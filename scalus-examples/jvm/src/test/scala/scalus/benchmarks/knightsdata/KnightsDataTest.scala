@@ -54,8 +54,8 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 138777221, steps = 44087137731L),
-                  since38 = ExUnits(memory = 118599581, steps = 37428654403L)
+                  pre38 = ExUnits(memory = 107148594, steps = 34246470503L),
+                  since38 = ExUnits(memory = 91769154, steps = 29166961445L)
                 )
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
@@ -157,8 +157,8 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 246404128, steps = 105396171993L),
-                  since38 = ExUnits(memory = 228570628, steps = 99283079433L)
+                  pre38 = ExUnits(memory = 187353930, steps = 80182714496L),
+                  since38 = ExUnits(memory = 174290190, steps = 75701311378L)
                 )
             else
                 options.targetLoweringBackend match
@@ -262,8 +262,8 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 438507966, steps = 212745799112L),
-                  since38 = ExUnits(memory = 416590146, steps = 205235130003L)
+                  pre38 = ExUnits(memory = 296892547, steps = 142435620629L),
+                  since38 = ExUnits(memory = 282560647, steps = 137519680014L)
                 )
             else
                 options.targetLoweringBackend match {
@@ -397,21 +397,21 @@ object KnightsDataTest:
             (item.deleteFirst.possibleMoves.length, item)
         }
 
-        def singleDescend: List[ChessSet] =
-            descAndNo.filterMap { item =>
-                val (moves, board) = item
-                if moves === BigInt(1) then Option.Some(board) else Option.empty
-            }
-
         def isDeadEnd: Boolean = possibleMoves.isEmpty
         def canJumpFirst: Boolean = deleteFirst.canMoveTo(firstPiece)
 
         def descendants: List[ChessSet] = {
             if canJumpFirst && addPiece(firstPiece).isDeadEnd then List.empty
             else
-                val singles = singleDescend
+                // Reuse the scored descendants when no forced move exists.
+                val descendantsWithCounts = descAndNo
+                val singles = descendantsWithCounts.filterMap { item =>
+                    val (moves, board) = item
+                    if moves === BigInt(1) then Option.Some(board) else Option.empty
+                }
+                // A knight has at most eight moves, bounding insertion sort here.
                 singles match
-                    case List.Nil              => descAndNo.quicksort.map { _._2 }
+                    case List.Nil              => descendantsWithCounts.insertionSort.map { _._2 }
                     case List.Cons(head, tail) => if tail.isEmpty then singles else List.empty
         }
 

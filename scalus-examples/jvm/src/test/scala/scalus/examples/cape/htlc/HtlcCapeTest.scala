@@ -1,7 +1,7 @@
 package scalus.examples.cape.htlc
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{CardanoInfo, ExUnits}
+import scalus.cardano.ledger.{CardanoInfo, ExUnits, RefScriptFee}
 import scalus.examples.cape.{CapeHarness, CapeTestSuite}
 import scalus.testing.kit.ScalusTest
 
@@ -14,9 +14,13 @@ class HtlcCapeTest extends AnyFunSuite with ScalusTest {
     private given CardanoInfo = CardanoInfo.mainnet
     private val program = HtlcContract.program
     private val suite = CapeTestSuite.load("/cape/htlc/cape-tests.json")
+    private val protocolParams = summon[CardanoInfo].protocolParams
+    private val scriptSize = program.cborByteString.size
+    // Price it as the transaction's only reference script, using the repository's parameter snapshot.
+    private val referenceScriptFee = RefScriptFee.fee(scriptSize, protocolParams).value
 
-    test(s"Script size: ${program.cborByteString.length} bytes") {
-        assert(program.cborByteString.length == 569)
+    test(s"Script size: $scriptSize bytes") {
+        assert(scriptSize == 569)
     }
 
     private val expectedBudgets: Map[String, ExUnits] = Map(
@@ -29,7 +33,12 @@ class HtlcCapeTest extends AnyFunSuite with ScalusTest {
     for c <- suite.cases do
         test(s"CAPE: ${c.name}") {
             CapeHarness.run(program, c).foreach { budget =>
-                info(s"${c.name}: $budget")
+                val executionFee = budget.fee(protocolParams.executionUnitPrices).value
+                val combinedFee = referenceScriptFee + executionFee
+                info(
+                  s"${c.name}: $budget; fees (lovelace): reference-script=$referenceScriptFee, " +
+                      s"execution=$executionFee, combined=$combinedFee"
+                )
                 expectedBudgets.get(c.name).foreach(exp => assert(budget == exp))
             }
         }

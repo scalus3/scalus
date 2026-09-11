@@ -75,11 +75,8 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants.
-                // After sort rewrite: mem=132_915_975, steps=26_318_962_327
-                // Pre-rewrite baseline: mem=139_827_710, steps=27_837_791_939
-                // Pre-annotation baseline: mem=142_291_986, steps=30_322_212_276.
-                ExUnits(memory = 146486004L, steps = 30533045087L)
+                // Explicit descAndNo sharing and insertion sort for at most eight moves.
+                ExUnits(memory = 116736784L, steps = 24795623419L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -195,16 +192,8 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants
-                // + isCompatibleOn TypeVarKind discrimination (session 18).
-                // After KnightsTest:475 heisenbug fix (bindIntrinsicListResolverElementTypeVars1
-                // restType-suffix unification): mem=470_081_489, steps=92_591_878_616.
-                // Pre-fix (deterministic chooseCommonRepresentation tie-break, but B mis-bound
-                // to SolutionEntry instead of ChessSet at descAndNo.quicksort.map):
-                //   mem=445_174_581, steps=86_329_049_292.
-                // Pre-isCompatibleOn-fix: 550_142_929 / 111_902_743_585.
-                // Pre-annotation baseline: mem=447_798_345, steps=96_701_055_855.
-                ExUnits(memory = 482516818L, steps = 99882987445L)
+                // Explicit descAndNo sharing and insertion sort for at most eight moves.
+                ExUnits(memory = 383754374L, steps = 82543516417L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -308,16 +297,8 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants
-                // + isCompatibleOn TypeVarKind discrimination (session 18).
-                // After KnightsTest:475 heisenbug fix (bindIntrinsicListResolverElementTypeVars1
-                // restType-suffix unification): mem=915_159_867, steps=180_393_832_273.
-                // Pre-fix (deterministic chooseCommonRepresentation tie-break, but B mis-bound
-                // to SolutionEntry instead of ChessSet at descAndNo.quicksort.map):
-                //   mem=873_898_759, steps=170_137_815_977.
-                // Pre-isCompatibleOn-fix: 1_072_962_493 / 218_211_607_720.
-                // Pre-annotation baseline: mem=856_547_657, steps=186_040_711_969.
-                ExUnits(memory = 1024545436L, steps = 211308454878L)
+                // Explicit descAndNo sharing and insertion sort for at most eight moves.
+                ExUnits(memory = 740454792L, steps = 160511224929L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -470,11 +451,6 @@ object KnightsTest:
             SolutionEntry(item.deleteFirst.possibleMoves.length, item)
         }
 
-        def singleDescend: List[ChessSet] =
-            descAndNo.filterMap { item =>
-                if item.depth === BigInt(1) then Option.Some(item.board) else Option.empty
-            }
-
         def isDeadEnd: Boolean = possibleMoves.isEmpty
         def canJumpFirst: Boolean = deleteFirst.canMoveTo(firstPiece)
 
@@ -482,9 +458,14 @@ object KnightsTest:
         def descendants: List[ChessSet] = {
             if canJumpFirst && addPiece(firstPiece).isDeadEnd then List.empty
             else
-                val singles = singleDescend
+                // Reuse the scored descendants when no forced move exists.
+                val descendantsWithCounts = descAndNo
+                val singles = descendantsWithCounts.filterMap { item =>
+                    if item.depth === BigInt(1) then Option.Some(item.board) else Option.empty
+                }
+                // A knight has at most eight moves, bounding insertion sort here.
                 singles match
-                    case List.Nil              => descAndNo.quicksort.map { _.board }
+                    case List.Nil => descendantsWithCounts.insertionSort.map { _.board }
                     case List.Cons(head, tail) => if tail.isEmpty then singles else List.empty
         }
 
