@@ -478,13 +478,14 @@ class CommonSubexpressionEliminationTest
     // Force expressions (non-trivial)
     // ========================================================================
 
-    test("should not share two Force nodes when the binding saves no bits") {
+    test("should share repeated forced calls even when the binding saves no bits") {
         // Force(some_expr) appearing twice
         val forceExpr = Force(vr"f" $ vr"x")
         val term = Constr(Word64.Zero, List(forceExpr, forceExpr))
         val result = CommonSubexpressionElimination(term)
-        // Replacing two 32-bit terms pays 32 bits of let/reference overhead: no saving.
-        assert(result ~=~ term)
+        // The binding saves no bits, but avoids repeating the unknown call and its force.
+        assert(result ~!=~ term)
+        assert(CommonSubexpressionElimination(result) ~=~ result)
     }
 
     // ========================================================================

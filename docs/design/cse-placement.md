@@ -36,9 +36,9 @@ estimated lovelace saving; ties use deterministic traversal order, not names or 
 
 ## Candidate selection
 
-Every structurally repeated term is a candidate, including constants, delayed values and forced
+Every alpha-equivalent repeated term is a candidate, including constants, delayed values and forced
 builtins. There is no work-free filter or builtin exception. Candidates must pass the placement
-invariant above. `SharingCost` ranks them by positive estimated net lovelace savings:
+invariant above. Values require positive estimated net lovelace savings from `SharingCost`:
 
 ```
 savedBits = (n - 1) * termBits(expr) - n * VarBits - 8
@@ -53,8 +53,19 @@ mainnet reference prices at the first reference-script tier; it does not predict
 or total transaction fees. CCE separately prices one-hole templates in encoded bits and charges
 its additional execution steps, as described below.
 
-Each round chooses the greatest positive net saving and recollects after applying it. A positive
-net saving requires positive bit savings, so decreasing additive `termBits` ensures termination.
+Repeated computations, such as opaque `f(xs)` calls or `force(d)`, may also be shared with a
+negative estimate. Their avoided execution cost is unknown: this explicitly prefers running a
+computation once, rather than treating its small encoded size as evidence that it is cheap.
+`isValueForm` retains the fee gate for values, including forced builtins. Administrative
+`Apply(LamAbs(...), arg)` expressions retain the fee gate too. No name or builtin-prefix rule
+establishes safety.
+
+Each round chooses the greatest eligible estimate and recollects after applying it. Termination
+uses the lexicographic pair (non-let structural nodes, estimated bits). The first component counts
+nodes other than leaves and administrative Apply/LamAbs pairs. Runtime sharing removes at least
+one counted node; its new binding contributes none. Fee-only leaf sharing decreases bits instead.
+Collection skips the lambda in an immediate application, so lambda extraction cannot turn an
+ignored let into a counted call. Alpha-equivalent copies have identical node structure.
 The bit estimate assumes minimum-width variable indices and worst-case byte-array padding.
 Marginal extractions can therefore increase actual serialized size. This affects profitability,
 not semantic safety. A regression test covers this at an index-width boundary.
@@ -62,7 +73,9 @@ not semantic safety. A regression test covers this at an index-width boundary.
 The inliner shares the same cost calculation. It keeps exact occurrence counts, including guarded
 uses and excluding shadowed uses. For multiple uses, only variables, constants and builtins are
 eligible for duplication, and only when the estimated sharing saving is zero or negative. The
-single-use safety rules are unchanged. Opposite decisions at the same threshold prevent it from
+single-use safety rules are unchanged. Folding through retained constants also rejects large
+expansion relative to the symbolic expression, while allowing small results under the existing
+two-use value threshold. This is a local guard, not a global minimum-size guarantee. Opposite decisions at the same threshold prevent it from
 undoing profitable constant sharing. Before pricing a constant binding, the inliner simplifies
 its body using known constants from enclosing bindings. It substitutes these constants only into
 closed evaluation candidates: successful evaluation replaces the expression with its result;

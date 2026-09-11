@@ -4,7 +4,7 @@ import scalus.uplc.{Constant, Term}
 import scalus.uplc.Term.*
 import scalus.uplc.{DeBruijn, DefaultFun, NamedDeBruijn}
 import scalus.uplc.eval.{Log, Logger}
-import scalus.uplc.transform.TermAnalysis.freeVars
+import scalus.uplc.transform.TermAnalysis.{freeVars, isValueForm}
 import scalus.cardano.ledger.Word64
 import scalus.serialization.flat.Flat
 import scalus.uplc.Constant.flatConstant
@@ -63,8 +63,10 @@ import scala.util.Try
   *
   * ==Profitability: should we introduce the binding?==
   * Safe placement alone is insufficient. [[SharingCost]] prices estimated reference-script bits
-  * saved minus the extra binding's execution fee. Each round extracts the greatest positive saving,
-  * then recollects on the changed tree. For example, three uses of a 54-bit constant save
+  * saved minus the extra binding's execution fee for values. Repeated computations such as `f(xs)`
+  * are also shared when that estimate is negative: the callee's avoided work is unknown, so this
+  * is a runtime-sharing preference, not a prediction of lower total fees. Each round takes the
+  * greatest eligible estimate, then recollects on the changed tree. For example, three uses of a 54-bit constant save
   * `(3 - 1) * 54 - 3 * 12 - 8 = 64` estimated bits: remove two copies, insert three variables, and
   * pay the Apply/LamAbs tags. The default fee estimate subtracts about 20.77 lovelace of binding
   * work from 120 lovelace of reference-size savings. Two uses of an 18-bit integer constant instead
@@ -132,7 +134,7 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
             current = extract(current, c, name)
             changed = true
             logger.log(
-              s"CSE: extracted ${c.expr.showShort} (${c.occurrences.size} occurrences, ${c.savedLovelace} estimated lovelace saved) as $name"
+              s"CSE: extracted ${c.expr.showShort} (${c.occurrences.size} occurrences, size/binding estimate=${c.savedLovelace} lovelace) as $name"
             )
             // Extraction changes both occurrence counts and paths. For example, sharing f(e)
             // removes copies of the e inside it. A second candidate from the old tree would
@@ -232,12 +234,14 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
 
         go(term, Vector.empty, Vector.empty)
         // Safety is established by grouping, independently of expression size or builtin kind.
-        // Greatest estimated lovelace saving first; ties retain deterministic traversal order.
-        // For example, prefer a group saving 100 lovelace over one saving 20; for two groups
-        // saving 100, keep the first encountered. Recompute the other saving after extraction.
-        // Positive net savings require positive bit savings, so additive termBits ensures
-        // termination: an extraction saving 64 bits reduces the whole-tree estimate by 64.
-        // Even a huge expression with one occurrence in each of two sibling regions is not priced as a pair.
+        // Greatest eligible fee estimate first, retaining traversal order for ties. For example,
+        // a value saving 100 lovelace precedes f(xs), whose size/binding estimate may be negative.
+        // Runtime sharing terminates even when bits grow: count structural nodes excluding leaves
+        // and administrative Apply(LamAbs(...), arg) pairs. Sharing f(xs) removes one Apply per
+        // eliminated copy; the new let adds none. Fee-only leaf sharing instead reduces termBits.
+        // Thus (non-let structural nodes, termBits) decreases lexicographically. Collection skips
+        // immediate lambda function positions, so replacing a lambda cannot turn an ignored let
+        // into a counted Apply(Var(...), arg). Alpha-equivalent copies have the same node structure.
         var best: Option[Candidate] = None
         for (key, entries) <- groups do
             for group <- entries if group.occurrences.size >= 2 do
@@ -250,11 +254,22 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
                 val c = Candidate(key.term, paths.toSet, longestCommonPrefix(paths))
                 sizeOf(c.expr).foreach { bits =>
                     val saving = SharingCost.savingLovelace(bits, c.occurrences.size)
-                    if saving > best.fold(0.0)(_.savedLovelace) then
+                    val eligible = saving > 0 || preferComputationSharing(c.expr)
+                    if eligible && best.forall(saving > _.savedLovelace) then
                         best = Some(c.copy(savedLovelace = saving))
                 }
         best
     }
+
+    /** Prefer evaluating repeated computations once, independently of their unknown runtime cost.
+      * For example, two `f(xs)` calls can cost more than their few encoded bits suggest. Values
+      * such as `Delay(f(xs))` still use fee pricing. Administrative lets use fee pricing too:
+      * `(λx. x)(y)` adds no non-let structural node to the termination measure above.
+      */
+    private def preferComputationSharing(t: Term): Boolean = t match
+        case Apply(_: LamAbs, _, _) => false
+        case _: Apply | _: Force | _: Case | _: Constr => !t.isValueForm
+        case _ => false
 
     /** Replace uses and insert their binding in one traversal of the original paths.
       *
