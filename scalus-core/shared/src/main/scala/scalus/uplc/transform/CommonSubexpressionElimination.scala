@@ -64,14 +64,14 @@ import scala.util.Try
   * ==Profitability: should we introduce the binding?==
   * Safe placement alone is insufficient. [[SharingCost]] prices estimated reference-script bits
   * saved minus the extra binding's execution fee for values. Repeated computations such as `f(xs)`
-  * are also shared when that estimate is negative: the callee's avoided work is unknown, so this
-  * is a runtime-sharing preference, not a prediction of lower total fees. Each round takes the
-  * greatest eligible estimate, then recollects on the changed tree. For example, three uses of a 54-bit constant save
-  * `(3 - 1) * 54 - 3 * 12 - 8 = 64` estimated bits: remove two copies, insert three variables, and
-  * pay the Apply/LamAbs tags. The default fee estimate subtracts about 20.77 lovelace of binding
-  * work from 120 lovelace of reference-size savings. Two uses of an 18-bit integer constant instead
-  * save `18 - 24 - 8 = -14` bits and are rejected. See `docs/design/cse-placement.md` for the
-  * contract and pricing assumptions.
+  * are also shared when that estimate is negative: the callee's avoided work is unknown, so this is
+  * a runtime-sharing preference, not a prediction of lower total fees. Each round takes the
+  * greatest eligible estimate, then recollects on the changed tree. For example, three uses of a
+  * 54-bit constant save `(3 - 1) * 54 - 3 * 12 - 8 = 64` estimated bits: remove two copies, insert
+  * three variables, and pay the Apply/LamAbs tags. The default fee estimate subtracts about 20.77
+  * lovelace of binding work from 120 lovelace of reference-size savings. Two uses of an 18-bit
+  * integer constant instead save `18 - 24 - 8 = -14` bits and are rejected. See
+  * `docs/design/cse-placement.md` for the contract and pricing assumptions.
   */
 class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimizer {
     import CommonSubexpressionElimination.*
@@ -267,9 +267,9 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
       * `(λx. x)(y)` adds no non-let structural node to the termination measure above.
       */
     private def preferComputationSharing(t: Term): Boolean = t match
-        case Apply(_: LamAbs, _, _) => false
+        case Apply(_: LamAbs, _, _)                    => false
         case _: Apply | _: Force | _: Case | _: Constr => !t.isValueForm
-        case _ => false
+        case _                                         => false
 
     /** Replace uses and insert their binding in one traversal of the original paths.
       *

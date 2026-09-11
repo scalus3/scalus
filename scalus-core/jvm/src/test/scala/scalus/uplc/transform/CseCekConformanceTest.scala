@@ -73,6 +73,18 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         encoder.bitPosition()
     }
 
+    // Runtime sharing can add encoded bits. Its first progress measure removes administrative
+    // lets: sharing f(x) removes a call, while the new (λshared. body)(f(x)) adds no counted node.
+    private def nonLetNodes(t: Term): Int = t match
+        case Apply(LamAbs(_, body, _), arg, _) => nonLetNodes(body) + nonLetNodes(arg)
+        case _: Var | _: Const | _: Builtin | _: Error => 0
+        case LamAbs(_, body, _) => 1 + nonLetNodes(body)
+        case Delay(body, _) => 1 + nonLetNodes(body)
+        case Force(body, _) => 1 + nonLetNodes(body)
+        case Apply(f, arg, _) => 1 + nonLetNodes(f) + nonLetNodes(arg)
+        case Constr(_, fields, _) => 1 + fields.map(nonLetNodes).sum
+        case Case(scrutinee, branches, _) => 1 + nonLetNodes(scrutinee) + branches.map(nonLetNodes).sum
+
     private def check(t: Term): Term = {
         val cse = new CommonSubexpressionElimination()
         val result = cse(t)
@@ -81,14 +93,14 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
           s"Invalid CSE:\n${t.show}\n${result.show}"
         )
         assert(cse.logs.nonEmpty == (t ~!=~ result))
-        assert(
-          CommonSubexpressionElimination.termBits(result) <= CommonSubexpressionElimination
-              .termBits(t)
-        )
+        val beforeNodes = nonLetNodes(t)
+        val afterNodes = nonLetNodes(result)
+        assert(afterNodes <= beforeNodes)
         if cse.logs.nonEmpty then
             assert(
-              CommonSubexpressionElimination.termBits(result) < CommonSubexpressionElimination
-                  .termBits(t)
+              afterNodes < beforeNodes ||
+                  CommonSubexpressionElimination.termBits(result) < CommonSubexpressionElimination.termBits(t),
+              "CSE must decrease (non-let structural nodes, estimated bits) lexicographically"
             )
         assert(CommonSubexpressionElimination(result) ~=~ result, "CSE did not reach a fixed point")
         DeBruijn.deBruijnTerm(result, throwOnFreeVariable = true)
@@ -165,7 +177,7 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         check(term)
     }
 
-    test("size-only sharing can trade execution budget for a smaller constant representation") {
+    test("value sharing can trade execution budget for a smaller constant representation") {
         val large = Const(
           Constant.ByteString(scalus.uplc.builtin.ByteString.fromArray(Array.fill[Byte](64)(1)))
         )
@@ -179,9 +191,14 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(encodedBits(shared) < encodedBits(term))
         assert(spent(shared).memory > spent(term).memory)
         assert(spent(shared).steps > spent(term).steps)
+    }
+
+    test("repeated opaque calls are shared even when the binding adds encoded bits") {
         val smallCall = vr"f" $ vr"x"
         val calls = LamAbs("f", LamAbs("x", Constr(Word64.Zero, List(smallCall, smallCall))))
-        assert(check(calls) ~=~ calls)
+        val shared = check(calls)
+        assert(shared ~!=~ calls)
+        assert(encodedBits(shared) > encodedBits(calls))
     }
 
     test("IfThenElse shares identical delays without forcing their bodies early") {
