@@ -22,23 +22,25 @@ class CommonSubexpressionEliminationTest
     with ScalaCheckPropertyChecks
     with ArbitraryInstances {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
+    override implicit val generatorDrivenConfig: PropertyCheckConfiguration =
+        PropertyCheckConfiguration(minSuccessful = 100)
 
     // ========================================================================
     // Basic extraction tests
     // ========================================================================
 
     test("should extract duplicated subexpression") {
-        // add(mul(x, y), mul(x, y)) => let cse = mul(x, y) in add(cse, cse)
-        val mulXY = MultiplyInteger $ vr"x" $ vr"y"
-        val term = AddInteger $ mulXY $ mulXY
+        // add(mul(x, 2), mul(x, 2)) => let cse = mul(x, 2) in add(cse, cse)
+        val mulX2 = MultiplyInteger $ vr"x" $ (2: Term)
+        val term = AddInteger $ mulX2 $ mulX2
 
         val result = CommonSubexpressionElimination(term)
 
-        // Result should be: Apply(LamAbs(__cse_0, AddInteger $ __cse_0 $ __cse_0), mul(x, y))
+        // Result should be: Apply(LamAbs(__cse_0, AddInteger $ __cse_0 $ __cse_0), mul(x, 2))
         result match
             case Apply(LamAbs(cseName, body, _), expr, _) =>
                 assert(cseName.startsWith("__cse_"))
-                assert(expr ~=~ mulXY, s"Expected mul(x,y), got: ${expr.show}")
+                assert(expr ~=~ mulX2, s"Expected mul(x,2), got: ${expr.show}")
                 // Body should use the cse variable twice
                 body match
                     case Apply(Apply(Builtin(AddInteger, _), v1, _), v2, _) =>
@@ -94,7 +96,7 @@ class CommonSubexpressionEliminationTest
         assert(result ~=~ term, s"Expected unchanged, got: ${result.show}")
     }
 
-    test("should not extract Error terms") {
+    test("does not share tiny Error terms") {
         val term = Constr(Word64.Zero, List[Term](Error(), Error()))
         val result = CommonSubexpressionElimination(term)
         assert(result ~=~ term)
@@ -118,13 +120,13 @@ class CommonSubexpressionEliminationTest
     }
 
     test("should extract at common ancestor when occurrences span lambda boundary") {
-        // Apply(LamAbs(x, mul(a, b)), mul(a, b))
+        // Apply(LamAbs(x, mul(a, 2)), mul(a, 2))
         // One occurrence outside lambda, one inside => bind at root
-        val mulAB = MultiplyInteger $ vr"a" $ vr"b"
-        val term = (λ("x")(mulAB)) $ mulAB
+        val mulA2 = MultiplyInteger $ vr"a" $ (2: Term)
+        val term = (λ("x")(mulA2)) $ mulA2
         val result = CommonSubexpressionElimination(term)
 
-        // Should be: let cse = mul(a, b) in (lam x. cse) cse
+        // Should be: let cse = mul(a, 2) in (lam x. cse) cse
         result match
             case Apply(LamAbs(cseName, Apply(LamAbs(_, _, _), _, _), _), _, _) =>
                 assert(cseName.startsWith("__cse_"))
@@ -161,17 +163,15 @@ class CommonSubexpressionEliminationTest
     // Case branches
     // ========================================================================
 
-    test("should extract duplicates across Case branches at common ancestor") {
+    test("should not merge duplicates from sibling Case branches") {
         // case scrutinee of [mul(x,y), mul(x,y)]
-        // Both branches have mul(x,y) => extract at path common to both
+        // Neither branch is an ancestor of the other, so there is no strict anchor.
         val mulXY = MultiplyInteger $ vr"x" $ vr"y"
         val term = Case(vr"scrutinee", List(mulXY, mulXY))
 
         val result = CommonSubexpressionElimination(term)
 
-        // The extraction should happen (the duplicated expression appears in different branches)
-        // Since branches are different paths, the common ancestor is the Case node's path
-        assert(result ~!=~ term, s"Expected transformation, got: ${result.show}")
+        assert(result ~=~ term, s"Expected unchanged branches, got: ${result.show}")
     }
 
     // ========================================================================
@@ -239,7 +239,7 @@ class CommonSubexpressionEliminationTest
     // No new free variables
     // ========================================================================
 
-    test("CSE does not introduce free variables (except __cse_N)") {
+    test("CSE does not introduce free variables") {
         val terms = List[Term](
           AddInteger $ (MultiplyInteger $ vr"x" $ vr"y") $ (MultiplyInteger $ vr"x" $ vr"y"),
           λ("x")(
@@ -249,7 +249,7 @@ class CommonSubexpressionEliminationTest
         terms.foreach { term =>
             val result = CommonSubexpressionElimination(term)
             val origFree = term.freeVars
-            val resultFree = result.freeVars.filterNot(_.startsWith("__cse_"))
+            val resultFree = result.freeVars
             assert(
               resultFree.subsetOf(origFree),
               s"New free vars ${resultFree -- origFree} in ${term.show} => ${result.show}"
@@ -279,33 +279,6 @@ class CommonSubexpressionEliminationTest
         val key1 = new TermKey(t1)
         val key2 = new TermKey(t2)
         assert(key1 != key2)
-    }
-
-    // ========================================================================
-    // isSkippable tests
-    // ========================================================================
-
-    test("isSkippable: variables, constants, lambdas, delays, builtins are skippable") {
-        assert(isSkippable(vr"x"))
-        assert(isSkippable(42.asTerm))
-        assert(isSkippable(λ("x")(vr"x")))
-        assert(isSkippable(Delay(vr"x")))
-        assert(isSkippable(Builtin(AddInteger)))
-    }
-
-    test("isSkippable: Error is skippable") {
-        assert(isSkippable(Error()))
-    }
-
-    test("isSkippable: Force(Builtin) / Force(Force(Builtin)) are NOT skippable") {
-        // CSE extracts these to subsume what ForcedBuiltinsExtractor does -- duplicating
-        // them costs runtime memory/cpu (Force costs 100/16000 each).
-        assert(!isSkippable(Force(Builtin(HeadList))))
-        assert(!isSkippable(Force(Force(Builtin(FstPair)))))
-    }
-
-    test("isSkippable: saturated builtin application is not skippable") {
-        assert(!isSkippable(AddInteger $ vr"x" $ vr"y"))
     }
 
     // ========================================================================
@@ -390,8 +363,8 @@ class CommonSubexpressionEliminationTest
 
     test("CSE produces log entries when extracting") {
         val cse = new CommonSubexpressionElimination()
-        val mulXY = MultiplyInteger $ vr"x" $ vr"y"
-        cse(AddInteger $ mulXY $ mulXY)
+        val mulX2 = MultiplyInteger $ vr"x" $ (2: Term)
+        cse(AddInteger $ mulX2 $ mulX2)
         assert(cse.logs.nonEmpty, "Expected log entries for CSE extraction")
         assert(cse.logs.exists(_.contains("CSE:")))
     }
@@ -422,16 +395,13 @@ class CommonSubexpressionEliminationTest
     // Force expressions (non-trivial)
     // ========================================================================
 
-    test("should extract duplicated Force of non-builtin") {
+    test("should not share two Force nodes when the binding saves no bits") {
         // Force(some_expr) appearing twice
         val forceExpr = Force(vr"f" $ vr"x")
         val term = Constr(Word64.Zero, List(forceExpr, forceExpr))
         val result = CommonSubexpressionElimination(term)
-        // Force(f $ x) is not skippable, and appears twice => should be extracted
-        result match
-            case Apply(LamAbs(cseName, _, _), _, _) =>
-                assert(cseName.startsWith("__cse_"))
-            case _ => fail(s"Expected extraction of Force expr, got: ${result.show}")
+        // Replacing two 32-bit terms pays 32 bits of let/reference overhead: no saving.
+        assert(result ~=~ term)
     }
 
     // ========================================================================
@@ -505,11 +475,11 @@ class CommonSubexpressionEliminationTest
         }
     }
 
-    test("property: CSE never introduces new free variables (except __cse_N)") {
+    test("property: CSE never introduces new free variables") {
         forAll { (term: Term) =>
             val result = CommonSubexpressionElimination(term)
             val origFree = term.freeVars
-            val resultFree = result.freeVars.filterNot(_.startsWith("__cse_"))
+            val resultFree = result.freeVars
             assert(
               resultFree.subsetOf(origFree),
               s"New free vars ${resultFree -- origFree} in:\n  input=${term.show}\n  output=${result.show}"
@@ -603,23 +573,6 @@ class CommonSubexpressionEliminationTest
           cse.logs.isEmpty || !cse.logs.exists(_.contains("headList")),
           s"CSE should not hoist partial builtins across Case: ${cse.logs}"
         )
-    }
-
-    test("referencesPartialBuiltin detects partial builtins") {
-        val headList = Force(Builtin(DefaultFun.HeadList))
-        assert(referencesPartialBuiltin(headList $ vr"x"))
-        assert(referencesPartialBuiltin(Force(Force(Builtin(DefaultFun.UnConstrData))) $ vr"x"))
-        assert(!referencesPartialBuiltin(AddInteger $ vr"x" $ vr"y"))
-        assert(!referencesPartialBuiltin(vr"x"))
-        assert(!referencesPartialBuiltin(42.asTerm))
-        // LamAbs/Delay bodies are deferred - don't count
-        assert(!referencesPartialBuiltin(λ("x")(headList $ vr"x")))
-        assert(!referencesPartialBuiltin(Delay(headList $ vr"x")))
-        // ForcedBuiltinsExtractor-created variables (e.g., __HeadList) are detected
-        assert(referencesPartialBuiltin(vr"__HeadList" $ vr"xs"))
-        assert(referencesPartialBuiltin(vr"__UnConstrData" $ vr"d"))
-        assert(referencesPartialBuiltin(vr"__TailList" $ vr"xs"))
-        assert(!referencesPartialBuiltin(vr"__AddInteger" $ vr"x" $ vr"y"))
     }
 
     test("CSE on List.at compiled term preserves semantics") {

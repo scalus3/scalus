@@ -37,7 +37,8 @@ class CseTieOrderDeterminismTest extends AnyFunSuite {
         // variant was produced in some JVM runs.
         assert(
           program.cborByteString.toHex ==
-              "58390101009800aba1aab9eaba2488888c8c8cdc399b80002002337040020026eb4c018c010c010c014dd50011bad3005300330033004375400401"
+              "58390101009800aba1aab9eaba2488888cdc39919b80001001375a600a6006600660086ea8008c8cdc10008009bad3005300330033004375400201",
+          s"actual script: ${program.cborByteString.toHex}"
         )
     }
 }

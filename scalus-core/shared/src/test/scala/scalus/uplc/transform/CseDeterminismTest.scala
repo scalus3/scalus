@@ -50,16 +50,13 @@ class CseDeterminismTest extends AnyFunSuite {
         val b = chain("y")
         val term = LamAbs("x", LamAbs("y", add(add(a, a), add(b, b))))
 
-        val result = CommonSubexpressionElimination(term)
-
-        result match
-            case LamAbs(
-                  _,
-                  LamAbs(_, Apply(LamAbs(_, Apply(LamAbs(_, _, _), inner, _), _), outer, _), _),
-                  _
-                ) =>
-                assert(outer ~=~ a, s"expected the x chain to be bound first, got ${result.show}")
-                assert(inner ~=~ b, s"expected the y chain to be bound second, got ${result.show}")
-            case _ => fail(s"unexpected shape: ${result.show}")
+        val cse = new CommonSubexpressionElimination()
+        val result = cse(term)
+        // Each binding now stays inside the addition that uses it. Check extraction order
+        // directly, without requiring both bindings to float to the outer lambda body.
+        assert(cse.logs.size == 2)
+        assert(cse.logs.head.endsWith(s"as __cse_${TermNaming.termDescription(a)}"))
+        assert(cse.logs(1).endsWith(s"as __cse_${TermNaming.termDescription(b)}"))
+        assert(CommonSubexpressionElimination(result) ~=~ result)
     }
 }

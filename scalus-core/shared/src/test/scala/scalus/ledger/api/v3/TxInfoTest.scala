@@ -485,8 +485,8 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                   .getLovelace,
           budgetTx,
           BigInt(5),
-          ExUnits(memory = 26150, steps = 16_235924),
-          Coin(2680)
+          ExUnits(memory = 26314, steps = 16_418_504),
+          Coin(2703)
         )
     }
 
@@ -505,8 +505,8 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (tx: TxInfo) => tx.valueSpentFrom(addrA).getLovelace,
           budgetTx,
           BigInt(1),
-          ExUnits(memory = 22452, steps = 13_211207),
-          Coin(2249)
+          ExUnits(memory = 21524, steps = 12_751_814),
+          Coin(2162)
         )
     }
 
@@ -525,8 +525,8 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (tx: TxInfo) => tx.validToOrFail("to") - tx.validFromOrFail("from"),
           budgetTx,
           BigInt(10),
-          ExUnits(memory = 11174, steps = 3_868189),
-          Coin(924)
+          ExUnits(memory = 10174, steps = 3_708_189),
+          Coin(855)
         )
     }
 
@@ -535,7 +535,7 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (tx: TxInfo) => tx.onlyBurnsUnder(hex"cc"),
           budgetTx,
           true,
-          ExUnits(memory = 24140, steps = 5_581321),
+          ExUnits(memory = 24140, steps = 5_581_321),
           Coin(1796)
         )
     }
@@ -550,8 +550,8 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               ),
           budgetTx,
           true,
-          ExUnits(memory = 28459, steps = 16_022351),
-          Coin(2798)
+          ExUnits(memory = 28559, steps = 16_038_351),
+          Coin(2805)
         )
     }
 

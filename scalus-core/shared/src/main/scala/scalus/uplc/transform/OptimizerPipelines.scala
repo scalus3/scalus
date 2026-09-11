@@ -58,9 +58,12 @@ class V3Optimizer(
             t |> cse.apply |> inliner.apply
         }
 
-        // Phase 3: CCE followed by inliner to clean up single-use lambdas
+        // Phase 3: CCE, then inliner to clean up single-use lambdas, then CSE again. CCE
+        // rewrites every occurrence site into `[f leaf]`, so sites that shared a leaf become
+        // identical subterms: a plain CSE opportunity that did not exist before CCE ran. On
+        // AuctionValidator one such group has eleven occurrences.
         val withCce =
-            if cceEnabled then withCse |> cce.apply |> inliner.apply
+            if cceEnabled then withCse |> cce.apply |> inliner.apply |> cse.apply |> inliner.apply
             else withCse
 
         // Phase 4: regroup independent let chains into multi-argument applications, so the

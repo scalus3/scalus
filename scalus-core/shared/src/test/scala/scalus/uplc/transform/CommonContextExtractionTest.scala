@@ -25,6 +25,49 @@ class CommonContextExtractionTest
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
     // ========================================================================
+    // isSkippable tests
+    // ========================================================================
+
+    test("isSkippable: variables, constants, lambdas, delays, builtins are skippable") {
+        assert(isSkippable(vr"x"))
+        assert(isSkippable(42.asTerm))
+        assert(isSkippable(λ("x")(vr"x")))
+        assert(isSkippable(Delay(vr"x")))
+        assert(isSkippable(Builtin(AddInteger)))
+    }
+
+    test("isSkippable: Error is skippable") {
+        assert(isSkippable(Error()))
+    }
+
+    test("isSkippable: Force(Builtin) / Force(Force(Builtin)) are NOT skippable") {
+        // CCE retains these as candidates because repeated forces cost CPU and memory.
+        assert(!isSkippable(Force(Builtin(HeadList))))
+        assert(!isSkippable(Force(Force(Builtin(FstPair)))))
+    }
+
+    test("isSkippable: saturated builtin application is not skippable") {
+        assert(!isSkippable(AddInteger $ vr"x" $ vr"y"))
+    }
+
+    test("referencesPartialBuiltin detects partial builtins") {
+        val headList = Force(Builtin(DefaultFun.HeadList))
+        assert(referencesPartialBuiltin(headList $ vr"x"))
+        assert(referencesPartialBuiltin(Force(Force(Builtin(DefaultFun.UnConstrData))) $ vr"x"))
+        assert(!referencesPartialBuiltin(AddInteger $ vr"x" $ vr"y"))
+        assert(!referencesPartialBuiltin(vr"x"))
+        assert(!referencesPartialBuiltin(42.asTerm))
+        // LamAbs/Delay bodies are deferred - don't count
+        assert(!referencesPartialBuiltin(λ("x")(headList $ vr"x")))
+        assert(!referencesPartialBuiltin(Delay(headList $ vr"x")))
+        // ForcedBuiltinsExtractor-created variables (e.g., __HeadList) are detected
+        assert(referencesPartialBuiltin(vr"__HeadList" $ vr"xs"))
+        assert(referencesPartialBuiltin(vr"__UnConstrData" $ vr"d"))
+        assert(referencesPartialBuiltin(vr"__TailList" $ vr"xs"))
+        assert(!referencesPartialBuiltin(vr"__AddInteger" $ vr"x" $ vr"y"))
+    }
+
+    // ========================================================================
     // decomposeRightSpine tests
     // ========================================================================
 

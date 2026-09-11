@@ -2,11 +2,11 @@ package scalus.uplc.transform
 
 import scalus.uplc.Term
 import scalus.uplc.Term.*
-import scalus.uplc.NamedDeBruijn
+import scalus.uplc.{DefaultFun, NamedDeBruijn}
 import scalus.cardano.ledger.CardanoInfo
 import scalus.uplc.eval.{CekMachineCosts, Log, Logger}
-import scalus.uplc.transform.CommonSubexpressionElimination.{containsError, isSkippable, referencesPartialBuiltin, termBits, TermKey, TermTagBits, VarBits}
-import scalus.uplc.transform.TermAnalysis.freeVars
+import scalus.uplc.transform.CommonSubexpressionElimination.{termBits, TermKey, TermTagBits, VarBits}
+import scalus.uplc.transform.TermAnalysis.{freeVars, isValueForm}
 
 import scala.collection.mutable
 
@@ -390,6 +390,87 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
 }
 
 object CommonContextExtraction {
+
+    /** Legacy shape filter used by CCE. CSE does not consult it: admissibility depends only on
+      * occurrence regions and lexical scope. This is not a totality or purity analysis.
+      */
+    private val shapePartialBuiltins: Set[DefaultFun] = Set(
+      // Data destructors: fail on wrong Data variant (shape-dependent)
+      DefaultFun.UnConstrData,
+      DefaultFun.UnMapData,
+      DefaultFun.UnListData,
+      DefaultFun.UnIData,
+      DefaultFun.UnBData,
+      // List operations: fail on empty vs non-empty (shape-dependent)
+      DefaultFun.HeadList,
+      DefaultFun.TailList
+    )
+
+    /** Variable name prefixes for shape-partial builtins extracted by [[ForcedBuiltinsExtractor]].
+      * ForcedBuiltinsExtractor replaces `Force(Builtin(HeadList))` with `Var("__HeadList")`, so we
+      * must also detect these variable references.
+      */
+    private val partialBuiltinVarPrefixes: Set[String] =
+        shapePartialBuiltins.map(fn => s"__$fn")
+
+    /** Whether a term references any shape-partial builtin in an evaluated position.
+      *
+      * Detects three cases:
+      *   - Direct `Builtin(fn)` references for shape-partial builtins.
+      *   - Variable references created by [[ForcedBuiltinsExtractor]] (e.g., `__HeadList`).
+      *   - Applications `Apply(Var(name), arg)` where `name` is a user-defined helper (i.e., not a
+      *     pure-builtin-extractor name and not a `__cse_` wrapper). Such helpers may internally
+      *     reference partial builtins — e.g., a `List.head` helper transitively invokes
+      *     `__HeadList`. Without tracing through the helper's body we cannot prove it total, so we
+      *     conservatively assume it is partial when crossing a conditional boundary. This is only
+      *     consulted by CCE's `unsafeCaseCrossing` checks.
+      *
+      * Does not recurse into LamAbs or Delay bodies (those are deferred, so the builtin there
+      * doesn't fire at the extraction point).
+      */
+    private[transform] def referencesPartialBuiltin(t: Term): Boolean = t match
+        case Builtin(fn, _) => shapePartialBuiltins.contains(fn)
+        case Var(NamedDeBruijn(name, _), _) =>
+            partialBuiltinVarPrefixes.exists(name.startsWith)
+        case _: Const | _: Error                                                     => false
+        case _: LamAbs | _: Delay                                                    => false
+        case Apply(Var(NamedDeBruijn(name, _), _), arg, _) if !name.startsWith("__") =>
+            // User-defined helper — may transitively call a partial builtin in its body.
+            // Be conservative: treat the application as potentially partial, irrespective
+            // of what the argument contains.
+            true
+        case Apply(f, arg, _)   => referencesPartialBuiltin(f) || referencesPartialBuiltin(arg)
+        case Force(inner, _)    => referencesPartialBuiltin(inner)
+        case Constr(_, args, _) => args.exists(referencesPartialBuiltin)
+        case Case(arg, cases, _) =>
+            referencesPartialBuiltin(arg) || cases.exists(referencesPartialBuiltin)
+
+    /** Legacy CCE candidate filter. */
+    private[transform] def isSkippable(t: Term): Boolean = t match
+        case _: Var | _: Const | _: LamAbs | _: Delay | _: Builtin => true
+        case _: Error                                              => true
+        // Force(Builtin) / Force(Force(Builtin)) are value forms but worth extracting:
+        // duplicating them costs runtime memory/cpu (Force costs 100/16000 each).
+        case Force(Builtin(_, _), _)           => false
+        case Force(Force(Builtin(_, _), _), _) => false
+        // Other unsaturated builtin applications are value forms -- not worth extracting
+        case _ if t.isValueForm => true
+        // Keep the existing conservative filter for terms containing explicit error paths.
+        case _ if containsError(t) => true
+        case _                     => false
+
+    /** Whether a term contains an Error node anywhere, including deferred bodies. This syntactic
+      * filter is not a proof that evaluating the term fails.
+      */
+    private[transform] def containsError(t: Term): Boolean = t match
+        case _: Error                       => true
+        case _: Var | _: Const | _: Builtin => false
+        case LamAbs(_, body, _)             => containsError(body)
+        case Delay(inner, _)                => containsError(inner)
+        case Apply(f, arg, _)               => containsError(f) || containsError(arg)
+        case Force(inner, _)                => containsError(inner)
+        case Constr(_, args, _)             => args.exists(containsError)
+        case Case(arg, cases, _)            => containsError(arg) || cases.exists(containsError)
 
     private type Path = Vector[Int]
 

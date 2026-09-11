@@ -16,14 +16,14 @@ class HtlcCapeTest extends AnyFunSuite with ScalusTest {
     private val suite = CapeTestSuite.load("/cape/htlc/cape-tests.json")
 
     test(s"Script size: ${program.cborByteString.length} bytes") {
-        assert(program.cborByteString.length == 548)
+        assert(program.cborByteString.length == 569)
     }
 
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "claim_well_before_timeout" -> ExUnits(memory = 43917, steps = 18046963),
-      "claim_just_before_timeout" -> ExUnits(memory = 43917, steps = 18046963),
-      "refund_just_after_timeout" -> ExUnits(memory = 40984, steps = 16660141),
-      "refund_well_after_timeout" -> ExUnits(memory = 40984, steps = 16660141)
+      "claim_well_before_timeout" -> ExUnits(memory = 44945, steps = 18406297),
+      "claim_just_before_timeout" -> ExUnits(memory = 44945, steps = 18406297),
+      "refund_just_after_timeout" -> ExUnits(memory = 41812, steps = 16987475),
+      "refund_well_after_timeout" -> ExUnits(memory = 41812, steps = 16987475)
     )
 
     for c <- suite.cases do

@@ -4,354 +4,296 @@ import scalus.uplc.Term
 import scalus.uplc.Term.*
 import scalus.uplc.{DefaultFun, NamedDeBruijn}
 import scalus.uplc.eval.{Log, Logger}
-import scalus.uplc.transform.TermAnalysis.{freeVars, isValueForm}
+import scalus.uplc.transform.TermAnalysis.freeVars
 import scalus.cardano.ledger.Word64
-import scalus.serialization.flat.{Flat, given}
+import scalus.serialization.flat.Flat
 import scalus.uplc.Constant.flatConstant
 
 import scala.collection.mutable
 
-/** Common Subexpression Elimination (CSE) for UPLC terms.
+/** Share repeated expressions by introducing a strict UPLC binding, using Plutus 1.63.0.0's
+  * ancestor-or-self rule. In the examples below, `let x = e in body` means `[(lam x body) e]`; `e`
+  * is evaluated before `body`, even when the uses of `x` are delayed. For example,
+  * `let x = Error in Delay(x)` fails immediately, whereas `Delay(Error)` is a value.
   *
-  * Identifies duplicated subexpressions and hoists them into shared `let`-bindings (encoded as
-  * `Apply(LamAbs(name, body), expr)`). This reduces on-chain execution budget by avoiding redundant
-  * computation.
+  * {{{
+  * // When sharing pays, keep one copy of e and replace its uses with variables:
+  * Constr(0, [e, e])  =>  let x = e in Constr(0, [x, x])
   *
-  * ==Algorithm==
+  * // An existing strict occurrence can also supply a deferred use:
+  * Constr(0, [e, Delay(e)])  =>  let x = e in Constr(0, [x, Delay(x)])
   *
-  * Adapted from the Plutus CSE (3-pass path-based algorithm):
+  * // No strict occurrence outside the delays: do not move e out of them.
+  * Constr(0, [Delay(e), Delay(e)])
+  * }}}
   *
-  *   1. '''Count pass''': Traverse the term, assigning unique path IDs at evaluation boundaries
-  *      (LamAbs, Delay, Case branches). Count `(TermKey, Path) -> occurrences` pairs. Track which
-  *      variables are introduced at each path segment.
-  *   1. '''Merge & filter''': Merge counts to common ancestor paths and filter to candidates with
-  *      total count >= 2 that are not work-free. Verify that all free variables of the candidate
-  *      are in scope at the bind path.
-  *   1. '''Substitute pass''': For each candidate (largest first), replace occurrences with a fresh
-  *      variable and insert `Apply(LamAbs(freshName, body), candidate)` at the bind point.
+  * ==Safety: where may the binding go?==
+  * Lambda bodies, delayed bodies and individual Case branches are separate evaluation regions.
+  * Other children inherit their parent's region, including the body of an immediately applied
+  * lambda (a strict let). A group must contain an occurrence in its outermost region; occurrences
+  * in descendant regions can join it. Sibling regions alone cannot justify an outer binding.
+  * Otherwise extracting, for example, a failing `e` from an unused delay would make a successful
+  * program fail. The same placement rule applies to every candidate, including constants:
   *
-  * ==Safety==
+  * {{{
+  * LamAbs(a, Constr(0, [e(a), e(a)]))
+  *   => LamAbs(a, let x = e(a) in Constr(0, [x, x]))  // stay inside the lambda
   *
-  *   - Work-free terms (Var, Const, LamAbs, Delay, Builtin, unsaturated builtins) are never
-  *     extracted
-  *   - Error terms are never extracted
-  *   - Bare `Force(Builtin(...))` patterns are skipped (handled by [[ForcedBuiltinsExtractor]])
-  *   - CSE does not hoist expressions past lambdas that bind their free variables
-  *   - CSE does not hoist across evaluation boundaries, preserving evaluation order
+  * let a = e in Constr(0, [a, e])
+  *   => let x = e in (let a = x in Constr(0, [a, x])) // applied lambda is strict
   *
-  * @param logger
-  *   Logger for tracking CSE operations
+  * Case(tag, [e, e, 0])  // no outer occurrence of e; selecting branch 2 must not run e
+  * Constr(0, [Delay(largeConstant), Delay(largeConstant)])
+  *   // No special constant-hoisting exception: the two constant uses stay in separate regions.
+  *   // Sharing the whole Delay values is allowed; that does not evaluate their bodies.
+  * }}}
   *
-  * @see
-  *   [[https://github.com/IntersectMBO/plutus/blob/master/plutus-core/untyped-plutus-core/src/UntypedPlutusCore/Transform/Cse.hs Plutus CSE]]
+  * Like Plutus CSE, this preserves results and success/failure, not trace multiplicity, trace
+  * order, failure messages or exact budgets. A region is not an evaluation-order barrier: sharing
+  * may move work earlier within it. For example, with `e = trace("B", 1)` and `a = trace("A", 0)`,
+  * sharing e in `Constr(0, [a, e, e])` can change logs from `["A", "B", "B"]` to `["B", "A"]` while
+  * returning the same constructor. If a and e both fail, moving e first can change which failure is
+  * reported, but still fails. Even sharing a constant adds Apply/LamAbs/Var work, so exact budgets
+  * are not preserved.
+  *
+  * No builtin-totality or name-prefix assumptions are needed: `divideInteger n d` can be a
+  * candidate even when d might be zero, provided placement is safe and sharing pays. Renaming n to
+  * `__partial_n` does not change that decision.
+  *
+  * ==Profitability: should we introduce the binding?==
+  * Safe placement alone is insufficient. [[SharingCost]] prices estimated reference-script bits
+  * saved minus the extra binding's execution fee. Each round extracts the greatest positive saving,
+  * then recollects on the changed tree. For example, three uses of a 54-bit constant save
+  * `(3 - 1) * 54 - 3 * 12 - 8 = 64` estimated bits: remove two copies, insert three variables, and
+  * pay the Apply/LamAbs tags. The default fee estimate subtracts about 20.77 lovelace of binding
+  * work from 120 lovelace of reference-size savings. Two uses of an 18-bit integer constant instead
+  * save `18 - 24 - 8 = -14` bits and are rejected. See `docs/design/cse-placement.md` for the
+  * contract and pricing assumptions.
   */
 class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimizer {
     import CommonSubexpressionElimination.*
 
-    def apply(term: Term): Term = cse(term)
-
-    def logs: Seq[String] = logger.getLogs.toSeq
-
-    private def cse(term: Term): Term = {
-        // Pass 1: Count occurrences of each subexpression at each path.
-        // A "path" is a Vector[Int] of unique IDs assigned at evaluation boundaries
-        // (LamAbs body, Delay body, Case branches). Subexpressions under the same
-        // path prefix share the same evaluation context.
-        var nextId = 0
-        def freshPathId(): Int = { val id = nextId; nextId += 1; id }
-
-        // Track which variable name each path segment introduces (for scope checking)
-        val pathIdToVar = mutable.HashMap.empty[Int, String]
-
-        val counts = mutable.LinkedHashMap.empty[TermKey, mutable.ArrayBuffer[(Path, Int)]]
-        // Track which path IDs correspond to conditional evaluation boundaries
-        // (Case branches and Delay nodes). These are positions where the expression
-        // may not be evaluated depending on which branch is taken. LamAbs are excluded
-        // because lambda bodies are unconditionally evaluated when the lambda is applied.
-        val conditionalPathIds = mutable.HashSet.empty[Int]
-
-        def addCount(key: TermKey, path: Path): Unit = {
-            val pathCounts = counts.getOrElseUpdate(key, mutable.ArrayBuffer.empty)
-            val idx = pathCounts.indexWhere(_._1 == path)
-            if idx >= 0 then pathCounts(idx) = (path, pathCounts(idx)._2 + 1)
-            else pathCounts += ((path, 1))
-        }
-
-        def countPass(t: Term, path: Path): Unit = t match
-            case Var(_, _) | Const(_, _) | Builtin(_, _) | Error(_) => ()
-            case LamAbs(name, body, _) =>
-                val id = freshPathId()
-                pathIdToVar(id) = name
-                countPass(body, path :+ id)
-            case Apply(f, arg, _) =>
-                if !isSkippable(t) then addCount(new TermKey(t), path)
-                countPass(f, path)
-                countPass(arg, path)
-            case Force(inner, _) =>
-                if !isSkippable(t) then addCount(new TermKey(t), path)
-                countPass(inner, path)
-            case Delay(inner, _) =>
-                val id = freshPathId()
-                conditionalPathIds += id
-                countPass(inner, path :+ id)
-            case Constr(_, args, _) =>
-                if !isSkippable(t) then addCount(new TermKey(t), path)
-                args.foreach(countPass(_, path))
-            case Case(scrutinee, cases, _) =>
-                if !isSkippable(t) then addCount(new TermKey(t), path)
-                countPass(scrutinee, path)
-                cases.foreach { c =>
-                    val id = freshPathId()
-                    conditionalPathIds += id
-                    countPass(c, path :+ id)
-                }
-
-        countPass(term, Vector.empty)
-
-        // Compute which variables are in scope at a given path.
-        // Variables are introduced by LamAbs nodes; the path segment ID maps to the var name.
-        val topLevelFreeVars = term.freeVars
-        def varsInScope(path: Path): Set[String] =
-            topLevelFreeVars ++ path.flatMap(id => pathIdToVar.get(id))
-
-        // Check if hoisting from occurrencePath to bindPath is safe for the given free vars.
-        // A variable must be in scope at bindPath AND must NOT be re-bound (shadowed) by any
-        // lambda between bindPath and occurrencePath. If a variable is shadowed, the expression
-        // at the occurrence refers to the inner binding, but at the bind path it would refer
-        // to a different (outer) binding.
-        def isSafeToHoist(
-            freeVars: Set[String],
-            bindPath: Path,
-            occurrencePath: Path
-        ): Boolean = {
-            val scopeAtBind = varsInScope(bindPath)
-            if !freeVars.subsetOf(scopeAtBind) then return false
-            // Check for shadowing: path segments between bindPath and occurrencePath
-            val extensionSegments = occurrencePath.drop(bindPath.length)
-            val shadowedVars = extensionSegments.flatMap(id => pathIdToVar.get(id)).toSet
-            // If any free variable is re-bound in the extension, the binding is unsafe
-            freeVars.intersect(shadowedVars).isEmpty
-        }
-
-        // Pass 2: For each expression, compute the bind path (longest common ancestor
-        // of all occurrence paths) and total count.
-        case class CseCandidate(key: TermKey, bindPath: Path, totalCount: Int, size: Int)
-
-        val candidates = mutable.ArrayBuffer.empty[CseCandidate]
-
-        for (key, pathCounts) <- counts do
-            val allPaths = pathCounts.flatMap { case (path, count) =>
-                Iterator.fill(count)(path)
-            }.toVector
-
-            val totalCount = allPaths.size
-            if totalCount >= 2 then
-                val bindPath = longestCommonPrefix(allPaths)
-                val candidateFreeVars = key.term.freeVars
-                // Safety check: free variables must be in scope at the bind path AND
-                // must not be shadowed between bind path and ANY occurrence path.
-                val safeForAll = allPaths.forall(p => isSafeToHoist(candidateFreeVars, bindPath, p))
-                // Check if hoisting crosses a conditional boundary with partial builtins.
-                // Conditional boundaries are Case branches and Delay nodes (used in
-                // IfThenElse patterns). If occurrences are inside conditional branches and
-                // the expression contains partial builtins (headList, unConstrData, etc.),
-                // hoisting above the boundary removes the data-shape guarantee provided by
-                // branch selection.
-                val crossesConditional = allPaths.exists { path =>
-                    path.length > bindPath.length &&
-                    conditionalPathIds.contains(path(bindPath.length))
-                }
-                val unsafeCaseCrossing =
-                    crossesConditional && referencesPartialBuiltin(key.term)
-                if safeForAll && !unsafeCaseCrossing then
-                    candidates += CseCandidate(key, bindPath, totalCount, termSize(key.term))
-
-        if candidates.isEmpty then return term
-
-        // Sort by size descending, then by name. Ties keep first-occurrence order (the map above is
-        // insertion-ordered). The key is computed once per candidate: `sortBy` would re-evaluate
-        // it on every comparison, and `key.toString` renders the whole term.
-        val sortedCandidates =
-            candidates.map(c => ((-c.size, c.key.toString), c)).sortBy(_._1).map(_._2)
-
-        // Collect all existing names to avoid collisions
-        val existingNames = collectNames(term)
-        val nameBaseCounts = mutable.HashMap.empty[String, Int]
-        def freshCseName(extracted: Term): String = {
-            val base = TermNaming.termDescription(extracted)
-            val count = nameBaseCounts.getOrElse(base, 0)
-            nameBaseCounts(base) = count + 1
-            var name = if count == 0 then s"__cse_$base" else s"__cse_${base}_$count"
-            while existingNames.contains(name) do
-                val c = nameBaseCounts(base)
-                nameBaseCounts(base) = c + 1
-                name = s"__cse_${base}_$c"
-            existingNames += name
+    def apply(term: Term): Term = {
+        val names = collectNames(term)
+        // If __cse_e and __cse_e_1 already occur anywhere in the input, choose __cse_e_2.
+        def freshName(base: String): String = {
+            var name = base
+            var suffix = 0
+            while names.contains(name) do
+                suffix += 1
+                name = s"${base}_$suffix"
+            names += name
             name
         }
 
-        // Pass 3: Apply substitutions one at a time (largest candidates first).
-        // After each substitution, the replaced nodes are gone, so smaller candidates
-        // that were subterms of the larger one will naturally see fewer occurrences.
-        var currentTerm = term
-
-        for cand <- sortedCandidates do
-            // Re-count occurrences of this candidate in the (possibly modified) current term.
-            // This is necessary because prior substitutions may have removed some occurrences.
-            val occurrences = mutable.ArrayBuffer.empty[Path]
-            var reNextId = 0
-            def reFreshId(): Int = { val id = reNextId; reNextId += 1; id }
-
-            // Re-build pathIdToVar for the re-count pass on the modified term
-            val rePathIdToVar = mutable.HashMap.empty[Int, String]
-            val reConditionalPathIds = mutable.HashSet.empty[Int]
-
-            def reCount(t: Term, path: Path): Unit = t match
-                case _ if cand.key.term ~=~ t =>
-                    occurrences += path
-                    // Don't recurse into matched subterms -- they'll all be replaced
-                case Var(_, _) | Const(_, _) | Builtin(_, _) | Error(_) => ()
-                case LamAbs(name, body, _) =>
-                    val id = reFreshId()
-                    rePathIdToVar(id) = name
-                    reCount(body, path :+ id)
-                case Apply(f, arg, _) =>
-                    reCount(f, path)
-                    reCount(arg, path)
-                case Force(inner, _) =>
-                    reCount(inner, path)
-                case Delay(inner, _) =>
-                    val id = reFreshId()
-                    reConditionalPathIds += id
-                    reCount(inner, path :+ id)
-                case Constr(_, args, _) =>
-                    args.foreach(reCount(_, path))
-                case Case(scrutinee, cases, _) =>
-                    reCount(scrutinee, path)
-                    cases.foreach { c =>
-                        val id = reFreshId()
-                        reConditionalPathIds += id
-                        reCount(c, path :+ id)
-                    }
-
-            reCount(currentTerm, Vector.empty)
-
-            if occurrences.size >= 2 then
-                val bindPath = longestCommonPrefix(occurrences.toVector)
-
-                // Re-check scope safety with the modified term's path-to-var mapping.
-                // Must verify no shadowing between bind path and any occurrence path.
-                val reFreeVars = currentTerm.freeVars
-                val candFreeVars = cand.key.term.freeVars
-                def reIsSafeToHoist(bindP: Path, occP: Path): Boolean = {
-                    val scope = reFreeVars ++ bindP.flatMap(id => rePathIdToVar.get(id))
-                    if !candFreeVars.subsetOf(scope) then return false
-                    val ext = occP.drop(bindP.length)
-                    val shadowed = ext.flatMap(id => rePathIdToVar.get(id)).toSet
-                    candFreeVars.intersect(shadowed).isEmpty
-                }
-                val reSafe = occurrences.forall(p => reIsSafeToHoist(bindPath, p))
-                val reCrossesConditional = occurrences.exists { path =>
-                    path.length > bindPath.length &&
-                    reConditionalPathIds.contains(path(bindPath.length))
-                }
-                val reUnsafeCaseCrossing =
-                    reCrossesConditional && referencesPartialBuiltin(cand.key.term)
-                if reSafe && !reUnsafeCaseCrossing then
-                    val freshName = freshCseName(cand.key.term)
-                    val varTerm = Var(NamedDeBruijn(freshName))
-
-                    // Substitute all occurrences with the fresh variable
-                    var subNextId = 0
-                    def subFreshId(): Int = { val id = subNextId; subNextId += 1; id }
-
-                    def doSubstitute(t: Term, path: Path): Term = t match
-                        case _ if (cand.key.term ~=~ t) && isAncestorOrSelf(bindPath, path) =>
-                            varTerm
-                        case Var(_, _) | Const(_, _) | Builtin(_, _) | Error(_) => t
-                        case LamAbs(name, body, ann) =>
-                            val id = subFreshId()
-                            LamAbs(name, doSubstitute(body, path :+ id), ann)
-                        case Apply(f, arg, ann) =>
-                            Apply(doSubstitute(f, path), doSubstitute(arg, path), ann)
-                        case Force(inner, ann) =>
-                            Force(doSubstitute(inner, path), ann)
-                        case Delay(inner, ann) =>
-                            val id = subFreshId()
-                            Delay(doSubstitute(inner, path :+ id), ann)
-                        case Constr(tag, args, ann) =>
-                            Constr(tag, args.map(doSubstitute(_, path)), ann)
-                        case Case(scrutinee, cases, ann) =>
-                            val newScrutinee = doSubstitute(scrutinee, path)
-                            val newCases = cases.map { c =>
-                                val id = subFreshId()
-                                doSubstitute(c, path :+ id)
-                            }
-                            Case(newScrutinee, newCases, ann)
-
-                    val substituted = doSubstitute(currentTerm, Vector.empty)
-
-                    // Insert the let-binding at the bind path
-                    currentTerm = insertLetAtPath(substituted, bindPath, freshName, cand.key.term)
-                    logger.log(
-                      s"CSE: extracted ${cand.key.term.showShort} (${occurrences.size} occurrences) as $freshName"
-                    )
-
-        currentTerm
-    }
-
-    /** Inserts `Apply(LamAbs(name, <hole>), expr)` at the position corresponding to the bind path.
-      *
-      * The bind path identifies a point in the tree where the computation is guaranteed to be
-      * evaluated if any of the occurrences are evaluated. We walk the tree, tracking path IDs at
-      * evaluation boundaries, and wrap the subtree at the target point.
-      */
-    private def insertLetAtPath(term: Term, bindPath: Path, name: String, expr: Term): Term = {
-        if bindPath.isEmpty then return Apply(LamAbs(name, term), expr)
-
-        var nextId = 0
-        def freshId(): Int = { val id = nextId; nextId += 1; id }
-
-        def go(t: Term, remaining: Path): Term = t match
+        // Preserve existing unique names (including debug labels). Rename only binders which
+        // collide with another binder or a free variable; all generated names avoid input names.
+        // For example, e(x) under two different `lam x` binders must not be grouped as the
+        // same expression. Globally unique names make structural equality distinguish them.
+        // For example, Constr(0, [lam x. e(x), lam x. e(x)]) becomes
+        // Constr(0, [lam x. e(x), lam x_cse. e(x_cse)]) during collection.
+        // Free names are reserved too: Constr(0, [x, lam x. x]) must keep its free x separate
+        // from the lambda parameter. An already unique debug name such as amount is retained.
+        val boundNames = mutable.HashSet.from(term.freeVars)
+        def uniqueBinders(t: Term, env: Map[String, String]): Term = t match
+            case Var(n, ann) => Var(n.copy(name = env.getOrElse(n.name, n.name)), ann)
             case LamAbs(n, body, ann) =>
-                val id = freshId()
-                if remaining.nonEmpty && remaining.head == id then
-                    if remaining.size == 1 then
-                        // Wrap the lambda body with the let-binding
-                        LamAbs(n, Apply(LamAbs(name, body), expr), ann)
-                    else LamAbs(n, go(body, remaining.tail), ann)
-                else LamAbs(n, go(body, remaining), ann)
-            case Apply(f, arg, ann) =>
-                Apply(go(f, remaining), go(arg, remaining), ann)
-            case Force(inner, ann) =>
-                Force(go(inner, remaining), ann)
-            case Delay(inner, ann) =>
-                val id = freshId()
-                if remaining.nonEmpty && remaining.head == id then
-                    if remaining.size == 1 then Delay(Apply(LamAbs(name, inner), expr), ann)
-                    else Delay(go(inner, remaining.tail), ann)
-                else Delay(go(inner, remaining), ann)
-            case Constr(tag, args, ann) =>
-                Constr(tag, args.map(go(_, remaining)), ann)
-            case Case(scrutinee, cases, ann) =>
-                val newScrutinee = go(scrutinee, remaining)
-                val newCases = cases.map { c =>
-                    val id = freshId()
-                    if remaining.nonEmpty && remaining.head == id then
-                        if remaining.size == 1 then Apply(LamAbs(name, c), expr)
-                        else go(c, remaining.tail)
-                    else go(c, remaining)
-                }
-                Case(newScrutinee, newCases, ann)
-            case _ => t
+                val unique = if boundNames.add(n) then n else freshName(s"${n}_cse")
+                boundNames += unique
+                LamAbs(unique, uniqueBinders(body, env.updated(n, unique)), ann)
+            case _ => mapChildren(t)((child, _) => uniqueBinders(child, env))
 
-        go(term, bindPath)
+        var current = uniqueBinders(term, Map.empty)
+        var changed = false
+        var candidate = collect(current)
+        while candidate.nonEmpty do
+            val c = candidate.get
+            val name = freshName(s"__cse_${TermNaming.termDescription(c.expr)}")
+            current = extract(current, c, name)
+            changed = true
+            logger.log(
+              s"CSE: extracted ${c.expr.showShort} (${c.occurrences.size} occurrences, ${c.savedLovelace} estimated lovelace saved) as $name"
+            )
+            // Extraction changes both occurrence counts and paths. For example, sharing f(e)
+            // removes copies of the e inside it. A second candidate from the old tree would
+            // have stale uses and stale savings, so select again from the rewritten tree:
+            // Constr(0, [f(e), f(e)]) => let x = f(e) in Constr(0, [x, x]).
+            // There is now just one e, and the original child paths point into a new let.
+            candidate = collect(current)
+
+        // Alpha-renaming alone is not an optimization, and should not change a no-op result.
+        // For example, lam x. lam x. x needs internal renaming but has nothing to share;
+        // return the original names/annotations instead of exposing that preparation step.
+        if changed then current else term
     }
+
+    def logs: Seq[String] = logger.getLogs.toSeq
+
+    // The region of an actual occurrence, not merely the common ancestor of all uses.
+    // This occurrence justifies sharing into descendant regions that may not execute.
+    // In Constr(0, [e, Delay(e)]), the first e supplies the group's region. In
+    // Constr(0, [Delay(e), Delay(e)]), the common ancestor contains no occurrence of e itself.
+    private case class Group(region: Path, occurrences: mutable.ArrayBuffer[Path])
+    private case class Candidate(
+        expr: Term,
+        occurrences: Set[Path],
+        bindAt: Path,
+        savedLovelace: Double = 0
+    )
+
+    /** Collect equal expressions into groups with safe placement, then choose one profitable group.
+      *
+      * `path` identifies a node; `region` identifies the root of its evaluation region. These are
+      * different: many nodes share a region, but the binding belongs at their lowest common
+      * ancestor, not necessarily at the region root. For Constr(0, [a, Constr(0, [e, e])]), the e
+      * paths are [1, 0] and [1, 1], both in region []; insert the binding at [1].
+      */
+    private def collect(term: Term): Option[Candidate] = {
+        val groups = mutable.LinkedHashMap.empty[TermKey, mutable.ArrayBuffer[Group]]
+
+        def add(t: Term, path: Path, region: Path): Unit = {
+            val entries = groups.getOrElseUpdate(new TermKey(t), mutable.ArrayBuffer.empty)
+            entries.find(g => isAncestorOrSelf(g.region, region)) match
+                case Some(ancestor) =>
+                    // A strict occurrence was already found in this region or an enclosing one.
+                    // Its binding can supply this use even if this use is inside a delay/branch.
+                    // In Constr(0, [e, Delay(e)]), visiting the delayed e finds the first e's group.
+                    ancestor.occurrences += path
+                case None =>
+                    // Traversal order need not discover the outer occurrence first. In
+                    // Constr(0, [Delay(e), Delay(e), e]), the final e justifies merging both
+                    // previously separate groups. Without that e, the siblings stay separate.
+                    val occurrences = mutable.ArrayBuffer(path)
+                    entries.filterInPlace { g =>
+                        if isAncestorOrSelf(region, g.region) then
+                            occurrences ++= g.occurrences
+                            false
+                        else true
+                    }
+                    entries += Group(region, occurrences)
+        }
+
+        def go(t: Term, path: Path, region: Path): Unit = {
+            // Record a Delay/LamAbs itself in the current region: constructing the value is
+            // strict, although evaluating its body is not. Only the body starts a new region.
+            // Constr(0, [Delay(e), Delay(e)]) may become let d = Delay(e) in Constr(0, [d, d]);
+            // e remains unevaluated. Likewise, evaluating a lambda value does not call it.
+            add(t, path, region)
+            t match
+                // Let bodies are strict, but still have lexical scope. Unique binders and the
+                // structural LCA below keep any expression using the parameter inside its body.
+                // (lam a. Constr(0, [f(a), f(a)])) arg shares f(a) inside lam a, never around arg.
+                // Body path [0, 0] still records the intervening lambda despite inheriting region [].
+                case Apply(LamAbs(_, body, _), arg, _) =>
+                    go(body, path :+ 0 :+ 0, region)
+                    go(arg, path :+ 1, region)
+                case LamAbs(_, body, _) =>
+                    val p = path :+ 0
+                    go(body, p, p)
+                case Delay(body, _) =>
+                    val p = path :+ 0
+                    go(body, p, p)
+                case Case(scrutinee, branches, _) =>
+                    // The scrutinee is strict; only the selected branch executes. A repeated
+                    // expression confined to different branches cannot be hoisted above Case.
+                    // Case(tag, [e, e, 0]) must still return 0 for tag 2 even when e would fail.
+                    go(scrutinee, path :+ 0, region)
+                    branches.zipWithIndex.foreach { (branch, i) =>
+                        val p = path :+ (i + 1)
+                        go(branch, p, p)
+                    }
+                case _ =>
+                    children(t).zipWithIndex.foreach((child, i) => go(child, path :+ i, region))
+        }
+
+        go(term, Vector.empty, Vector.empty)
+        // Safety is established by grouping, independently of expression size or builtin kind.
+        // Greatest estimated lovelace saving first; ties retain deterministic traversal order.
+        // For example, prefer a group saving 100 lovelace over one saving 20; for two groups
+        // saving 100, keep the first encountered. Recompute the other saving after extraction.
+        // Positive net savings require positive bit savings, so additive termBits ensures
+        // termination: an extraction saving 64 bits reduces the whole-tree estimate by 64.
+        // Even a huge expression with one occurrence in each of two sibling regions is not priced as a pair.
+        var best: Option[Candidate] = None
+        for (key, entries) <- groups do
+            for group <- entries if group.occurrences.size >= 2 do
+                val paths = group.occurrences.toVector
+                // Unique binders ensure all uses of an expression with a bound variable lie
+                // within that binder's body. Their LCA therefore keeps its dependencies in scope.
+                // Placing here also avoids wrapping unrelated parts of the enclosing region.
+                // In lam a. Constr(0, [other, Constr(0, [f(a), f(a)])]), bind f(a) only around
+                // the inner Constr: a stays in scope and other stays outside the new binding.
+                val c = Candidate(key.term, paths.toSet, longestCommonPrefix(paths))
+                val saving = SharingCost.savingLovelace(c.expr, c.occurrences.size)
+                if saving > best.fold(0.0)(_.savedLovelace) then
+                    best = Some(c.copy(savedLovelace = saving))
+        best
+    }
+
+    /** Replace uses and insert their binding in one traversal of the original paths.
+      *
+      * For a subtree `Constr(0, [e, e])`, first build `Constr(0, [x, x])`, then wrap it in
+      * `[(lam x ...) e]`. The binding's right-hand side is the original e: visiting it with the
+      * replacement rule would incorrectly replace it with x and create a self-reference.
+      */
+    private def extract(term: Term, candidate: Candidate, name: String): Term = {
+        def go(t: Term, path: Path): Term = {
+            if candidate.occurrences.contains(path) then Var(NamedDeBruijn(name), t.annotation)
+            else {
+                val body = mapChildren(t)((child, i) => go(child, path :+ i))
+                if path == candidate.bindAt then
+                    Apply(LamAbs(name, body, t.annotation), candidate.expr, t.annotation)
+                else body
+            }
+        }
+        go(term, Vector.empty)
+    }
+
+    // Child numbering is shared by collection and rewriting: Apply uses 0=function, 1=argument;
+    // Case uses 0=scrutinee, 1..n=branches. These indices must agree with mapChildren below.
+    // For Apply(f, Case(s, [b0, b1])), path [1, 2] must identify b1 in both walks.
+    private def children(t: Term): List[Term] = t match
+        case LamAbs(_, body, _)           => List(body)
+        case Apply(f, arg, _)             => List(f, arg)
+        case Force(body, _)               => List(body)
+        case Delay(body, _)               => List(body)
+        case Constr(_, args, _)           => args
+        case Case(scrutinee, branches, _) => scrutinee :: branches
+        case _                            => Nil
+
+    private def mapChildren(t: Term)(f: (Term, Int) => Term): Term = t match
+        case LamAbs(n, body, ann)   => LamAbs(n, f(body, 0), ann)
+        case Apply(fn, arg, ann)    => Apply(f(fn, 0), f(arg, 1), ann)
+        case Force(body, ann)       => Force(f(body, 0), ann)
+        case Delay(body, ann)       => Delay(f(body, 0), ann)
+        case Constr(tag, args, ann) => Constr(tag, args.zipWithIndex.map(f.tupled), ann)
+        case Case(scrutinee, branches, ann) =>
+            Case(f(scrutinee, 0), branches.zipWithIndex.map((b, i) => f(b, i + 1)), ann)
+        case _ => t
 }
 
 object CommonSubexpressionElimination {
 
-    /** Annotation-ignoring structural equality wrapper for use as HashMap key. */
+    // Preserve the emitted 1.1.0 methods for binary compatibility; these filters belong to CCE.
+    // For example, an already compiled call to CSE.isSkippable(t) still resolves, but forwards
+    // to CCE.isSkippable(t). The CSE collection algorithm above never calls these filters.
+    @deprecated("use CommonContextExtraction.referencesPartialBuiltin", "1.1.1")
+    private[transform] def referencesPartialBuiltin(t: Term): Boolean =
+        CommonContextExtraction.referencesPartialBuiltin(t)
+
+    @deprecated("use CommonContextExtraction.isSkippable", "1.1.1")
+    private[transform] def isSkippable(t: Term): Boolean = CommonContextExtraction.isSkippable(t)
+
+    @deprecated("use CommonContextExtraction.containsError", "1.1.1")
+    private[transform] def containsError(t: Term): Boolean =
+        CommonContextExtraction.containsError(t)
+
+    /** Structural equality and hashing ignore annotations, so different source locations do not
+      * prevent sharing. This is not alpha-equivalence: binder names still matter. The initial
+      * unique-binder traversal prevents equal-looking variables from referring to different
+      * binders. For example, `addInteger x 1` at source line 10 equals the same syntax at line 20,
+      * but `lam x. x` and `lam y. y` are distinct keys despite being alpha-equivalent.
+      */
     private[transform] final class TermKey(val term: Term) {
         override def equals(that: Any): Boolean = that match
             case other: TermKey => term ~=~ other.term
@@ -376,12 +318,15 @@ object CommonSubexpressionElimination {
         override def toString: String = s"TermKey(${term.showShort})"
     }
 
+    // A path is a sequence of child indices from the root, not a preorder traversal number.
+    // For example, [0, 1] and [0, 2] have LCA [0]; wrapping that subtree leaves its siblings alone.
     private type Path = Vector[Int]
 
+    // [] encloses every path; [1] encloses [1, 0] and itself, but not sibling [2].
     private def isAncestorOrSelf(ancestor: Path, descendant: Path): Boolean =
         descendant.startsWith(ancestor)
 
-    /** Computes the longest common prefix of a collection of paths. */
+    /** Computes the LCA: paths [1, 0] and [1, 2, 0] give [1]; [0] and [1] give the root []. */
     private def longestCommonPrefix(paths: Vector[Path]): Path = {
         if paths.isEmpty then Vector.empty
         else if paths.size == 1 then paths.head
@@ -396,124 +341,36 @@ object CommonSubexpressionElimination {
             paths.head.take(prefixLen)
     }
 
-    /** Builtins whose failure depends on the **shape/type** of their input data. These are unsafe
-      * to hoist across conditional (Case/Delay) boundaries because branch selection provides
-      * data-shape guarantees that the builtin relies on.
-      *
-      * This is a subset of non-total builtins (`!DefaultFun.isTotal`). We intentionally exclude:
-      *   - Value-dependent failures (division by zero, index OOB, overflow) — safe to hoist since
-      *     Case branches don't discriminate on these conditions
-      *   - `MkCons` / `Trace` — while non-total, blocking them is too conservative in practice
-      *     since they appear pervasively in smart contract code
-      *
-      * @see
-      *   [[DefaultFun.isTotal]] for the full list of non-total builtins
-      */
-    private val shapePartialBuiltins: Set[DefaultFun] = Set(
-      // Data destructors: fail on wrong Data variant (shape-dependent)
-      DefaultFun.UnConstrData,
-      DefaultFun.UnMapData,
-      DefaultFun.UnListData,
-      DefaultFun.UnIData,
-      DefaultFun.UnBData,
-      // List operations: fail on empty vs non-empty (shape-dependent)
-      DefaultFun.HeadList,
-      DefaultFun.TailList
-    )
-
-    /** Variable name prefixes for shape-partial builtins extracted by [[ForcedBuiltinsExtractor]].
-      * ForcedBuiltinsExtractor replaces `Force(Builtin(HeadList))` with `Var("__HeadList")`, so we
-      * must also detect these variable references.
-      */
-    private val partialBuiltinVarPrefixes: Set[String] =
-        shapePartialBuiltins.map(fn => s"__$fn")
-
-    /** Whether a term references any shape-partial builtin in an evaluated position.
-      *
-      * Detects three cases:
-      *   - Direct `Builtin(fn)` references for shape-partial builtins.
-      *   - Variable references created by [[ForcedBuiltinsExtractor]] (e.g., `__HeadList`).
-      *   - Applications `Apply(Var(name), arg)` where `name` is a user-defined helper (i.e., not a
-      *     pure-builtin-extractor name and not a `__cse_` wrapper). Such helpers may internally
-      *     reference partial builtins — e.g., a `List.head` helper transitively invokes
-      *     `__HeadList`. Without tracing through the helper's body we cannot prove it total, so we
-      *     conservatively assume it is partial when crossing a conditional boundary. This is only
-      *     consulted inside `unsafeCaseCrossing` checks; it does not disable CSE in non-conditional
-      *     contexts.
-      *
-      * Does not recurse into LamAbs or Delay bodies (those are deferred, so the builtin there
-      * doesn't fire at the extraction point).
-      */
-    private[transform] def referencesPartialBuiltin(t: Term): Boolean = t match
-        case Builtin(fn, _) => shapePartialBuiltins.contains(fn)
-        case Var(NamedDeBruijn(name, _), _) =>
-            partialBuiltinVarPrefixes.exists(name.startsWith)
-        case _: Const | _: Error                                                     => false
-        case _: LamAbs | _: Delay                                                    => false
-        case Apply(Var(NamedDeBruijn(name, _), _), arg, _) if !name.startsWith("__") =>
-            // User-defined helper — may transitively call a partial builtin in its body.
-            // Be conservative: treat the application as potentially partial, irrespective
-            // of what the argument contains.
-            true
-        case Apply(f, arg, _)   => referencesPartialBuiltin(f) || referencesPartialBuiltin(arg)
-        case Force(inner, _)    => referencesPartialBuiltin(inner)
-        case Constr(_, args, _) => args.exists(referencesPartialBuiltin)
-        case Case(arg, cases, _) =>
-            referencesPartialBuiltin(arg) || cases.exists(referencesPartialBuiltin)
-
-    /** Whether a term should be skipped for CSE (work-free or otherwise not worth extracting). */
-    private[transform] def isSkippable(t: Term): Boolean = t match
-        case _: Var | _: Const | _: LamAbs | _: Delay | _: Builtin => true
-        case _: Error                                              => true
-        // Force(Builtin) / Force(Force(Builtin)) are value forms but worth extracting:
-        // duplicating them costs runtime memory/cpu (Force costs 100/16000 each).
-        case Force(Builtin(_, _), _)           => false
-        case Force(Force(Builtin(_, _), _), _) => false
-        // Other unsaturated builtin applications are value forms -- not worth extracting
-        case _ if t.isValueForm => true
-        // Terms containing Error will definitely fail when evaluated --
-        // extracting them to an eagerly-evaluated binding would change semantics
-        case _ if containsError(t) => true
-        case _                     => false
-
-    /** Whether a term contains an Error node anywhere in its tree (including inside Delay/LamAbs).
-      *
-      * Terms containing Error are typically error-handling paths (e.g., `force [trace "msg" (delay
-      * error)]`). Extracting these as common subexpressions would move the error to an
-      * eagerly-evaluated binding position, causing the error to fire unconditionally. Even when
-      * Error is inside a Delay, a surrounding Force can unwrap it.
-      */
-    private[transform] def containsError(t: Term): Boolean = t match
-        case _: Error                       => true
-        case _: Var | _: Const | _: Builtin => false
-        case LamAbs(_, body, _)             => containsError(body)
-        case Delay(inner, _)                => containsError(inner)
-        case Apply(f, arg, _)               => containsError(f) || containsError(arg)
-        case Force(inner, _)                => containsError(inner)
-        case Constr(_, args, _)             => args.exists(containsError)
-        case Case(arg, cases, _)            => containsError(arg) || cases.exists(containsError)
-
-    /** Count the number of nodes in a term (used for sorting candidates). */
-    /** Width of a UPLC term tag in the flat encoding. */
+    /** Width of a UPLC term tag: Error costs 4 bits; Delay(t) costs 4 plus the size of t. */
     private[transform] val TermTagBits = 4
 
-    /** Flat-encoded width of a `Var`: a 4-bit tag plus one 7-bit index group.
+    /** Flat-encoded width of a `Var`: a 4-bit tag plus an 8-bit index group (7 payload bits and a
+      * continuation bit).
       *
       * Exact while every de Bruijn index stays below 128. The largest index measured across the
-      * example validators is 66.
+      * example validators is 66. For example, index 1 costs 4 + 8 = 12 bits, whereas index 128
+      * needs two groups (20 bits); this estimate would still charge it 12.
       */
     private[transform] val VarBits = TermTagBits + 8
 
-    /** Flat-encoded bit size of a term, used for size-cost decisions.
+    /** Approximate Flat-encoded bit size used for CSE and CCE profitability.
       *
       * Mirrors `Flat[Term].bitSize` in Term.scala, except that every `Var` is priced at the minimum
       * [[VarBits]] rather than from its de Bruijn index. The optimizer passes run before de Bruijn
       * conversion, so indices are not yet assigned and `Flat[Term].bitSize` throws on them; CCE
-      * templates also contain a hole sentinel that is not a real variable.
+      * templates also contain a hole sentinel that is not a real variable. For example, `vr"x"` has
+      * an unassigned index 0: termBits prices it at 12 bits without trying to serialize it. The
+      * same placeholder can be sized inside a CCE application template.
       *
-      * Prefer this over [[termSize]] whenever the decision is about serialized script size: node
-      * counts price an `Apply` (4 bits) the same as a `Var` (12 bits) or a small `Data` constant
-      * (58 bits), which is a 3x error bar on a cost that is charged in bytes.
+      * This estimate ignores variable-index growth and uses worst-case byte-array padding.
+      * Profitability is heuristic; semantic safety comes from the placement rules. For example,
+      * `(con (list data) [I 1])` is estimated at 54 bits: 4 for the term tag, 16 for the type, 2
+      * for list framing, and 32 for the byte-wrapped CBOR datum, including worst-case alignment.
+      * Counting this as one AST node would hide its serialization cost. The CBOR integer 1 occupies
+      * one byte, but its Flat byte wrapper is estimated as four bytes: alignment, chunk length,
+      * payload, and terminator. Actual alignment can use fewer than eight bits. A marginal positive
+      * estimate can therefore lose its advantage after serialization, for example when extraction
+      * pushes an existing variable index from 127 to 128.
       */
     private[transform] def termBits(t: Term): Int = t match
         case Var(_, _)          => VarBits
@@ -528,9 +385,12 @@ object CommonSubexpressionElimination {
             TermTagBits + summon[Flat[Word64]].bitSize(tag) + termListBits(args)
         case Case(arg, cases, _) => TermTagBits + termBits(arg) + termListBits(cases)
 
-    /** Flat list framing is one continuation bit per element plus a terminator. */
+    /** Flat list framing: [] costs 1 bit; [a, b] costs 3 bits plus termBits(a) + termBits(b). */
     private def termListBits(ts: List[Term]): Int = ts.size + 1 + ts.map(termBits).sum
 
+    /** AST node count: Apply(Var(f), Const(bytes)) has 3 nodes even for a kilobyte of bytes. Unlike
+      * termBits, this does not measure script-size savings.
+      */
     private[transform] def termSize(t: Term): Int = t match
         case Var(_, _) | Const(_, _) | Builtin(_, _) | Error(_) => 1
         case LamAbs(_, body, _)                                 => 1 + termSize(body)
@@ -540,7 +400,7 @@ object CommonSubexpressionElimination {
         case Constr(_, args, _)                                 => 1 + args.map(termSize).sum
         case Case(arg, cases, _) => 1 + termSize(arg) + cases.map(termSize).sum
 
-    /** Collect all variable/lambda names used in a term. */
+    /** Reserve bound and free names: lam x. Apply(x, y) contributes both x and y. */
     private def collectNames(t: Term): mutable.HashSet[String] = {
         val names = mutable.HashSet.empty[String]
         def go(t: Term): Unit = t match
@@ -556,7 +416,7 @@ object CommonSubexpressionElimination {
         names
     }
 
-    /** Applies CSE to a term using default settings. */
+    /** Convenience entry point: CSE(term) runs a fresh CSE instance with its default logger. */
     def apply(term: Term): Term = {
         val cse = new CommonSubexpressionElimination()
         cse(term)
