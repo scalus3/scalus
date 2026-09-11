@@ -40,10 +40,9 @@ class CommonContextExtractionTest
         assert(isSkippable(Error()))
     }
 
-    test("isSkippable: Force(Builtin) / Force(Force(Builtin)) are NOT skippable") {
-        // CCE retains these as candidates because repeated forces cost CPU and memory.
-        assert(!isSkippable(Force(Builtin(HeadList))))
-        assert(!isSkippable(Force(Force(Builtin(FstPair)))))
+    test("isSkippable: forced builtins cannot reach the minimum template size") {
+        assert(isSkippable(Force(Builtin(HeadList))))
+        assert(isSkippable(Force(Force(Builtin(FstPair)))))
     }
 
     test("isSkippable: saturated builtin application is not skippable") {
@@ -64,7 +63,13 @@ class CommonContextExtractionTest
         assert(referencesPartialBuiltin(vr"__HeadList" $ vr"xs"))
         assert(referencesPartialBuiltin(vr"__UnConstrData" $ vr"d"))
         assert(referencesPartialBuiltin(vr"__TailList" $ vr"xs"))
-        assert(!referencesPartialBuiltin(vr"__AddInteger" $ vr"x" $ vr"y"))
+        // A name alone does not establish that this binding actually contains AddInteger.
+        assert(referencesPartialBuiltin(vr"__AddInteger" $ vr"x" $ vr"y"))
+    }
+
+    test("helper names cannot establish totality across conditional boundaries") {
+        for name <- List("helper", "__helper", "__cse_helper", "__cce_helper") do
+            assert(referencesPartialBuiltin(vr(name) $ vr"x"))
     }
 
     // ========================================================================
@@ -499,6 +504,14 @@ class CommonContextExtractionTest
           run(optimized, true, List(Constant.Integer(7))) α_==
               run(term, true, List(Constant.Integer(7)))
         )
+    }
+
+    test("CCE skips templates containing constants without a Flat encoding") {
+        import scalus.uplc.builtin.bls12_381.G1Element
+        val point = Const(Constant.BLS12_381_G1_Element(G1Element.generator))
+        val term = λ(f => λ(x => λ(y => Constr(Word64.Zero, List(f $ point $ x, f $ point $ y)))))
+        val result = CommonContextExtraction(term)
+        assert(result ~=~ term)
     }
 
     test("CCE preserves semantics of closed terms with common context") {

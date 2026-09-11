@@ -5,7 +5,7 @@ import scalus.uplc.Term.*
 import scalus.uplc.{DefaultFun, NamedDeBruijn}
 import scalus.cardano.ledger.CardanoInfo
 import scalus.uplc.eval.{CekMachineCosts, Log, Logger}
-import scalus.uplc.transform.CommonSubexpressionElimination.{termBits, TermKey, TermTagBits, VarBits}
+import scalus.uplc.transform.CommonSubexpressionElimination.{cachedTermBits, TermKey, TermTagBits, VarBits}
 import scalus.uplc.transform.TermAnalysis.{freeVars, isValueForm}
 
 import scala.collection.mutable
@@ -36,7 +36,7 @@ import scala.collection.mutable
   *   1. '''Collect pass''': Traverse the term. For each non-leaf node, generate all single-hole
   *      decompositions via [[CommonContextExtraction.decompose]]. Record templates with
   *      `termBits >= [[CommonContextExtraction.MinTemplateBits]]` along with their paths. Track
-  *      path IDs at evaluation boundaries (LamAbs, Delay, Case) — same as CSE.
+  *      path IDs at evaluation boundaries (LamAbs, Delay, Case), same as CSE.
   *   1. '''Group & filter pass''': Group by TemplateKey. For each group:
   *      - Require >= 2 **distinct** leaves (identical leaves are handled by CSE)
   *      - Profitability check: [[CommonContextExtraction.extractionSavingBits]] > 0
@@ -64,6 +64,7 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
     def logs: Seq[String] = logger.getLogs.toSeq
 
     private def cce(term: Term): Term = {
+        val sizeOf = cachedTermBits()
         // Pass 1: Collect (template, leaf) pairs via generalized single-hole decomposition.
         var nextId = 0
         def freshPathId(): Int = { val id = nextId; nextId += 1; id }
@@ -90,7 +91,7 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                 // Generate all single-hole decompositions at any child position
                 if !isSkippable(nonLeaf) then
                     decompose(nonLeaf).foreach { case (template, leaf) =>
-                        if termBits(template) >= MinTemplateBits && !containsError(template)
+                        if sizeOf(template).exists(_ >= MinTemplateBits) && !containsError(template)
                         then addOccurrence(new TermKey(template), path, leaf)
                     }
                 // Always recurse into subterms
@@ -144,12 +145,14 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
 
         val candidates = mutable.ArrayBuffer.empty[CceCandidate]
 
-        for (key, occs) <- templateOccurrences do
+        for
+            (key, occs) <- templateOccurrences
+            tBits <- sizeOf(key.term)
+        do
             // Require at least 2 occurrences with distinct leaves
             val distinctLeafKeys = occs.map { case (_, leaf) => new TermKey(leaf) }.toSet
             if distinctLeafKeys.size >= 2 then
                 val n = occs.size
-                val tBits = termBits(key.term)
 
                 // Profitability is measured in flat-encoded bits plus the CEK steps the
                 // extraction adds, because that is what the chain charges. See
@@ -158,7 +161,7 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                     val allPaths = occs.map(_._1).toVector
                     val bindPath = longestCommonPrefix(allPaths)
 
-                    // Template free vars exclude the HOLE sentinel — only real vars matter
+                    // Template free vars exclude the HOLE sentinel, only real vars matter
                     val templateFreeVars = key.term.freeVars - holeSentinelName
 
                     val safeForAll =
@@ -199,7 +202,7 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
             name
         }
 
-        // Pass 3: Substitute — for each candidate (largest template first),
+        // Pass 3: Substitute, for each candidate (largest template first),
         // re-count in the modified term and apply substitution.
         var currentTerm = term
 
@@ -334,7 +337,7 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                     val nOcc = reOccurrences.size
                     val savedBits = extractionSavingBits(nOcc, cand.templateBits)
                     logger.log(
-                      f"CCE: extracted template (bits=${cand.templateBits}, $nOcc occ, ${reDistinctLeaves.size} leaves, saved=$savedBits%.1f bits) as $lambdaName: ${cand.key.term.showShort}"
+                      s"CCE: extracted template (bits=${cand.templateBits}, $nOcc occ, ${reDistinctLeaves.size} leaves, saved=$savedBits bits) as $lambdaName: ${cand.key.term.showShort}"
                     )
 
         currentTerm
@@ -345,7 +348,7 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
       * '''Path ID synchronization invariant:''' This method traverses the post-substitution term,
       * while bindPath was computed from `reCollect` on the pre-substitution term. The paths stay in
       * sync because `doSubstitute` only replaces nodes at/below occurrence positions, and
-      * `bindPath` is their LCA — so all LamAbs/Delay/Case nodes from root to bindPath are
+      * `bindPath` is their LCA, so all LamAbs/Delay/Case nodes from root to bindPath are
       * structurally identical in both the pre- and post-substitution terms.
       */
     private def insertLetAtPath(term: Term, bindPath: Path, name: String, expr: Term): Term = {
@@ -418,9 +421,8 @@ object CommonContextExtraction {
       * Detects three cases:
       *   - Direct `Builtin(fn)` references for shape-partial builtins.
       *   - Variable references created by [[ForcedBuiltinsExtractor]] (e.g., `__HeadList`).
-      *   - Applications `Apply(Var(name), arg)` where `name` is a user-defined helper (i.e., not a
-      *     pure-builtin-extractor name and not a `__cse_` wrapper). Such helpers may internally
-      *     reference partial builtins — e.g., a `List.head` helper transitively invokes
+      *   - Applications `Apply(Var(name), arg)`, regardless of the helper's name. Such helpers may
+      *     internally reference partial builtins; a `List.head` helper transitively invokes
       *     `__HeadList`. Without tracing through the helper's body we cannot prove it total, so we
       *     conservatively assume it is partial when crossing a conditional boundary. This is only
       *     consulted by CCE's `unsafeCaseCrossing` checks.
@@ -432,10 +434,10 @@ object CommonContextExtraction {
         case Builtin(fn, _) => shapePartialBuiltins.contains(fn)
         case Var(NamedDeBruijn(name, _), _) =>
             partialBuiltinVarPrefixes.exists(name.startsWith)
-        case _: Const | _: Error                                                     => false
-        case _: LamAbs | _: Delay                                                    => false
-        case Apply(Var(NamedDeBruijn(name, _), _), arg, _) if !name.startsWith("__") =>
-            // User-defined helper — may transitively call a partial builtin in its body.
+        case _: Const | _: Error  => false
+        case _: LamAbs | _: Delay => false
+        case Apply(_: Var, _, _)  =>
+            // User-defined helper, may transitively call a partial builtin in its body.
             // Be conservative: treat the application as potentially partial, irrespective
             // of what the argument contains.
             true
@@ -449,10 +451,8 @@ object CommonContextExtraction {
     private[transform] def isSkippable(t: Term): Boolean = t match
         case _: Var | _: Const | _: LamAbs | _: Delay | _: Builtin => true
         case _: Error                                              => true
-        // Force(Builtin) / Force(Force(Builtin)) are value forms but worth extracting:
-        // duplicating them costs runtime memory/cpu (Force costs 100/16000 each).
-        case Force(Builtin(_, _), _)           => false
-        case Force(Force(Builtin(_, _), _), _) => false
+        // Forced builtins are value forms too; their 16/20-bit hole templates cannot reach
+        // MinTemplateBits, so exempting them from this filter never enabled extraction.
         // Other unsaturated builtin applications are value forms -- not worth extracting
         case _ if t.isValueForm => true
         // Keep the existing conservative filter for terms containing explicit error paths.
@@ -645,7 +645,7 @@ object CommonContextExtraction {
                         (Case(scrTemplate, cases, ann), leaf)
                 }
                 // NOTE: We skip hole positions inside Case branches because they are
-                // evaluation boundaries (like LamAbs bodies) — extracting from them
+                // evaluation boundaries (like LamAbs bodies), extracting from them
                 // requires scope tracking that the template approach doesn't capture.
                 holeAtScrutinee ++ deeperInScrutinee
     }
@@ -702,11 +702,11 @@ object CommonContextExtraction {
         def mergeResults(a: MatchResult, b: MatchResult): Option[MatchResult] = (a, b) match
             case (NoHole, other) => Some(other)
             case (other, NoHole) => Some(other)
-            case _               => None // Two holes — not a single-hole template
+            case _               => None // Two holes, not a single-hole template
 
         go(template, term).flatMap {
             case Found(leaf) => Some(leaf)
-            case NoHole      => None // Template matched but no HOLE found — not useful
+            case NoHole      => None // Template matched but no HOLE found, not useful
         }
     }
 
