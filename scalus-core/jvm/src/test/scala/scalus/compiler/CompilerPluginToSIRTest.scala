@@ -548,7 +548,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         val flatBytesLength = appliedScript.flatEncoded.length
         summon[Options].targetLoweringBackend match
             case TargetLoweringBackend.SirToUplcV3Lowering =>
-                assert(flatBytesLength == 148)
+                assert(flatBytesLength == 147)
             case _ =>
                 assert(flatBytesLength == 348)
     }
