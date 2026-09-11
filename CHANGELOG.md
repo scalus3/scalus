@@ -50,14 +50,15 @@
 ### Changed
 
 - CSE uses Plutus-style ancestor-based grouping and places bindings in the smallest scope
-  containing their uses. It selects positive estimated reference-script savings after charging
-  binding execution costs.
-  The inliner shares that profitability model and counts every occurrence. All term kinds are
-  eligible for CSE. CSE remains enabled by default. Recompilation changes 21 of 23 example
-  blueprint hashes and reduces their combined compiled size by 711 bytes. Execution-budget
-  changes are mixed, and builds retaining error traces (the default) can grow. Use
-  `Options.release` for builds with traces removed. See
-  [CSE measurements](docs/design/cse-measurements.md) for sizes, budgets and transaction fees.
+  containing their uses. It recognizes alpha-equivalent terms and prices value sharing by
+  reference-script savings minus binding execution costs. Repeated computations can also be
+  shared to avoid unknown runtime work. The inliner shares value pricing, tracks retained
+  constants without exponential traversal, and bounds folding growth through shared constants.
+  CSE remains enabled in optimized builds. In the final controlled 23-contract comparison with
+  the pre-review optimizer, Scala 3.3.8 saves 525 bytes with traces and 514 without. Individual
+  execution budgets remain mixed. Error traces are retained by default; `Options.release`
+  enables optimization and removes them. See
+  [CSE measurements](docs/design/cse-measurements.md) for provenance, sizes, budgets and fees.
 - Scala **3.9.0**, the next LTS, is now supported: it is cross-built and tested alongside 3.3.8 and
   3.8.4, and gets its own `scalus-plugin_3.9.0`. The plugin continues to be published for 3.3.7 as
   well, so projects pinned to that patch keep working. The `_3` library artifacts are still built by

@@ -1,5 +1,110 @@
 # CSE placement measurements
 
+## Review fixes measured on 2026-09-11
+
+Optimizer baseline: `d315bb9b0`; final optimizer: `638946636` (plus the cache-lifetime fix already included in its ancestry). Measurements use JDK 25. Budget/size assertion updates and documentation commits do not change the optimizer.
+
+### Contract-declared blueprint options
+
+A fresh `scalusExamplesJVM/blueprint` run on Scala 3.3.8 produced the following comparison. Each contract uses its own declared options, so this is not a uniformly traced corpus. The snapshot script counts bytes in `compiledCode` and compares actual blueprint hashes.
+
+Hashes changed: 22/23. Bytes: 32260 -> 31747 (-513).
+
+| Validator | Before bytes | After bytes | Delta | Hash changed |
+|---|---:|---:|---:|:---:|
+| Hello Cardano | 149 | 149 | +0 | no |
+| Constant-product AMM | 2944 | 2901 | -43 | yes |
+| Auction | 2246 | 2190 | -56 | yes |
+| Betting validator | 1989 | 1963 | -26 | yes |
+| Bilinear-accumulator allowlist | 607 | 588 | -19 | yes |
+| Two-party escrow (CAPE) | 1009 | 1007 | -2 | yes |
+| Crowdfunding campaign | 3084 | 3031 | -53 | yes |
+| Crowdfunding donation minting policy | 766 | 749 | -17 | yes |
+| Decentralized identity | 2319 | 2289 | -30 | yes |
+| Editable NFT | 1056 | 1033 | -23 | yes |
+| Three-party escrow smart contract | 1030 | 1019 | -11 | yes |
+| Factory | 924 | 911 | -13 | yes |
+| Hashed timelocked contract | 311 | 310 | -1 | yes |
+| On-chain linked list | 3870 | 3853 | -17 | yes |
+| Two-player lottery contract | 1481 | 1463 | -18 | yes |
+| Naive Payment Splitter | 1599 | 1533 | -66 | yes |
+| Optimized Payment Splitter | 1378 | 1354 | -24 | yes |
+| Price bet | 945 | 933 | -12 | yes |
+| Price oracle | 747 | 733 | -14 | yes |
+| Simple Transfer contract | 844 | 826 | -18 | yes |
+| Upgradeable proxy validator | 653 | 641 | -12 | yes |
+| Vault | 1460 | 1434 | -26 | yes |
+| Vesting validator | 849 | 837 | -12 | yes |
+
+### Controlled traced and release comparison
+
+These measurements run the old and new optimizers on identical lowered input, using the current SIR and unchanged pre-UPLC passes. Five optimizer sources from `d315bb9b0` were compiled as temporary renamed helpers, including the old pricing helper. An identity UPLC override retained BooleanOptimizer/StaticArgumentTransformation while exposing the raw input. Each current result was checked against normal compilation: all 92 checks passed across both Scala versions.
+
+Both modes explicitly enable optimization. Traced mode uses the other default options; `Options.default` itself leaves optimization disabled. Release mode removes traces. Scalus tags and CCE are disabled on both sides. These are controlled optimizer comparisons, not regenerated historical Scala binaries. The before/after CBOR SHA-256 changed for 22 of 23 contracts in each mode; these diagnostic hashes are not ledger script hashes.
+
+| Scala | Mode | Before bytes | After bytes | Delta |
+|---|---|---:|---:|---:|
+| 3.3.8 | traced | 65,325 | 64,800 | -525 |
+| 3.3.8 | release | 32,199 | 31,685 | -514 |
+| 3.8.4 | traced | 64,526 | 63,985 | -541 |
+| 3.8.4 | release | 31,396 | 30,869 | -527 |
+
+### Execution measurements
+
+Knights source is unchanged from the explicitly shared `descAndNo` + insertion-sort variant. Sizes include each benchmark's inputs and exact-result assertion. Native Knights produces identical measurements on both compiler versions. Before columns use the retained historical measured pins/artifacts; after columns are fresh evaluations in this review. Unlike the controlled corpus, these are not fresh reruns of the old optimizer. CPU and memory are ExUnits, not CEK instruction counts; sizes are serialized CBOR bytes.
+
+| Workload | Scala | Before bytes | After bytes | Before CPU | After CPU | Before memory | After memory |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Knights 4×4 | both | 3,662 | 3,330 | 24,795,623,419 | 24,141,658,357 | 116,736,784 | 115,750,464 |
+| Knights 6×6 | both | 5,445 | 4,995 | 82,543,516,417 | 79,085,715,783 | 383,754,374 | 380,245,598 |
+| Knights 8×8 | both | 5,786 | 5,336 | 160,511,224,929 | 153,067,851,900 | 740,454,792 | 733,346,016 |
+| KnightsData 4×4 | 3.3.8 | 1,945 | 1,872 | 34,246,470,503 | 34,091,860,957 | 107,148,594 | 106,537,178 |
+| KnightsData 6×6 | 3.3.8 | 3,362 | 3,308 | 80,182,714,496 | 80,469,837,771 | 187,353,930 | 189,494,618 |
+| KnightsData 8×8 | 3.3.8 | 3,772 | 3,718 | 142,435,620,629 | 142,960,889,966 | 296,892,547 | 300,557,355 |
+| KnightsData 4×4 | 3.8.4 | 1,885 | 1,803 | 29,166,961,445 | 29,183,567,899 | 91,769,154 | 92,227,838 |
+| KnightsData 6×6 | 3.8.4 | 3,293 | 3,239 | 75,701,311,378 | 75,988,434,653 | 174,290,190 | 176,430,878 |
+| KnightsData 8×8 | 3.8.4 | 3,703 | 3,649 | 137,519,680,014 | 138,044,949,351 | 282,560,647 | 286,225,455 |
+
+The runtime results are mixed: native Knights improves, while KnightsData's 6×6 and 8×8 budgets grow slightly despite smaller scripts. The heuristic does not guarantee lower runtime or total fees on every workload. Historical Plutus budgets are not a compiler-only comparison against this modified Scalus algorithm.
+
+Escrow and ordinary HTLC budget tests enable error traces. Their base release script sizes are 1,030 → 1,019 and 311 → 310 bytes respectively. Both compiler versions produced the same budgets:
+
+| Workload | Before CPU | After CPU | Before memory | After memory |
+|---|---:|---:|---:|---:|
+| Escrow deposit | 50,121,742 | 49,702,903 | 101,353 | 99,457 |
+| Escrow pay | 40,976,679 | 40,604,495 | 93,310 | 91,714 |
+| Escrow refund | 48,401,763 | 45,526,339 | 105,345 | 100,260 |
+| HTLC claim | 10,924,152 | 10,940,152 | 24,731 | 24,831 |
+| HTLC reclaim | 8,082,981 | 8,130,981 | 21,598 | 21,898 |
+
+### CAPE HTLC fees
+
+CAPE HTLC uses `Options.releaseUntagged`. Script size decreases from 569 to 553 bytes. Fees use the repository's reference price (15 lovelace/byte at this size), plus the ceiling of the combined execution-unit charge. Both compiler versions produced these values. Fee columns are lovelace and cover only reference-script plus execution fees, excluding transaction base/byte fees:
+
+| Case | Before CPU | After CPU | Before memory | After memory | Before ref fee | After ref fee | Before execution fee | After execution fee | Before combined | After combined |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Claim | 18,406,297 | 17,950,963 | 44,945 | 43,317 | 8,535 | 8,295 | 3,921 | 3,794 | 12,456 | 12,089 |
+| Refund | 16,987,475 | 16,564,141 | 41,812 | 40,384 | 8,535 | 8,295 | 3,638 | 3,525 | 12,173 | 11,820 |
+
+### Optimizer scaling
+
+A warmed JDK 25 probe compared the eager alpha-key implementation against the final metadata cache. It kept extraction order unchanged. Times are diagnostic measurements, not fixed CI thresholds:
+
+| Distinct repeated groups | Eager alpha keys | Cached/lazy keys |
+|---|---:|---:|
+| 50 | 62.9 ms | 22.3 ms |
+| 100 | 449.7 ms | 120.0 ms |
+| 200 | 4,541.0 ms | 590.4 ms |
+| 400 | 64,587.4 ms | 4,864.9 ms |
+
+The Data-constant CCE chain probe fell from 4.05 to 1.71 ms, and its four-arm variant from 44.88 to 11.76 ms. Constant encoding is cached by identity within each pass. CSE still recollects after each extraction, so worst-case scaling remains superlinear; batched extraction is deferred to avoid changing selection/placement semantics in this fix pass.
+
+Raw logs, controlled JSON (including CBOR), and archived temporary helpers are under `/tmp/scalus-review-*` and `/tmp/scalus-metadata-probe/` in the measurement workspace. The temporary sources were removed before the final repository checks.
+
+---
+
+## Historical measurements before this review
+
 The tables below record commit `dacf54604`, before the subsequent constant-propagation fix.
 That fix restores `List.singleton(1).init` to 400 memory / 48,100 CPU by simplifying through
 retained constant bindings before deciding whether to share them. The historical regression
