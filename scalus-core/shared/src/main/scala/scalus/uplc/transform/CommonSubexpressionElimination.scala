@@ -2,7 +2,7 @@ package scalus.uplc.transform
 
 import scalus.uplc.Term
 import scalus.uplc.Term.*
-import scalus.uplc.{DefaultFun, NamedDeBruijn}
+import scalus.uplc.{DeBruijn, DefaultFun, NamedDeBruijn}
 import scalus.uplc.eval.{Log, Logger}
 import scalus.uplc.transform.TermAnalysis.freeVars
 import scalus.cardano.ledger.Word64
@@ -149,10 +149,10 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
       * paths are [1, 0] and [1, 1], both in region []; insert the binding at [1].
       */
     private def collect(term: Term): Option[Candidate] = {
-        val groups = mutable.LinkedHashMap.empty[TermKey, mutable.ArrayBuffer[Group]]
+        val groups = mutable.LinkedHashMap.empty[AlphaTermKey, mutable.ArrayBuffer[Group]]
 
         def add(t: Term, path: Path, region: Path): Unit = {
-            val entries = groups.getOrElseUpdate(new TermKey(t), mutable.ArrayBuffer.empty)
+            val entries = groups.getOrElseUpdate(new AlphaTermKey(t), mutable.ArrayBuffer.empty)
             entries.find(g => isAncestorOrSelf(g.region, region)) match
                 case Some(ancestor) =>
                     // A strict occurrence was already found in this region or an enclosing one.
@@ -273,6 +273,24 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
 }
 
 object CommonSubexpressionElimination {
+
+    /** Canonicalize only a candidate's internal binders. Free names retain the identities assigned
+      * by uniqueBinders, so lambdas with different captures remain distinct. The round trip gives
+      * bound variables canonical names and positive indices, while free occurrences keep their
+      * names and negative indices; even a free `i0` cannot equal the canonical bound `i0`. Keep the
+      * original term for extraction, including its names, indices and annotations.
+      */
+    private[transform] final class AlphaTermKey(val term: Term) {
+        private val canonical = new TermKey(
+          DeBruijn.fromDeBruijnTerm(DeBruijn.deBruijnTerm(term))
+        )
+
+        override def equals(that: Any): Boolean = that match
+            case other: AlphaTermKey => canonical == other.canonical
+            case _                   => false
+
+        override def hashCode(): Int = canonical.hashCode()
+    }
 
     // Preserve the emitted 1.1.0 methods for binary compatibility; these filters belong to CCE.
     // For example, an already compiled call to CSE.isSkippable(t) still resolves, but forwards

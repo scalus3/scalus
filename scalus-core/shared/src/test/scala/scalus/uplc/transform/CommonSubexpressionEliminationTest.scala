@@ -261,6 +261,86 @@ class CommonSubexpressionEliminationTest
     // TermKey tests
     // ========================================================================
 
+    test("CSE shares alpha-equivalent applications and retains the original representative") {
+        val first = vr"map" $ λ("x")(AddInteger $ vr"x" $ (1: Term)) $ vr"xs"
+        val second = vr"map" $ λ("y")(AddInteger $ vr"y" $ (1: Term)) $ vr"xs"
+        val term = Constr(Word64.Zero, List(first, second))
+        CommonSubexpressionElimination(term) match
+            case Apply(LamAbs(name, Constr(_, List(a, b), _), _), representative, _) =>
+                assert(representative ~=~ first)
+                assert(a ~=~ Var(NamedDeBruijn(name)))
+                assert(b ~=~ Var(NamedDeBruijn(name)))
+            case other => fail(s"Expected shared application, got ${other.show}")
+    }
+
+    test("CSE shares alpha-equivalent lambdas while keeping their capture in scope") {
+        // Keep these out of the syntactic-let path, which visits only the body and argument.
+        val left = Force(Delay(λ("left")(AddInteger $ vr"outer" $ vr"left")))
+        val right = Force(Delay(λ("right")(AddInteger $ vr"outer" $ vr"right")))
+        val term = λ("outer")(AddInteger $ (left $ (2: Term)) $ (right $ (3: Term))) $
+            (10: Term)
+        val cse = new CommonSubexpressionElimination()
+        val result = cse(term)
+        assert(cse.logs.nonEmpty)
+        assert(result.freeVars.isEmpty)
+        assert(result.evaluate ~=~ (25: Term))
+        assert(result.evaluate ~=~ term.evaluate)
+    }
+
+    test("AlphaTermKey: bound renames have equal keys and hashes") {
+        for (a, b) <- List(("x", "y"), ("i0", "amount"), ("x_cse", "x")) do
+            val first = λ(a)(AddInteger $ Var(NamedDeBruijn(a)) $ vr"capture")
+            val second = λ(b)(AddInteger $ Var(NamedDeBruijn(b)) $ vr"capture")
+            val key1 = new AlphaTermKey(first)
+            val key2 = new AlphaTermKey(second)
+            assert(key1 == key2)
+            assert(key2 == key1)
+            assert(key1.hashCode == key2.hashCode)
+            assert(Set(key1).contains(key2))
+            assert(key1.term eq first)
+            // CCE's shared structural key deliberately remains name-sensitive.
+            assert(new TermKey(first) != new TermKey(second))
+    }
+
+    test("AlphaTermKey: free names and their order remain significant") {
+        def candidate(a: String, b: String): Term =
+            λ("bound")(Constr(Word64.Zero, List(Var(NamedDeBruijn(a)), Var(NamedDeBruijn(b)))))
+        val xy = new AlphaTermKey(candidate("x", "y"))
+        assert(xy != new AlphaTermKey(candidate("y", "x")))
+        assert(xy != new AlphaTermKey(candidate("x", "z")))
+        assert(xy != new AlphaTermKey(candidate("x", "x")))
+    }
+
+    test("AlphaTermKey: shadowing distinguishes inner and outer references") {
+        val shadowed = new AlphaTermKey(λ("x")(λ("x")(vr"x")))
+        val inner = new AlphaTermKey(λ("a")(λ("b")(vr"b")))
+        val outer = new AlphaTermKey(λ("a")(λ("b")(vr"a")))
+        assert(shadowed == inner)
+        assert(shadowed.hashCode == inner.hashCode)
+        assert(shadowed != outer)
+    }
+
+    test("AlphaTermKey: canonical binder names cannot capture a free i0") {
+        val free = new AlphaTermKey(λ("x")(vr"i0"))
+        val renamed = new AlphaTermKey(λ("y")(vr"i0"))
+        val bound = new AlphaTermKey(λ("x")(vr"x"))
+        assert(free == renamed)
+        assert(free.hashCode == renamed.hashCode)
+        assert(free != bound)
+    }
+
+    test("AlphaTermKey: annotations are ignored and the original indices are retained") {
+        val original = LamAbs(
+          "x",
+          Var(NamedDeBruijn("capture", 42), UplcAnnotation(functionName = "first"))
+        )
+        val renamed = λ("y")(vr"capture")
+        val key = new AlphaTermKey(original)
+        assert(key == new AlphaTermKey(renamed))
+        assert(key.hashCode == new AlphaTermKey(renamed).hashCode)
+        assert(key.term eq original)
+    }
+
     test("TermKey: same structure, different annotations => equal") {
         val t1 = Apply(Builtin(AddInteger), 1.asTerm)
         val t2 = Apply(
