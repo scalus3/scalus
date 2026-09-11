@@ -283,7 +283,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               )
             )
           ),
-          ExUnits(memory = 62347, steps = 15_781_826)
+          ExUnits(memory = 61391, steps = 15_003_506)
         )
     }
 
@@ -596,7 +596,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.zero,
-          ExUnits(memory = 93474, steps = 25300775)
+          ExUnits(memory = 92054, steps = 24_406_589)
         )
     }
 
@@ -621,7 +621,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.lovelace(1000),
-          ExUnits(memory = 48852, steps = 13454702)
+          ExUnits(memory = 48292, steps = 13_031_609)
         )
     }
 
@@ -643,7 +643,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 48852, steps = 13454702)
+          ExUnits(memory = 48292, steps = 13_031_609)
         )
     }
 
@@ -788,7 +788,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.zero,
-          ExUnits(memory = 93928, steps = 25920929)
+          ExUnits(memory = 92508, steps = 25_026_743)
         )
     }
 
@@ -813,7 +813,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.lovelace(1000),
-          ExUnits(memory = 49285, steps = 13797279)
+          ExUnits(memory = 48725, steps = 13_374_186)
         )
     }
 
@@ -835,7 +835,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 49285, steps = 13797279)
+          ExUnits(memory = 48725, steps = 13_374_186)
         )
     }
 
@@ -1455,7 +1455,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.hasOnly(hex"aa", utf8"BEACON", 1),
           multi,
           true,
-          ExUnits(memory = 8687, steps = 3_620_482)
+          ExUnits(memory = 8255, steps = 3_473_332)
         )
     }
 
@@ -1551,7 +1551,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.flatten,
           Value.lovelace(1000),
           List((Value.adaPolicyId, Value.adaTokenName, BigInt(1000))),
-          ExUnits(memory = 27508, steps = 7_007_603)
+          ExUnits(memory = 26580, steps = 6_546_443)
         )
     }
 
@@ -1566,7 +1566,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               BigInt(1000)
             )
           ),
-          ExUnits(memory = 27508, steps = 7_007_603)
+          ExUnits(memory = 26580, steps = 6_546_443)
         )
     }
 
@@ -1590,7 +1590,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               BigInt(1000)
             )
           ),
-          ExUnits(memory = 49252, steps = 13_068_550)
+          ExUnits(memory = 47396, steps = 12_146_230)
         )
     }
 
@@ -1778,7 +1778,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           true,
-          ExUnits(memory = 92565, steps = 24890759)
+          ExUnits(memory = 91145, steps = 23_996_573)
         )
     }
 
@@ -1806,7 +1806,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           true,
-          ExUnits(memory = 92565, steps = 24890759)
+          ExUnits(memory = 91145, steps = 23_996_573)
         )
     }
 
@@ -1887,7 +1887,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           true,
-          ExUnits(memory = 160068, steps = 42961767)
+          ExUnits(memory = 157024, steps = 41_317_908)
         )
     }
 
