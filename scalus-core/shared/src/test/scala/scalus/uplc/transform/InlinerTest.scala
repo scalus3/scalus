@@ -308,6 +308,12 @@ class InlinerTest extends AnyFunSuite {
         assert(Inliner(term) == Constr(Word64.Zero, List.fill(3)(42.asTerm)))
     }
 
+    test("unused impure bindings finish deferred bodies") {
+        val term = LamAbs("x", LamAbs("y", AddInteger $ 1 $ 2)) $ Error() $ 0
+        val expected = LamAbs("x", LamAbs("y", 3.asTerm)) $ Error() $ 0
+        assert(Inliner(term) == expected)
+    }
+
     test("non-lambda function expressions finish deferred lambda bodies") {
         val lambda = LamAbs("y", AddInteger $ 1 $ 2)
         val folded = LamAbs("y", 3.asTerm)

@@ -243,7 +243,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                     // Retained bindings enclose their body rather than returning it as the
                     // function spine. Finish deferred values and reprice any removed uses.
                     val finalBody =
-                        if deferLambdaBody && initialOcc != OccurrenceInfo.Zero &&
+                        if deferLambdaBody && !(initialOcc == OccurrenceInfo.Zero && inlinedArg.isPure) &&
                             !shouldInline(inlinedArg, initialOcc)
                         then finishDeferred(body, bodyConstants)
                         else body
