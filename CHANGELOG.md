@@ -55,7 +55,8 @@
   The inliner shares that profitability model and counts every occurrence. All term kinds are
   eligible for CSE. CSE remains enabled by default. Recompilation changes 21 of 23 example
   blueprint hashes and reduces their combined compiled size by 711 bytes. Execution-budget
-  changes are mixed, and builds retaining error traces can grow. See
+  changes are mixed, and builds retaining error traces (the default) can grow. Use
+  `Options.release` for builds with traces removed. See
   [CSE measurements](docs/design/cse-measurements.md) for sizes, budgets and transaction fees.
 - Scala **3.9.0**, the next LTS, is now supported: it is cross-built and tested alongside 3.3.8 and
   3.8.4, and gets its own `scalus-plugin_3.9.0`. The plugin continues to be published for 3.3.7 as

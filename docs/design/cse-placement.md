@@ -23,7 +23,8 @@ are ancestor-related. Every resulting group therefore has an actual occurrence i
 region; an occurrence in each sibling branch is insufficient.
 
 Within a group, the binding is placed at the structural least common ancestor of its occurrences.
-Unique binders make different lexical variables distinct keys. Since every occurrence is inside
+Candidate keys normalize internal binders for alpha-equivalence while retaining the unique
+identities of free references. Different captures therefore remain distinct. Since every occurrence is inside
 the scope of each variable it references, their structural common ancestor is inside that scope
 too. This achieves the innermost placement of Plutus's `placeCseBinding`, including descent into
 immediately applied lambda bodies.
@@ -49,7 +50,8 @@ For a one-node value, n evaluations become n variable lookups plus one retained 
 LamAbs. The extra work is three node evaluations. For larger expressions the estimate gives no
 credit for avoided computation. It assumes one execution of the binding and uses the repository's
 mainnet reference prices at the first reference-script tier; it does not predict execution frequency
-or total transaction fees. CCE's existing pricing is unchanged.
+or total transaction fees. CCE separately prices one-hole templates in encoded bits and charges
+its additional execution steps, as described below.
 
 Each round chooses the greatest positive net saving and recollects after applying it. A positive
 net saving requires positive bit savings, so decreasing additive `termBits` ensures termination.
@@ -79,7 +81,7 @@ pipeline output need not be smaller than a different CSE implementation's output
 
 The legacy `isSkippable`, `containsError`, shape-builtin list and variable-prefix checks
 live in `CommonContextExtraction` and serve only CCE. Deprecated forwarding methods preserve
-the emitted 1.1.0 methods for binary compatibility. CCE's pricing is unchanged.
+the emitted 1.1.0 methods for binary compatibility.
 
 ## Validation
 
@@ -99,10 +101,14 @@ as evidence that two terms are equivalent.
 The existing cross-JVM tests check deterministic output. `scripts/cse-corpus.py` snapshots and
 compares all generated blueprint hashes and compiled sizes after `scalusExamplesJVM/blueprint`.
 
-CCE's extraction rules and pricing are unchanged. Its legacy filters now live in its own
-companion object.
-The speculative/all-branches rules and CCE refactoring from the earlier design are not part of
-this CSE change.
+CCE has its own bit-based profitability model. For `n` occurrences it credits the duplicated
+skeleton, subtracts the application/variable framing, and charges `3n + 3` additional CEK steps
+using the repository's mainnet reference prices. Its minimum template size follows from this
+formula. It assumes each site executes once, so this is a heuristic rather than a guarantee of
+lower fees. Decomposition stops at `Delay` boundaries to keep deferred leaves from becoming
+eager arguments. Its legacy filters live in its companion object.
+
+The speculative/all-branches CSE placement rules from the earlier design are not implemented.
 
 ## References
 
