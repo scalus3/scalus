@@ -32,7 +32,11 @@ private[stream] final class HubDriver(
             if started || stopped then false
             else { started = true; true }
         }
-        if begin then pump()
+        if begin then {
+            // Before the first pull, so nothing is produced into a source nobody is reading yet.
+            follower.start()
+            pump()
+        }
     }
 
     private def pump(): Unit =

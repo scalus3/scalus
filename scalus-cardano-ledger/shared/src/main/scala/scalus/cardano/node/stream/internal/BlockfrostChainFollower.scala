@@ -63,6 +63,19 @@ private[stream] trait BlockfrostChainApi {
   * addresses are watched*, not with how busy the chain is, which is the whole reason this polls per
   * address rather than fetching blocks.
   *
+  * Two per transaction is the floor rather than the figure. A transaction whose outputs cannot be
+  * classified from `/txs/{hash}/utxos` alone costs a third (see
+  * `BlockfrostProvider.scriptPhaseFailed`), and one touching a reference script costs a further two
+  * per script hash the client has not already cached.
+  *
+  * ## A transient failure is not survived
+  *
+  * There is no retry or backoff anywhere on this path: any non-2xx that is not a 404 throws, and
+  * the failure travels straight to every subscriber. On a metered backend where a 429 is a normal
+  * event that is a real gap — and so is the converse, a lagging replica answering 404 for a block
+  * it has not indexed yet, which is reported here as a reorg. Both are known and deliberate for
+  * now; see the M2 plan.
+  *
   * ## Reorgs: detected, not reconciled
   *
   * When `/blocks/{hash}/next` 404s, the block we last reported is no longer on chain. This follower
@@ -95,7 +108,15 @@ private[stream] final class BlockfrostChainFollower(
     private var watched: Set[UtxoSource] = Set.empty
     private var last: Option[BlockRef] = None
     private var stopped = false
+
+    /** Whether the poll loop is spending anything. Starts true so a follower nobody suspends
+      * behaves exactly as before; the provider sets it from live demand.
+      */
+    private var observing = true
     private var started = false
+
+    /** An anchor read is outstanding, so a second `subscribe` must not issue another. */
+    private var anchoring = false
 
     /** The block whose set of probed sources was most recently decided.
       *
@@ -133,6 +154,51 @@ private[stream] final class BlockfrostChainFollower(
         committed.map(_.point).getOrElse(ChainPoint.origin)
     }
 
+    override def stopWatching(sources: Set[UtxoSource]): Unit = synchronized {
+        // A stopped follower assembles nothing, so there is nothing left to stop watching; see
+        // ChainFollower.stopWatching for why this must not throw.
+        if !stopped then watched = sources
+    }
+
+    /** Suspending clears the cursor as well as stopping the poll: on resume the next poll re-reads
+      * the tip and continues from there. Keeping the old cursor would make a resumed follower walk
+      * every block of the quiet interval and hand them to a subscription that asked for events from
+      * *now* — a backlog nobody subscribed for, paid for one request at a time.
+      */
+    /** Fix the resume position, if there is not one already. See [[ChainFollower.anchor]]. */
+    override def anchor(): Unit = {
+        val needed = synchronized(!stopped && last.isEmpty && !anchoring)
+        if needed then {
+            synchronized { anchoring = true }
+            api.latestBlock().onComplete {
+                case Success(tip) =>
+                    synchronized {
+                        anchoring = false
+                        // `start` may have won the race and set a cursor of its own; a later
+                        // anchor must not drag the feed backwards over blocks already delivered.
+                        if last.isEmpty then last = Some(tip)
+                        if committed.forall(_.blockNo <= tip.blockNo) then committed = Some(tip)
+                    }
+                case Failure(_) =>
+                    // Leave the cursor empty: the next poll re-reads the tip, which is the same
+                    // answer one interval later. An anchor is an optimisation of position, not a
+                    // liveness requirement, so it must not fail the feed.
+                    synchronized { anchoring = false }
+            }
+        }
+    }
+
+    override def setObserving(active: Boolean): Unit = synchronized {
+        if active then observing = true
+        else if observing then {
+            observing = false
+            // Drop the cursor so a resumed follower re-reads the tip rather than replaying the
+            // quiet interval. `anchor` runs on the *next* subscription and puts a position back,
+            // so this discards a stale cursor without discarding a fresh commitment.
+            last = None
+        }
+    }
+
     override def close(): Unit = {
         synchronized { stopped = true }
         mailbox.close()
@@ -148,7 +214,7 @@ private[stream] final class BlockfrostChainFollower(
     private def isStopped: Boolean = synchronized(stopped) || mailbox.isClosed
 
     /** Start polling. The loop is a `Future` chain, not a thread, so it works on Scala.js too. */
-    def start(): Unit = {
+    override def start(): Unit = {
         val begin = synchronized {
             if started || stopped then false
             else { started = true; true }
@@ -157,10 +223,17 @@ private[stream] final class BlockfrostChainFollower(
             api.latestBlock().onComplete {
                 case Success(tip) =>
                     synchronized {
-                        last = Some(tip)
-                        // Nothing below the tip is ever emitted, so this is the first position a
-                        // subscription could be observed from.
-                        committed = Some(tip)
+                        // An anchor set when a subscription registered already names where that
+                        // subscription must be observed from, and demand can arrive minutes later
+                        // — long enough for several blocks, including the one carrying a
+                        // transaction submitted in between. Seeding unconditionally here would
+                        // drag the cursor forward over exactly those blocks and lose them.
+                        if last.isEmpty then {
+                            last = Some(tip)
+                            // Nothing below the tip is ever emitted, so this is the first position
+                            // a subscription could be observed from.
+                            committed = Some(tip)
+                        }
                     }
                     loop()
                 case Failure(t) => mailbox.fail(t)
@@ -175,21 +248,32 @@ private[stream] final class BlockfrostChainFollower(
     else close()
 
     private def poll(): Future[Unit] = {
-        val from = synchronized(last)
-        from match
-            case None => Future.unit
-            case Some(ref) =>
-                api.blocksAfter(ref).flatMap {
-                    case None =>
-                        Future.failed(
-                          ResyncRequiredException(
-                            s"block ${ref.blockNo} is no longer on chain, so the chain forked below " +
-                                "the last reported block; this provider detects reorgs but does " +
-                                "not reconcile them, and the subscriber's view cannot be trusted"
-                          )
-                        )
-                    case Some(blocks) => sequentially(blocks)(emitBlock)
-                }
+        val (active, from) = synchronized((observing, last))
+        if !active then Future.unit
+        else
+            from match
+                // No cursor: either the follower was suspended, or its initial read failed. Either
+                // way the tip is where a subscription that exists now wants to start.
+                case None =>
+                    api.latestBlock().map { tip =>
+                        synchronized {
+                            last = Some(tip)
+                            if committed.forall(_.blockNo <= tip.blockNo) then committed = Some(tip)
+                        }
+                    }
+                case Some(ref) =>
+                    api.blocksAfter(ref).flatMap {
+                        case None =>
+                            Future.failed(
+                              ResyncRequiredException(
+                                s"block ${ref.blockNo} is no longer on chain, so the chain forked " +
+                                    "below the last reported block; this provider detects reorgs " +
+                                    "but does not reconcile them, and the subscriber's view " +
+                                    "cannot be trusted"
+                              )
+                            )
+                        case Some(blocks) => sequentially(blocks)(emitBlock)
+                    }
     }
 
     /** Blocks must be observed in order — the hub takes each applied block's height as the new tip
