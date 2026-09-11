@@ -8,7 +8,7 @@ import { Callout } from 'nextra/components'
 
 # UPLC Optimiser Pipeline
 
-Scalus optimizes Untyped Plutus Core (UPLC) scripts to reduce script size and execution costs. `toUplcOptimized()` and `Options.default` enable optimization automatically. `Options.default` also retains error traces; use `Options.release` to remove them for release measurements. Trace retention can affect script size and which expressions can be folded.
+Scalus optimizes Untyped Plutus Core (UPLC) scripts to reduce script size and execution costs. `toUplcOptimized()` enables optimization. `Options.default` retains error traces and leaves `optimizeUplc` disabled; set it to `true` for an optimized traced build. Use `Options.release` for an optimized build with traces removed. Trace retention can affect script size and which expressions can be folded.
 
 ## Optimization Pipeline
 
