@@ -76,14 +76,15 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     // Runtime sharing can add encoded bits. Its first progress measure removes administrative
     // lets: sharing f(x) removes a call, while the new (λshared. body)(f(x)) adds no counted node.
     private def nonLetNodes(t: Term): Int = t match
-        case Apply(LamAbs(_, body, _), arg, _) => nonLetNodes(body) + nonLetNodes(arg)
+        case Apply(LamAbs(_, body, _), arg, _)         => nonLetNodes(body) + nonLetNodes(arg)
         case _: Var | _: Const | _: Builtin | _: Error => 0
-        case LamAbs(_, body, _) => 1 + nonLetNodes(body)
-        case Delay(body, _) => 1 + nonLetNodes(body)
-        case Force(body, _) => 1 + nonLetNodes(body)
-        case Apply(f, arg, _) => 1 + nonLetNodes(f) + nonLetNodes(arg)
-        case Constr(_, fields, _) => 1 + fields.map(nonLetNodes).sum
-        case Case(scrutinee, branches, _) => 1 + nonLetNodes(scrutinee) + branches.map(nonLetNodes).sum
+        case LamAbs(_, body, _)                        => 1 + nonLetNodes(body)
+        case Delay(body, _)                            => 1 + nonLetNodes(body)
+        case Force(body, _)                            => 1 + nonLetNodes(body)
+        case Apply(f, arg, _)                          => 1 + nonLetNodes(f) + nonLetNodes(arg)
+        case Constr(_, fields, _)                      => 1 + fields.map(nonLetNodes).sum
+        case Case(scrutinee, branches, _) =>
+            1 + nonLetNodes(scrutinee) + branches.map(nonLetNodes).sum
 
     private def check(t: Term): Term = {
         val cse = new CommonSubexpressionElimination()
@@ -99,7 +100,8 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         if cse.logs.nonEmpty then
             assert(
               afterNodes < beforeNodes ||
-                  CommonSubexpressionElimination.termBits(result) < CommonSubexpressionElimination.termBits(t),
+                  CommonSubexpressionElimination.termBits(result) < CommonSubexpressionElimination
+                      .termBits(t),
               "CSE must decrease (non-let structural nodes, estimated bits) lexicographically"
             )
         assert(CommonSubexpressionElimination(result) ~=~ result, "CSE did not reach a fixed point")
