@@ -42,9 +42,8 @@ object SumCaseUplcConstrOnlyEmitter extends SumCaseUplcConstrCommon {
         constr: SIR.Constr,
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
-    )(using lctx: LoweringContext): LoweredValue = {
-        ProdUplcConstrOps.genConstr(constr, loweredArgs)
-    }
+    )(using lctx: LoweringContext): LoweredValue =
+        ProdUplcConstrOps.genConstr(withCaseClassTp(constr), loweredArgs)
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext
