@@ -994,6 +994,13 @@ class CommonContextExtractionTest
         assert(result ~=~ term)
     }
 
+    test("CCE preserves the reference bit-to-fee exchange rate") {
+        // At the reference prices, a node costs 6.9236 lovelace and a bit costs 1.875.
+        // The 47-bit skeleton saves 47 bits at two sites, less 56 framing bits and 9 nodes.
+        assert(math.abs(extractionSavingBits(2, htlcAccessorBits) - -42.23328) < 1e-8)
+        assert(math.abs(extractionSavingBits(6, htlcAccessorBits) - 37.45568) < 1e-8)
+    }
+
     test("extractionSavingBits rejects a small template at two occurrences") {
         // Extracting costs 56 bits of framing and 9 CEK steps; the skeleton is only 47 bits.
         assert(extractionSavingBits(2, htlcAccessorBits) < 0)

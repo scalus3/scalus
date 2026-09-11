@@ -3,7 +3,6 @@ package scalus.uplc.transform
 import scalus.uplc.Term
 import scalus.uplc.Term.*
 import scalus.uplc.{DefaultFun, NamedDeBruijn}
-import scalus.cardano.ledger.CardanoInfo
 import scalus.uplc.eval.{CekMachineCosts, Log, Logger}
 import scalus.uplc.transform.CommonSubexpressionElimination.{cachedTermBits, TermKey, TermTagBits, VarBits}
 import scalus.uplc.transform.TermAnalysis.{freeVars, isValueForm}
@@ -474,36 +473,28 @@ object CommonContextExtraction {
 
     private type Path = Vector[Int]
 
-    /** Mainnet is the reference point for the size-versus-execution exchange rate: no protocol
-      * parameters are plumbed into the UPLC optimizer, and the ratio is stable across networks.
-      */
-    private val referenceParams = CardanoInfo.mainnet.protocolParams
+    private val costs = CekMachineCosts.defaultMachineCosts
 
-    /** Lovelace cost of one CEK machine step. Every step kind costs the same at PV11, so the
-      * `applyCost` entry stands for all of them.
-      */
-    private val LovelacePerStep = {
-        val prices = referenceParams.executionUnitPrices
-        val step = CekMachineCosts.defaultMachineCosts.applyCost
-        prices.priceMemory.toDouble * step.memory + prices.priceSteps.toDouble * step.steps
-    }
+    // Each call adds an Apply, the function lookup and the parameter lookup. For example,
+    // f(x) adds these around the original leaf x; the leaf itself still evaluates once.
+    private val CallBits = SharingCost.lovelace(costs.applyCost + costs.varCost + costs.varCost) /
+        SharingCost.lovelacePerBit
 
-    /** Lovelace cost of one reference-script bit, per transaction. */
-    private val LovelacePerBit = referenceParams.minFeeRefScriptCostPerByte.toDouble / 8
-
-    /** One CEK step expressed in bits, so size and execution costs can be added. About 3.7. */
-    private val StepBits = LovelacePerStep / LovelacePerBit
+    // The outer let evaluates one Apply and two lambdas: (λf -> body)(λx -> template(x)).
+    private val BindingBits =
+        SharingCost.lovelace(costs.applyCost + costs.lamCost + costs.lamCost) /
+            SharingCost.lovelacePerBit
 
     /** Smallest template, in flat-encoded bits, that any occurrence count could make profitable.
       *
       * A collection-time filter: `occurrences` is not yet known, so this is the loosest possible
       * bound. Reading [[extractionSavingBits]] as a function of `n`, the coefficient of `n` is
-      * `skeletonBits - (TermTagBits + VarBits) - 3 * StepBits`. Unless that is positive, no
-      * occurrence count can pay however much the framing is amortized. Adding the hole variable
-      * back gives the template size. Must be declared after [[StepBits]], which it reads.
+      * `skeletonBits - (TermTagBits + VarBits) - CallBits`. Unless that is positive, no occurrence
+      * count can pay however much the framing is amortized. Adding the hole variable back gives the
+      * template size. Must be declared after [[CallBits]], which it reads.
       */
     private[transform] val MinTemplateBits: Int = {
-        val minSkeletonBits = math.floor((TermTagBits + VarBits) + 3 * StepBits).toInt + 1
+        val minSkeletonBits = math.floor((TermTagBits + VarBits) + CallBits).toInt + 1
         minSkeletonBits + VarBits
     }
 
@@ -528,7 +519,7 @@ object CommonContextExtraction {
         // Per site an Apply and a Var reference; once, the let (Apply + LamAbs), the lambda
         // parameter and the hole variable.
         val framingBits = n * (TermTagBits + VarBits) + 3 * TermTagBits + VarBits
-        (n - 1) * skeletonBits - framingBits - StepBits * (3 * n + 3)
+        (n - 1) * skeletonBits - framingBits - n * CallBits - BindingBits
     }
 
     /** Sentinel variable name used as the HOLE placeholder in templates. */
