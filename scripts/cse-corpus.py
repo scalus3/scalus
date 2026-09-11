@@ -47,14 +47,18 @@ if __name__ == "__main__":
     commands = parser.add_subparsers(dest="command", required=True)
     capture = commands.add_parser("snapshot")
     capture.add_argument("output", type=Path)
-    capture.add_argument("--root", type=Path, default=Path(
-        "scalus-examples/jvm/target/scala-3.3.8/resource_managed/main/META-INF/scalus/blueprints"
-    ))
+    capture.add_argument("--scala-version", default="3.3.8",
+                         help="Scala version used to build the blueprints (default: 3.3.8)")
+    capture.add_argument("--root", type=Path,
+                         help="Explicit blueprint directory; overrides --scala-version")
     diff = commands.add_parser("compare")
     diff.add_argument("before", type=Path)
     diff.add_argument("after", type=Path)
     args = parser.parse_args()
     if args.command == "snapshot":
-        snapshot(args.output, args.root)
+        root = args.root or Path(
+            f"scalus-examples/jvm/target/scala-{args.scala_version}/resource_managed/main/META-INF/scalus/blueprints"
+        )
+        snapshot(args.output, root)
     else:
         compare(args.before, args.after)
