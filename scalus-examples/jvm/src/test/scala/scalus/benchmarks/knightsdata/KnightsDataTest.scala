@@ -12,6 +12,10 @@ import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.eval.{ProfileFormatter, Result}
 
+/** Optimized Scalus workload with explicit descendant sharing and insertion sort.
+  * Historical reference budgets below predate these source changes; their compiler/source
+  * revision is not recorded here. Ratios are historical comparisons, not compiler-only results.
+  */
 class KnightsDataTest extends AnyFunSuite, ScalusTest:
     import KnightsDataTest.{*, given}
     import scalus.uplc.eval.PlutusVM
@@ -70,7 +74,7 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
         assert(result.budget == scalusBudget)
 
         compareBudgetWithReferenceValue(
-          testName = "KnightsDataTest.100_4x4",
+          testName = "KnightsDataTest (historical reference).100_4x4",
           scalusBudget = scalusBudget,
           refBudget = ExUnits(memory = 160_204421L, steps = 54958_831939L),
           isPrintComparison = printComparison
@@ -173,7 +177,7 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
         assert(result.budget == scalusBudget)
 
         compareBudgetWithReferenceValue(
-          testName = "KnightsDataTest.100_6x6",
+          testName = "KnightsDataTest (historical reference).100_6x6",
           scalusBudget = scalusBudget,
           refBudget = ExUnits(memory = 292_216349L, steps = 131954_064320L),
           isPrintComparison = printComparison
@@ -278,7 +282,7 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
         assert(result.budget == scalusBudget)
 
         compareBudgetWithReferenceValue(
-          testName = "KnightsDataTest.100_8x8",
+          testName = "KnightsDataTest (historical reference).100_8x8",
           scalusBudget = scalusBudget,
           refBudget = ExUnits(memory = 540_217437L, steps = 270266_226527L),
         )

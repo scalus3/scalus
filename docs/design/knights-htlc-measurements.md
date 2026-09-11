@@ -4,6 +4,12 @@ Measured on 2026-09-11, branch base `27ffbfdfb`, Scala 3.3.8, V3 lowering, van R
 
 ## Knights
 
+The tables below compare Scalus source variants. The benchmark tests also retain older external
+reference budgets whose source/compiler revision is not recorded. Those reference numbers predate
+our explicit sharing and insertion-sort changes, so their printed ratios are historical comparisons,
+not measurements of compiler quality on identical source. A compiler-only comparison requires
+recovering the reference source and compiler revision and regenerating both sides.
+
 All variants use the current optimizer. The baseline is the unchanged benchmark source. The shared variants bind `descAndNo` inside the existing `else` branch, then reuse it for filtering and sorting. No optimizer changes were made.
 
 ```scala
