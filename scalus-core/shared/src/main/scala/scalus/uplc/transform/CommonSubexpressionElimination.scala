@@ -107,7 +107,25 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         var current = uniqueBinders(term, Map.empty)
         var changed = false
         val sizeOf = cachedTermBits()
-        var candidate = collect(current, sizeOf)
+        val hashes = new java.util.IdentityHashMap[Term, java.lang.Integer]()
+        val keys = new java.util.IdentityHashMap[Term, AlphaTermKey]()
+        def hashOf(t: Term): Int = {
+            val cached = hashes.get(t)
+            if cached != null then cached.intValue
+            else
+                val hash = structuralHash(t, hashOf, ignoreNames = true)
+                hashes.put(t, hash)
+                hash
+        }
+        def keyOf(t: Term): AlphaTermKey = {
+            val cached = keys.get(t)
+            if cached != null then cached
+            else
+                val key = new AlphaTermKey(t, hashOf(t))
+                keys.put(t, key)
+                key
+        }
+        var candidate = collect(current, sizeOf, keyOf)
         while candidate.nonEmpty do
             val c = candidate.get
             val name = freshName(s"__cse_${TermNaming.termDescription(c.expr)}")
@@ -121,7 +139,7 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
             // have stale uses and stale savings, so select again from the rewritten tree:
             // Constr(0, [f(e), f(e)]) => let x = f(e) in Constr(0, [x, x]).
             // There is now just one e, and the original child paths point into a new let.
-            candidate = collect(current, sizeOf)
+            candidate = collect(current, sizeOf, keyOf)
 
         // Alpha-renaming alone is not an optimization, and should not change a no-op result.
         // For example, lam x. lam x. x needs internal renaming but has nothing to share;
@@ -150,11 +168,15 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
       * ancestor, not necessarily at the region root. For Constr(0, [a, Constr(0, [e, e])]), the e
       * paths are [1, 0] and [1, 1], both in region []; insert the binding at [1].
       */
-    private def collect(term: Term, sizeOf: Term => Option[Int]): Option[Candidate] = {
+    private def collect(
+        term: Term,
+        sizeOf: Term => Option[Int],
+        keyOf: Term => AlphaTermKey
+    ): Option[Candidate] = {
         val groups = mutable.LinkedHashMap.empty[AlphaTermKey, mutable.ArrayBuffer[Group]]
 
         def add(t: Term, path: Path, region: Path): Unit = {
-            val entries = groups.getOrElseUpdate(new AlphaTermKey(t), mutable.ArrayBuffer.empty)
+            val entries = groups.getOrElseUpdate(keyOf(t), mutable.ArrayBuffer.empty)
             entries.find(g => isAncestorOrSelf(g.region, region)) match
                 case Some(ancestor) =>
                     // A strict occurrence was already found in this region or an enclosing one.
@@ -265,14 +287,30 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         case Case(scrutinee, branches, _) => scrutinee :: branches
         case _                            => Nil
 
+    // Preserve unchanged subtree identities so per-pass size/key caches survive extraction rounds.
     private def mapChildren(t: Term)(f: (Term, Int) => Term): Term = t match
-        case LamAbs(n, body, ann)   => LamAbs(n, f(body, 0), ann)
-        case Apply(fn, arg, ann)    => Apply(f(fn, 0), f(arg, 1), ann)
-        case Force(body, ann)       => Force(f(body, 0), ann)
-        case Delay(body, ann)       => Delay(f(body, 0), ann)
-        case Constr(tag, args, ann) => Constr(tag, args.zipWithIndex.map(f.tupled), ann)
+        case LamAbs(n, body, ann) =>
+            val next = f(body, 0)
+            if next eq body then t else LamAbs(n, next, ann)
+        case Apply(fn, arg, ann) =>
+            val nextFn = f(fn, 0)
+            val nextArg = f(arg, 1)
+            if (nextFn eq fn) && (nextArg eq arg) then t else Apply(nextFn, nextArg, ann)
+        case Force(body, ann) =>
+            val next = f(body, 0)
+            if next eq body then t else Force(next, ann)
+        case Delay(body, ann) =>
+            val next = f(body, 0)
+            if next eq body then t else Delay(next, ann)
+        case Constr(tag, args, ann) =>
+            val next = args.zipWithIndex.map(f.tupled)
+            if next.zip(args).forall((a, b) => a eq b) then t else Constr(tag, next, ann)
         case Case(scrutinee, branches, ann) =>
-            Case(f(scrutinee, 0), branches.zipWithIndex.map((b, i) => f(b, i + 1)), ann)
+            val nextScrutinee = f(scrutinee, 0)
+            val nextBranches = branches.zipWithIndex.map((b, i) => f(b, i + 1))
+            if (nextScrutinee eq scrutinee) && nextBranches.zip(branches).forall((a, b) => a eq b)
+            then t
+            else Case(nextScrutinee, nextBranches, ann)
         case _ => t
 }
 
@@ -284,8 +322,12 @@ object CommonSubexpressionElimination {
       * names and negative indices; even a free `i0` cannot equal the canonical bound `i0`. Keep the
       * original term for extraction, including its names, indices and annotations.
       */
-    private[transform] final class AlphaTermKey(val term: Term) {
-        private val canonical = new TermKey(
+    private[transform] final class AlphaTermKey(val term: Term, hash: Int) {
+        def this(term: Term) = this(term, alphaHash(term))
+
+        // Most large candidates are unique. Hash their shape first; pay for canonicalization only
+        // when another key has the same hash. The canonical key resolves all weak-hash collisions.
+        private lazy val canonical = new TermKey(
           DeBruijn.fromDeBruijnTerm(DeBruijn.deBruijnTerm(term))
         )
 
@@ -293,7 +335,7 @@ object CommonSubexpressionElimination {
             case other: AlphaTermKey => canonical == other.canonical
             case _                   => false
 
-        override def hashCode(): Int = canonical.hashCode()
+        override def hashCode(): Int = hash
     }
 
     // Preserve the emitted 1.1.0 methods for binary compatibility; these filters belong to CCE.
@@ -321,24 +363,34 @@ object CommonSubexpressionElimination {
             case other: TermKey => term ~=~ other.term
             case _              => false
 
-        override def hashCode(): Int = structuralHash(term)
-
-        private def structuralHash(t: Term): Int = t match
-            case Var(name, _)          => name.hashCode * 31 + 1
-            case LamAbs(name, body, _) => (name.hashCode * 31 + structuralHash(body)) * 31 + 2
-            case Apply(f, arg, _)      => (structuralHash(f) * 31 + structuralHash(arg)) * 31 + 3
-            case Force(inner, _)       => structuralHash(inner) * 31 + 4
-            case Delay(inner, _)       => structuralHash(inner) * 31 + 5
-            case Const(c, _)           => c.hashCode * 31 + 6
-            case Builtin(bn, _)        => bn.ordinal * 31 + 7
-            case Error(_)              => 8
-            case Constr(tag, args, _) =>
-                args.foldLeft(tag.hashCode * 31 + 9)((h, a) => h * 31 + structuralHash(a))
-            case Case(arg, cases, _) =>
-                cases.foldLeft(structuralHash(arg) * 31 + 10)((h, c) => h * 31 + structuralHash(c))
+        private lazy val hash = {
+            def go(t: Term): Int = structuralHash(t, go, ignoreNames = false)
+            go(term)
+        }
+        override def hashCode(): Int = hash
 
         override def toString: String = s"TermKey(${term.showShort})"
     }
+
+    private def alphaHash(t: Term): Int = structuralHash(t, alphaHash, ignoreNames = true)
+
+    /** Alpha keys use a weaker name-independent hash; structural keys preserve their existing hash.
+      * Equal alpha terms necessarily share this shape, but only canonical equality decides sharing.
+      */
+    private def structuralHash(t: Term, recur: Term => Int, ignoreNames: Boolean): Int = t match
+        case Var(name, _) => (if ignoreNames then 0 else name.hashCode) * 31 + 1
+        case LamAbs(name, body, _) =>
+            ((if ignoreNames then 0 else name.hashCode) * 31 + recur(body)) * 31 + 2
+        case Apply(f, arg, _) => (recur(f) * 31 + recur(arg)) * 31 + 3
+        case Force(inner, _)  => recur(inner) * 31 + 4
+        case Delay(inner, _)  => recur(inner) * 31 + 5
+        case Const(c, _)      => c.hashCode * 31 + 6
+        case Builtin(bn, _)   => bn.ordinal * 31 + 7
+        case Error(_)         => 8
+        case Constr(tag, args, _) =>
+            args.foldLeft(tag.hashCode * 31 + 9)((h, a) => h * 31 + recur(a))
+        case Case(arg, cases, _) =>
+            cases.foldLeft(recur(arg) * 31 + 10)((h, c) => h * 31 + recur(c))
 
     // A path is a sequence of child indices from the root, not a preorder traversal number.
     // For example, [0, 1] and [0, 2] have LCA [0]; wrapping that subtree leaves its siblings alone.

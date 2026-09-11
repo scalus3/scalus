@@ -326,7 +326,10 @@ class CommonSubexpressionEliminationTest
         val bound = new AlphaTermKey(λ("x")(vr"x"))
         assert(free == renamed)
         assert(free.hashCode == renamed.hashCode)
+        // The cheap shape hash intentionally collides here; canonical equality must disambiguate.
+        assert(free.hashCode == bound.hashCode)
         assert(free != bound)
+        assert(Set(free, bound).size == 2)
     }
 
     test("AlphaTermKey: annotations are ignored and the original indices are retained") {
