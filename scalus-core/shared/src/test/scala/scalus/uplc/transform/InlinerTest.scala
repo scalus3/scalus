@@ -9,6 +9,7 @@ import DefaultFun.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.Word64
 import scalus.uplc.eval.PlutusVM
+import scalus.uplc.builtin.Data
 
 import scala.language.implicitConversions
 
@@ -197,9 +198,83 @@ class InlinerTest extends AnyFunSuite {
         assert(Inliner(term) == expected)
     }
 
+    test("constant duplication uses the exact count and includes binding execution fees") {
+        val value = Data.I(0).asTerm
+        def shared(n: Int) = λ(x => Constr(Word64.Zero, List.fill(n)(x))) $ value
+        val twice = shared(2)
+        val thrice = shared(3)
+        // Sharing twice saves bits, but not enough to pay for executing the binding.
+        assert(SharingCost.savingBits(value, 2) > 0)
+        assert(Inliner(twice) == Constr(Word64.Zero, List.fill(2)(value)))
+        assert(Inliner(thrice) == thrice)
+        assert(Inliner(thrice).evaluate α_== thrice.evaluate)
+    }
+
+    test("occurrence counting includes guarded uses and excludes shadowed uses") {
+        val value = Data.I(0).asTerm
+        val shared = λ(x => Constr(Word64.Zero, List(x, Delay(x), λ(y => x)))) $ value
+        assert(Inliner(shared) == shared)
+        val input = λ(x => Constr(Word64.Zero, List(x, Delay(x), λ(x => x)))) $ value
+        val expected = Constr(Word64.Zero, List(value, Delay(value), λ(x => x)))
+        assert(Inliner(input) == expected)
+    }
+
+    test("fold through a shared constant without duplicating its remaining uses") {
+        val value = Data.I(42).asTerm
+        val term = λ(x => Constr(Word64.Zero, List(UnIData $ x, x, x, x))) $ value
+        val expected = λ(x => Constr(Word64.Zero, List(42, x, x, x))) $ value
+        assert(Inliner(term) == expected)
+        assert(Inliner(expected) == expected)
+    }
+
+    test("reprice sharing after constant propagation removes uses") {
+        val value = Data.I(0).asTerm
+        val term = λ(x => Constr(Word64.Zero, List(UnIData $ x, x, x))) $ value
+        assert(SharingCost.savingLovelace(value, 3) > 0)
+        assert(Inliner(term) == Constr(Word64.Zero, List(0, value, value)))
+    }
+
+    test("constant propagation respects shadowing and leaves failed evaluation unchanged") {
+        val value = Data.I(42).asTerm
+        val term = λ(x => Constr(Word64.Zero, List(λ(x => UnIData $ x), UnBData $ x, x, x))) $ value
+        assert(Inliner(term) == term)
+    }
+
+    test("constant propagation combines nested bindings") {
+        val first = Data.I(40).asTerm
+        val second = Data.I(2).asTerm
+        val term = λ(x =>
+            λ(y =>
+                Constr(
+                  Word64.Zero,
+                  List(AddInteger $ (UnIData $ x) $ (UnIData $ y), x, x, x, y, y, y)
+                )
+            ) $ second
+        ) $ first
+        val expected =
+            λ(x => λ(y => Constr(Word64.Zero, List(42, x, x, x, y, y, y))) $ second) $ first
+        assert(Inliner(term) == expected)
+    }
+
+    test("the sharing fee estimate charges the measured extra CEK work for a one-node value") {
+        val value = Data.I(0).asTerm
+        val params = scalus.cardano.ledger.CardanoInfo.mainnet.protocolParams
+        for n <- List(2, 3, 20) do
+            val duplicated = Constr(Word64.Zero, List.fill(n)(value))
+            val shared = λ(x => Constr(Word64.Zero, List.fill(n)(x))) $ value
+            val before = duplicated.evaluateDebug.budget
+            val after = shared.evaluateDebug.budget
+            val extraFee =
+                (after.memory - before.memory) * params.executionUnitPrices.priceMemory.toDouble +
+                    (after.steps - before.steps) * params.executionUnitPrices.priceSteps.toDouble
+            val sizeFee =
+                SharingCost.savingBits(value, n) * params.minFeeRefScriptCostPerByte.toDouble / 8
+            assert(math.abs(SharingCost.savingLovelace(value, n) - (sizeFee - extraFee)) < 1e-9)
+    }
+
     test("should inline small constant with multiple occurrences") {
         // (λx. x + x) 42 => 42 + 42
-        // Small integer (≤64 bits flat-encoded) is safe to duplicate
+        // Two uses are cheap enough to duplicate under the shared fee estimate.
         val term = λ("x")(AddInteger $ vr"x" $ vr"x") $ 42
         val expected = 84.asTerm
         assert(Inliner(term) == expected)
@@ -207,7 +282,7 @@ class InlinerTest extends AnyFunSuite {
 
     test("should not inline large constant with multiple occurrences") {
         // (λx. pair x x) "a long string..." => (λx. pair x x) "a long string..."
-        // Large constant (>64 bits) should not be duplicated
+        // Duplicating this constant costs more than retaining its binding.
         val largeStr: Term = "this is a long string that exceeds 64 bits in flat encoding"
         val term = λ("x")(Constr(Word64.Zero, List(vr"x", vr"x"))) $ largeStr
         assert(Inliner(term) == term)

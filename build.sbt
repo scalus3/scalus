@@ -442,6 +442,20 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq(
+        // Inliner's private occurrence analysis now stores the exact count in Many. Scala emits
+        // these enum helpers as public bytecode, but none belongs to the accessible Scala API.
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.uplc.transform.Inliner#OccurrenceInfo.Many"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.uplc.transform.Inliner#OccurrenceInfo.values"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.uplc.transform.Inliner#OccurrenceInfo.valueOf"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.uplc.transform.Inliner#OccurrenceInfo.guard"
+        ),
         // Compiler-internal packages: no supported external implementors or instantiators;
         // excluded from the binary-compat promise (README: "compiler internals carry no
         // compatibility promise"; interop style guide: SIR compiler out of scope). Everything

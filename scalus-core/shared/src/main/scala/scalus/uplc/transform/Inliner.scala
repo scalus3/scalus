@@ -1,7 +1,6 @@
 package scalus.uplc.transform
 
 import scalus.*
-import scalus.uplc.Constant.flatConstant
 import scalus.uplc.Term.*
 import scalus.uplc.eval.{Log, Logger}
 import scalus.uplc.transform.TermAnalysis.{freeVars, isPure, isValueForm}
@@ -13,7 +12,8 @@ import scalus.uplc.{NamedDeBruijn, Term}
   *   - '''Beta-reduction''': Replaces function application with direct substitution when safe
   *   - '''Identity function inlining''': Eliminates identity functions like `λx.x`
   *   - '''Dead code elimination''': Removes unused lambda parameters when the argument is pure
-  *   - '''Small value inlining''': Inlines variables, small constants, and builtins
+  *   - '''Profitable value inlining''': Inlines variables, constants, and builtins when duplication
+  *     is profitable
   *   - '''Force/Delay elimination''': Simplifies `Force(Delay(t))` to `t`
   *   - '''Partial evaluation''': Evaluates closed subexpressions at compile time via the CEK
   *     machine (e.g., `addInteger 2 3` → `5`, `(λx. addInteger x 1) 2` → `3`)
@@ -21,8 +21,8 @@ import scalus.uplc.{NamedDeBruijn, Term}
   * ==Inlining Strategy==
   *
   * The inliner uses occurrence counting and purity analysis to decide what is safe to inline:
-  *   - Variables, builtins, and small constants (≤64 bits) can be duplicated safely
-  *   - Larger values are only inlined if used once
+  *   - Variables, builtins, and constants are duplicated only when sharing is unprofitable
+  *   - Other values are only inlined if used once
   *   - Pure unused arguments are eliminated entirely
   *
   * ==Example==
@@ -64,25 +64,25 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       *     timing as the Apply site) — safe to inline any term
       *   - '''OnceGuarded''': Occurs exactly once under a Delay, Case branch, or LamAbs body — safe
       *     to inline values only (no side effects to defer/suppress)
-      *   - '''Many''': Multiple occurrences — only inline if the value is small/cheap
+      *   - '''Many''': Exact occurrence count — duplicate eligible values only when profitable
       */
     private enum OccurrenceInfo:
         case Zero
         case OnceDirect
         case OnceGuarded
-        case Many
+        case Many(uses: Int)
+
+        def count: Int = this match
+            case Zero                     => 0
+            case OnceDirect | OnceGuarded => 1
+            case Many(n)                  => n
 
     private object OccurrenceInfo:
         def combine(a: OccurrenceInfo, b: OccurrenceInfo): OccurrenceInfo =
             (a, b) match
                 case (Zero, x) => x
                 case (x, Zero) => x
-                case _         => Many
-
-        def guard(info: OccurrenceInfo): OccurrenceInfo =
-            info match
-                case Zero => Zero
-                case _    => OnceGuarded
+                case _         => Many(a.count + b.count)
 
     /** Analyzes how a variable occurs in a term, tracking whether occurrences are in direct
       * (always-evaluated) or guarded (deferred/conditional) positions.
@@ -109,34 +109,27 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                 if n == name then Zero // shadowed
                 else analyzeOccurrence(body, name, guarded = true)
             case Apply(f, arg, _) =>
-                val fInfo = analyzeOccurrence(f, name, guarded)
-                if fInfo == Many then Many
-                else combine(fInfo, analyzeOccurrence(arg, name, guarded))
+                combine(analyzeOccurrence(f, name, guarded), analyzeOccurrence(arg, name, guarded))
             case Force(t, _) => analyzeOccurrence(t, name, guarded)
             case Delay(t, _) => analyzeOccurrence(t, name, guarded = true)
             case Constr(_, args, _) =>
                 args.foldLeft(Zero: OccurrenceInfo) { (acc, a) =>
-                    if acc == Many then Many
-                    else combine(acc, analyzeOccurrence(a, name, guarded))
+                    combine(acc, analyzeOccurrence(a, name, guarded))
                 }
             case Case(scrutinee, cases, _) =>
-                val sInfo = analyzeOccurrence(scrutinee, name, guarded)
-                if sInfo == Many then Many
-                else
-                    combine(
-                      sInfo,
-                      cases.foldLeft(Zero: OccurrenceInfo) { (acc, c) =>
-                          if acc == Many then Many
-                          else combine(acc, analyzeOccurrence(c, name, guarded = true))
-                      }
-                    )
+                combine(
+                  analyzeOccurrence(scrutinee, name, guarded),
+                  cases.foldLeft(Zero: OccurrenceInfo) { (acc, c) =>
+                      combine(acc, analyzeOccurrence(c, name, guarded = true))
+                  }
+                )
             case _: Const | _: Builtin | _: Error => Zero
 
     /** Determines if a term is safe to inline based on its type and occurrence info.
       *
       *   - '''OnceDirect''': Always safe — evaluation timing is unchanged
       *   - '''OnceGuarded''': Safe only for values (no side effects to defer/suppress)
-      *   - '''Many''': Only safe for variables, small constants (≤64 bits), and builtins
+      *   - '''Many''': Variables, constants and builtins, subject to shared profitability pricing
       *   - '''Zero''': Not inlined (dead code handled separately)
       */
     private def shouldInline(inlining: Term, occInfo: OccurrenceInfo): Boolean =
@@ -144,12 +137,11 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
         occInfo match
             case OnceDirect  => true
             case OnceGuarded => inlining.isValueForm
-            case Many =>
+            case Many(uses) =>
                 inlining match
-                    case Var(_, _)     => true
-                    case Const(c, _)   => flatConstant.bitSize(c) <= 64
-                    case Builtin(_, _) => true
-                    case _             => false
+                    case _: Var | _: Const | _: Builtin =>
+                        SharingCost.savingLovelace(inlining, uses) <= 0
+                    case _ => false
             case Zero => false
 
     /** Performs capture-avoiding substitution `[x → s]t`.
@@ -192,8 +184,15 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       * If the term is a closed, reducible expression that evaluates to a constant, returns that
       * constant. Otherwise returns the term unchanged.
       */
-    private def tryPartialEval(term: Term): Term =
-        PartialEvaluator.tryEval(term) match
+    private def tryPartialEval(term: Term, constants: Map[String, Const]): Term =
+        // Substitute known constants only into a candidate for evaluation. If evaluation fails,
+        // retain the original term and its shared variables instead of duplicating constants.
+        val free = term.freeVars
+        if !free.forall(constants.contains) then return term
+        val candidate = free.foldLeft(term) { (t, name) =>
+            substitute(t, name, constants(name))
+        }
+        PartialEvaluator.tryEval(candidate) match
             case Some(result) =>
                 logger.log(s"Partial evaluation: ${term.showShort} => ${result.showShort}")
                 result
@@ -211,50 +210,58 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       * @see
       *   [[TermAnalysis.isPure]] for purity analysis used in dead code elimination
       */
-    private def go(term: Term): Term = term match
+    private def go(term: Term, constants: Map[String, Const] = Map.empty): Term = term match
         case _: Var => term
 
         case Apply(f, arg, ann) =>
-            val inlinedF = go(f)
-            val inlinedArg = go(arg)
+            val inlinedF = go(f, constants)
+            val inlinedArg = go(arg, constants)
             inlinedF match
                 // Inline identity functions
                 case LamAbs(name, Var(NamedDeBruijn(vname, _), _), _) if name == vname =>
                     logger.log(s"Inlining identity function: $name")
                     inlinedArg
-                case LamAbs(name, body, _) =>
+                case LamAbs(name, originalBody, lamAnn) =>
+                    val body = inlinedArg match
+                        case c: Const => go(originalBody, constants.updated(name, c))
+                        case _        => originalBody
                     val occInfo = analyzeOccurrence(body, name)
                     if occInfo == OccurrenceInfo.Zero && inlinedArg.isPure then
                         logger.log(s"Eliminating dead code: $name")
-                        go(body)
+                        go(body, constants - name)
                     else if shouldInline(inlinedArg, occInfo) then
                         logger.log(s"Inlining $name with ${inlinedArg.show}")
-                        go(substitute(body, name, inlinedArg))
-                    else tryPartialEval(Apply(inlinedF, inlinedArg, ann))
+                        go(substitute(body, name, inlinedArg), constants)
+                    else
+                        tryPartialEval(
+                          Apply(LamAbs(name, body, lamAnn), inlinedArg, ann),
+                          constants
+                        )
                 case _ =>
-                    tryPartialEval(Apply(inlinedF, inlinedArg, ann))
+                    tryPartialEval(Apply(inlinedF, inlinedArg, ann), constants)
 
-        case LamAbs(name, body, ann) => LamAbs(name, go(body), ann)
+        case LamAbs(name, body, ann) => LamAbs(name, go(body, constants - name), ann)
         case Force(Delay(t, _), _) =>
             logger.log(s"Eliminating Force(Delay(t)), t: ${t.showHighlighted}")
-            go(t)
+            go(t, constants)
         case Force(t, ann) =>
-            go(t) match
+            go(t, constants) match
                 case Delay(inner, _) =>
                     logger.log(s"Eliminating Force(Delay(t)) after optimization")
                     inner
                 case optimized =>
-                    tryPartialEval(Force(optimized, ann))
-        case Delay(t, ann)          => Delay(go(t), ann)
-        case Constr(tag, args, ann) => Constr(tag, args.map(go), ann)
+                    tryPartialEval(Force(optimized, ann), constants)
+        case Delay(t, ann)          => Delay(go(t, constants), ann)
+        case Constr(tag, args, ann) => Constr(tag, args.map(go(_, constants)), ann)
 
         case Case(scrutinee, cases, ann) =>
             tryPartialEval(
               Case(
-                go(scrutinee),
-                cases.map(go),
+                go(scrutinee, constants),
+                cases.map(go(_, constants)),
                 ann
-              )
+              ),
+              constants
             )
 
         case _: Const | _: Builtin | _: Error => term
