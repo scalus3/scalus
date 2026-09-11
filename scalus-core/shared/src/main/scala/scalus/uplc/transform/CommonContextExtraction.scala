@@ -3,8 +3,9 @@ package scalus.uplc.transform
 import scalus.uplc.Term
 import scalus.uplc.Term.*
 import scalus.uplc.NamedDeBruijn
-import scalus.uplc.eval.{Log, Logger}
-import scalus.uplc.transform.CommonSubexpressionElimination.{containsError, isSkippable, referencesPartialBuiltin, termSize, TermKey}
+import scalus.cardano.ledger.CardanoInfo
+import scalus.uplc.eval.{CekMachineCosts, Log, Logger}
+import scalus.uplc.transform.CommonSubexpressionElimination.{containsError, isSkippable, referencesPartialBuiltin, termBits, TermKey, TermTagBits, VarBits}
 import scalus.uplc.transform.TermAnalysis.freeVars
 
 import scala.collection.mutable
@@ -34,11 +35,11 @@ import scala.collection.mutable
   *
   *   1. '''Collect pass''': Traverse the term. For each non-leaf node, generate all single-hole
   *      decompositions via [[CommonContextExtraction.decompose]]. Record templates with
-  *      `termSize >= 6` (see [[CommonContextExtraction.MinTemplateSize]]) along with their paths.
-  *      Track path IDs at evaluation boundaries (LamAbs, Delay, Case) — same as CSE.
+  *      `termBits >= [[CommonContextExtraction.MinTemplateBits]]` along with their paths. Track
+  *      path IDs at evaluation boundaries (LamAbs, Delay, Case) — same as CSE.
   *   1. '''Group & filter pass''': Group by TemplateKey. For each group:
   *      - Require >= 2 **distinct** leaves (identical leaves are handled by CSE)
-  *      - Profitability check: `(N-1) * templateSize > N + 3`
+  *      - Profitability check: [[CommonContextExtraction.extractionSavingBits]] > 0
   *      - Compute bind path as longest common prefix of occurrence paths
   *      - Scope safety: free vars of template (excluding HOLE) in scope at bind path
   *      - Shadowing safety: no re-binding between bind and occurrence paths
@@ -89,9 +90,8 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                 // Generate all single-hole decompositions at any child position
                 if !isSkippable(nonLeaf) then
                     decompose(nonLeaf).foreach { case (template, leaf) =>
-                        val tSize = termSize(template)
-                        if tSize >= MinTemplateSize && !containsError(template) then
-                            addOccurrence(new TermKey(template), path, leaf)
+                        if termBits(template) >= MinTemplateBits && !containsError(template)
+                        then addOccurrence(new TermKey(template), path, leaf)
                     }
                 // Always recurse into subterms
                 nonLeaf match
@@ -122,7 +122,7 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
             key: TermKey,
             bindPath: Path,
             occurrences: Vector[(Path, Term)],
-            templateSize: Int
+            templateBits: Int
         )
 
         val topLevelFreeVars = term.freeVars
@@ -149,12 +149,12 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
             val distinctLeafKeys = occs.map { case (_, leaf) => new TermKey(leaf) }.toSet
             if distinctLeafKeys.size >= 2 then
                 val n = occs.size
-                val tSize = termSize(key.term)
+                val tBits = termBits(key.term)
 
-                // Profitability: extracting saves (N-1)*templateSize nodes (template
-                // duplicated N times minus the one copy kept in the lambda body).
-                // Cost is N+3: 1 LamAbs + 1 Apply for let-binding, 1 LamAbs for param, N Applys.
-                if (n - 1) * tSize > n + 3 then
+                // Profitability is measured in flat-encoded bits plus the CEK steps the
+                // extraction adds, because that is what the chain charges. See
+                // [[extractionSavingBits]].
+                if extractionSavingBits(n, tBits) > 0 then
                     val allPaths = occs.map(_._1).toVector
                     val bindPath = longestCommonPrefix(allPaths)
 
@@ -172,7 +172,7 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                         crossesConditional && referencesPartialBuiltin(key.term)
 
                     if safeForAll && !unsafeCaseCrossing then
-                        candidates += CceCandidate(key, bindPath, occs.toVector, tSize)
+                        candidates += CceCandidate(key, bindPath, occs.toVector, tBits)
 
         if candidates.isEmpty then return term
 
@@ -180,7 +180,7 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
         // above is insertion-ordered). The key is computed once per candidate: `sortBy` would
         // re-evaluate it on every comparison, and `key.toString` renders the whole term.
         val sortedCandidates =
-            candidates.map(c => ((-c.templateSize, c.key.toString), c)).sortBy(_._1).map(_._2)
+            candidates.map(c => ((-c.templateBits, c.key.toString), c)).sortBy(_._1).map(_._2)
 
         // Collect all existing names to avoid collisions
         val existingNames = collectNames(term)
@@ -247,9 +247,14 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
 
             reCollect(currentTerm, Vector.empty)
 
-            // Need distinct leaves AND at least 2 occurrences
+            // Need distinct leaves AND at least 2 occurrences. Re-check profitability too:
+            // candidates were scored before any extraction ran, and an earlier extraction can
+            // have swallowed some of this template's occurrences, leaving too few to pay for
+            // the framing and the CEK steps the abstraction adds.
             val reDistinctLeaves = reOccurrences.map { case (_, leaf) => new TermKey(leaf) }.toSet
-            if reOccurrences.size >= 2 && reDistinctLeaves.size >= 2 then
+            if reOccurrences.size >= 2 && reDistinctLeaves.size >= 2
+                && extractionSavingBits(reOccurrences.size, cand.templateBits) > 0
+            then
                 val allPaths = reOccurrences.map(_._1).toVector
                 val bindPath = longestCommonPrefix(allPaths)
 
@@ -326,11 +331,10 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                     // Insert let-binding at bind path:
                     // Apply(LamAbs(lambdaName, <body>), lambda)
                     currentTerm = insertLetAtPath(substituted, bindPath, lambdaName, lambda)
-                    val tSize = termSize(cand.key.term)
                     val nOcc = reOccurrences.size
-                    val saved = (nOcc - 1) * tSize - (nOcc + 3)
+                    val savedBits = extractionSavingBits(nOcc, cand.templateBits)
                     logger.log(
-                      s"CCE: extracted template (size=$tSize, ${nOcc} occ, ${reDistinctLeaves.size} leaves, saved=$saved nodes) as $lambdaName: ${cand.key.term.showShort}"
+                      f"CCE: extracted template (bits=${cand.templateBits}, $nOcc occ, ${reDistinctLeaves.size} leaves, saved=$savedBits%.1f bits) as $lambdaName: ${cand.key.term.showShort}"
                     )
 
         currentTerm
@@ -389,21 +393,62 @@ object CommonContextExtraction {
 
     private type Path = Vector[Int]
 
-    /** Minimum template size (in nodes) for extraction to be considered.
-      *
-      * Extraction cost is N+3 nodes (1 LamAbs + 1 Apply for let-binding, 1 LamAbs for the param, N
-      * Apply calls). Savings are (N-1)*tSize. Profitability requires `(N-1)*tSize > N+3`.
-      *
-      *   - tSize=3 (`f(HOLE)`): needs N>=7 — too trivial to extract.
-      *   - tSize=4: needs N>=4 — rare with distinct leaves.
-      *   - tSize=5 (`f(g(HOLE))`): needs N>=3 — barely profitable; many size=5 candidates ended up
-      *     with only 2 occurrences after substitution and saved 0 nodes net.
-      *   - tSize=6+: profitable even at N=2 — always collected.
-      *
-      * Set to 6 so that every collected template is at least 1 node profitable at N=2, eliminating
-      * the "saved=0" extractions that add lambda/apply overhead without clear benefit.
+    /** Mainnet is the reference point for the size-versus-execution exchange rate: no protocol
+      * parameters are plumbed into the UPLC optimizer, and the ratio is stable across networks.
       */
-    private val MinTemplateSize = 6
+    private val referenceParams = CardanoInfo.mainnet.protocolParams
+
+    /** Lovelace cost of one CEK machine step. Every step kind costs the same at PV11, so the
+      * `applyCost` entry stands for all of them.
+      */
+    private val LovelacePerStep = {
+        val prices = referenceParams.executionUnitPrices
+        val step = CekMachineCosts.defaultMachineCosts.applyCost
+        prices.priceMemory.toDouble * step.memory + prices.priceSteps.toDouble * step.steps
+    }
+
+    /** Lovelace cost of one reference-script bit, per transaction. */
+    private val LovelacePerBit = referenceParams.minFeeRefScriptCostPerByte.toDouble / 8
+
+    /** One CEK step expressed in bits, so size and execution costs can be added. About 3.7. */
+    private val StepBits = LovelacePerStep / LovelacePerBit
+
+    /** Smallest template, in flat-encoded bits, that any occurrence count could make profitable.
+      *
+      * A collection-time filter: `occurrences` is not yet known, so this is the loosest possible
+      * bound. Reading [[extractionSavingBits]] as a function of `n`, the coefficient of `n` is
+      * `skeletonBits - (TermTagBits + VarBits) - 3 * StepBits`. Unless that is positive, no
+      * occurrence count can pay however much the framing is amortized. Adding the hole variable
+      * back gives the template size. Must be declared after [[StepBits]], which it reads.
+      */
+    private[transform] val MinTemplateBits: Int = {
+        val minSkeletonBits = math.floor((TermTagBits + VarBits) + 3 * StepBits).toInt + 1
+        minSkeletonBits + VarBits
+    }
+
+    /** Net saving, in bits, of extracting a one-hole template that occurs `occurrences` times.
+      *
+      * `templateBits` is [[CommonSubexpressionElimination.termBits]] of the template, including its
+      * hole sentinel.
+      *
+      * Counting in bits rather than AST nodes matters because the framing an extraction pays for is
+      * `Var`-heavy (12 bits each) while the template it saves is usually `Apply`-heavy (4 bits
+      * each), so a node count overstates the saving and understates the cost. The step term is
+      * needed because extraction never saves work: it adds `3n+3` CEK steps.
+      *
+      * No execution profile is available in the optimizer, so every site is assumed to run once.
+      * That is right for the majority of a validator that runs exactly once per transaction, and
+      * optimistic on hot paths, where the real step cost is higher.
+      */
+    private[transform] def extractionSavingBits(occurrences: Int, templateBits: Int): Double = {
+        val n = occurrences
+        // Each site keeps its own leaf in place of the hole, so only the skeleton is duplicated.
+        val skeletonBits = templateBits - VarBits
+        // Per site an Apply and a Var reference; once, the let (Apply + LamAbs), the lambda
+        // parameter and the hole variable.
+        val framingBits = n * (TermTagBits + VarBits) + 3 * TermTagBits + VarBits
+        (n - 1) * skeletonBits - framingBits - StepBits * (3 * n + 3)
+    }
 
     /** Sentinel variable name used as the HOLE placeholder in templates. */
     private[transform] val holeSentinelName = "__CCE_HOLE__"

@@ -6,6 +6,7 @@ import scalus.uplc.TermDSL.given
 import scalus.uplc.Constant.given
 import scalus.uplc.transform.TermAnalysis.freeVars
 import scalus.uplc.transform.CommonContextExtraction.*
+import scalus.uplc.transform.CommonSubexpressionElimination.VarBits
 import DefaultFun.*
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
@@ -302,9 +303,9 @@ class CommonContextExtractionTest
         // => let f = \a -> headList(unConstrData(a)) in constr(f(x), f(y))
         val headList = Force(Builtin(HeadList))
         val unConstr = Force(Force(Builtin(UnConstrData)))
-        val chain1 = headList $ (unConstr $ vr"x")
-        val chain2 = headList $ (unConstr $ vr"y")
-        val term = Constr(Word64.Zero, List(chain1, chain2))
+        // A 42-bit skeleton only pays for its framing from six occurrences up.
+        val chains = List("x", "y", "z", "p", "q", "r").map(n => headList $ (unConstr $ vr(n)))
+        val term = Constr(Word64.Zero, chains)
 
         val cce = new CommonContextExtraction()
         val result = cce(term)
@@ -495,9 +496,8 @@ class CommonContextExtractionTest
     test("CCE produces log entries when extracting") {
         val headList = Force(Builtin(HeadList))
         val unConstr = Force(Force(Builtin(UnConstrData)))
-        val chain1 = headList $ (unConstr $ vr"x")
-        val chain2 = headList $ (unConstr $ vr"y")
-        val term = Constr(Word64.Zero, List(chain1, chain2))
+        val chains = List("x", "y", "z", "p", "q", "r").map(n => headList $ (unConstr $ vr(n)))
+        val term = Constr(Word64.Zero, chains)
 
         val cce = new CommonContextExtraction()
         cce(term)
@@ -517,11 +517,12 @@ class CommonContextExtractionTest
 
     test("should extract context with three distinct leaves") {
         val headList = Force(Builtin(HeadList))
+        val tailList = Force(Builtin(TailList))
+        val sndPair = Force(Force(Builtin(SndPair)))
         val unConstr = Force(Force(Builtin(UnConstrData)))
-        val chain1 = headList $ (unConstr $ vr"x")
-        val chain2 = headList $ (unConstr $ vr"y")
-        val chain3 = headList $ (unConstr $ vr"z")
-        val term = Constr(Word64.Zero, List(chain1, chain2, chain3))
+        // An 84-bit skeleton, deep enough to pay at three occurrences.
+        def chain(n: String) = headList $ (tailList $ (sndPair $ (unConstr $ vr(n))))
+        val term = Constr(Word64.Zero, List(chain("x"), chain("y"), chain("z")))
 
         val cce = new CommonContextExtraction()
         val result = cce(term)
@@ -674,13 +675,11 @@ class CommonContextExtractionTest
         val chainA1 = headList $ (tailList $ (unConstr $ vr"x"))
         val chainA2 = headList $ (tailList $ (unConstr $ vr"y"))
         val chainA3 = headList $ (tailList $ (unConstr $ vr"z"))
-        // Template B: sndPair(unConstrData(HOLE)) used with a, b, c
-        val chainB1 = sndPair $ (unConstr $ vr"a")
-        val chainB2 = sndPair $ (unConstr $ vr"b")
-        val chainB3 = sndPair $ (unConstr $ vr"c")
+        // Template B: sndPair(unConstrData(HOLE)); its 46-bit skeleton needs five occurrences
+        val chainsB = List("a", "b", "c", "d", "e").map(n => sndPair $ (unConstr $ vr(n)))
         val term = Constr(
           Word64.Zero,
-          List(chainA1, chainA2, chainA3, chainB1, chainB2, chainB3)
+          List(chainA1, chainA2, chainA3) ++ chainsB
         )
 
         val cce = new CommonContextExtraction()
@@ -758,10 +757,8 @@ class CommonContextExtractionTest
         val g = Force(Builtin(HeadList))
         val f = Force(Force(Builtin(UnConstrData)))
         // g(f(x)) and g(f(y)) — same as existing right-spine, but verifying Force still works
-        val chain1 = g $ (f $ vr"x")
-        val chain2 = g $ (f $ vr"y")
-        val chain3 = g $ (f $ vr"z")
-        val term = Constr(Word64.Zero, List(chain1, chain2, chain3))
+        val chains = List("x", "y", "z", "p", "q", "r").map(n => g $ (f $ vr(n)))
+        val term = Constr(Word64.Zero, chains)
 
         val cce = new CommonContextExtraction()
         val result = cce(term)
@@ -778,10 +775,8 @@ class CommonContextExtractionTest
         val sndPair = Force(Force(Builtin(SndPair)))
         val unConstr = Force(Force(Builtin(UnConstrData)))
         // sndPair(unConstrData(x)) and sndPair(unConstrData(y))
-        val chain1 = sndPair $ (unConstr $ vr"x")
-        val chain2 = sndPair $ (unConstr $ vr"y")
-        val chain3 = sndPair $ (unConstr $ vr"z")
-        val term = Constr(Word64.Zero, List(chain1, chain2, chain3))
+        val chains = List("x", "y", "z", "p", "q").map(n => sndPair $ (unConstr $ vr(n)))
+        val term = Constr(Word64.Zero, chains)
 
         val cce = new CommonContextExtraction()
         val result = cce(term)
@@ -807,10 +802,16 @@ class CommonContextExtractionTest
         )
         given Options = opts
 
-        val compiled = PlutusV3.compile { (a: Data, b: Data) =>
+        // Five arguments: the accessor chain's 47-bit skeleton only pays from five
+        // occurrences up, so fewer would leave nothing for CCE to extract and the
+        // semantics comparison below would be vacuous.
+        val compiled = PlutusV3.compile { (a: Data, b: Data, c: Data, d: Data, e: Data) =>
             val fa = a.toConstr.snd.head.toBigInt
             val fb = b.toConstr.snd.head.toBigInt
-            fa + fb
+            val fc = c.toConstr.snd.head.toBigInt
+            val fd = d.toConstr.snd.head.toBigInt
+            val fe = e.toConstr.snd.head.toBigInt
+            fa + fb + fc + fd + fe
         }
         val noCce = compiled.program.term
 
@@ -824,8 +825,8 @@ class CommonContextExtractionTest
         import scalus.cardano.onchain.plutus.prelude.List as PList
         val testData = Data.Constr(0, PList(Data.I(42)))
         val testArg = Const(Constant.Data(testData))
-        val noCceApplied = noCce $ testArg $ testArg
-        val withCceApplied = withCce $ testArg $ testArg
+        val noCceApplied = noCce $ testArg $ testArg $ testArg $ testArg $ testArg
+        val withCceApplied = withCce $ testArg $ testArg $ testArg $ testArg $ testArg
 
         val noCceResult = Try(noCceApplied.evaluate)
         val withCceResult = Try(withCceApplied.evaluate)
@@ -835,5 +836,47 @@ class CommonContextExtractionTest
           noCceResult.get == withCceResult.get,
           s"Results should match: ${noCceResult.get} != ${withCceResult.get}"
         )
+    }
+
+    // ========================================================================
+    // extractionSavingBits: profitability in bits, not nodes
+    // ========================================================================
+
+    // The htlc accessor template `unConstrData(headList(tailList(HOLE)))`:
+    // 3 Apply (4 bits each) + 1 Builtin (11) + 2 Var (12 each) = 47 bits of skeleton,
+    // plus the 12-bit hole sentinel = 59 bits as measured by termBits.
+    private val htlcAccessorBits = 59
+
+    test("MinTemplateBits is exactly the smallest template that can ever pay") {
+        // Below the threshold no occurrence count can make an extraction profitable, because
+        // the per-occurrence saving is negative however much the framing is amortized.
+        assert(
+          (2 to 10000).forall(n => extractionSavingBits(n, MinTemplateBits - 1) <= 0),
+          "a template one bit below the threshold must never pay"
+        )
+        // At the threshold some occurrence count does pay, so the filter is not over-strict.
+        assert(
+          (2 to 10000).exists(n => extractionSavingBits(n, MinTemplateBits) > 0),
+          "a template at the threshold must pay at some occurrence count"
+        )
+    }
+
+    test("extractionSavingBits rejects a small template at two occurrences") {
+        // Extracting costs 56 bits of framing and 9 CEK steps; the skeleton is only 47 bits.
+        assert(extractionSavingBits(2, htlcAccessorBits) < 0)
+    }
+
+    test("extractionSavingBits accepts a large template at two occurrences") {
+        // 90 bits of skeleton clears both the 56 bits of framing and the step cost.
+        assert(extractionSavingBits(2, 90 + VarBits) > 0)
+    }
+
+    test("extractionSavingBits accepts the small template once it repeats enough") {
+        // The same 47-bit skeleton pays for itself when the framing is amortized.
+        assert(extractionSavingBits(6, htlcAccessorBits) > 0)
+    }
+
+    test("extractionSavingBits never accepts a single occurrence") {
+        assert(extractionSavingBits(1, 500) < 0)
     }
 }

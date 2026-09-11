@@ -643,4 +643,72 @@ class CommonSubexpressionEliminationTest
         assert(Try(noCse.evaluate).isSuccess, "Without CSE should succeed")
         assert(Try(withCse.evaluate).isSuccess, "With CSE should succeed")
     }
+
+    // ========================================================================
+    // termBits tests
+    // ========================================================================
+
+    test("termBits agrees with the flat encoder on a de Bruijn term") {
+        // Covers Var, Apply, LamAbs, Force, Delay, Builtin, Const.
+        val named = LamAbs(
+          "x",
+          Force(
+            Delay(
+              Apply(
+                Apply(Builtin(AddInteger), Var(NamedDeBruijn("x"))),
+                Apply(Force(Builtin(HeadList)), 42: Term)
+              )
+            )
+          )
+        )
+        val db = DeBruijn.deBruijnTerm(named)
+        assert(termBits(db) == summon[scalus.serialization.flat.Flat[Term]].bitSize(db))
+    }
+
+    test("termBits agrees with the flat encoder on arbitrary closed terms") {
+        // The flat encoder is the oracle: close the term, assign de Bruijn indices, compare.
+        // This is what pins termBits to the encoder as the encoder evolves.
+        forAll { (t: Term) =>
+            val closed = freeVars(t).foldLeft(t)((acc, n) => LamAbs(n, acc))
+            val db = DeBruijn.deBruijnTerm(closed)
+            whenever(maxVarIndex(db) < 128) {
+                assert(termBits(db) == summon[scalus.serialization.flat.Flat[Term]].bitSize(db))
+            }
+        }
+    }
+
+    test("the flat encoder cannot price a CCE template, which is why termBits exists") {
+        // A template is a fragment: its variables are free, and DeBruijn gives free variables
+        // negative indices, which the encoder rejects. termBits prices them at the minimum width
+        // instead.
+        val template = Apply(Force(Builtin(HeadList)), Var(NamedDeBruijn("__CCE_HOLE__")))
+        val db = DeBruijn.deBruijnTerm(template)
+        assert(maxVarIndex(db) < 0, "expected a negative index for the free hole sentinel")
+        assertThrows[IllegalArgumentException] {
+            summon[scalus.serialization.flat.Flat[Term]].bitSize(db)
+        }
+        assert(termBits(db) > 0)
+    }
+
+    private def maxVarIndex(t: Term): Int = t match
+        case Var(n, _)          => n.index
+        case Const(_, _)        => Int.MinValue
+        case Builtin(_, _)      => Int.MinValue
+        case Error(_)           => Int.MinValue
+        case LamAbs(_, body, _) => maxVarIndex(body)
+        case Apply(f, arg, _)   => maxVarIndex(f) max maxVarIndex(arg)
+        case Force(inner, _)    => maxVarIndex(inner)
+        case Delay(inner, _)    => maxVarIndex(inner)
+        case Constr(_, args, _) => args.map(maxVarIndex).foldLeft(Int.MinValue)(_ max _)
+        case Case(arg, cases, _) =>
+            cases.map(maxVarIndex).foldLeft(maxVarIndex(arg))(_ max _)
+
+    test("termBits agrees with the flat encoder on Constr, Case and Error") {
+        val named = Case(
+          Constr(Word64.Zero, List[Term](1: Term, Error())),
+          List[Term](LamAbs("a", LamAbs("b", Var(NamedDeBruijn("a")))))
+        )
+        val db = DeBruijn.deBruijnTerm(named)
+        assert(termBits(db) == summon[scalus.serialization.flat.Flat[Term]].bitSize(db))
+    }
 }

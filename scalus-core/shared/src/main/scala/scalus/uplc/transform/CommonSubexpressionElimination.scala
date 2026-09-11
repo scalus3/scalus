@@ -5,6 +5,9 @@ import scalus.uplc.Term.*
 import scalus.uplc.{DefaultFun, NamedDeBruijn}
 import scalus.uplc.eval.{Log, Logger}
 import scalus.uplc.transform.TermAnalysis.{freeVars, isValueForm}
+import scalus.cardano.ledger.Word64
+import scalus.serialization.flat.{Flat, given}
+import scalus.uplc.Constant.flatConstant
 
 import scala.collection.mutable
 
@@ -491,6 +494,43 @@ object CommonSubexpressionElimination {
         case Case(arg, cases, _)            => containsError(arg) || cases.exists(containsError)
 
     /** Count the number of nodes in a term (used for sorting candidates). */
+    /** Width of a UPLC term tag in the flat encoding. */
+    private[transform] val TermTagBits = 4
+
+    /** Flat-encoded width of a `Var`: a 4-bit tag plus one 7-bit index group.
+      *
+      * Exact while every de Bruijn index stays below 128. The largest index measured across the
+      * example validators is 66.
+      */
+    private[transform] val VarBits = TermTagBits + 8
+
+    /** Flat-encoded bit size of a term, used for size-cost decisions.
+      *
+      * Mirrors `Flat[Term].bitSize` in Term.scala, except that every `Var` is priced at the minimum
+      * [[VarBits]] rather than from its de Bruijn index. The optimizer passes run before de Bruijn
+      * conversion, so indices are not yet assigned and `Flat[Term].bitSize` throws on them; CCE
+      * templates also contain a hole sentinel that is not a real variable.
+      *
+      * Prefer this over [[termSize]] whenever the decision is about serialized script size: node
+      * counts price an `Apply` (4 bits) the same as a `Var` (12 bits) or a small `Data` constant
+      * (58 bits), which is a 3x error bar on a cost that is charged in bytes.
+      */
+    private[transform] def termBits(t: Term): Int = t match
+        case Var(_, _)          => VarBits
+        case Const(c, _)        => TermTagBits + flatConstant.bitSize(c)
+        case Apply(f, arg, _)   => TermTagBits + termBits(f) + termBits(arg)
+        case LamAbs(_, body, _) => TermTagBits + termBits(body)
+        case Force(inner, _)    => TermTagBits + termBits(inner)
+        case Delay(inner, _)    => TermTagBits + termBits(inner)
+        case Builtin(bn, _)     => TermTagBits + summon[Flat[DefaultFun]].bitSize(bn)
+        case Error(_)           => TermTagBits
+        case Constr(tag, args, _) =>
+            TermTagBits + summon[Flat[Word64]].bitSize(tag) + termListBits(args)
+        case Case(arg, cases, _) => TermTagBits + termBits(arg) + termListBits(cases)
+
+    /** Flat list framing is one continuation bit per element plus a terminator. */
+    private def termListBits(ts: List[Term]): Int = ts.size + 1 + ts.map(termBits).sum
+
     private[transform] def termSize(t: Term): Int = t match
         case Var(_, _) | Const(_, _) | Builtin(_, _) | Error(_) => 1
         case LamAbs(_, body, _)                                 => 1 + termSize(body)
