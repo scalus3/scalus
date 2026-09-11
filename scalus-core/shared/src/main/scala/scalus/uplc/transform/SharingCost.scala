@@ -3,7 +3,7 @@ package scalus.uplc.transform
 import scalus.cardano.ledger.CardanoInfo
 import scalus.uplc.Term
 import scalus.uplc.eval.CekMachineCosts
-import scalus.uplc.transform.CommonSubexpressionElimination.{termBits, TermTagBits, VarBits}
+import scalus.uplc.transform.CommonSubexpressionElimination.{cachedTermBits, termBits, TermTagBits, VarBits}
 
 /** Shared profitability estimate for retaining or introducing a let binding.
   *
@@ -21,10 +21,15 @@ private[transform] object SharingCost {
             overhead.steps * params.executionUnitPrices.priceSteps.toDouble
     private val pricePerBit = params.minFeeRefScriptCostPerByte.toDouble / 8
 
-    def savingBits(term: Term, uses: Int): Long =
-        (uses.toLong - 1) * termBits(term) - uses.toLong * VarBits - 2 * TermTagBits
+    def savingBits(term: Term, uses: Int): Long = savingBits(termBits(term), uses)
+
+    def savingBits(bits: Int, uses: Int): Long =
+        (uses.toLong - 1) * bits - uses.toLong * VarBits - 2 * TermTagBits
 
     /** Positive means keep/share the binding; zero or negative favors inlining when safe. */
     def savingLovelace(term: Term, uses: Int): Double =
-        savingBits(term, uses) * pricePerBit - bindingFee
+        cachedTermBits()(term).fold(Double.NegativeInfinity)(savingLovelace(_, uses))
+
+    def savingLovelace(bits: Int, uses: Int): Double =
+        savingBits(bits, uses) * pricePerBit - bindingFee
 }

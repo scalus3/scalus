@@ -1,6 +1,6 @@
 package scalus.uplc.transform
 
-import scalus.uplc.Term
+import scalus.uplc.{Constant, Term}
 import scalus.uplc.Term.*
 import scalus.uplc.{DeBruijn, DefaultFun, NamedDeBruijn}
 import scalus.uplc.eval.{Log, Logger}
@@ -10,6 +10,7 @@ import scalus.serialization.flat.Flat
 import scalus.uplc.Constant.flatConstant
 
 import scala.collection.mutable
+import scala.util.Try
 
 /** Share repeated expressions by introducing a strict UPLC binding, using Plutus 1.63.0.0's
   * ancestor-or-self rule. In the examples below, `let x = e in body` means `[(lam x body) e]`; `e`
@@ -105,7 +106,8 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
 
         var current = uniqueBinders(term, Map.empty)
         var changed = false
-        var candidate = collect(current)
+        val sizeOf = cachedTermBits()
+        var candidate = collect(current, sizeOf)
         while candidate.nonEmpty do
             val c = candidate.get
             val name = freshName(s"__cse_${TermNaming.termDescription(c.expr)}")
@@ -119,7 +121,7 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
             // have stale uses and stale savings, so select again from the rewritten tree:
             // Constr(0, [f(e), f(e)]) => let x = f(e) in Constr(0, [x, x]).
             // There is now just one e, and the original child paths point into a new let.
-            candidate = collect(current)
+            candidate = collect(current, sizeOf)
 
         // Alpha-renaming alone is not an optimization, and should not change a no-op result.
         // For example, lam x. lam x. x needs internal renaming but has nothing to share;
@@ -148,7 +150,7 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
       * ancestor, not necessarily at the region root. For Constr(0, [a, Constr(0, [e, e])]), the e
       * paths are [1, 0] and [1, 1], both in region []; insert the binding at [1].
       */
-    private def collect(term: Term): Option[Candidate] = {
+    private def collect(term: Term, sizeOf: Term => Option[Int]): Option[Candidate] = {
         val groups = mutable.LinkedHashMap.empty[AlphaTermKey, mutable.ArrayBuffer[Group]]
 
         def add(t: Term, path: Path, region: Path): Unit = {
@@ -224,9 +226,11 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
                 // In lam a. Constr(0, [other, Constr(0, [f(a), f(a)])]), bind f(a) only around
                 // the inner Constr: a stays in scope and other stays outside the new binding.
                 val c = Candidate(key.term, paths.toSet, longestCommonPrefix(paths))
-                val saving = SharingCost.savingLovelace(c.expr, c.occurrences.size)
-                if saving > best.fold(0.0)(_.savedLovelace) then
-                    best = Some(c.copy(savedLovelace = saving))
+                sizeOf(c.expr).foreach { bits =>
+                    val saving = SharingCost.savingLovelace(bits, c.occurrences.size)
+                    if saving > best.fold(0.0)(_.savedLovelace) then
+                        best = Some(c.copy(savedLovelace = saving))
+                }
         best
     }
 
@@ -374,11 +378,10 @@ object CommonSubexpressionElimination {
     /** Approximate Flat-encoded bit size used for CSE and CCE profitability.
       *
       * Mirrors `Flat[Term].bitSize` in Term.scala, except that every `Var` is priced at the minimum
-      * [[VarBits]] rather than from its de Bruijn index. The optimizer passes run before de Bruijn
-      * conversion, so indices are not yet assigned and `Flat[Term].bitSize` throws on them; CCE
-      * templates also contain a hole sentinel that is not a real variable. For example, `vr"x"` has
-      * an unassigned index 0: termBits prices it at 12 bits without trying to serialize it. The
-      * same placeholder can be sized inside a CCE application template.
+      * [[VarBits]] rather than from its de Bruijn index. Flat accepts unassigned index 0, so named
+      * terms and CCE hole templates can be sized directly. The approximation deliberately ignores
+      * index growth: index 127 takes one group, while 128 takes two. Negative free-variable indices
+      * produced by de Bruijn conversion are also priced at the same fixed width.
       *
       * This estimate ignores variable-index growth and uses worst-case byte-array padding.
       * Profitability is heuristic; semantic safety comes from the placement rules. For example,
@@ -390,21 +393,60 @@ object CommonSubexpressionElimination {
       * estimate can therefore lose its advantage after serialization, for example when extraction
       * pushes an existing variable index from 127 to 128.
       */
-    private[transform] def termBits(t: Term): Int = t match
-        case Var(_, _)          => VarBits
-        case Const(c, _)        => TermTagBits + flatConstant.bitSize(c)
-        case Apply(f, arg, _)   => TermTagBits + termBits(f) + termBits(arg)
-        case LamAbs(_, body, _) => TermTagBits + termBits(body)
-        case Force(inner, _)    => TermTagBits + termBits(inner)
-        case Delay(inner, _)    => TermTagBits + termBits(inner)
-        case Builtin(bn, _)     => TermTagBits + summon[Flat[DefaultFun]].bitSize(bn)
-        case Error(_)           => TermTagBits
-        case Constr(tag, args, _) =>
-            TermTagBits + summon[Flat[Word64]].bitSize(tag) + termListBits(args)
-        case Case(arg, cases, _) => TermTagBits + termBits(arg) + termListBits(cases)
+    private[transform] def termBits(t: Term): Int =
+        cachedTermBits()(t).getOrElse(
+          throw new IllegalArgumentException("Flat size is unavailable for this term")
+        )
 
-    /** Flat list framing: [] costs 1 bit; [a, b] costs 3 bits plus termBits(a) + termBits(b). */
-    private def termListBits(ts: List[Term]): Int = ts.size + 1 + ts.map(termBits).sum
+    /** One estimator per optimizer pass, reused across extraction rounds. An unavailable constant
+      * encoding rejects its containing candidate; it must never become a large profitable sentinel.
+      * Ask the encoder itself so serializable containers such as an empty BLS list remain
+      * supported. Identity caches avoid reserializing constants when their surrounding term
+      * wrappers change.
+      */
+    private[transform] def cachedTermBits(): Term => Option[Int] = {
+        val terms = new java.util.IdentityHashMap[Term, Option[Int]]()
+        val constants = new java.util.IdentityHashMap[Constant, Option[Int]]()
+
+        def constantBits(c: Constant): Option[Int] = {
+            val cached = constants.get(c)
+            if cached != null then cached
+            else
+                val bits = Try(flatConstant.bitSize(c)).toOption
+                constants.put(c, bits)
+                bits
+        }
+
+        def listBits(ts: List[Term]): Option[Int] =
+            ts.foldLeft(Option(ts.size + 1)) { (sum, t) =>
+                for a <- sum; b <- size(t) yield a + b
+            }
+
+        def size(t: Term): Option[Int] = {
+            val cached = terms.get(t)
+            if cached != null then cached
+            else {
+                val bits = t match
+                    case Var(_, _)   => Some(VarBits)
+                    case Const(c, _) => constantBits(c).map(TermTagBits + _)
+                    case Apply(f, arg, _) =>
+                        for a <- size(f); b <- size(arg) yield TermTagBits + a + b
+                    case LamAbs(_, body, _) => size(body).map(TermTagBits + _)
+                    case Force(inner, _)    => size(inner).map(TermTagBits + _)
+                    case Delay(inner, _)    => size(inner).map(TermTagBits + _)
+                    case Builtin(bn, _) =>
+                        Some(TermTagBits + summon[Flat[DefaultFun]].bitSize(bn))
+                    case Error(_) => Some(TermTagBits)
+                    case Constr(tag, args, _) =>
+                        listBits(args).map(TermTagBits + summon[Flat[Word64]].bitSize(tag) + _)
+                    case Case(arg, cases, _) =>
+                        for a <- size(arg); bs <- listBits(cases) yield TermTagBits + a + bs
+                terms.put(t, bits)
+                bits
+            }
+        }
+        size
+    }
 
     /** AST node count: Apply(Var(f), Const(bytes)) has 3 nodes even for a kilobyte of bytes. Unlike
       * termBits, this does not measure script-size savings.

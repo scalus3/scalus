@@ -681,6 +681,66 @@ class CommonSubexpressionEliminationTest
     // termBits tests
     // ========================================================================
 
+    private def unsupportedConstants: List[Constant] = {
+        import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
+        val g1 = Constant.BLS12_381_G1_Element(G1Element.generator)
+        val g2 = Constant.BLS12_381_G2_Element(G2Element.generator)
+        List(
+          g1,
+          g2,
+          Constant.List(g1.tpe, List(g1)),
+          Constant.Pair(Constant.Integer(1), g2),
+          Constant.Array(g1.tpe, Vector(g1))
+        )
+    }
+
+    test("CSE rejects constants whose Flat size is unavailable, including nested BLS values") {
+        for constant <- unsupportedConstants do
+            val repeated = Const(constant)
+            val term = Constr(Word64.Zero, List(repeated, repeated))
+            assert(CommonSubexpressionElimination(term) eq term)
+    }
+
+    test("unavailable sizes propagate through expressions and cannot become profitable") {
+        val sizeOf = cachedTermBits()
+        for constant <- unsupportedConstants do
+            val c = Const(constant)
+            for term <- List[Term](c, Delay(c), Apply(vr"f", c), Constr(Word64.Zero, List(c))) do
+                assert(sizeOf(term).isEmpty)
+                assert(SharingCost.savingLovelace(term, 3) == Double.NegativeInfinity)
+    }
+
+    test("empty BLS containers remain sizeable when the Flat encoder supports them") {
+        val sizeOf = cachedTermBits()
+        for tpe <- List(DefaultUni.BLS12_381_G1_Element, DefaultUni.BLS12_381_G2_Element) do
+            val term = Const(Constant.List(tpe, Nil))
+            assert(
+              sizeOf(term).contains(summon[scalus.serialization.flat.Flat[Term]].bitSize(term))
+            )
+    }
+
+    test("cached sizing encodes the same constant only once across different term wrappers") {
+        var reads = 0
+        val values = new IndexedSeq[Constant] {
+            def length: Int = 3
+            def apply(index: Int): Constant = {
+                reads += 1
+                Constant.Integer(index + 1000)
+            }
+        }
+        val constant = Constant.Array(DefaultUni.Integer, values)
+        val sizeOf = cachedTermBits()
+        val first = sizeOf(Const(constant)).get
+        val firstReads = reads
+        assert(firstReads > 0)
+        assert(sizeOf(Const(constant)).contains(first))
+        assert(sizeOf(Delay(Const(constant))).contains(first + TermTagBits))
+        assert(reads == firstReads)
+        // Caches belong to a single pass, so a later invocation sizes the constant again.
+        assert(cachedTermBits()(Const(constant)).contains(first))
+        assert(reads > firstReads)
+    }
+
     test("termBits agrees with the flat encoder on a de Bruijn term") {
         // Covers Var, Apply, LamAbs, Force, Delay, Builtin, Const.
         val named = LamAbs(
@@ -710,10 +770,22 @@ class CommonSubexpressionEliminationTest
         }
     }
 
-    test("the flat encoder cannot price a CCE template, which is why termBits exists") {
-        // A template is a fragment: its variables are free, and DeBruijn gives free variables
-        // negative indices, which the encoder rejects. termBits prices them at the minimum width
-        // instead.
+    test("termBits agrees with Flat on index-zero names, lambdas and CCE holes") {
+        val terms = List(
+          vr"free",
+          λ("x")(vr"x"),
+          Apply(Force(Builtin(HeadList)), Var(NamedDeBruijn("__CCE_HOLE__"))),
+          Var(NamedDeBruijn("largestSingleGroupIndex", 127))
+        )
+        for term <- terms do
+            assert(termBits(term) == summon[scalus.serialization.flat.Flat[Term]].bitSize(term))
+    }
+
+    test("termBits deliberately uses a fixed variable width across index boundaries") {
+        val term = Var(NamedDeBruijn("twoGroupIndex", 128))
+        assert(termBits(term) + 8 == summon[scalus.serialization.flat.Flat[Term]].bitSize(term))
+        // Named index-zero holes can be sized directly. Converting an open template to de Bruijn
+        // introduces negative indices, which Flat rejects but the fixed-width estimate ignores.
         val template = Apply(Force(Builtin(HeadList)), Var(NamedDeBruijn("__CCE_HOLE__")))
         val db = DeBruijn.deBruijnTerm(template)
         assert(maxVarIndex(db) < 0, "expected a negative index for the free hole sentinel")
