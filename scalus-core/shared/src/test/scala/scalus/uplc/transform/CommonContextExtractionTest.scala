@@ -965,6 +965,22 @@ class CommonContextExtractionTest
         )
     }
 
+    test("CCE rejects extraction when its actual encoding would grow") {
+        val term = λ(xs =>
+            λ(ys =>
+                Constr(
+                  Word64.Zero,
+                  List(xs, ys).map(list =>
+                      Force(Builtin(HeadList)) $ (Force(Builtin(TailList)) $ list)
+                  )
+                )
+            )
+        )
+        val result = CommonContextExtraction(term)
+        assert(result.plutusV3.cborByteString.size <= term.plutusV3.cborByteString.size)
+        assert(result ~=~ term)
+    }
+
     test("extractionSavingBits rejects a small template at two occurrences") {
         // Extracting costs 56 bits of framing and 9 CEK steps; the skeleton is only 47 bits.
         assert(extractionSavingBits(2, htlcAccessorBits) < 0)

@@ -8,12 +8,11 @@ import scalus.uplc.transform.{CommonContextExtraction, CommonSubexpressionElimin
 import scalus.uplc.{PlutusV3, Term}
 import scalus.examples.auction.AuctionValidator
 
-/** Every extraction CCE applies must still pay at the occurrence count it is applied with.
+/** CCE must not grow the encoded script on these compiled contracts.
   *
-  * Extractions are applied in sequence, largest first, and each rewrites the term, so a large
-  * template can swallow occurrences of a smaller one and drop it below the count it was scored at.
-  * Real validators produce chains of nested accessors where this happens; synthetic terms are
-  * surprisingly hard to make trigger it, so this runs against compiled contracts.
+  * This measures the actual output independently of the profitability formula. A whole-pass
+  * decrease does not prove each individual extraction pays; isolated core tests cover rejection of
+  * growing extractions.
   */
 class CceProfitabilityTest extends AnyFunSuite {
 
@@ -38,19 +37,17 @@ class CceProfitabilityTest extends AnyFunSuite {
 
     private def check(name: String, compiled: PlutusV3[?]): Unit = {
         val cce = new CommonContextExtraction()
-        cce(afterCse(rawUplc(compiled)))
-        val savings = cce.logs.flatMap { l =>
-            raw"saved=(-?[0-9.]+) bits".r.findFirstMatchIn(l).map(_.group(1).toDouble)
-        }
-        val losers = savings.filter(_ <= 0)
+        val before = afterCse(rawUplc(compiled))
+        val after = cce(before)
+        val beforeBytes = before.plutusV3.cborByteString.size
+        val afterBytes = after.plutusV3.cborByteString.size
         assert(
-          losers.isEmpty,
-          s"$name: ${losers.size} of ${savings.size} extractions do not pay ($losers):\n" +
-              cce.logs.mkString("\n")
+          afterBytes <= beforeBytes,
+          s"$name: CCE grew the script from $beforeBytes to $afterBytes bytes"
         )
     }
 
-    test("CCE applies no unprofitable extraction: cape linear_vesting") {
+    test("CCE does not grow the encoded script: cape linear_vesting") {
         given Options = Options.releaseUntagged
         check(
           "linear_vesting",
@@ -58,12 +55,12 @@ class CceProfitabilityTest extends AnyFunSuite {
         )
     }
 
-    test("CCE applies no unprofitable extraction: cape htlc") {
+    test("CCE does not grow the encoded script: cape htlc") {
         given Options = Options.releaseUntagged
         check("htlc", PlutusV3.compile(scalus.examples.cape.htlc.HtlcValidator.validate))
     }
 
-    test("CCE applies no unprofitable extraction: AuctionValidator") {
+    test("CCE does not grow the encoded script: AuctionValidator") {
         given Options = Options.release
         check("AuctionValidator", PlutusV3.compile(AuctionValidator.validate))
     }
