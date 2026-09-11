@@ -56,7 +56,8 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
 
     def apply(term: Term): Term = {
         sizeOf = CommonSubexpressionElimination.cachedTermBits()
-        go(term)
+        try go(term)
+        finally sizeOf = CommonSubexpressionElimination.cachedTermBits()
     }
 
     def logs: Seq[String] = logger.getLogs.toSeq
