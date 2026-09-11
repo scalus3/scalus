@@ -569,6 +569,14 @@ class CommonContextExtractionTest
     // Integration with V3Optimizer
     // ========================================================================
 
+    test("V3Optimizer zero CSE iterations disables post-CCE sharing too") {
+        val term = λ(x => Constr(Word64.Zero, List.fill(2)(AddInteger $ x $ 1000)))
+        val optimizer = new V3Optimizer(cseIterations = 0, cceEnabled = true)
+        val result = optimizer(term)
+        assert(!optimizer.logs.exists(_.startsWith("CSE:")))
+        assert((result $ 3).evaluate α_== (term $ 3).evaluate)
+    }
+
     test("V3Optimizer with CCE preserves semantics") {
         // Same common context pattern as the semantic test, through the full optimizer
         val chain1 = AddInteger $ (MultiplyInteger $ (3: Term) $ (2: Term)) $ (1: Term)

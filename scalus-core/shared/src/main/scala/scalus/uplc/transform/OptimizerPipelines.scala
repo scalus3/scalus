@@ -25,7 +25,7 @@ class V1V2Optimizer extends Optimizer {
 }
 
 class V3Optimizer(
-    cseIterations: Int = 2,
+    cseIterations: Int = 2, // Zero disables every CSE pass, including the post-CCE cleanup.
     cceEnabled: Boolean = false,
     letChainRegroup: Boolean = false
 ) extends Optimizer {
@@ -63,7 +63,10 @@ class V3Optimizer(
         // identical subterms: a plain CSE opportunity that did not exist before CCE ran. On
         // AuctionValidator one such group has eleven occurrences.
         val withCce =
-            if cceEnabled then withCse |> cce.apply |> inliner.apply |> cse.apply |> inliner.apply
+            if cceEnabled then
+                val extracted = withCse |> cce.apply |> inliner.apply
+                if cseIterations > 0 then extracted |> cse.apply |> inliner.apply
+                else extracted
             else withCse
 
         // Phase 4: regroup independent let chains into multi-argument applications, so the
