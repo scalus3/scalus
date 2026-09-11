@@ -20,14 +20,14 @@ class HtlcCapeTest extends AnyFunSuite with ScalusTest {
     private val referenceScriptFee = new RefScriptFee().calculate(scriptSize).value
 
     test(s"Script size: $scriptSize bytes") {
-        assert(scriptSize == 569)
+        assert(scriptSize == 553)
     }
 
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "claim_well_before_timeout" -> ExUnits(memory = 44945, steps = 18406297),
-      "claim_just_before_timeout" -> ExUnits(memory = 44945, steps = 18406297),
-      "refund_just_after_timeout" -> ExUnits(memory = 41812, steps = 16987475),
-      "refund_well_after_timeout" -> ExUnits(memory = 41812, steps = 16987475)
+      "claim_well_before_timeout" -> ExUnits(memory = 43317, steps = 17950963),
+      "claim_just_before_timeout" -> ExUnits(memory = 43317, steps = 17950963),
+      "refund_just_after_timeout" -> ExUnits(memory = 40384, steps = 16564141),
+      "refund_well_after_timeout" -> ExUnits(memory = 40384, steps = 16564141)
     )
 
     for c <- suite.cases do
