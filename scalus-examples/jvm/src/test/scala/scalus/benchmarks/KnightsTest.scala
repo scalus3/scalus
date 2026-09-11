@@ -13,9 +13,9 @@ import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.eval.{ProfileFormatter, Result}
 
-/** Optimized Scalus workload with explicit descendant sharing and insertion sort.
-  * Historical reference budgets below predate these source changes; their compiler/source
-  * revision is not recorded here. Ratios are historical comparisons, not compiler-only results.
+/** Optimized Scalus workload with explicit descendant sharing and insertion sort. Historical
+  * reference budgets below predate these source changes; their compiler/source revision is not
+  * recorded here. Ratios are historical comparisons, not compiler-only results.
   */
 class KnightsTest extends AnyFunSuite, ScalusTest:
     import KnightsTest.{*, given}
@@ -56,16 +56,21 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
 
     extension (term: scalus.uplc.Term)
         private def evalWithOptionalProfile(using PlutusVM): Result =
-            if profilingEnabled then
-                val result = term.evaluateProfile
-                result.profile.foreach { p =>
-                    info(ProfileFormatter.summary(p))
-                    ProfileFormatter.writeHtml(p, "target/knights-profile.html")
-                    ProfileFormatter.writeJson(p, "target/knights-profile.json")
-                    info("Wrote profile to target/knights-profile.html and .json")
-                }
-                result
-            else term.evaluateDebug
+            val result =
+                if profilingEnabled then
+                    val result = term.evaluateProfile
+                    result.profile.foreach { p =>
+                        info(ProfileFormatter.summary(p))
+                        ProfileFormatter.writeHtml(p, "target/knights-profile.html")
+                        ProfileFormatter.writeJson(p, "target/knights-profile.json")
+                        info("Wrote profile to target/knights-profile.html and .json")
+                    }
+                    result
+                else term.evaluateDebug
+            info(
+              s"Measured budget: ${result.budget}; CBOR bytes: ${term.plutusV3.cborEncoded.length}"
+            )
+            result
 
     test("100_4x4") {
         val sir = compile {
@@ -80,7 +85,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 // Explicit descAndNo sharing and insertion sort for at most eight moves.
-                ExUnits(memory = 116736784L, steps = 24795623419L)
+                ExUnits(memory = 115750464L, steps = 24141658357L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -98,7 +103,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
 
         compareBudgetWithReferenceValue(
           testName = "KnightsTest (historical reference).100_4x4",
-          scalusBudget = scalusBudget,
+          scalusBudget = result.budget,
           refBudget = ExUnits(memory = 160_204421L, steps = 54958_831939L),
           isPrintComparison = printComparison
         )
@@ -197,7 +202,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 // Explicit descAndNo sharing and insertion sort for at most eight moves.
-                ExUnits(memory = 383754374L, steps = 82543516417L)
+                ExUnits(memory = 380245598L, steps = 79085715783L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -214,7 +219,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
 
         compareBudgetWithReferenceValue(
           testName = "KnightsTest (historical reference).100_6x6",
-          scalusBudget = scalusBudget,
+          scalusBudget = result.budget,
           refBudget = ExUnits(memory = 292_216349L, steps = 131954_064320L),
           isPrintComparison = printComparison
         )
@@ -302,7 +307,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 // Explicit descAndNo sharing and insertion sort for at most eight moves.
-                ExUnits(memory = 740454792L, steps = 160511224929L)
+                ExUnits(memory = 733346016L, steps = 153067851900L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -320,7 +325,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
 
         compareBudgetWithReferenceValue(
           testName = "KnightsTest (historical reference).100_8x8",
-          scalusBudget = scalusBudget,
+          scalusBudget = result.budget,
           refBudget = ExUnits(memory = 540_217437L, steps = 270266_226527L),
         )
     }
