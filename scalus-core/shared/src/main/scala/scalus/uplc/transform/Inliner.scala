@@ -52,7 +52,12 @@ import scalus.uplc.{NamedDeBruijn, Term}
   *   [[Optimizer]] for the base optimizer trait
   */
 class Inliner(logger: Logger = new Log()) extends Optimizer:
-    def apply(term: Term): Term = go(term)
+    private var sizeOf = CommonSubexpressionElimination.cachedTermBits()
+
+    def apply(term: Term): Term = {
+        sizeOf = CommonSubexpressionElimination.cachedTermBits()
+        go(term)
+    }
 
     def logs: Seq[String] = logger.getLogs.toSeq
 
@@ -64,7 +69,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       *     timing as the Apply site) — safe to inline any term
       *   - '''OnceGuarded''': Occurs exactly once under a Delay, Case branch, or LamAbs body — safe
       *     to inline values only (no side effects to defer/suppress)
-      *   - '''Many''': Exact occurrence count — duplicate eligible values only when profitable
+      *   - '''Many''': Exact occurrence count; duplicate eligible values only when profitable
       */
     private enum OccurrenceInfo:
         case Zero
@@ -140,7 +145,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
             case Many(uses) =>
                 inlining match
                     case _: Var | _: Const | _: Builtin =>
-                        SharingCost.savingLovelace(inlining, uses) <= 0
+                        sizeOf(inlining).exists(bits => SharingCost.savingLovelace(bits, uses) <= 0)
                     case _ => false
             case Zero => false
 
@@ -193,10 +198,20 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
             substitute(t, name, constants(name))
         }
         PartialEvaluator.tryEval(candidate) match
-            case Some(result) =>
+            case Some(result) if free.isEmpty || affordableFold(term, result) =>
                 logger.log(s"Partial evaluation: ${term.showShort} => ${result.showShort}")
                 result
-            case None => term
+            case _ => term
+
+    /** Propagating a shared constant must not materialize large copies in its users. Compare
+      * against the symbolic expression, before substitution. Keep the existing small-value
+      * allowance: e.g. lengthOfByteString of 1024 bytes produces a slightly larger integer term.
+      * Closed folds need no guard because they do not copy a separately retained binding.
+      */
+    private def affordableFold(original: Term, result: Term): Boolean =
+        sizeOf(original).zip(sizeOf(result)).exists { case (before, after) =>
+            after <= before || SharingCost.savingLovelace(after, 2) <= 0
+        }
 
     /** Only a returned lambda or delay can contain a body deferred by function-spine traversal.
       * Finish it before retaining it underneath another expression.

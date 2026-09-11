@@ -11,7 +11,7 @@ import org.scalatest.concurrent.TimeLimits.failAfter
 import org.scalatest.time.SpanSugar.*
 import scalus.cardano.ledger.Word64
 import scalus.uplc.eval.PlutusVM
-import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.{ByteString, Data}
 
 import scala.language.implicitConversions
 
@@ -256,6 +256,37 @@ class InlinerTest extends AnyFunSuite {
         val expected =
             λ(x => λ(y => Constr(Word64.Zero, List(42, x, x, x, y, y, y))) $ second) $ first
         assert(Inliner(term) == expected)
+    }
+
+    test("constant folding does not expand shared bytestrings") {
+        val value = ByteString.fromArray(Array.fill[Byte](1024)(42)).asTerm
+        for directUses <- List(1, 4) do
+            val term = λ(x =>
+                Constr(Word64.Zero, (AppendByteString $ x $ x) :: List.fill(directUses)(x))
+            ) $ value
+            val optimized = Inliner(term)
+            assert(optimized.evaluate α_== term.evaluate)
+            assert(optimized.plutusV3.cborEncoded.length <= term.plutusV3.cborEncoded.length)
+            assert(optimized == term)
+    }
+
+    test("small fold results remain available through large shared constants") {
+        val value = ByteString.fromArray(Array.fill[Byte](1024)(42)).asTerm
+        val term = λ(x => Constr(Word64.Zero, List(LengthOfByteString $ x, x, x))) $ value
+        val expected = λ(x => Constr(Word64.Zero, List(1024, x, x))) $ value
+        assert(Inliner(term) == expected)
+        assert(Inliner(term).evaluate α_== term.evaluate)
+    }
+
+    test("repeated constants with unavailable Flat sizes retain their bindings") {
+        import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
+        val g1 = Constant.BLS12_381_G1_Element(G1Element.generator)
+        val g2 = Constant.BLS12_381_G2_Element(G2Element.generator)
+        for constant <- List(g1, g2, Constant.List(g1.tpe, List(g1))) do
+            val value = Const(constant)
+            val term = λ(x => Constr(Word64.Zero, List(x, x))) $ value
+            assert(Inliner(term) == term)
+            assert(Inliner(LamAbs("x", vr"x") $ value) == value)
     }
 
     test("retained constant chains complete without exponential body traversal") {
