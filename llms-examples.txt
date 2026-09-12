@@ -175,12 +175,12 @@ object HtlcValidator {
         val config = datum.getOrFail(InvalidDatum).to[Config]
         redeemer.to[Action] match
             case Action.Timeout =>
-                val validFrom = tx.validRange.from.finite(0)
+                val validFrom = tx.validFromOrFail(ValidRangeMustBeBound)
                 // validFrom is inclusive, hence 10 <= 10 is correct
                 require(config.timeout <= validFrom, InvalidCommitterTimePoint)
                 require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
             case Action.Reveal(preimage) =>
-                val validTo = tx.validRange.to.finiteOrFail(ValidRangeMustBeBound)
+                val validTo = tx.validToOrFail(ValidRangeMustBeBound)
                 // validTo is exclusive, hence 10 <= 10 is correct
                 require(validTo <= config.timeout, InvalidReceiverTimePoint)
                 require(tx.isSignedBy(config.receiver), UnsignedReceiverTransaction)
@@ -265,7 +265,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     }
 
     test(s"HTLC validator size is ${HtlcContract.compiled.script.script.size} bytes") {
-        assert(HtlcContract.compiled.script.script.size == 366)
+        assert(HtlcContract.compiled.script.script.size == 310)
     }
 
     test("VALIDATOR: receiver reveals preimage before timeout") {
@@ -288,8 +288,8 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         assert(Try(contract(scriptCtx.toData).code).isSuccess)
         val result = contract(scriptCtx.toData).program.evaluateDebug
         assert(result.isSuccess)
-        assert(result.budget == ExUnits(memory = 29355, steps = 12_138878))
-        assert(result.budget.fee == Coin(2569))
+        assert(result.budget == ExUnits(memory = 24831, steps = 10_940_152))
+        assert(result.budget.fee == Coin(2222))
     }
 
     test("receiver reveals preimage before timeout") {
@@ -308,7 +308,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
           signer = Bob.signer
         )
 
-        assertResult(ExUnits(memory = 29355, steps = 12_138878)):
+        assertResult(ExUnits(memory = 24831, steps = 10_940_152)):
             revealTx.witnessSet.redeemers.get.value.totalExUnits
 
         provider.setSlot(beforeSlot)
@@ -389,7 +389,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
 
-        assertResult(ExUnits(memory = 25922L, steps = 9249707L)):
+        assertResult(ExUnits(memory = 21898L, steps = 8130981L)):
             timeoutTx.witnessSet.redeemers.get.value.totalExUnits
 
         provider.setSlot(afterSlot)
@@ -800,30 +800,6 @@ object AmmValidator extends DataParameterizedValidator {
     inline def readPoolDatum(out: TxOut): AmmDatum =
         out.datum.inlineOrFail[AmmDatum]("Pool output must have inline datum")
 
-    /** Finds the unique pool output at `addr`; fails if absent or ambiguous. */
-    inline def findPoolOutput(outputs: List[TxOut], addr: Address): TxOut = {
-        val matching = outputs.filter(_.address === addr)
-        matching match
-            case List.Cons(out, List.Nil) => out
-            case List.Nil                 => fail("No pool output found")
-            case _                        => fail("Multiple pool outputs found")
-    }
-
-    /** Finds the unique output locked by this script (`policyId == scriptHash`). Used at `Init`,
-      * where there is no pool input to read the address from.
-      */
-    inline def findScriptOutput(outputs: List[TxOut], policyId: PolicyId): TxOut = {
-        val matching = outputs.filter { out =>
-            out.address.credential match
-                case Credential.ScriptCredential(sh) => sh === policyId
-                case _                               => false
-        }
-        matching match
-            case List.Cons(out, List.Nil) => out
-            case List.Nil                 => fail("No pool output found")
-            case _                        => fail("Multiple pool outputs found")
-    }
-
     /** The single NFT minted at `Init` that authenticates a pool UTxO. */
     val poolNftName: TokenName = utf8"POOL"
 
@@ -838,37 +814,37 @@ object AmmValidator extends DataParameterizedValidator {
         redeemer.to[AmmMintAction] match
             case AmmMintAction.Init =>
                 // Consume the one-shot seed so this policyId can only ever be initialized once.
-                require(
-                  tx.inputs.exists(_.outRef === param.to[AmmParams].seed),
-                  "Init: must spend the seed UTxO"
-                )
+                tx.findInputOrFail(param.to[AmmParams].seed, "Init: must spend the seed UTxO")
                 // Mint exactly the pool NFT and nothing else, into a fresh empty pool that holds it.
                 require(
                   tx.mint.hasOnly(policyId, poolNftName, 1),
                   "Init: must mint exactly one pool NFT"
                 )
-                val poolOut = findScriptOutput(tx.outputs, policyId)
+                // There is no pool input yet, so the fresh pool output is located by its payment
+                // credential (`policyId == scriptHash`); the staking part is the creator's choice.
+                val poolOut = tx.outputs.findUniqueOrFail(
+                  _.address.credential === Credential.ScriptCredential(policyId),
+                  "Init: expected exactly one pool output"
+                )
                 require(
-                  readPoolDatum(poolOut) === AmmDatum(BigInt(0), BigInt(0), BigInt(0)),
+                  poolOut.hasInlineDatum(AmmDatum(BigInt(0), BigInt(0), BigInt(0))),
                   "Init: pool must start empty"
                 )
                 require(
-                  poolOut.value.quantityOf(policyId, poolNftName) === BigInt(1),
+                  poolOut.value.hasNft(policyId, poolNftName),
                   "Init: empty pool must hold the pool NFT"
                 )
 
             case AmmMintAction.ChangeLiquidity =>
                 // Locate the pool input we're spending, and its continuation.
-                val poolInput = tx.inputs
-                    .find { inp =>
-                        inp.resolved.address.credential match
-                            case Credential.ScriptCredential(sh) => sh === policyId
-                            case _                               => false
-                    }
-                    .getOrFail("Mint: no pool input found")
+                val poolInput = tx.inputs.findUniqueOrFail(
+                  _.resolved.address.credential === Credential.ScriptCredential(policyId),
+                  "Mint: expected exactly one pool input"
+                )
                 val poolDatum = readPoolDatum(poolInput.resolved)
-                val continuationDatum =
-                    readPoolDatum(findPoolOutput(tx.outputs, poolInput.resolved.address))
+                val continuationDatum = readPoolDatum(
+                  tx.findContinuingOutputOrFail(poolInput, "Mint: expected exactly one pool output")
+                )
 
                 // The tx must mint/burn exactly `lpDelta` of the LP token and NOTHING else under
                 // this policy: `hasOnly` pins the token name and rejects any other name in one check
@@ -892,11 +868,9 @@ object AmmValidator extends DataParameterizedValidator {
         ownRef: TxOutRef
     ): Unit = {
         val params = param.to[AmmParams]
-        val ownInput = tx.findOwnInputOrFail(ownRef, "Own pool input not found")
-        val poolAddress = ownInput.resolved.address
-        val poolPolicyId = poolAddress.credential match
-            case Credential.ScriptCredential(sh) => sh
-            case _                               => fail("Own pool input must be script-locked")
+        val ownInput = tx.findInputOrFail(ownRef, "Own pool input not found")
+        val poolPolicyId = ownInput.resolved.address.credential
+            .scriptHashOrFail("Own pool input must be script-locked")
         val datum = d.getOrFail("Pool datum missing").to[AmmDatum]
 
         redeemer.to[AmmRedeemer] match {
@@ -914,9 +888,12 @@ object AmmValidator extends DataParameterizedValidator {
                 )
 
             case action =>
-                val poolOutput = findPoolOutput(tx.outputs, poolAddress)
-                val newDatum = readPoolDatum(poolOutput)
-                action match {
+                val poolOutput =
+                    tx.findContinuingOutputOrFail(ownInput, "Expected exactly one pool output")
+                // Each handler computes the datum the continuing output must carry and checks it
+                // with `hasInlineDatum` (one data equality, no decoding); the value it returns is
+                // that verified datum, so the reserve binding below can read its fields.
+                val newDatum = action match {
                     case AmmRedeemer.Deposit(x0, x1) =>
                         require(x0 > 0 && x1 > 0, "Deposit: amounts must be positive")
                         if datum.lpSupply !== BigInt(0) then
@@ -927,7 +904,11 @@ object AmmValidator extends DataParameterizedValidator {
                           expectedDatum.lpSupply - datum.lpSupply > 0,
                           "Deposit: zero LP minted"
                         )
-                        require(newDatum === expectedDatum, "Deposit: output datum mismatch")
+                        require(
+                          poolOutput.hasInlineDatum(expectedDatum),
+                          "Deposit: output datum mismatch"
+                        )
+                        expectedDatum
                     case AmmRedeemer.Redeem(lp) =>
                         // We don't check where the redeemed tokens go: the ledger already guarantees
                         // the tx balances, and the reserve binding below ties the new datum reserves
@@ -937,7 +918,11 @@ object AmmValidator extends DataParameterizedValidator {
                         require(lp <= datum.lpSupply, "Redeem: LP amount exceeds supply")
 
                         val expectedDatum = AmmMath.redeemDatum(datum, lp)
-                        require(newDatum === expectedDatum, "Redeem: output datum mismatch")
+                        require(
+                          poolOutput.hasInlineDatum(expectedDatum),
+                          "Redeem: output datum mismatch"
+                        )
+                        expectedDatum
 
                     case AmmRedeemer.Swap(t0In, amountIn, minAmountOut) =>
                         // As with Redeem, we validate only the datum transition; the reserve binding
@@ -958,7 +943,11 @@ object AmmValidator extends DataParameterizedValidator {
                           expectedDatum.r0 * expectedDatum.r1 >= datum.r0 * datum.r1,
                           "Swap: invariant violated"
                         )
-                        require(newDatum === expectedDatum, "Swap: output datum mismatch")
+                        require(
+                          poolOutput.hasInlineDatum(expectedDatum),
+                          "Swap: output datum mismatch"
+                        )
+                        expectedDatum
                     case AmmRedeemer.Close => fail("unreachable")
                 }
 
@@ -976,7 +965,7 @@ object AmmValidator extends DataParameterizedValidator {
                 )
                 // The pool NFT must stay with the pool - it can only be burned via `Close`.
                 require(
-                  poolOutput.value.quantityOf(poolPolicyId, poolNftName) === BigInt(1),
+                  poolOutput.value.hasNft(poolPolicyId, poolNftName),
                   "Pool output must retain the pool NFT"
                 )
         }
@@ -1161,13 +1150,10 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         assert(provider.submit(depositTx).await().isRight, "deposit should succeed")
         assertScriptBudget(
           depositTx,
+          ExUnits(memory = 119051, steps = 50_745_771),
           ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 147306, steps = 60_533898),
-            since38 = ExUnits(memory = 147306, steps = 60_533898)
-          ),
-          ScalaCompilerVersion.baseline(
-            pre38 = Coin(404702L),
-            since38 = Coin(402326L)
+            pre38 = Coin(443550L),
+            since38 = Coin(441174L)
           )
         )
     }
@@ -1182,13 +1168,10 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         assert(provider.submit(redeemTx).await().isRight, "redeem should succeed")
         assertScriptBudget(
           redeemTx,
+          ExUnits(memory = 109816, steps = 48_091_551),
           ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 135327, steps = 56_614863),
-            since38 = ExUnits(memory = 135327, steps = 56_614863)
-          ),
-          ScalaCompilerVersion.baseline(
-            pre38 = Coin(403596L),
-            since38 = Coin(401220L)
+            pre38 = Coin(442605L),
+            since38 = Coin(440229L)
           )
         )
     }
@@ -1779,8 +1762,7 @@ import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, Transac
 import scalus.cardano.node.BlockchainProvider
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.compiler.Options
-import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.DataParameterizedValidator
@@ -1889,15 +1871,10 @@ object AuctionValidator extends DataParameterizedValidator {
                 val input = txInfo.inputs.at(inputIdx)
                 require(input.outRef === txOutRef, "Input index does not match txOutRef")
 
-                val (scriptHash, inputValue, currentDatum) = input.resolved match
-                    case TxOut(
-                          Address(Credential.ScriptCredential(sh), _),
-                          value,
-                          OutputDatum.OutputDatum(inlineDatum),
-                          _
-                        ) =>
-                        (sh, value, inlineDatum.to[Datum])
-                    case _ => fail("Auction input must have script credential and inline datum")
+                val scriptHash = input.resolved.address.credential
+                    .scriptHashOrFail("Auction input must have script credential")
+                val currentDatum = input.resolved.datum
+                    .inlineOrFail[Datum]("Auction input must have inline datum")
 
                 handleBid(
                   txInfo,
@@ -1914,15 +1891,10 @@ object AuctionValidator extends DataParameterizedValidator {
                 val input = txInfo.inputs.at(inputIdx)
                 require(input.outRef === txOutRef, "Input index does not match txOutRef")
 
-                val (scriptHash, inputValue, currentDatum) = input.resolved match
-                    case TxOut(
-                          Address(Credential.ScriptCredential(sh), _),
-                          value,
-                          OutputDatum.OutputDatum(inlineDatum),
-                          _
-                        ) =>
-                        (sh, value, inlineDatum.to[Datum])
-                    case _ => fail("Auction input must have script credential and inline datum")
+                val scriptHash = input.resolved.address.credential
+                    .scriptHashOrFail("Auction input must have script credential")
+                val currentDatum = input.resolved.datum
+                    .inlineOrFail[Datum]("Auction input must have inline datum")
 
                 handleEnd(txInfo, scriptHash, currentDatum, sellerOutputIdx, winnerOutputIdx)
 
@@ -1993,7 +1965,7 @@ object AuctionValidator extends DataParameterizedValidator {
 
         // 8. Verify the auction NFT is preserved in the continuing output
         require(
-          continuingOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
+          continuingOutput.value.hasNft(scriptHash, itemId),
           "Auction NFT must be preserved"
         )
 
@@ -2071,17 +2043,12 @@ object AuctionValidator extends DataParameterizedValidator {
                   winnerOutput.address === Address.fromPubKeyHash(winner),
                   "Winner output must go to the winner"
                 )
-                // Verify winner receives exactly this auction's NFT (prevents double satisfaction)
-                // If multiple auctions shared this output, it would have multiple NFTs
-                val totalNftsInWinnerOutput =
-                    winnerOutput.value.tokens(scriptHash).values.foldLeft(BigInt(0))(_ + _)
+                // Verify winner receives exactly this auction's NFT and no other token under this
+                // policy (prevents double satisfaction): if multiple auctions shared this output,
+                // it would carry multiple NFTs.
                 require(
-                  totalNftsInWinnerOutput === BigInt(1),
-                  "Winner output must have exactly one auction NFT (no bundling)"
-                )
-                require(
-                  winnerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
-                  "Winner must receive this auction's NFT"
+                  winnerOutput.value.hasOnly(scriptHash, itemId, 1),
+                  "Winner must receive exactly this auction's NFT (no bundling)"
                 )
 
                 // 3. Seller must receive the highest bid amount - use indexed lookup
@@ -2101,10 +2068,8 @@ object AuctionValidator extends DataParameterizedValidator {
                 // check is only `>=` its own bid), letting an attacker pay the seller once and pocket
                 // the rest. Requiring the seller output to carry this auction's scriptHash forces a
                 // distinct seller output per auction, closing the cross-instance double satisfaction.
-                val sellerOutputDatum = sellerOutput.datum
-                    .inlineOrFail[Data]("Seller output must carry this auction's id datum")
                 require(
-                  sellerOutputDatum == scriptHash.toData,
+                  sellerOutput.hasInlineDatum(scriptHash),
                   "Seller output must be tagged with this auction's id"
                 )
 
@@ -2121,16 +2086,11 @@ object AuctionValidator extends DataParameterizedValidator {
                   sellerOutput.address === Address.fromPubKeyHash(seller),
                   "Seller output must go to the seller"
                 )
-                // Verify seller receives exactly this auction's NFT (prevents double satisfaction)
-                val totalNftsInSellerOutput =
-                    sellerOutput.value.tokens(scriptHash).values.foldLeft(BigInt(0))(_ + _)
+                // Verify seller receives exactly this auction's NFT and no other token under this
+                // policy (prevents double satisfaction)
                 require(
-                  totalNftsInSellerOutput === BigInt(1),
-                  "Seller output must have exactly one auction NFT (no bundling)"
-                )
-                require(
-                  sellerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
-                  "Seller must receive back this auction's NFT"
+                  sellerOutput.value.hasOnly(scriptHash, itemId, 1),
+                  "Seller must receive back exactly this auction's NFT (no bundling)"
                 )
 
     inline override def mint(
@@ -2159,10 +2119,7 @@ object AuctionValidator extends DataParameterizedValidator {
         auctionEndTime: PosixTime
     ): Unit =
         // 1. Verify the one-shot UTxO is being spent (ensures unique policyId per auction)
-        require(
-          txInfo.inputs.exists(_.outRef === oneShot),
-          "Must spend the one-shot UTxO to create auction"
-        )
+        txInfo.findInputOrFail(oneShot, "Must spend the one-shot UTxO to create auction")
 
         // 2. Seller must sign the transaction
         require(
@@ -2188,16 +2145,16 @@ object AuctionValidator extends DataParameterizedValidator {
           "Starting bid must be positive"
         )
 
-        // 6. Find the output going to the script address
-        val auctionOutput = txInfo.outputs.filter { out =>
-            out.address === Address.fromScriptHash(policyId)
-        }.match
-            case List.Cons(out, List.Nil) => out
-            case _ => fail("There must be exactly one output to the auction script")
+        // 6. Find the unique output going to the script address
+        val scriptAddress = Address.fromScriptHash(policyId)
+        val auctionOutput = txInfo.outputs.findUniqueOrFail(
+          _.address === scriptAddress,
+          "There must be exactly one output to the auction script"
+        )
 
         // 7. Verify the output contains the minted NFT
         require(
-          auctionOutput.value.quantityOf(policyId, itemId) === BigInt(1),
+          auctionOutput.value.hasNft(policyId, itemId),
           "Auction output must contain the minted NFT"
         )
 
@@ -2210,8 +2167,7 @@ object AuctionValidator extends DataParameterizedValidator {
           itemId = itemId
         )
         require(
-          auctionOutput.datum
-              .inlineOrFail[Datum]("Auction output must have inline datum") === expectedDatum,
+          auctionOutput.hasInlineDatum(expectedDatum),
           "Initial auction datum must be correct"
         )
 
@@ -2219,10 +2175,10 @@ object AuctionValidator extends DataParameterizedValidator {
         policyId: PolicyId,
         txInfo: TxInfo
     ): Unit =
-        // For burning, verify all tokens of this policy are burned (negative quantity)
-        val mintedTokens = txInfo.mint.tokens(policyId)
+        // Every quantity under this policy must be negative. onlyBurnsUnder also rejects an
+        // empty sub-map, where a bare forall would be vacuously true.
         require(
-          mintedTokens.forall { case (_, amount) => amount < 0 },
+          txInfo.onlyBurnsUnder(policyId),
           "Only burning is allowed (all amounts must be negative)"
         )
 }
@@ -2631,8 +2587,7 @@ package scalus.examples.auction
 
 import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data}
-import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{Datum as _, *}
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.Validator
@@ -2668,15 +2623,10 @@ object UnfixedAuctionValidator extends Validator {
                 val input = txInfo.inputs.at(inputIdx)
                 require(input.outRef === txOutRef, "Input index does not match txOutRef")
 
-                val (scriptHash, inputValue, currentDatum) = input.resolved match
-                    case TxOut(
-                          Address(Credential.ScriptCredential(sh), _),
-                          value,
-                          OutputDatum.OutputDatum(inlineDatum),
-                          _
-                        ) =>
-                        (sh, value, inlineDatum.to[Datum])
-                    case _ => fail("Auction input must have script credential and inline datum")
+                val scriptHash = input.resolved.address.credential
+                    .scriptHashOrFail("Auction input must have script credential")
+                val currentDatum = input.resolved.datum
+                    .inlineOrFail[Datum]("Auction input must have inline datum")
 
                 handleBid(
                   txInfo,
@@ -2692,15 +2642,10 @@ object UnfixedAuctionValidator extends Validator {
                 val input = txInfo.inputs.at(inputIdx)
                 require(input.outRef === txOutRef, "Input index does not match txOutRef")
 
-                val (scriptHash, inputValue, currentDatum) = input.resolved match
-                    case TxOut(
-                          Address(Credential.ScriptCredential(sh), _),
-                          value,
-                          OutputDatum.OutputDatum(inlineDatum),
-                          _
-                        ) =>
-                        (sh, value, inlineDatum.to[Datum])
-                    case _ => fail("Auction input must have script credential and inline datum")
+                val scriptHash = input.resolved.address.credential
+                    .scriptHashOrFail("Auction input must have script credential")
+                val currentDatum = input.resolved.datum
+                    .inlineOrFail[Datum]("Auction input must have inline datum")
 
                 handleEnd(txInfo, scriptHash, currentDatum, sellerOutputIdx, winnerOutputIdx)
 
@@ -2762,7 +2707,7 @@ object UnfixedAuctionValidator extends Validator {
         )
 
         require(
-          continuingOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
+          continuingOutput.value.hasNft(scriptHash, itemId),
           "Auction NFT must be preserved"
         )
 
@@ -2833,7 +2778,7 @@ object UnfixedAuctionValidator extends Validator {
                   "Winner output must go to the winner"
                 )
                 require(
-                  winnerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
+                  winnerOutput.value.hasNft(scriptHash, itemId),
                   "Winner must receive the auction NFT"
                 )
 
@@ -2859,7 +2804,7 @@ object UnfixedAuctionValidator extends Validator {
                   "Seller output must go to the seller"
                 )
                 require(
-                  sellerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
+                  sellerOutput.value.hasNft(scriptHash, itemId),
                   "Seller must receive back the auction NFT"
                 )
 
@@ -2904,14 +2849,14 @@ object UnfixedAuctionValidator extends Validator {
           "Starting bid must be positive"
         )
 
-        val auctionOutput = txInfo.outputs.filter { out =>
-            out.address === Address.fromScriptHash(policyId)
-        }.match
-            case List.Cons(out, List.Nil) => out
-            case _ => fail("There must be exactly one output to the auction script")
+        val scriptAddress = Address.fromScriptHash(policyId)
+        val auctionOutput = txInfo.outputs.findUniqueOrFail(
+          _.address === scriptAddress,
+          "There must be exactly one output to the auction script"
+        )
 
         require(
-          auctionOutput.value.quantityOf(policyId, itemId) === BigInt(1),
+          auctionOutput.value.hasNft(policyId, itemId),
           "Auction output must contain the minted NFT"
         )
 
@@ -2923,8 +2868,7 @@ object UnfixedAuctionValidator extends Validator {
           itemId = itemId
         )
         require(
-          auctionOutput.datum
-              .inlineOrFail[Datum]("Auction output must have inline datum") === expectedDatum,
+          auctionOutput.hasInlineDatum(expectedDatum),
           "Initial auction datum must be correct"
         )
 
@@ -2932,9 +2876,8 @@ object UnfixedAuctionValidator extends Validator {
         policyId: PolicyId,
         txInfo: TxInfo
     ): Unit =
-        val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.forall { case (_, amount) => amount < 0 },
+          txInfo.onlyBurnsUnder(policyId),
           "Only burning is allowed (all amounts must be negative)"
         )
 }
@@ -4615,7 +4558,6 @@ object AuctionTestKitTest {
 package scalus.examples.auction
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.ScalaCompilerVersion
 import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.address.ShelleyAddress
 import scalus.cardano.ledger.*
@@ -4680,10 +4622,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           expected = Expected.Success
         ).runWithBudget()
         assert(
-          budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 90771, steps = 36_577723),
-            since38 = ExUnits(memory = 87715, steps = 35_499861)
-          )
+          budget == ExUnits(memory = 74319, steps = 31_271_176)
         )
     }
 
@@ -4693,10 +4632,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           expected = Expected.Success
         ).runWithBudget()
         assert(
-          budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 108451, steps = 43_455561),
-            since38 = ExUnits(memory = 105395, steps = 42_377699)
-          )
+          budget == ExUnits(memory = 89435, steps = 37_285_576)
         )
     }
 
@@ -4706,10 +4642,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           expected = Expected.Success
         ).runWithBudget()
         assert(
-          budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 171521, steps = 57_863333),
-            since38 = ExUnits(memory = 168465, steps = 56_785471)
-          )
+          budget == ExUnits(memory = 128003, steps = 46_341_689)
         )
     }
 
@@ -4719,10 +4652,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           expected = Expected.Success
         ).runWithBudget()
         assert(
-          budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 151847, steps = 47_592180),
-            since38 = ExUnits(memory = 148791, steps = 46_514318)
-          )
+          budget == ExUnits(memory = 108929, steps = 36_483_500)
         )
     }
 }
@@ -5926,8 +5856,6 @@ import scalus.uplc.builtin.Data.FromData
 import scalus.uplc.builtin.Data.ToData
 import scalus.uplc.builtin.ToData.*
 import scalus.cardano.onchain.plutus.v1.Address
-import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
-import scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.Validator
@@ -5992,55 +5920,37 @@ object BettingValidator extends Validator {
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit =
-        val (scriptHash, address, value, Config(player1, player2, oracle, expiration)) =
-            txInfo.findOwnInputOrFail(txOutRef, "Bet spent input must be present") match
-                case TxInInfo(
-                      _,
-                      TxOut(
-                        address @ Address(Credential.ScriptCredential(scriptHash), _),
-                        value,
-                        OutputDatum(currentDatum),
-                        _
-                      )
-                    ) =>
-                    (scriptHash, address, value, currentDatum.to[Config])
-                case _ => fail("Initial bet datum must be inline")
+        val ownInput = txInfo.findInputOrFail(txOutRef, "Bet spent input must be present")
+        val TxOut(address, value, currentDatum, _) = ownInput.resolved
+        val scriptHash = address.credential.scriptHashOrFail("Bet input must sit at the script")
+        val Config(player1, player2, oracle, expiration) =
+            currentDatum.inlineOrFail[Config]("Initial bet datum must be inline")
 
         redeemer.to[Action] match
             case Action.Join =>
-                val (
-                  outputAddress,
-                  outputValue,
-                  Config(newPlayer1, joiningPlayer, newOracle, newExpiration)
-                ) = txInfo
-                    .findOwnScriptOutputs(scriptHash)
-                    .match
-                        case List.Cons(
-                              TxOut(outAddr, outValue, OutputDatum(newDatum), _),
-                              List.Nil
-                            ) =>
-                            (outAddr, outValue, newDatum.to[Config])
-                        case _ =>
-                            fail(
-                              "There must be a single continuing spent output with inline new betting config that goes to the script"
-                            )
+                // V016 fix: the continuing output is matched on the full address, staking
+                // credential included.
+                val continuingOutput = txInfo.findContinuingOutputOrFail(
+                  ownInput,
+                  "There must be a single continuing spent output with inline new betting config that goes to the script"
+                )
+                val outputValue = continuingOutput.value
+                val Config(newPlayer1, joiningPlayer, newOracle, newExpiration) =
+                    continuingOutput.datum.inlineOrFail[Config](
+                      "The continuing bet output must carry the new betting config as an inline datum"
+                    )
                 require(
-                  player2.hash.length === BigInt(0),
+                  player2.hash.isEmpty,
                   "Current bet must not have a player2 yet"
                 )
                 require(
-                  value.policyIds.contains(scriptHash),
+                  value.tokens(scriptHash).nonEmpty,
                   "Input must contain the bet token"
                 )
                 // V002 fix: Verify bet token is preserved in output
                 require(
-                  outputValue.policyIds.contains(scriptHash),
+                  outputValue.tokens(scriptHash).nonEmpty,
                   "Output must contain the bet token"
-                )
-                // V016 fix: Verify full address including staking credential
-                require(
-                  outputAddress === address,
-                  "Output address must match input address (including staking credential)"
                 )
                 require(
                   txInfo.isSignedBy(joiningPlayer),
@@ -6088,7 +5998,7 @@ object BettingValidator extends Validator {
                   "Winner must be either player1 or player2"
                 )
                 require(
-                  player2.hash.length != BigInt(0),
+                  player2.hash.nonEmpty,
                   "Both players must have joined (player2 is not None)"
                 )
                 require(
@@ -6110,9 +6020,7 @@ object BettingValidator extends Validator {
                 )
                 // Burn the bet NFT so the bet is one-shot and cannot be re-locked into a forged bet.
                 require(
-                  txInfo.mint.quantityOf(scriptHash, betTokenName(value, scriptHash)) === BigInt(
-                    -1
-                  ),
+                  txInfo.mint.hasOnly(scriptHash, betTokenName(value, scriptHash), -1),
                   "The bet token must be burned when announcing the winner"
                 )
 
@@ -6130,15 +6038,13 @@ object BettingValidator extends Validator {
                 // Exactly one bet input — the per-player refund check below sums outputs by address,
                 // so batching two bets in one tx could let one refund satisfy both. One input per
                 // reclaim keeps the accounting sound.
-                require(
-                  txInfo.findOwnInputsByCredential(address.credential).length === BigInt(1),
+                txInfo.inputs.findUniqueOrFail(
+                  _.resolved.address.credential === address.credential,
                   "Reclaim must spend exactly one bet input"
                 )
                 // Burn the bet NFT so a reclaimed bet's token can't be re-locked into a forged bet.
                 require(
-                  txInfo.mint.quantityOf(scriptHash, betTokenName(value, scriptHash)) === BigInt(
-                    -1
-                  ),
+                  txInfo.mint.hasOnly(scriptHash, betTokenName(value, scriptHash), -1),
                   "The bet token must be burned on timeout"
                 )
                 if player2.hash.isEmpty then
@@ -6161,16 +6067,11 @@ object BettingValidator extends Validator {
 
     /** The bet NFT's token name — the single asset under the bet's own policy in its UTxO value. */
     private inline def betTokenName(value: Value, scriptHash: PolicyId): TokenName =
-        value.tokens(scriptHash).toList match
-            case List.Cons((name, _), List.Nil) => name
-            case _                              => fail("Bet UTxO must hold exactly one bet token")
+        value.tokens(scriptHash).singleOrFail("Bet UTxO must hold exactly one bet token")._1
 
     /** Sum the lovelace paid to a public key's (enterprise) address across all outputs. */
     private inline def totalPaidTo(txInfo: TxInfo, pkh: PubKeyHash): BigInt =
-        txInfo.outputs.foldLeft(BigInt(0)) { (acc, out) =>
-            if out.address === Address.fromPubKeyHash(pkh) then acc + out.value.getLovelace
-            else acc
-        }
+        txInfo.valuePaidTo(Address.fromPubKeyHash(pkh)).getLovelace
 
     /** Minting policy:
       *
@@ -6183,9 +6084,9 @@ object BettingValidator extends Validator {
     ): Unit =
         // Exactly one token type under this policy, either minted (+1, a new bet) or burned (-1, a
         // bet ending). (V003/V011 fix.)
-        val quantity = tx.mint.tokens(policyId).toList match
-            case List.Cons((_, qty), List.Nil) => qty
-            case _ => fail("Must mint or burn exactly one token type under this policy")
+        val (_, quantity) = tx.mint
+            .tokens(policyId)
+            .singleOrFail("Must mint or burn exactly one token type under this policy")
 
         if quantity === BigInt(-1) then
             // Burning the bet NFT at the end of a bet. The token can only ever sit in a bet UTxO at
@@ -6196,15 +6097,16 @@ object BettingValidator extends Validator {
             ()
         else
             require(quantity === BigInt(1), "Must mint exactly one token")
+            val scriptAddress = Address.fromScriptHash(policyId)
             val Config(player1, player2, oracle, expiration) = tx.outputs
-                .filter:
-                    _.address === Address.fromScriptHash(policyId)
-                .match
-                    case List.Cons(TxOut(_, _, OutputDatum(datum), _), List.Nil) => datum.to[Config]
-                    case _ =>
-                        fail(
-                          "There must be a single output with inline initial betting config that goes to the script"
-                        )
+                .findUniqueOrFail(
+                  _.address === scriptAddress,
+                  "There must be a single output with inline initial betting config that goes to the script"
+                )
+                .datum
+                .inlineOrFail[Config](
+                  "The initial bet output must carry the betting config as an inline datum"
+                )
             require(
               tx.isSignedBy(player1),
               "Player1 must sign the transaction (they're creating the bet)"
@@ -6518,7 +6420,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, joinTx, betUtxo.input)
         assert(result.isSuccess)
         assert(
-          result.budget == (ExUnits(memory = 162223, steps = 62_515930))
+          result.budget == (ExUnits(memory = 111227, steps = 44_050_890))
         )
 
         provider.setSlot(beforeSlot - 1)
@@ -6743,7 +6645,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, winTx, joinedBetUtxo.input)
         assert(result.isSuccess)
         assert(
-          result.budget == (ExUnits(memory = 109946, steps = 41_692671))
+          result.budget == (ExUnits(memory = 98418, steps = 38_026_798))
         )
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTime))
@@ -7099,7 +7001,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for initial minting")
         assert(
-          result.budget == (ExUnits(memory = 70831, steps = 23_567977))
+          result.budget == (ExUnits(memory = 61499, steps = 20_710_633))
         )
 
     test("Verify that player2 can join an existing bet"):
@@ -7174,7 +7076,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for player2 joining spending")
         assert(
-          result.budget == (ExUnits(memory = 155006, steps = 59_092034))
+          result.budget == (ExUnits(memory = 104705, steps = 39_483_383))
         )
 
     test("Verify that the oracle can announce winner and trigger payout"):
@@ -7237,7 +7139,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for announce winner spending")
         assert(
-          result.budget == (ExUnits(memory = 107349, steps = 39_681050))
+          result.budget == (ExUnits(memory = 94693, steps = 35_583_296))
         )
 
     test("Verify that announcing the winner fails if the bet token is not burned"):
@@ -7340,7 +7242,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         if result.isFailure then result.logs.foreach(println)
         assert(result.isSuccess, "Reclaim after expiration should succeed")
         assert(
-          result.budget == (ExUnits(memory = 140622, steps = 51_828904))
+          result.budget == (ExUnits(memory = 118173, steps = 46_239_533))
         )
 
     test("Verify that reclaim before expiration fails"):
@@ -7406,11 +7308,9 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
 ```scala
 package scalus.examples.crowdfunding
 
-import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.Options
-import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.PlutusV3
@@ -7634,12 +7534,9 @@ object DonationMintingPolicy {
           "Campaign donation policy must match this policy"
         )
 
-        // 3. All tokens of this policy must be burned (negative quantity)
-        val mintedTokens = txInfo.mint.tokens(policyId)
-        require(
-          mintedTokens.forall { case (_, amount) => amount < 0 },
-          "Only burning allowed during withdraw/reclaim"
-        )
+        // 3. All tokens of this policy must be burned (negative quantity). onlyBurnsUnder also
+        // rejects an empty sub-map, where a bare forall would be vacuously true.
+        require(txInfo.onlyBurnsUnder(policyId), "Only burning allowed during withdraw/reclaim")
 }
 
 // ============================================================================
@@ -7661,15 +7558,10 @@ object CrowdfundingValidator extends Validator {
                 val input = txInfo.inputs.at(campaignInputIdx)
                 require(input.outRef === txOutRef, "Input index does not match txOutRef")
 
-                val (scriptHash, currentDatum) = input.resolved match
-                    case TxOut(
-                          Address(Credential.ScriptCredential(sh), _),
-                          _,
-                          OutputDatum.OutputDatum(inlineDatum),
-                          _
-                        ) =>
-                        (sh, inlineDatum.to[CampaignDatum])
-                    case _ => fail("Campaign input must have script credential and inline datum")
+                val scriptHash = input.resolved.address.credential
+                    .scriptHashOrFail("Campaign input must have script credential")
+                val currentDatum = input.resolved.datum
+                    .inlineOrFail[CampaignDatum]("Campaign input must have inline datum")
 
                 handleDonateSpend(
                   txInfo,
@@ -7691,18 +7583,16 @@ object CrowdfundingValidator extends Validator {
                 // Check if this is the campaign UTxO or a donation value UTxO
                 if campaignInput.outRef === txOutRef then
                     // This is the campaign UTxO - do full validation
-                    val (scriptHash, currentDatum) = campaignInput.resolved match
-                        case TxOut(
-                              Address(Credential.ScriptCredential(sh), _),
-                              value,
-                              OutputDatum.OutputDatum(inlineDatum),
-                              _
-                            ) =>
-                            // Verify campaign NFT exists (policyId = scriptHash)
-                            verifyCampaignNftPresent(value, sh)
-                            (sh, inlineDatum.to[CampaignDatum])
-                        case _ =>
-                            fail("Campaign input must have script credential and inline datum")
+                    val TxOut(campaignAddress, campaignValue, campaignDatum, _) =
+                        campaignInput.resolved
+                    val scriptHash = campaignAddress.credential
+                        .scriptHashOrFail("Campaign input must have script credential")
+                    // Verify campaign NFT exists (policyId = scriptHash)
+                    verifyCampaignNftPresent(campaignValue, scriptHash)
+                    val currentDatum =
+                        campaignDatum.inlineOrFail[CampaignDatum](
+                          "Campaign input must have inline datum"
+                        )
 
                     handleWithdrawSpend(
                       txInfo,
@@ -7730,18 +7620,16 @@ object CrowdfundingValidator extends Validator {
                 // Check if this is the campaign UTxO or a donation value UTxO
                 if campaignInput.outRef === txOutRef then
                     // This is the campaign UTxO - do full validation
-                    val (scriptHash, currentDatum) = campaignInput.resolved match
-                        case TxOut(
-                              Address(Credential.ScriptCredential(sh), _),
-                              value,
-                              OutputDatum.OutputDatum(inlineDatum),
-                              _
-                            ) =>
-                            // Verify campaign NFT exists (policyId = scriptHash)
-                            verifyCampaignNftPresent(value, sh)
-                            (sh, inlineDatum.to[CampaignDatum])
-                        case _ =>
-                            fail("Campaign input must have script credential and inline datum")
+                    val TxOut(campaignAddress, campaignValue, campaignDatum, _) =
+                        campaignInput.resolved
+                    val scriptHash = campaignAddress.credential
+                        .scriptHashOrFail("Campaign input must have script credential")
+                    // Verify campaign NFT exists (policyId = scriptHash)
+                    verifyCampaignNftPresent(campaignValue, scriptHash)
+                    val currentDatum =
+                        campaignDatum.inlineOrFail[CampaignDatum](
+                          "Campaign input must have inline datum"
+                        )
 
                     handleReclaimSpend(
                       txInfo,
@@ -7781,10 +7669,6 @@ object CrowdfundingValidator extends Validator {
 
         // 3. Verify continuing campaign output
         val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
-        val newDatum =
-            campaignOutput.datum.inlineOrFail[CampaignDatum](
-              "Campaign output must have inline datum"
-            )
 
         // 4. Verify datum update - only totalSum should change
         val expectedDatum = CampaignDatum(
@@ -7795,7 +7679,10 @@ object CrowdfundingValidator extends Validator {
           withdrawn = currentDatum.withdrawn,
           donationPolicyId = currentDatum.donationPolicyId
         )
-        require(newDatum === expectedDatum, "Updated datum must reflect donation")
+        require(
+          campaignOutput.hasInlineDatum(expectedDatum),
+          "Updated datum must reflect donation"
+        )
 
         // 5. Verify donation UTxO is created at script address with token + ADA + DonationDatum
         val donationOutput = txInfo.outputs.at(donationOutputIdx)
@@ -7811,11 +7698,11 @@ object CrowdfundingValidator extends Validator {
         // 6. Verify donation token is minted and goes to donation UTxO
         val tokenName = DonationMintingPolicy.donationTokenName
         require(
-          txInfo.mint.quantityOf(currentDatum.donationPolicyId, tokenName) === BigInt(1),
+          txInfo.mint.hasNft(currentDatum.donationPolicyId, tokenName),
           "Donation token must be minted"
         )
         require(
-          donationOutput.value.quantityOf(currentDatum.donationPolicyId, tokenName) === BigInt(1),
+          donationOutput.value.hasNft(currentDatum.donationPolicyId, tokenName),
           "Donation token must be in donation UTxO"
         )
 
@@ -7887,9 +7774,6 @@ object CrowdfundingValidator extends Validator {
         else
             // Partial withdrawal - verify updated campaign datum
             val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
-            val newDatum = campaignOutput.datum.inlineOrFail[CampaignDatum](
-              "Campaign output must have inline datum"
-            )
             // Verify all immutable fields remain unchanged, only withdrawn updates (V015 protection)
             val expectedDatum = CampaignDatum(
               totalSum = currentDatum.totalSum,
@@ -7899,7 +7783,10 @@ object CrowdfundingValidator extends Validator {
               withdrawn = newWithdrawn,
               donationPolicyId = currentDatum.donationPolicyId
             )
-            require(newDatum === expectedDatum, "Only withdrawn field may change")
+            require(
+              campaignOutput.hasInlineDatum(expectedDatum),
+              "Only withdrawn field may change"
+            )
             // Verify campaign NFT is preserved in output
             verifyCampaignNftPresent(campaignOutput.value, scriptHash)
 
@@ -7988,9 +7875,6 @@ object CrowdfundingValidator extends Validator {
         else
             // Partial reclaim - verify updated campaign datum
             val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
-            val newDatum = campaignOutput.datum.inlineOrFail[CampaignDatum](
-              "Campaign output must have inline datum"
-            )
             // Verify all immutable fields remain unchanged, only withdrawn updates (V015 protection)
             val expectedDatum = CampaignDatum(
               totalSum = currentDatum.totalSum,
@@ -8000,7 +7884,10 @@ object CrowdfundingValidator extends Validator {
               withdrawn = newWithdrawn,
               donationPolicyId = currentDatum.donationPolicyId
             )
-            require(newDatum === expectedDatum, "Only withdrawn field may change")
+            require(
+              campaignOutput.hasInlineDatum(expectedDatum),
+              "Only withdrawn field may change"
+            )
             // Verify campaign NFT is preserved in output
             verifyCampaignNftPresent(campaignOutput.value, scriptHash)
 
@@ -8010,12 +7897,11 @@ object CrowdfundingValidator extends Validator {
       * policyId = scriptHash, so we check for exactly one token from that policy.
       */
     def verifyCampaignNftPresent(value: Value, scriptHash: ValidatorHash): Unit =
-        val nftTokens = value.tokens(scriptHash)
         // Must have exactly one token type with quantity 1
-        val hasExactlyOneNft =
-            nftTokens.size === BigInt(1) &&
-                nftTokens.forall { case (_, qty) => qty === BigInt(1) }
-        require(hasExactlyOneNft, "Campaign input must contain exactly one campaign NFT")
+        val (_, qty) = value
+            .tokens(scriptHash)
+            .singleOrFail("Campaign input must contain exactly one campaign NFT")
+        require(qty === BigInt(1), "Campaign input must contain exactly one campaign NFT")
 
     /** Verify that indices are strictly ascending (which guarantees uniqueness).
       *
@@ -8058,11 +7944,10 @@ object CrowdfundingValidator extends Validator {
         // Count donation tokens and verify each input has exactly 1
         val tokenCount = donationInputIndices.foldLeft(BigInt(0)) { (count, idx) =>
             val donationInput = txInfo.inputs.at(idx)
-            val tokens = donationInput.resolved.value.tokens(donationPolicyId)
-            val hasOneToken = tokens.get(tokenName) match
-                case Option.Some(qty) => tokens.size === BigInt(1) && qty === BigInt(1)
-                case Option.None      => false
-            require(hasOneToken, "Donation input must have exactly 1 donation token")
+            require(
+              donationInput.resolved.value.hasOnly(donationPolicyId, tokenName, 1),
+              "Donation input must have exactly 1 donation token"
+            )
             count + BigInt(1)
         }
         // Verify exact number of tokens are burned
@@ -8111,9 +7996,7 @@ object CrowdfundingValidator extends Validator {
             case List.Nil            => fail("Must consume at least one UTxO")
 
         // Hash the serialized TxOutRef to get a 32-byte campaign ID (AssetName limit)
-        val campaignId = scalus.uplc.builtin.Builtins.blake2b_256(
-          scalus.uplc.builtin.Builtins.serialiseData(consumedUtxo.toData)
-        )
+        val campaignId = consumedUtxo.deriveTokenName
 
         // 5. Verify exactly one campaign NFT is minted and no other tokens under this
         // policy (V011 protection)
@@ -8123,15 +8006,15 @@ object CrowdfundingValidator extends Validator {
         )
 
         // 6. Find the output going to the script address
-        val campaignOutput = txInfo.outputs.filter { out =>
-            out.address === Address.fromScriptHash(policyId)
-        }.match
-            case List.Cons(out, List.Nil) => out
-            case _ => fail("There must be exactly one output to the campaign script")
+        val scriptAddress = Address.fromScriptHash(policyId)
+        val campaignOutput = txInfo.outputs.findUniqueOrFail(
+          _.address === scriptAddress,
+          "There must be exactly one output to the campaign script"
+        )
 
         // 7. Verify the output contains the minted NFT
         require(
-          campaignOutput.value.quantityOf(policyId, campaignId) === BigInt(1),
+          campaignOutput.value.hasNft(policyId, campaignId),
           "Campaign output must contain the minted NFT"
         )
 
@@ -8150,10 +8033,7 @@ object CrowdfundingValidator extends Validator {
           donationPolicyId = donationPolicyId
         )
         require(
-          campaignOutput.datum
-              .inlineOrFail[CampaignDatum](
-                "Campaign output must have inline datum"
-              ) === expectedDatum,
+          campaignOutput.hasInlineDatum(expectedDatum),
           "Initial campaign datum must be correct"
         )
 
@@ -8161,11 +8041,7 @@ object CrowdfundingValidator extends Validator {
         policyId: PolicyId,
         txInfo: TxInfo
     ): Unit =
-        val mintedTokens = txInfo.mint.tokens(policyId)
-        require(
-          mintedTokens.forall { case (_, amount) => amount < 0 },
-          "Only burning is allowed"
-        )
+        require(txInfo.onlyBurnsUnder(policyId), "Only burning is allowed")
 }
 
 // ============================================================================
@@ -11701,7 +11577,7 @@ import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Builtins.blake2b_224
 import scalus.uplc.builtin.Data.{FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.{Credential, IntervalBoundType, PolicyId, PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{PolicyId, PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
@@ -11792,10 +11668,11 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 identityOutput.datum.inlineOrFail[IdentityDatum]("Identity must have inline datum")
 
                 // Output must be at own script address
-                identityOutput.address.credential match
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash === policyId, "Identity must go to script address")
-                    case _ => fail("Identity must go to script address")
+                require(
+                  identityOutput.address.credential
+                      .scriptHashOrFail("Identity must go to script address") === policyId,
+                  "Identity must go to script address"
+                )
 
                 // Find the identity token name from the output (starts with "i")
                 val idTn = findTokenWithPrefix(identityOutput.value, policyId, "i")
@@ -11814,7 +11691,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
 
                 // Must be signed by identity owner
                 require(
-                  tx.signatories.exists(_ === identityDatum.ownerPkh),
+                  tx.isSignedBy(identityDatum.ownerPkh),
                   "Must be signed by identity owner"
                 )
 
@@ -11824,10 +11701,11 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
 
                 // Delegation output must be at script address
                 val delegationOutput = tx.outputs.at(delegationOutIndex)
-                delegationOutput.address.credential match
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash === policyId, "Delegation must go to script address")
-                    case _ => fail("Delegation must go to script address")
+                require(
+                  delegationOutput.address.credential
+                      .scriptHashOrFail("Delegation must go to script address") === policyId,
+                  "Delegation must go to script address"
+                )
 
                 // Check delegation datum
                 val delegDatum = delegationOutput.datum.inlineOrFail[DelegationDatum](
@@ -11852,7 +11730,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 )
 
                 require(
-                  delegationOutput.value.quantityOf(policyId, delegTn) === BigInt(1),
+                  delegationOutput.value.hasNft(policyId, delegTn),
                   "Delegation output must hold the delegation token"
                 )
 
@@ -11863,10 +11741,11 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                     .inlineOrFail[DelegationDatum]("Delegation ref input must have inline datum")
 
                 // Delegation must be at script address (proving it's valid/non-forged)
-                delegationRefInput.resolved.address.credential match
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash === policyId, "Delegation must be at script address")
-                    case _ => fail("Delegation must be at script address")
+                require(
+                  delegationRefInput.resolved.address.credential
+                      .scriptHashOrFail("Delegation must be at script address") === policyId,
+                  "Delegation must be at script address"
+                )
 
                 // The delegation must actually hold its delegation token. Being at the script
                 // address with a datum-shaped value is not enough — anyone can pay a forged
@@ -11876,31 +11755,32 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 val delegTn =
                     delegationTokenName(delegDatum.identityTokenName, delegDatum.delegatePkh)
                 require(
-                  delegationRefInput.resolved.value.quantityOf(policyId, delegTn) === BigInt(1),
+                  delegationRefInput.resolved.value.hasNft(policyId, delegTn),
                   "Delegation reference input must hold the delegation token"
                 )
 
                 // Must be signed by delegate
                 require(
-                  tx.signatories.exists(_ === delegDatum.delegatePkh),
+                  tx.isSignedBy(delegDatum.delegatePkh),
                   "Must be signed by delegate"
                 )
 
                 // Check delegation validity: entire tx validity range must fall within delegation period
-                val txStartTime = tx.getValidityStartTime
+                val txStartTime =
+                    tx.validFromOrFail("Transaction must have a finite lower validity bound")
                 require(txStartTime >= delegDatum.validFrom, "Delegation not yet valid")
 
-                val txEndTime = tx.validRange.to.boundType match
-                    case IntervalBoundType.Finite(t) => t
-                    case _ => fail("Transaction must have a finite upper validity bound")
+                val txEndTime =
+                    tx.validToOrFail("Transaction must have a finite upper validity bound")
                 require(txEndTime <= delegDatum.validUntil, "Delegation expired")
 
                 // Attribute output must be at script address
                 val attributeOutput = tx.outputs.at(attributeOutIndex)
-                attributeOutput.address.credential match
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash === policyId, "Attribute must go to script address")
-                    case _ => fail("Attribute must go to script address")
+                require(
+                  attributeOutput.address.credential
+                      .scriptHashOrFail("Attribute must go to script address") === policyId,
+                  "Attribute must go to script address"
+                )
 
                 // Check attribute datum
                 val attrDatum = attributeOutput.datum.inlineOrFail[AttributeDatum](
@@ -11920,16 +11800,14 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 )
 
                 require(
-                  attributeOutput.value.quantityOf(policyId, attrTn) === BigInt(1),
+                  attributeOutput.value.hasNft(policyId, attrTn),
                   "Attribute output must hold the attribute token"
                 )
 
             case MintAction.Burn =>
-                // Ensure all quantities under this policy are negative (only burns allowed)
-                require(
-                  tx.mint.tokens(policyId).forall((_, qty) => qty < 0),
-                  "Burn action must only burn tokens"
-                )
+                // Every quantity under this policy must be negative; onlyBurnsUnder also
+                // rejects an empty sub-map, where a bare forall would be vacuously true.
+                require(tx.onlyBurnsUnder(policyId), "Burn action must only burn tokens")
         }
     }
 
@@ -11942,11 +11820,9 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
         val scriptAddress = ownInput.resolved.address
-        val policyId = scriptAddress.credential match
-            case Credential.ScriptCredential(hash) => hash
-            case _                                 => fail("Expected script credential")
+        val policyId = scriptAddress.credential.scriptHashOrFail("Expected script credential")
 
         redeemer.to[SpendAction] match {
             case SpendAction.TransferOwnership(newOwnerPkh, identityOutIndex) =>
@@ -11959,25 +11835,26 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
 
                 // Must be signed by current owner
                 require(
-                  tx.signatories.exists(_ === datum.ownerPkh),
+                  tx.isSignedBy(datum.ownerPkh),
                   "Must be signed by current owner"
                 )
 
                 // Must be signed by new owner (accept transfer)
                 require(
-                  tx.signatories.exists(_ === newOwnerPkh),
+                  tx.isSignedBy(newOwnerPkh),
                   "Must be signed by new owner"
                 )
 
                 // Identity token must be returned to script address with new datum
                 val newOutput = tx.outputs.at(identityOutIndex)
-                newOutput.address.credential match
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash === policyId, "Identity must return to script address")
-                    case _ => fail("Identity must return to script address")
+                require(
+                  newOutput.address.credential
+                      .scriptHashOrFail("Identity must return to script address") === policyId,
+                  "Identity must return to script address"
+                )
 
                 require(
-                  newOutput.value.quantityOf(policyId, identityTn) === BigInt(1),
+                  newOutput.value.hasNft(policyId, identityTn),
                   "Must return identity token"
                 )
 
@@ -11994,7 +11871,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 val ownerPkh = findIdentityOwner(tx, policyId, datum.identityTokenName)
 
                 require(
-                  tx.signatories.exists(_ === ownerPkh),
+                  tx.isSignedBy(ownerPkh),
                   "Must be signed by identity owner to revoke"
                 )
 
@@ -12012,7 +11889,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 val ownerPkh = findIdentityOwner(tx, policyId, attrDatum.identityTokenName)
 
                 require(
-                  tx.signatories.exists(_ === ownerPkh),
+                  tx.isSignedBy(ownerPkh),
                   "Must be signed by identity owner to revoke"
                 )
 
@@ -12053,7 +11930,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
     ): PubKeyHash = {
         val identityRefInput = tx.referenceInputs
             .find { txInInfo =>
-                txInInfo.resolved.value.quantityOf(policyId, identityTokenName) === BigInt(1)
+                txInInfo.resolved.value.hasNft(policyId, identityTokenName)
             }
             .getOrFail("Identity reference input not found")
 
@@ -12887,7 +12764,6 @@ import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.{Credential, PolicyId}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
-import scalus.uplc.builtin.Data.toData
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 
@@ -13013,11 +12889,9 @@ object EditableNftValidator extends DataParameterizedValidator {
         ownRef: TxOutRef
     ): Unit = {
         val datum = d.getOrFail(DatumRequired).to[ReferenceNftDatum]
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
         val scriptAddress = ownInput.resolved.address
-        val policyId = scriptAddress.credential match
-            case Credential.ScriptCredential(hash) => hash
-            case _                                 => fail(ExpectedScriptCredential)
+        val policyId = scriptAddress.credential.scriptHashOrFail(ExpectedScriptCredential)
 
         val userTokenName = userNftName(datum.tokenId)
         val refTokenName = refNftName(datum.tokenId)
@@ -13026,26 +12900,25 @@ object EditableNftValidator extends DataParameterizedValidator {
             case SpendRedeemer.Spend(userNftInputIndex, refNftOutputIndex) => {
                 val userTokenInput = tx.inputs.at(userNftInputIndex)
                 val hasUserToken =
-                    userTokenInput.resolved.value.quantityOf(policyId, userTokenName) === BigInt(1)
+                    userTokenInput.resolved.value.hasNft(policyId, userTokenName)
 
                 require(hasUserToken, MustPresentUserToken)
 
                 val newOutput = tx.outputs.at(refNftOutputIndex)
                 val correctAddress = newOutput.address === scriptAddress
                 val correctQuantity =
-                    newOutput.value.quantityOf(policyId, refTokenName) === BigInt(1)
+                    newOutput.value.hasNft(policyId, refTokenName)
                 val validContinuation = correctAddress && correctQuantity
                 require(validContinuation, MustReturnRefNft)
 
-                val newDatum =
-                    newOutput.datum.inlineOrFail[ReferenceNftDatum](ContinuationMustHaveInlineDatum)
-
                 // Sealed policy enforcement
                 if datum.isSealed then
-                    // check the entire datum
-                    require(newDatum.toData === d.get, SealedNftImmutable)
+                    // check the entire datum: the continuation must carry it unchanged
+                    require(newOutput.hasInlineDatum(datum), SealedNftImmutable)
                 else
                     // just check the token id, rest is ok to change
+                    val newDatum = newOutput.datum
+                        .inlineOrFail[ReferenceNftDatum](ContinuationMustHaveInlineDatum)
                     require(newDatum.tokenId === datum.tokenId, TokenIdImmutable)
             }
             case SpendRedeemer.Burn => {
@@ -13648,7 +13521,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
         assertResult(
-          ExUnits(memory = 80706, steps = 27_227427)
+          ExUnits(memory = 70070, steps = 24_064_803)
         ):
             burnTx.witnessSet.redeemers.get.value.totalExUnits
         val burnResult = provider.submit(burnTx).await()
@@ -14219,7 +14092,6 @@ import scalus.compiler.Compile
 
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{FromData, ToData}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.Validator
@@ -14266,14 +14138,21 @@ object EscrowValidator extends Validator {
         val receivedData = datum.getOrFail("Datum not found")
         val escrowDatum: Config = receivedData.to[Config]
         val action = redeemer.to[Action]
-        val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
-        val contractAddress = ownInput.address
-        val contractInputs = txInfo.findOwnInputsByCredential(contractAddress.credential)
-        val contractBalance = Utils.getAdaFromInputs(contractInputs)
+        val ownInput = txInfo.findInputOrFail(txOutRef)
+        val contractAddress = ownInput.resolved.address
+        // Exactly one escrow may be spent per transaction: the payout checks below sum the
+        // buyer's and seller's outputs by credential, so two escrows spent together could be
+        // settled by one payout (double satisfaction).
+        txInfo.inputs.findUniqueOrFail(
+          _.resolved.address.credential === contractAddress.credential,
+          "Exactly one escrow input may be spent"
+        )
+        // Lovelace by design: the escrow holds ADA only. Summed by the full own address.
+        val contractBalance = txInfo.valueSpentFrom(contractAddress).getLovelace
 
         action match {
             case Action.Deposit =>
-                handleDeposit(escrowDatum, txInfo, contractAddress, contractBalance, receivedData)
+                handleDeposit(escrowDatum, txInfo, ownInput, contractBalance, receivedData)
             case Action.Pay =>
                 handlePay(escrowDatum, txInfo, contractBalance)
             case Action.Refund =>
@@ -14284,7 +14163,7 @@ object EscrowValidator extends Validator {
     private inline def handleDeposit(
         escrowDatum: Config,
         txInfo: TxInfo,
-        contractAddress: Address,
+        ownInput: TxInInfo,
         contractBalance: Lovelace,
         receivedData: Data
     ): Unit = {
@@ -14293,31 +14172,32 @@ object EscrowValidator extends Validator {
           "Buyer must sign deposit transaction"
         )
 
-        val buyerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(escrowDatum.buyer))
-        val contractOutputs = txInfo.findOwnOutputsByCredential(contractAddress.credential)
+        val contractAddress = ownInput.resolved.address
+        // Unique output to the WHOLE own address, staking part included.
+        val contractOutput =
+            txInfo.findContinuingOutputOrFail(ownInput, "Expected exactly one contract output")
 
-        require(contractOutputs.length === BigInt(1), "Expected exactly one contract output")
-        val contractOutput = contractOutputs.head
-
-        require(buyerOutputs.length === BigInt(1), "Expected exactly one buyer output")
+        val buyerCredential = Credential.PubKeyCredential(escrowDatum.buyer)
+        require(
+          txInfo.outputs.count(_.address.credential === buyerCredential) === BigInt(1),
+          "Expected exactly one buyer output"
+        )
 
         require(
           contractBalance === escrowDatum.initializationAmount,
           "Contract must contain only initialization amount before deposit"
         )
 
+        // Whole-value check: the continuing output carries exactly the escrow amount plus the
+        // initialization amount, and nothing else. Summing lovelace alone would let native
+        // tokens be stripped from (or dust added to) the escrow UTxO.
         require(
-          Utils.getAdaFromOutputs(
-            contractOutputs
-          ) === escrowDatum.escrowAmount + escrowDatum.initializationAmount,
+          txInfo.valuePaidTo(contractAddress) ===
+              Value.lovelace(escrowDatum.escrowAmount + escrowDatum.initializationAmount),
           "Contract output must contain exactly escrow amount plus initialization amount"
         )
 
-        require(
-          contractOutput.datum.inlineOrFail[Data]("Expected inline datum") === receivedData,
-          "EscrowDatum must be preserved"
-        )
+        require(contractOutput.hasInlineDatum(receivedData), "EscrowDatum must be preserved")
     }
 
     private inline def handlePay(
@@ -14331,9 +14211,9 @@ object EscrowValidator extends Validator {
         )
 
         val buyerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(escrowDatum.buyer))
+            txInfo.findOutputsByCredential(Credential.PubKeyCredential(escrowDatum.buyer))
         val sellerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(escrowDatum.seller))
+            txInfo.findOutputsByCredential(Credential.PubKeyCredential(escrowDatum.seller))
 
         require(
           sellerOutputs.nonEmpty,
@@ -14350,10 +14230,10 @@ object EscrowValidator extends Validator {
           "Only buyer can release payment"
         )
 
+        // The seller is a key, paid in lovelace by design.
         require(
-          Utils.getAdaFromOutputs(
-            sellerOutputs
-          ) === escrowDatum.escrowAmount + escrowDatum.initializationAmount,
+          sellerOutputs.foldLeft(Value.zero)(_ + _.value).getLovelace ===
+              escrowDatum.escrowAmount + escrowDatum.initializationAmount,
           "Seller must receive exactly escrow amount plus initialization amount"
         )
     }
@@ -14369,9 +14249,9 @@ object EscrowValidator extends Validator {
         )
 
         val buyerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(escrowDatum.buyer))
+            txInfo.findOutputsByCredential(Credential.PubKeyCredential(escrowDatum.buyer))
         val sellerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(escrowDatum.seller))
+            txInfo.findOutputsByCredential(Credential.PubKeyCredential(escrowDatum.seller))
 
         require(
           sellerOutputs.nonEmpty,
@@ -14388,8 +14268,9 @@ object EscrowValidator extends Validator {
           "Only seller can issue refund"
         )
 
+        // The buyer is a key, paid in lovelace by design.
         require(
-          Utils.getAdaFromOutputs(buyerOutputs) === escrowDatum.escrowAmount,
+          buyerOutputs.foldLeft(Value.zero)(_ + _.value).getLovelace === escrowDatum.escrowAmount,
           "Buyer must receive exactly the escrow amount back"
         )
     }
@@ -14510,7 +14391,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         )
 
         assertResult(
-          ExUnits(memory = 134154, steps = 48_867522)
+          ExUnits(memory = 99457, steps = 49_702_903)
         ):
             depositTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(depositTx).await()
@@ -14615,7 +14496,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         )
 
         assertResult(
-          ExUnits(memory = 116600, steps = 41_533374)
+          ExUnits(memory = 91714, steps = 40_604_495)
         ):
             payTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(payTx).await()
@@ -14700,7 +14581,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         )
 
         assertResult(
-          ExUnits(memory = 125248, steps = 46_200453)
+          ExUnits(memory = 100260, steps = 45_526_339)
         ):
             refundTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(refundTx).await()
@@ -14777,9 +14658,7 @@ package scalus.examples.factory
 import scalus.compiler.Compile
 
 import scalus.*
-import scalus.uplc.builtin.Builtins
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
-import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.ByteString.given
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
@@ -14833,8 +14712,7 @@ object Factory {
       * @return
       *   blake2b_256(serialiseData(seedUtxo))
       */
-    def computeTokenName(seedUtxo: TxOutRef): TokenName =
-        Builtins.blake2b_256(Builtins.serialiseData(seedUtxo.toData))
+    def computeTokenName(seedUtxo: TxOutRef): TokenName = seedUtxo.deriveTokenName
 
     /** Validate product creation (minting policy logic for `Create`).
       *
@@ -14867,7 +14745,7 @@ object Factory {
         tx: TxInfo
     ): Unit = {
         // Seed UTxO must be consumed (one-shot guarantee)
-        require(tx.inputs.exists(_.outRef === seedUtxo), SeedUtxoMustBeConsumed)
+        tx.findInputOrFail(seedUtxo, SeedUtxoMustBeConsumed)
 
         // Compute expected token name from seed UTxO
         val expectedTokenName = computeTokenName(seedUtxo)
@@ -14877,12 +14755,12 @@ object Factory {
 
         // Find a product output at the spending script address with the NFT and correct datum
         val scriptCred = Credential.ScriptCredential(spendingScriptHash)
-        val productOutput = tx.outputs
-            .find { output =>
-                output.address.credential === scriptCred
-                && output.value.quantityOf(policyId, expectedTokenName) === BigInt(1)
-            }
-            .getOrFail(MissingProductOutput)
+        val productOutput = tx.outputs.findUniqueOrFail(
+          output =>
+              output.address.credential === scriptCred
+                  && output.value.hasNft(policyId, expectedTokenName),
+          MissingProductOutput
+        )
 
         // Verify inline datum and authorize against the product's own creator. The creator is taken
         // from the product datum (not the first signatory) so it is order-independent and the
@@ -14913,10 +14791,7 @@ object Factory {
         tx: TxInfo
     ): Unit = {
         // Check exactly 1 token burned under this policy
-        val mintedTokens = tx.mint.toSortedMap.get(policyId).getOrFail(NoTokensMinted)
-        val (_, quantity) = mintedTokens.toList match
-            case List.Cons(pair, List.Nil) => pair
-            case _                         => fail(MustBurnExactlyOneToken)
+        val (_, quantity) = tx.mint.tokens(policyId).singleOrFail(MustBurnExactlyOneToken)
         require(quantity === BigInt(-1), MustBurnExactlyOneToken)
     }
 
@@ -14945,20 +14820,15 @@ object Factory {
         require(tx.isSignedBy(datum.creator), CreatorMustSign)
 
         // Extract the factory NFT token name from our own input
-        val ownFactoryTokens =
-            ownInputValue.toSortedMap.get(factoryPolicyId).getOrFail(NoFactoryToken)
-        val (tokenName, _) = ownFactoryTokens.toList match
-            case List.Cons(pair, List.Nil) => pair
-            case _                         => fail(MustHaveExactlyOneFactoryToken)
+        val (tokenName, _) =
+            ownInputValue.tokens(factoryPolicyId).singleOrFail(MustHaveExactlyOneFactoryToken)
 
-        // The NFT must be burned (qty = -1)
-        val burnQty = tx.mint.quantityOf(factoryPolicyId, tokenName)
-        require(burnQty === BigInt(-1), ProductNFTMustBeBurned)
+        // Exactly this NFT must be burned (qty = -1) and nothing else under the factory policy
+        require(tx.mint.hasOnly(factoryPolicyId, tokenName, -1), ProductNFTMustBeBurned)
     }
 
     inline val CreatorMustSign = "Creator must sign the transaction"
     inline val SeedUtxoMustBeConsumed = "Seed UTxO must be consumed"
-    inline val NoTokensMinted = "No tokens minted under this policy"
     inline val MustMintExactlyOneToken = "Must mint exactly one token"
     inline val MissingProductOutput = "No product output found at spending script"
     inline val MissingInlineDatum = "Product output must have an inline datum"
@@ -15032,10 +14902,9 @@ object FactoryExample extends Validator {
         val productDatum = datum.getOrFail("Datum required").to[ProductDatum]
 
         // Derive the factory policy from our own script address
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
         val factoryPolicyId =
-            ownInput.resolved.address.credential.scriptOption
-                .getOrFail("Own address must be Script")
+            ownInput.resolved.address.credential.scriptHashOrFail("Own address must be Script")
 
         Factory.validateSpend(
           datum = productDatum,
@@ -15071,7 +14940,7 @@ import scalus.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.given
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.onchain.RequirementError
+import scalus.cardano.onchain.{OnchainError, RequirementError}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
@@ -15260,7 +15129,7 @@ class FactoryTest
     }
 
     test("validateCreate fails when seed UTxO is not consumed") {
-        assertEvalFailsWithMessage[RequirementError](Factory.SeedUtxoMustBeConsumed) {
+        assertEvalFailsWithMessage[OnchainError](Factory.SeedUtxoMustBeConsumed) {
             val creator = PubKeyHash(
               ByteString.fromHex("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
             )
@@ -15359,7 +15228,7 @@ class FactoryTest
     }
 
     test("validateCreate fails with missing product output") {
-        assertEvalFailsWithMessage[NoSuchElementException](Factory.MissingProductOutput) {
+        assertEvalFailsWithMessage[OnchainError](Factory.MissingProductOutput) {
             val creator = PubKeyHash(
               ByteString.fromHex("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
             )
@@ -15555,7 +15424,7 @@ class FactoryTest
     }
 
     test("validateSpend fails when no factory token in input") {
-        assertEvalFailsWithMessage[NoSuchElementException](Factory.NoFactoryToken) {
+        assertEvalFailsWithMessage[OnchainError](Factory.MustHaveExactlyOneFactoryToken) {
             val creator = PubKeyHash(
               ByteString.fromHex("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
             )
@@ -16168,10 +16037,9 @@ object LinkedListValidator extends DataParameterizedValidator {
     ): Unit = {
         val cfg = param.to[ListConfig]
         val action = redeemer.to[ListAction]
-        val ownInput = tx.findOwnInputOrFail(ownRef, "Own input not found")
-        val nftPolicyId = ownInput.resolved.value.toSortedMap.toList match
-            case List.Cons((_, _), List.Cons((nftPol, _), List.Nil)) => nftPol
-            case _ => fail("Cannot find NFT policy in own UTxO")
+        val ownInput = tx.findInputOrFail(ownRef, "Own input not found")
+        val (nftPolicyId, _) = ownInput.resolved.value.withoutLovelace.toSortedMap
+            .singleOrFail("Cannot find NFT policy in own UTxO")
 
         action match {
             case ListAction.SpendForUpdate(elemInputIdx, contElemOutputIdx) =>
@@ -17463,9 +17331,8 @@ package scalus.examples.lottery
 
 import scalus.uplc.builtin.Builtins.sha2_256
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef, Validator}
-import scalus.cardano.onchain.plutus.{v1, v2}
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.compiler.Compile
 
@@ -17529,12 +17396,12 @@ enum Action derives ToData, FromData:
 object LotteryValidator extends Validator {
 
     inline def spend(
-        datum: scalus.cardano.onchain.plutus.prelude.Option[Data],
+        datum: Option[Data],
         redeemer: Data,
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
         val amount = ownInput.resolved.value.getLovelace
 
         val action = redeemer.to[Action]
@@ -17549,14 +17416,10 @@ object LotteryValidator extends Validator {
                         val isValid = sha2_256(preimage) === state.playerOneSecret
                         require(isValid, "Fraudulent attempt")
 
-                        val continuationOutputs =
-                            tx.outputs.filter(out => out.address === ownInput.resolved.address)
-                        require(
-                          continuationOutputs.length == BigInt(1),
+                        val continuationOutput = tx.findContinuingOutputOrFail(
+                          ownInput,
                           "Must have exactly one continuation output"
                         )
-
-                        val continuationOutput = continuationOutputs.head
 
                         val newState = continuationOutput.datum.inlineOrFail[State](
                           "continuation out must have an inline datum"
@@ -17566,10 +17429,7 @@ object LotteryValidator extends Validator {
                         newState.lotteryState match {
                             case LotteryState.PlayerOneRevealed(length, pkh) =>
                                 require(length === preimage.length, "Length mismatch")
-                                require(
-                                  tx.signatories.exists(_ === pkh),
-                                  "Must be signed by player one"
-                                )
+                                require(tx.isSignedBy(pkh), "Must be signed by player one")
                             case _ => fail("Invalid state transition")
                         }
 
@@ -17593,14 +17453,10 @@ object LotteryValidator extends Validator {
                         require(isValid, "Fraudulent attempt")
 
                         // Find the continuation output with updated state
-                        val continuationOutputs =
-                            tx.outputs.filter(out => out.address === ownInput.resolved.address)
-                        require(
-                          continuationOutputs.length === BigInt(1),
+                        val continuationOutput = tx.findContinuingOutputOrFail(
+                          ownInput,
                           "Must have exactly one continuation output"
                         )
-
-                        val continuationOutput = continuationOutputs.head
                         val newState = continuationOutput.datum.inlineOrFail[State](
                           "continuation out must have an inline datum"
                         )
@@ -17609,10 +17465,7 @@ object LotteryValidator extends Validator {
                         newState.lotteryState match {
                             case LotteryState.PlayerTwoRevealed(length, pkh) =>
                                 require(length === preimage.length, "Length mismatch")
-                                require(
-                                  tx.signatories.exists(_ === pkh),
-                                  "Must be signed by player two"
-                                )
+                                require(tx.isSignedBy(pkh), "Must be signed by player two")
                             case _ => fail("Invalid state transition")
                         }
 
@@ -17667,11 +17520,9 @@ object LotteryValidator extends Validator {
 
                         // Verify output to player one contains all the money
                         val supposedWinnerOutput = tx.outputs.at(winnerOutputIdx)
-                        supposedWinnerOutput.address.credential match {
-                            case v1.Credential.PubKeyCredential(hash) =>
-                                require(hash === playerOnePkh, "Wrong winner")
-                            case v1.Credential.ScriptCredential(_) => fail("Winner must be pubkey")
-                        }
+                        val winnerPkh = supposedWinnerOutput.address.credential
+                            .pubKeyHashOrFail("Winner must be pubkey")
+                        require(winnerPkh === playerOnePkh, "Wrong winner")
                         require(
                           supposedWinnerOutput.value.getLovelace >= amount,
                           "Insufficient payout"
@@ -17722,11 +17573,9 @@ object LotteryValidator extends Validator {
                           "Fraudulent attempt"
                         )
                         val supposedWinnerOutput = tx.outputs.at(winnerOutputIdx)
-                        supposedWinnerOutput.address.credential match {
-                            case v1.Credential.PubKeyCredential(hash) =>
-                                require(hash === playerTwoPkh, "Wrong winner")
-                            case v1.Credential.ScriptCredential(_) => fail("Winner must be pubkey")
-                        }
+                        val winnerPkh = supposedWinnerOutput.address.credential
+                            .pubKeyHashOrFail("Winner must be pubkey")
+                        require(winnerPkh === playerTwoPkh, "Wrong winner")
                         require(
                           supposedWinnerOutput.value.getLovelace >= amount,
                           "Insufficient payout"
@@ -17756,12 +17605,10 @@ object LotteryValidator extends Validator {
 
     /** True if some output pays at least `amount` lovelace to the public-key `pkh`. */
     private inline def paysAtLeast(tx: TxInfo, pkh: PubKeyHash, amount: BigInt): Boolean =
-        tx.outputs.exists { out =>
-            out.address.credential match
-                case v1.Credential.PubKeyCredential(h) =>
-                    h === pkh && out.value.getLovelace >= amount
-                case _ => false
-        }
+        val credential = Credential.PubKeyCredential(pkh)
+        tx.outputs.exists(out =>
+            out.address.credential === credential && out.value.getLovelace >= amount
+        )
 }
 ```
 
@@ -18978,7 +18825,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 85024, steps = 31_155465)
+          ExUnits(memory = 56921, steps = 24_888_156)
         )
     }
 
@@ -19005,7 +18852,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 85256, steps = 31_223952)
+          ExUnits(memory = 56921, steps = 24_842_980)
         )
     }
 
@@ -19032,7 +18879,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 85024, steps = 31_155465)
+          ExUnits(memory = 56921, steps = 24_888_156)
         )
     }
 
@@ -19173,7 +19020,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           p2RevealTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 51791, steps = 19_109122)
+          ExUnits(memory = 40963, steps = 16_786_217)
         )
     }
 
@@ -19220,7 +19067,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           timeoutTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 57987, steps = 21_218996)
+          ExUnits(memory = 45235, steps = 18_372_131)
         )
     }
 
@@ -19308,7 +19155,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           loseTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 53177, steps = 20_689342)
+          ExUnits(memory = 42073, steps = 18_306_644)
         )
     }
 
@@ -19353,7 +19200,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           timeoutTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 57755, steps = 21_150509)
+          ExUnits(memory = 45003, steps = 18_303_644)
         )
     }
 
@@ -19503,7 +19350,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           loseTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 52945, steps = 20_620855)
+          ExUnits(memory = 41841, steps = 18_238_157)
         )
     }
 
@@ -19673,7 +19520,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           p1RevealTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 51559, steps = 19_040635)
+          ExUnits(memory = 40731, steps = 16_717_730)
         )
     }
 }
@@ -19964,7 +19811,7 @@ object OptimizedPaymentSplitterValidator extends DataParameterizedValidator {
             .map(payee => Credential.PubKeyCredential(PubKeyHash(payee)))
 
         val verification = redeemer.to[SplitVerificationRedeemer]
-        val ownScriptHash = stakingKey.scriptOption.getOrFail("Staking key must be Script")
+        val ownScriptHash = stakingKey.scriptHashOrFail("Staking key must be Script")
         val ownScriptCredential = Credential.ScriptCredential(ownScriptHash)
         val payeeWithChangeCredential = Credential.PubKeyCredential(verification.payeeWithChange)
 
@@ -20141,7 +19988,7 @@ object NaivePaymentSplitterValidator extends DataParameterizedValidator {
             .map(payee => Credential.PubKeyCredential(PubKeyHash(payee)))
 
         val myTxInputCredential =
-            tx.findOwnInputOrFail(ownRef).resolved.address.credential
+            tx.findInputOrFail(ownRef).resolved.address.credential
 
         // Find the first and single payee that triggers the payout and pays the fee
         //  and calculate the sum of contract inputs
@@ -20174,9 +20021,9 @@ object NaivePaymentSplitterValidator extends DataParameterizedValidator {
             ) { case (state, output) =>
                 val (sum, sumsPerPayee) = state
                 val value = output.value.getLovelace
-                val payee: Credential.PubKeyCredential = output.address.credential match
-                    case Credential.PubKeyCredential(pkh) => Credential.PubKeyCredential(pkh)
-                    case _                                => fail("Output to script is not allowed")
+                val payee: Credential.PubKeyCredential = Credential.PubKeyCredential(
+                  output.address.credential.pubKeyHashOrFail("Output to script is not allowed")
+                )
                 sumsPerPayee.get(payee) match
                     case None => (sum + value, sumsPerPayee.insert(payee, value))
                     case Some(prevSum) =>
@@ -20227,6 +20074,7 @@ object NaivePaymentSplitterValidator extends DataParameterizedValidator {
 package scalus.examples.paymentsplitter
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.ScalaCompilerVersion
 import scalus.*
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
@@ -20235,7 +20083,7 @@ import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v2.TxOut
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.SpendingScript
-import scalus.cardano.onchain.plutus.prelude.{List as SList, Option as SOption, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{AssocMap, List as SList, Option as SOption}
 import scalus.cardano.ledger.ExUnits
 import scalus.testing.kit.ScalusTest
 
@@ -20254,59 +20102,59 @@ class NaivePaymentSplitterValidatorTest
     private val expectedBudgets: Map[String, ExUnits] = ScalaCompilerVersion.baseline(
       pre38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 165603,
-          steps = 57_802961
+          memory = 155999,
+          steps = 54_489_071
         ),
         "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 256352,
-          steps = 90_142341
+          memory = 243216,
+          steps = 86_132_901
         ),
         "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 362305,
-          steps = 129_436300
+          memory = 343541,
+          steps = 124_244_435
         ),
         "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 362305,
-          steps = 129_436300
+          memory = 343541,
+          steps = 124_244_435
         ),
         "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 362305,
-          steps = 129_436300
+          memory = 343541,
+          steps = 124_244_435
         ),
         "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 362305,
-          steps = 129_436300
+          memory = 343541,
+          steps = 124_244_435
         ),
-        "success between 5 payees" -> ExUnits(memory = 630020, steps = 232_744548),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 423313, steps = 159_739904)
+        "success between 5 payees" -> ExUnits(memory = 593712, steps = 223_727_208),
+        "success with multiple contract UTxOs" -> ExUnits(memory = 395525, steps = 150_610_387)
       ),
       since38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 156967,
-          steps = 54_731038
+          memory = 147663,
+          steps = 51_465_148
         ),
         "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 245856,
-          steps = 86_405731
+          memory = 233620,
+          steps = 82_540_291
         ),
         "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 349949,
-          steps = 125_035003
+          memory = 332685,
+          steps = 120_083_138
         ),
         "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 349949,
-          steps = 125_035003
+          memory = 332685,
+          steps = 120_083_138
         ),
         "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 349949,
-          steps = 125_035003
+          memory = 332685,
+          steps = 120_083_138
         ),
         "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 349949,
-          steps = 125_035003
+          memory = 332685,
+          steps = 120_083_138
         ),
-        "success between 5 payees" -> ExUnits(memory = 613944, steps = 227_013877),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 410957, steps = 155_338607)
+        "success between 5 payees" -> ExUnits(memory = 580336, steps = 218_428_537),
+        "success with multiple contract UTxOs" -> ExUnits(memory = 384669, steps = 146_449_090)
       )
     )
 
@@ -20351,7 +20199,7 @@ class NaivePaymentSplitterValidatorTest
             inputs = SList(feePayerInput, contractInput),
             outputs = outputs,
             fee = BigInt(2),
-            redeemers = SortedMap.fromList(
+            redeemers = AssocMap.fromList(
               SList((ScriptPurpose.Spending(txOutRef), Data.unit))
             ),
             id = txId
@@ -20422,7 +20270,7 @@ class NaivePaymentSplitterValidatorTest
             inputs = allInputs,
             outputs = txOutputs,
             fee = tc.fee,
-            redeemers = SortedMap.fromList(
+            redeemers = AssocMap.fromList(
               SList((ScriptPurpose.Spending(txOutRef), redeemer))
             ),
             id = txId
@@ -20462,6 +20310,7 @@ class NaivePaymentSplitterValidatorTest
 package scalus.examples.paymentsplitter
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.ScalaCompilerVersion
 import scalus.*
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
@@ -20470,7 +20319,7 @@ import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v2.TxOut
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.{RewardingScript, SpendingScript}
-import scalus.cardano.onchain.plutus.prelude.{List as SList, Option as SOption, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{AssocMap, List as SList, Option as SOption, SortedMap}
 import scalus.testing.kit.ScalusTest
 
 /** Tests for OptimizedPaymentSplitterValidator using shared test cases. */
@@ -20488,63 +20337,63 @@ class OptimizedPaymentSplitterValidatorTest
     private val expectedRewardBudgets: Map[String, ExUnits] = ScalaCompilerVersion.baseline(
       pre38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 121905,
-          steps = 43_603979
+          memory = 117281,
+          steps = 42_195_436
         ),
         "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 155405,
-          steps = 57_832083
+          memory = 150181,
+          steps = 56_327_540
         ),
         "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 190506,
-          steps = 73_541683
+          memory = 184682,
+          steps = 71_941_140
         ),
         "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 190506,
-          steps = 73_541683
+          memory = 184682,
+          steps = 71_941_140
         ),
         "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 190506,
-          steps = 73_541683
+          memory = 184682,
+          steps = 71_941_140
         ),
         "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 190506,
-          steps = 73_541683
+          memory = 184682,
+          steps = 71_941_140
         ),
-        "success between 5 payees" -> ExUnits(memory = 265511, steps = 109_405371),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 241090, steps = 99_683635)
+        "success between 5 payees" -> ExUnits(memory = 258487, steps = 107_612_828),
+        "success with multiple contract UTxOs" -> ExUnits(memory = 234466, steps = 97_955_092)
       ),
       since38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 116989,
-          steps = 41_861430
+          memory = 112365,
+          steps = 40_452_887
         ),
         "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 150489,
-          steps = 56_089534
+          memory = 145265,
+          steps = 54_584_991
         ),
         "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 185590,
-          steps = 71_799134
+          memory = 179766,
+          steps = 70_198_591
         ),
         "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 185590,
-          steps = 71_799134
+          memory = 179766,
+          steps = 70_198_591
         ),
         "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 185590,
-          steps = 71_799134
+          memory = 179766,
+          steps = 70_198_591
         ),
         "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 185590,
-          steps = 71_799134
+          memory = 179766,
+          steps = 70_198_591
         ),
-        "success between 5 payees" -> ExUnits(memory = 260595, steps = 107_662822),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 236174, steps = 97_941086)
+        "success between 5 payees" -> ExUnits(memory = 253571, steps = 105_870_279),
+        "success with multiple contract UTxOs" -> ExUnits(memory = 229550, steps = 96_212_543)
       )
     )
 
-    private val expectedSpendBudget: ExUnits = ExUnits(memory = 41828, steps = 13_443300)
+    private val expectedSpendBudget: ExUnits = ExUnits(memory = 38768, steps = 12_563_087)
 
     // Run all shared test cases
     testCases.foreach { tc =>
@@ -20558,11 +20407,11 @@ class OptimizedPaymentSplitterValidatorTest
         val (rewardBudget, spendBudget) = runTestCaseWithBudget(tc)
         assert(
           rewardBudget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 241090, steps = 99_683635),
-            since38 = ExUnits(memory = 236174, steps = 97_941086)
+            pre38 = ExUnits(memory = 234466, steps = 97_955_092),
+            since38 = ExUnits(memory = 229550, steps = 96_212_543)
           )
         )
-        assert(spendBudget == ExUnits(memory = 41828, steps = 13_443300))
+        assert(spendBudget == expectedSpendBudget)
     }
 
     private def runTestCase(tc: PaymentSplitterTestCase): Unit = {
@@ -20632,7 +20481,7 @@ class OptimizedPaymentSplitterValidatorTest
         val firstScriptOutRef = TxOutRef(lockTxId, 0)
         val stakingCredential = Credential.ScriptCredential(scriptHash)
 
-        val redeemers = SortedMap.fromList(
+        val redeemers = AssocMap.fromList(
           SList(
             (ScriptPurpose.Spending(firstScriptOutRef), spendingRedeemer),
             (ScriptPurpose.Rewarding(stakingCredential), rewardingRedeemer)
@@ -20750,7 +20599,7 @@ class OptimizedPaymentSplitterValidatorTest
         val firstScriptOutRef = TxOutRef(lockTxId, 0)
         val stakingCredential = Credential.ScriptCredential(scriptHash)
 
-        val redeemers = SortedMap.fromList(
+        val redeemers = AssocMap.fromList(
           SList(
             (ScriptPurpose.Spending(firstScriptOutRef), spendingRedeemer),
             (ScriptPurpose.Rewarding(stakingCredential), rewardingRedeemer)
@@ -21347,7 +21196,7 @@ import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.examples.pricebet.MintOracleRedeemer.{Burn, Mint}
 import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2
-import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, PolicyId, TxInfo, TxOutRef}
 import scalus.cardano.onchain.plutus.prelude.*
 
 // Parameter
@@ -21383,7 +21232,7 @@ object OracleValidator extends DataParameterizedValidator {
     inline def mint(
         param: Data,
         redeemer: Data,
-        policyId: scalus.cardano.onchain.plutus.v3.PolicyId,
+        policyId: PolicyId,
         tx: TxInfo
     ): Unit = {
         val mintRedeemer = redeemer.to[MintOracleRedeemer]
@@ -21393,8 +21242,7 @@ object OracleValidator extends DataParameterizedValidator {
         mintRedeemer match {
             case Mint =>
                 // Verify the seed UTXO is being spent
-                val seedUtxoIsSpent = tx.inputs.exists(_.outRef === config.seedUtxo)
-                require(seedUtxoIsSpent, "Must spend seed utxo to mint the beacon")
+                tx.findInputOrFail(config.seedUtxo, "Must spend seed utxo to mint the beacon")
 
                 // Verify exactly one beacon token is minted with quantity 1 and nothing else
                 // under this policy
@@ -21425,7 +21273,7 @@ object OracleValidator extends DataParameterizedValidator {
         val config = param.to[OracleConfig]
         val r = redeemer.to[SpendOracleRedeemer]
         val state = datum.getOrFail("Must have inline datum").to[OracleState]
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
 
         // Verify exchange rate is non-zero
         state.exchangeRate.checkDenominator()
@@ -21463,12 +21311,13 @@ object OracleValidator extends DataParameterizedValidator {
 
             case SpendOracleRedeemer.Burn =>
                 // Verify the beacon token is being burned in this transaction
-                val ownScriptHash = ownInput.resolved.address.credential match {
-                    case scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential(hash) => hash
-                    case _ => fail("Own input must be a script")
-                }
-                val burnedAmount = tx.mint.quantityOf(ownScriptHash, config.beaconName)
-                require(burnedAmount === BigInt(-1), "Must burn the beacon token")
+                val ownScriptHash =
+                    ownInput.resolved.address.credential
+                        .scriptHashOrFail("Own input must be a script")
+                require(
+                  tx.mint.hasOnly(ownScriptHash, config.beaconName, -1),
+                  "Must burn the beacon token"
+                )
         }
     }
 
@@ -21835,7 +21684,7 @@ import scalus.compiler.Compile
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.uplc.builtin.Data
-import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, TxInInfo, TxInfo, TxOutRef}
 import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.prelude.*
@@ -21885,7 +21734,7 @@ object PricebetValidator extends DataParameterizedValidator {
         val state = datum.getOrFail("Datum must be present").to[PricebetState]
         val action = redeemer.to[Action]
         val config = param.to[PricebetConfig]
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
 
         action match {
             case Action.Join =>
@@ -21893,14 +21742,10 @@ object PricebetValidator extends DataParameterizedValidator {
                 require(state.player.isEmpty, "Player already joined")
 
                 // Find continuation output
-                val continuationOutputs =
-                    tx.outputs.filter(out => out.address === ownInput.resolved.address)
-                require(
-                  continuationOutputs.length === BigInt(1),
+                val continuationOutput = tx.findContinuingOutputOrFail(
+                  ownInput,
                   "Must have exactly one continuation output"
                 )
-
-                val continuationOutput = continuationOutputs.head
                 val initialBetAmount = ownInput.resolved.value.getLovelace
 
                 // Verify continuation output has 2x the bet
@@ -21915,8 +21760,7 @@ object PricebetValidator extends DataParameterizedValidator {
                 )
 
                 // Find who signed and verify they're the player
-                require(newState.player.isDefined, "Player must be set in new datum")
-                val playerPkh = newState.player.get
+                val playerPkh = newState.player.getOrFail("Player must be set in new datum")
                 require(tx.isSignedBy(playerPkh), "Must be signed by player")
 
                 // Verify other fields unchanged
@@ -21930,19 +21774,18 @@ object PricebetValidator extends DataParameterizedValidator {
 
             case Action.Win(index) =>
                 // Verify player exists and signed
-                require(state.player.isDefined, "No player joined yet")
-                val playerPkh = state.player.get
+                val playerPkh = state.player.getOrFail("No player joined yet")
                 require(tx.isSignedBy(playerPkh), "Must be signed by player")
 
                 // Verify before deadline
                 require(!tx.validRange.isEntirelyAfter(state.deadline), "Deadline passed")
 
                 val oracleInput: TxInInfo = tx.referenceInputs.at(index)
-                oracleInput.resolved.address.credential match {
-                    case Credential.PubKeyCredential(hash) => fail(OracleInputMustBeOracleScript)
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash == config.oracleScriptHash, OracleInputMustBeOracleScript)
-                }
+                require(
+                  oracleInput.resolved.address.credential
+                      .scriptHashOrFail(OracleInputMustBeOracleScript) === config.oracleScriptHash,
+                  OracleInputMustBeOracleScript
+                )
 
                 // Authenticate the oracle UTxO by its beacon NFT — being at the oracle script
                 // address is not enough, since anyone can pay a forged datum to that address. The
@@ -21951,7 +21794,7 @@ object PricebetValidator extends DataParameterizedValidator {
                 // ([[OracleBeaconName]]), so it lives in the contract rather than the datum.
                 require(
                   oracleInput.resolved.value
-                      .quantityOf(config.oracleScriptHash, OracleBeaconName) === BigInt(1),
+                      .hasNft(config.oracleScriptHash, OracleBeaconName),
                   OracleInputMustHaveBeacon
                 )
 
@@ -21975,7 +21818,7 @@ object PricebetValidator extends DataParameterizedValidator {
 
             case Action.Timeout =>
                 // Verify owner signed
-                require(tx.signatories.exists(_ === state.owner), "Must be signed by owner")
+                require(tx.isSignedBy(state.owner), "Must be signed by owner")
 
                 // Verify deadline passed
                 require(tx.validRange.isEntirelyAfter(state.deadline), "Deadline not reached")
@@ -22055,7 +21898,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         assert(
           // Slightly higher than before: the exchange-rate check now uses RationalEq.equals
           // (cross-multiplication) instead of the previous structural equalsData on Rational.
-          joinResult.budget == (ExUnits(memory = 81568, steps = 32_653670))
+          joinResult.budget == (ExUnits(memory = 58029, steps = 27_146_462))
         )
     }
 
@@ -22131,7 +21974,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(beforeSlot)
         val winResult = assertSuccess(provider, winTx, joinedPricebetUtxo._1)
         assert(
-          winResult.budget == (ExUnits(memory = 79915, steps = 28_106800))
+          winResult.budget == (ExUnits(memory = 62975, steps = 23_982_006))
         )
     }
 
@@ -22236,7 +22079,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(afterDeadlineSlot)
         val timeoutResult = assertSuccess(provider, timeoutTx, pricebetUtxo._1)
         assert(
-          timeoutResult.budget == (ExUnits(memory = 41039, steps = 14_268074))
+          timeoutResult.budget == (ExUnits(memory = 29783, steps = 11_632_207))
         )
     }
 
@@ -22280,7 +22123,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(updateSlot)
         val updateResult = assertSuccess(provider, updateTx, oracleUtxo._1)
         assert(
-          updateResult.budget == (ExUnits(memory = 61389, steps = 24_034128))
+          updateResult.budget == (ExUnits(memory = 48713, steps = 20_684_954))
         )
     }
 
@@ -22810,7 +22653,6 @@ package scalus.examples.simpletransfer
 import scalus.compiler.Compile
 import scalus.uplc.builtin.{Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.PubKeyHash
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.Validator
@@ -22854,14 +22696,17 @@ object SimpleTransferValidator extends Validator {
     ): Unit = {
         val datumData = datum.getOrFail("Datum not found")
         val Parties(owner, recipient) = datumData.to[Parties]
-        val contract = tx.findOwnInputOrFail(ownRef).resolved
-        val contractAddress = contract.address.credential
-        val contractInputs = tx.findOwnInputsByCredential(contractAddress)
-        val contractOutputs = tx.findOwnOutputsByCredential(contractAddress)
+        val ownInput = tx.findInputOrFail(ownRef)
+        val contract = ownInput.resolved
+        val contractCredential = contract.address.credential
+        val contractOutputs = tx.findOutputsByCredential(contractCredential)
         val balance = contract.value
 
         // eliminate double satisfaction by ensuring exactly one contract own input and at most one own output
-        require(contractInputs.size === BigInt(1), "Contract should have exactly one own input")
+        tx.inputs.findUniqueOrFail(
+          _.resolved.address.credential === contractCredential,
+          "Contract should have exactly one own input"
+        )
         require(
           contractOutputs.size <= 1,
           "Contract should have at most one own output"
@@ -22871,18 +22716,16 @@ object SimpleTransferValidator extends Validator {
             case Action.Deposit(amount) =>
                 require(tx.isSignedBy(owner), "Deposit must be signed by owner")
                 require(amount.isPositive, "Negative amount")
-                // eliminate double satisfaction by ensuring exactly one contract own input and one own output
-                require(
-                  contractOutputs.size === BigInt(1),
+                // exactly one own output (by credential, checked above), at the whole own address
+                val contractOutput = contractOutputs.singleOrFail(
                   "Contract should have exactly one own output"
                 )
-                val contractOutput = contractOutputs.head
+                require(contractOutput.address === contract.address, "Own output address changed")
                 require(
                   contractOutput.value === balance + amount,
                   "Contract has received incorrect amount"
                 )
-                val expectedDatum = OutputDatum.OutputDatum(datumData)
-                require(contractOutput.datum === expectedDatum, "Output datum changed")
+                require(contractOutput.hasInlineDatum(datumData), "Output datum changed")
             case Action.Withdraw(withdraw) =>
                 require(tx.isSignedBy(recipient), "Withdraw must be signed by recipient")
                 require(withdraw.isPositive, "Negative amount")
@@ -22890,18 +22733,18 @@ object SimpleTransferValidator extends Validator {
                     // if withdrawing all, there should be no contract output
                     require(contractOutputs.isEmpty, "Contract own output is not empty")
                 else if (balance - withdraw).isPositive then
-                    // eliminate double satisfaction by ensuring exactly one contract own input and one own output
-                    require(
-                      contractOutputs.size === BigInt(1),
+                    val contractOutput = contractOutputs.singleOrFail(
                       "Contract should have exactly one own output"
                     )
-                    val contractOutput = contractOutputs.head
+                    require(
+                      contractOutput.address === contract.address,
+                      "Own output address changed"
+                    )
                     require(
                       contractOutput.value === balance - withdraw,
                       "Contract balance is incorrect"
                     )
-                    val expectedDatum = OutputDatum.OutputDatum(datumData)
-                    require(contractOutput.datum === expectedDatum, "Output datum changed")
+                    require(contractOutput.hasInlineDatum(datumData), "Output datum changed")
                 else fail("Withdraw exceeds balance")
     }
 }
@@ -22952,7 +22795,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
         assert(
-          res.budget == (ExUnits(memory = 94684, steps = 35_275977))
+          res.budget == (ExUnits(memory = 73853, steps = 31_550_026))
         )
     }
 
@@ -23001,7 +22844,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
         assert(
-          res.budget == (ExUnits(memory = 110015, steps = 41_811012))
+          res.budget == (ExUnits(memory = 88105, steps = 36_679_848))
         )
     }
 
@@ -23031,7 +22874,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
         assert(
-          res.budget == (ExUnits(memory = 80263, steps = 27_895837))
+          res.budget == (ExUnits(memory = 60435, steps = 22_757_728))
         )
     }
 
@@ -23696,21 +23539,18 @@ object ProxyValidator extends Validator {
     ): Unit = {
         val d = datum.getOrFail(MissingDatum).to[ProxyDatum]
         val r = redeemer.to[ProxyRedeemer]
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
 
         // Reject spending more than one proxy UTxO at once: otherwise a single continuation
         // output could satisfy several script inputs (double satisfaction) and the value of the
         // extra inputs would be swept off to the attacker.
-        require(
-          tx.findOwnInputsByCredential(ownInput.resolved.address.credential).length === BigInt(1),
+        val ownCredential = ownInput.resolved.address.credential
+        tx.inputs.findUniqueOrFail(
+          _.resolved.address.credential === ownCredential,
           MultipleProxyInputs
         )
 
-        val continuationOutput =
-            tx.outputs
-                .filter(out => out.address === ownInput.resolved.address)
-                .headOption
-                .getOrFail(MissingContinuation)
+        val continuationOutput = tx.findContinuingOutputOrFail(ownInput, MissingContinuation)
 
         val continuationDatum =
             continuationOutput.datum.inlineOrFail[ProxyDatum](ContinuationMustHaveInlineDatum)
@@ -24405,14 +24245,14 @@ case class VaultTransactions(
 package scalus.examples.vault
 
 import scalus.compiler.Compile
-import scalus.uplc.builtin.Data.{toData, FromData, ToData}
+import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.examples.vault.Action.{Cancel, Deposit, FinalizeWithdrawal, InitiateWithdrawal}
 import scalus.cardano.onchain.plutus.v1
 import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime}
 import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
 import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef, Validator}
-import scalus.cardano.onchain.plutus.prelude.{===, require}
+import scalus.cardano.onchain.plutus.prelude.*
 
 // Datum
 case class State(
@@ -24432,7 +24272,7 @@ enum Action derives FromData, ToData:
     case FinalizeWithdrawal
     case Cancel
 
-enum Status derives FromData, ToData:
+enum Status derives FromData, ToData, Eq:
     case Idle
     case Pending
 
@@ -24468,7 +24308,7 @@ object Status {
 object VaultValidator extends Validator {
 
     inline override def spend(
-        d: scalus.cardano.onchain.plutus.prelude.Option[Data],
+        d: Option[Data],
         redeemer: Data,
         tx: TxInfo,
         ownRef: TxOutRef
@@ -24483,11 +24323,10 @@ object VaultValidator extends Validator {
     }
 
     def deposit(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
-        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
+        val ownInput = tx.findInputOrFail(ownRef, OwnInputNotFound)
 
-        val out = getVaultOutput(tx, ownRef)
+        val out = getVaultOutput(tx, ownInput)
         requireSameOwner(out, datum)
-        requireOutputToOwnAddress(ownInput, out, WrongDepositDestination)
 
         val value = out.value
         require(value.withoutLovelace.isZero, CannotAddTokens)
@@ -24495,15 +24334,15 @@ object VaultValidator extends Validator {
         require(value.getLovelace > ownInput.resolved.value.getLovelace, AdaNotConserved)
         requireEntireVaultIsSpent(datum, ownInput.resolved)
         val newDatum = getVaultDatum(out)
-        require(newDatum.amount == value.getLovelace, VaultAmountChanged)
-        require(newDatum.waitTime == datum.waitTime, WaitTimeChanged)
+        require(newDatum.amount === value.getLovelace, VaultAmountChanged)
+        require(newDatum.waitTime === datum.waitTime, WaitTimeChanged)
         require(
-          newDatum.finalizationDeadline == datum.finalizationDeadline,
+          newDatum.finalizationDeadline === datum.finalizationDeadline,
           FinalizationDeadlineChanged
         )
         // A deposit must not change the withdrawal state machine — otherwise anyone could flip a
         // Pending withdrawal back to Idle (or vice versa) just by adding funds.
-        require(newDatum.status.toData == datum.status.toData, DepositMustNotChangeStatus)
+        require(newDatum.status === datum.status, DepositMustNotChangeStatus)
     }
 
     def initiateWithdrawal(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
@@ -24518,14 +24357,9 @@ object VaultValidator extends Validator {
           OwnerMustSign
         )
 
-        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
-        val out = getVaultOutput(tx, ownRef)
+        val ownInput = tx.findInputOrFail(ownRef, OwnInputNotFound)
+        val out = getVaultOutput(tx, ownInput)
         requireSameOwner(out, datum)
-        requireOutputToOwnAddress(
-          ownInput,
-          out,
-          NotExactlyOneVaultOutput
-        )
 
         // Verify value is conserved during initiation
         require(
@@ -24537,12 +24371,12 @@ object VaultValidator extends Validator {
         // The lower bound (getValidityStartTime) can be backdated arbitrarily, which would let an
         // attacker set finalizationDeadline in the past and finalize immediately, defeating the
         // wait. The ledger guarantees the upper bound is >= now, so deadline >= now + waitTime.
-        val requestTime = tx.validRange.to.finiteOrFail(NoFinalizationUpperBound)
+        val requestTime = tx.validToOrFail(NoFinalizationUpperBound)
         val finalizationDeadline = requestTime + datum.waitTime
         val newDatum = getVaultDatum(out)
         require(newDatum.status.isPending, MustBePending)
         require(
-          newDatum.finalizationDeadline == finalizationDeadline,
+          newDatum.finalizationDeadline === finalizationDeadline,
           IncorrectDatumFinalization
         )
     }
@@ -24550,15 +24384,14 @@ object VaultValidator extends Validator {
     def finalize(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
         require(datum.status.isPending, ContractMustBePending)
         require(tx.validRange.isEntirelyAfter(datum.finalizationDeadline), DeadlineNotPassed)
-        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
+        val ownInput = tx.findInputOrFail(ownRef, OwnInputNotFound)
         requireEntireVaultIsSpent(datum, ownInput.resolved)
 
-        val scriptOutputs = tx.findOwnOutputsByCredential(ownInput.resolved.address.credential)
-        require(scriptOutputs.size == BigInt(0), WithdrawalsMustNotSendBackToVault)
+        val scriptOutputs = tx.findOutputsByCredential(ownInput.resolved.address.credential)
+        require(scriptOutputs.isEmpty, WithdrawalsMustNotSendBackToVault)
         val ownerCredential = Credential.PubKeyCredential(v1.PubKeyHash(datum.owner))
-        val ownerOutputs =
-            tx.findOwnOutputs(out => out.address.credential === ownerCredential)
-        require(ownerOutputs.size > 0, WrongAddressWithdrawal)
+        val ownerOutputs = tx.findOutputsByCredential(ownerCredential)
+        require(ownerOutputs.nonEmpty, WrongAddressWithdrawal)
         val totalToOwner =
             ownerOutputs.foldLeft(BigInt(0))((acc, out) => acc + out.value.getLovelace)
         require(totalToOwner >= datum.amount, VaultAmountChanged)
@@ -24575,16 +24408,17 @@ object VaultValidator extends Validator {
         // There must be a pending request to cancel.
         require(datum.status.isPending, NothingToCancel)
 
-        val out = getVaultOutput(tx, ownRef)
+        val ownInput = tx.findInputOrFail(ownRef, OwnInputNotFound)
+        val out = getVaultOutput(tx, ownInput)
         requireSameOwner(out, datum)
         val vaultDatum = getVaultDatum(out)
-        require(vaultDatum.amount == datum.amount, VaultAmountChanged)
+        require(vaultDatum.amount === datum.amount, VaultAmountChanged)
         require(
-          out.value.getLovelace == datum.amount,
+          out.value.getLovelace === datum.amount,
           WrongOutputAmount
         )
         require(vaultDatum.status.isIdle, StateNotIdle)
-        require(vaultDatum.waitTime == datum.waitTime, WaitTimeChanged)
+        require(vaultDatum.waitTime === datum.waitTime, WaitTimeChanged)
     }
 
     // Helper functions
@@ -24592,26 +24426,21 @@ object VaultValidator extends Validator {
     private def requireEntireVaultIsSpent(datum: State, output: TxOut): Unit = {
         val amountToSpend = datum.amount
         val adaSpent = output.value.getLovelace
-        require(amountToSpend == adaSpent, AdaLeftover)
+        require(amountToSpend === adaSpent, AdaLeftover)
     }
 
-    private def requireOutputToOwnAddress(ownInput: TxInInfo, out: TxOut, message: String): Unit =
-        require(out.address.credential === ownInput.resolved.address.credential, message)
-
-    private def getVaultOutput(tx: TxInfo, ownRef: TxOutRef): TxOut = {
-        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
-        val scriptOutputs = tx.findOwnOutputsByCredential(ownInput.resolved.address.credential)
-        require(scriptOutputs.size == BigInt(1), NotExactlyOneVaultOutput)
-        scriptOutputs.head
-    }
+    // The unique continuing output to the vault's WHOLE address (staking part included), so a
+    // spender cannot redirect the vault's delegation rewards by changing the staking credential.
+    private def getVaultOutput(tx: TxInfo, ownInput: TxInInfo): TxOut =
+        tx.findContinuingOutputOrFail(ownInput, NotExactlyOneVaultOutput)
 
     private def getVaultDatum(vaultOutput: TxOut) =
         vaultOutput.datum.inlineOrFail[State](NoDatumProvided)
 
     private def requireSameOwner(out: TxOut, datum: State): Unit = {
         val s = out.datum.inlineOrFail[State](NoInlineDatum)
-        require(s.owner == datum.owner, VaultOwnerChanged)
-        require(s.recoveryKey == datum.recoveryKey, RecoveryKeyChanged)
+        require(s.owner === datum.owner, VaultOwnerChanged)
+        require(s.recoveryKey === datum.recoveryKey, RecoveryKeyChanged)
     }
 
     // Errors
@@ -24622,8 +24451,6 @@ object VaultValidator extends Validator {
     inline val VaultAmountChanged = "Datum amount must match output lovelace amount"
     inline val CannotAddTokens = "Deposits must only contain ADA"
     inline val AdaNotConserved = "Deposits must add ADA to the vault"
-    inline val WrongDepositDestination =
-        "Deposit transactions can only be made to the vault"
     inline val NotExactlyOneVaultOutput =
         "Vault transaction must have exactly 1 output to the vault script"
     inline val OwnInputNotFound = "Own input not found"
@@ -24811,7 +24638,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(result.isSuccess)
         assert(
-          result.budget == (ExUnits(memory = 102413, steps = 38_755014))
+          result.budget == (ExUnits(memory = 63548, steps = 26_641_144))
         )
 
         provider.setSlot(currentSlot)
@@ -24908,7 +24735,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, depositTx, vaultUtxo.input)
         assert(result.isSuccess, s"Deposit should succeed: $result")
         assert(
-          result.budget == (ExUnits(memory = 97976, steps = 38_644816))
+          result.budget == (ExUnits(memory = 63239, steps = 27_431_942))
         )
 
         assert(provider.submit(depositTx).await().isRight)
@@ -25064,7 +24891,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val withdrawResult = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
         assert(
-          withdrawResult.budget == (ExUnits(memory = 102413, steps = 38_755014))
+          withdrawResult.budget == (ExUnits(memory = 63548, steps = 26_641_144))
         )
 
         provider.setSlot(withdrawSlot)
@@ -25111,7 +24938,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo.input)
         assert(finalizeResult.isSuccess, s"Finalize should succeed: $finalizeResult")
         assert(
-          finalizeResult.budget == (ExUnits(memory = 96841, steps = 34_363973))
+          finalizeResult.budget == (ExUnits(memory = 74551, steps = 29_960_222))
         )
 
         provider.setSlot(finalizeSlot)
@@ -25474,7 +25301,6 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.Value
 import scalus.cardano.onchain.plutus.v1.Value.*
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*
@@ -25519,22 +25345,21 @@ object VestingValidator extends Validator {
 
         require(requestedAmount > 0, NonPositiveAmount)
 
-        val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
-        val contractAddress = ownInput.address
+        val ownInputInfo = txInfo.findInputOrFail(txOutRef)
+        val ownInput = ownInputInfo.resolved
+        val ownCredential = ownInput.address.credential
 
         // Reject spending more than one vesting UTxO at once: otherwise a single continuing
         // output could satisfy several script inputs (double satisfaction) and the remaining
         // locked funds of the extra inputs would be siphoned off.
-        require(
-          txInfo.findOwnInputsByCredential(contractAddress.credential).length === BigInt(1),
+        txInfo.inputs.findUniqueOrFail(
+          _.resolved.address.credential === ownCredential,
           MultipleVestingInputs
         )
 
         val contractAmount = ownInput.value.getLovelace
 
-        val contractOutputs = txInfo.findOwnOutputsByCredential(contractAddress.credential)
-
-        val txEarliestTime = txInfo.getValidityStartTime
+        val txEarliestTime = txInfo.validFromOrFail(NoValidityLowerBound)
 
         val released = vestingConfig.initialAmount - contractAmount
 
@@ -25551,11 +25376,12 @@ object VestingValidator extends Validator {
 
         val beneficiaryCred = Credential.PubKeyCredential(vestingConfig.beneficiary)
 
-        val beneficiaryInputs = txInfo.findOwnInputsByCredential(beneficiaryCred)
-        val beneficiaryOutputs = txInfo.findOwnOutputsByCredential(beneficiaryCred)
+        val beneficiaryInputs = txInfo.findInputsByCredential(beneficiaryCred)
+        val beneficiaryOutputs = txInfo.findOutputsByCredential(beneficiaryCred)
 
-        val adaInInputs = Utils.getAdaFromInputs(beneficiaryInputs)
-        val adaInOutputs = Utils.getAdaFromOutputs(beneficiaryOutputs)
+        // The beneficiary is a key, paid in lovelace by design; sum the whole value and project.
+        val adaInInputs = beneficiaryInputs.foldLeft(Value.zero)(_ + _.resolved.value).getLovelace
+        val adaInOutputs = beneficiaryOutputs.foldLeft(Value.zero)(_ + _.value).getLovelace
 
         val expectedOutput =
             requestedAmount + adaInInputs - txInfo.fee
@@ -25567,14 +25393,11 @@ object VestingValidator extends Validator {
 
         if requestedAmount === contractAmount then ()
         else
-            require(contractOutputs.length === BigInt(1), NotExactlyOneContractOutput)
-
-            val contractOutput = contractOutputs.head
-
-            // Pin the continuing output to the exact own input address: matching the payment
-            // credential alone would let the staking credential (and thus delegation rewards)
-            // be redirected to the attacker.
-            require(contractOutput.address === ownInput.address, ContinuingAddressMismatch)
+            // The unique output to the exact own input address: matching the payment credential
+            // alone would let the staking credential (and thus delegation rewards) be redirected
+            // to the attacker.
+            val contractOutput =
+                txInfo.findContinuingOutputOrFail(ownInputInfo, NotExactlyOneContractOutput)
 
             // The continuing output must preserve the entire remaining value — ADA and any
             // native tokens — minus only the withdrawn lovelace. A lovelace-only check would
@@ -25584,10 +25407,7 @@ object VestingValidator extends Validator {
               ContinuingValueMismatch
             )
 
-            require(
-              contractOutput.datum === OutputDatum.OutputDatum(vestingDatum),
-              InvalidDatum
-            )
+            require(contractOutput.hasInlineDatum(vestingDatum), InvalidDatum)
     }
 
     def linearVesting(vestingDatum: Config, timestamp: BigInt): BigInt = {
@@ -25596,7 +25416,8 @@ object VestingValidator extends Validator {
         if timestamp < min then 0
         else if timestamp >= max then vestingDatum.initialAmount
         else
-            vestingDatum.initialAmount * (timestamp - vestingDatum.startTimestamp) / vestingDatum.duration
+            val elapsed = timestamp - vestingDatum.startTimestamp
+            vestingDatum.initialAmount * elapsed divFloor vestingDatum.duration
     }
 
     // Error messages
@@ -25607,10 +25428,10 @@ object VestingValidator extends Validator {
     inline val AmountExceedsAvailable = "Requested amount exceeds the available vested amount"
     inline val BeneficiaryOutputMismatch = "Beneficiary output mismatch"
     inline val NotExactlyOneContractOutput = "Expected exactly one contract output"
-    inline val ContinuingAddressMismatch = "Continuing output must keep the vesting address"
     inline val ContinuingValueMismatch =
         "Continuing output must preserve the remaining vested value"
     inline val InvalidDatum = "VestingDatum mismatch"
+    inline val NoValidityLowerBound = "Transaction validity range must have a lower bound"
 }
 ```
 
@@ -25758,7 +25579,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, withdrawTx, lockedUtxo.input)
         assert(result.isSuccess, s"Validator failed: $result")
         assert(
-          result.budget == (ExUnits(memory = 154500, steps = 57_255916))
+          result.budget == (ExUnits(memory = 102088, steps = 45_362_126))
         )
 
         val submitResult = provider.submit(withdrawTx).await()
@@ -25791,7 +25612,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, withdrawTx, lockedUtxo.input)
         assert(result.isSuccess, s"Validator failed: $result")
         assert(
-          result.budget == (ExUnits(memory = 185197, steps = 74_033910))
+          result.budget == (ExUnits(memory = 126531, steps = 62_170_114))
         )
 
         val submitResult = provider.submit(withdrawTx).await()

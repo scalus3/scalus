@@ -9,9 +9,15 @@ the residual risk actually lives, and what to do about it.
 
 ## Lazy by Default, on Purpose
 
-Toolchains differ here. Aiken's `expect` decodes a typed datum strictly at the boundary
-(tag, exact field count, deep). PlutusTx decodes the declared fields but accepts extra trailing
-ones. Scalus, like plu-ts, trusts the datum and projects fields lazily.
+Toolchains differ here, though less than you might expect. Aiken's `expect` decodes a typed
+datum strictly at the `Data` boundary (tag, exact field count, deep). Plinth's default derived
+decoder checks the constructor index on every type, including single-constructor ones, but
+accepts extra trailing fields; its `asData` mode drops the index check on the grounds that a
+type with one constructor has nothing to discriminate. Plutarch's `pmatch` on a single-variant
+data type skips the check too, and offers `PTryFrom` as the opt-in strict decoder. Pebble goes
+further and warns you that testing the constructor of a one-constructor struct is redundant.
+Scalus is in that second group: like plu-ts, Plutarch and Plinth's `asData`, it trusts the datum
+and projects fields lazily.
 
 Strict-by-default sounds safer, but it adds a catalogued vulnerability: **arbitrary-datum
 bricking**. If a validator rejects any output whose datum does not decode to the expected type,
@@ -26,6 +32,96 @@ The trade is two different exposures:
   arbitrary-datum bricking.
 - Lazy projection keeps that robustness; the residual risk is shape smuggling into your own
   protocol state (below).
+
+## The Constructor Tag
+
+For a **single-constructor** type (a plain `case class`), reading a field compiles to
+`sndPair(unConstrData d)` plus list drops. The tag is never compared, so any `Constr(k, ...)` is
+accepted:
+
+```scala
+case class State(owner: ByteString, counter: BigInt)
+
+// all three return 42
+d.to[State].counter   // d = Constr(0,  [B #deadbeef, I 42])
+d.to[State].counter   // d = Constr(1,  [B #deadbeef, I 42])
+d.to[State].counter   // d = Constr(99, [B #deadbeef, I 42])
+```
+
+`match` does not check it either: a single-constructor `match` lowers to the same projection. The
+one guard that remains is `unConstrData` itself, so a `Data.I`, `Data.B`, `Data.List` or
+`Data.Map` still fails the script.
+
+**Sum types are different.** An `enum` or sealed hierarchy dispatches on the tag, and at PV11
+(the default target) an out-of-range tag fails the script. That holds even for a one-case `enum`.
+Pre-PV11 targets (`Options.plomin`) treat the last constructor as an unconditioned `else`, which
+matches Aiken's behaviour for an exhaustive `when`.
+
+### Re-encoding uses the declared tag
+
+The unpacked form of a product is a plain `List[Data]`, which carries no tag. When such a value is
+turned back into `Data`, Scalus emits the tag **declared by the type**, not the one that arrived.
+This happens when the value crosses a non-`inline` function boundary:
+
+```scala
+@Compile
+object Helpers:
+    def reencode(s: State): Data = s.toData   // the parameter takes the unpacked form
+
+compile { (d: Data) => Helpers.reencode(d.to[State]) }
+// d = Constr(1, [B #deadbeef, I 42])  ->  Constr(0, [B #deadbeef, I 42])
+```
+
+Inside a single expression the value keeps its packed form and the tag survives:
+
+```scala
+compile { (d: Data) =>
+    val s = d.to[State]
+    s.toData                                  // Constr(1, ...) stays Constr(1, ...)
+}
+```
+
+Well-formed values are never affected. A value whose tag already matches its type round-trips
+unchanged, including a variant of a sealed hierarchy that legitimately carries a non-zero tag.
+Extra trailing fields also survive; only the tag is rewritten.
+
+This is the mechanism behind the `inlineOrFail[T] === x` warning in
+[Equality vs Field Reads](#equality-vs-field-reads): the decoded value is held as a field list, and
+the rewrap before the comparison stamps the declared tag on it. `hasInlineDatum` avoids the round
+trip entirely by comparing the original `Data`.
+
+### Two rules this implies
+
+First: never cast to a **concrete variant** of a sealed hierarchy. Match on the parent instead.
+
+```scala
+enum Order derives FromData, ToData:
+    case Buy(amount: BigInt)     // tag 0
+    case Sell(amount: BigInt)    // tag 1
+
+// WRONG: a Sell's bytes are read as a Buy, and re-encoding emits a canonical Buy
+val buy = redeemer.to[Order.Buy]
+
+// RIGHT: the parent match checks the tag
+redeemer.to[Order] match
+    case Order.Buy(amount)  => ...
+    case Order.Sell(amount) => ...
+```
+
+Second: compare datums in the form you received them. Comparing two re-encoded values can report
+equal for byte-different datums, so for a continuing output use `out.hasInlineDatum(expected)`,
+which compares the original `Data` byte for byte.
+
+### Checking the tag yourself
+
+When a single-constructor datum comes from an untrusted source and its tag matters to you, guard
+it explicitly:
+
+```scala
+require(datum.toConstr.fst === BigInt(0), "unexpected constructor tag")
+```
+
+At PV11 that costs roughly 165 lovelace on top of a plain field read, at current mainnet prices.
 
 ## Why "Huge Datum" Attacks Are Weaker Than They Look
 
@@ -48,16 +144,54 @@ they become protocol state, every later spend that traverses the datum pays more
 UTxO can eventually exceed the execution budget. Byte-different datums that decode to the same
 typed value also silently fork anything keyed on datum bytes or hashes.
 
-Whole-datum equality already closes this hole: `===` on datums compiles to a byte-exact
-`equalsData`, and it is cheap.
+Whole-datum equality already closes this hole: comparing the output's datum as `Data` is a
+byte-exact `equalsData`, and it is cheap.
 
 ```scala
 // Field-wise check: extra trailing fields are smuggled through
+val newDatum = contractOutput.datum.inlineOrFail[VestingDatum]("not inline")
 require(newDatum.owner === datum.owner && newDatum.deadline === datum.deadline)
 
 // Whole-datum check: byte-exact, no smuggling possible
-require(newDatum === expectedDatum, "unexpected continuing datum")
+require(contractOutput.hasInlineDatum(expectedDatum), "unexpected continuing datum")
 ```
+
+## Equality vs Field Reads
+
+There are two ways to look at a continuing output's inline datum, and they are not
+interchangeable:
+
+- **`out.hasInlineDatum(x)`** when the datum must **equal** a known value. It wraps `x` as an
+  `OutputDatum` and compares the whole `Data` with one `equalsData`. Measured at 286 lovelace
+  per comparison.
+- **`out.datum.inlineOrFail[T](msg)`** when the datum's **fields** are needed. It unwraps the
+  `OutputDatum`, fails if the datum is a hash or absent, and hands back a lazily decoded `T`.
+  Decoding and then comparing with `=== x` costs 461 lovelace for the same check, because the
+  decoded value is held as a field list and rewrapped before the comparison.
+
+```scala
+// Equality: compare the Data once
+require(contractOutput.hasInlineDatum(vestingDatum), InvalidDatum)
+
+// Field reads: decode, then use the fields
+val next = contractOutput.datum.inlineOrFail[Config](NotInlineDatum)
+require(next.beneficiary === config.beneficiary, BeneficiaryChanged)
+require(next.startTimestamp === config.startTimestamp, StartChanged)
+```
+
+The two forms also differ on a malformed datum. `inlineOrFail[T]` does **not** validate the
+shape: a datum with the wrong constructor tag decodes lazily and no error is raised until a field
+is read, if ever. When such a value is compared with `=== x`, the rewrap hard-codes the
+constructor tag as `0`, so a datum with a wrong tag and matching fields compares **equal**.
+`hasInlineDatum` compares the original `Data`, tag included, so a wrong tag simply fails the
+equality. For a continuing-output check that is the behaviour you want: the attacker's datum is
+rejected without the validator having to know what was wrong with it.
+
+Never write `out.datum.inlineOrFail[T](msg) === x` for a pure equality check. It is the dearer
+form and the weaker one. The migrated examples use `hasInlineDatum` for every continuing datum
+comparison (`VestingValidator`, `EscrowValidator`, `AmmValidator`, `Auction`); see
+[Equality and Lookups](/docs/smart-contract-optimisations/equality-and-lookups#datum-equality-hasinlinedatum-vs-inlineorfail)
+for the measured table.
 
 ## Guidance
 
@@ -65,14 +199,17 @@ In priority order:
 
 1. **Authenticate protocol UTxOs with a state-thread or one-shot NFT.** Shape validation cannot
    detect a well-formed fake; this is the defence that matters most.
-2. **Check continuing-output datums with whole-datum `===`**, not field by field.
-3. **Require inline datums on protocol outputs.** Never accept a datum-hash output as protocol
+2. **Check continuing-output datums with `out.hasInlineDatum(expected)`**, not field by field.
+   Use `inlineOrFail[T]` only when the fields are needed.
+3. **Never cast to a concrete variant of a sealed hierarchy**; match on the parent type, which
+   checks the constructor tag. See [The Constructor Tag](#the-constructor-tag).
+4. **Require inline datums on protocol outputs.** Never accept a datum-hash output as protocol
    state.
-4. **Handle the PlutusV3 no-datum branch explicitly** (on V3 the script runs with `None`; on
+5. **Handle the PlutusV3 no-datum branch explicitly** (on V3 the script runs with `None`; on
    V1/V2 a missing datum is a phase-1 rejection).
-5. **Bound anything you iterate**: datum-carried lists and token counts in a value. Real UTxOs
+6. **Bound anything you iterate**: datum-carried lists and token counts in a value. Real UTxOs
    have been bricked by exceeding the memory budget with 150+ assets, well under the size limit.
-6. **Validate `ByteString` lengths used as credentials.** Nothing forces a key hash to be 28
+7. **Validate `ByteString` lengths used as credentials.** Nothing forces a key hash to be 28
    bytes; a zero-length or over-long value can make a required output impossible to build.
 
 ## Opt-In Validation
@@ -89,10 +226,12 @@ point of use:
 
   A general opt-in deep validator with Aiken-equivalent semantics (an `expect`-style combinator
   that checks constructor tags, exact field counts and nested shapes) is planned. Until then,
-  whole-datum `===` plus the guidance above covers the known attack surface.
+  `hasInlineDatum` plus the guidance above covers the known attack surface.
 
 ## See Also
 
 - **[Common Vulnerabilities](/docs/security/common-vulnerabilities)** – Known vulnerability patterns and mitigations
+- **[Safe API Cheatsheet](/docs/security/safe-api-cheatsheet)** – The fail-fast form of every lookup, one line per operation
+- **[Equality and Lookups](/docs/smart-contract-optimisations/equality-and-lookups)** – Measured costs behind the rules on this page
 - **[Plutus Data](/docs/smart-contracts/plutus-data)** – How `toData`/`fromData` work
 - **[Design Patterns](/docs/design-patterns)** – State-thread NFTs and other structural defences

@@ -14,6 +14,12 @@ val owner = datum.to[PubKeyHash]
 val data = myValue.toData
 ```
 
+  On-chain, `to[T]` is a *retag*, not a decoder: it compiles to nothing. No constructor tag is
+  checked, no field count is verified, and fields are read from the underlying `Data` only when
+  your code touches them. In particular, never cast to a concrete variant of a sealed hierarchy
+  (`redeemer.to[Order.Buy]`) – match on the parent type instead. See
+  [The Constructor Tag](/docs/security/datum-validation#the-constructor-tag).
+
 ## Using Data in Validators
 
 In validators, you receive `Data` and convert it to typed values:

@@ -45,6 +45,7 @@ Claude Code users: `/plugin marketplace add scalus3/scalus` then `/plugin instal
 ### Smart Contract Optimisations
 - /docs/smart-contract-optimisations - Reduce script size and execution units in Cardano validators
 - /docs/smart-contract-optimisations/measuring-performance - Measure CPU steps, memory, flat size, and transaction fees
+- /docs/smart-contract-optimisations/equality-and-lookups - Measured costs of datum equality, ===, contains/exists, count, findUniqueOrFail, SortedMap vs AssocMap
 - /docs/smart-contract-optimisations/profiling - CEK machine profiling: per-line costs, profile.json/manifest, UPLC source map
 - /docs/smart-contract-optimisations/vscode-extension - VS Code extension: inline cost annotations and the compiled UPLC view
 - /docs/smart-contract-optimisations/algorithmic-optimisations - Withdraw-zero, UTxO indexer, transaction-level minting, merkelised validators
@@ -88,8 +89,9 @@ Claude Code users: `/plugin marketplace add scalus3/scalus` then `/plugin instal
 
 ### Security
 - /docs/security - Security principles
-- /docs/security/common-vulnerabilities - Plutus vulnerabilities and mitigations
+- /docs/security/common-vulnerabilities - Vulnerability classes by family (DS, VP, AU, MI, TI, DT, IX, PU, EV, AR, RS, DE) and the operation that closes each
 - /docs/security/datum-validation - Datum shape validation: lazy decoding by default, when and how to validate
+- /docs/security/safe-api-cheatsheet - The safe on-chain API: idioms, the nineteen operations, fail-fast lookups, deprecated members
 
 ### DApp Development
 - /docs/dapp-development - Building complete DApps

@@ -311,7 +311,7 @@ object in your project:
 
 ```sh copy
 # Generate CIP-57 blueprints under
-# target/scala-3.3.7/resource_managed/main/META-INF/scalus/blueprints/<package>/
+# target/scala-3.3.8/resource_managed/main/META-INF/scalus/blueprints/<package>/
 # plus an aggregate plutus.json at the resource root
 # (sbt package / publish also embed them in the JAR automatically)
 sbt blueprint
@@ -1299,6 +1299,13 @@ Below is a comprehensive list of what Scala features are currently supported in 
 * `throw` expressions but no `try-catch` expressions
 * built-in functions and operators
 * simple data types: case classes and enums
+* functions stored in data types: a case class, enum, `List` or `Option` may hold a function
+  value (Aiken forbids this; Plinth allows it). Such a value has no `Data` form, so it cannot be a
+  datum or redeemer, and it needs UPLC 1.1.0 – PlutusV3, or PlutusV1/V2 from protocol version 11
+  (van Rossem) on. One known gap: choosing between two constructors of a function-holding enum at
+  runtime (`if c then Run(f) else Skip`, or a `match` returning different constructors) does not
+  lower yet; build the value through one constructor, or dispatch on the condition after
+  matching instead
 * `inline` vals, functions and macros in general
 * implicit conversions
 * opaque types (non top-level) and type aliases
@@ -4950,10 +4957,10 @@ The blockchain enforces these bounds, and our validator checks they're set corre
 Now let's implement. In Scalus, we define types with automatic serialization:
 
 ```scala
-import scalus.*
+import scalus.compiler.Compile
 import scalus.uplc.builtin.Builtins.sha3_256
-import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 
@@ -5006,13 +5013,15 @@ object HtlcValidator {
         redeemer.to[Action] match
             case Action.Timeout =>
                 // COMMITTER RECLAIMS: must be after timeout, signed by committer
-                val validFrom = tx.validRange.from.finite(0)
+                val validFrom = tx.validFromOrFail(ValidRangeMustBeBound)
+                // validFrom is inclusive, hence 10 <= 10 is correct
                 require(config.timeout <= validFrom, InvalidCommitterTimePoint)
                 require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
 
             case Action.Reveal(preimage) =>
                 // RECEIVER CLAIMS: must be before timeout, correct secret, signed
-                val validTo = tx.validRange.to.finiteOrFail(ValidRangeMustBeBound)
+                val validTo = tx.validToOrFail(ValidRangeMustBeBound)
+                // validTo is exclusive, hence 10 <= 10 is correct
                 require(validTo <= config.timeout, InvalidReceiverTimePoint)
                 require(tx.isSignedBy(config.receiver), UnsignedReceiverTransaction)
                 require(sha3_256(preimage) == config.image, InvalidReceiverPreimage)
@@ -5022,10 +5031,10 @@ object HtlcValidator {
     inline val MustBeSpending = "Must be a spending script"
     inline val InvalidDatum = "Invalid Datum"
     inline val ValidRangeMustBeBound = "ValidTo must be set"
-    inline val UnsignedCommitterTransaction = "Must be signed by committer"
-    inline val UnsignedReceiverTransaction = "Must be signed by receiver"
-    inline val InvalidCommitterTimePoint = "Must be after timeout"
-    inline val InvalidReceiverTimePoint = "Must be before timeout"
+    inline val UnsignedCommitterTransaction = "Must be signed by a committer"
+    inline val UnsignedReceiverTransaction = "Must be signed by a receiver"
+    inline val InvalidCommitterTimePoint = "Must be exclusively after timeout"
+    inline val InvalidReceiverTimePoint = "Must be inclusively before timeout"
     inline val InvalidReceiverPreimage = "Invalid preimage"
 }
 ```
@@ -5036,12 +5045,20 @@ object HtlcValidator {
 
 | Check | Prevents |
 |-------|----------|
+| `tx.validFromOrFail(...)` / `tx.validToOrFail(...)` | A transaction with no validity bound on the side the branch depends on |
 | `config.timeout <= validFrom` | Committer reclaiming before timeout |
 | `validTo <= config.timeout` | Receiver claiming after timeout |
 | `sha3_256(preimage) == config.image` | Receiver claiming with wrong secret |
 | `tx.isSignedBy(...)` | Anyone else stealing funds |
 
-The validator is 84 lines total. It compiles to **569 bytes** of Plutus Core.
+**Never substitute a default for a missing bound.** `validFromOrFail` fails when the transaction
+has no lower bound. An earlier version of this validator read the lower bound with a default of
+`0` instead, which treats an unbounded transaction as happening at the Unix epoch and lets the
+committer reclaim before the timeout. `validFrom` is inclusive (the earliest slot the transaction
+can land in) and `validTo` is exclusive, so both comparisons use `<=`.
+
+The validator is under 80 lines and compiles to 318 bytes of Plutus Core (pinned in `HtlcTest`);
+the `HtlcContract` main below prints the size.
 
 ## The Scalus Advantage: Debugging
 
@@ -5458,7 +5475,7 @@ Run to see the script size and blueprint:
 
 ```sh
 scala-cli run HtlcContract.scala
-# Script size: 569 bytes
+# Script size: 318 bytes
 # { "preamble": { "title": "Hash Time-Locked Contract", ... }, "validators": [...] }
 ```
 
@@ -5475,8 +5492,8 @@ scala-cli run HtlcContract.scala
 
 ## Full Source Code
 
-- [HtlcValidator.scala](https://github.com/nau/scalus/blob/master/scalus-examples/shared/src/main/scala/scalus/examples/htlc/HtlcValidator.scala) — Smart contract
-- [HtlcTransactions.scala](https://github.com/nau/scalus/blob/master/scalus-examples/shared/src/main/scala/scalus/examples/htlc/HtlcTransactions.scala) — Transaction building
+- [HtlcValidator.scala](https://github.com/nau/scalus/blob/master/scalus-examples/jvm/src/main/scala/scalus/examples/htlc/HtlcValidator.scala) – Smart contract
+- [HtlcTransactions.scala](https://github.com/nau/scalus/blob/master/scalus-examples/jvm/src/main/scala/scalus/examples/htlc/HtlcTransactions.scala) – Transaction building
 - [HtlcTest.scala](https://github.com/nau/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala) — Unit tests
 - [HtlcIntegrationTest.scala](https://github.com/nau/scalus/blob/master/scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/HtlcIntegrationTest.scala) — Integration tests
 
@@ -5783,6 +5800,12 @@ val owner = datum.to[PubKeyHash]
 val data = myValue.toData
 ```
 
+  On-chain, `to[T]` is a *retag*, not a decoder: it compiles to nothing. No constructor tag is
+  checked, no field count is verified, and fields are read from the underlying `Data` only when
+  your code touches them. In particular, never cast to a concrete variant of a sealed hierarchy
+  (`redeemer.to[Order.Buy]`) – match on the parent type instead. See
+  [The Constructor Tag](/docs/security/datum-validation#the-constructor-tag).
+
 ## Using Data in Validators
 
 In validators, you receive `Data` and convert it to typed values:
@@ -5938,6 +5961,25 @@ val compiled = PlutusV3.compile(MyValidator.validate)
 // Add error traces for debugging
 val withTraces = compiled.withErrorTraces
 ```
+
+## BigInt Comparison Evaluation Order
+
+Compiled `BigInt` comparisons `left > right` and `left >= right` evaluate the
+right operand first. Scalus uses the same direct lowering as Aiken: `left > right`
+becomes `lessThanInteger(right, left)`, and `left >= right` becomes
+`lessThanEqualsInteger(right, left)`.
+
+This differs from Scala's left-to-right evaluation on the JVM. It matters when
+operand expressions emit traces or fail. To evaluate the left expression first,
+bind both operands explicitly before comparing:
+
+```scala
+val left = computeLeft()
+val right = computeRight()
+left > right
+```
+
+The comparison result is unchanged for operands that evaluate successfully.
 
 ## Complete Example
 
@@ -6110,7 +6152,7 @@ A typical contract defines these functions, often just one. A successful contrac
 Let's take a look at an example contract, `HTLCValidator`, to illustrate the concepts above.
 
 ```scala
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.Builtins.sha3_256
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
@@ -6149,12 +6191,14 @@ object HtlcValidator {
     val config = datum.getOrFail(InvalidDatum).to[Config]
     redeemer.to[Action] match
       case Action.Timeout =>
-        val validFrom = tx.validRange.from.finite(0)
+        val validFrom = tx.validFromOrFail(ValidRangeMustBeBound)
+        // validFrom is inclusive, hence 10 <= 10 is correct
         require(config.timeout <= validFrom, InvalidCommitterTimePoint)
         require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
 
       case Action.Reveal(preimage) =>
-        val validTo = tx.validRange.to.finiteOrFail(ValidRangeMustBeBound)
+        val validTo = tx.validToOrFail(ValidRangeMustBeBound)
+        // validTo is exclusive, hence 10 <= 10 is correct
         require(validTo <= config.timeout, InvalidReceiverTimePoint)
         require(tx.isSignedBy(config.receiver), UnsignedReceiverTransaction)
         require(sha3_256(preimage) == config.image, InvalidReceiverPreimage)
@@ -6208,6 +6252,15 @@ is enumerated at the bottom of the contract, each containing a message describin
 >
 > `require` is an inline function, meaning that the compiler will not generate a method call and instead insert
 > the body of `require` directly into validator body.
+
+###### Validity bounds
+
+Both branches read the transaction's validity range through `tx.validFromOrFail(msg)` and
+`tx.validToOrFail(msg)`. Each returns the finite bound, or fails with the message when the range is
+unbounded on that side. This matters for the `Timeout` branch: a transaction with no lower bound
+has no earliest time, and a validator that substituted `0` for it would let the committer reclaim
+before the timeout. The lower bound is inclusive and the upper bound is exclusive, which is why
+both comparisons use `<=`.
 
 #### Summary
 
@@ -6394,6 +6447,232 @@ and deployed scripts keep the hash of the compiler that produced them (use
 
 - **[Algorithmic Optimisations](/docs/smart-contract-optimisations/algorithmic-optimisations)** — start here for the biggest wins; design patterns that reduce on-chain work asymptotically.
 - **[Scala Metaprogramming](/docs/smart-contract-optimisations/scala-metaprogramming)** — once you've measured a hot path, use compile-time evaluation to eliminate it.
+
+
+---
+Source: https://scalus.org/docs/smart-contract-optimisations/equality-and-lookups
+---
+
+# Equality and Lookups
+
+Most validator budget goes to a handful of idioms: comparing a datum, finding one input or
+output, checking a signature, looking up a token. Several of those idioms have two spellings that
+read the same and cost differently. This page lists the measured pairs and explains, once per
+pair, what the generated UPLC does.
+
+All fees are in lovelace at mainnet prices (0.0577 per memory unit, 0.0000721 per CPU step, the
+same convention as [Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)).
+Budgets were measured with `Options.release` on the Plutus V3 backend.
+
+The rules on this page are collected, without the numbers, in the
+[Safe API Cheatsheet](/docs/security/safe-api-cheatsheet).
+
+## Datum equality: `hasInlineDatum` vs `inlineOrFail`
+
+Two spellings compare a continuing output's datum with an expected value:
+
+```scala
+// wrap form: build the expected OutputDatum and compare once
+require(contractOutput.hasInlineDatum(vestingDatum), InvalidDatum)
+
+// decode form: take the datum apart, decode it, compare the decoded value
+require(contractOutput.datum.inlineOrFail[Config](NotInline) === vestingConfig, InvalidDatum)
+```
+
+Measured on a three-field case-class datum:
+
+| Form | mem | cpu | ex-unit fee | script | fee as reference script |
+|---|---:|---:|---:|---:|---:|
+| `out.hasInlineDatum(x)` | 2 465 | 1 988 178 | **286** | 28 B | **706** |
+| `out.datum.inlineOrFail[T](msg) === x` | 4 625 | 2 684 905 | 461 | 45 B | 1 136 |
+
+The intuition runs the other way, so the UPLC is worth reading. `hasInlineDatum` is three
+builtins around one `equalsData`: it wraps `x` as `constrData(2, [x])` and compares that with the
+output's `OutputDatum` field. The decode form must first take the `OutputDatum` apart
+(`unConstrData`, `fstPair`, a three-way `case` on the tag, `sndPair`, `headList`), and then
+`=== x` on the decoded `T` does **not** compare the original `Data`: the lowering holds the decoded
+value as its field list and rewraps it, `equalsData(constrData(0, sndPair(unConstrData(inner))), x)`.
+Nine builtins against three, on the same `equalsData`, and a fresh constr allocation on every
+comparison. Memory moves more than CPU (+88% against +19%) for that reason.
+
+**Rule:** equality on a datum is `out.hasInlineDatum(x)`. Reading the datum's fields is
+`out.datum.inlineOrFail[T](msg)`. Do not decode and then compare.
+
+The decode form has one more property that matters for security: the rewrap hard-codes the
+constructor tag as `0`, so a datum with a wrong constructor tag and matching fields compares
+**equal** under `inlineOrFail[T] === x` and **unequal** under `hasInlineDatum`. See
+[Datum Validation](/docs/security/datum-validation#equality-vs-field-reads).
+
+The migrated example: `scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala`.
+
+## `===` vs `toData ==`
+
+```scala
+// canonical
+require(contractOutput.value === expectedValue, ContinuingValueMismatch)
+
+// hand-written, believing === is field-by-field
+require(contractOutput.value.toData == expectedValue.toData, ContinuingValueMismatch)
+```
+
+Both spellings compile to the same UPLC. Measured on `Value.lovelace`: **901 mem / 1 653 665 cpu**
+for each. For any Data-backed type, `a === b` already lowers to `equalsData(toData a, toData b)`;
+only primitives (`BigInt`, `ByteString`, `Boolean`, `String`) and `@UplcRepr(UplcConstr)` types get
+a different comparison. Writing `toData ==` by hand buys nothing and hides the type.
+
+**Rule:** write `===`. If `===` does not compile, the type is missing an `Eq` instance; derive one.
+The one exception is a type with value-versus-structure semantics such as `Rational`, where the
+explicit comparator is the point.
+
+One related trap: a generic `===` on a `BigInt` or `ByteString` behind a type variable also lowers
+to `equalsData`, not to `equalsInteger` / `equalsByteString`. Measured on a singleton map lookup,
+the generic form costs 1 761 779 cpu against 832 313 for a concrete-typed clone. Keep key types
+concrete at the comparison site.
+
+## `contains` vs `exists`: the `Option` tax
+
+```scala
+// intrinsic: a Boolean scan, no Option, no Eq closure
+require(tx.signatories.contains(owner), NotSigned)
+
+// prelude: find(p).isDefined, allocates one Option per call
+require(tx.signatories.exists(_ === owner), NotSigned)
+```
+
+`Option` has no native representation on-chain: `Some(x)` is `constrData(0, [x])` and reading it
+back is `unConstrData` plus a `case`. No optimizer pass folds a `Case` over an `Option` built from
+a runtime value. `List.contains` is intrinsic and compiles to the direct recursion; `List.exists`
+is `find(p).isDefined` and pays the allocation on every call.
+
+Measured per call, V3 backend, `contains` (direct recursion) against `find(...).isDefined`:
+
+| Outcome | cpu saved | mem saved | lovelace saved |
+|---|---:|---:|---:|
+| miss | 326 483 | 1 064 | 84.93 |
+| hit | 564 996 | 2 028 | 157.75 |
+
+`exists` measures exactly equal to the `find` form in every configuration, so every `exists` call
+pays that 326 K (miss) / 565 K (hit) cpu. The tax is a fixed per-call cost, not per element: on a
+`List[Data]` it is 32% of the total at length 1 and 2% at length 20. The same shape appears in
+`List.isDefinedAt`, `SortedMap.contains` and `AssocMap.contains`.
+
+**Rule:** for an equality test use `contains`. For any other predicate prefer `forall` on the
+negated predicate, or a fold, over `exists`. Any helper that returns `Option[A]` in a hot path pays
+the same tax; a `…OrFail(msg)` helper that returns `A` does not.
+
+## `count` vs `filter(...).length`
+
+```scala
+// one traversal, tail-recursive, no allocation
+require(tx.outputs.count(_.address.credential === buyerCredential) === BigInt(1), OneBuyerOutput)
+
+// two traversals; filter allocates one cons cell per survivor
+require(tx.outputs.filter(_.address.credential === buyerCredential).length === BigInt(1), OneBuyerOutput)
+```
+
+There is no fusion in the Scalus pipeline: `filter` is a non-tail `foldRight` that builds a new
+list, and `length` walks it again. `count` is one tail-recursive pass with an integer accumulator.
+On the `BuiltinList` representation neither `filter` nor `length` has an intrinsic. This pair has
+not been pinned with a budget; the difference is structural (two traversals plus k `mkCons`
+against one traversal and zero allocations).
+
+**Rule:** `count(p)` when a number is needed; `isEmpty` / `nonEmpty` when only emptiness is, never
+`length === 0` (`length` is O(n), `isEmpty` is one `nullList`).
+
+## `findUniqueOrFail` vs `filter(...).length === 1` plus `.head`
+
+When exactly one element must match and the validator then uses it, the anti-idiom is:
+
+```scala
+val own = tx.inputs.filter(_.resolved.address.credential === ownCred)
+require(own.length === BigInt(1), MultipleScriptInputs)
+val ownInput = own.head
+```
+
+That is two traversals, k cons cells, a `length` walk and a `head` that fails with a generic
+message. The migrated examples write:
+
+```scala
+tx.inputs.findUniqueOrFail(_.resolved.address.credential === ownCred, MultipleScriptInputs)
+```
+
+`findUniqueOrFail` is one pass: it fails as soon as a second match is seen, fails with `message` if
+none is, and returns the element. This pair has not been pinned against each other; the
+`findUniqueOrFail` call alone pins at 25 694 mem / 4 809 547 cpu (1 830 lovelace) in its test.
+
+### The single-own-input guard
+
+The double-satisfaction guard "exactly one input from my own script" has a cheaper and a dearer
+spelling, and this pair was measured:
+
+```scala
+// measured cheaper
+tx.inputs.findUniqueOrFail(_.resolved.address.credential === ownCred, MultipleScriptInputs)
+
+// measured dearer
+require(tx.inputs.count(_.resolved.address.credential === ownCred) === BigInt(1), MultipleScriptInputs)
+```
+
+| Inputs in the transaction | `findUniqueOrFail` fee | `count(...) === 1` fee |
+|---:|---:|---:|
+| 3 | **3 175** | 3 307 |
+| 10 | **6 289** | 6 804 |
+
+`count` must visit every input and then compare the accumulator; `findUniqueOrFail` stops at the
+second match, carries no accumulator, and returns the input for free when the caller needs it.
+The migrated example: `scalus-examples/jvm/src/main/scala/scalus/examples/cape/htlc/HtlcValidator.scala`.
+
+## `SortedMap` vs `AssocMap`
+
+Both are a `Data` map (a list of pairs) at runtime; the difference is what the operations do with
+the ordering.
+
+| Operation | `SortedMap` | `AssocMap` |
+|---|---|---|
+| `get` | loop over the pair list; **stops early** when the key sorts before the current entry | always scans to hit or end |
+| `union` | **one linear merge** | O(n·m): `get` per left key plus `exists` per right key |
+| `size` / `length` | O(n), even though it is `inline` | O(n) |
+| `isEmpty` | O(1), one `nullList` | O(1) |
+| `insert` / `delete` | rebuilds the spine up to the key | rebuilds the prefix |
+| `Eq` | derived, one `equalsData` | none on purpose; the explicit comparator is itself O(n·m) |
+
+Measured `SortedMap[BigInt, BigInt]` pins, one entry: `get` hit 5 994 mem / 1 309 043 cpu, `get`
+miss 4 429 / 929 240, `insert` on an empty map 2 464 / 460 969, `filter` 7 225 / 1 563 239,
+`foldLeft` 14 476 / 3 527 562. A whole-expression `union` of two three-entry maps pins at
+54 386 / 14 318 018.
+
+The early exit on `get` does not help on a present key (the key has to be reached either way); it
+pays on misses that sort early. Two consequences:
+
+- Use `SortedMap` for anything with more than a few entries or any `union`. The ledger already
+  hands you `Value`, `mint` and `withdrawals` as sorted maps.
+- `SortedMap.contains(k)` is `get(k).isDefined` and pays the `Option` tax above. When the token
+  name is known, `value.hasOnly(policy, name, qty)` or `value.hasNft(policy, name)` are the
+  cheaper and stronger checks; both are builtin-backed at PV11.
+
+## Phase 2: the migrated examples
+
+The example validators in `scalus-examples` were rewritten to the operations above
+(`findInputOrFail`, `findContinuingOutputOrFail`, `hasInlineDatum`, `hasNft`, `validFromOrFail` /
+`validToOrFail`, `valuePaidTo` / `valueSpentFrom`, `findUniqueOrFail`, `onlyBurnsUnder`). Every
+pinned budget in the example test suites moved down. Highlights:
+
+| Validator | Change |
+|---|---|
+| Vault, withdrawal | budget **-25%** |
+| Auction, end with winner | budget **-15%** |
+| HTLC (CAPE variant) | script 582 B to **548 B** |
+| TwoPartyEscrow (CAPE) | script 1 174 B to **1 079 B** |
+
+None of these validators changed what it checks. The savings come from the idioms on this page:
+one traversal instead of two, one `equalsData` instead of a decode-and-rewrap, no `Option` on the
+hot path.
+
+## What's Next?
+
+- **[Safe API Cheatsheet](/docs/security/safe-api-cheatsheet)** – the same rules as a one-line-per-operation reference.
+- **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** – how to reproduce these numbers on your own validator.
+- **[Value Builtins](/docs/smart-contract-optimisations/value-builtins)** – the `Value` operations that lower to single CIP-153 builtins at PV11.
 
 
 ---
@@ -6606,7 +6885,7 @@ Profiling adds ~40% overhead to CEK evaluation (measured on the Knights benchmar
 ## See Also
 
 - **[VS Code Extension](/docs/smart-contract-optimisations/vscode-extension)** – Per-line cost annotations and the compiled UPLC view in your editor
-- **[JS/TS Profiling](/docs/testing/js-emulator#profiling-a-script)** — Collect profiling data (JSON) from JavaScript/TypeScript with `Scalus.evaluateScriptProfile`
+- **[JS/TS Profiling](/docs/testing/js-emulator#profiling-a-script)** — Collect profiling data (JSON) from JavaScript/TypeScript with `evaluateScriptProfile`
 - **[Debugging](/docs/testing/debugging)** — IDE debugging, logging, error traces
 - **[Unit Testing](/docs/testing/unit-testing)** — Test validators with budget assertions
 
@@ -7574,19 +7853,19 @@ Source: https://scalus.org/docs/smart-contract-optimisations/uplc-optimiser-pipe
 
 # UPLC Optimiser Pipeline
 
-Scalus optimizes Untyped Plutus Core (UPLC) scripts to reduce script size and execution costs. By default, `toUplcOptimized()` and `Options.default` apply the full optimization pipeline automatically.
+Scalus optimizes Untyped Plutus Core (UPLC) scripts to reduce script size and execution costs. `toUplcOptimized()` enables optimization. `Options.default` retains error traces and leaves `optimizeUplc` disabled; set it to `true` for an optimized traced build. Use `Options.release` for an optimized build with traces removed. Trace retention can affect script size and which expressions can be folded.
 
 ## Optimization Pipeline
 
-The optimizer runs several passes in sequence:
+The default V3 optimizer runs these phases:
 
-1. **EtaReduce** — eliminates redundant lambda wrappers (`λx. f x` → `f`)
-2. **Inliner** — beta-reduction, dead code elimination, constant folding via `PartialEvaluator` (runs 3 times)
-3. **StrictIf** — converts eligible `if/then/else` to strict evaluation
-4. **ForcedBuiltinsExtractor** — hoists shared `Force(Builtin(...))` subexpressions
-5. **CaseConstrApply** — rewrites multi-argument application as `Case`/`Constr` nodes
+1. **EtaReduce and Inliner** run three times to simplify wrappers, bindings and constant computations.
+2. **StrictIf** converts eligible conditionals to strict evaluation, then **ForcedBuiltinsExtractor** hoists shared forced builtins.
+3. **CommonSubexpressionElimination (CSE)** alternates with the Inliner, twice by default.
+4. **CommonContextExtraction (CCE)** optionally shares one-hole application templates, followed by the Inliner and, when CSE is enabled, another CSE/Inliner cleanup.
+5. **CaseConstrApply** rewrites multi-argument applications as `Case`/`Constr` nodes. Optional let-chain regrouping runs immediately before this phase.
 
-Steps 1–2 repeat three times to handle patterns created by earlier inlining.
+`Options.cceEnabled` defaults to `false`. Setting `Options.cseIterations = 0` disables CSE, including cleanup after CCE. The V1/V2 optimizer stops after StrictIf and forced-builtin extraction.
 
 ```scala mdoc:compile-only copy showLineNumbers
 import scalus.*, scalus.compiler.*, scalus.uplc.Term
@@ -7628,11 +7907,13 @@ The Inliner uses occurrence analysis to decide when inlining is safe:
 | **Zero** (unused) | Eliminate the argument if it's pure (can't crash) |
 | **Once, direct** | Always inline — evaluation timing is unchanged |
 | **Once, guarded** (under lambda/delay) | Inline only if the argument is a value (no side effects to defer) |
-| **Multiple** | Inline only small/cheap terms: variables, small constants (≤64 bits), builtins |
+| **Multiple** | Duplicate only variables, constants or builtins, and only when their estimated sharing saving is zero or negative |
+
+The repeated-value decision uses the same fee estimate as CSE: saved reference-script bits are compared with the execution cost of introducing a binding. It counts all uses, including guarded uses, and excludes uses of shadowing binders. There is no fixed 64-bit constant threshold.
 
 ### Compile-time Partial Evaluation
 
-When the Inliner encounters a closed subexpression (no free variables) that contains a reducible operation (function application, `Force`, or `Case`), it runs the CEK machine to evaluate it at compile time. If the result is a constant, the original expression is replaced with that constant.
+When the Inliner encounters a closed subexpression (no free variables) that contains a reducible operation (function application, `Force`, or `Case`), it runs the CEK machine to evaluate it at compile time. Successful constant results are candidates for replacing the expression. The Inliner also tracks constants in enclosing bindings, so it can evaluate a subexpression without duplicating those constants throughout the body.
 
 This means arithmetic on constants, pattern matching on known constructors, and even multi-step computations are all folded away during compilation:
 
@@ -7692,7 +7973,7 @@ This pattern works for any closed computation over constants:
 - **Hash preimages** — precompute hashes of known values so the on-chain code only needs to compare
 - **Mathematical constants** — compute precision values, powers, or factorials once at compile time
 
-The key insight: if you can express the computation in Scalus (`@Compile` annotated code) and all inputs are constants, it runs at compile time for free.
+Closed computations with constant inputs can therefore avoid on-chain work when they fit the partial evaluator's budget and pass the folding checks.
 
 ## What's Next?
 
@@ -7891,6 +8172,7 @@ Notice how the optimized version:
 ## Optimization Techniques
 
 - **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** -- script evaluation, emulator-based transaction fees
+- **[Equality and Lookups](/docs/smart-contract-optimisations/equality-and-lookups)** -- measured costs of `hasInlineDatum`, `===`, `contains`, `count`, `findUniqueOrFail`, `SortedMap`
 - **[Profiling](/docs/smart-contract-optimisations/profiling)** -- CEK machine budget profiling, per-line costs, machine-readable reports
 - **[VS Code Extension](/docs/smart-contract-optimisations/vscode-extension)** -- inline cost annotations and the compiled UPLC view in your editor
 - **[Algorithmic Optimisations](/docs/smart-contract-optimisations/algorithmic-optimisations)** -- design patterns for the biggest wins
@@ -12241,7 +12523,7 @@ Source: https://scalus.org/docs/testing/js-emulator
 
 # Cardano Emulator for JavaScript and TypeScript
 
-The [Scalus Emulator](/docs/testing/emulator) — an in-memory Cardano node with full transaction validation and Plutus script execution — is also available as an npm package for JavaScript and TypeScript.
+The [Scalus Emulator](/docs/testing/emulator) – an in-memory Cardano node with full transaction validation and Plutus script execution – is also available as an npm package for JavaScript and TypeScript.
 
 ## What It Validates
 
@@ -12256,7 +12538,7 @@ Scalus implements a ledger framework that emulates an in-memory node without con
 | **Fees & Collateral** | Fee calculation, collateral handling on script failure |
 | **Signatures** | Witness verification for required signers |
 
-  The emulator runs the same [ledger rules](/docs/ledger/ledger-rules) as the JVM version — Phase 1 (transaction structure) and Phase 2 (script execution) validation.
+  The emulator runs the same [ledger rules](/docs/ledger/ledger-rules) as the JVM version – Phase 1 (transaction structure) and Phase 2 (script execution) validation.
 
 ## Installation
 
@@ -12267,214 +12549,400 @@ npm install scalus
 ## Quick Start
 
 ```typescript
-import { Emulator, SlotConfig } from "scalus";
+import { CardanoInfo, Emulator, Utxo, Value } from "scalus";
 
-/*
-`withAddresses` creates an emulator where every specified address has
-a UTxO with the specified lovelace amount.
-*/
-const emulator = Emulator.withAddresses(
-  ["addr_test1qr...", "addr_test1qp..."],
-  SlotConfig.preview,
-  10_000_000
-);
+const alice = "addr_test1vzpwq95z3xyum8vqndgdd9mdnmafh3djcxnc6jemlgdmswcve6tkw";
 
-// Encode your transaction to CBOR with your favorite encoder and submit the result to the Scalus emulator.
+// A network is a slot configuration and a set of protocol parameters together,
+// so the emulator cannot validate against one network's parameters while doing
+// slot arithmetic for another.
+const emulator = Emulator.create(CardanoInfo.preview(), {
+  utxos: [new Utxo("00".repeat(32), 0, alice, Value.ada(1000n))],
+});
+
+// Build the transaction with whatever builder you already use, then submit the
+// bytes it produced.
 const result = emulator.submitTx(txCborBytes);
 
 if (result.isSuccess) {
-  console.log(`Transaction submitted: ${result.txHash}`);
+  console.log(`accepted: ${result.txHash}`);
 } else {
-  console.log(`Failed: ${result.error}`);
-  if (result.logs) {
-    console.log(`Script logs: ${result.logs.join("\n")}`);
-  }
+  console.log(`rejected by ${result.errorRule}: ${result.error}`);
+  console.log(result.logs.join("\n")); // empty unless a Plutus script traced
 }
+
+// Queries return objects, not CBOR.
+const [utxo] = emulator.getUtxos({ address: alice });
+console.log(utxo.value.coin); // 1000000000n
 ```
 
 ## Creating an Emulator
 
-### With Funded Addresses
+`Emulator.create` takes a `CardanoInfo` – the network, its slot configuration and its protocol
+parameters as one coherent triple – and, optionally, the state to start from.
 
 ```typescript
-const emulator = Emulator.withAddresses(
-  [aliceAddress, bobAddress],
-  SlotConfig.mainnet,
-  BigInt(50_000_000_000) // 50 000 ADA
+CardanoInfo.mainnet()   // mainnet parameters and slot configuration
+CardanoInfo.preprod()   // preprod testnet
+CardanoInfo.preview()   // preview testnet
+
+// Yaci DevKit, a private testnet, or anything else with its own timing:
+const devnet = CardanoInfo.custom(
+  "testnet",
+  new SlotConfig(zeroTime, zeroSlot, slotLength, epochLength, zeroEpoch),
+  params,
 );
 ```
 
-### With Custom UTxOs
-
-For more control, provide CBOR-encoded UTxOs directly:
+Every field of the options object is optional:
 
 ```typescript
-// UTxOs as CBOR-encoded Map<TransactionInput, TransactionOutput>
-const emulator = new Emulator(initialUtxosCbor, SlotConfig.preview);
+const emulator = Emulator.create(CardanoInfo.preview(), {
+  utxos: [new Utxo(txHash, 0, alice, Value.ada(1000n))],
+  slot: 1_000_000,                        // defaults to the slot containing Date.now()
+  stakeRegistrations: [
+    { credentialType: "key", credentialHash: keyHashHex, rewards: 0n },
+  ],
+  poolRegistrations: [{ params: poolRegistrationCertificateCbor }],
+  drepRegistrations: [
+    { credentialType: "script", credentialHash: scriptHashHex, deposit: 500_000_000n },
+  ],
+  datums: [{ hash: datumHashHex, datum: datumCborHex }],
+});
 ```
 
-## Slot Configuration
+  `new Emulator(utxosCbor, slotConfig)`, `Emulator.withState` and `Emulator.withAddresses` are
+  deprecated since 1.2.0. They take protocol parameters from the slot configuration alone, so a
+  `SlotConfig.preview` emulator validated transactions against mainnet's parameters.
+  `Emulator.create` is the fix.
 
-Use the built-in configurations for time conversion:
+## Querying UTxOs
+
+`getUtxos()` returns every UTxO; `getUtxos(filter)` narrows it. Filtering happens inside the
+ledger, so no object is built for a row the filter drops.
 
 ```typescript
-SlotConfig.mainnet  // Mainnet (Shelley era start)
-SlotConfig.preview  // Preview testnet
-SlotConfig.preprod  // Preprod testnet
+emulator.getUtxos();                                  // everything
+emulator.getUtxos({ address: alice });                // one address
+emulator.getUtxos({ paymentCredential: keyHashHex }); // any address with this payment part
+emulator.getUtxos({ unit: policyId + assetNameHex }); // holders of one asset
+emulator.getUtxos({ minLovelace: 5_000_000n, limit: 10 });
+emulator.getUtxos({ outRefs: [{ txHash, outputIndex: 0 }] });
+```
 
-// Or custom configuration
+Every field given is ANDed together. `outRefs` is the exception: it matches any of the references
+given, which is what a "resolve these inputs" query needs.
+
+A field the filter does not declare throws. TypeScript rejects `{ adress: alice }` at compile time;
+in plain JavaScript it used to be ignored, and a filter with nothing recognised in it matches
+everything, so a misspelt key handed back the whole ledger as though it were one wallet's.
+
+A returned `Utxo` carries the ledger's own input and output, so it can be handed straight back to
+`evaluateTx` or `addUtxo` with no encoding step:
+
+```typescript
+const [utxo] = emulator.getUtxos({ address: alice });
+
+utxo.txHash;         // hex
+utxo.outputIndex;    // number
+utxo.address;        // bech32
+utxo.value.coin;     // bigint lovelace
+utxo.value.assets;   // Asset[], each with policyId, assetName, quantity and unit
+utxo.datumHash;      // string | undefined
+utxo.inlineDatum;    // Uint8Array | undefined
+utxo.scriptRef;      // Uint8Array | undefined
+```
+
+  `Utxo`, `Value`, `Asset`, `ProtocolParams` and `CardanoInfo` expose their fields through
+  accessors, which live on the prototype. `JSON.stringify`, object spread and `expect(...).toEqual`
+  therefore all see an empty object. Call `toObject()` and assert on that instead.
+
+## Values and assets
+
+```typescript
+Value.ada(10n);                     // 10 ada, as lovelace
+new Value(2_000_000n, [asset]);      // lovelace plus native assets
+value.plus(other);                  // neither operand is modified
+
+const asset = new Asset(policyIdHex, assetNameHex, 5n);
+asset.unit; // policyIdHex + assetNameHex, the form lucid and MeshJS both call a "unit"
+```
+
+## Protocol parameters
+
+```typescript
+const params = emulator.getProtocolParameters();
+
+params.txFeePerByte;             // number
+params.utxoCostPerByte;          // bigint
+params.maxTxExecutionSteps;      // bigint
+params.costModels.PlutusV3;      // number[], by language rather than by position
+
+// For an adapter that already parses Blockfrost's shape:
+const json = params.toBlockfrostJson();
+const roundTripped = ProtocolParams.fromBlockfrostJson(json);
+```
+
+Quantities that can exceed `Number.MAX_SAFE_INTEGER` – every deposit, `utxoCostPerByte` and the
+execution-unit maxima – are `bigint`. Fee rates, sizes, percentages and counts are `number`, and
+so are slots.
+
+## Evaluating scripts against the ledger
+
+`evaluateTx` runs every Plutus script a transaction triggers, resolving its inputs against this
+emulator's UTxO set, slot config, cost models and protocol version. Nothing has to be passed in,
+so nothing can be passed in wrongly.
+
+```typescript
+for (const redeemer of emulator.evaluateTx(txCborBytes)) {
+  console.log(`${redeemer.tag}[${redeemer.index}]:`,
+    redeemer.budget.memory, "mem,", redeemer.budget.steps, "steps");
+}
+
+// Inputs the emulator does not hold yet - the outputs of a transaction you have
+// not submitted, typically - go in the second argument.
+emulator.evaluateTx(txCborBytes, [new Utxo(txHash, 0, scriptAddress, Value.ada(5n))]);
+```
+
+A failing script throws `PlutusScriptEvaluationError`, which extends `Error` and carries the
+script's trace logs:
+
+```typescript
+try {
+  emulator.evaluateTx(txCborBytes);
+} catch (e) {
+  if (e instanceof PlutusScriptEvaluationError) {
+    console.log(e.message, e.logs);
+  }
+}
+```
+
+## Time
+
+```typescript
+emulator.getSlot();          // current slot
+emulator.setSlot(1000);      // jump to an absolute slot, forwards or backwards
+emulator.tick(10);           // advance by 10 slots
+emulator.getTime();          // POSIX ms at which the current slot starts
+emulator.setTime(Date.now());
+
+SlotConfig.mainnet;
+SlotConfig.preview;
+SlotConfig.preprod;
 const custom = new SlotConfig(zeroTime, zeroSlot, slotLength);
 ```
 
-## API Reference
+No blocks are produced between two slots and no rewards are paid out: only validity intervals and
+time-aware scripts see the difference.
 
-### `submitTx(txCborBytes: Uint8Array): SubmitResult`
-
-Submit a CBOR-encoded transaction. Returns:
+## Editing the ledger directly
 
 ```typescript
-interface SubmitResult {
-  isSuccess: boolean;
-  txHash?: string;      // On success
-  error?: string;       // On failure
-  logs?: string[];      // Script trace logs on failure
-}
+emulator.addUtxo(utxo);                             // seed a UTxO, skipping validation
+emulator.removeUtxo({ txHash, outputIndex: 0 });    // take one away
+const checkpoint = emulator.snapshot();             // an independent copy of everything
 ```
 
-### `getUtxosForAddress(addressBech32: string): Uint8Array[]`
+`snapshot` copies the UTxOs, registrations and rewards, the datum store, the accepted
+transactions and the current slot, so one expensive setup can branch into several scenarios.
 
-Get UTxOs for an address. Each entry is a CBOR-encoded `Map<Input, Output>`:
+## Stake and governance state
+
+Stake queries take a bech32 reward address, so a key credential and a script credential are told
+apart by the address itself:
 
 ```typescript
-const utxos = emulator.getUtxosForAddress(aliceAddress);
-// Decode with cbor-x or similar
+emulator.getStakeReward("stake_test1...");   // bigint | undefined
+emulator.getDelegation("stake_test1...");    // { poolId?, rewards }
+emulator.getStakeDistribution();             // live stake per registered credential
 ```
 
-### `getAllUtxos(): Uint8Array[]`
+## Using the emulator as a transaction-builder backend
 
-Get all UTxOs in the emulator state.
+Both MeshJS and lucid-evolution take a provider object. The emulator answers what either of them
+asks, so the adapter is field renaming: no CBOR codec, no protocol-parameter table and no cost
+model of its own.
 
-### `getUtxosCbor(): Uint8Array`
-
-Get the entire UTxO set as a single CBOR-encoded map.
-
-### `setSlot(slot: number): void`
-
-Advance the current slot for time-based validation:
+### lucid-evolution
 
 ```typescript
-emulator.setSlot(1000);
-```
+import {
+  Lucid,
+  type Credential,
+  type Delegation,
+  type EvalRedeemer,
+  type OutRef,
+  type ProtocolParameters,
+  type Provider,
+  type RedeemerTag,
+  type UTxO,
+} from "@lucid-evolution/lucid";
+import type { Emulator, Utxo } from "scalus";
 
-### `snapshot(): Emulator`
+// The mechanical conversions the adapter carries. `__tests__/provider-lucid.test.ts` has all four
+// in full; each is field renaming, and the two UTxO ones refuse the shapes the two sides do not
+// share rather than dropping a datum or a reference script in silence.
+declare function hexToBytes(hex: string): Uint8Array;
+declare function bytesToHex(bytes: Uint8Array): string;
+declare function toLucidUtxo(utxo: Utxo): UTxO;
+declare function fromLucidUtxo(utxo: UTxO): Utxo;
+// `{ Spend: "spend", Mint: "mint", Cert: "publish", Reward: "withdraw", ... }`
+declare const LUCID_TAG: Record<string, RedeemerTag>;
 
-Create a point-in-time copy:
+class EmulatorProvider implements Provider {
+  constructor(readonly emulator: Emulator) {}
 
-```typescript
-const checkpoint = emulator.snapshot();
-// ... submit transactions ...
-// checkpoint still has original state
-```
-
-## Example: Simple Payment
-
-```typescript
-import { Emulator, SlotConfig } from "scalus";
-import { Decoder } from "cbor-x";
-
-const decoder = new Decoder({ mapsAsObjects: false });
-
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  async getProtocolParameters(): Promise<ProtocolParameters> {
+    const p = this.emulator.getProtocolParameters();
+    return {
+      protocolMajorVersion: p.protocolMajorVersion,
+      minFeeA: p.txFeePerByte,
+      minFeeB: p.txFeeFixed,
+      maxTxSize: p.maxTxSize,
+      maxValSize: p.maxValueSize,
+      keyDeposit: p.stakeAddressDeposit,
+      poolDeposit: p.stakePoolDeposit,
+      drepDeposit: p.dRepDeposit,
+      govActionDeposit: p.govActionDeposit,
+      priceMem: p.priceMemory,
+      priceStep: p.priceSteps,
+      maxTxExMem: p.maxTxExecutionMemory,
+      maxTxExSteps: p.maxTxExecutionSteps,
+      coinsPerUtxoByte: p.utxoCostPerByte,
+      collateralPercentage: p.collateralPercentage,
+      maxCollateralInputs: p.maxCollateralInputs,
+      minFeeRefScriptCostPerByte: p.minFeeRefScriptCostPerByte,
+      costModels: p.costModels,
+    };
   }
-  return bytes;
-}
 
-// Alice has 100 ADA, sends 25 ADA to Bob
-const initialUtxosCborHex = "a282582000000000000000000000000000000000000000000000000000000000000000000082581d60c8c47610a36034aac6fc58848bdae5c278d994ff502c05455e3b3ee81a05f5e10082582000000000000000000000000000000000000000000000000000000000000000000182581d60c8c47610a36034aac6fc58848bdae5c278d994ff502c05455e3b3ee81a00989680";
+  async getUtxos(addressOrCredential: string | Credential): Promise<UTxO[]> {
+    const filter = typeof addressOrCredential === "string"
+      ? { address: addressOrCredential }
+      : { paymentCredential: addressOrCredential.hash };
+    return this.emulator.getUtxos(filter).map(toLucidUtxo);
+  }
 
-const emulator = new Emulator(
-  hexToBytes(initialUtxosCborHex),
-  SlotConfig.preview
-);
+  async submitTx(txHex: string): Promise<string> {
+    const result = this.emulator.submitTx(hexToBytes(txHex));
+    if (!result.isSuccess) throw new Error(`${result.errorRule}: ${result.error}`);
+    return result.txHash!; // `txHash` is present exactly when `isSuccess` is true
+  }
 
-// Build transaction with your preferred library, get CBOR bytes
-const txCborBytes = buildTransaction(); // Your transaction builder
+  // The rest is one emulator call each.
 
-const result = emulator.submitTx(txCborBytes);
-console.log(result.isSuccess ? `Success: ${result.txHash}` : `Error: ${result.error}`);
-```
+  async getUtxosWithUnit(
+    addressOrCredential: string | Credential,
+    unit: string,
+  ): Promise<UTxO[]> {
+    const filter = typeof addressOrCredential === "string"
+      ? { address: addressOrCredential, unit }
+      : { paymentCredential: addressOrCredential.hash, unit };
+    return this.emulator.getUtxos(filter).map(toLucidUtxo);
+  }
 
-## Working with UTxOs
+  async getUtxoByUnit(unit: string): Promise<UTxO> {
+    const found = this.emulator.getUtxos({ unit, limit: 2 });
+    if (found.length !== 1) throw new Error(`${found.length} UTxOs hold ${unit}, expected 1`);
+    return toLucidUtxo(found[0]!);
+  }
 
-The emulator returns UTxOs as CBOR-encoded data. Decode with `cbor-x`:
+  async getUtxosByOutRef(outRefs: OutRef[]): Promise<UTxO[]> {
+    return this.emulator.getUtxos({ outRefs }).map(toLucidUtxo);
+  }
 
-```typescript
-import { Decoder } from "cbor-x";
+  async getDelegation(rewardAddress: string): Promise<Delegation> {
+    const d = this.emulator.getDelegation(rewardAddress);
+    return { poolId: d.poolId ?? null, rewards: d.rewards };
+  }
 
-const decoder = new Decoder({ mapsAsObjects: false });
+  async getDatum(datumHash: string): Promise<string> {
+    const datum = this.emulator.getDatum(datumHash);
+    if (datum === undefined) throw new Error(`no datum for hash ${datumHash}`);
+    return bytesToHex(datum);
+  }
 
-const utxos = emulator.getUtxosForAddress(address);
-for (const utxoCbor of utxos) {
-  const decoded = decoder.decode(utxoCbor);
-  // decoded is Map<TransactionInput, TransactionOutput>
-  for (const [input, output] of decoded) {
-    console.log("Input:", input);
-    console.log("Output:", output);
+  async awaitTx(txHash: string): Promise<boolean> {
+    return this.emulator.hasTx(txHash);
+  }
+
+  async evaluateTx(txHex: string, additionalUTxOs: UTxO[] = []): Promise<EvalRedeemer[]> {
+    return this.emulator
+      .evaluateTx(hexToBytes(txHex), additionalUTxOs.map(fromLucidUtxo))
+      .map((r) => ({
+        redeemer_tag: LUCID_TAG[r.tag]!,
+        redeemer_index: r.index,
+        ex_units: { mem: Number(r.budget.memory), steps: Number(r.budget.steps) },
+      }));
   }
 }
+
+const lucid = await Lucid(new EmulatorProvider(emulator), "Preview");
+lucid.selectWallet.fromSeed(seed);
+
+const tx = await lucid.newTx().pay.ToAddress(bob, { lovelace: 25_000_000n }).complete();
+const txHash = await (await tx.sign.withWallet().complete()).submit();
+
+emulator.getUtxos({ address: bob }); // the payment is on the ledger
 ```
 
-## Integration with Lucid
+### MeshJS
 
-Use the emulator's UTxO state with Lucid Evolution for transaction building:
+`IFetcher`, `ISubmitter` and `IEvaluator` map just as directly. `castProtocol` fills in the
+parameters a transaction build never reads:
 
 ```typescript
-// Get UTxOs from emulator
-const utxosCbor = emulator.getUtxosCbor();
+import { MeshTxBuilder, MeshWallet, castProtocol } from "@meshsdk/core";
 
-// Build transaction with Lucid
-const tx = await lucid.newTx()
-  .pay.ToAddress(bobAddress, { lovelace: 25_000_000n })
-  .complete();
+// Two methods from the body of a class EmulatorProvider
+// implements IFetcher, ISubmitter, IEvaluator:
 
-const signedTx = await tx.sign.withWallet().complete();
-const txCbor = signedTx.toCBOR();
+async fetchAddressUTxOs(address: string, asset?: string) {
+  const filter = asset === undefined ? { address } : { address, unit: asset };
+  return this.emulator.getUtxos(filter).map(toMeshUtxo);
+}
 
-// Submit to emulator instead of network
-const result = emulator.submitTx(hexToBytes(txCbor));
+async evaluateTx(txHex: string, additionalUtxos = []) {
+  return this.emulator
+    .evaluateTx(hexToBytes(txHex), additionalUtxos.map(fromMeshUtxo))
+    .map((r) => ({
+      tag: MESH_TAG[r.tag],
+      index: r.index,
+      budget: { mem: Number(r.budget.memory), steps: Number(r.budget.steps) },
+    }));
+}
 ```
 
-## Script Evaluation
+  The complete, runnable versions of both adapters live in the package's own test suite, at
+  `__tests__/provider-lucid.test.ts` and `__tests__/provider-mesh.test.ts`. Each one builds, signs
+  and submits a real transaction against the emulator.
 
-For evaluating Plutus scripts without submitting transactions, use `evalPlutusScripts`:
+## Script evaluation without an emulator
+
+`evalPlutusScripts` evaluates a transaction's scripts with everything passed in explicitly. Prefer
+`emulator.evaluateTx` when you have an emulator: it takes the UTxOs, slot config, cost models and
+protocol version from the ledger the transaction is going to.
 
 ```typescript
-import { Scalus, SlotConfig } from "scalus";
+import { evalPlutusScripts, SlotConfig } from "scalus";
 
-const redeemers = Scalus.evalPlutusScripts(
+const redeemers = evalPlutusScripts(
   txCborBytes,
   utxoCborBytes,
   SlotConfig.preview,
-  costModels // [v1CostModel, v2CostModel, v3CostModel]
+  costModels, // [v1CostModel, v2CostModel, v3CostModel]
 );
-
-for (const redeemer of redeemers) {
-  console.log(`${redeemer.tag}[${redeemer.index}]: ${redeemer.budget.memory} mem, ${redeemer.budget.steps} steps`);
-}
 ```
 
 ### Profiling a script
 
-`Scalus.evaluateScript(doubleCborHex)` runs a single fully-applied script (for example the output of `Scalus.applyDataArgToScript`) and returns a `Result` with `isSuccess`, `budget`, and `logs`. `Scalus.evaluateScriptProfile(doubleCborHex)` does the same but also collects [CEK machine profiling data](/docs/smart-contract-optimisations/profiling), exposed on the result as `profileJson` — per-source-location and per-builtin cost plus the transition edges. It is `undefined` for the plain `evaluateScript` (which has zero profiling overhead).
+`evaluateScript(doubleCborHex)` runs a single fully-applied script (for example the output of `applyDataArgToScript`) and returns an `EvaluationResult` with `isSuccess`, `budget`, and `logs`. `evaluateScriptProfile(doubleCborHex)` does the same but also collects [CEK machine profiling data](/docs/smart-contract-optimisations/profiling), exposed on the result as `profileJson` – per-source-location and per-builtin cost plus the transition edges. It is `undefined` for the plain `evaluateScript` (which has zero profiling overhead).
 
 ```typescript
-import { Scalus } from "scalus";
+import { evaluateScriptProfile } from "scalus";
 
-// `applied` is a fully-applied script, e.g. from Scalus.applyDataArgToScript(...)
-const result = Scalus.evaluateScriptProfile(applied);
+// `applied` is a fully-applied script, e.g. from applyDataArgToScript(...)
+const result = evaluateScriptProfile(applied);
 
 console.log(`success=${result.isSuccess}, cpu=${result.budget.steps}, mem=${result.budget.memory}`);
 
@@ -12487,15 +12955,28 @@ if (result.profileJson) {
 
   Only the profiling **data** is available from JavaScript. The interactive HTML report (sortable
   tables, hot paths/edges, annotated source) is rendered by the Scala/JVM
-  [`ProfileFormatter`](/docs/smart-contract-optimisations/profiling#html-output) — it is deliberately kept out of
+  [`ProfileFormatter`](/docs/smart-contract-optimisations/profiling#html-output) – it is deliberately kept out of
   `scalus.js` so the transaction-builder bundle stays small. Feed `profileJson` into your own tooling,
   or run the profiler on the JVM to get the HTML.
 
+## Conformance
+
+Scalus's JavaScript build runs the Plutus conformance suite in CI: **999 of 999** UPLC evaluation
+cases, none skipped. For the 724 the reference evaluates successfully, both the resulting term and
+the exact CPU and memory budget are asserted against the reference implementation. The other 275
+are programs the reference rejects – 220 it fails to evaluate and 55 it fails to parse – and since
+the corpus records no term or budget for those, the assertion there is that Scalus rejects them the
+same way.
+
+The evaluator that prices your transaction here is the same code the emulator runs in phase 2, so
+`evaluateTx` and `submitTx` cannot disagree about cost – which is not true of a setup that pairs a
+separate wasm evaluator with a hand-written emulator.
+
 ## See Also
 
-- [Emulator (JVM)](/docs/testing/emulator) — Full Scala API documentation
-- [Multiplatform](/docs/multiplatform) — Platform support overview
-- [`scalus` npm package](https://www.npmjs.com/package/scalus) — Full JavaScript/TypeScript API
+- [Emulator (JVM)](/docs/testing/emulator) – Full Scala API documentation
+- [Multiplatform](/docs/multiplatform) – Platform support overview
+- [`scalus` npm package](https://www.npmjs.com/package/scalus) – Full JavaScript/TypeScript API
 
 
 ---
@@ -13159,8 +13640,8 @@ object MyValidator extends Validator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
-            .scriptOption.getOrFail("Own address must be Script")
+        val ownCredential = tx.findInputOrFail(ownRef).resolved.address.credential
+        val ownScriptHash = ownCredential.scriptHashOrFail("Own address must be Script")
 
         // Option 1: Just check stake validator ran (withdraw zero trick)
         StakeValidator.spendMinimal(ownScriptHash, tx)
@@ -13168,12 +13649,17 @@ object MyValidator extends Validator {
         // Option 2: Also validate redeemer and withdrawal amount
         StakeValidator.spend(
           withdrawalScriptHash = ownScriptHash,
-          withdrawalRedeemerValidator = (redeemer, lovelace) => lovelace === BigInt(0),
+          withdrawalRedeemerValidator =
+              (redeemer, lovelace) => require(lovelace === BigInt(0), "Withdrawal must be zero"),
           txInfo = tx
         )
     }
 }
 ```
+
+`tx.findInputOrFail(ownRef)` scans the inputs once and fails with a message when the own input is
+missing; `credential.scriptHashOrFail(msg)` projects the script hash out of the credential or fails.
+Neither builds an intermediate `Option`.
 
 ### Reward Endpoint (Stake Validator)
 
@@ -13191,7 +13677,7 @@ inline override def reward(
               acc + input.resolved.value.getLovelace
           }
           // Verify outputs match expected distribution
-          true
+          require(totalInputValue === expectedTotal, "Input total mismatch")
       },
       redeemer = redeemer,
       credential = stakingKey,
@@ -13199,6 +13685,28 @@ inline override def reward(
     )
 }
 ```
+
+### Callbacks return `Unit`
+
+Every validator callback in `StakeValidator`, `TransactionLevelMinterValidator` and
+`UtxoIndexer` has the type `... => Unit`. The callback performs its own `require(cond, message)`
+or `fail(message)` calls; the library does not inspect a return value. A `Boolean` callback could
+only ever fail with one generic message, and a `false` from a missed branch was silent.
+
+**Migration hazard.** A lambda that returns `Boolean` still compiles against a `Unit` parameter
+(Scala discards the value) and then checks nothing:
+
+```scala
+// Compiles. Checks nothing. The withdrawal amount is never verified.
+withdrawalRedeemerValidator = (redeemer, lovelace) => lovelace === BigInt(0)
+
+// Correct: the condition is inside require
+withdrawalRedeemerValidator =
+    (redeemer, lovelace) => require(lovelace === BigInt(0), "Withdrawal must be zero")
+```
+
+After upgrading, grep every callback passed to these patterns and wrap each condition in
+`require(..., message)`.
 
 **Script Configuration:** The spending script address must have a staking credential that points to your withdrawal validator. This is configured when deploying scripts.
 
@@ -13225,8 +13733,8 @@ inline override def spend(...): Unit = {
     val ownInput = tx.inputs.at(spendRedeemer.ownInputIndex)
     require(ownInput.outRef === ownRef, "Own input index mismatch")
 
-    val ownScriptHash = ownInput.resolved.address.credential
-        .scriptOption.getOrFail("Own address must be Script")
+    val ownScriptHash =
+        ownInput.resolved.address.credential.scriptHashOrFail("Own address must be Script")
 
     // Just check stake validator ran (withdraw zero trick)
     StakeValidator.spendMinimal(ownScriptHash, tx)
@@ -13321,8 +13829,8 @@ object MyValidator extends Validator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
-            .scriptOption.getOrFail("Own address must be Script")
+        val ownCredential = tx.findInputOrFail(ownRef).resolved.address.credential
+        val ownScriptHash = ownCredential.scriptHashOrFail("Own address must be Script")
 
         // Option 1: Just check minting policy ran
         TransactionLevelMinterValidator.spendMinimal(ownScriptHash, tx)
@@ -13330,16 +13838,24 @@ object MyValidator extends Validator {
         // Option 2: Also validate redeemer and minted tokens
         TransactionLevelMinterValidator.spend(
           minterScriptHash = ownScriptHash,
-          minterRedeemerValidator = _.to[MintRedeemer].isValid,
+          minterRedeemerValidator = redeemer =>
+              require(redeemer.to[MintRedeemer].maxUtxosToSpend > 0, "maxUtxosToSpend must be positive"),
           minterTokensValidator = tokens => {
-              val (tokenName, qty) = tokens.toList.head
-              tokenName === utf8"BEACON" && (qty === BigInt(1) || qty === BigInt(-1))
+              val (tokenName, qty) = tokens.singleOrFail("Exactly one BEACON entry")
+              require(tokenName === utf8"BEACON", "Unexpected token name")
+              require(qty === BigInt(1) || qty === BigInt(-1), "BEACON quantity must be 1 or -1")
           },
           txInfo = tx
         )
     }
 }
 ```
+
+Both callbacks return `Unit`: each check is a `require` with its own message, so a failure names
+the check that tripped. `tokens.singleOrFail(msg)` returns the only entry of the map and fails when
+there are zero or several, which is what `tokens.toList.head` could not express. See the
+[Stake Validator](/docs/design-patterns/withdraw-zero#callbacks-return-unit) page for the
+migration hazard that applies to every callback in this module.
 
 ### Minting Endpoint
 
@@ -13352,11 +13868,8 @@ inline override def mint(
     val mintRedeemer = redeemer.to[MintRedeemer]
 
     // Your heavy validation logic here - runs ONCE
-    val scriptInputsCount = tx.inputs.foldRight(BigInt(0)) { (input, acc) =>
-        input.resolved.address.credential match
-            case Credential.ScriptCredential(hash) if hash === policyId => acc + 1
-            case _ => acc
-    }
+    val ownCredential = Credential.ScriptCredential(policyId)
+    val scriptInputsCount = tx.inputs.count(_.resolved.address.credential === ownCredential)
 
     require(scriptInputsCount === mintRedeemer.expectedInputCount, "Input count mismatch")
 
@@ -13376,18 +13889,21 @@ case class MintRedeemer(maxUtxosToSpend: BigInt) derives FromData
 // Spending endpoint - checks beacon is minted/burnt
 inline override def spend(datum: Option[Data], redeemer: Redeemer, tx: TxInfo, ownRef: TxOutRef): Unit = {
     val spendRedeemer = redeemer.to[SpendRedeemer]
-    val ownHash = tx.inputs.get(spendRedeemer.ownIndex)
-        .getOrFail("Invalid index").resolved.address.credential
-        .scriptOption.getOrFail("Must be script")
+    val input = tx.inputs.get(spendRedeemer.ownIndex).getOrFail("Undefined ownIndex")
+    require(ownRef === input.outRef, "ownIndex does not point at the spending UTxO")
+    val ownHash = input.resolved.address.credential.scriptHashOrFail("Own address must be Script")
 
     TransactionLevelMinterValidator.spend(
       minterScriptHash = ownHash,
-      minterRedeemerValidator = _.to[MintRedeemer].maxUtxosToSpend > 0,
+      minterRedeemerValidator = redeemer =>
+          require(redeemer.to[MintRedeemer].maxUtxosToSpend > 0, "maxUtxosToSpend must be positive"),
       minterTokensValidator = tokens => {
-          val (tokenName, qty) = tokens.toList.head
+          val (tokenName, qty) = tokens.singleOrFail("Exactly one BEACON entry")
           require(tokenName === utf8"BEACON")
-          if spendRedeemer.burn then qty === BigInt(-1)
-          else qty === BigInt(1)
+          require(
+            if spendRedeemer.burn then qty === BigInt(-1) else qty === BigInt(1),
+            "BEACON quantity must be -1 on burn and 1 on mint"
+          )
       },
       txInfo = tx
     )
@@ -13396,7 +13912,8 @@ inline override def spend(datum: Option[Data], redeemer: Redeemer, tx: TxInfo, o
 // Minting endpoint - heavy logic runs once
 inline override def mint(redeemer: Redeemer, policyId: PolicyId, tx: TxInfo): Unit = {
     val mintRedeemer = redeemer.to[MintRedeemer]
-    val scriptInputsCount = countScriptInputs(tx, policyId)
+    val ownCredential = Credential.ScriptCredential(policyId)
+    val scriptInputsCount = tx.inputs.count(_.resolved.address.credential === ownCredential)
     require(scriptInputsCount === mintRedeemer.maxUtxosToSpend)
 }
 ```
@@ -13500,8 +14017,8 @@ object BatchAuctionValidator extends Validator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
-            .scriptOption.getOrFail("Own address must be Script")
+        val ownCredential = tx.findInputOrFail(ownRef).resolved.address.credential
+        val ownScriptHash = ownCredential.scriptHashOrFail("Must be script address")
 
         // Read verified settlement data from stake validator
         val stakeRedeemer = MerkelizedValidator.verifyAndGetRedeemer(ownScriptHash, tx)
@@ -13663,13 +14180,17 @@ object NFTMintingPolicy {
         val sc = scData.to[ScriptContext]
         sc.scriptInfo match
             case ScriptInfo.MintingScript(policyId) =>
-                val mintedAmount = sc.txInfo.mint.quantityOf(policyId, params.tokenName)
-                require(mintedAmount === BigInt(1), "Must mint exactly 1 NFT")
+                // Mint exactly 1 of our token and nothing else under this policy
+                require(
+                  sc.txInfo.mint.hasOnly(policyId, params.tokenName, 1),
+                  "Must mint exactly 1 NFT and no other token under this policy"
+                )
 
-                // Find output containing our NFT
-                val nftOutput = sc.txInfo.outputs.find { output =>
-                    output.value.quantityOf(policyId, params.tokenName) > 0
-                }.getOrFail("NFT output not found")
+                // Find the single output holding units of this token
+                val nftOutput = sc.txInfo.outputs.findUniqueOrFail(
+                  _.value.quantityOf(policyId, params.tokenName) > 0,
+                  "NFT must go to exactly one output"
+                )
 
                 // Verify output goes to the expected marketplace script
                 ParameterValidationOnChain.verifyAddressScript(
@@ -13682,6 +14203,11 @@ object NFTMintingPolicy {
 ```
 
 **Key insight:** The expected hash is computed off-chain and passed as a parameter to the minting policy. The on-chain code only needs to compare hashes, not recompute them.
+
+Two details of the snippet carry security weight. `mint.hasOnly(policyId, name, 1)` rejects any
+other token name under the same policy in the same transaction, which a bare
+`quantityOf(...) === 1` does not. `outputs.findUniqueOrFail(p, msg)` fails when the token lands in
+zero or several outputs, where `find(p).getOrFail(msg)` would silently pick the first.
 
 ### Example: NFT with Verified Marketplace
 
@@ -13847,14 +14373,21 @@ object MyValidator extends Validator {
           inputIdx,
           outputIdx,
           tx,
+          // Each check is a require with its own message
           validator = (input, output) => {
-              // Your validation logic: check values, datums, addresses, etc.
-              input.resolved.value.getLovelace === output.value.getLovelace
+              require(output.value.hasSameTokensAndAtLeastAda(input.resolved.value), "value")
+              require(output.hasInlineDatum(expectedDatum), "datum") // your continuing datum
+              require(output.address === input.resolved.address, "address")
           }
         )
     }
 }
 ```
+
+Every `UtxoIndexer` callback returns `Unit` and does its own `require`. A `Boolean` lambda compiles
+against that parameter and checks nothing; see the
+[migration hazard](/docs/design-patterns/withdraw-zero#callbacks-return-unit) before upgrading
+existing validators.
 
 ### One-to-Many Indexer
 
@@ -13868,11 +14401,12 @@ UtxoIndexer.oneToMany(
   tx,
   perOutputValidator = (input, idx, output) => {
       // Validate each output individually
-      output.value.getLovelace >= minAmount
+      require(output.value.getLovelace >= minAmount, "Output below minimum")
   },
   collectiveValidator = (input, outputs) => {
       // Validate all outputs together
-      outputs.foldLeft(BigInt(0))(_ + _.value.getLovelace) === input.resolved.value.getLovelace
+      val paid = outputs.foldLeft(BigInt(0))(_ + _.value.getLovelace)
+      require(paid === input.resolved.value.getLovelace, "Outputs do not sum to the input")
   }
 )
 ```
@@ -13888,7 +14422,7 @@ UtxoIndexer.multiOneToOneNoRedeemer(
   tx = txInfo,
   validator = (inIdx, input, outIdx, output) => {
       // Validate each input-output pair
-      input.resolved.value.getLovelace === output.value.getLovelace
+      require(input.resolved.value.getLovelace === output.value.getLovelace, "Lovelace mismatch")
   }
 )
 ```
@@ -13909,7 +14443,7 @@ UtxoIndexer.multiOneToOneWithRedeemer[MyRedeemer](
   },
   validator = (inIdx, input, redeemer, outIdx, output) => {
       // Validate with per-input redeemer data
-      true
+      require(output.value.getLovelace >= redeemer.minPayout, "Payout below the redeemer minimum")
   }
 )
 ```
@@ -14093,12 +14627,12 @@ object ListAction
 @Compile
 object MyListValidator extends DataParameterizedValidator {
 
-    inline override def mint(cfgData: Data, redeemer: Data, tx: TxInfo): Unit = {
+    // policyId is the minting script's own hash, handed in by the Validator trait
+    inline override def mint(cfgData: Data, redeemer: Data, policyId: PolicyId, tx: TxInfo): Unit = {
         // Extract configuration (rootKey, prefix, etc.)
         val rootKey: RootKey = ??? // from cfgData
         val prefix: NodeKeyPrefix = ???
         val prefixLen: BigInt = ???
-        val policyId = tx.findOwnMintingPolicyHash
 
         redeemer.to[ListAction] match
             case ListAction.Init =>
@@ -15065,154 +15599,490 @@ Source: https://scalus.org/docs/security/common-vulnerabilities
 
 # Common Plutus Vulnerabilities
 
-This guide summarizes known Plutus vulnerabilities and mitigation strategies. Understanding these patterns helps you write more secure validators.
+This guide lists the known vulnerability classes of Cardano validators, grouped by family and
+ordered by how often they appear in real audits. Every entry ends with the Scalus operation or
+idiom that closes it, with a snippet from one of the example validators in `scalus-examples`.
+The short labels (`DS-1`, `VP-2`, ...) are the vocabulary the `/security-review` skill uses, so a
+finding in a review report maps to a section here.
 
----
+A Cardano validator only **validates**; it never acts. Every script input in a transaction runs
+its own validator, and every run sees the same `TxInfo`. Most classes below are one mistake in
+different clothes: a check phrased as "some output satisfies X" instead of "this exact output
+satisfies exactly X".
 
-## 1. UTxO Value Size Spam (Token Dust Attack)
+## Double Satisfaction (DS)
 
-**Problem:** An attacker creates a UTxO containing thousands of different token types, approaching the 16KB maximum size limit. When sent to a script address, this oversized UTxO becomes expensive or impossible to spend, effectively locking the protocol.
+### DS-1: One output satisfies two script inputs
 
-**Mitigation:**
-- Don't allow arbitrary values in trusted places
-- Implement minimum ADA requirements that scale with UTxO size
-- Whitelist acceptable tokens
-- Validate value composition before accepting UTxOs
+**Problem:** Two UTxOs locked by the same script are spent in one transaction. Each validator run
+looks for "an output paying the beneficiary", and both find the same output.
 
----
+**Mitigation:** Allow only one own-script input per transaction, or tag every payout with the
+spent input's `TxOutRef`, or fold over all own inputs and outputs and compare the sums.
 
-## 2. Large Datum Size
+**Scalus:** the single-input guard is `findUniqueOrFail` on the inputs. It fails unless exactly one
+input sits at the script's payment credential. `.filter(...).head` is the anti-idiom.
 
-**Problem:** Oversized datums on UTxOs that must be consumed for critical operations create performance bottlenecks and can exceed transaction size limits.
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala
+txInfo.inputs.findUniqueOrFail(
+  _.resolved.address.credential === ownCredential,
+  MultipleVestingInputs
+)
+```
 
-**Mitigation:**
-- Avoid infinitely-sized data types
-- Implement size limits on all data structures
-- Use bounded collections (lists with maximum length)
-- Consider using Merkle trees or cryptographic hashes for large datasets
-- Store large data off-chain with on-chain hash references
+The tagged-output defence is `hasPaidTagged`. All three comparisons are exact: whole address,
+whole value with `===` (never `>=`), and the datum tag. A `TxOutRef`-derived tag is unique across
+every script and every instance:
 
----
+```scala
+val tag = OutputDatum.OutputDatum(ownRef.deriveTokenName.toData)
+require(tx.hasPaidTagged(beneficiary, Value.lovelace(price), tag), "must pay the beneficiary")
+```
 
-## 3. Double Satisfaction
+### DS-2: Cross-instance double satisfaction
 
-**Problem:** A spending validator that only checks transaction outputs can allow multiple UTxOs to be spent in one transaction while satisfying conditions only once. Example: Multiple NFTs sold while the seller receives payment for just one.
+**Problem:** The single-input guard is scoped to one script hash. Two parameterized instances of
+the same validator have different hashes, so each sees one own input, and both share one payout.
 
-**Mitigation:**
-- Validate single UTxO consumption by filtering inputs by script address and counting them
-- Tag outputs with corresponding input transaction IDs in datums
-- Explicitly require the redeemer to reference the specific input being spent
-- Verify exactly which UTxO is being consumed
+**Mitigation:** Tag the payout with something unique to *this instance*: the input's `TxOutRef`
+(`hasPaidTagged` above) or the instance's own script hash.
 
----
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala
+require(sellerOutput.hasInlineDatum(scriptHash), "Seller output must be tagged with this auction's id")
+```
 
-## 4. Lack of Staking Control
+## Value Preservation (VP)
 
-**Problem:** Protocols must control staking for protocol-held funds. Without proper checks, users could arbitrarily change staking pool addresses, redirecting rewards or manipulating protocol-controlled stake.
+### VP-1: Value not preserved on the continuing output
 
-**Mitigation:**
-- Use script-controlled staking credentials
-- Verify staking credentials remain unchanged in continuation outputs
-- Implement explicit staking withdrawal validators
-- Ensure all outputs to the script maintain the same staking credential
+**Problem:** The validator checks the datum transition but never the value of the continuing
+output, or the datum records a balance never tied to the actual `Value`. The attacker keeps the
+difference. This is the most frequent bug in reviewed validators.
 
----
+**Mitigation:** Compare the whole continuing value with `===` against a value computed from the
+input. If the datum carries a balance, tie it to the real token quantity with `quantityOf` (as
+`AmmValidator` does for its reserves). When the output may gain ADA but must keep every token, use
+`hasSameTokensAndAtLeastAda(expected)`.
 
-## 5. EUTxO Concurrency Denial of Service
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/simpletransfer/SimpleTransferValidator.scala
+require(contractOutput.value === balance + amount, "Contract has received incorrect amount")
+```
 
-**Problem:** An attacker repeatedly spends and recreates the same UTxO with trivial transactions, blocking legitimate users from interacting with the protocol. In the EUTxO model, only one transaction can spend a specific UTxO per block.
+### VP-2: Lovelace-only comparison
 
-**Mitigation:**
-- Implement cancellation fees or economic disincentives
-- Add freezing periods allowing only keeper functions
-- Use time-range validators to create protocol "cold periods"
-- Require minimum time locks before allowing certain operations
-- Design protocols to minimize shared state
+**Problem:** `value.getLovelace` is the easy accessor, so the check is written in lovelace. It
+passes while every native token in the UTxO goes to the attacker.
 
----
+**Mitigation:** Compare the whole `Value`. If the protocol is ADA-only by design, prove it once at
+the boundary with `withoutLovelace.isZero` instead of assuming it in every comparison.
 
-## 6. Unauthorized State Transitions
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala
+require(
+  contractOutput.value === ownInput.value - Value.lovelace(requestedAmount),
+  ContinuingValueMismatch
+)
 
-**Problem:** Missing signature checks or insufficient validation of transaction signatories allows unauthorized parties to perform state transitions.
+// scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/PaymentSplitterValidator.scala
+require(input.resolved.value.withoutLovelace.isZero, "Contract input must contain only ADA")
+```
 
-**Mitigation:**
-- Always verify required signatures in `tx.signatories`
-- Implement multi-signature requirements where appropriate
-- Maintain comprehensive test suites where each unauthorized actor fails validation
-- Never assume a transaction is valid without explicit authorization checks
+### VP-3: Continuing output redirected
 
----
+**Problem:** The validator reads "the output at index `i`" from the redeemer and checks its value
+and datum but never its address, so the attacker points `i` at an output they control.
 
-## 7. Oracle Attacks
+**Mitigation:** Locate the continuing output by the **whole** input address with
+`findContinuingOutputOrFail(ownInput, msg)`, which fails unless exactly one output matches (see
+AU-4 for the staking part).
 
-### Price Manipulation
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/escrow/EscrowValidator.scala
+val contractOutput =
+    txInfo.findContinuingOutputOrFail(ownInput, "Expected exactly one contract output")
+```
 
-**Problem:** Attackers manipulate oracle price feeds to cause incorrect liquidations or unfavorable trades. Example: Using flash loans to temporarily manipulate DEX spot prices.
+### VP-4: `>=` where an exact payout was meant
 
-**Mitigation:**
-- Use Time-Weighted Average Price (TWAP) instead of spot prices
-- Implement maximum/minimum reportable price changes
-- Aggregate multiple oracle sources (Chainlink, DEXes, Charli3)
-- Verify price consistency across sources
+**Problem:** "At least the required amount" looks conservative. It lets one over-sized output
+satisfy two obligations at once, which is what enables DS-1.
 
-### Oracle Key Compromise
+**Mitigation:** Payouts and refunds compare with `===`. Reserve `>=` for cases where an excess is
+genuinely allowed, and say so in the message.
 
-**Problem:** Oracle cryptographic keys are valuable attack targets. If compromised, attackers can submit fraudulent data.
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala
+require(refundOutput.value.getLovelace === currentHighestBid, "Previous bidder must receive exactly their bid amount")
+```
 
-**Mitigation:**
-- Implement on-chain key revoking, expiry, and updating systems
-- Require multi-signature oracles
-- Build robust oracle ecosystems with redundancy
-- Verify oracle signatures on-chain
+## Authentication (AU)
 
-### Oracle Data Freshness
+### AU-1: Unauthenticated UTxO or reference input
 
-**Problem:** Stale oracle data can lead to incorrect protocol decisions.
+**Problem:** Anyone can create a UTxO at any address with any datum. A validator that locates
+protocol state by address alone ("the input from the oracle script") reads attacker-supplied data.
+Reference inputs feel read-only and safe; they are not.
 
-**Mitigation:**
-- Verify timestamp freshness on oracle data
-- Reject oracle data older than acceptable threshold
-- Include timestamp validation in validators
+**Mitigation:** Authenticate protocol UTxOs by a beacon NFT whose minting policy guarantees
+uniqueness (MI-2). Check the beacon with `hasNft`, not the address.
 
----
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/PricebetValidator.scala
+require(
+  oracleInput.resolved.value.hasNft(config.oracleScriptHash, OracleBeaconName),
+  OracleInputMustHaveBeacon
+)
+```
 
-## 8. Infinite Mint
+### AU-2: Missing signature on a state transition
 
-**Problem:** Unintended token minting via unexpected authorization pathways. Example: A forwarding minting policy that lacks proper mint-action checks in witness redeemers.
+**Problem:** One branch of the redeemer enum forgets its authorization check. Nothing is
+structurally wrong; a required predicate is absent, and anyone can submit that transition.
 
-**Mitigation:**
-- Always explicitly validate the mint amount in minting policies
-- Check the exact quantity being minted matches expectations
-- Don't rely solely on spending validators to constrain minting
-- For NFTs, verify exactly one token is minted
-- Implement time windows or other constraints for token creation
+**Mitigation:** Every branch that is not deliberately permissionless checks `tx.isSignedBy(key)`;
+a set of allowed signers uses `tx.isSignedByAny(keys)`. Keep a test per branch that submits it
+from an unrelated key and expects a failure.
 
----
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/htlc/HtlcValidator.scala
+require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
+```
 
-## 9. Parameterized Validator Verification
+### AU-4: Staking credential swapped on the continuing output
 
-**Problem:** Difficulty verifying on-chain that scripts are proper parameterized instantiations. Users risk interacting with malicious contracts that appear legitimate but have attacker-controlled parameters.
+**Problem:** An address is a pair: a payment credential and an optional staking credential. A
+check on the payment credential alone accepts an output at `(scriptHash, attackerStakeKey)`. The
+attacker cannot spend the funds, but collects every staking reward on the protocol's TVL, and the
+DS-1 single-input guard breaks because the funds now sit at many distinct addresses.
 
-**Mitigation:**
-- Store parameters in authenticated, unique UTxOs instead of baking into scripts
-- Use protocol NFTs to authenticate configuration UTxOs
-- Manually construct terms using UPLC Apply constructor for off-chain verification
-- Provide tools for users to verify script parameterization
-- Consider avoiding parameterization for critical protocols
+**Mitigation:** Compare the whole `Address`. `findContinuingOutputOrFail` matches the full input
+address; the credential-only finders (`findOutputsByCredential`, `findOutputsByScriptHash`) are
+wrong for the continuing output. Never rebuild the expected address with `Address.fromScriptHash`,
+which has no staking part.
 
----
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultValidator.scala
+// The unique continuing output to the vault's WHOLE address (staking part included), so a
+// spender cannot redirect the vault's delegation rewards by changing the staking credential.
+private def getVaultOutput(tx: TxInfo, ownInput: TxInInfo): TxOut =
+    tx.findContinuingOutputOrFail(ownInput, NotExactlyOneVaultOutput)
+```
 
-## 10. Missing Transaction Validation
+### AU-6: Parameterized validator substitution
 
-**Problem:** Validators fail to check critical transaction properties such as time ranges, required reference inputs, proper continuation outputs, or expected mints/burns.
+**Problem:** A script cannot verify on-chain that a counterpart script is the correct
+instantiation of a known template, so a user may interact with an attacker's identically-shaped
+instance whose `owner` parameter is the attacker.
 
-**Mitigation:**
-- Always validate transaction time ranges when time-dependent
-- Verify required reference inputs are present and authentic
-- Check continuation outputs maintain correct state and value
-- Validate all state transitions are consistent
-- Ensure staking credentials remain unchanged where required
-- Verify expected mints/burns occur as intended
+**Mitigation:** Store parameters in a beacon-authenticated UTxO instead of baking them into the
+script. Where a dependent script must know an instance, compute the expected hash off-chain and
+bake it in (the `ParameterValidation` pattern in `scalus-design-patterns`). Publish the instance
+hash in the blueprint so users can verify it.
+
+## Minting (MI)
+
+### MI-1: Other token name
+
+**Problem:** A policy asserts "one unit of my expected token is minted" and says nothing about
+other token names under the same policy, so the attacker mints a counterfeit alongside it. This is
+the Minswap incident class: summing across token names conflates mints and burns, so "total under
+my policy is 1" also passes for `+2` of A and `-1` of B.
+
+**Mitigation:** Compare the whole sub-map under the policy. `tx.mint.hasOnly(policy, name, qty)`
+is the mint idiom; `qty` is signed, so the same call pins a burn. When the name is not known in
+advance, `tx.mint.tokens(policy).singleOrFail(msg)` yields the only entry and fails on zero or
+several.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala
+require(tx.mint.hasOnly(policyId, poolNftName, 1), "Init: must mint exactly one pool NFT")
+// ...and on Close:
+require(tx.mint.hasOnly(policyId, poolNftName, -1), "Close: must burn exactly the pool NFT")
+```
+
+### MI-2: One-shot seed not bound
+
+**Problem:** A one-shot policy is parameterized by a seed `TxOutRef` and must require that exact
+ref to be spent. A check weakened to "some input exists at index `i`" never compares against the
+seed, so the "unique" NFT is mintable forever, and every beacon built on it (AU-1) is forgeable.
+
+**Mitigation:** Bind the seed explicitly, and derive the token name from it with `deriveTokenName`
+so the on-chain and off-chain sides cannot disagree.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/editablenft/EditableNftValidator.scala
+require(tx.inputs.at(seedIndex).outRef === seed, MustSpendSeed)
+
+// scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/Crowdfunding.scala
+val campaignId = consumedUtxo.deriveTokenName
+require(txInfo.mint.hasOnly(policyId, campaignId, 1), "Exactly one campaign NFT must be minted")
+```
+
+### MI-3: Burn checks that pass without a burn
+
+**Problem:** `tokens(policy).forall(_._2 < 0)` is vacuously true on an empty map, so a "burn only"
+branch passes a transaction that burns nothing. A `<=` on the quantity accepts a partial burn; a
+sign error lets a mint pass a burn check.
+
+**Mitigation:** `onlyBurnsUnder(policy)` requires at least one entry under the policy and every
+quantity negative. When the name is known, `mint.hasOnly(policy, name, -qty)` is stronger.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala
+require(txInfo.onlyBurnsUnder(policyId), "Only burning is allowed (all amounts must be negative)")
+```
+
+## Time (TI)
+
+### TI-1: Unbounded validity range used as "now"
+
+**Problem:** A validity bound may be infinite, and any helper that turns it into a number must
+invent a value for that case. The deprecated `getValidityStartTime` returned `0`, so a transaction
+with **no** lower bound was treated as happening at the Unix epoch and every deadline comparison
+flipped. The transaction author picks the validity range, so a missing bound is an attacker
+capability, not an accident.
+
+**Mitigation:** Never project the interval to a scalar without proving the bound is finite.
+`validFromOrFail(msg)` and `validToOrFail(msg)` fail closed on an unbounded range; the interval
+predicates `validRange.isEntirelyAfter(t)` and `isEntirelyBefore(t)` return `false` on one. Pick
+the bound the attacker cannot move in their favour: a lower bound can be backdated freely, while
+the upper bound cannot be earlier than the real posting time (`VaultValidator` derives its
+finalization deadline from `validToOrFail` for this reason).
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/htlc/HtlcValidator.scala
+case Action.Timeout =>
+    val validFrom = tx.validFromOrFail(ValidRangeMustBeBound)
+    // validFrom is inclusive, hence 10 <= 10 is correct
+    require(config.timeout <= validFrom, InvalidCommitterTimePoint)
+```
+
+### TI-2: Bound inclusivity
+
+**Problem:** An off-by-one at a deadline gives both the claimant and the refunder a valid path in
+the same slot.
+
+**Mitigation:** The ledger builds the lower bound closed and the upper bound open. `validFromOrFail`
+is inclusive; `validToOrFail` is exclusive, so a timestamp written from it can be late but never
+early. State which one you use in the message, as the HTLC snippet above does.
+
+## Datum (DT)
+
+### DT-1: Datum hijacking
+
+**Problem:** A transition validates the field that changed and forgets the rest. The attacker
+rewrites `owner` while keeping `amount`, and the field-wise check passes. Extra trailing fields
+are smuggled through the same way.
+
+**Mitigation:** Build the complete expected datum and compare the whole thing; `copy` on the old
+datum pins every field you do not name. `hasInlineDatum(expected)` is one data equality with no
+decoding, measured at 286 lovelace against 461 for decode-then-compare. Use `inlineOrFail[T]`
+when you need the fields, not equality.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala
+val expectedDatum = AmmMath.depositDatum(datum, x0, x1)
+require(poolOutput.hasInlineDatum(expectedDatum), "Deposit: output datum mismatch")
+```
+
+### DT-3: Datum-hash bricking and missing datums
+
+**Problem:** An output at a script address may carry only a datum hash. If the preimage is never
+published, the UTxO is unspendable forever, and it costs the attacker one min-ADA to plant. On
+Plutus V3 the spending datum is `Option[Data]` and may be absent entirely.
+
+**Mitigation:** Require an **inline** datum on every output the protocol creates and never accept
+a datum-hash output as protocol state. Handle the no-datum branch with `datum.getOrFail(msg)`.
+Locate protocol UTxOs by beacon (AU-1), so planted junk is invisible. See
+[Datum Validation](/security/datum-validation) for the lazy-decoding model.
+
+## Indices and Ordering (IX)
+
+### IX-1 and IX-2: Index lists and missed inputs
+
+**Problem:** Batch validators take index lists in the redeemer. Three bugs live there: the same
+index twice (one payout counted for two obligations), a list shorter than the item list with `zip`
+silently truncating, and an extra script input that no index names and that is therefore spent
+with no validation at all.
+
+**Mitigation:** Check the index list length against the item list and reject duplicates. Verify
+coverage in both directions: every named index is an own input, and every own input is named.
+`List.at` fails on an out-of-range index. Inputs are sorted by the ledger; outputs keep the
+author's order. `UtxoIndexer.multiOneToOneNoRedeemer` in `scalus-design-patterns` walks every
+input at the script credential and fails when one has no index pair; the singular indexer
+patterns solve missed inputs, not double satisfaction.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/Crowdfunding.scala
+val isInDonationList = donationInputIndices.exists { idx =>
+    txInfo.inputs.at(idx).outRef === txOutRef
+}
+require(isInDonationList, "Donation UTxO must be in donationInputIndices")
+```
+
+## Script Purposes (PU)
+
+### PU-1: Other redeemer and unimplemented purposes
+
+**Problem:** A script that runs under several purposes or redeemer branches is only as strong as
+its weakest branch. A second script that relies on "the global validator ran" is bypassed when the
+global validator ran under a different, weaker redeemer.
+
+**Mitigation:** The Scalus compiler plugin generates a `fail` for every purpose a validator does
+not implement, so a single-purpose validator rejects minting, rewarding and certifying by default.
+When a counterpart script must run, assert *which* redeemer it ran with:
+`tx.redeemers.getOrFail(purpose, msg)` and compare the decoded value.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/htlc/HtlcValidator.scala
+ctx.scriptInfo match
+    case ScriptInfo.SpendingScript(txOutRef, datum) =>
+        spend(datum, ctx.redeemer, ctx.txInfo, txOutRef)
+    case _ => fail(MustBeSpending)
+```
+
+### PU-2: Withdraw-zero forwarding proves it ran, not how
+
+**Problem:** The withdraw-zero trick runs a stake validator once per transaction instead of once
+per input. A spending validator that only checks "a withdrawal for my stake script exists" does
+not know which branch of the stake script accepted it.
+
+**Mitigation:** `StakeValidator.spendMinimal` in `scalus-design-patterns` proves the withdrawal
+script ran and nothing more. Use `StakeValidator.spend` with a redeemer validator to pin the
+endpoint when the stake script has more than one branch.
+
+## Evaluation Order (EV)
+
+### EV-1: A required check short-circuited away
+
+**Problem:** UPLC control flow is lazy. `&&` and `||` short-circuit, and only the taken branch of
+an `if` runs. With `isEmergency || (signed && valuePreserved)`, nothing else is checked when
+`isEmergency` is true.
+
+**Mitigation:** Every obligation is its own `require` with its own message. Validation callbacks
+return `Unit` and fail inside; a `Boolean` callback throws the message away.
+
+```scala
+require(isEmergency || tx.isSignedBy(owner), "authorized")
+require(out.value === expected, "value preserved") // unconditional
+```
+
+The validator callbacks of `UtxoIndexer`, `StakeValidator` and `TransactionLevelMinterValidator`
+in `scalus-design-patterns` take `=> Unit`. An older `Boolean` lambda still compiles against a
+`Unit` parameter (value discard) and then checks nothing. After upgrading, grep every callback
+passed to these patterns and wrap its condition in `require(..., message)`.
+
+## Arithmetic (AR)
+
+### AR-1: Rounding direction
+
+**Problem:** On-chain integers do not overflow, but they round. In any `amount * rate /
+denominator`, the rounding direction decides who absorbs the remainder, and an attacker who splits
+one large action into many small ones harvests one rounding unit each time. Plain `/` on `BigInt`
+compiles to `divideInteger`, which floors; Scala's `/` truncates toward zero, so the two disagree
+on negative operands.
+
+**Mitigation:** Name the direction: `a divFloor b` or `a divCeil b`. Round the protocol's share
+down and the user's obligation up. An alphanumeric infix operator has the lowest precedence, so
+parenthesize operand expressions.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/cape/linearvesting/LinearVestingValidator.scala
+// The remaining locked quantity rounds UP at every step: nothing vests early.
+val expectedRemaining = (futureInstallments * d.totalVestingQty) divCeil d.totalInstallments
+
+// scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala
+// The released amount rounds DOWN: the beneficiary never gets a fraction early.
+vestingDatum.initialAmount * elapsed divFloor vestingDatum.duration
+```
+
+### AR-2: Negative quantities
+
+**Problem:** Datum and redeemer fields are attacker-supplied. A negative "withdrawal" is a deposit
+the validator did not intend to allow, and a negative fee is a payout.
+
+**Mitigation:** Check the sign of every quantity that enters from the redeemer or datum before
+using it in arithmetic: `require(requestedAmount > 0, NonPositiveAmount)` in `VestingValidator`.
+
+## Resources and Denial of Service (RS)
+
+### RS-1: Token dust on a protocol UTxO
+
+**Problem:** Anyone can add native tokens to any output they create. A protocol UTxO that
+accumulates hundreds of asset classes approaches the maximum value size, blows the execution
+budget of any validator that iterates its value, and pushes the min-ADA above what the UTxO holds.
+
+**Mitigation:** Constrain the token set on every output the protocol creates. `hasOnly` pins a
+single-asset value; `withoutLovelace.isZero` pins an ADA-only one.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultValidator.scala
+require(value.withoutLovelace.isZero, CannotAddTokens)
+```
+
+### RS-2: Large datum
+
+**Problem:** Oversized datums on UTxOs that must be consumed for critical operations exhaust the
+budget of every later spend and can exceed the transaction size limit.
+
+**Mitigation:** Bound every collection a validator iterates, and keep large data off-chain behind
+a hash. Compare continuing datums with whole-datum `hasInlineDatum`, which is constant-cost.
+
+### RS-4: Quadratic scans
+
+**Problem:** Every spent script input runs the validator, and each run that iterates all inputs is
+linear, so the transaction is quadratic. A protocol that works with three inputs fails at fifteen.
+
+**Mitigation:** Move batch validation to a stake validator that runs once per transaction
+(`StakeValidator` in `scalus-design-patterns`, as in `OptimizedPaymentSplitterValidator`), and
+pin the budget at several input counts in tests.
+
+### RS-5: UTxO contention
+
+**Problem:** A single global-state UTxO must be consumed by every operation, so concurrent users
+race and all but one fail. An attacker who spends and recreates that UTxO on every block halts the
+protocol.
+
+**Mitigation:** Design for per-user UTxOs, sharded state, or batching through a stake validator.
+Add cancellation fees, freezing periods, or minimum time locks as economic disincentives. Submit
+competing transactions in an Emulator test so contention shows up before deployment.
+
+## Design-Level (DE)
+
+### DE-1: Locked value
+
+**Problem:** A state with no outgoing transition, or a branch whose precondition can never hold,
+locks the UTxO forever. The classic case is a bet with no timeout path when the oracle goes silent.
+
+**Mitigation:** Every state has an exit. Give time-gated flows a reclaim branch, gated by
+`validRange.isEntirelyAfter(expiration)` and a participant's signature (the `Timeout` action in
+`BettingValidator`), and test that it is reachable.
+
+### DE-2: Oracle attacks
+
+**Authenticity.** An oracle datum located by address alone is AU-1. Authenticate the oracle UTxO
+by its beacon NFT (`hasNft`) before reading its datum.
+
+**Freshness.** Stale data leads to wrong decisions. Compare the oracle timestamp against the
+transaction's validity range and reject data older than the protocol's threshold.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/PricebetValidator.scala
+require(
+  validRange.isEntirelyAfter(oracleState.timestamp),
+  "Oracle timestamp must be within transaction validity range"
+)
+```
+
+**Manipulation.** Spot prices can be moved within one block. Prefer time-weighted averages, cap
+the reportable change per update, and aggregate several sources.
+
+**Key compromise.** Oracle keys are high-value targets. Support on-chain key rotation and expiry,
+require multi-signature oracles, and verify oracle signatures on-chain with a domain-separated
+payload so a signature cannot be replayed across instances.
 
 
 ---
@@ -15228,9 +16098,15 @@ the residual risk actually lives, and what to do about it.
 
 ## Lazy by Default, on Purpose
 
-Toolchains differ here. Aiken's `expect` decodes a typed datum strictly at the boundary
-(tag, exact field count, deep). PlutusTx decodes the declared fields but accepts extra trailing
-ones. Scalus, like plu-ts, trusts the datum and projects fields lazily.
+Toolchains differ here, though less than you might expect. Aiken's `expect` decodes a typed
+datum strictly at the `Data` boundary (tag, exact field count, deep). Plinth's default derived
+decoder checks the constructor index on every type, including single-constructor ones, but
+accepts extra trailing fields; its `asData` mode drops the index check on the grounds that a
+type with one constructor has nothing to discriminate. Plutarch's `pmatch` on a single-variant
+data type skips the check too, and offers `PTryFrom` as the opt-in strict decoder. Pebble goes
+further and warns you that testing the constructor of a one-constructor struct is redundant.
+Scalus is in that second group: like plu-ts, Plutarch and Plinth's `asData`, it trusts the datum
+and projects fields lazily.
 
 Strict-by-default sounds safer, but it adds a catalogued vulnerability: **arbitrary-datum
 bricking**. If a validator rejects any output whose datum does not decode to the expected type,
@@ -15245,6 +16121,96 @@ The trade is two different exposures:
   arbitrary-datum bricking.
 - Lazy projection keeps that robustness; the residual risk is shape smuggling into your own
   protocol state (below).
+
+## The Constructor Tag
+
+For a **single-constructor** type (a plain `case class`), reading a field compiles to
+`sndPair(unConstrData d)` plus list drops. The tag is never compared, so any `Constr(k, ...)` is
+accepted:
+
+```scala
+case class State(owner: ByteString, counter: BigInt)
+
+// all three return 42
+d.to[State].counter   // d = Constr(0,  [B #deadbeef, I 42])
+d.to[State].counter   // d = Constr(1,  [B #deadbeef, I 42])
+d.to[State].counter   // d = Constr(99, [B #deadbeef, I 42])
+```
+
+`match` does not check it either: a single-constructor `match` lowers to the same projection. The
+one guard that remains is `unConstrData` itself, so a `Data.I`, `Data.B`, `Data.List` or
+`Data.Map` still fails the script.
+
+**Sum types are different.** An `enum` or sealed hierarchy dispatches on the tag, and at PV11
+(the default target) an out-of-range tag fails the script. That holds even for a one-case `enum`.
+Pre-PV11 targets (`Options.plomin`) treat the last constructor as an unconditioned `else`, which
+matches Aiken's behaviour for an exhaustive `when`.
+
+### Re-encoding uses the declared tag
+
+The unpacked form of a product is a plain `List[Data]`, which carries no tag. When such a value is
+turned back into `Data`, Scalus emits the tag **declared by the type**, not the one that arrived.
+This happens when the value crosses a non-`inline` function boundary:
+
+```scala
+@Compile
+object Helpers:
+    def reencode(s: State): Data = s.toData   // the parameter takes the unpacked form
+
+compile { (d: Data) => Helpers.reencode(d.to[State]) }
+// d = Constr(1, [B #deadbeef, I 42])  ->  Constr(0, [B #deadbeef, I 42])
+```
+
+Inside a single expression the value keeps its packed form and the tag survives:
+
+```scala
+compile { (d: Data) =>
+    val s = d.to[State]
+    s.toData                                  // Constr(1, ...) stays Constr(1, ...)
+}
+```
+
+Well-formed values are never affected. A value whose tag already matches its type round-trips
+unchanged, including a variant of a sealed hierarchy that legitimately carries a non-zero tag.
+Extra trailing fields also survive; only the tag is rewritten.
+
+This is the mechanism behind the `inlineOrFail[T] === x` warning in
+[Equality vs Field Reads](#equality-vs-field-reads): the decoded value is held as a field list, and
+the rewrap before the comparison stamps the declared tag on it. `hasInlineDatum` avoids the round
+trip entirely by comparing the original `Data`.
+
+### Two rules this implies
+
+First: never cast to a **concrete variant** of a sealed hierarchy. Match on the parent instead.
+
+```scala
+enum Order derives FromData, ToData:
+    case Buy(amount: BigInt)     // tag 0
+    case Sell(amount: BigInt)    // tag 1
+
+// WRONG: a Sell's bytes are read as a Buy, and re-encoding emits a canonical Buy
+val buy = redeemer.to[Order.Buy]
+
+// RIGHT: the parent match checks the tag
+redeemer.to[Order] match
+    case Order.Buy(amount)  => ...
+    case Order.Sell(amount) => ...
+```
+
+Second: compare datums in the form you received them. Comparing two re-encoded values can report
+equal for byte-different datums, so for a continuing output use `out.hasInlineDatum(expected)`,
+which compares the original `Data` byte for byte.
+
+### Checking the tag yourself
+
+When a single-constructor datum comes from an untrusted source and its tag matters to you, guard
+it explicitly:
+
+```scala
+require(datum.toConstr.fst === BigInt(0), "unexpected constructor tag")
+```
+
+At PV11 that costs roughly 165 lovelace on top of a plain field read, at current mainnet prices.
 
 ## Why "Huge Datum" Attacks Are Weaker Than They Look
 
@@ -15267,16 +16233,54 @@ they become protocol state, every later spend that traverses the datum pays more
 UTxO can eventually exceed the execution budget. Byte-different datums that decode to the same
 typed value also silently fork anything keyed on datum bytes or hashes.
 
-Whole-datum equality already closes this hole: `===` on datums compiles to a byte-exact
-`equalsData`, and it is cheap.
+Whole-datum equality already closes this hole: comparing the output's datum as `Data` is a
+byte-exact `equalsData`, and it is cheap.
 
 ```scala
 // Field-wise check: extra trailing fields are smuggled through
+val newDatum = contractOutput.datum.inlineOrFail[VestingDatum]("not inline")
 require(newDatum.owner === datum.owner && newDatum.deadline === datum.deadline)
 
 // Whole-datum check: byte-exact, no smuggling possible
-require(newDatum === expectedDatum, "unexpected continuing datum")
+require(contractOutput.hasInlineDatum(expectedDatum), "unexpected continuing datum")
 ```
+
+## Equality vs Field Reads
+
+There are two ways to look at a continuing output's inline datum, and they are not
+interchangeable:
+
+- **`out.hasInlineDatum(x)`** when the datum must **equal** a known value. It wraps `x` as an
+  `OutputDatum` and compares the whole `Data` with one `equalsData`. Measured at 286 lovelace
+  per comparison.
+- **`out.datum.inlineOrFail[T](msg)`** when the datum's **fields** are needed. It unwraps the
+  `OutputDatum`, fails if the datum is a hash or absent, and hands back a lazily decoded `T`.
+  Decoding and then comparing with `=== x` costs 461 lovelace for the same check, because the
+  decoded value is held as a field list and rewrapped before the comparison.
+
+```scala
+// Equality: compare the Data once
+require(contractOutput.hasInlineDatum(vestingDatum), InvalidDatum)
+
+// Field reads: decode, then use the fields
+val next = contractOutput.datum.inlineOrFail[Config](NotInlineDatum)
+require(next.beneficiary === config.beneficiary, BeneficiaryChanged)
+require(next.startTimestamp === config.startTimestamp, StartChanged)
+```
+
+The two forms also differ on a malformed datum. `inlineOrFail[T]` does **not** validate the
+shape: a datum with the wrong constructor tag decodes lazily and no error is raised until a field
+is read, if ever. When such a value is compared with `=== x`, the rewrap hard-codes the
+constructor tag as `0`, so a datum with a wrong tag and matching fields compares **equal**.
+`hasInlineDatum` compares the original `Data`, tag included, so a wrong tag simply fails the
+equality. For a continuing-output check that is the behaviour you want: the attacker's datum is
+rejected without the validator having to know what was wrong with it.
+
+Never write `out.datum.inlineOrFail[T](msg) === x` for a pure equality check. It is the dearer
+form and the weaker one. The migrated examples use `hasInlineDatum` for every continuing datum
+comparison (`VestingValidator`, `EscrowValidator`, `AmmValidator`, `Auction`); see
+[Equality and Lookups](/docs/smart-contract-optimisations/equality-and-lookups#datum-equality-hasinlinedatum-vs-inlineorfail)
+for the measured table.
 
 ## Guidance
 
@@ -15284,14 +16288,17 @@ In priority order:
 
 1. **Authenticate protocol UTxOs with a state-thread or one-shot NFT.** Shape validation cannot
    detect a well-formed fake; this is the defence that matters most.
-2. **Check continuing-output datums with whole-datum `===`**, not field by field.
-3. **Require inline datums on protocol outputs.** Never accept a datum-hash output as protocol
+2. **Check continuing-output datums with `out.hasInlineDatum(expected)`**, not field by field.
+   Use `inlineOrFail[T]` only when the fields are needed.
+3. **Never cast to a concrete variant of a sealed hierarchy**; match on the parent type, which
+   checks the constructor tag. See [The Constructor Tag](#the-constructor-tag).
+4. **Require inline datums on protocol outputs.** Never accept a datum-hash output as protocol
    state.
-4. **Handle the PlutusV3 no-datum branch explicitly** (on V3 the script runs with `None`; on
+5. **Handle the PlutusV3 no-datum branch explicitly** (on V3 the script runs with `None`; on
    V1/V2 a missing datum is a phase-1 rejection).
-5. **Bound anything you iterate**: datum-carried lists and token counts in a value. Real UTxOs
+6. **Bound anything you iterate**: datum-carried lists and token counts in a value. Real UTxOs
    have been bricked by exceeding the memory budget with 150+ assets, well under the size limit.
-6. **Validate `ByteString` lengths used as credentials.** Nothing forces a key hash to be 28
+7. **Validate `ByteString` lengths used as credentials.** Nothing forces a key hash to be 28
    bytes; a zero-length or over-long value can make a required output impossible to build.
 
 ## Opt-In Validation
@@ -15308,13 +16315,224 @@ point of use:
 
   A general opt-in deep validator with Aiken-equivalent semantics (an `expect`-style combinator
   that checks constructor tags, exact field counts and nested shapes) is planned. Until then,
-  whole-datum `===` plus the guidance above covers the known attack surface.
+  `hasInlineDatum` plus the guidance above covers the known attack surface.
 
 ## See Also
 
 - **[Common Vulnerabilities](/docs/security/common-vulnerabilities)** – Known vulnerability patterns and mitigations
+- **[Safe API Cheatsheet](/docs/security/safe-api-cheatsheet)** – The fail-fast form of every lookup, one line per operation
+- **[Equality and Lookups](/docs/smart-contract-optimisations/equality-and-lookups)** – Measured costs behind the rules on this page
 - **[Plutus Data](/docs/smart-contracts/plutus-data)** – How `toData`/`fromData` work
 - **[Design Patterns](/docs/design-patterns)** – State-thread NFTs and other structural defences
+
+
+---
+Source: https://scalus.org/docs/security/safe-api-cheatsheet
+---
+
+# Safe API Cheatsheet
+
+The safe API is a small set of on-chain operations whose *semantics* close a vulnerability
+class: the obvious hand-written expansion is wrong in a way real contracts have paid for, and the
+named operation removes the mistake. Three conventions hold throughout:
+
+- **Fail-fast is primary.** A lookup that must succeed is `xOrFail(message)`; the `Option` form
+  exists only where the caller branches.
+- **Predicates plus `require`.** Checks return `Boolean` and you write
+  `require(check, message)`. There are no `requireX` wrappers.
+- **Safety in semantics, not naming.** `findContinuingOutputOrFail` compares the whole address;
+  `onlyBurnsUnder` refuses an empty mint. The name says what is checked, and the body checks it.
+
+  Most of what a validator needs was already in the library. The first table lists those idioms;
+  the nineteen operations that follow are the additions. Do not rewrite an idiom into a helper of
+  your own.
+
+## Already in the library
+
+| Check | Idiom | Anti-idiom it replaces |
+|---|---|---|
+| Exact mint **or burn**, nothing else under the policy | `tx.mint.hasOnly(policy, name, qty)` (`qty` is signed) | `quantityOf(policy, name) === qty` alone (MI-1: other names slip through) |
+| Multi-asset exact mint | `tx.mint.tokens(policy) === expected` | per-name `quantityOf` checks |
+| Nothing / anything minted under a policy | `tx.mint.tokens(policy).isEmpty` / `.nonEmpty` | `size == 0`; hand-written `mintsNothing` helpers |
+| ADA only | `value.withoutLovelace.isZero` | `value.toSortedMap.size === BigInt(1)` |
+| Deadline passed / not yet | `tx.validRange.isEntirelyAfter(t)` / `isEntirelyBefore(t)` | raw bound reads with a default of `0` |
+| Signed by one; by all; how many | `tx.isSignedBy(pkh)`; `keys.forall(tx.isSignedBy)`; `keys.count(tx.isSignedBy)` | `tx.signatories.filter(...).length` |
+| Inline datum decode (fields needed) | `out.datum.inlineOrFail[T](msg)` | `datum match { case OutputDatum(d) => d.to[T] }` with `@unchecked` |
+| Map lookup that must succeed | `map.getOrFail(key, msg)` | `map.get(key).get` |
+| Finite interval bound | `bound.finiteOrFail(msg)` | `bound.finite(0)` (invents a time) |
+| Enterprise address for a script | `Address.fromScriptHash(h)` | building `Address(cred, None)` and comparing it to a real output |
+| Credential projection, branching | `cred.scriptOption` / `cred.pubKeyOption` | destructuring with `: @unchecked` |
+| Any / every element; count; index | `list.contains(x)`, `forall`, `count(p)`, `at(i)` | `exists` (allocates an `Option`), `filter(p).length` |
+| Structural equality | `a === b` | `a.toData == b.toData` (identical UPLC, so never write it) |
+
+## The nineteen operations
+
+Grouped by receiver. The last column is the hand-written line the operation replaces.
+
+### List, SortedMap, AssocMap
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `List.findUniqueOrFail(predicate: A => Boolean, inline message: String): A` | DS-1 double satisfaction: `find` stops at the first match and accepts a second | `filter(p).length === BigInt(1)` then `.head`; two traversals |
+| `List.singleOrFail(inline message: String): A` | IX-1 "first of many": `head` accepts the first of five | `list.head` after an unchecked size assumption |
+| `SortedMap.singleOrFail(inline message: String): (A, B)` (and `AssocMap.singleOrFail`, same body) | MI-1 / MI-3 partial mint or burn: extracts the one entry and fails on two or more | `match` on `tokens(p).toList` with a `PairCons(kv, PairNil)` arm |
+
+### Credential
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `Credential.scriptHashOrFail(inline message: String): ValidatorHash` | AU-3 own-hash confusion; no `Option` allocation | `cred.scriptOption.getOrFail(msg)`; `case ScriptCredential(h) => h` with `@unchecked` |
+| `Credential.pubKeyHashOrFail(inline message: String): PubKeyHash` | same, for keys | `cred.pubKeyOption.getOrFail(msg)` |
+
+### Value
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `Value.hasNft(cs: PolicyId, tn: TokenName): Boolean` | AU-1 planted UTxO: "exactly one" is the NFT invariant; `> 0` is a different predicate | `quantityOf(p, n) === BigInt(1)` (and the drift to `> 0`) |
+| `Value.hasSameTokensAndAtLeastAda(expected: Value): Boolean` | VP-1 `>=` on the whole value; VP-6 min-ADA griefing with `===` | `out.value === expected` or `out.value.containsAtLeast(expected)` |
+
+### TxOut
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `TxOut.hasInlineDatum[A: ToData](a: A): Boolean` | DT-1 datum continuity, field-wise checks that let trailing fields through; measured 286 lovelace against 461 for the decode form | `out.datum.inlineOrFail[T](msg) === expected`; `out.datum === OutputDatum(x.toData)` |
+
+### TxInfo
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `TxInfo.findContinuingOutputOrFail(ownInput: TxInInfo, inline message: String): TxOut` | AU-4 staking swap: compares the **whole** address, the credential-only finders do not; DS-1 via uniqueness | `findOutputsByCredential(cred)` then `.length === BigInt(1)` then `.head` |
+| `TxInfo.valuePaidTo(addr: Address): Value` | VP-2 lovelace-only sums that let native tokens be stripped | `Utils.getAdaFromOutputs(outs)`; `outputs.filter(_.address === a).map(_.value.getLovelace).sum` |
+| `TxInfo.valueSpentFrom(addr: Address): Value` | same, over inputs | `Utils.getAdaFromInputs(ins)` |
+| `TxInfo.isSignedByAny(keys: List[PubKeyHash]): Boolean` | AU-2 multi-owner authorization without the `Option` tax of `exists` | `keys.exists(tx.isSignedBy)` |
+| `TxInfo.validFromOrFail(inline message: String): PosixTime` | TI-1 unbounded range used as "now": fails instead of returning `0`; the bound is **inclusive** | `tx.getValidityStartTime`; `validRange.from.finite(0)` |
+| `TxInfo.validToOrFail(inline message: String): PosixTime` | TI-2 inclusivity: the bound is **exclusive**, a datum timestamp taken from it can be late, never early | `validRange.to.boundType match { case Finite(t) => t }` |
+| `TxInfo.onlyBurnsUnder(policy: PolicyId): Boolean` | MI-3 vacuous truth: `forall` on an empty mint map is `true`, so a `Close` that mints nothing passes | `tx.mint.tokens(policy).forall(_._2 < 0)` |
+| `TxInfo.hasPaidTagged(addr: Address, value: Value, tag: OutputDatum): Boolean` | DS-1 / DS-2 across instances: exact address, exact value, unique tag | a fold over outputs with `>=` on the value |
+
+### TxOutRef
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `TxOutRef.deriveTokenName: TokenName` | MI-2 one-shot seed: one definition the off-chain side can mirror byte for byte | `blake2b_256(serialiseData(ref.toData))` copied into every validator |
+
+### Math
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `a divFloor b` (`Math.divFloor(a: BigInt, b: BigInt): BigInt`) | AR-1 rounding direction: the protocol's share rounds down, explicitly | `a / b` (truncates toward zero, rounds **up** for negatives) |
+| `a divCeil b` (`Math.divCeil(a: BigInt, b: BigInt): BigInt`) | AR-1: the user's obligation rounds up, so no fraction leaks per transaction | `(a + b - 1) / b` and other hand-rolled ceilings |
+
+  An alphanumeric infix operator has the lowest precedence: `total divCeil n * fee` parses as
+  `total divCeil (n * fee)`. Parenthesize operands that are expressions.
+
+## The fail-fast form of every lookup
+
+Reach for the `OrFail` form whenever the validator cannot continue without the value. Each one
+takes a message, so the failure names the check.
+
+| Lookup | Fail-fast form | Fails when |
+|---|---|---|
+| Map entry | `map.getOrFail(key, msg)` | key absent |
+| Inline datum, typed | `out.datum.inlineOrFail[T](msg)` | datum is a hash or missing |
+| Interval bound | `bound.finiteOrFail(msg)` | bound is infinite |
+| Only element | `list.singleOrFail(msg)`, `map.singleOrFail(msg)` | size is not one |
+| Unique match | `list.findUniqueOrFail(p, msg)` | zero or two or more matches |
+| Input by reference | `tx.findInputOrFail(ref, msg)` | no input spends `ref` |
+| Continuing output | `tx.findContinuingOutputOrFail(ownInput, msg)` | zero or several outputs at the exact address |
+| Credential hash | `cred.scriptHashOrFail(msg)` / `cred.pubKeyHashOrFail(msg)` | wrong credential kind |
+| Validity bounds | `tx.validFromOrFail(msg)` / `tx.validToOrFail(msg)` | the range is unbounded on that side |
+
+**Vocabulary.** `singleton` *builds* a one-element collection (`List.singleton(a)`,
+`SortedMap.singleton(k, v)`). `singleOrFail` *extracts* the only element of a size-one collection.
+`findUniqueOrFail` finds the one element that satisfies a predicate among many, and keeps scanning
+to prove there is no second. `.head` after `filter` is the anti-idiom for both.
+
+## Deprecated members
+
+Deprecated members still compile and delegate to their replacement. The design-pattern callback
+change in the last row is different: it is in place, with no deprecated overload.
+
+| Deprecated | Replacement | Note |
+|---|---|---|
+| `findOwnInput(ref)` | `findInput(ref)` | "Own" was a Plutus inheritance; these find *any* input |
+| `findOwnInputOrFail(ref, msg)` | `findInputOrFail(ref, msg)` | direct scan, no `Option` |
+| `findOwnDatum(hash)` | `findDatum(hash)` | |
+| `findOwnScriptOutputs(hash)` | `findOutputsByScriptHash(hash)` | payment credential only; not for the continuing output (AU-4) |
+| `findOwnInputsByCredential(cred)` | `findInputsByCredential(cred)` | payment credential only |
+| `findOwnOutputsByCredential(cred)` | `findOutputsByCredential(cred)` | payment credential only; not for the continuing output (AU-4) |
+| `findOwnInputs(pred)` | `tx.inputs.filter(pred)` | one-liner |
+| `findOwnOutputs(pred)` | `tx.outputs.filter(pred)` | one-liner |
+| `getValidityStartTime` | `validFromOrFail(msg)` | returned `0` for an unbounded range (TI-1) |
+| `Utils.getAdaFromOutputs(outs)` | `valuePaidTo(addr).getLovelace` | summed lovelace only (VP-2); the replacement sums the whole `Value` |
+| `Utils.getAdaFromInputs(ins)` | `valueSpentFrom(addr).getLovelace` | same |
+| `List.single(a)` | `List.singleton(a)` | one constructor name across all four collections |
+| `PairList.single(a, b)` | `PairList.singleton(a, b)` | same |
+| Design-pattern `Boolean` callbacks (`UtxoIndexer`, `StakeValidator`, `TransactionLevelMinterValidator`) | `=> Unit` callbacks that `require` / `fail` with their own message | changed in place, no overload. **Hazard:** a `Boolean` lambda still compiles against the `Unit` parameter (value discard) and then checks nothing. Grep every callback and wrap its condition in `require(..., message)` |
+
+## Worked example: the vesting validator
+
+`scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala`, the spend
+branch before and after migration. Five operations do the work of nine lines of scaffolding, and
+every check that used to be implicit now fails with its own message.
+
+**Before**
+
+```scala
+val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
+val contractAddress = ownInput.address
+
+require(
+  txInfo.findOwnInputsByCredential(contractAddress.credential).length === BigInt(1),
+  MultipleVestingInputs
+)
+
+val contractOutputs = txInfo.findOwnOutputsByCredential(contractAddress.credential)
+val txEarliestTime = txInfo.getValidityStartTime   // 0 when the range has no lower bound
+// ...
+require(contractOutputs.length === BigInt(1), NotExactlyOneContractOutput)
+val contractOutput = contractOutputs.head
+require(contractOutput.address === ownInput.address, ContinuingAddressMismatch)
+require(
+  contractOutput.value === ownInput.value - Value.lovelace(requestedAmount),
+  ContinuingValueMismatch
+)
+require(contractOutput.datum === OutputDatum.OutputDatum(vestingDatum), InvalidDatum)
+```
+
+**After**
+
+```scala
+val ownInputInfo = txInfo.findInputOrFail(txOutRef)
+val ownInput = ownInputInfo.resolved
+val ownCredential = ownInput.address.credential
+
+// One own input per transaction: one pass, fails on a second match (DS-1).
+txInfo.inputs.findUniqueOrFail(
+  _.resolved.address.credential === ownCredential,
+  MultipleVestingInputs
+)
+
+val txEarliestTime = txInfo.validFromOrFail(NoValidityLowerBound)   // fails, never 0 (TI-1)
+// ...
+// The unique output at the exact own input address, staking credential included (AU-4).
+val contractOutput =
+    txInfo.findContinuingOutputOrFail(ownInputInfo, NotExactlyOneContractOutput)
+require(
+  contractOutput.value === ownInput.value - Value.lovelace(requestedAmount),
+  ContinuingValueMismatch
+)
+require(contractOutput.hasInlineDatum(vestingDatum), InvalidDatum)
+```
+
+The vesting formula in the same file uses the rounding operation:
+`vestingDatum.initialAmount * elapsed divFloor vestingDatum.duration`.
+
+## See Also
+
+- **[Common Vulnerabilities](/docs/security/common-vulnerabilities)** – The classes these operations close
+- **[Datum Validation](/docs/security/datum-validation)** – Whole-datum equality and lazy decoding
+- **[Design Patterns](/docs/design-patterns)** – State-thread NFTs, indexers and other structural defences
 
 
 ---
@@ -15990,6 +17208,27 @@ private given Options = Options.release.copy(
 private given Options = Options.plomin
 ```
 
+**The Scalus marker.** `Options.release` marks the compiled program as Scalus-generated, so
+explorers and analytics tools can attribute it (the same idea as Aiken's and plu-ts's markers).
+The marker is `[(error) (con integer 3)]`, placed on the first `(error)` node of the optimised
+program – `3` is Scalus's compiler id in [CIP-171](https://cips.cardano.org/cip/CIP-0171).
+An `(error)` node is only reached when the script is about to fail, so on every successful run
+the marker is never evaluated: it costs no execution budget, only two or three bytes of script
+size. A program with no `(error)` node at all (a computation that cannot fail) is left unmarked.
+
+The marker is part of the script bytes, so it changes the script hash. Use
+`Options.releaseUntagged` to compile without it – for example, to reproduce the hash of a
+contract deployed from a version of Scalus that did not add one.
+
+```scala
+private given Options = Options.releaseUntagged
+```
+
+Scalus 1.0 and 1.1 used a different marker, `[(lam _ program) (con string "S")]` wrapped around
+the whole program. It was evaluated on every run and cost 300 memory and 48,000 CPU steps, which
+is why it was replaced. Tooling that recognises Scalus scripts should accept both shapes:
+contracts compiled with those versions are deployed on mainnet.
+
 ## Using Compiled Contracts
 
 ### Access Script and Address
@@ -16501,7 +17740,7 @@ addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "<scalus-version>")
 lazy val myProject = (project in file("."))
     .enablePlugins(ScalusSbtPlugin)
     .settings(
-      scalaVersion := "3.3.7",
+      scalaVersion := "3.3.8",
       addCompilerPlugin("org.scalus" % "scalus-plugin" % "<scalus-version>" cross CrossVersion.full),
       libraryDependencies ++= Seq(
         "org.scalus" %% "scalus" % "<scalus-version>",
@@ -16622,7 +17861,7 @@ or toolchain change affected each `compiledCode` and `hash`.
 
 `sbt blueprintCheck` fails when the pinned files no longer match freshly generated ones – use
 it in release pipelines to catch forgotten pins. If your project cross-builds several Scala
-versions, set `blueprintScalaVersion := Some("3.3.7")` so pins are only written (and checked)
+versions, set `blueprintScalaVersion := Some("3.3.8")` so pins are only written (and checked)
 under your primary Scala baseline; other versions still embed their own blueprints in their
 JARs.
 

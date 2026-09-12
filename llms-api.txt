@@ -1,4 +1,4 @@
-# Scalus 1.1.0 public API cheatsheet
+# Scalus 1.2.0 public API cheatsheet
 # Generated - do not edit. Signatures are Scala 3.
 
 object scalus.cardano.ledger.BloxbeanToLedgerTranslation
@@ -141,6 +141,7 @@ case class scalus.cardano.ledger.StakeDistribution.StakeDistributionSnapshot
   val poolStakes: Map[PoolKeyHash, Coin]
   val stakeCredentials: Map[Credential, Coin]
   def computeSnapshot(utxos: Utxos, delegations: Map[Credential, PoolKeyHash], drepDelegations: Map[Credential, DRep]): StakeDistributionSnapshot
+  def aggregateUtxoStake(utxos: Utxos): Map[Credential, Coin]
   def computeDRepVotingStake(stakeByCredential: Map[Credential, Coin], drepDelegations: Map[Credential, DRep]): Map[DRep, Coin]
   def fromCertState(utxos: Utxos, certState: CertState): StakeDistributionSnapshot
 
@@ -354,6 +355,7 @@ case class scalus.cardano.ledger.TransactionException.PlutusScriptValidationExce
 
 case class scalus.cardano.ledger.TransactionException.IllegalArgumentException
   val message: String
+  def ruleName(ex: TransactionException): String
 
 case class scalus.cardano.ledger.UTxOState
   val utxo: Utxos
@@ -479,6 +481,7 @@ object scalus.cardano.node.BlockfrostProvider
   def parseUtxos(json: String): Utxos
   def parseUtxoItems(items: Seq[ujson.Value]): Utxos
   def parseUtxoItemsWithRefHashes(items: Seq[ujson.Value]): Tuple2[Utxos, Map[TransactionInput, ScriptHash]]
+  def combineOr(left: Either[UtxoQueryError, Utxos], right: Either[UtxoQueryError, Utxos]): Either[UtxoQueryError, Utxos]
   def referenceScriptHash(json: ujson.Value): Option[ScriptHash]
   def buildPlutusScript(scriptType: String, expectedHash: ScriptHash, cbor: ByteString): Script
   def buildNativeScript(expectedHash: ScriptHash, timelockJson: ujson.Value): Script
@@ -503,17 +506,7 @@ case class scalus.cardano.node.DelegationInfo
 class scalus.cardano.node.Emulator
   val validators: Iterable[Validator]
   val mutators: Iterable[Mutator]
-  def utxos: Utxos
-  def certState: CertState
-  def datums: Map[DataHash, Data]
   def appliedTxLog: Vector[AppliedTx]
-  def appliedTxIndex: Map[TransactionHash, AppliedTx]
-  def appliedTxs: Set[TransactionHash]
-  def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash]
-  def submitSync(transaction: Transaction, debugScripts: Map[ScriptHash, DebugScript]): Either[SubmitError, TransactionHash]
-  def setSlot(slot: SlotNo): Unit
-  def clearAppliedTxs(): Unit
-  def snapshot(): Emulator
 
 object scalus.cardano.node.Emulator
   val defaultValidators: Set[STS.Validator]
@@ -547,14 +540,20 @@ trait scalus.cardano.node.EmulatorBase
   def getTransaction(txHash: TransactionHash): Option[Transaction]
   def getAppliedTx(txHash: TransactionHash): Option[AppliedTx]
   def getDelegation(credential: Credential): DelegationInfo
+  def stakeDistribution: Seq[StakeDistributionEntry]
   def getDatum(datumHash: DataHash): Future[Option[Data]]
   def cardanoInfo: CardanoInfo
   def currentSlot: Future[SlotNo]
+  def currentSlotSync: SlotNo
   def fetchLatestParams: Future[ProtocolParams]
   def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]]
   def submit(transaction: Transaction, debugScripts: Map[ScriptHash, DebugScript]): Future[Either[SubmitError, TransactionHash]]
   def submitSync(transaction: Transaction, debugScripts: Map[ScriptHash, DebugScript]): Either[SubmitError, TransactionHash]
+  def addUtxo(input: TransactionInput, output: TransactionOutput): Unit
+  def removeUtxo(input: TransactionInput): Unit
+  def findUtxosSync(query: UtxoQuery): Utxos
   def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]]
+  def checkTransaction(txHash: TransactionHash): Future[TransactionStatus]
 
 object scalus.cardano.node.EmulatorBase
   def evalQuery(utxos: Utxos, query: UtxoQuery): Utxos
@@ -562,6 +561,8 @@ object scalus.cardano.node.EmulatorBase
   def createInitialUtxos(addresses: Seq[Address], initialValue: Value): Utxos
   def resolveSpent(utxos: Utxos, transaction: Transaction): Utxos
   def indexAppliedTxs(log: Iterable[AppliedTx]): Map[TransactionHash, AppliedTx]
+  def inlineDatumOf(output: TransactionOutput): Option[Tuple2[DataHash, Data]]
+  def extractInlineDatums(utxos: Utxos): Map[DataHash, Data]
   def extractDatums(transaction: Transaction): Map[DataHash, Data]
   def buildInitialState(initState: EmulatorInitialState, context: Context): Tuple2[CertState, Map[DataHash, Data]]
   def certStateWithRegisteredCredentials(initialStakeRewards: Map[Credential, Coin], context: Context): CertState
@@ -624,6 +625,22 @@ object scalus.cardano.node.EmulatorStakeRegistration
   def of(credential: Credential, rewards: Coin): EmulatorStakeRegistration
   def of(credential: Credential, rewards: Coin, delegatedTo: PoolKeyHash): EmulatorStakeRegistration
 
+case class scalus.cardano.node.EmulatorState
+  val ledger: State
+  val context: Context
+  val datums: Map[DataHash, Data]
+  val appliedTxLog: Vector[AppliedTx]
+  val appliedTxIndex: Map[TransactionHash, AppliedTx]
+  val appliedTxs: Set[TransactionHash]
+  def withApplied(newLedger: State, applied: AppliedTx): EmulatorState
+  def withClearedAppliedTxs: EmulatorState
+  def withSlot(slot: SlotNo): EmulatorState
+  def withUtxo(input: TransactionInput, output: TransactionOutput): EmulatorState
+  def withoutUtxo(input: TransactionInput): EmulatorState
+
+object scalus.cardano.node.EmulatorState
+  def initial(utxos: Utxos, certState: CertState, context: Context, datums: Map[DataHash, Data], appliedTxLog: Vector[AppliedTx]): EmulatorState
+
 trait scalus.cardano.node.NetworkSubmitError
 
 object scalus.cardano.node.NetworkSubmitError
@@ -631,22 +648,28 @@ object scalus.cardano.node.NetworkSubmitError
 case class scalus.cardano.node.NetworkSubmitError.ConnectionError
   val message: String
   val cause: Option[Throwable]
+  def rule: String
 
 case class scalus.cardano.node.NetworkSubmitError.AuthenticationError
   val message: String
+  def rule: String
 
 case class scalus.cardano.node.NetworkSubmitError.RateLimited
   val message: String
+  def rule: String
 
 case class scalus.cardano.node.NetworkSubmitError.Banned
   val message: String
+  def rule: String
 
 case class scalus.cardano.node.NetworkSubmitError.MempoolFull
   val message: String
+  def rule: String
 
 case class scalus.cardano.node.NetworkSubmitError.InternalError
   val message: String
   val cause: Option[Throwable]
+  def rule: String
 
 trait scalus.cardano.node.NodeSubmitError
 
@@ -655,25 +678,37 @@ object scalus.cardano.node.NodeSubmitError
 case class scalus.cardano.node.NodeSubmitError.UtxoNotAvailable
   val message: String
   val unavailableInputs: Set[TransactionInput]
+  def rule: String
 
 case class scalus.cardano.node.NodeSubmitError.TransactionExpired
   val message: String
+  def rule: String
 
 case class scalus.cardano.node.NodeSubmitError.ValueNotConserved
   val message: String
+  def rule: String
 
 case class scalus.cardano.node.NodeSubmitError.ScriptFailure
   val message: String
   val logs: Seq[String]
   val scriptHash: Option[ScriptHash]
   val spentBudget: ExUnits
+  def rule: String
 
 case class scalus.cardano.node.NodeSubmitError.ValidationError
   val message: String
   val errorCode: Option[String]
+  def rule: String
+
+case class scalus.cardano.node.StakeDistributionEntry
+  val credential: Credential
+  val pool: Option[PoolKeyHash]
+  val stake: Coin
+  val rewards: Coin
 
 trait scalus.cardano.node.SubmitError
   def message: String
+  def rule: String
 
 object scalus.cardano.node.SubmitError
   val ConnectionError: ConnectionError.type
@@ -805,6 +840,9 @@ case class scalus.cardano.node.UtxoSource.FromInputs
 
 case class scalus.cardano.node.UtxoSource.FromTransaction
   val transactionId: TransactionHash
+
+case class scalus.cardano.node.UtxoSource.FromPaymentCredential
+  val credential: Credential
 
 case class scalus.cardano.node.UtxoSource.Or
   val left: UtxoSource
@@ -1761,6 +1799,10 @@ enum scalus.cardano.ledger.Credential.KeyHash
 
 enum scalus.cardano.ledger.Credential.ScriptHash
   val scriptHash: ScriptHash
+  given given_Ordering_Credential: given_Ordering_Credential
+
+object scalus.cardano.ledger.Credential.given_Ordering_Credential
+  def compare(x: Credential, y: Credential): Int
   given given_Pretty_Credential: given_Pretty_Credential
 
 object scalus.cardano.ledger.Credential.given_Pretty_Credential
@@ -1877,7 +1919,7 @@ object scalus.cardano.ledger.ExUnits
   val enormous: ExUnits
   given given_Encoder_ExUnits: Encoder[ExUnits]
   given given_Decoder_ExUnits: Decoder[ExUnits]
-  given given_Ordering_ExUnits: Ordering[ExUnits]
+  @deprecated("ExUnits is only partially ordered; this ordering is wrong for budget checks. Use fitsWithin/exceeds instead") given given_Ordering_ExUnits: Ordering[ExUnits]
   given given_Group_ExUnits: given_Group_ExUnits
 
 object scalus.cardano.ledger.ExUnits.given_Group_ExUnits
@@ -1922,7 +1964,6 @@ enum scalus.cardano.ledger.GovAction.NewConstitution
   val prevActionId: Option[GovActionId]
   val constitution: Constitution
   val InfoAction: GovAction
-  given given_Ordering_GovAction: Ordering[GovAction]
   given given_Encoder_GovAction: Encoder[GovAction]
   given given_Decoder_GovAction: Decoder[GovAction]
 
@@ -2013,6 +2054,9 @@ object scalus.cardano.ledger.Language
 object scalus.cardano.ledger.Language.given_Pretty_Language
   def pretty(a: Language, style: Style): Doc
 
+object scalus.cardano.ledger.LedgerBounds
+  def requireTextBytes(what: String, text: String, maxBytes: Int): Unit
+
 object scalus.cardano.ledger.LedgerToPlutusTranslation
   def getCredential(cred: Credential): v1.Credential
   def getStakingCredential(cred: Credential): v1.StakingCredential
@@ -2029,7 +2073,7 @@ object scalus.cardano.ledger.LedgerToPlutusTranslation
   def getTxOutV1(output: Sized[TransactionOutput]): v1.TxOut
   def getTxOutV2(output: Sized[TransactionOutput]): v2.TxOut
   def getInterval(validityStartSlot: Option[Long], ttl: Option[Long], slotConfig: SlotConfig, protocolVersion: MajorProtocolVersion): v1.Interval
-  def getWithdrawals(withdrawals: Option[Withdrawals]): scalus.cardano.onchain.plutus.prelude.List[Tuple2[v1.StakingCredential, BigInt]]
+  def getWithdrawals(withdrawals: Option[Withdrawals]): prelude.List[Tuple2[v1.StakingCredential, BigInt]]
   def getDCert(cert: Certificate): v1.DCert
   def getTxCertV3(cert: Certificate): v3.TxCert
   def getTxInfoV1(tx: Transaction, utxos: Map[TransactionInput, TransactionOutput], slotConfig: SlotConfig, protocolVersion: MajorProtocolVersion): v1.TxInfo
@@ -2162,6 +2206,7 @@ object scalus.cardano.ledger.NonNegativeInterval
   def reduceBigInt(numerator: BigInt, denominator: BigInt): NonNegativeInterval
   def apply(numerator: Long): NonNegativeInterval
   def apply(value: Double, precision: Int): NonNegativeInterval
+  def gcdOf(numerator: Long, denominator: Long): Long
   given given_UpickleReadWriter_NonNegativeInterval: ReadWriter[NonNegativeInterval]
   given given_Encoder_NonNegativeInterval: Encoder[NonNegativeInterval]
   given given_Decoder_NonNegativeInterval: Decoder[NonNegativeInterval]
@@ -2188,7 +2233,7 @@ object scalus.cardano.ledger.PlutusScript
 
 case class scalus.cardano.ledger.PoolMetadata
   val url: String
-  val metadataHash: MetadataHash
+  val metadataHash: ByteString
 
 case class scalus.cardano.ledger.PoolVotingThresholds
   val motionNoConfidence: UnitInterval
@@ -2220,7 +2265,6 @@ case class scalus.cardano.ledger.ProposalProcedure
   val anchor: Anchor
 
 object scalus.cardano.ledger.ProposalProcedure
-  given given_Ordering_ProposalProcedure: Ordering[ProposalProcedure]
 
 case class scalus.cardano.ledger.ProtocolParamUpdate
   val minFeeA: Option[Coin]
@@ -2300,6 +2344,7 @@ case class scalus.cardano.ledger.ProtocolParams.ParamDiff
   val expected: String
   val actual: String
   def diff(expected: ProtocolParams, actual: ProtocolParams): Seq[ParamDiff]
+  def toBlockfrostJson(params: ProtocolParams): String
   def fromBlockfrostJson(json: String): ProtocolParams
   def fromBlockfrostJson(json: InputStream): ProtocolParams
   def fromCardanoCliJson(json: String): ProtocolParams
@@ -2430,6 +2475,12 @@ object scalus.cardano.ledger.Redeemers.given_Decoder_Redeemers
 
 object scalus.cardano.ledger.Redeemers.given_Pretty_Redeemers
   def pretty(a: Redeemers, style: Style): Doc
+
+class scalus.cardano.ledger.RefScriptFee
+  def calculate(sizeInBytes: Int): Coin
+
+object scalus.cardano.ledger.RefScriptFee
+  def fee(sizeInBytes: Int, costPerByte: Long): Coin
 
 enum scalus.cardano.ledger.Relay
 
@@ -2569,8 +2620,6 @@ case class scalus.cardano.ledger.SlotConfig
   val zeroEpoch: Long
   def slotToTime(slot: Long): Long
   def timeToSlot(time: Long): Long
-  def slotToInstant(slot: Long): Instant
-  def instantToSlot(instant: Instant): Long
   def epochOf(slot: Long): Long
   def firstSlotOfEpoch(epoch: Long): Long
 
@@ -2580,6 +2629,10 @@ object scalus.cardano.ledger.SlotConfig
   val mainnet: SlotConfig
   val preview: SlotConfig
   val preprod: SlotConfig
+
+trait scalus.cardano.ledger.SlotConfigPlatform
+  def slotToInstant(slot: Long): Instant
+  def instantToSlot(instant: Instant): Long
 
 trait scalus.cardano.ledger.TaggedSeq
   def checkNonEmpty[A](src: IterableOnce[A]): IndexedSeq[A]
@@ -2794,6 +2847,7 @@ case class scalus.cardano.ledger.UnitInterval
   val numerator: Long
   val denominator: Long
   def toDouble: Double
+  def reduce: UnitInterval
 
 object scalus.cardano.ledger.UnitInterval
   def fromDouble(value: Double): UnitInterval
@@ -2989,6 +3043,7 @@ object scalus.cardano.onchain.plutus.prelude.AssocMap
   given AssocMapFromData[A, B](evidence$1: FromData[A], evidence$2: Eq[A], evidence$3: FromData[B]): FromData[AssocMap[A, B]]
   given assocMapToData[A, B](evidence$1: ToData[A], evidence$2: ToData[B]): ToData[AssocMap[A, B]]
   def toPairList[A, B](self: AssocMap[A, B]): PairList[A, B]
+  def singleOrFail[A, B](self: AssocMap[A, B])(message: String): Tuple2[A, B]
   def isEmpty[A, B](self: AssocMap[A, B]): Boolean
   def nonEmpty[A, B](self: AssocMap[A, B]): Boolean
   def length[A, B](self: AssocMap[A, B]): BigInt
@@ -3005,6 +3060,7 @@ object scalus.cardano.onchain.plutus.prelude.AssocMap
   def foldLeft[A, B](self: AssocMap[A, B])[C](init: C)(combiner: Function2[C, Tuple2[A, B], C]): C
   def foldRight[A, B](self: AssocMap[A, B])[C](init: C)(combiner: Function2[Tuple2[A, B], C, C]): C
   def get[A, B](self: AssocMap[A, B])(key: A)(evidence$1: Eq[A]): Option[B]
+  def getOrFail[A, B](self: AssocMap[A, B])(key: A, message: String)(evidence$1: Eq[A]): B
   def contains[A, B](self: AssocMap[A, B])(key: A)(evidence$1: Eq[A]): Boolean
   def insert[A, B](self: AssocMap[A, B])(key: A, value: B)(evidence$1: Eq[A]): AssocMap[A, B]
   def delete[A, B](self: AssocMap[A, B])(key: A)(evidence$1: Eq[A]): AssocMap[A, B]
@@ -3053,7 +3109,8 @@ enum scalus.cardano.onchain.plutus.prelude.List.Cons
   val tail: List[A]
   def empty[A]: List[A]
   def unboxedNil[A]: List[A]
-  def single[A](a: A): List[A]
+  def singleton[A](a: A): List[A]
+  @deprecated("use singleton") def single[A](a: A): List[A]
   def apply[A](args: A*): List[A]
   def from[A](i: IterableOnce[A]): List[A]
   def from[A](i: java.lang.Iterable[A]): List[A]
@@ -3071,7 +3128,12 @@ enum scalus.cardano.onchain.plutus.prelude.List.Cons
   def +:[A][B](list: List[B])(elem: A): List[B]
   def sort[A](self: List[A])(evidence$1: Ord[A]): List[A]
   def quicksort[A](self: List[A])(evidence$1: Ord[A]): List[A]
+  def insertionSort[A](self: List[A])(evidence$1: Ord[A]): List[A]
+  def isSorted[A](self: List[A])(evidence$1: Ord[A]): Boolean
+  def isStrictlyAscending[A](self: List[A])(evidence$1: Ord[A]): Boolean
   def flatten[A](self: List[List[A]]): List[A]
+  def sortWith[A](self: List[A])(lt: Function2[A, A, Boolean]): List[A]
+  def isSortedWith[A](self: List[A])(lt: Function2[A, A, Boolean]): Boolean
   def !![A](self: List[A])(idx: BigInt): A
   def isEmpty[A](self: List[A]): Boolean
   def nonEmpty[A](self: List[A]): Boolean
@@ -3098,6 +3160,8 @@ enum scalus.cardano.onchain.plutus.prelude.List.Cons
   def filterNot[A](self: List[A])(predicate: Function1[A, Boolean]): List[A]
   def filterMap[A](self: List[A])[B](predicate: Function1[A, Option[B]]): List[B]
   def find[A](self: List[A])(predicate: Function1[A, Boolean]): Option[A]
+  def findUniqueOrFail[A](self: List[A])(predicate: Function1[A, Boolean], message: String): A
+  def findUniqueOrElse[A](self: List[A])(predicate: Function1[A, Boolean], orElse: Function1[Unit, A]): A
   def findMap[A](self: List[A])[B](mapper: Function1[A, Option[B]]): Option[B]
   def foldLeft[A](self: List[A])[B](init: B)(combiner: Function2[B, A, B]): B
   def foldRight[A](self: List[A])[B](init: B)(combiner: Function2[A, B, B]): B
@@ -3111,6 +3175,7 @@ enum scalus.cardano.onchain.plutus.prelude.List.Cons
   def length[A](self: List[A]): BigInt
   def size[A](self: List[A]): BigInt
   def head[A](self: List[A]): A
+  def singleOrFail[A](self: List[A])(message: String): A
   def headOption[A](self: List[A]): Option[A]
   def tail[A](self: List[A]): List[A]
   def drop[A](self: List[A])(skip: BigInt): List[A]
@@ -3137,6 +3202,8 @@ object scalus.cardano.onchain.plutus.prelude.Math
   def abs(x: BigInt): BigInt
   def min(x: BigInt, y: BigInt): BigInt
   def max(x: BigInt, y: BigInt): BigInt
+  def divFloor(a: BigInt, b: BigInt): BigInt
+  def divCeil(a: BigInt, b: BigInt): BigInt
   def clamp(self: BigInt, min: BigInt, max: BigInt): BigInt
   def gcd(x: BigInt, y: BigInt): BigInt
   def sqrt(radicand: BigInt): BigInt
@@ -3253,7 +3320,8 @@ enum scalus.cardano.onchain.plutus.prelude.PairList.PairCons
   val head: Tuple2[A, B]
   val tail: PairList[A, B]
   def empty[A, B]: PairList[A, B]
-  def single[A, B](a: A, b: B): PairList[A, B]
+  def singleton[A, B](a: A, b: B): PairList[A, B]
+  @deprecated("use singleton") def single[A, B](a: A, b: B): PairList[A, B]
   def from[A, B](it: IterableOnce[Tuple2[A, B]]): PairList[A, B]
   def head[A, B](self: PairList[A, B]): Tuple2[A, B]
   def tail[A, B](self: PairList[A, B]): PairList[A, B]
@@ -3346,6 +3414,7 @@ object scalus.cardano.onchain.plutus.prelude.SortedMap
   def singleton[A, B](key: A, value: B): SortedMap[A, B]
   def unsafeFromList[A, B](lst: List[Tuple2[A, B]]): SortedMap[A, B]
   def fromList[A, B](lst: List[Tuple2[A, B]])(evidence$1: Ord[A]): SortedMap[A, B]
+  def fromLargeList[A, B](lst: List[Tuple2[A, B]])(evidence$1: Ord[A]): SortedMap[A, B]
   def fromStrictlyAscendingList[A, B](lst: List[Tuple2[A, B]])(evidence$1: Ord[A]): SortedMap[A, B]
   def from[A, B](it: IterableOnce[Tuple2[A, B]])(evidence$1: Ord[A]): SortedMap[A, B]
   def union[A, B, C](lhs: SortedMap[A, B], rhs: SortedMap[A, C])(evidence$1: Ord[A]): SortedMap[A, These[B, C]]
@@ -3356,6 +3425,7 @@ object scalus.cardano.onchain.plutus.prelude.SortedMap
   def sortedMapFromDataWithValidation[A, B](evidence$1: FromData[A], evidence$2: Ord[A], evidence$3: FromData[B]): FromData[SortedMap[A, B]]
   given sortedMapToData[A, B](evidence$1: ToData[A], evidence$2: ToData[B]): ToData[SortedMap[A, B]]
   def toPairList[A, B](self: SortedMap[A, B]): PairList[A, B]
+  def singleOrFail[A, B](self: SortedMap[A, B])(message: String): Tuple2[A, B]
   def isEmpty[A, B](self: SortedMap[A, B]): Boolean
   def nonEmpty[A, B](self: SortedMap[A, B]): Boolean
   def length[A, B](self: SortedMap[A, B]): BigInt
@@ -3431,6 +3501,8 @@ enum scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
   given given_ToData_Credential: ToData[Credential]
   def pubKeyOption(self: Credential): Option[PubKeyHash]
   def scriptOption(self: Credential): Option[ValidatorHash]
+  def scriptHashOrFail(self: Credential)(message: String): ValidatorHash
+  def pubKeyHashOrFail(self: Credential)(message: String): PubKeyHash
   val sirModule: Module
   val sirDeps: List[SIRModuleWithDeps]
 
@@ -3716,6 +3788,8 @@ object scalus.cardano.onchain.plutus.v1.Value
   def tokens(v: Value)(cs: PolicyId): SortedMap[TokenName, BigInt]
   def hasOnly(v: Value)(cs: PolicyId, tn: TokenName, amount: BigInt): Boolean
   def withoutLovelace(v: Value): Value
+  def hasNft(v: Value)(cs: PolicyId, tn: TokenName): Boolean
+  def hasSameTokensAndAtLeastAda(v: Value)(expected: Value): Boolean
   def flatten(v: Value): List[Tuple3[PolicyId, TokenName, BigInt]]
   def policyIds(v: Value): List[PolicyId]
   val sirModule: Module
@@ -3777,7 +3851,7 @@ case class scalus.cardano.onchain.plutus.v2.TxInfo
   val withdrawals: SortedMap[StakingCredential, BigInt]
   val validRange: PosixTimeRange
   val signatories: List[PubKeyHash]
-  val redeemers: SortedMap[ScriptPurpose, Redeemer]
+  val redeemers: AssocMap[ScriptPurpose, Redeemer]
   val data: SortedMap[DatumHash, Datum]
   val id: TxId
 
@@ -3804,6 +3878,7 @@ object scalus.cardano.onchain.plutus.v2.TxOut
   given given_Ord_TxOut: Ord[TxOut]
   given given_ToData_TxOut: ToData[TxOut]
   given given_FromData_TxOut: FromData[TxOut]
+  def hasInlineDatum(self: TxOut)[A](a: A)(evidence$1: ToData[A]): Boolean
   val sirModule: Module
   val sirDeps: List[SIRModuleWithDeps]
 
@@ -4114,7 +4189,7 @@ case class scalus.cardano.onchain.plutus.v3.TxInfo
   val withdrawals: SortedMap[Credential, Lovelace]
   val validRange: Interval
   val signatories: List[PubKeyHash]
-  val redeemers: SortedMap[ScriptPurpose, Redeemer]
+  val redeemers: AssocMap[ScriptPurpose, Redeemer]
   val data: SortedMap[DatumHash, Datum]
   val id: TxId
   val votes: SortedMap[Voter, SortedMap[GovernanceActionId, Vote]]
@@ -4128,16 +4203,30 @@ object scalus.cardano.onchain.plutus.v3.TxInfo
   given given_FromData_TxInfo: FromData[TxInfo]
   given given_ToData_TxInfo: ToData[TxInfo]
   val placeholder: TxInfo
-  def findOwnInput(self: TxInfo)(outRef: TxOutRef): Option[TxInInfo]
-  def findOwnInputOrFail(self: TxInfo)(outRef: TxOutRef, message: String): TxInInfo
-  def findOwnDatum(self: TxInfo)(datumHash: DatumHash): Option[Datum]
-  def findOwnScriptOutputs(self: TxInfo)(scriptHash: ValidatorHash): List[v2.TxOut]
-  def findOwnInputsByCredential(self: TxInfo)(cred: Credential): List[TxInInfo]
-  def findOwnOutputsByCredential(self: TxInfo)(cred: Credential): List[v2.TxOut]
-  def findOwnInputs(self: TxInfo)(pred: Function1[TxInInfo, Boolean]): List[TxInInfo]
-  def findOwnOutputs(self: TxInfo)(pred: Function1[v2.TxOut, Boolean]): List[v2.TxOut]
+  def findInput(self: TxInfo)(outRef: TxOutRef): Option[TxInInfo]
+  def findInputOrFail(self: TxInfo)(outRef: TxOutRef, message: String): TxInInfo
+  def findDatum(self: TxInfo)(datumHash: DatumHash): Option[Datum]
+  def findOutputsByScriptHash(self: TxInfo)(scriptHash: ValidatorHash): List[v2.TxOut]
+  def findInputsByCredential(self: TxInfo)(cred: Credential): List[TxInInfo]
+  def findOutputsByCredential(self: TxInfo)(cred: Credential): List[v2.TxOut]
+  def findContinuingOutputOrFail(self: TxInfo)(ownInput: TxInInfo, message: String): v2.TxOut
+  def valuePaidTo(self: TxInfo)(addr: Address): Value
+  def valueSpentFrom(self: TxInfo)(addr: Address): Value
+  @deprecated("use findInput") def findOwnInput(self: TxInfo)(outRef: TxOutRef): Option[TxInInfo]
+  @deprecated("use findInputOrFail") def findOwnInputOrFail(self: TxInfo)(outRef: TxOutRef, message: String): TxInInfo
+  @deprecated("use findDatum") def findOwnDatum(self: TxInfo)(datumHash: DatumHash): Option[Datum]
+  @deprecated("use findOutputsByScriptHash") def findOwnScriptOutputs(self: TxInfo)(scriptHash: ValidatorHash): List[v2.TxOut]
+  @deprecated("use findInputsByCredential") def findOwnInputsByCredential(self: TxInfo)(cred: Credential): List[TxInInfo]
+  @deprecated("use findOutputsByCredential") def findOwnOutputsByCredential(self: TxInfo)(cred: Credential): List[v2.TxOut]
+  @deprecated("use inputs.filter") def findOwnInputs(self: TxInfo)(pred: Function1[TxInInfo, Boolean]): List[TxInInfo]
+  @deprecated("use outputs.filter") def findOwnOutputs(self: TxInfo)(pred: Function1[v2.TxOut, Boolean]): List[v2.TxOut]
   def isSignedBy(self: TxInfo)(pubKeyHash: PubKeyHash): Boolean
-  def getValidityStartTime(self: TxInfo): BigInt
+  def isSignedByAny(self: TxInfo)(keys: List[PubKeyHash]): Boolean
+  def validFromOrFail(self: TxInfo)(message: String): PosixTime
+  def validToOrFail(self: TxInfo)(message: String): PosixTime
+  def onlyBurnsUnder(self: TxInfo)(policy: PolicyId): Boolean
+  def hasPaidTagged(self: TxInfo)(addr: Address, value: Value, tag: v2.OutputDatum): Boolean
+  @deprecated("use validFromOrFail") def getValidityStartTime(self: TxInfo): BigInt
   val sirModule: Module
   val sirDeps: List[SIRModuleWithDeps]
 
@@ -4150,6 +4239,7 @@ object scalus.cardano.onchain.plutus.v3.TxOutRef
   given given_Ord_TxOutRef: Ord[TxOutRef]
   given given_FromData_TxOutRef: FromData[TxOutRef]
   given given_ToData_TxOutRef: ToData[TxOutRef]
+  def deriveTokenName(self: TxOutRef): TokenName
   val sirModule: Module
   val sirDeps: List[SIRModuleWithDeps]
 
@@ -4157,8 +4247,8 @@ object scalus.cardano.onchain.plutus.v3.Utils
   def findInput(inputs: List[TxInInfo], outRef: TxOutRef): Option[TxInInfo]
   def findDatum(outputs: List[TxOut], datum: SortedMap[DatumHash, Datum], datumHash: DatumHash): Option[Datum]
   def findScriptOutputs(outputs: List[TxOut], scriptHash: ValidatorHash): List[TxOut]
-  def getAdaFromOutputs(outputs: List[v2.TxOut]): Lovelace
-  def getAdaFromInputs(inputs: List[TxInInfo]): Lovelace
+  @deprecated def getAdaFromOutputs(outputs: List[v2.TxOut]): Lovelace
+  @deprecated def getAdaFromInputs(inputs: List[TxInInfo]): Lovelace
   val sirModule: Module
   val sirDeps: List[SIRModuleWithDeps]
 
@@ -4220,6 +4310,7 @@ case class scalus.compiler.Options
   val warnListConversions: Boolean
   val noWarn: Boolean
   val valueBuiltins: Boolean
+  val letChainRegroup: Boolean
   def withScalusTag(enable: Boolean): Options
 
 object scalus.compiler.Options
@@ -4312,6 +4403,7 @@ object scalus.uplc.Program
   def fromCbor(cbor: Array[Byte]): Program
   def fromCborByteString(cbor: ByteString): Program
   def fromFlatEncoded(flatEncoded: Array[Byte]): Program
+  def minVersionFor(term: Term): Tuple3[Int, Int, Int]
   def plutusV1(term: Term): Program
   def plutusV2(term: Term): Program
   def plutusV3(term: Term): Program
@@ -4503,7 +4595,7 @@ class scalus.uplc.builtin.ByteString
   def toString: String
   def hashCode: Int
   def equals(obj: Any): Boolean
-  val toHex: String
+  def toHex: String
   def toBinaryString: String
   def concat(that: ByteString): ByteString
   def size: Int
@@ -4596,6 +4688,7 @@ case class scalus.uplc.builtin.Data.B
 
 trait scalus.uplc.builtin.DataApi
   def dataHash(self: Data): ByteString
+  given dataJsonCodec: JsonValueCodec[Data]
   given DataReadWriter: ReadWriter[Data]
   given dataCborEncoder: dataCborEncoder
 
@@ -4605,8 +4698,8 @@ object scalus.uplc.builtin.DataApi.dataCborEncoder
 
 object scalus.uplc.builtin.DataApi.dataCborDecoder
   def read(r: Reader): Data
-  def toJson[A](a: A)(evidence$1: Writer[A]): String
-  def toJsonIndented[A](a: A)(indent: Int)(evidence$1: Writer[A]): String
+  def toJson[A](a: A): String
+  def toJsonIndented[A](a: A)(indent: Int): String
   def toCbor[A](a: A): Array[Byte]
   def toCborByteString[A](a: A): ByteString
   def field(data: Data)[A](expr: Function1[A, Any]): Data
@@ -4633,6 +4726,23 @@ object scalus.uplc.builtin.DataApi.given_Flat_Data
 
 object scalus.uplc.builtin.DataApi.given_Pretty_Data
   def pretty(a: Data, style: Style): Doc
+
+case class scalus.uplc.builtin.DataJson
+  val constructor: Option[BigInt]
+  val fields: Option[List[DataJson]]
+  val map: Option[List[DataJsonMapEntry]]
+  val list: Option[List[DataJson]]
+  val int: Option[BigInt]
+  val bytes: Option[String]
+
+object scalus.uplc.builtin.DataJson
+  val codec: JsonValueCodec[DataJson]
+  def fromData(data: Data): DataJson
+  def toData(json: DataJson, in: JsonReader): Data
+
+case class scalus.uplc.builtin.DataJsonMapEntry
+  val k: DataJson
+  val v: DataJson
 
 trait scalus.uplc.builtin.FromData
   def apply(v: Data): A
@@ -4963,10 +5073,10 @@ object scalus.testing.kit.KeyPairGenerator
 
 enum scalus.testing.kit.Party
   val account: HdAccount
-  val addrKeyHash: AddrKeyHash
+  def addrKeyHash: AddrKeyHash
   def address(network: Network): ShelleyAddress
   def address(using env: CardanoInfo): ShelleyAddress
-  val signer: TransactionSigner
+  def signer: TransactionSigner
 
 object scalus.testing.kit.Party
   val Alice: Party
