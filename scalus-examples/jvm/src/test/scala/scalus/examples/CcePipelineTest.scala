@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
-import scalus.uplc.transform.{CommonSubexpressionElimination, V3Optimizer}
+import scalus.uplc.transform.{CommonContextExtraction, CommonSubexpressionElimination, Inliner, V3Optimizer}
 import scalus.uplc.{PlutusV3, Term}
 import scalus.examples.auction.AuctionValidator
 
@@ -26,8 +26,8 @@ class CcePipelineTest extends AnyFunSuite {
         compiled.sir.toUplc(optimizeUplc = false)
     }
 
-    private def check(name: String, compiled: PlutusV3[?]): Unit = {
-        val optimized = new V3Optimizer(2, cceEnabled = true)(rawUplc(compiled))
+    private def checkPipeline(name: String, raw: Term): Unit = {
+        val optimized = new V3Optimizer(2, cceEnabled = true)(raw)
         val cse = new CommonSubexpressionElimination()
         cse(optimized)
         assert(
@@ -37,21 +37,50 @@ class CcePipelineTest extends AnyFunSuite {
         )
     }
 
-    test("no CSE opportunity survives the CCE phase: cape linear_vesting") {
+    // Prepare the same two CSE/Inliner rounds as the original profitability fixtures.
+    // This deliberately stops before CCE and does not run the full V3 pipeline's other phases.
+    private def checkProfitability(name: String, raw: Term): Unit = {
+        val cse = new CommonSubexpressionElimination()
+        val inliner = new Inliner()
+        val before = (0 until 2).foldLeft(raw)((t, _) => inliner(cse(t)))
+        val after = new CommonContextExtraction()(before)
+        val beforeBytes = before.plutusV3.cborByteString.size
+        val afterBytes = after.plutusV3.cborByteString.size
+        // Actual encoded sizes are independent of the pricing formula. Whole-pass savings
+        // do not establish profitability of each extraction; isolated core tests cover that.
+        assert(
+          afterBytes <= beforeBytes,
+          s"$name: CCE grew the script from $beforeBytes to $afterBytes bytes"
+        )
+    }
+
+    private lazy val linearVesting: Term = {
         given Options = Options.releaseUntagged
-        check(
-          "linear_vesting",
+        rawUplc(
           PlutusV3.compile(scalus.examples.cape.linearvesting.LinearVestingValidator.validate)
         )
     }
 
-    test("no CSE opportunity survives the CCE phase: cape htlc") {
+    private lazy val htlc: Term = {
         given Options = Options.releaseUntagged
-        check("htlc", PlutusV3.compile(scalus.examples.cape.htlc.HtlcValidator.validate))
+        rawUplc(PlutusV3.compile(scalus.examples.cape.htlc.HtlcValidator.validate))
     }
 
-    test("no CSE opportunity survives the CCE phase: AuctionValidator") {
+    private lazy val auction: Term = {
         given Options = Options.release
-        check("AuctionValidator", PlutusV3.compile(AuctionValidator.validate))
+        rawUplc(PlutusV3.compile(AuctionValidator.validate))
     }
+
+    for (name, fixture) <- List(
+          "cape linear_vesting" -> (() => linearVesting),
+          "cape htlc" -> (() => htlc),
+          "AuctionValidator" -> (() => auction)
+        )
+    do
+        test(s"no CSE opportunity survives the CCE phase: $name") {
+            checkPipeline(name, fixture())
+        }
+        test(s"CCE does not grow the encoded script: $name") {
+            checkProfitability(name, fixture())
+        }
 }

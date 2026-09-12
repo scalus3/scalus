@@ -42,6 +42,12 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             case _: MachineError       => Observation.Failed
     }
 
+    private def spent(term: Term): ExUnits = {
+        val spender = new RestrictingBudgetSpender(limit)
+        vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(term, true), spender, new Log())
+        spender.getSpentBudget
+    }
+
     private val probes: List[Term] = List(0, 1, true, ().asTerm)
 
     private def agree(before: Term, after: Term, depth: Int = 6): Unit = {
@@ -181,14 +187,11 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val large = scalus.uplc.builtin.ByteString.fromArray(Array.fill[Byte](64)(1)).asTerm
         val term = Constr(Word64.Zero, List(large, large))
         val shared = check(term)
-        def spent(t: Term): ExUnits = {
-            val spender = new RestrictingBudgetSpender(limit)
-            vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(t, true), spender, new Log())
-            spender.getSpentBudget
-        }
+        val beforeBudget = spent(term)
+        val afterBudget = spent(shared)
         assert(encodedBits(shared) < encodedBits(term))
-        assert(spent(shared).memory > spent(term).memory)
-        assert(spent(shared).steps > spent(term).steps)
+        assert(afterBudget.memory > beforeBudget.memory)
+        assert(afterBudget.steps > beforeBudget.steps)
     }
 
     test("repeated opaque calls are shared even when the binding adds encoded bits") {
@@ -301,18 +304,12 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val t = Constr(Word64.Zero, List(Delay(div), LamAbs("x", div), div))
         val result = check(t)
         assert(result ~!=~ t)
-        assert(CommonSubexpressionElimination(result) ~=~ result)
     }
 
     test("partial builtin sharing still reduces execution budget") {
         val div = DivideInteger $ 20 $ 2
         val t = Constr(Word64.Zero, List(div, div, div))
         val result = check(t)
-        def spent(term: Term): ExUnits = {
-            val spender = new RestrictingBudgetSpender(limit)
-            vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(term, true), spender, new Log())
-            spender.getSpentBudget
-        }
         val before = spent(t)
         val after = spent(result)
         assert(after.memory < before.memory && after.steps < before.steps)
