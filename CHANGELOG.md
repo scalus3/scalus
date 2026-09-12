@@ -1,357 +1,59 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 (2026-09-12)
 
-### JavaScript SDK
-
-- Add optional `paymentCredentialType: "key" | "script"` to Emulator UTxO queries.
-  It requires `paymentCredential`; omit the type to match either credential kind.
-- Bundle browser-compatible crypto without mandatory Node built-in imports. The npm
-  package now declares Node 20 or newer; browsers require no Node crypto polyfill.
-  Optional filesystem operations remain limited to Node CommonJS hosts.
-- Preserve `@TsType` optionality even for unmappable Scala types, and parenthesize
-  function and verbatim types when composing TypeScript unions.
-
-
-### Performance
-
-- `List.sort` is a stable natural merge sort instead of a head-pivot quicksort. Quicksort is
-  `Theta(n^2)` on already-sorted, reverse-sorted and all-equal input, and on Cardano those are
-  ordinary inputs rather than corner cases: the ledger guarantees `tx.inputs` arrives ordered by
-  `TxOutRef`, and `SortedMap` contents are key-ordered. The sort was therefore worst-cased by its
-  most common input, which a validator has to be provisioned for. Worst-case fee, in lovelace:
-
-  | n | 2 | 4 | 8 | 16 | 32 | 64 |
-  |---|---:|---:|---:|---:|---:|---:|
-  | before | 1,780 | 4,988 | 16,519 | 60,041 | 228,924 | 894,051 |
-  | after | 2,248 | 5,096 | 12,471 | 24,865 | 65,812 | 141,105 |
-
-  **This is a regression below n≈5**, up to 1.26x at n=2, because merge sort has a larger body and
-  that is fixed overhead a script pays even on a short list. The compiled body grows from 169 to
-  277 bytes. Use the new `insertionSort` where the length is bounded by construction and small.
-
-- `SortedMap.fromList` folds from the right instead of the left. Folding left made
-  already-ascending keys its worst case, since each insert then walked the whole accumulator;
-  ascending is how ledger data arrives. Folding right makes that the best case instead: about 28x
-  cheaper at n=64 on ascending keys, cheaper than before at every size measured, and 30 bytes
-  smaller. `Value` construction, which calls it once per policy, got 11-13% cheaper as a result.
-
-- The `UplcConstr` sort intrinsic is removed. Measured against the new `List.sort`, every input
-  shape was cheaper without it – from 2.5% to 2.9x – because the prelude sort exploits ascending
-  runs and the intrinsic's counted merge structurally could not.
-
-
-- `EtaReduce` removes multi-argument wrappers (`\a.\b. f a b` → `f`), not only single-argument
-  ones, and now traverses into `Constr` arguments and `Case` scrutinee/branches so wrappers
-  nested there reduce like any other subterm. A value-arity analysis guards the rewrite:
-  eta-reduction is unsound in call-by-value when the wrapper delays work, so a redex collapses
-  only when the head provably accepts that many arguments without performing any
-
-### Changed
-
-- CSE uses Plutus-style ancestor-based grouping and places bindings in the smallest scope
-  containing their uses. It recognizes alpha-equivalent terms and prices value sharing by
-  reference-script savings minus binding execution costs. Repeated computations can also be
-  shared to avoid unknown runtime work. The inliner shares value pricing, tracks retained
-  constants without exponential traversal, and bounds folding growth through shared constants.
-  CSE remains enabled in optimized builds. In the final controlled 23-contract comparison with
-  the pre-review optimizer, Scala 3.3.8 saves 525 bytes with traces and 514 without. Individual
-  execution budgets remain mixed. Error traces are retained by default; `Options.release`
-  enables optimization and removes them. See
-  [CSE measurements](docs/design/cse-measurements.md) for provenance, sizes, budgets and fees.
-- Scala **3.9.0**, the next LTS, is now supported: it is cross-built and tested alongside 3.3.8 and
-  3.8.4, and gets its own `scalus-plugin_3.9.0`. The plugin continues to be published for 3.3.7 as
-  well, so projects pinned to that patch keep working. The `_3` library artifacts are still built by
-  3.3.8 and are readable by every supported compiler, so consumers need no change.
-- PlutusV1/V2 programs declare the UPLC version their term needs. Since van Rossem became the
-  default target, the lowering emits `case` for PlutusV1/V2 validators that pattern-match on `Data`
-  (it gates `constr`/`case` on the protocol version, not the ledger language), but the program was
-  still stamped UPLC `(1, 0, 0)`, which Plutus does not accept for `constr`/`case` at
-  deserialization. Scalus's own flat codec did not check this, so it went unnoticed.
-  PlutusV1/V2 programs now declare the lowest UPLC version their term needs
-  (`Program.minVersionFor`: 1.1.0 if it uses `constr`/`case`, else 1.0.0), on every path -
-  `PlutusV1.compile`, `Program.plutusV1(term)` and `Term.plutusV1` alike. The version field gates
-  only `constr`/`case` syntax (builtins are gated by ledger language and protocol version), so this
-  is the honest stamp: a `constr`-free term is valid as 1.0.0 at every protocol version and keeps
-  its hash and its reach; a term with `constr`/`case` needs 1.1.0, which PlutusV1/V2 only carry from
-  the van Rossem hard fork on (`plcVersionsIntroducedIn` in plutus-ledger-api). Only the hashes of
-  scripts that were not accepted before change; `sir.toUplc().plutusV2` on a `Data`-matching
-  validator now produces a 1.1.0 program.
-- Below van Rossem, PlutusV1/V2 no longer emit `constr`/`case` at all. The stamp alone is not
-  enough: `@UplcRepr(UplcConstr)` on a type declaration (`Order`, hence `Ord`, `SortedMap`
-  and `List.sort`) was honoured regardless of the target, so `Options.plomin` - the documented way to
-  reproduce pre-van-Rossem output - still put `case` into a PlutusV1/V2 program, and no 1.0.0 stamp
-  can carry it. `LoweringContext.uplc110Available` now names the capability (always on PlutusV3+,
-  from protocol version 11 on V1/V2), and on a target without it a declaration-level
-  `@UplcRepr(UplcConstr)` falls back to the Data representation the type had before the annotation,
-  with a warning. A type that holds a function has no Data form, so lowering it on such a target
-  fails with the type name instead. Use-site annotations (`List[A] @UplcRepr(UplcConstr)`) are left
-  alone: the runtime support ops are written against them. As a backstop,
-  `ProgramFlatCodec.encodeFlat` refuses a program that declares a version below 1.1.0 but contains
-  `constr`/`case` - the same check the Plutus decoder makes - so no path can produce bytes the
-  ledger rejects. New `Term.usesConstrOrCase`.
-- `Utils.readPlutusFileContent` accepts a `(1, 1, 0)` program in a `PlutusScriptV1`/`V2` envelope.
-  It used to reject it as "only valid in PlutusScriptV3", which van Rossem made wrong - and which
-  would now reject Scalus's own output.
-- The Scalus identification tag no longer costs execution budget. `Options.release` used to wrap
-  the whole program in `[(lam _scalusTag body) (con string "S")]`, which the CEK machine
-  evaluated on every run for 300 memory and 48000 CPU. It now marks the first `(error)` node of
-  the optimized term as `[(error) (con integer 3)]` instead. An `(error)` node reached during a
-  successful run would make the script fail, so every `(error)` node in a script that succeeds is
-  unreachable by construction, and the marker is never evaluated: **0 memory, 0 CPU, 2-3 bytes**.
-  `3` is Scalus's compiler id in CIP-171. This is the mechanism Aiken uses for its own marker.
-  A validator with no `(error)` node - a pure computation that cannot fail - is left untagged;
-  there is no fallback shape. `ScalusTag.isTagged` still recognises the old wrapper, so scripts
-  deployed from 1.0.0 and 1.1.x keep registering. **The script hash of every `Options.release`
-  contract changes**, and pinned `ExUnits` drop by 300 memory / 48000 CPU per execution.
-- `scalus-design-patterns`: the validator callbacks of `UtxoIndexer`, `StakeValidator` and
-  `TransactionLevelMinterValidator` now return `Unit` and are expected to `require` / `fail` with
-  their own message, instead of returning `Boolean` and failing with a generic library message. A
-  `Boolean` callback could only ever report "validator failed", and a stray `false` from a missed
-  branch was silent. The generic `*ValidatorFailed` message constants are gone. The module has no
-  MiMa baseline yet, so this is an in-place change. **Migration hazard:** an existing `Boolean`
-  lambda still compiles against the `Unit` parameter (value discard) and then checks nothing;
-  after upgrading, grep every callback passed to these patterns and wrap its condition in
-  `require(..., message)`
-- Examples migrated to the safe API (`findInputOrFail`, `hasInlineDatum`, `hasNft`,
-  `validFromOrFail` / `validToOrFail`, `valuePaidTo` / `valueSpentFrom`, `onlyBurnsUnder`). Every
-  pinned budget moved downward; `HtlcValidator` shrank from 322 to 318 bytes and its CAPE script
-  from 582 to 548 bytes, and the CAPE two-party escrow moved from hand-navigated `Data` to the
-  typed `Validator` context, shrinking from 1174 to 1079 bytes with every measured budget lower. `EscrowValidator` now compares its continuing output as a whole `Value`,
-  so tokens can no longer be stripped from the escrow UTxO, and `VestingValidator`,
-  `DecentralizedIdentityValidator` and `OnChainCellOps` fail on an unbounded validity range where
-  they used to read it as the Unix epoch
-- `TxInfo.redeemers` (Plutus V2 and V3) is an `AssocMap[ScriptPurpose, Redeemer]` instead of a
-  `SortedMap`. Redeemer keys are positional: the ledger keys its map by `PlutusPurpose AsIx era`,
-  which keeps only the `Word32` index, so no content-based `Ord` can reproduce their order. A
-  sorted map's short-circuiting lookup therefore walked past keys that were present and returned
-  `None`. `AssocMap` does a linear `Eq` scan, which is what `PlutusTx.AssocMap` and Aiken's
-  `Pairs` do for the same field. The on-chain `Data` encoding is unchanged, since both types
-  carry `@UplcRepr(PackedDataMap)`. **Migration hazard:** `redeemers.get(purpose)` still
-  compiles, so the break is loud only where `SortedMap`-specific members were used; code written
-  against the old lookup missing a present key will now find it
-- `Ordering[GovAction]` and `Ordering[ProposalProcedure]` are deleted. Both compared only the
-  `GovAction` constructor ordinal, so two distinct proposals compared equal and a `SortedSet`
-  silently dropped one. That violates the `Ordering` contract rather than merely being a coarse
-  order. Neither had a use: `proposalProcedures` is a `TaggedOrderedSet`, which preserves
-  submitter order and never sorts
-- `CardanoInfo.preprod` is pinned to preprod epoch 310 instead of 303, picking up the parameter
-  update enacted at preprod epoch 305: `maxTxExecutionUnits.memory` 16,500,000 -> 17,500,000,
-  `maxBlockExecutionUnits.memory` 72,000,000 -> 77,500,000 and `minPoolCost` 170 -> 75 ada. Cost
-  models and every other parameter are unchanged. Mainnet (epoch 645) and preview (epoch 1370)
-  pins already match their networks; the equivalent mainnet parameter change is still an open
-  governance action
-
-- The JVM and JavaScript `Emulator`s share one state machine in `EmulatorBase`, so the claim that
-  both run the same ledger rules is enforced by a parity test rather than by hand. The JVM
-  emulator holds its state in a single `AtomicReference` instead of six independently
-  compare-and-set cells, closing a window in which a reader could observe the ledger advanced
-  while the applied-transaction log still lagged behind it
-
-- `ProtocolParams.toBlockfrostJson` writes ten fields as JSON numbers rather than strings:
-  `min_fee_a`, `min_fee_b`, `max_tx_size`, `max_block_size`, `max_block_header_size`,
-  `max_collateral_inputs`, `collateral_percent`, `min_fee_ref_script_cost_per_byte`, `e_max` and
-  `n_opt`. ujson defines an implicit `Long => Str`, because `ujson.Num` is a `Double` and would
-  lose precision, so a bare `Long` was being quoted invisibly at the call site. Blockfrost's own
-  responses carry these as numbers. The reader accepts both forms, so nothing that round-trips
-  through Scalus is affected
-
-- `SlotConfig` has one definition again. It was forked per platform: a `Long` case class in `jvm/`
-  and an identical one in `native/`, and a separate `Double`, `js.Object`-extending class in `js/`.
-  Shared code compiled against whichever its platform supplied and absorbed the difference with
-  `.toLong` in fifteen places, including `LedgerToPlutusTranslation`, which computes the validity
-  bounds a Plutus script sees. There is now one shared `Long` case class, with `slotToInstant` and
-  `instantToSlot` moved to a per-platform `SlotConfigPlatform` trait because `java.time.Instant` is
-  not available everywhere.
-
-  **For JavaScript, nothing changes**: the exported `SlotConfig` is now a handle that keeps the same
-  constructor, the same `number` members and the same `Double` arithmetic, so `timeToSlot` still
-  returns a fractional slot and `scalus.d.ts` is byte-identical.
-
-  **For Scala.js consumers of the `scalus_sjs1` artifact, this is a source and binary break**:
-  `scalus.cardano.ledger.SlotConfig` no longer extends `js.Object`, and its fields and methods take
-  and return `Long` rather than `Double`. Code that held a `Double` from it needs `.toLong`, or
-  should simply drop the conversion it was already making. `SlotConfigParityTest` pins the
-  arithmetic to the same answers on all three platforms.
-
-  Two behaviour notes. `Emulator`'s internal `slotConfig == SlotConfig.mainnet` check is now
-  structural rather than reference equality, so an emulator built from a hand-constructed config
-  with mainnet's values now picks up mainnet protocol parameters where it previously fell through to
-  the defaults. And `CardanoInfo.slotConfig` returns a fresh handle per call in JavaScript, so
-  `info.slotConfig === SlotConfig.mainnet` is no longer true; the field values are unchanged.
-
-### Deprecated
-
-- `TxInfo.findOwnInput`, `findOwnInputOrFail`, `findOwnDatum`, `findOwnScriptOutputs`,
-  `findOwnInputsByCredential`, `findOwnOutputsByCredential` are renamed without the `Own`, which
-  is a Plutus inheritance that is wrong for every Scalus version (all take an explicit
-  argument); `findOwnInputs` / `findOwnOutputs` are `inputs.filter` / `outputs.filter`
-- `TxInfo.getValidityStartTime` returned `0` for an unbounded range, so a transaction with no
-  lower bound passed every "not before" deadline; use `validFromOrFail(msg)`
-- `Utils.getAdaFromOutputs` / `getAdaFromInputs` sum lovelace only and let native tokens be
-  stripped; use `TxInfo.valuePaidTo(addr)` / `valueSpentFrom(addr)`
-- `List.single` / `PairList.single`; use `singleton`
-- Scaladoc warnings on `IntervalBound.finite(default)`, `Address.fromScriptHash` /
-  `fromPubKeyHash` (no staking part) and the payment-credential-only output finders
-- On the JavaScript surface, superseded by `Emulator.create(cardanoInfo, options)`, which takes the
-  protocol parameters and slot configuration as one object so they cannot disagree: the `Emulator`
-  constructor, `Emulator.withState` and `Emulator.withAddresses`. Also `getUtxosForAddress(addr)`,
-  superseded by `getUtxos({ address })`, and `getAllUtxos()`, superseded by `getUtxos()`, which
-  returns decoded `Utxo` handles rather than CBOR
-
-### Fixed
-
-- Constructor-pattern fallbacks no longer repeat wildcard guards that have already failed.
-  This preserves trace order and avoids duplicate execution costs; affected scripts may change
-  size, execution budgets, and hashes after recompilation.
-- Unsupported aliases on alternative patterns, such as `x @ ("a" | "b")`, now produce a
-  positioned diagnostic instead of a misleading forward-reference error or compiler crash.
-  Remove the alias and refer to a `val` holding the scrutinee as a workaround.
-
-- `Eq[DCert]` and `Eq[ScriptPurpose]` (Plutus V1) compared every field to itself: the inner
-  pattern binder shadowed the outer one, so any two values with the same constructor were equal
-  off-chain. On-chain the lowering replaces `Eq` with structural `equalsData`, which hid it
-- `dischargeCekValEnv` returned `Constr` and `Case` nodes untouched, so a variable inside a
-  constructor argument or a case branch kept its unresolved name whenever a CEK value was
-  discharged back to a term
-- `TermSanitizer` could emit names the reference plutus-core parser rejects as malformed. It
-  allowed hyphen-digit anywhere in a name, but the upstream textual grammar treats a `-<digits>`
-  suffix as a terminal Unique-id token, so a name carrying both a `-<id>` suffix and a
-  `'<counter>` disambiguation suffix (e.g. `a-91533'653`) produced unparseable UPLC. Every `-`
-  now maps to `_`
-- Script-context collections were ordered by an `Ord` that disagreed with the order the Cardano
-  ledger delivers, and `SortedMap.get` short-circuits, so a lookup could walk past a key that was
-  present and report `None`. `Ord[Credential]` (Plutus V1) now sorts script credentials before
-  key credentials, matching the ledger's derived `Ord (Credential kr)` over
-  `ScriptHashObj | KeyHashObj`; `Ordering[RewardAccount]` compares network, credential kind and
-  hash rather than the hash alone; V1/V2 withdrawals keep Plutus order while V3 withdrawals and
-  the container a `Withdrawing` redeemer index resolves against keep ledger order, which are
-  deliberately opposite constructor orders and are now separate helpers; and
-  `getVotingProcedures` no longer re-sorts by `toString`, which named the wrong voter for a
-  `Voting` redeemer index
-- Pointer addresses lost their staking credential in translation. The ledger translates them in
-  every Plutus version, so the delegation part is now a `StakingPtr`
-- The ledger decoders rejected transactions the node accepts: chain codes were length-checked
-  although the CDDL leaves them unconstrained, and urls and DNS names were bounded by characters
-  where `text .size (0..128)` counts UTF-8 bytes
-- `ChangedParameters.toData` did not match the ledger's encoding of a parameter-change
-  governance action
-- `scalus-bloxbean-cardano-client-lib`: `Ordering[Voter]` sorted by CCL's `VoterType` ordinal,
-  which declares key before script and so is the opposite of the ledger's order, resolving a
-  `Voting` redeemer index to the wrong voter. A `Proposing` redeemer index was collected from the
-  certificate list, which can never hold a `ProposalProcedure`, so every `Proposing` redeemer
-  threw
+Scalus 1.2 makes generated validators smaller, ordered collections faster, and contract APIs safer.
+It also brings a self-contained Emulator and streaming blockchain APIs to JVM and JavaScript.
 
 ### Added
 
-- `List.insertionSort` – cheaper than `sort` for very short lists and about a third the script
-  size (106 bytes against 277). Up to 2.1x cheaper at n≤2, a tie at n=8, then rapidly worse: 1.9x
-  at n=16 and 5.3x at n=64. Use it only when the length is bounded by construction and at most 8;
-  it is `O(n^2)`, so an attacker-chosen length is an attacker-chosen cost.
+- Safe on-chain APIs for unique lookups, validity bounds, whole-value checks, NFT checks, tagged
+  payments, explicit rounding, and credential extraction.
+- A complete Emulator provider with stable error codes, per-redeemer budgets, filtered UTxO
+  queries, and rollback-aware subscriptions.
+- `List.insertionSort` for very small bounded lists, plus `isSorted`, `isStrictlyAscending`, and
+  comparator-based sorting.
+- `SortedMap.fromLargeList` for lists that may be long or attacker-controlled.
+- Blockchain streaming adapters for the standard library and fs2.
+- All eight UPLC-CAPE benchmarks, with reproducible script-size and execution-budget measurements.
+- Scala 3.9.0 support alongside 3.3.7, 3.3.8, and 3.8.4.
 
-- `List.isSorted` and `List.isStrictlyAscending` – one pass, no allocation. Verifying an
-  off-chain-supplied order costs about a seventh of sorting at n=64. This is what most of the
-  ecosystem does instead of sorting: Plutarch ships no sort at all, only its equivalent of these.
-  There are no `OrFail` twins; `require(xs.isSorted, "...")` says the same thing at the same cost.
+### Changed
 
-- `List.sortWith(lt)` and `List.isSortedWith(lt)` – take an explicit boolean comparator instead of
-  an `Ord`. About 20% cheaper and smaller when the caller has a direct comparison, because `Ord[A]`
-  is `(A, A) => Order` and so allocates an `Order` per comparison only to match it back down to a
-  boolean.
+- `List.sort` is now a stable natural merge sort. At 64 ordered items, worst-case execution fees
+  fall **84%**, from 894,051 to 141,105 lovelace.
+- `SortedMap.fromList` is **28x cheaper** at 64 ascending keys. This reduces measured `Value`
+  construction costs by 11–13%.
+- Common subexpression elimination and common context extraction now reuse repeated code in the
+  smallest safe scope. Fee-aware decisions save another 514 bytes across the 23-contract release
+  benchmark. See [measurements](docs/design/cse-measurements.md).
+- The Scalus compiler tag now has **zero execution cost**, saving 300 memory units and 48,000 CPU
+  units per run. **All release script hashes change.**
+- The npm package now runs in browsers without Node crypto polyfills and requires Node 20 or newer.
+  Ledger values use typed handles with `toObject()` instead of raw CBOR.
+- **Breaking:** design-pattern callbacks now return `Unit`; `TxInfo.redeemers` is now an
+  `AssocMap`; invalid `GovAction` and `ProposalProcedure` orderings were removed.
+- **Breaking:** the JavaScript Emulator uses hex identifiers and `undefined` for missing values.
+  Direct Scala.js users must migrate `SlotConfig` to the shared `Long`-based API.
 
-- `SortedMap.fromLargeList` – the `Theta(n log n)` constructor, for when a key list may be long or
-  its length is not under your control. Crossover against `fromList` is around n=10.
+### Deprecated
 
+- Misnamed `TxInfo.findOwn*` methods, `getValidityStartTime`, and ADA-only input/output sums. Use
+  the renamed `TxInfo.find*`, `validFromOrFail`, `valuePaidTo`, and `valueSpentFrom` APIs.
+- `List.single`, `PairList.single`, and legacy JavaScript Emulator constructors and query methods.
 
-- A translation oracle for the script context: cardano-ledger's own golden `TxInfo` corpus is
-  vendored as a test resource, pinned by sha256, and compared field by field against the Scalus
-  translation for V1, V2 and V3 withdrawals, votes and datums. Each cell asserts a minimum number
-  of transactions compared, so the oracle cannot silently lose coverage and still report green
-- On-chain safe API, nineteen operations the research corpus showed contract authors
-  re-implement by hand with a measurable rate of security-relevant divergence. Prelude:
-  `List.findUniqueOrFail(p, msg)` (one pass, fails on zero or two matches, where `find` accepts a
-  second), `List.singleOrFail(msg)` and `SortedMap`/`AssocMap.singleOrFail(msg)` (the only
-  element of a size-one collection, where `head` accepts the first of many),
-  `a divFloor b` / `a divCeil b` (explicit rounding, one `divideInteger` each). `Credential`:
-  `scriptHashOrFail(msg)`, `pubKeyHashOrFail(msg)`. `Value`: `hasNft(policy, name)` (exactly
-  one; the strict twin is `hasOnly(policy, name, 1)`), `hasSameTokensAndAtLeastAda(expected)`
-  (tokens exact, ADA open above, the continuing-output value check). `TxOut.hasInlineDatum(x)`,
-  measured cheaper than `datum.inlineOrFail[T](msg) === x` (286 vs 461 lovelace) because the
-  decode form unwraps and rewraps before `equalsData`. `TxInfo`: `findContinuingOutputOrFail`
-  (compares the whole address, staking part included), `valuePaidTo` / `valueSpentFrom` (whole
-  `Value`, not lovelace only), `isSignedByAny`, `validFromOrFail` / `validToOrFail` (lower bound
-  inclusive, upper bound exclusive, as the ledger builds them), `onlyBurnsUnder` (guards the
-  empty sub-map that makes `forall` vacuously true), `hasPaidTagged` (the tagged-output
-  double-satisfaction defence). `TxOutRef.deriveTokenName` is `blake2b_256(serialiseData(ref))`
-- `List.singleton` and `PairList.singleton`, the constructor name the map types already used
-- Streaming subscriptions in `scalus.cardano.node.stream`: `BlockchainStreamProvider` /
-  `BlockchainStreamReader` (and their `TF` variants over a generic effect) add rollback-aware
-  event subscriptions to the existing reader/provider pair. Everything that changes over time
-  now has both a one-shot read and a subscription, so `pollForConfirmation` becomes
-  `subscribeTransactionStatus` with no sleep loop and no missed-update window.
+### Fixed
 
-  A provider declares only `StreamCapabilities`; whether a given request is served, and whether
-  it is cheap, is derived from that by `SubscriptionSupport.of` – so a provider can neither
-  refuse what it advertised nor accept what it did not. Subscriptions are registered
-  synchronously, which makes `subscribe` followed by `submit` race-free.
-
-  The stream type is chosen per call rather than per provider. `ScalusAsyncSource` needs nothing
-  beyond the stdlib and works on JVM and JS alike; the new `scalus-streaming-fs2` module adds
-  fs2 `Stream`s, and further adapters plug in through `ScalusAsyncStreamAdapter`.
-  `StreamingEmulator` implements the facade over the in-memory emulator, and
-  `StreamProviderConformance` in `scalus-testkit` holds any implementation to the capabilities
-  it declares
-
-- Scalus implementations of all 8 [UPLC-CAPE](https://github.com/IntersectMBO/UPLC-CAPE)
-  benchmark scenarios in `scalus-examples`, each with a test pinning its script size and
-  per-case execution budget, plus `scripts/cape-submit.sh` to generate, verify, measure and
-  rank submissions against the published leaderboard in one command
-
-- The in-memory `Emulator` answers everything a blockchain provider must, so driving it from
-  TypeScript no longer needs a second provider standing behind it. It evaluates transactions
-  against its own state and returns per-redeemer budgets, serves UTxO queries filtered by address,
-  payment credential, asset or datum, reports its stake distribution, and exposes slot and time
-  control plus direct ledger edits for seeding a fixture without a genesis transaction
-
-- `SubmitError.rule`: a short, stable name for the condition that rejected a transaction, safe to
-  assert on in a test unlike the prose `message`. The emulator and the network providers share one
-  vocabulary, so `err.rule` means the same thing whichever produced it. Unclassified rejections
-  report `TransactionException.ruleName`, an exhaustive table beside the exception hierarchy, so 23
-  conditions that previously arrived as a bare `"ValidationError"` – fee too small, missing
-  signatures, min-ada, ex-units exceeded – now name themselves
-
-### JavaScript (npm `scalus` 1.2.0)
-
-The emulator becomes a self-sufficient provider backend, so a MeshJS or lucid-evolution adapter can
-be written against it alone. Both are exercised end to end in the test suite: each builds, signs and
-submits a transaction the emulator accepts, and one spends a Plutus script.
-
-Breaking, all in service of one rule – **identifiers are hex strings, absence is `undefined`**:
-
-| Before | Now |
-|---|---|
-| `hasTx(txHashBytes: Uint8Array)` | `hasTx(txHashHex: string)` |
-| `getDatum(datumHashBytes: Uint8Array): Uint8Array \| null` | `getDatum(datumHashHex: string)` |
-| `getDelegation(stakeCredentialCbor: Uint8Array)` | `getDelegation(rewardAddressBech32: string)` |
-| `getStakeReward(...): bigint \| null` | `bigint \| undefined` |
-| `DelegationInfo.poolId: Uint8Array \| null` | `poolId?: string`, hex-encoded |
-
-`JEmulator` is reachable only through this npm package, which is built and published from this
-repository, so no caller can hold the previous signatures while running the new bundle.
-
-Also:
-
-- **`require("scalus")` works again.** The package stays ESM-only; one `"default"` condition in the
-  exports map restores CommonJS resolution, and both conditions resolve to the same file, so mixing
-  `require()` and `import()` still yields a single module instance
-- **`PlutusScriptEvaluationError extends Error`**, so a caught failure answers `instanceof Error`
-  and carries `.stack`. It keeps `.message` and `.logs`
-- **Handles instead of CBOR.** `Value`, `Asset`, `Utxo`, `ProtocolParams` and `CardanoInfo` wrap the
-  ledger's own types. Their fields are accessors on the prototype, so `JSON.stringify`, object
-  spread and a test framework's `toEqual` all see an empty object – call `toObject()` and assert on
-  that
-- **`scalus.d.ts` is generated from the compiler's own TASTy** rather than hand-written, and
-  `checkDtsUpToDate` fails the build when it drifts
+- PlutusV1/V2 scripts now declare the correct UPLC version and avoid unsupported syntax on older
+  protocol versions.
+- Script-context ordering, redeemer lookup, voter/proposal indexing, and pointer-address staking
+  credentials now match the Cardano ledger.
+- Example validators now prevent token stripping and reject missing validity bounds.
+- CommonJS `require("scalus")` works again, evaluation failures extend `Error`, and TypeScript
+  declarations are generated from compiler metadata.
+- Equality for `DCert` and PlutusV1 `ScriptPurpose`, pattern fallbacks, CEK value discharge, ledger
+  decoding, and Plutus-compatible names were corrected.
+- Preprod protocol parameters were updated to epoch 310.
 
 ## 1.1.1 (2026-08-25)
 
