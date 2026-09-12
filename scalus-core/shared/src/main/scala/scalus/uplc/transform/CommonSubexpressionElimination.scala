@@ -4,7 +4,7 @@ import scalus.uplc.{Constant, Term}
 import scalus.uplc.Term.*
 import scalus.uplc.{DeBruijn, DefaultFun, NamedDeBruijn}
 import scalus.uplc.eval.{Log, Logger}
-import scalus.uplc.transform.TermAnalysis.{freeVars, isValueForm}
+import scalus.uplc.transform.TermAnalysis.{collectNames, freeVars, isValueForm}
 import scalus.cardano.ledger.Word64
 import scalus.serialization.flat.Flat
 import scalus.uplc.Constant.flatConstant
@@ -319,11 +319,11 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
             if next eq body then t else Delay(next, ann)
         case Constr(tag, args, ann) =>
             val next = args.zipWithIndex.map(f.tupled)
-            if next.zip(args).forall((a, b) => a eq b) then t else Constr(tag, next, ann)
+            if next.corresponds(args)(_ eq _) then t else Constr(tag, next, ann)
         case Case(scrutinee, branches, ann) =>
             val nextScrutinee = f(scrutinee, 0)
             val nextBranches = branches.zipWithIndex.map((b, i) => f(b, i + 1))
-            if (nextScrutinee eq scrutinee) && nextBranches.zip(branches).forall((a, b) => a eq b)
+            if (nextScrutinee eq scrutinee) && nextBranches.corresponds(branches)(_ eq _)
             then t
             else Case(nextScrutinee, nextBranches, ann)
         case _ => t
@@ -526,22 +526,6 @@ object CommonSubexpressionElimination {
         case Delay(inner, _)                                    => 1 + termSize(inner)
         case Constr(_, args, _)                                 => 1 + args.map(termSize).sum
         case Case(arg, cases, _) => 1 + termSize(arg) + cases.map(termSize).sum
-
-    /** Reserve bound and free names: lam x. Apply(x, y) contributes both x and y. */
-    private def collectNames(t: Term): mutable.HashSet[String] = {
-        val names = mutable.HashSet.empty[String]
-        def go(t: Term): Unit = t match
-            case Var(NamedDeBruijn(n, _), _)      => names += n
-            case LamAbs(n, body, _)               => names += n; go(body)
-            case Apply(f, arg, _)                 => go(f); go(arg)
-            case Force(inner, _)                  => go(inner)
-            case Delay(inner, _)                  => go(inner)
-            case Constr(_, args, _)               => args.foreach(go)
-            case Case(arg, cases, _)              => go(arg); cases.foreach(go)
-            case _: Const | _: Builtin | _: Error => ()
-        go(t)
-        names
-    }
 
     /** Convenience entry point: CSE(term) runs a fresh CSE instance with its default logger. */
     def apply(term: Term): Term = {

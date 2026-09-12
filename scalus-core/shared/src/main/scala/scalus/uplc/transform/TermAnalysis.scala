@@ -3,12 +3,30 @@ package scalus.uplc.transform
 import scalus.uplc.{DefaultFun, DefaultUni, Meaning, NamedDeBruijn, Term, TypeScheme}
 import scalus.uplc.Term.*
 
+import scala.collection.mutable
+
 /** Static analysis utilities for UPLC terms.
   *
   * Provides analysis methods for determining properties of UPLC terms that are useful for
   * optimization and transformation passes.
   */
 object TermAnalysis:
+
+    /** Reserve bound and free names: lam x. Apply(x, y) contributes both x and y. */
+    private[transform] def collectNames(t: Term): mutable.HashSet[String] = {
+        val names = mutable.HashSet.empty[String]
+        def go(t: Term): Unit = t match
+            case Var(NamedDeBruijn(n, _), _)      => names += n
+            case LamAbs(n, body, _)               => names += n; go(body)
+            case Apply(f, arg, _)                 => go(f); go(arg)
+            case Force(inner, _)                  => go(inner)
+            case Delay(inner, _)                  => go(inner)
+            case Constr(_, args, _)               => args.foreach(go)
+            case Case(arg, cases, _)              => go(arg); cases.foreach(go)
+            case _: Const | _: Builtin | _: Error => ()
+        go(t)
+        names
+    }
 
     /** Extracts builtin information from a term consisting of Force and Apply nodes.
       *

@@ -5,7 +5,7 @@ import scalus.uplc.Term.*
 import scalus.uplc.{DefaultFun, NamedDeBruijn}
 import scalus.uplc.eval.{CekMachineCosts, Log, Logger}
 import scalus.uplc.transform.CommonSubexpressionElimination.{cachedTermBits, TermKey, TermTagBits, VarBits}
-import scalus.uplc.transform.TermAnalysis.{freeVars, isValueForm}
+import scalus.uplc.transform.TermAnalysis.{collectNames, freeVars, isValueForm}
 
 import scala.collection.mutable
 
@@ -127,21 +127,6 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
 
         val topLevelFreeVars = term.freeVars
 
-        def varsInScope(path: Path): Set[String] =
-            topLevelFreeVars ++ path.flatMap(id => pathIdToVar.get(id))
-
-        def isSafeToHoist(
-            freeVarSet: Set[String],
-            bindPath: Path,
-            occurrencePath: Path
-        ): Boolean = {
-            val scopeAtBind = varsInScope(bindPath)
-            if !freeVarSet.subsetOf(scopeAtBind) then return false
-            val extensionSegments = occurrencePath.drop(bindPath.length)
-            val shadowedVars = extensionSegments.flatMap(id => pathIdToVar.get(id)).toSet
-            freeVarSet.intersect(shadowedVars).isEmpty
-        }
-
         val candidates = mutable.ArrayBuffer.empty[CceCandidate]
 
         for
@@ -164,7 +149,15 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                     val templateFreeVars = key.term.freeVars - holeSentinelName
 
                     val safeForAll =
-                        allPaths.forall(p => isSafeToHoist(templateFreeVars, bindPath, p))
+                        allPaths.forall(p =>
+                            isSafeToHoist(
+                              templateFreeVars,
+                              bindPath,
+                              p,
+                              topLevelFreeVars,
+                              pathIdToVar
+                            )
+                        )
 
                     val crossesConditional = allPaths.exists { path =>
                         path.length > bindPath.length &&
@@ -263,18 +256,9 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                 val templateFreeVars = cand.key.term.freeVars - holeSentinelName
                 val reTopFreeVars = currentTerm.freeVars
 
-                def reVarsInScope(path: Path): Set[String] =
-                    reTopFreeVars ++ path.flatMap(id => rePathIdToVar.get(id))
-
-                def reIsSafeToHoist(bindP: Path, occP: Path): Boolean = {
-                    val scope = reVarsInScope(bindP)
-                    if !templateFreeVars.subsetOf(scope) then return false
-                    val ext = occP.drop(bindP.length)
-                    val shadowed = ext.flatMap(id => rePathIdToVar.get(id)).toSet
-                    templateFreeVars.intersect(shadowed).isEmpty
-                }
-
-                val reSafe = allPaths.forall(p => reIsSafeToHoist(bindPath, p))
+                val reSafe = allPaths.forall(p =>
+                    isSafeToHoist(templateFreeVars, bindPath, p, reTopFreeVars, rePathIdToVar)
+                )
                 val reCrossesConditional = allPaths.exists { path =>
                     path.length > bindPath.length &&
                     reConditionalPathIds.contains(path(bindPath.length))
@@ -447,16 +431,8 @@ object CommonContextExtraction {
             referencesPartialBuiltin(arg) || cases.exists(referencesPartialBuiltin)
 
     /** Legacy CCE candidate filter. */
-    private[transform] def isSkippable(t: Term): Boolean = t match
-        case _: Var | _: Const | _: LamAbs | _: Delay | _: Builtin => true
-        case _: Error                                              => true
-        // Forced builtins are value forms too; their 16/20-bit hole templates cannot reach
-        // MinTemplateBits, so exempting them from this filter never enabled extraction.
-        // Other unsaturated builtin applications are value forms -- not worth extracting
-        case _ if t.isValueForm => true
-        // Keep the existing conservative filter for terms containing explicit error paths.
-        case _ if containsError(t) => true
-        case _                     => false
+    private[transform] def isSkippable(t: Term): Boolean =
+        t.isValueForm || containsError(t)
 
     /** Whether a term contains an Error node anywhere, including deferred bodies. This syntactic
       * filter is not a proof that evaluating the term fails.
@@ -472,6 +448,23 @@ object CommonContextExtraction {
         case Case(arg, cases, _)            => containsError(arg) || cases.exists(containsError)
 
     private type Path = Vector[Int]
+
+    /** Check visibility and shadowing using the scope metadata from the current traversal. For
+      * example, f(x) must stay within x's binding and cannot cross a shadowing lambda x.
+      */
+    private def isSafeToHoist(
+        freeVarSet: Set[String],
+        bindPath: Path,
+        occurrencePath: Path,
+        topLevelFreeVars: Set[String],
+        pathIdToVar: scala.collection.Map[Int, String]
+    ): Boolean = {
+        val scopeAtBind = topLevelFreeVars ++ bindPath.flatMap(id => pathIdToVar.get(id))
+        if !freeVarSet.subsetOf(scopeAtBind) then return false
+        val extensionSegments = occurrencePath.drop(bindPath.length)
+        val shadowedVars = extensionSegments.flatMap(id => pathIdToVar.get(id)).toSet
+        freeVarSet.intersect(shadowedVars).isEmpty
+    }
 
     private val costs = CekMachineCosts.defaultMachineCosts
 
@@ -770,22 +763,6 @@ object CommonContextExtraction {
         case Force(_, _)     => List("Force")
         case Delay(_, _)     => List("Delay")
         case _               => Nil
-
-    /** Collect all variable/lambda names used in a term. */
-    private def collectNames(t: Term): mutable.HashSet[String] = {
-        val names = mutable.HashSet.empty[String]
-        def go(t: Term): Unit = t match
-            case Var(NamedDeBruijn(n, _), _)      => names += n
-            case LamAbs(n, body, _)               => names += n; go(body)
-            case Apply(f, arg, _)                 => go(f); go(arg)
-            case Force(inner, _)                  => go(inner)
-            case Delay(inner, _)                  => go(inner)
-            case Constr(_, args, _)               => args.foreach(go)
-            case Case(arg, cases, _)              => go(arg); cases.foreach(go)
-            case _: Const | _: Builtin | _: Error => ()
-        go(t)
-        names
-    }
 
     /** Applies CCE to a term using default settings. */
     def apply(term: Term): Term = {
