@@ -123,12 +123,12 @@ Next steps:
 
 ### Scala / sbt
 
-Use the latest published Scalus version. Maven Central currently lists `1.0.0`.
+Use Scalus `1.2.0`:
 
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "1.0.0")
+addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "1.2.0")
 ```
 
 `build.sbt`:
@@ -136,7 +136,7 @@ addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "1.0.0")
 ```scala
 scalaVersion := "3.3.8"
 
-val scalusVersion = "1.0.0"
+val scalusVersion = "1.2.0"
 
 addCompilerPlugin(
   "org.scalus" % "scalus-plugin" % scalusVersion cross CrossVersion.full
