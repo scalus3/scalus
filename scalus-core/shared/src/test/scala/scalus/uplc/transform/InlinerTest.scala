@@ -286,7 +286,7 @@ class InlinerTest extends AnyFunSuite {
             val value = Const(constant)
             val term = λ(x => Constr(Word64.Zero, List(x, x))) $ value
             assert(Inliner(term) == term)
-            assert(Inliner(LamAbs("x", vr"x") $ value) == value)
+            assert(Inliner(λ(x => x) $ value) == value)
     }
 
     test("retained constant chains complete without exponential body traversal") {
@@ -294,8 +294,8 @@ class InlinerTest extends AnyFunSuite {
         def chain(exposeLambda: Boolean): Term =
             (0 until 27).foldLeft(vr"free": Term) { (body, i) =>
                 val name = s"constant$i"
-                val ref = Var(NamedDeBruijn(name))
-                val lambda = LamAbs(name, Constr(Word64.Zero, List(ref, ref, body)))
+                val ref = vr(name)
+                val lambda = λ(name)(Constr(Word64.Zero, List(ref, ref, body)))
                 val function = if exposeLambda then Force(Delay(lambda)) else lambda
                 function $ value
             }
@@ -322,32 +322,32 @@ class InlinerTest extends AnyFunSuite {
         val value = ("a" * 128).asTerm
         val body = Constr(Word64.Zero, List(vr"x", vr"x", AddInteger $ 1 $ 2))
         val folded = Constr(Word64.Zero, List(vr"x", vr"x", 3))
-        val term = LamAbs("x", LamAbs("y", body)) $ value $ 0
-        val expected = LamAbs("x", LamAbs("y", folded)) $ value $ 0
+        val term = λ("x", "y")(body) $ value $ 0
+        val expected = λ("x", "y")(folded) $ value $ 0
         assert(Inliner(term) == expected)
         assert(Inliner(term).evaluate α_== term.evaluate)
 
-        val delayed = LamAbs("x", Delay(LamAbs("y", body))) $ value $ 0
-        val expectedDelayed = LamAbs("x", Delay(LamAbs("y", folded))) $ value $ 0
+        val delayed = λ("x")(Delay(λ("y")(body))) $ value $ 0
+        val expectedDelayed = λ("x")(Delay(λ("y")(folded))) $ value $ 0
         assert(Inliner(delayed) == expectedDelayed)
     }
 
     test("finished deferred bodies reprice their remaining constant uses") {
         val value = Data.I(42).asTerm
         val body = Constr(Word64.Zero, List.fill(3)(UnIData $ vr"x"))
-        val term = LamAbs("x", LamAbs("y", body)) $ value $ 0
+        val term = λ("x", "y")(body) $ value $ 0
         assert(Inliner(term) == Constr(Word64.Zero, List.fill(3)(42.asTerm)))
     }
 
     test("unused impure bindings finish deferred bodies") {
-        val term = LamAbs("x", LamAbs("y", AddInteger $ 1 $ 2)) $ Error() $ 0
-        val expected = LamAbs("x", LamAbs("y", 3.asTerm)) $ Error() $ 0
+        val term = λ(x => λ(y => AddInteger $ 1 $ 2)) $ Error() $ 0
+        val expected = λ(x => λ(y => 3.asTerm)) $ Error() $ 0
         assert(Inliner(term) == expected)
     }
 
     test("non-lambda function expressions finish deferred lambda bodies") {
-        val lambda = LamAbs("y", AddInteger $ 1 $ 2)
-        val folded = LamAbs("y", 3.asTerm)
+        val lambda = λ(y => AddInteger $ 1 $ 2)
+        val folded = λ(y => 3.asTerm)
         assert(Inliner(Delay(lambda) $ 0) == (Delay(folded) $ 0))
         assert(Inliner(Force(lambda) $ 0) == (Force(folded) $ 0))
     }

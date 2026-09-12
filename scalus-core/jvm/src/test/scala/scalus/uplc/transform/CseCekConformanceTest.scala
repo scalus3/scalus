@@ -42,7 +42,7 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             case _: MachineError       => Observation.Failed
     }
 
-    private val probes: List[Term] = List(0, 1, true, Const(Constant.Unit))
+    private val probes: List[Term] = List(0, 1, true, ().asTerm)
 
     private def agree(before: Term, after: Term, depth: Int = 6): Unit = {
         (observe(before), observe(after)) match
@@ -129,13 +129,13 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     test("division stays in the two branches that evaluate it") {
         val div = DivideInteger $ vr"a" $ vr"b"
         val body = Case(Constr(Word64(2), Nil), List(div, div, 42))
-        val t = LamAbs("a", LamAbs("b", body)) $ 1 $ 0
+        val t = λ("a", "b")(body) $ 1 $ 0
         assert(observe(t) == Observation.Value(42))
         check(t)
     }
 
     test("CSE and inliner agree on both sides of the constant-sharing threshold") {
-        val value = Const(Constant.Data(scalus.uplc.builtin.Data.I(0)))
+        val value = scalus.uplc.builtin.Data.I(0).asTerm
         for n <- List(2, 3, 20) do
             val original = Constr(Word64.Zero, List.fill(n)(value))
             val shared = check(original)
@@ -168,9 +168,7 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     }
 
     test("the greatest bit saving wins over the largest AST") {
-        val large = Const(
-          Constant.ByteString(scalus.uplc.builtin.ByteString.fromArray(Array.fill[Byte](128)(1)))
-        )
+        val large = scalus.uplc.builtin.ByteString.fromArray(Array.fill[Byte](128)(1)).asTerm
         val call = AddInteger $ 1 $ 2
         val term = Constr(Word64.Zero, List(large, large, call, call))
         val cse = new CommonSubexpressionElimination()
@@ -180,9 +178,7 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     }
 
     test("value sharing can trade execution budget for a smaller constant representation") {
-        val large = Const(
-          Constant.ByteString(scalus.uplc.builtin.ByteString.fromArray(Array.fill[Byte](64)(1)))
-        )
+        val large = scalus.uplc.builtin.ByteString.fromArray(Array.fill[Byte](64)(1)).asTerm
         val term = Constr(Word64.Zero, List(large, large))
         val shared = check(term)
         def spent(t: Term): ExUnits = {
@@ -196,8 +192,12 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     }
 
     test("repeated opaque calls are shared even when the binding adds encoded bits") {
-        val smallCall = vr"f" $ vr"x"
-        val calls = LamAbs("f", LamAbs("x", Constr(Word64.Zero, List(smallCall, smallCall))))
+        val calls = λ(f =>
+            λ(x => {
+                val smallCall = f $ x
+                Constr(Word64.Zero, List(smallCall, smallCall))
+            })
+        )
         val shared = check(calls)
         assert(shared ~!=~ calls)
         assert(encodedBits(shared) > encodedBits(calls))
@@ -219,7 +219,7 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     test("the default V3 pipeline shares local work and leaves other branches guarded") {
         val div = DivideInteger $ 20 $ vr"d"
         val branch = AddInteger $ div $ div
-        val term = LamAbs("s", LamAbs("d", Case(vr"s", List(branch, branch, 42))))
+        val term = λ("s", "d")(Case(vr"s", List(branch, branch, 42)))
         val optimizer = new V3Optimizer()
         val optimized = optimizer(term)
         assert(optimizer.logs.exists(_.startsWith("CSE:")), "pipeline must exercise CSE")
@@ -230,9 +230,9 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
     test("unknown helper names cannot bypass branch placement") {
         for name <- List("helper", "__helper", "__cce_helper", "__cse_helper") do
-            val call = Var(NamedDeBruijn(name)) $ 0
+            val call = vr(name) $ 0
             val body = Case(Constr(Word64(2), Nil), List(call, call, 42))
-            check(LamAbs(name, body) $ LamAbs("x", DivideInteger $ 1 $ vr"x"))
+            check(λ(name)(body) $ λ(x => DivideInteger $ 1 $ x))
     }
 
     test("placement does not assume variables passed to total builtins have the right type") {
@@ -242,7 +242,7 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     }
 
     test("the CEK budget bounds divergence and unused divergent branches stay deferred") {
-        val self = LamAbs("x", vr"x" $ vr"x")
+        val self = λ(x => x $ x)
         val omega = self $ self
         assert(observe(omega) == Observation.OutOfBudget)
         assert(!CseTranslationValidation.validate(42, omega), "oracle must reject a cyclic proof")
@@ -292,7 +292,7 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
     test("a scrutinee occurrence anchors sharing into its Case branches") {
         val value = Constr(Word64.Zero, List(AddInteger $ 1 $ 2))
-        val t = Case(value, List(LamAbs("field", Constr(Word64.Zero, List(value, vr"field")))))
+        val t = Case(value, List(λ(field => Constr(Word64.Zero, List(value, field)))))
         assert(check(t) ~!=~ t)
     }
 
@@ -365,10 +365,10 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
     private val names = List("a", "b", "c")
     private def genTerm(env: List[String], size: Int): Gen[Term] = {
-        val constant: Gen[Term] = Gen.choose(-3, 5).map(n => Const(Constant.Integer(n)))
+        val constant: Gen[Term] = Gen.choose(-3, 5).map(_.asTerm)
         val leaf =
             if env.isEmpty then constant
-            else Gen.frequency(3 -> constant, 1 -> Gen.oneOf(env).map(n => Var(NamedDeBruijn(n))))
+            else Gen.frequency(3 -> constant, 1 -> Gen.oneOf(env).map(vr))
         if size <= 0 then leaf
         else {
             val child = genTerm(env, size / 2)
@@ -378,7 +378,7 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                   a <- child
                   b <- child
                   op <- Gen.oneOf(AddInteger, MultiplyInteger, DivideInteger)
-              yield Builtin(op) $ a $ b),
+              yield op $ a $ b),
               4 -> child.map(e => Constr(Word64.Zero, List(e, e))),
               2 -> (for
                   name <- Gen.oneOf(names)

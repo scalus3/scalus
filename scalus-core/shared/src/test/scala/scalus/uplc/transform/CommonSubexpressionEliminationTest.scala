@@ -289,8 +289,8 @@ class CommonSubexpressionEliminationTest
 
     test("AlphaTermKey: bound renames have equal keys and hashes") {
         for (a, b) <- List(("x", "y"), ("i0", "amount"), ("x_cse", "x")) do
-            val first = λ(a)(AddInteger $ Var(NamedDeBruijn(a)) $ vr"capture")
-            val second = λ(b)(AddInteger $ Var(NamedDeBruijn(b)) $ vr"capture")
+            val first = λ(a)(AddInteger $ vr(a) $ vr"capture")
+            val second = λ(b)(AddInteger $ vr(b) $ vr"capture")
             val key1 = new AlphaTermKey(first)
             val key2 = new AlphaTermKey(second)
             assert(key1 == key2)
@@ -304,7 +304,7 @@ class CommonSubexpressionEliminationTest
 
     test("AlphaTermKey: free names and their order remain significant") {
         def candidate(a: String, b: String): Term =
-            λ("bound")(Constr(Word64.Zero, List(Var(NamedDeBruijn(a)), Var(NamedDeBruijn(b)))))
+            λ("bound")(Constr(Word64.Zero, List(vr(a), vr(b))))
         val xy = new AlphaTermKey(candidate("x", "y"))
         assert(xy != new AlphaTermKey(candidate("y", "x")))
         assert(xy != new AlphaTermKey(candidate("x", "z")))
@@ -747,17 +747,7 @@ class CommonSubexpressionEliminationTest
 
     test("termBits agrees with the flat encoder on a de Bruijn term") {
         // Covers Var, Apply, LamAbs, Force, Delay, Builtin, Const.
-        val named = LamAbs(
-          "x",
-          Force(
-            Delay(
-              Apply(
-                Apply(Builtin(AddInteger), Var(NamedDeBruijn("x"))),
-                Apply(Force(Builtin(HeadList)), 42: Term)
-              )
-            )
-          )
-        )
+        val named = λ(x => Force(Delay(AddInteger $ x $ (Force(Builtin(HeadList)) $ 42))))
         val db = DeBruijn.deBruijnTerm(named)
         assert(termBits(db) == summon[scalus.serialization.flat.Flat[Term]].bitSize(db))
     }
@@ -778,7 +768,7 @@ class CommonSubexpressionEliminationTest
         val terms = List(
           vr"free",
           λ("x")(vr"x"),
-          Apply(Force(Builtin(HeadList)), Var(NamedDeBruijn("__CCE_HOLE__"))),
+          Force(Builtin(HeadList)) $ vr"__CCE_HOLE__",
           Var(NamedDeBruijn("largestSingleGroupIndex", 127))
         )
         for term <- terms do
@@ -790,7 +780,7 @@ class CommonSubexpressionEliminationTest
         assert(termBits(term) + 8 == summon[scalus.serialization.flat.Flat[Term]].bitSize(term))
         // Named index-zero holes can be sized directly. Converting an open template to de Bruijn
         // introduces negative indices, which Flat rejects but the fixed-width estimate ignores.
-        val template = Apply(Force(Builtin(HeadList)), Var(NamedDeBruijn("__CCE_HOLE__")))
+        val template = Force(Builtin(HeadList)) $ vr"__CCE_HOLE__"
         val db = DeBruijn.deBruijnTerm(template)
         assert(maxVarIndex(db) < 0, "expected a negative index for the free hole sentinel")
         assertThrows[IllegalArgumentException] {
@@ -815,7 +805,7 @@ class CommonSubexpressionEliminationTest
     test("termBits agrees with the flat encoder on Constr, Case and Error") {
         val named = Case(
           Constr(Word64.Zero, List[Term](1: Term, Error())),
-          List[Term](LamAbs("a", LamAbs("b", Var(NamedDeBruijn("a")))))
+          List[Term](λ(a => λ(b => a)))
         )
         val db = DeBruijn.deBruijnTerm(named)
         assert(termBits(db) == summon[scalus.serialization.flat.Flat[Term]].bitSize(db))

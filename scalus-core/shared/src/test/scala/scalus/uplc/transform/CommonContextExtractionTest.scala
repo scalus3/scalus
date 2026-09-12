@@ -490,7 +490,7 @@ class CommonContextExtractionTest
         val optimized = CommonContextExtraction(term)
         def run(t: Term, condition: Boolean, elements: List[Constant]): Term =
             (t $ condition $ Const(Constant.List(DefaultUni.Integer, elements)) $
-                Const(Constant.Data(scalus.uplc.builtin.Data.I(1))) $
+                scalus.uplc.builtin.Data.I(1).asTerm $
                 scalus.uplc.builtin.ByteString.empty).evaluate
 
         // The false branch returns zero without evaluating headList([]).
