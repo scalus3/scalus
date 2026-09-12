@@ -345,11 +345,10 @@ class CommonSubexpressionEliminationTest
     }
 
     test("TermKey: same structure, different annotations => equal") {
-        val t1 = Apply(Builtin(AddInteger), 1.asTerm)
-        val t2 = Apply(
-          Builtin(AddInteger, UplcAnnotation.empty),
-          Const(Constant.Integer(1), UplcAnnotation.empty)
-        )
+        val t1 = AddInteger $ 1
+        val t2 = (AddInteger: Term).withAnnotation(UplcAnnotation(functionName = "builtin")) $
+            1.asTerm.withAnnotation(UplcAnnotation(functionName = "argument"))
+        assert(t1 != t2)
         val key1 = new TermKey(t1)
         val key2 = new TermKey(t2)
         assert(key1 == key2)
@@ -600,9 +599,13 @@ class CommonSubexpressionEliminationTest
 
     test("property: TermKey hash consistency") {
         forAll { (term: Term) =>
+            val annotated = term.withAnnotation(
+              term.annotation.copy(functionName = term.annotation.functionName + "-other")
+            )
+            assert(term != annotated)
             val key1 = new TermKey(term)
-            val key2 = new TermKey(term)
-            assert(key1 == key2, "Same term should produce equal keys")
+            val key2 = new TermKey(annotated)
+            assert(key1 == key2, "Annotations must not affect structural keys")
             assert(key1.hashCode == key2.hashCode, "Equal keys must have equal hashCodes")
         }
     }
