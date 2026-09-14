@@ -1,6 +1,6 @@
 {
   "name": "scalus",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Scalus \u2013 Cardano on-chain / off-chain toolkit compiled with Scala.js",
   "type": "module",
   "files": [
@@ -56,6 +56,6 @@
   "homepage": "https://scalus.org",
   "license": "Apache-2.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=18"
   }
 }

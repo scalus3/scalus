@@ -373,7 +373,7 @@ load it directly, with no bundler and no import map:
 </script>
 ```
 
-The same bundle runs in Node 20+ and browsers without a Node crypto polyfill. Optional
+The same bundle runs in Node 18+ and browsers without a Node crypto polyfill. Optional
 filesystem operations require a Node CommonJS host; evaluation, hashing, signature
 verification and the Emulator do not require filesystem access.
 

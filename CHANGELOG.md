@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.2.1 (2026-09-14)
+
+npm-only release: it relaxes the Node floor and changes no Scala code.
+
+### Changed
+
+- The npm package requires Node 18 or newer, down from the Node 20 floor 1.2.0 shipped with. The
+  floor came in with the browser bundle, whose crypto now resolves through `globalThis.crypto` -
+  absent on Node 18. Nothing on the evaluation path reaches it: every Plutus crypto builtin is a
+  pure-JS `@noble/*` implementation, and `globalThis.crypto` is used only by noble's `randomBytes`,
+  which hashing and signature verification never call. Measured on Node 18.20.4 with
+  `globalThis.crypto` undefined: `sha2_256`, `sha3_256`, `keccak_256`, `blake2b_256`,
+  `verifyEcdsaSecp256k1Signature`, `verifySchnorrSecp256k1Signature`, `bls12_381_G1_uncompress`,
+  G1 compress round-trip and `bls12_381_G1_add` all return results byte-identical to Node 22, and
+  the full JavaScript Emulator suite passes.
+
 ## 1.2.0 (2026-09-12)
 
 Scalus 1.2 makes generated validators smaller, ordered collections faster, and contract APIs safer.
