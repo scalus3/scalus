@@ -144,9 +144,13 @@ private trait DataApi {
                     writer.writeTag(Other((1280 + (constr - 7)).toLong))
                     writer.writeLinearSeq(args.toScalaList)
                 case Constr(constr, args) =>
+                    // The index is a CBOR *unsigned* 64-bit integer, so writing it as a signed
+                    // Long turned everything from 2^63 up into a negative integer - different
+                    // bytes, and a different `serialiseData` hash, than the node produces.
+                    // Borer's BigInt encoder picks the right CBOR major type across the range.
                     writer.writeTag(Other(102))
                     writer.writeArrayHeader(2)
-                    writer.writeLong(constr.toLong)
+                    writer.write(constr)
                     writer.writeLinearSeq(args.toScalaList)
                 case Map(values)       => writeMap(writer, values.toScalaList)
                 case Data.List(values) => writer.writeLinearSeq(values.toScalaList)
@@ -177,6 +181,8 @@ private trait DataApi {
       */
     given dataCborDecoder: Decoder[Data] with
 
+        private val twoTo64: BigInt = BigInt(1) << 64
+
         override def read(r: Reader): Data =
 
             val maxCborByteArraySize = 64
@@ -203,6 +209,22 @@ private trait DataApi {
                         readBoundedBytesIndef()
                     case _ => r.unexpectedDataItem(expected = "Bytes or BytesStart")
 
+            // The constructor index of the tag-102 form is a CBOR unsigned 64-bit integer, so
+            // 2^63 and above reach us as borer OverLongs and have to be widened without a sign.
+            // Anything else - a negative integer, or a bignum above the range - is rejected, as
+            // the node's `decodeWord64` rejects it.
+            def readConstrIndex(): BigInt =
+                r.dataItem() match
+                    case DI.Int | DI.Long =>
+                        val i = r.readLong()
+                        if i < 0 then r.unexpectedDataItem(expected = "unsigned Constr index")
+                        BigInt(i)
+                    case DI.OverLong =>
+                        if r.overLongNegative then
+                            r.unexpectedDataItem(expected = "unsigned Constr index")
+                        BigInt(r.readOverLong()) + twoTo64
+                    case _ => r.unexpectedDataItem(expected = "unsigned Constr index")
+
             r.dataItem() match
                 case DI.Int | DI.Long | DI.OverLong => I(Decoder.forBigInt.read(r))
                 case DI.MapHeader | DI.MapStart     => Map(PList.from(readMap.read(r)))
@@ -212,10 +234,18 @@ private trait DataApi {
                 case DI.Tag =>
                     r.readTag() match
                         case Other(102) =>
-                            val _ = r.readArrayHeader()
-                            val i = r.readLong()
+                            // Exactly two elements, definite- or indefinite-length, as in
+                            // `decodeConstrExtended`. The length used to be read and discarded,
+                            // which let a three-element array through as a two-element list.
+                            val indefinite = r.hasArrayStart
+                            if indefinite then r.readArrayStart()
+                            else if !r.tryReadArrayHeader(2) then
+                                r.unexpectedDataItem(expected = "Array-Header(2)")
+                            val i = readConstrIndex()
                             val args = Decoder.forArray[Data].read(r)
-                            Constr(BigInt(i), PList.from(args.toList))
+                            if indefinite && !r.tryReadBreak() then
+                                r.unexpectedDataItem(expected = "Break")
+                            Constr(i, PList.from(args.toList))
                         case Other(value) if 121 <= value && value < 128 =>
                             Constr(
                               BigInt(value - 121),

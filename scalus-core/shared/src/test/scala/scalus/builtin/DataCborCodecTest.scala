@@ -96,6 +96,64 @@ class DataCborCodecTest extends AnyFunSuite with ScalaCheckPropertyChecks with A
         )
     }
 
+    /* The tag-102 form encodes the constructor index as a CBOR unsigned 64-bit integer, so the
+     * whole 0 .. 2^64-1 range is valid. The node reads it with `decodeWord64` and requires the
+     * tagged array to hold exactly two elements, definite- or indefinite-length; see
+     * `decodeConstrExtended` in PlutusCore.Data.
+     */
+    private val twoTo63 = BigInt(1) << 63
+    private val twoTo64 = BigInt(1) << 64
+
+    private def assertRejects(hex: String): Unit =
+        assertThrows[io.bullet.borer.Borer.Error[?]](decodeHex(hex))
+
+    test("Constr index around the signed 64-bit boundary") {
+        assert(encodeHex(Constr(twoTo63 - 1, PList.Nil)) == "d866821b7fffffffffffffff80")
+        assert(decodeHex("d8 66 82 1b 7fffffffffffffff 80") == Constr(twoTo63 - 1, PList.Nil))
+
+        // Long.MaxValue + 1: still a valid unsigned 64-bit index, and the value at which a
+        // signed write silently wrapped into a CBOR negative integer.
+        assert(encodeHex(Constr(twoTo63, PList.Nil)) == "d866821b800000000000000080")
+        assert(decodeHex("d8 66 82 1b 8000000000000000 80") == Constr(twoTo63, PList.Nil))
+
+        assert(encodeHex(Constr(twoTo64 - 1, PList.Nil)) == "d866821bffffffffffffffff80")
+        assert(decodeHex("d8 66 82 1b ffffffffffffffff 80") == Constr(twoTo64 - 1, PList.Nil))
+    }
+
+    test("Constr index above the unsigned 64-bit range does not round-trip") {
+        // Outside the Plutus Data contract, since the index is a CBOR unsigned 64-bit integer.
+        // Both implementations emit a bignum here and neither reads it back, so what matters is
+        // that the value fails loudly instead of wrapping into a different one.
+        val encoded = encodeHex(Constr(twoTo64, PList.Nil))
+        assert(encoded.startsWith("d86682c2"))
+        assertRejects(encoded)
+        assertRejects("d8 66 82 c2 49 010000000000000000 80")
+    }
+
+    test("Constr index must be a non-negative integer") {
+        assertRejects("d8 66 82 20 80") // -1
+        assertRejects("d8 66 82 3b 8000000000000000 80") // -2^63 - 1, a negative overlong
+    }
+
+    test("tag 102 rejects a three-element array") {
+        // Wrapped in an outer two-element array so the stray item is consumed there instead of
+        // surfacing later as trailing input: this used to decode as `List(Constr(0, []), I(0))`.
+        assertRejects("82 d8 66 83 00 80 00")
+    }
+
+    test("tag 102 rejects a one-element array") {
+        assertRejects("d8 66 81 00")
+    }
+
+    test("tag 102 rejects an indefinite-length array of the wrong arity") {
+        assertRejects("d8 66 9f 00 80 00 ff")
+    }
+
+    test("tag 102 accepts an indefinite-length array") {
+        assert(decodeHex("d8 66 9f 00 80 ff") == Constr(0, PList.Nil))
+        assert(decodeHex("d8 66 9f 1b 8000000000000000 80 ff") == Constr(twoTo63, PList.Nil))
+    }
+
     test("Encoding/decoding of Lists") {
         assert(
           encodeHex(
