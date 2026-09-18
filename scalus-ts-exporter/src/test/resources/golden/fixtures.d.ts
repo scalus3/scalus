@@ -40,6 +40,13 @@ export class Box<A> {
   readonly value: A;
 }
 
+export function CallableOptions(value: boolean): CallableOptions;
+
+/** A function can also share a name with an interface, including through an alias. */
+export interface CallableOptions {
+  readonly enabled: boolean;
+}
+
 /** A callback we invoke: its parameters are values we hand OUT, so they must stay mutable. */
 export class Callbacks {
   constructor();
@@ -147,6 +154,15 @@ export class Documented {
    * @throws IllegalArgumentException never, in practice
    */
   pick<A>(a: A): A;
+}
+
+export const EvaluationOptions: {
+  plutusV3(): EvaluationOptions;
+};
+
+/** An options interface and its factory share one TypeScript export name. */
+export interface EvaluationOptions {
+  readonly plutusVersion: number;
 }
 
 /** Referenced but not exported: a generic chased trait. */
@@ -369,6 +385,8 @@ export const Tools: {
 /** Doubles. */
 export function twice(x: number): number;
 
+/** @deprecated Use CallableOptions instead. */
+export { CallableOptions as LegacyCallableOptions };
 /** @deprecated Use NewName instead. */
 export { NewName as OldName };
 /** @deprecated Use twice instead. */

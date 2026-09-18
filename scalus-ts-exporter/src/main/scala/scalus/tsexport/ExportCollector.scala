@@ -718,17 +718,29 @@ object ExportCollector {
                   )
                 )
             else Nil
-        // defensive: the Scala.js linker would also reject duplicate top-level export
-        // names, but chased interface names and aliases are ours alone to check
-        val allNames = decls.toList.map(_.name) ++
-            decls.toList.collect {
-                case c: TsDecl.Cls => c.deprecatedAliases
-                case f: TsDecl.Fun => f.deprecatedAliases
-            }.flatten
-        val collisionErrors = allNames
-            .groupBy(identity)
-            .collect { case (name, occurrences) if occurrences.sizeIs > 1 => name }
-            .toList
+        // TypeScript has separate type and value spaces: an interface can share its name
+        // with a factory object or function. Classes occupy both spaces. Still reject
+        // repeated types rather than silently merging unrelated Scala declarations.
+        // Aliases re-export the whole symbol (including any same-named interface), so keep
+        // reserving them in both spaces; do not merge declarations through an alias.
+        val aliases = decls.toList.collect {
+            case c: TsDecl.Cls => c.deprecatedAliases
+            case f: TsDecl.Fun => f.deprecatedAliases
+        }.flatten
+        val typeNames = decls.toList.collect {
+            case c: TsDecl.Cls   => c.name
+            case i: TsDecl.Iface => i.name
+        } ++ aliases
+        val valueNames = decls.toList.collect {
+            case c: TsDecl.Cls      => c.name
+            case f: TsDecl.Fun      => f.name
+            case o: TsDecl.ConstObj => o.name
+        } ++ aliases
+        val collisionErrors = List(typeNames, valueNames)
+            .flatMap(_.groupBy(identity).collect {
+                case (name, occurrences) if occurrences.sizeIs > 1 => name
+            })
+            .distinct
             .sorted
             .map(n => ExportError(n, s"duplicate top-level TypeScript declaration name '$n'"))
         Result(TsModule(decls.toList), inspectionErrors ++ errors.toList ++ collisionErrors)

@@ -382,13 +382,47 @@ class ExportCollectorTest extends AnyFunSuite {
         assert(!ownsPrecedingDoc("\n  someCall()\n  def "))
     }
 
-    test("duplicate top-level export names are reported") {
-        assert(
-          result.errors.exists(e =>
-              e.member == "Duplicated" && e.message.contains("duplicate top-level")
-          )
-        )
+    test("an interface and its factory object can share a top-level name") {
+        val shared = result.module.decls.filter(_.name == "EvaluationOptions")
+        assert(shared.count(_.isInstanceOf[TsDecl.Iface]) == 1)
+        val factory = shared.collect { case c: TsDecl.ConstObj => c }
+        assert(factory.size == 1)
+        val make = factory.head.members.collectFirst {
+            case m: TsMember.Method if m.name == "plutusV3" => m
+        }.get
+        assert(make.overloads.head.ret == TsType.Named("EvaluationOptions"))
+        assert(!result.errors.exists(_.member == "EvaluationOptions"))
     }
+
+    test("an interface and a function can share a top-level name and retain aliases") {
+        val shared = result.module.decls.filter(_.name == "CallableOptions")
+        assert(shared.count(_.isInstanceOf[TsDecl.Iface]) == 1)
+        val factory = shared.collect { case f: TsDecl.Fun => f }
+        assert(factory.size == 1)
+        assert(factory.head.overloads.head.ret == TsType.Named("CallableOptions"))
+        assert(factory.head.deprecatedAliases == List("LegacyCallableOptions"))
+        assert(!result.errors.exists(_.member == "CallableOptions"))
+    }
+
+    for name <- List(
+          "Duplicated",
+          "BadDuplicateType",
+          "BadDuplicateValue",
+          "BadClassType",
+          "BadClassValue",
+          "BadAliasType",
+          "BadAliasValue",
+          "BadFunctionAliasType",
+          "BadThreeWay"
+        )
+    do
+        test(s"conflicting top-level declarations or aliases are rejected: $name") {
+            assert(
+              result.errors.count(e =>
+                  e.member == name && e.message.contains("duplicate top-level")
+              ) == 1
+            )
+        }
 
     test("empty or missing tasty root is an error, not an empty module") {
         val empty = ExportCollector.collect(

@@ -25,7 +25,25 @@ import {
   Intersections,
   Boom,
   BoomType,
+  EvaluationOptions,
+  CallableOptions,
+  LegacyCallableOptions,
 } from "./fixtures";
+import type { EvaluationOptions as OptionsType } from "./fixtures";
+
+// One import provides both the interface and its runtime factory.
+const options: EvaluationOptions = EvaluationOptions.plutusV3();
+const optionsType: OptionsType = options;
+const plutusVersion: number = options.plutusVersion;
+const customOptions: EvaluationOptions = { plutusVersion: 3 };
+// @ts-expect-error the factory object is not an options instance
+const invalidOptions: EvaluationOptions = EvaluationOptions;
+// @ts-expect-error options properties keep their generated types
+const invalidVersion: EvaluationOptions = { plutusVersion: "3" };
+
+const callable: CallableOptions = CallableOptions(true);
+// Re-export aliases retain both the interface and the callable value.
+const legacyCallable: LegacyCallableOptions = LegacyCallableOptions(false);
 
 const p: Point = new Point(1, 2);
 const d: number = p.dist(p);
@@ -101,6 +119,8 @@ export {
   r, rev, rev2, rrn, rrs, rb, ra, rv, rall, sof,
   rect, rw, ol, tv, ca, cn, dbl, circle, ck, cd, cs, sb, dp, both,
   boom, boomMessage, boomDetail, boomIsError, boomStack, boomType,
+  options, optionsType, plutusVersion, customOptions, invalidOptions, invalidVersion,
+  callable, legacyCallable,
 };
 
 // @TsType preserves optionality even when its Scala value type cannot be mapped.
