@@ -365,12 +365,16 @@ object Macros {
                           )
                           val ref = Ref(value.symbol)
                           stats += value
-                          // params.field1 = read[Long](json.obj("field1"))
-                          // ...
+                          // Historical models omit suffix fields; keep their constructor defaults.
                           fields.foreach { field =>
+                              val initial = ref.select(field).asExprOf[Long]
                               stats += Assign(
                                 ref.select(field),
-                                '{ read[Long](json.obj(${ Expr(field.name.toString) })) }.asTerm
+                                '{
+                                    if json.obj.contains(${ Expr(field.name.toString) }) then
+                                        read[Long](json.obj(${ Expr(field.name.toString) }))
+                                    else $initial
+                                }.asTerm
                               )
                           }
                           // { val params = new A(); params.field1 = read[Long](json.obj("field1")); ...; params }

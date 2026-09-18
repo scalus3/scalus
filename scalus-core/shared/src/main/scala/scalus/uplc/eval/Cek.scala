@@ -127,26 +127,14 @@ object CekMachineCosts {
             memory = params.`cekBuiltinCost-exBudgetMemory`,
             steps = params.`cekBuiltinCost-exBudgetCPU`
           ),
-          // PlutusV1Params/PlutusV2Params never carry the constr/case machine costs (they are
-          // PV11-appended parameters, read as the 300_000_000 placeholder), so fall back to the
-          // Plutus reference values — same approach as fromMap and the new-builtin cost fallback
-          // in MachineParams.fromCostModels. The on-chain PV11 V1/V2 values equal the reference.
-          constrCost =
-              if params.`cekConstrCost-exBudgetCPU` == 300_000_000L then
-                  defaultMachineCosts.constrCost
-              else
-                  ExUnits(
-                    memory = params.`cekConstrCost-exBudgetMemory`,
-                    steps = params.`cekConstrCost-exBudgetCPU`
-                  )
-          ,
-          caseCost =
-              if params.`cekCaseCost-exBudgetCPU` == 300_000_000L then defaultMachineCosts.caseCost
-              else
-                  ExUnits(
-                    memory = params.`cekCaseCost-exBudgetMemory`,
-                    steps = params.`cekCaseCost-exBudgetCPU`
-                  )
+          constrCost = ExUnits(
+            memory = params.`cekConstrCost-exBudgetMemory`,
+            steps = params.`cekConstrCost-exBudgetCPU`
+          ),
+          caseCost = ExUnits(
+            memory = params.`cekCaseCost-exBudgetMemory`,
+            steps = params.`cekCaseCost-exBudgetCPU`
+          )
         )
     }
 
@@ -222,43 +210,33 @@ object MachineParams {
         language: Language,
         protocolVersion: MajorProtocolVersion
     ): MachineParams = {
-        val params = language match
-            case Language.PlutusV1 =>
-                val costs = costModels.models(language.ordinal)
-                PlutusV1Params.fromSeq(costs)
-            case Language.PlutusV2 =>
-                val costs = costModels.models(language.ordinal)
-                PlutusV2Params.fromSeq(costs)
-            case Language.PlutusV3 =>
-                val costs = costModels.models(language.ordinal)
-                PlutusV3Params.fromSeq(costs)
+        val costs = language match
             case Language.PlutusV4 =>
-                // Use V3 cost models for V4 until V4 cost models are available on-chain
-                val costs = costModels.models.getOrElse(
+                // Use V3 cost models for V4 until V4 cost models are available on-chain.
+                costModels.models.getOrElse(
                   language.ordinal,
                   costModels.models(Language.PlutusV3.ordinal)
                 )
-                PlutusV4Params.fromSeq(costs)
+            case _ => costModels.models(language.ordinal)
+        val params = language match
+            case Language.PlutusV1 => PlutusV1Params.fromSeq(costs)
+            case Language.PlutusV2 => PlutusV2Params.fromSeq(costs)
+            case Language.PlutusV3 => PlutusV3Params.fromSeq(costs)
+            case Language.PlutusV4 => PlutusV4Params.fromSeq(costs)
 
         val semvar = BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
           protocolVersion,
           language
         )
         val base = BuiltinCostModel.fromPlutusParams(params, language, semvar)
-        // The van Rossem (PV11) variants D/E add builtins (dropList, array/value ops, expModInteger,
-        // multiScalarMul, ...) whose cost parameters do not exist in pre-van-Rossem cost models. When
-        // such a model is supplied (e.g. today's mainnet Plomin params), reading those parameters
-        // yields the 300_000_000 placeholder (the value `fromSeq` fills in for absent entries),
-        // making the new builtins absurdly expensive. Fill ONLY those new builtins from the vendored
-        // Plutus reference model, leaving every existing builtin on its supplied (governance-set)
-        // cost. We detect "PV11 params absent" by probing a representative new parameter for the
-        // placeholder; this also covers variant D, whose V1/V2 param classes never carry these
-        // parameters (they always read the placeholder). A real on-chain PV11 cost model supplies a
-        // real value, so the reference is not used. (Avoids PlutusParams.numberOfParams, which relies
-        // on JVM reflection and does not link on Scala.js.)
+        // Preserve the historical PV11 reference fallback only when the entire new-builtin suffix
+        // is omitted. A supplied value of 300_000_000 is a cost, not evidence of a missing field.
+        val newBuiltinStart = language match
+            case Language.PlutusV1 | Language.PlutusV2 => 279
+            case Language.PlutusV3 | Language.PlutusV4 => 297
         val needsReferenceNewBuiltins =
             (semvar == BuiltinSemanticsVariant.D || semvar == BuiltinSemanticsVariant.E) &&
-                params.`dropList-cpu-arguments-intercept` == 300_000_000L
+                costs.length <= newBuiltinStart
         val builtinCostModel =
             if needsReferenceNewBuiltins then
                 // Variants D and E carry identical costs for all fourteen of these builtins, so
@@ -284,8 +262,20 @@ object MachineParams {
                 )
             else base
         val machineCosts = CekMachineCosts.fromPlutusParams(params)
+        val constrIndex = language match
+            case Language.PlutusV1                     => 175
+            case Language.PlutusV2                     => 185
+            case Language.PlutusV3 | Language.PlutusV4 => 193
+        // Historical V1/V2 models omit these CEK costs; never replace a supplied sentinel value.
         MachineParams(
-          machineCosts = machineCosts,
+          machineCosts = machineCosts.copy(
+            constrCost =
+                if costs.length <= constrIndex then CekMachineCosts.defaultMachineCosts.constrCost
+                else machineCosts.constrCost,
+            caseCost =
+                if costs.length <= constrIndex + 2 then CekMachineCosts.defaultMachineCosts.caseCost
+                else machineCosts.caseCost
+          ),
           builtinCostModel = builtinCostModel,
         )
     }
