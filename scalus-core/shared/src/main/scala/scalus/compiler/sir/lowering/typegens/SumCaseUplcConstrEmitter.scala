@@ -59,36 +59,8 @@ object SumCaseUplcConstrEmitter extends SumCaseUplcConstrCommon {
         constr: SIR.Constr,
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
-    )(using lctx: LoweringContext): LoweredValue = {
-        // `ProdUplcConstrOps.genConstr` needs a CaseClass tp. After `dispatchNil` `constr.tp` may be a
-        // sum target (possibly `Annotated`) carrying caller-supplied substituted args — preserve
-        // them as the rebuilt CaseClass's parent rather than dropping them via the static
-        // `decl.constrType(name)` lookup (which would substitute back to abstract decl typevars).
-        val effectiveTp =
-            if SIRType.isProd(constr.tp) then constr.tp
-            else if SIRType.isSum(constr.tp) then
-                preservedParentCaseClassForm(constr.tp, constr.data, constr.name)
-            else constr.data.constrType(constr.name)
-        ProdUplcConstrOps.genConstr(
-          constr.copy(tp = effectiveTp),
-          loweredArgs
-        )
-    }
-
-    /** Build a CaseClass form for `ctorName` using `parent` as its parent field, preserving any
-      * `Annotated`/substituted args on `parent`. The constructor's own shape (typeParams, typeArgs)
-      * comes from `decl.constrType(ctorName)`; only the parent reference is swapped.
-      */
-    private def preservedParentCaseClassForm(
-        parent: SIRType,
-        decl: scalus.compiler.sir.DataDecl,
-        ctorName: String
-    ): SIRType = decl.constrType(ctorName) match
-        case SIRType.TypeLambda(params, SIRType.CaseClass(c, args, _)) =>
-            SIRType.TypeLambda(params, SIRType.CaseClass(c, args, Some(parent)))
-        case SIRType.CaseClass(c, args, _) =>
-            SIRType.CaseClass(c, args, Some(parent))
-        case other => other
+    )(using lctx: LoweringContext): LoweredValue =
+        ProdUplcConstrOps.genConstr(withCaseClassTp(constr), loweredArgs)
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext

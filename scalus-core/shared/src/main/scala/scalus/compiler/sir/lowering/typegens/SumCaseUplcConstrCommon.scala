@@ -19,6 +19,38 @@ trait SumCaseUplcConstrCommon extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         SumUplcConstrOps.buildSumUplcConstr(tp)
 
+    /** `constr` with a CaseClass `tp`, as `ProdUplcConstrOps.genConstr` requires.
+      *
+      * A nullary enum case (`case Skip`) and a constructor reached through `dispatchNil` carry the
+      * *sum* type as `constr.tp` (possibly `Annotated`, with caller-supplied substituted args).
+      * Rebuild the CaseClass form for `constr.name` with that sum preserved as its parent, rather
+      * than dropping it via the static `decl.constrType(name)` lookup (which would substitute back
+      * to the abstract decl typevars).
+      */
+    protected def withCaseClassTp(constr: SIR.Constr): SIR.Constr = {
+        val effectiveTp =
+            if SIRType.isProd(constr.tp) then constr.tp
+            else if SIRType.isSum(constr.tp) then
+                preservedParentCaseClassForm(constr.tp, constr.data, constr.name)
+            else constr.data.constrType(constr.name)
+        constr.copy(tp = effectiveTp)
+    }
+
+    /** Build a CaseClass form for `ctorName` using `parent` as its parent field, preserving any
+      * `Annotated`/substituted args on `parent`. The constructor's own shape (typeParams, typeArgs)
+      * comes from `decl.constrType(ctorName)`; only the parent reference is swapped.
+      */
+    private def preservedParentCaseClassForm(
+        parent: SIRType,
+        decl: scalus.compiler.sir.DataDecl,
+        ctorName: String
+    ): SIRType = decl.constrType(ctorName) match
+        case SIRType.TypeLambda(params, SIRType.CaseClass(c, args, _)) =>
+            SIRType.TypeLambda(params, SIRType.CaseClass(c, args, Some(parent)))
+        case SIRType.CaseClass(c, args, _) =>
+            SIRType.CaseClass(c, args, Some(parent))
+        case other => other
+
     /** Template method: `ProdUplcConstr` is always lifted into a single-entry `SumUplcConstr`
       * parent; everything else is delegated to `upcastOneOther`.
       *
