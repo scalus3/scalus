@@ -218,6 +218,13 @@ lazy val jsModuleSettings: Seq[Def.Setting[?]] = Seq(
   // Compiler. It's a no-op on top of esbuild's --minify for our current bundle, but we
   // keep it on as the officially-supported minification path for ESModule output.
   scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule).withMinify(true) },
+  // The IANA timezone database is ~590 KB of the minified bundle and nothing here uses it.
+  // `scribe` -> `perfolation` pulls `scala-java-time-tzdb` in at compile scope, and its
+  // `TzdbZoneRulesProvider` is `@EnableReflectiveInstantiation`, which makes it an
+  // unconditional linker root: dead-code elimination can never drop it. Excluding the
+  // artifact is the only way out. No JS-compiled code calls `ZoneId`/`ZoneRules`; plain
+  // `Instant` arithmetic (`ofEpochMilli`/`toEpochMilli`) still works without a zone db.
+  excludeDependencies += ExclusionRule("io.github.cquiroz", "scala-java-time-tzdb_sjs1_3"),
   Test / executeTests := (Test / executeTests).dependsOn(ThisBuild / installNpmTestDeps).value,
   Test / testOnly := (Test / testOnly).dependsOn(ThisBuild / installNpmTestDeps).evaluated
 )

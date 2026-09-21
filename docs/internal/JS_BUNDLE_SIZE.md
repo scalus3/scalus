@@ -19,6 +19,12 @@ project's own `quick` alias, which compiles every JVM project including examples
 the plugin tests; and `scalusNative/Test/compile`, since `scalus-core` also cross-compiles to
 Native and three of the four files touched there are in `shared/`.
 
+> **Correction, 2026-09-21.** The verification grep below used `threeten` as the marker for
+> scala-java-time. That marker can never match: this build's timezone database is in package
+> `zonedb.java`, and its classes are named `zonedb.java.tzdb$…`. Lever 1 removed `Instant` and
+> its formatting machinery (~140 KB) but left the whole 590 KB IANA database in the bundle, and
+> the grep reported a clean run. See lever 5. Always grep for `zonedb`, never `threeten`.
+
 `scalus.d.ts` is byte-identical to before, and `grep -cE 'upickle|ujson|scribe|threeten'` over
 `scalus.js` is 0.
 
@@ -139,8 +145,12 @@ extensions in the companion without an import, so `SlotConfigTest`, `TxBuilder` 
 no longer export roots and the linker drops them.
 
 Measured: **−404,618 B linker, −140,220 B minified (−4.5%), −37,482 B gzip (−5.3%)**;
-`threeten` occurrences in `main.js` go from many to zero. (`America/New_York` still appears
-once, from javalib `TimeZone`/`Locale` residue, not from `scala-java-time`. Do not re-hunt it.)
+`threeten` occurrences in `main.js` go from many to zero.
+
+**This did not remove the timezone database, contrary to what this section first claimed.**
+`threeten` was the wrong marker, and the 281 `zonedb.java.tzdb$…` classes and the ~590 KB of
+zone-transition arrays survived untouched until lever 5. The zone names seen in the bundle,
+`America/New_York` among them, were `scala-java-time`'s all along, not javalib residue.
 
 Worth auditing the other exported classes for the same pattern: `Emulator`/`JEmulator` and the
 `JScalus` value classes.
@@ -282,9 +292,12 @@ release, drop the limit to just above the new size and add two assertions that w
 caught both regressions cheaply:
 
 ```ts
-expect(bundle).not.toContain("threeten");  // scala-java-time and the tzdb
+expect(bundle).not.toContain("zonedb");  // the IANA timezone database
 expect(bundle).not.toContain("scribe");
 ```
+
+(`threeten` was the marker originally proposed here. It matches nothing in this build and would
+have passed while the whole tzdb was present — see lever 5.)
 
 ## Lever 4 – small independent cuts
 
@@ -300,6 +313,53 @@ expect(bundle).not.toContain("scribe");
 - `PlutusScriptEvaluator`'s `prices` default parameter reached `CardanoInfo.mainnet`
   (`ExUnitPrices` literals would avoid it). Measured on its own: **−503 B**. Not worth a
   standalone change; fold it into group B if that work happens.
+
+## Lever 5 – the IANA timezone database, for real this time (applied 2026-09-21)
+
+Measured on `f2a50f60f`, same clean and same `prepareNpmPackage` on both sides:
+
+| build | linker `main.js` | `scalus.js` minified | gzip |
+|---|---:|---:|---:|
+| master | 7,190,158 | 2,874,407 | 677,053 |
+| + lever 5 | 6,262,461 | **2,270,369** | **594,915** |
+| delta | −927,697 (−12.9%) | **−604,038 (−21.0%)** | **−82,138 (−12.1%)** |
+
+`grep -c zonedb scalus.js` goes from 281 to 0.
+
+Three facts, each of which has to be understood or the cut looks impossible:
+
+1. **Who pulls it in.** `com.outr:scribe` → `com.outr:perfolation:1.3.0`, whose pom declares
+   `io.github.cquiroz:scala-java-time-tzdb_sjs1_3:2.6.0` at **compile** scope. Nothing in
+   Scalus asks for it. (jsoniter-scala and scribe itself declare the same artifact at *test*
+   scope, which is harmless.) Lever 2 removed scribe's *code* from the bundle but the
+   dependency is still on the JS classpath, because the JVM side of `scalus-cardano-ledger`
+   uses scribe.
+2. **Why dead-code elimination does not drop it.** `java.time.zone.TzdbZoneRulesProvider` is
+   `@EnableReflectiveInstantiation`, and the linker emits a `Reflect` registration call for it.
+   Observed, not inferred: the bundle contained exactly one such registration, the only
+   `scala.scalajs.reflect.Reflect$` accessor call in the file was that registration, and the
+   590 KB had no importer anywhere in the module graph. Nothing in the program referenced it,
+   and it was still emitted. The annotation's own scaladoc does not document the linker rule, so
+   treat the mechanism as "registration is an entry point" and the classpath as the only lever.
+3. **Why the artifact can simply be excluded.** `scala-java-time-tzdb` only supplies the zone
+   database. Plain `Instant` arithmetic (`ofEpochMilli`, `toEpochMilli`) lives in
+   `scala-java-time` core and keeps working. Only `ZoneId.of(...)` / `ZoneRules` lookups would
+   fail, and no JS-compiled source in this repo makes one.
+
+**Fix, applied:** one line in `jsModuleSettings`, so it covers every JS project including tests:
+
+```scala
+excludeDependencies += ExclusionRule("io.github.cquiroz", "scala-java-time-tzdb_sjs1_3"),
+```
+
+Note the artifact id is the fully cross-versioned one. `ExclusionRule("io.github.cquiroz")`
+alone would also drop `scala-java-time` core and `scala-java-locales`, which do not link.
+
+**How to find this class of problem again.** A transitive `@EnableReflectiveInstantiation`
+class is invisible to every reachability tool in this document, because it has no importer.
+The tell is a package in the bundle that the module graph says nothing imports. Grep the
+minified output for `.bgR(` (the registration helper) or, version-independently, for the
+distinctive `new v().i(X,"<fqcn>"` metadata and look for names no source mentions.
 
 ## Rejected / already falsified – do not re-test
 

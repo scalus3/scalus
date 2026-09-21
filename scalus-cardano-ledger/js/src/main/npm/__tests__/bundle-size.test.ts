@@ -30,7 +30,10 @@ describe("scalus.js bundle", () => {
         // Two size levers from docs/internal/JS_BUNDLE_SIZE.md, each worth six figures of linker
         // output, and each undone by a single new reachable member. Both regressions would have
         // been caught here for the price of two string searches.
-        expect(bundle).not.toContain("threeten"); // scala-java-time and the IANA tzdb
+        // The IANA timezone database, ~590 KB of the minified bundle. `threeten` used to be the
+        // marker here and matched nothing: this build's zone data is in package `zonedb.java`, so
+        // the assertion passed from the day it was added while the whole database shipped.
+        expect(bundle).not.toContain("zonedb");
         // The JVM logging backend. Minification renames identifiers but keeps string literals, and
         // Scala.js writes each linked class's fully qualified name into one, so `scribe.Logger` and
         // friends appear as `scribe.` if and only if the library links. A bare `"scribe"` substring
@@ -51,14 +54,14 @@ describe("scalus.js bundle", () => {
         expect(Object.values(result.metafile!.outputs).flatMap(o => o.imports)).toEqual([]);
     });
 
-    test("should be smaller than 2.75MB", () => {
-        // About 2.69 MiB; the 2.75 MiB cap leaves roughly 60 KiB of headroom.
-        // The pre-Task-7 baseline was 2,591,052 bytes; the difference is `ProtocolParams.fromBlockfrostJson`/`toBlockfrostJson` re-linking upickle and ujson,
-        // which is a deliberate, recorded trade (the jsoniter port that would have recovered
-        // ~142 KB broke scalus-native and was reverted). The limit guards the next regression, not
-        // that one.
+    test("should be smaller than 2.3MB", () => {
+        // About 2.17 MiB since the tzdb exclusion (lever 5); the 2.3 MiB cap leaves ~140 KiB of
+        // headroom. `ProtocolParams.fromBlockfrostJson`/`toBlockfrostJson` still re-link upickle
+        // and ujson for ~117 KB, which is a deliberate, recorded trade (the jsoniter port that
+        // would have recovered it broke scalus-native and was reverted). The limit guards the next
+        // regression, not that one.
         const sizeInBytes = Buffer.byteLength(bundle, "utf8");
-        const limit = 2.75 * 1024 * 1024;
+        const limit = 2.3 * 1024 * 1024;
         expect(sizeInBytes).toBeLessThan(limit);
     });
 });
