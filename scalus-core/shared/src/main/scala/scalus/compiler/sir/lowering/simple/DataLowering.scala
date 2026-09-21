@@ -1,6 +1,5 @@
 package scalus.compiler.sir.lowering.simple
 
-import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.*
 import scalus.uplc.*
@@ -16,7 +15,7 @@ import scalus.uplc.*
   *
   * This trait provides methods for:
   *   - Lowering Data constructors to UPLC builtins (iData, bData, listData, mapData, constrData)
-  *   - Lowering pattern matches on Data (chooseData for V3, Case on Data for V4)
+  *   - Lowering pattern matches on Data (chooseData)
   *   - Lowering field selections on Data variants (unIData, unBData, etc.)
   */
 trait DataLowering { self: BaseSimpleLowering =>
@@ -103,15 +102,10 @@ trait DataLowering { self: BaseSimpleLowering =>
       *   - 3: I (value: Integer)
       *   - 4: B (value: ByteString)
       *
-      * For PlutusV4, use Case on Data instruction. For PlutusV3 and earlier, use chooseData
-      * builtin.
+      * The variants are dispatched via the chooseData builtin on every protocol version. The Case
+      * instruction is no alternative: it rejects a Data scrutinee before dijkstraPV, and from
+      * dijkstraPV on it only scrutinizes Data.Constr, selecting the branch by the constructor tag.
       *
-      * For V4 Case on Data:
-      *   - Branches are lambdas that receive the inner values
-      *   - Constr branch: \tag args -> body
-      *   - Other branches: \value -> body
-      *
-      * For V3 chooseData:
       *   - chooseData just selects a delayed branch, it doesn't pass arguments
       *   - We bind the scrutinee first, then extract values within each branch
       */
@@ -156,100 +150,35 @@ trait DataLowering { self: BaseSimpleLowering =>
             .orElse(wildcardCase)
             .getOrElse(SIR.Case(Pattern.Wildcard, errorBranch("Unmatched Data.B"), anns))
 
-        if self.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-            // For PlutusV4: Case on Data with 5 branches in order: Constr, Map, List, I, B
-            // Branches are lambdas that receive the inner values
-            val constrBranch = lowerDataCaseBranchV4(constrCase, SIRType.Data.Constr.name)
-            val mapBranch = lowerDataCaseBranchV4(mapCase, SIRType.Data.Map.name)
-            val listBranch = lowerDataCaseBranchV4(listCase, SIRType.Data.List.name)
-            val iBranch = lowerDataCaseBranchV4(iCase, SIRType.Data.I.name)
-            val bBranch = lowerDataCaseBranchV4(bCase, SIRType.Data.B.name)
-            Term.Case(scrutineeTerm, List(constrBranch, mapBranch, listBranch, iBranch, bBranch))
-        else
-            // For PlutusV3 and earlier: use chooseData builtin
-            // Bind scrutinee first, then use it in branches
-            val scrutineeVar = "__data_scrutinee__"
-            val scrutineeRef = Term.Var(NamedDeBruijn(scrutineeVar))
+        // Bind scrutinee first, then use it in branches
+        val scrutineeVar = "__data_scrutinee__"
+        val scrutineeRef = Term.Var(NamedDeBruijn(scrutineeVar))
 
-            val constrBranch =
-                lowerDataCaseBranchV3(constrCase, SIRType.Data.Constr.name, scrutineeRef)
-            val mapBranch = lowerDataCaseBranchV3(mapCase, SIRType.Data.Map.name, scrutineeRef)
-            val listBranch = lowerDataCaseBranchV3(listCase, SIRType.Data.List.name, scrutineeRef)
-            val iBranch = lowerDataCaseBranchV3(iCase, SIRType.Data.I.name, scrutineeRef)
-            val bBranch = lowerDataCaseBranchV3(bCase, SIRType.Data.B.name, scrutineeRef)
+        val constrBranch =
+            lowerDataCaseBranch(constrCase, SIRType.Data.Constr.name, scrutineeRef)
+        val mapBranch = lowerDataCaseBranch(mapCase, SIRType.Data.Map.name, scrutineeRef)
+        val listBranch = lowerDataCaseBranch(listCase, SIRType.Data.List.name, scrutineeRef)
+        val iBranch = lowerDataCaseBranch(iCase, SIRType.Data.I.name, scrutineeRef)
+        val bBranch = lowerDataCaseBranch(bCase, SIRType.Data.B.name, scrutineeRef)
 
-            // (\scrutinee -> force(chooseData scrutinee (delay branch) ...)) data
-            // chooseData returns the selected delayed branch, so we need to force it
-            val chooseDataExpr = !(self.builtinTerms(DefaultFun.ChooseData) $
-                scrutineeRef $
-                ~constrBranch $
-                ~mapBranch $
-                ~listBranch $
-                ~iBranch $
-                ~bBranch)
-            Term.Apply(Term.LamAbs(scrutineeVar, chooseDataExpr), scrutineeTerm)
+        // (\scrutinee -> force(chooseData scrutinee (delay branch) ...)) data
+        // chooseData returns the selected delayed branch, so we need to force it
+        val chooseDataExpr = !(self.builtinTerms(DefaultFun.ChooseData) $
+            scrutineeRef $
+            ~constrBranch $
+            ~mapBranch $
+            ~listBranch $
+            ~iBranch $
+            ~bBranch)
+        Term.Apply(Term.LamAbs(scrutineeVar, chooseDataExpr), scrutineeTerm)
     }
 
-    /** Lower a single case branch for Data pattern matching (PlutusV4).
+    /** Lower a single case branch for Data pattern matching.
       *
-      * For V4 Case on Data, branches are lambdas that receive the inner values directly:
-      *   - Constr: \tag args -> body
-      *   - Map: \entries -> body
-      *   - List: \elements -> body
-      *   - I: \value -> body
-      *   - B: \value -> body
-      *
-      * Even for wildcards/no-bindings, we need lambdas that ignore the inner values.
+      * For chooseData, branches are thunks that reference a pre-bound scrutinee. We extract values
+      * from the scrutinee within each branch.
       */
-    protected def lowerDataCaseBranchV4(sirCase: SIR.Case, variantName: String): Term = {
-        val bodyTerm = self.lowerInner(sirCase.body)
-
-        // Get bindings from the pattern, or generate dummy ones for wildcards
-        val bindings = sirCase.pattern match {
-            case Pattern.Constr(_, bs, _) => bs
-            case _                        => Nil
-        }
-
-        variantName match {
-            case SIRType.Data.Constr.name =>
-                // Constr branch receives tag and args (2 arguments)
-                val tagBinding = if bindings.length >= 1 then bindings(0) else "_tag"
-                val argsBinding = if bindings.length >= 2 then bindings(1) else "_args"
-                Term.LamAbs(tagBinding, Term.LamAbs(argsBinding, bodyTerm))
-
-            case SIRType.Data.Map.name =>
-                // Map branch receives entries (1 argument)
-                val valuesBinding = if bindings.nonEmpty then bindings(0) else "_entries"
-                Term.LamAbs(valuesBinding, bodyTerm)
-
-            case SIRType.Data.List.name =>
-                // List branch receives elements (1 argument)
-                val elementsBinding = if bindings.nonEmpty then bindings(0) else "_elements"
-                Term.LamAbs(elementsBinding, bodyTerm)
-
-            case SIRType.Data.I.name =>
-                // I branch receives value (1 argument)
-                val valueBinding = if bindings.nonEmpty then bindings(0) else "_value"
-                Term.LamAbs(valueBinding, bodyTerm)
-
-            case SIRType.Data.B.name =>
-                // B branch receives value (1 argument)
-                val valueBinding = if bindings.nonEmpty then bindings(0) else "_value"
-                Term.LamAbs(valueBinding, bodyTerm)
-
-            case _ =>
-                throw new IllegalArgumentException(
-                  s"Unknown Data variant: $variantName"
-                )
-        }
-    }
-
-    /** Lower a single case branch for Data pattern matching (PlutusV3).
-      *
-      * For V3 chooseData, branches are thunks that reference a pre-bound scrutinee. We extract
-      * values from the scrutinee within each branch.
-      */
-    protected def lowerDataCaseBranchV3(
+    protected def lowerDataCaseBranch(
         sirCase: SIR.Case,
         variantName: String,
         scrutineeRef: Term

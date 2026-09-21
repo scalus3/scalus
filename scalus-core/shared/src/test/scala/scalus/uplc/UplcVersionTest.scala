@@ -72,7 +72,7 @@ class UplcVersionTest extends AnyFunSuite {
     }
 
     test("V1 declares 1.1.0 at van Rossem and 1.0.0 at plomin") {
-        // This fixture's term has `case` at van Rossem (case-on-Data) and none at plomin, so the
+        // This fixture's term has `case` at van Rossem (case-on-builtins) and none at plomin, so the
         // declared version tracks the term.
         val vanRossem = PlutusV1.compile((d: Data) =>
             (_: Data) => (_: Data) => UplcVersionFixture.check(d)

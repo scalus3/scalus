@@ -15,7 +15,8 @@ import scala.collection.mutable
   *   - `genConstrLowered`: forwards to the variant case-class's own typegen (variants live as Prod
   *     types that know how to assemble their own bytes).
   *   - `genMatchDataConstr` / `genMatchDataConstrCase`: tag/field extraction via `unConstrData`,
-  *     with `lvCaseInteger` (V4+) or if-then-else chain (V3) for branch dispatch.
+  *     with `lvCaseInteger` (van Rossem) or if-then-else chain (earlier) for branch dispatch; from
+  *     Dijkstra on, `lvCaseDataConstr` dispatches on the Data scrutinee itself.
   *   - `upcastOne`: synthesizes a parent-sum Constr by reusing the child's bytes under the parent's
   *     variant tag.
   *
@@ -260,6 +261,66 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
     }
 
     def genMatchDataConstr(
+        matchData: SIR.Match,
+        loweredScrutinee: LoweredValue,
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
+        // From dijkstraPV on, Case scrutinizes a Data.Constr directly: the branch is selected by
+        // the constructor tag and receives the fields list, no unConstrData/fstPair/sndPair needed.
+        if lctx.targetProtocolVersion >= MajorProtocolVersion.dijkstraPV then
+            genMatchDataConstrViaCaseOnData(matchData, loweredScrutinee, optTargetType)
+        else genMatchDataConstrViaUnConstrData(matchData, loweredScrutinee, optTargetType)
+    }
+
+    /** `Case(scrutinee, [λfields.branch0, ..., λfields.branchN])` - Case on Data (dijkstraPV+). */
+    private def genMatchDataConstrViaCaseOnData(
+        matchData: SIR.Match,
+        loweredScrutinee: LoweredValue,
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
+        val prevScope = lctx.scope
+
+        val dataListElemRepr =
+            SirTypeUplcGenerator.defaultDataRepresentation(SIRType.Data.tp)
+        val dataListRepr = SumCaseClassRepresentation.SumBuiltinList(dataListElemRepr)
+
+        // orderedCases are already 0..n-1 (wildcards expanded), so they index by constructor tag
+        val orderedCases = prepareCases(matchData, loweredScrutinee)
+
+        val (fieldsVars, branches) = orderedCases.map { preparedCase =>
+            // lambda-bound: receives the constructor fields from the Case instruction
+            val fieldsVarId = lctx.uniqueVarName("_match_datalist")
+            val fieldsVar = new VariableLoweredValue(
+              id = fieldsVarId,
+              name = fieldsVarId,
+              sir = SIR.Var(
+                fieldsVarId,
+                SIRType.List(SIRType.Data.tp),
+                AnnotationsDecl(preparedCase.sirCase.anns.pos)
+              ),
+              representation = dataListRepr,
+              optRhs = None
+            )
+            lctx.scope = prevScope.add(fieldsVar)
+            val branch =
+                genMatchDataConstrCase(preparedCase.sirCase, fieldsVar, optTargetType, false)
+            lctx.scope = prevScope
+            (fieldsVar: IdentifiableLoweredValue, branch)
+        }.unzip
+
+        lvCaseDataConstr(
+          loweredScrutinee.toRepresentation(
+            SumCaseClassRepresentation.DataConstr,
+            matchData.scrutinee.anns.pos
+          ),
+          fieldsVars,
+          branches,
+          matchData.anns.pos,
+          optTargetType
+        )
+    }
+
+    private def genMatchDataConstrViaUnConstrData(
         matchData: SIR.Match,
         loweredScrutinee: LoweredValue,
         optTargetType: Option[SIRType]

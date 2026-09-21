@@ -90,24 +90,53 @@ class DataPatternMatchingTest extends AnyFunSuite:
         assert(result == 3.asTerm)
     }
 
-    test("Pattern match on Data in V4 generates Case instruction") {
-        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
-        given Options =
-            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
+    // The Case instruction can't dispatch on the five Data variants: it rejects a Data scrutinee
+    // at van Rossem (PV11), and from Dijkstra (PV12) on it only scrutinizes Data.Constr, selecting
+    // the branch by the constructor tag. So the match goes through chooseData on every target.
+    for pv <- Seq(MajorProtocolVersion.vanRossemPV, MajorProtocolVersion.dijkstraPV) do
+        test(s"Pattern match on Data generates chooseData, not Case, on PV${pv.version}") {
+            given PlutusVM = PlutusVM.makePlutusV3VM(pv)
+            given Options = Options.default.copy(targetProtocolVersion = pv)
+
+            val sirFun = compile { (d: Data) =>
+                d match
+                    case Data.I(i) => i
+                    case _         => BigInt(-1)
+            }
+
+            val uplcStr = sirFun.toUplc().pretty.render(200)
+            assert(uplcStr.contains("chooseData"), s"Expected chooseData in UPLC, got:\n$uplcStr")
+            assert(!uplcStr.contains("(case"), s"Unexpected Case instruction in UPLC:\n$uplcStr")
+
+            def run(arg: Data): Term =
+                (sirFun $ SIR.Const(Constant.Data(arg), SIRType.Data.tp, AnnotationsDecl.empty))
+                    .toUplc()
+                    .evaluate
+            assert(run(testDataI42) == 42.asTerm)
+            assert(run(testDataB) == (-1).asTerm)
+            assert(run(testDataList) == (-1).asTerm)
+            assert(run(testDataMap) == (-1).asTerm)
+            assert(run(testConstr42) == (-1).asTerm)
+        }
+
+    test("Data.Constr branch takes tag and args from a single unConstrData") {
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        // no UPLC optimizer: CSE must not be what removes a duplicated unConstrData
+        given Options = Options.default.copy(optimizeUplc = false)
 
         val sirFun = compile { (d: Data) =>
             d match
-                case Data.I(i) => i
-                case _         => BigInt(-1)
+                case Data.Constr(tag, args) => tag + args.length
+                case _                      => BigInt(-1)
         }
 
-        val uplc = sirFun.toUplc()
-        val uplcStr = uplc.pretty.render(200)
+        val uplcStr = sirFun.toUplc().pretty.render(200)
+        val count = "unConstrData".r.findAllIn(uplcStr).length
+        assert(count == 1, s"Expected one unConstrData, found $count in:\n$uplcStr")
 
-        assert(
-          uplcStr.contains("case"),
-          s"Expected Case instruction in UPLC for PlutusV4, got:\n$uplcStr"
-        )
+        val applied =
+            sirFun $ SIR.Const(Constant.Data(testConstr42), SIRType.Data.tp, AnnotationsDecl.empty)
+        assert(applied.toUplc().evaluate == 44.asTerm)
     }
 
     // ============================================================================

@@ -39,6 +39,13 @@ class PlutusVM(
     private val caseOnBuiltinsEnabled: Boolean =
         protocolVersion >= MajorProtocolVersion.vanRossemPV || language == Language.PlutusV4
 
+    // Casing on Data (Data.Constr only, branch selected by the constructor tag) arrives one hard
+    // fork later than the rest of case-on-builtins: van Rossem (PV11) rejects a Data scrutinee.
+    // Deliberately no `|| language == PlutusV4` here: a PlutusV4 target lowers for vanRossemPV
+    // (see SirToUplcV3Lowering.newLoweringContext), so it never emits a Case on Data.
+    private val caseOnDataEnabled: Boolean =
+        protocolVersion >= MajorProtocolVersion.dijkstraPV
+
     /** Evaluates a Plutus script according to the Plutus specification.
       *
       * This includes CIP-117.
@@ -113,7 +120,8 @@ class PlutusVM(
           logger,
           builtins.getBuiltinRuntime,
           caseOnBuiltinsEnabled,
-          tracing = tracing
+          tracing = tracing,
+          caseOnDataEnabled = caseOnDataEnabled
         )
         DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
     }
@@ -145,7 +153,8 @@ class PlutusVM(
           builtins.getBuiltinRuntime,
           caseOnBuiltinsEnabled,
           profiling = profiling,
-          tracing = tracing
+          tracing = tracing,
+          caseOnDataEnabled = caseOnDataEnabled
         )
         try
             val term = DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
@@ -214,7 +223,8 @@ object PlutusVM {
     /** Creates a Plutus V1 VM with custom parameters and a specific protocol version.
       *
       * Use `MajorProtocolVersion.vanRossemPV` to enable protocol version 11 features
-      * (case-on-builtins, batch6 builtins like ExpModInteger).
+      * (case-on-builtins, batch6 builtins like ExpModInteger), and
+      * `MajorProtocolVersion.dijkstraPV` to also enable case on `Data.Constr`.
       *
       * @param params
       *   Custom machine parameters to use for the VM
@@ -240,7 +250,8 @@ object PlutusVM {
     /** Creates a Plutus V1 VM with default parameters and a specific protocol version.
       *
       * Use `MajorProtocolVersion.vanRossemPV` to enable protocol version 11 features
-      * (case-on-builtins, batch6 builtins like ExpModInteger).
+      * (case-on-builtins, batch6 builtins like ExpModInteger), and
+      * `MajorProtocolVersion.dijkstraPV` to also enable case on `Data.Constr`.
       *
       * @param protocolVersion
       *   The target protocol version
@@ -278,7 +289,8 @@ object PlutusVM {
     /** Creates a Plutus V2 VM with custom parameters and a specific protocol version.
       *
       * Use `MajorProtocolVersion.vanRossemPV` to enable protocol version 11 features
-      * (case-on-builtins, batch6 builtins like ExpModInteger).
+      * (case-on-builtins, batch6 builtins like ExpModInteger), and
+      * `MajorProtocolVersion.dijkstraPV` to also enable case on `Data.Constr`.
       *
       * @param params
       *   Custom machine parameters to use for the VM
@@ -304,7 +316,8 @@ object PlutusVM {
     /** Creates a Plutus V2 VM with default parameters and a specific protocol version.
       *
       * Use `MajorProtocolVersion.vanRossemPV` to enable protocol version 11 features
-      * (case-on-builtins, batch6 builtins like ExpModInteger).
+      * (case-on-builtins, batch6 builtins like ExpModInteger), and
+      * `MajorProtocolVersion.dijkstraPV` to also enable case on `Data.Constr`.
       *
       * @param protocolVersion
       *   The target protocol version
@@ -342,7 +355,8 @@ object PlutusVM {
     /** Creates a Plutus V3 VM with a specific protocol version.
       *
       * Use `MajorProtocolVersion.vanRossemPV` to enable protocol version 11 features
-      * (case-on-builtins, batch6 builtins like ExpModInteger).
+      * (case-on-builtins, batch6 builtins like ExpModInteger), and
+      * `MajorProtocolVersion.dijkstraPV` to also enable case on `Data.Constr`.
       *
       * @param params
       *   Custom machine parameters to use for the VM
@@ -368,7 +382,8 @@ object PlutusVM {
     /** Creates a Plutus V3 VM with default parameters and a specific protocol version.
       *
       * Use `MajorProtocolVersion.vanRossemPV` to enable protocol version 11 features
-      * (case-on-builtins, batch6 builtins like ExpModInteger).
+      * (case-on-builtins, batch6 builtins like ExpModInteger), and
+      * `MajorProtocolVersion.dijkstraPV` to also enable case on `Data.Constr`.
       *
       * @param protocolVersion
       *   The target protocol version
