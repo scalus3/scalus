@@ -54,3 +54,6 @@ scalus-examples/jvm/src/test/resources/scalus/examples/AikenMpfData/aiken.lock
 
 # Generated at site-deploy time from the latest release tag (deploy-site.yml)
 scalus-site/public/llms-api.txt
+
+# Local-only working notes, never committed
+docs/internal/local/
