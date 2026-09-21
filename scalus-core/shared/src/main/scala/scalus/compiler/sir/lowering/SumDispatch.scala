@@ -248,7 +248,8 @@ object SumDispatch {
       *   - `SumUplcConstr` → tag-ordered Case via `genMatchUplcConstr` (the scrutinee's UPLC bytes
       *     are already a `Constr(tag, fields)` so branches index by tag directly).
       *   - `DataConstr` → Data-shape Case in `DataConstrEmitter. genMatchDataConstr` (unConstrData
-      *     → tag/field-list → if/else chain, or `Case` on integer for V4+).
+      *     → tag/field-list → if/else chain, or `Case` on integer for van Rossem; `Case` directly
+      *     on the Data scrutinee from Dijkstra on).
       *   - `SumBuiltinList(elemRepr)` → caseList-ordered Case via the element-repr-parameterized
       *     `SumBuiltinListEmitter.genMatch`.
       *   - `PackedSumDataList` → unpack to `SumBuiltinList(<elem-default>)`, bind a fresh var,

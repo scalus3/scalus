@@ -562,181 +562,114 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
         assert(evalV4(term) == Const(Constant.Integer(3)))
     }
 
-    // Case on Data tests for V4
-    // Data has 5 constructors: Constr=0 (tag, args), Map=1, List=2, I=3, B=4
-    // Each branch receives the inner value(s) as arguments
+    // Case on Data tests
+    // Casing on Data arrives with Dijkstra (PV12), one hard fork after the rest of
+    // case-on-builtins. Only Data.Constr can be scrutinized: the branch is selected by the
+    // constructor tag and receives the list of fields as its single argument.
 
     import scalus.uplc.builtin.{ByteString, Data}
     import scalus.cardano.onchain.plutus.prelude.List as PList
 
+    val pv12vm: PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.dijkstraPV)
+
+    def evalPV12(term: Term): Term =
+        pv12vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(term))
+
     def mkDataConst(d: Data): Constant = Constant.Data(d)
 
-    test("V4: Case on Data.Constr selects first branch and applies tag and args") {
-        // Case on Data.Constr(42, [I(1), I(2)])
-        // Constr branch: \tag args -> tag (returns the constructor tag)
-        val term = Case(
-          Const(mkDataConst(Data.Constr(42, PList(Data.I(1), Data.I(2))))),
-          List(
-            LamAbs("tag", LamAbs("args", Var(NamedDeBruijn("tag", 0)))),
-            LamAbs("entries", Const(Constant.String("map"))),
-            LamAbs("elements", Const(Constant.String("list"))),
-            LamAbs("i", Const(Constant.String("integer"))),
-            LamAbs("b", Const(Constant.String("bytestring")))
-          )
+    def fieldsBranch(result: String): Term = LamAbs("fields", Const(Constant.String(result)))
+
+    test("PV12: Case on Data.Constr selects the branch by the constructor tag") {
+        def term(tag: Int) = Case(
+          Const(mkDataConst(Data.Constr(tag, PList(Data.I(1), Data.I(2))))),
+          List(fieldsBranch("zero"), fieldsBranch("one"), fieldsBranch("two"))
         )
-        assert(evalV4(term) == Const(Constant.Integer(42)))
+        assert(evalPV12(term(0)) == Const(Constant.String("zero")))
+        assert(evalPV12(term(1)) == Const(Constant.String("one")))
+        assert(evalPV12(term(2)) == Const(Constant.String("two")))
     }
 
-    test("V4: Case on Data.Constr can access args") {
-        // Case on Data.Constr(0, [I(100)])
-        // Constr branch: \tag args -> args (returns the args list)
+    test("PV12: Case on Data.Constr applies the fields list to the branch") {
         val term = Case(
-          Const(mkDataConst(Data.Constr(0, PList(Data.I(100))))),
+          Const(mkDataConst(Data.Constr(1, PList(Data.I(100), Data.B(ByteString.fromHex("FF")))))),
           List(
-            LamAbs("tag", LamAbs("args", Var(NamedDeBruijn("args", 0)))),
-            LamAbs("entries", Const(Constant.String("map"))),
-            LamAbs("elements", Const(Constant.String("list"))),
-            LamAbs("i", Const(Constant.String("integer"))),
-            LamAbs("b", Const(Constant.String("bytestring")))
+            fieldsBranch("zero"),
+            LamAbs("fields", Var(NamedDeBruijn("fields", 0)))
           )
         )
-        val expected = Const(Constant.List(DefaultUni.Data, List(Constant.Data(Data.I(100)))))
-        assert(evalV4(term) == expected)
-    }
-
-    test("V4: Case on Data.Map selects second branch and applies entries") {
-        // Case on Data.Map([(I(1), I(2))])
-        // Map branch: \entries -> "map"
-        val term = Case(
-          Const(mkDataConst(Data.Map(PList((Data.I(1), Data.I(2)))))),
-          List(
-            LamAbs("tag", LamAbs("args", Const(Constant.String("constr")))),
-            LamAbs("entries", Const(Constant.String("map"))),
-            LamAbs("elements", Const(Constant.String("list"))),
-            LamAbs("i", Const(Constant.String("integer"))),
-            LamAbs("b", Const(Constant.String("bytestring")))
+        val expected = Const(
+          Constant.List(
+            DefaultUni.Data,
+            List(Constant.Data(Data.I(100)), Constant.Data(Data.B(ByteString.fromHex("FF"))))
           )
         )
-        assert(evalV4(term) == Const(Constant.String("map")))
+        assert(evalPV12(term) == expected)
     }
 
-    test("V4: Case on Data.List selects third branch and applies elements") {
-        // Case on Data.List([I(1), I(2), I(3)])
-        // List branch: \elements -> "list"
+    test("PV12: Case on Data.Constr without fields applies the empty list") {
         val term = Case(
-          Const(mkDataConst(Data.List(PList(Data.I(1), Data.I(2), Data.I(3))))),
+          Const(mkDataConst(Data.Constr(0, PList.Nil))),
+          List(LamAbs("fields", Var(NamedDeBruijn("fields", 0))))
+        )
+        assert(evalPV12(term) == Const(Constant.List(DefaultUni.Data, Nil)))
+    }
+
+    test("PV12: Case on Data.Constr with a tag without a branch throws CaseIndexOutOfBounds") {
+        val term = Case(
+          Const(mkDataConst(Data.Constr(2, PList.Nil))),
+          List(fieldsBranch("zero"), fieldsBranch("one"))
+        )
+        assertThrows[CaseIndexOutOfBounds](evalPV12(term))
+    }
+
+    test("PV12: Case on Data.Constr with no branches throws CaseIndexOutOfBounds") {
+        val term = Case(Const(mkDataConst(Data.Constr(0, PList.Nil))), List())
+        assertThrows[CaseIndexOutOfBounds](evalPV12(term))
+    }
+
+    test("PV12: Case on Data.Map/List/I/B throws CaseDataNonConstrError") {
+        def term(d: Data) = Case(
+          Const(mkDataConst(d)),
           List(
-            LamAbs("tag", LamAbs("args", Const(Constant.String("constr")))),
-            LamAbs("entries", Const(Constant.String("map"))),
-            LamAbs("elements", Const(Constant.String("list"))),
-            LamAbs("i", Const(Constant.String("integer"))),
-            LamAbs("b", Const(Constant.String("bytestring")))
+            fieldsBranch("0"),
+            fieldsBranch("1"),
+            fieldsBranch("2"),
+            fieldsBranch("3"),
+            fieldsBranch("4")
           )
         )
-        assert(evalV4(term) == Const(Constant.String("list")))
-    }
-
-    test("V4: Case on Data.I selects fourth branch and applies integer") {
-        // Case on Data.I(42)
-        // I branch: \i -> i (returns the integer)
-        val term = Case(
-          Const(mkDataConst(Data.I(42))),
-          List(
-            LamAbs("tag", LamAbs("args", Const(Constant.String("constr")))),
-            LamAbs("entries", Const(Constant.String("map"))),
-            LamAbs("elements", Const(Constant.String("list"))),
-            LamAbs("i", Var(NamedDeBruijn("i", 0))),
-            LamAbs("b", Const(Constant.String("bytestring")))
-          )
+        assertThrows[CaseDataNonConstrError](
+          evalPV12(term(Data.Map(PList((Data.I(1), Data.I(2))))))
         )
-        assert(evalV4(term) == Const(Constant.Integer(42)))
+        assertThrows[CaseDataNonConstrError](evalPV12(term(Data.List(PList(Data.I(1))))))
+        assertThrows[CaseDataNonConstrError](evalPV12(term(Data.I(42))))
+        assertThrows[CaseDataNonConstrError](evalPV12(term(Data.B(ByteString.fromHex("DEADBEEF")))))
     }
 
-    test("V4: Case on Data.B selects fifth branch and applies bytestring") {
-        // Case on Data.B(0xDEADBEEF)
-        // B branch: \b -> b (returns the bytestring)
-        val bs = ByteString.fromHex("DEADBEEF")
+    test("PV12: the rest of case-on-builtins stays available") {
         val term = Case(
-          Const(mkDataConst(Data.B(bs))),
-          List(
-            LamAbs("tag", LamAbs("args", Const(Constant.String("constr")))),
-            LamAbs("entries", Const(Constant.String("map"))),
-            LamAbs("elements", Const(Constant.String("list"))),
-            LamAbs("i", Const(Constant.String("integer"))),
-            LamAbs("b", Var(NamedDeBruijn("b", 0)))
-          )
+          Const(Constant.Integer(1)),
+          List(Const(Constant.String("zero")), Const(Constant.String("one")))
         )
-        assert(evalV4(term) == Const(Constant.ByteString(bs)))
+        assert(evalPV12(term) == Const(Constant.String("one")))
     }
 
-    test("V4: Case on Data with fewer branches throws CaseDataBranchError for missing branch") {
-        // Case on Data.I(42) with only 3 branches (needs 4 for I)
-        val term = Case(
-          Const(mkDataConst(Data.I(42))),
-          List(
-            LamAbs("tag", LamAbs("args", Const(Constant.String("constr")))),
-            LamAbs("entries", Const(Constant.String("map"))),
-            LamAbs("elements", Const(Constant.String("list")))
-          )
+    test("V4: Case on Data is not available at van Rossem (PV11)") {
+        val onConstr = Case(
+          Const(mkDataConst(Data.Constr(0, PList(Data.I(1))))),
+          List(fieldsBranch("zero"))
         )
-        assertThrows[CaseDataBranchError](evalV4(term))
-    }
-
-    test("V4: Case on Data with no branches throws CaseDataBranchError") {
-        val term = Case(Const(mkDataConst(Data.I(42))), List())
-        assertThrows[CaseDataBranchError](evalV4(term))
-    }
-
-    test("V4: Case on Data with more than 5 branches throws CaseDataBranchError") {
-        val term = Case(
-          Const(mkDataConst(Data.I(42))),
-          List(
-            Const(Constant.String("1")),
-            Const(Constant.String("2")),
-            Const(Constant.String("3")),
-            Const(Constant.String("4")),
-            Const(Constant.String("5")),
-            Const(Constant.String("6"))
-          )
-        )
-        assertThrows[CaseDataBranchError](evalV4(term))
+        val onI = Case(Const(mkDataConst(Data.I(42))), List(fieldsBranch("zero")))
+        assertThrows[CaseDataNotSupportedError](evalV4(onConstr))
+        assertThrows[CaseDataNotSupportedError](evalV4(onI))
     }
 
     test("V3: Case on Data throws NonConstrScrutinized") {
         val term = Case(
-          Const(mkDataConst(Data.I(42))),
-          List(
-            LamAbs("tag", LamAbs("args", Const(Constant.String("constr")))),
-            LamAbs("entries", Const(Constant.String("map"))),
-            LamAbs("elements", Const(Constant.String("list"))),
-            LamAbs("i", Var(NamedDeBruijn("i", 0))),
-            LamAbs("b", Const(Constant.String("bytestring")))
-          )
+          Const(mkDataConst(Data.Constr(0, PList.Nil))),
+          List(fieldsBranch("zero"))
         )
         assertThrows[NonConstrScrutinized](evalV3(term))
-    }
-
-    // Test that we can use case on Data to implement pattern matching like chooseData
-    test("V4: Case on Data can implement chooseData-like behavior") {
-        // A function that returns a string describing the Data type
-        def describeData(d: Data): Term = Case(
-          Const(mkDataConst(d)),
-          List(
-            LamAbs("tag", LamAbs("args", Const(Constant.String("constr")))),
-            LamAbs("entries", Const(Constant.String("map"))),
-            LamAbs("elements", Const(Constant.String("list"))),
-            LamAbs("i", Const(Constant.String("integer"))),
-            LamAbs("b", Const(Constant.String("bytestring")))
-          )
-        )
-
-        assert(evalV4(describeData(Data.Constr(0, PList.Nil))) == Const(Constant.String("constr")))
-        assert(evalV4(describeData(Data.Map(PList.Nil))) == Const(Constant.String("map")))
-        assert(evalV4(describeData(Data.List(PList.Nil))) == Const(Constant.String("list")))
-        assert(evalV4(describeData(Data.I(0))) == Const(Constant.String("integer")))
-        assert(
-          evalV4(describeData(Data.B(ByteString.empty))) == Const(Constant.String("bytestring"))
-        )
     }
 
     // Case on Pair tests for V4

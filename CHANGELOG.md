@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Pattern matching on the builtin `Data` type (`Data.Constr` / `Map` / `List` / `I` / `B`) compiled
+  for protocol version 11 - the default target - produced a `case` on a `Data` scrutinee, which a
+  van Rossem node rejects: PV11 has `case` on `bool`, `unit`, `integer`, `list` and `pair`, not on
+  `data`. The Scalus VM accepted that term, so tests and the Emulator passed while the script failed
+  on-chain. The match is now lowered through `chooseData` on every target (all three lowering
+  backends), and the VM rejects `case` on `Data` at PV11 with `CaseDataNotSupportedError`.
+- `case` on `Data` in the VM and the JIT now has the Plutus semantics: only `Data.Constr` is
+  scrutinized, the branch is selected by the constructor tag and receives the fields list. The
+  former five-branch form (one branch per `Data` variant) never existed in Plutus.
+  `CaseDataBranchError` is deprecated; see `CaseDataNonConstrError` and `CaseIndexOutOfBounds`.
+
+### Added
+
+- Protocol version 12 (Dijkstra): `MajorProtocolVersion.dijkstraPV` / `ProtocolVersion.dijkstraPV`.
+  A PV12 VM (`PlutusVM.makePlutusV3VM(MajorProtocolVersion.dijkstraPV)`) evaluates `case` on
+  `Data.Constr`, and with `targetProtocolVersion = dijkstraPV` a match on a sum type in the Data
+  representation compiles to it, replacing `unConstrData` + `fstPair` + `sndPair` + `case` on the
+  tag. The default target stays PV11.
+
 ## 1.2.1 (2026-09-14)
 
 npm-only release: it relaxes the Node floor and changes no Scala code.

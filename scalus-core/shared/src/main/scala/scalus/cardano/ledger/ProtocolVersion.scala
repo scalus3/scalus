@@ -35,6 +35,11 @@ object ProtocolVersion {
     val conwayPV = ProtocolVersion(9, 0)
     val plominPV = ProtocolVersion(10, 0)
     val vanRossemPV = ProtocolVersion(11, 0)
+
+    /** Dijkstra hard fork. Not enacted yet: scripts compiled for it (e.g. with a Case on Data) are
+      * rejected by nodes running an earlier protocol version.
+      */
+    val dijkstraPV = ProtocolVersion(12, 0)
     val futurePV = ProtocolVersion(Int.MaxValue, 0)
 
     // Known protocol versions
@@ -48,7 +53,8 @@ object ProtocolVersion {
           valentinePV,
           conwayPV,
           plominPV,
-          vanRossemPV
+          vanRossemPV,
+          dijkstraPV
         )
 }
 
@@ -68,6 +74,11 @@ object MajorProtocolVersion {
     val changPV = MajorProtocolVersion(9)
     val plominPV = MajorProtocolVersion(10)
     val vanRossemPV = MajorProtocolVersion(11)
+
+    /** Dijkstra hard fork. Not enacted yet: scripts compiled for it (e.g. with a Case on Data) are
+      * rejected by nodes running an earlier protocol version.
+      */
+    val dijkstraPV = MajorProtocolVersion(12)
     val futurePV = MajorProtocolVersion(Int.MaxValue)
 
     // Known protocol versions
@@ -81,6 +92,7 @@ object MajorProtocolVersion {
           valentinePV,
           changPV,
           plominPV,
-          vanRossemPV
+          vanRossemPV,
+          dijkstraPV
         )
 }

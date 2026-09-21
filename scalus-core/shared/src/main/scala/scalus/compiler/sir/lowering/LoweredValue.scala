@@ -1297,54 +1297,27 @@ case class CasePairLoweredValue(
 
 }
 
-/** LoweredValue for Case on Data (PlutusV4+).
+/** LoweredValue for Case on Data (dijkstraPV+).
   *
-  * Data has 5 constructors with different bound variables:
-  *   - Constr (index 0): receives tag (Integer) and args (List[Data])
-  *   - Map (index 1): receives entries (List[(Data, Data)])
-  *   - List (index 2): receives elements (List[Data])
-  *   - I (index 3): receives value (Integer)
-  *   - B (index 4): receives value (ByteString)
-  *
-  * Each branch is a lambda that receives the appropriate arguments.
+  * The Case instruction scrutinizes only `Data.Constr` values: branch `i` handles the constructor
+  * tag `i` and is a lambda receiving the constructor fields (List[Data]) - `λfields.body`. A
+  * Map/List/I/B scrutinee or a tag without a branch is an evaluation error, so this is the lowering
+  * of a match on a sum type in a Data-Constr representation, not of a match on the five Data
+  * variants (see [[ChooseDataLoweredValue]] for that).
   */
-case class CaseDataLoweredValue(
+case class CaseDataConstrLoweredValue(
     scrutinee: LoweredValue,
-    // Constr branch: λtag.λargs.body
-    constrTagVar: IdentifiableLoweredValue,
-    constrArgsVar: IdentifiableLoweredValue,
-    constrBranch: LoweredValue,
-    // Map branch: λentries.body
-    mapEntriesVar: IdentifiableLoweredValue,
-    mapBranch: LoweredValue,
-    // List branch: λelements.body
-    listElementsVar: IdentifiableLoweredValue,
-    listBranch: LoweredValue,
-    // I branch: λvalue.body
-    iValueVar: IdentifiableLoweredValue,
-    iBranch: LoweredValue,
-    // B branch: λvalue.body
-    bValueVar: IdentifiableLoweredValue,
-    bBranch: LoweredValue,
+    // branch i: λfieldsVars(i).branches(i)
+    fieldsVars: scala.collection.immutable.List[IdentifiableLoweredValue],
+    branches: scala.collection.immutable.List[LoweredValue],
     tp: SIRType,
     repr: LoweredValueRepresentation,
     inPos: SIRPosition
-) extends ComplexLoweredValue(
-      Set(
-        constrTagVar,
-        constrArgsVar,
-        mapEntriesVar,
-        listElementsVar,
-        iValueVar,
-        bValueVar
-      ),
-      scrutinee,
-      constrBranch,
-      mapBranch,
-      listBranch,
-      iBranch,
-      bBranch
-    ) {
+) extends ComplexLoweredValue(fieldsVars.toSet, (scrutinee :: branches)*) {
+    require(
+      fieldsVars.length == branches.length,
+      s"Case on Data: ${fieldsVars.length} fields vars for ${branches.length} branches"
+    )
 
     override def sirType: SIRType = tp
 
@@ -1353,67 +1326,26 @@ case class CaseDataLoweredValue(
     override def pos: SIRPosition = inPos
 
     override def termInternal(gctx: TermGenerationContext): Term = {
-        // Case(scrutinee, [λtag.λargs.constrBranch, λentries.mapBranch, λelems.listBranch, λi.iBranch, λbs.bBranch])
-        val constrCtx =
-            gctx.copy(generatedVars = gctx.generatedVars + constrTagVar.id + constrArgsVar.id)
-        val mapCtx = gctx.copy(generatedVars = gctx.generatedVars + mapEntriesVar.id)
-        val listCtx = gctx.copy(generatedVars = gctx.generatedVars + listElementsVar.id)
-        val iCtx = gctx.copy(generatedVars = gctx.generatedVars + iValueVar.id)
-        val bCtx = gctx.copy(generatedVars = gctx.generatedVars + bValueVar.id)
-
+        // Case(scrutinee, [λfields.branch0, λfields.branch1, ..., λfields.branchN])
         Term.Case(
           scrutinee.termWithNeededVars(gctx),
-          scala.collection.immutable.List(
-            // Constr branch (index 0): λtag.λargs.body
-            Term.LamAbs(
-              constrTagVar.id,
-              Term.LamAbs(
-                constrArgsVar.id,
-                constrBranch.termWithNeededVars(constrCtx),
-                ann(pos)
-              ),
-              ann(pos)
-            ),
-            // Map branch (index 1): λentries.body
-            Term.LamAbs(
-              mapEntriesVar.id,
-              mapBranch.termWithNeededVars(mapCtx),
-              ann(pos)
-            ),
-            // List branch (index 2): λelements.body
-            Term.LamAbs(
-              listElementsVar.id,
-              listBranch.termWithNeededVars(listCtx),
-              ann(pos)
-            ),
-            // I branch (index 3): λvalue.body
-            Term.LamAbs(iValueVar.id, iBranch.termWithNeededVars(iCtx), ann(pos)),
-            // B branch (index 4): λvalue.body
-            Term.LamAbs(bValueVar.id, bBranch.termWithNeededVars(bCtx), ann(pos))
-          ),
+          fieldsVars.zip(branches).map { case (fieldsVar, branch) =>
+              val branchCtx = gctx.copy(generatedVars = gctx.generatedVars + fieldsVar.id)
+              Term.LamAbs(fieldsVar.id, branch.termWithNeededVars(branchCtx), ann(pos))
+          },
           ann(pos)
         )
     }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
         import Doc.*
+        val branchDocs =
+            fieldsVars.zip(branches).zipWithIndex.map { case ((fieldsVar, branch), i) =>
+                line + text(s"Constr $i") + space + fieldsVar.docRef(ctx) + text(" ->") +
+                    (lineOrSpace + branch.docRef(ctx)).nested(2)
+            }
         ((text("case") + space + scrutinee.docRef(ctx) + space + text("of"))
-            + (line + text("Constr") + space + constrTagVar.docRef(ctx) + space + constrArgsVar
-                .docRef(ctx) + text(" ->") + (lineOrSpace + constrBranch.docRef(ctx)).nested(
-              2
-            )).grouped
-            + (line + text("Map") + space + mapEntriesVar.docRef(ctx) + text(
-              " ->"
-            ) + (lineOrSpace + mapBranch.docRef(ctx)).nested(2)).grouped
-            + (line + text("List") + space + listElementsVar.docRef(ctx) + text(
-              " ->"
-            ) + (lineOrSpace + listBranch.docRef(ctx)).nested(2)).grouped
-            + (line + text("I") + space + iValueVar.docRef(ctx) + text(
-              " ->"
-            ) + (lineOrSpace + iBranch.docRef(ctx)).nested(2)).grouped
-            + (line + text("B") + space + bValueVar.docRef(ctx) + text(
-              " ->"
-            ) + (lineOrSpace + bBranch.docRef(ctx)).nested(2)).grouped).aligned
+            + branchDocs.foldLeft(Doc.empty)(_ + _.grouped)).aligned
     }
 }
 
@@ -1469,9 +1401,9 @@ case class ChooseListLoweredValue(
   * Uses the ChooseData builtin with delayed branches: Force(ChooseData data (Delay constr) (Delay
   * map) (Delay list) (Delay i) (Delay b)).
   *
-  * Unlike [[CaseDataLoweredValue]], the bound variables are not lambda parameters: each carries the
-  * corresponding un*Data extraction of the scrutinee as its rhs and is emitted inside the branch
-  * that uses it, so the extraction only runs when the branch is selected.
+  * The bound variables are not lambda parameters: each carries the corresponding un*Data extraction
+  * of the scrutinee as its rhs and is emitted inside the branch that uses it, so the extraction
+  * only runs when the branch is selected.
   */
 case class ChooseDataLoweredValue(
     dataInput: LoweredValue,
@@ -1901,83 +1833,41 @@ object LoweredValue {
             )
         }
 
-        /** Create a Case on Data for PlutusV4+.
+        /** Create a Case on Data (dijkstraPV+): branch `i` handles the `Data.Constr` tag `i` and
+          * binds `fieldsVars(i)` to the constructor fields (List[Data]). The scrutinee has to be a
+          * Data.Constr at runtime.
           *
           * @param scrutinee
-          *   the Data value to match on
-          * @param constrTagVar
-          *   variable to bind to the constructor tag (Integer)
-          * @param constrArgsVar
-          *   variable to bind to the constructor args (List[Data])
-          * @param constrBranch
-          *   the branch to execute for Constr case
-          * @param mapEntriesVar
-          *   variable to bind to the map entries (List[(Data, Data)])
-          * @param mapBranch
-          *   the branch to execute for Map case
-          * @param listElementsVar
-          *   variable to bind to the list elements (List[Data])
-          * @param listBranch
-          *   the branch to execute for List case
-          * @param iValueVar
-          *   variable to bind to the integer value (Integer)
-          * @param iBranch
-          *   the branch to execute for I case
-          * @param bValueVar
-          *   variable to bind to the bytestring value (ByteString)
-          * @param bBranch
-          *   the branch to execute for B case
-          * @param inPos
-          *   source position
-          * @param optTargetType
-          *   optional target type for the result
+          *   the Data value to match on, in a packed-Data representation
+          * @param fieldsVars
+          *   per-branch lambda-bound variable receiving the constructor fields
+          * @param branches
+          *   per-tag branches, ordered 0..n-1
           */
-        def lvCaseData(
+        def lvCaseDataConstr(
             scrutinee: LoweredValue,
-            constrTagVar: IdentifiableLoweredValue,
-            constrArgsVar: IdentifiableLoweredValue,
-            constrBranch: LoweredValue,
-            mapEntriesVar: IdentifiableLoweredValue,
-            mapBranch: LoweredValue,
-            listElementsVar: IdentifiableLoweredValue,
-            listBranch: LoweredValue,
-            iValueVar: IdentifiableLoweredValue,
-            iBranch: LoweredValue,
-            bValueVar: IdentifiableLoweredValue,
-            bBranch: LoweredValue,
+            fieldsVars: scala.collection.immutable.List[IdentifiableLoweredValue],
+            branches: scala.collection.immutable.List[LoweredValue],
             inPos: SIRPosition,
             optTargetType: Option[SIRType] = None
         )(using lctx: LoweringContext): LoweredValue = {
+            require(branches.nonEmpty, "Case on Data requires at least one branch")
 
-            val (resType, targetRepresentation, Seq(constrR, mapR, listR, iR, bR)) =
-                alignDataMatchBranches(
-                  Seq(constrBranch, mapBranch, listBranch, iBranch, bBranch),
-                  inPos,
-                  optTargetType
-                )
+            val (resType, targetRepresentation, branchesR) =
+                alignDataMatchBranches(branches, inPos, optTargetType)
 
-            CaseDataLoweredValue(
+            CaseDataConstrLoweredValue(
               scrutinee,
-              constrTagVar,
-              constrArgsVar,
-              constrR,
-              mapEntriesVar,
-              mapR,
-              listElementsVar,
-              listR,
-              iValueVar,
-              iR,
-              bValueVar,
-              bR,
+              fieldsVars,
+              branchesR.toList,
               resType,
               targetRepresentation,
               inPos
             )
         }
 
-        /** ChooseData analogue of [[lvCaseData]] for targets without Case-on-Data support (protocol
-          * version < vanRossemPV). The bound variables are expected to carry their un*Data
-          * extraction of the scrutinee as rhs.
+        /** Dispatch on the five Data variants via the chooseData builtin. The bound variables are
+          * expected to carry their un*Data extraction of the scrutinee as rhs.
           */
         def lvChooseData(
             scrutinee: LoweredValue,
@@ -2023,7 +1913,7 @@ object LoweredValue {
         }
 
         /** Unify branch types, upcast every branch to the common type and convert all branches to a
-          * common representation. Shared by [[lvCaseData]] and [[lvChooseData]].
+          * common representation. Shared by [[lvCaseDataConstr]] and [[lvChooseData]].
           */
         private def alignDataMatchBranches(
             allBranches: Seq[LoweredValue],

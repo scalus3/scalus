@@ -109,47 +109,20 @@ object CaseHelper {
                                     )
                                 cases(1)()
                     case data: Data =>
-                        // Data case - Constr=0, Map=1, List=2, I=3, B=4
-                        if bc == 0 || bc > 5 then
-                            throw new JitEvaluationFailure(
-                              s"Case on data requires 1 to 5 branches, but $bc provided"
-                            )
+                        // Data case - only Data.Constr, the branch is selected by the constructor
+                        // tag and receives the fields list
                         data match
                             case Data.Constr(tag, args) =>
-                                if bc < 1 then
+                                if tag < 0 || tag >= bc then
                                     throw new JitEvaluationFailure(
-                                      s"Case on data requires at least 1 branch for Constr"
+                                      s"Case index $tag out of bounds for $bc branches"
                                     )
-                                val constrBranch = cases(0)().asInstanceOf[Any => Any]
-                                constrBranch(tag).asInstanceOf[Any => Any](args)
-                            case Data.Map(entries) =>
-                                if bc < 2 then
-                                    throw new JitEvaluationFailure(
-                                      s"Case on data requires at least 2 branches for Map"
-                                    )
-                                val mapBranch = cases(1)().asInstanceOf[Any => Any]
-                                mapBranch(entries.map(BuiltinPair.apply))
-                            case Data.List(elements) =>
-                                if bc < 3 then
-                                    throw new JitEvaluationFailure(
-                                      s"Case on data requires at least 3 branches for List"
-                                    )
-                                val listBranch = cases(2)().asInstanceOf[Any => Any]
-                                listBranch(elements)
-                            case Data.I(integer) =>
-                                if bc < 4 then
-                                    throw new JitEvaluationFailure(
-                                      s"Case on data requires at least 4 branches for I"
-                                    )
-                                val iBranch = cases(3)().asInstanceOf[Any => Any]
-                                iBranch(integer)
-                            case Data.B(bs) =>
-                                if bc < 5 then
-                                    throw new JitEvaluationFailure(
-                                      s"Case on data requires 5 branches for B"
-                                    )
-                                val bBranch = cases(4)().asInstanceOf[Any => Any]
-                                bBranch(bs)
+                                val constrBranch = cases(tag.toInt)().asInstanceOf[Any => Any]
+                                constrBranch(args.toScalaList)
+                            case other =>
+                                throw new JitEvaluationFailure(
+                                  s"Casing on data only supports Data.Constr values, got $other"
+                                )
                     case pair: BuiltinPair[?, ?] =>
                         // Pair case - exactly 1 branch receiving both elements
                         if bc != 1 then
@@ -245,42 +218,19 @@ object CaseHelper {
                                     )
                                 cases(1)()
                     case data: Data =>
-                        // Data case - Constr=0, Map=1, List=2, I=3, B=4
-                        if bc == 0 || bc > 5 then
-                            throw new JitEvaluationFailure(
-                              s"Case on data requires 1 to 5 branches, but $bc provided"
-                            )
+                        // Data case - only Data.Constr, the branch is selected by the constructor
+                        // tag and receives the fields list
                         data match
                             case Data.Constr(tag, args) =>
-                                if bc < 1 then
+                                if tag < 0 || tag >= bc then
                                     throw new JitEvaluationFailure(
-                                      s"Case on data requires at least 1 branch for Constr"
+                                      s"Case index $tag out of bounds for $bc branches"
                                     )
-                                Apply(Apply(cases(0)(), Return(tag)), Return(args))
-                            case Data.Map(entries) =>
-                                if bc < 2 then
-                                    throw new JitEvaluationFailure(
-                                      s"Case on data requires at least 2 branches for Map"
-                                    )
-                                Apply(cases(1)(), Return(entries.map(BuiltinPair.apply)))
-                            case Data.List(elements) =>
-                                if bc < 3 then
-                                    throw new JitEvaluationFailure(
-                                      s"Case on data requires at least 3 branches for List"
-                                    )
-                                Apply(cases(2)(), Return(elements))
-                            case Data.I(integer) =>
-                                if bc < 4 then
-                                    throw new JitEvaluationFailure(
-                                      s"Case on data requires at least 4 branches for I"
-                                    )
-                                Apply(cases(3)(), Return(integer))
-                            case Data.B(bs) =>
-                                if bc < 5 then
-                                    throw new JitEvaluationFailure(
-                                      s"Case on data requires 5 branches for B"
-                                    )
-                                Apply(cases(4)(), Return(bs))
+                                Apply(cases(tag.toInt)(), Return(args.toScalaList))
+                            case other =>
+                                throw new JitEvaluationFailure(
+                                  s"Casing on data only supports Data.Constr values, got $other"
+                                )
                     case pair: BuiltinPair[?, ?] =>
                         // Pair case - exactly 1 branch receiving both elements
                         if bc != 1 then

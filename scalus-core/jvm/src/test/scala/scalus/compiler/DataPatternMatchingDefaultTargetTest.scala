@@ -11,12 +11,13 @@ import scalus.uplc.eval.PlutusVM
 import scalus.toUplc
 
 /** Regression tests for audit finding R1 (docs/local/audits/2026_07_10/R1.md): pattern matching on
-  * a Data scrutinee must work on the default compilation target (PlutusV3, changPV), where
+  * a Data scrutinee must work on the default compilation target (PlutusV3, vanRossemPV), where
   * Case-on-Data is not available and the match must be lowered via the chooseData builtin.
   */
 class DataPatternMatchingDefaultTargetTest extends AnyFunSuite:
 
-    // Default V3 VM at the default protocol version: Case on builtin values is not enabled
+    // Default V3 VM at the default protocol version: Case on builtin values is enabled, except on
+    // Data - a Case with a Data scrutinee fails with CaseDataNotSupportedError
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
     private given Options = Options.default

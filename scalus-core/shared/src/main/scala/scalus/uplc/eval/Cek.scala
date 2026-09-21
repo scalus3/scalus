@@ -441,12 +441,42 @@ class CaseListBranchError(
       sourcePos
     )
 
+@deprecated(
+  "Case on Data selects a branch by the Data.Constr tag, see CaseDataNonConstrError and CaseIndexOutOfBounds",
+  "1.2.0"
+)
 class CaseDataBranchError(
     val branchCount: Int,
     env: CekValEnv,
     sourcePos: ScalusSourcePos = ScalusSourcePos.empty
 ) extends CaseOnBuiltinError(
-      s"Case on data requires 1 to 5 branches (Constr, Map, List, I, B), but $branchCount provided",
+      s"Case on data with $branchCount branches: the branch-per-Data-variant form does not exist, " +
+          "Case on data selects the branch by the Data.Constr tag",
+      env,
+      sourcePos
+    )
+
+/** Case on a Data value that is not a `Data.Constr`. Only `Data.Constr` can be scrutinized: the
+  * branch is selected by the constructor tag and receives the list of fields.
+  */
+class CaseDataNonConstrError(
+    val data: Data,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends CaseOnBuiltinError(
+      s"Casing on data only supports Data.Constr values, got $data",
+      env,
+      sourcePos
+    )
+
+/** Case on a Data value under a protocol version where casing on Data is not available (before
+  * Dijkstra, protocol version 12).
+  */
+class CaseDataNotSupportedError(
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends CaseOnBuiltinError(
+      "Casing on data is not supported before protocol version 12",
       env,
       sourcePos
     )
@@ -855,10 +885,34 @@ class CekMachine(
     getBuiltinRuntime: DefaultFun => BuiltinRuntime,
     caseOnBuiltinsEnabled: Boolean = false,
     profiling: Boolean = false,
-    tracing: Boolean = false
+    tracing: Boolean = false,
+    caseOnDataEnabled: Boolean = false
 ) {
     import CekValue.*
     import Context.*
+
+    /** Binary-compatible constructor without `caseOnDataEnabled` (casing on Data is disabled).
+      * Keeps the pre-Dijkstra 7-argument signature linkable, so it has to stay until the next major
+      * version.
+      */
+    def this(
+        params: MachineParams,
+        budgetSpender: BudgetSpender,
+        logger: Logger,
+        getBuiltinRuntime: DefaultFun => BuiltinRuntime,
+        caseOnBuiltinsEnabled: Boolean,
+        profiling: Boolean,
+        tracing: Boolean
+    ) = this(
+      params,
+      budgetSpender,
+      logger,
+      getBuiltinRuntime,
+      caseOnBuiltinsEnabled,
+      profiling,
+      tracing,
+      false
+    )
 
     private var ctx: Context = NoFrame
     private var env: CekValEnv = ArraySeq.empty
@@ -1350,115 +1404,60 @@ class CekMachine(
                                             )
                                         Compute(ctx, env, cases(1))
                             case Constant.Data(data) =>
-                                // Data has 5 constructors:
-                                // Constr=0 (tag, args), Map=1, List=2, I=3, B=4
-                                // Each branch receives the inner value(s) as arguments
-                                if cases.size == 0 || cases.size > 5 then
-                                    throw new CaseDataBranchError(cases.size, env, lastSourcePos)
+                                // Casing on Data is available from Dijkstra (PV12) on, and only
+                                // for Data.Constr: the branch is selected by the constructor tag
+                                // and receives the list of fields as its single argument.
+                                if !caseOnDataEnabled then
+                                    throw new CaseDataNotSupportedError(env, lastSourcePos)
                                 data match
                                     case Data.Constr(tag, args) =>
-                                        // Constr branch (index 0) receives tag (as Integer) and args (as list of Data)
-                                        if cases.size < 1 then
-                                            throw new CaseDataBranchError(
-                                              cases.size,
-                                              env,
-                                              lastSourcePos
-                                            )
-                                        // Diagnostic (gated by -Dscalus.assert.case.data.arity=1):
-                                        // when a Data.Constr scrutinee enters the case-on-Data
-                                        // branch, the matched branch should expect at most 2
-                                        // bindings (tag, argsList). If branch 0 is a deeper
-                                        // lambda chain, this is almost certainly a native-UC
-                                        // ProductCase selector (4-arg λf0..f3) being misdispatched
-                                        // on a Data-encoded value — the exact corruption shape
-                                        // behind `MultiplyInteger Apply LamAbs at :477:59`.
-                                        if assertCaseDataArity then {
-                                            val depth = lamChainDepth(cases(0), 0)
-                                            if depth > 2 then
-                                                System.err.println(
-                                                  s"[CASE-DATA-ARITY-MISMATCH] Data.Constr(tag=$tag, " +
-                                                      s"args.size=${args.toScalaList.size}) → branch[0] " +
-                                                      s"has lambda depth=$depth (>2). Likely a native-UC " +
-                                                      s"selector applied to Data. lastSourcePos=$lastSourcePos"
-                                                )
-                                                System.err.println(
-                                                  s"  branch[0] = ${cases(0).pretty.render(200).take(800)}"
-                                                )
-                                        }
-                                        val tagVal = VCon(Constant.Integer(tag))
-                                        val argsVal = VCon(
-                                          Constant.List(
-                                            DefaultUni.Data,
-                                            args.toScalaList.map(Constant.Data.apply)
-                                          )
-                                        )
-                                        val newCtx = FrameAwaitFunValue(
-                                          tagVal,
-                                          FrameAwaitFunValue(argsVal, ctx)
-                                        )
-                                        Compute(newCtx, env, cases(0))
-                                    case Data.Map(entries) =>
-                                        // Map branch (index 1) receives entries as list of pairs
-                                        if cases.size < 2 then
-                                            throw new CaseDataBranchError(
-                                              cases.size,
-                                              env,
-                                              lastSourcePos
-                                            )
-                                        val entriesVal = VCon(
-                                          Constant.List(
-                                            DefaultUni.Apply(
-                                              DefaultUni.Apply(
-                                                DefaultUni.ProtoPair,
-                                                DefaultUni.Data
-                                              ),
-                                              DefaultUni.Data
-                                            ),
-                                            entries.toScalaList.map { case (k, v) =>
-                                                Constant.Pair(Constant.Data(k), Constant.Data(v))
+                                        if tag >= 0 && tag < cases.size then
+                                            // Diagnostic (gated by -Dscalus.assert.case.data.arity=1):
+                                            // the matched branch should expect at most 1 binding
+                                            // (the fields list). A deeper lambda chain is almost
+                                            // certainly a native-UC ProductCase selector (λf0..fn)
+                                            // misdispatched on a Data-encoded value.
+                                            if assertCaseDataArity then {
+                                                val depth = lamChainDepth(cases(tag.toInt), 0)
+                                                if depth > 1 then
+                                                    System.err.println(
+                                                      s"[CASE-DATA-ARITY-MISMATCH] Data.Constr(tag=$tag, " +
+                                                          s"args.size=${args.toScalaList.size}) → branch[$tag] " +
+                                                          s"has lambda depth=$depth (>1). Likely a native-UC " +
+                                                          s"selector applied to Data. lastSourcePos=$lastSourcePos"
+                                                    )
+                                                    System.err.println(
+                                                      s"  branch[$tag] = ${cases(tag.toInt).pretty.render(200).take(800)}"
+                                                    )
                                             }
-                                          )
-                                        )
-                                        val newCtx = FrameAwaitFunValue(entriesVal, ctx)
-                                        Compute(newCtx, env, cases(1))
-                                    case Data.List(elements) =>
-                                        // List branch (index 2) receives elements as list of Data
-                                        if cases.size < 3 then
-                                            throw new CaseDataBranchError(
+                                            val argsVal = VCon(
+                                              Constant.List(
+                                                DefaultUni.Data,
+                                                args.toScalaList.map(Constant.Data.apply)
+                                              )
+                                            )
+                                            Compute(
+                                              FrameAwaitFunValue(argsVal, ctx),
+                                              env,
+                                              cases(tag.toInt)
+                                            )
+                                        else
+                                            if diagCaseOnBuiltin then
+                                                dumpCaseOnBuiltinDiag(
+                                                  "CaseIndexOutOfBounds",
+                                                  s"VCon(Data.Constr(tag=$tag)) — no branch for the constructor tag",
+                                                  cases,
+                                                  env
+                                                )
+                                            throw new CaseIndexOutOfBounds(
+                                              tag,
                                               cases.size,
                                               env,
-                                              lastSourcePos
+                                              lastSourcePos,
+                                              getSourceTrace
                                             )
-                                        val elementsVal = VCon(
-                                          Constant.List(
-                                            DefaultUni.Data,
-                                            elements.toScalaList.map(Constant.Data.apply)
-                                          )
-                                        )
-                                        val newCtx = FrameAwaitFunValue(elementsVal, ctx)
-                                        Compute(newCtx, env, cases(2))
-                                    case Data.I(integer) =>
-                                        // I branch (index 3) receives the integer value
-                                        if cases.size < 4 then
-                                            throw new CaseDataBranchError(
-                                              cases.size,
-                                              env,
-                                              lastSourcePos
-                                            )
-                                        val intVal = VCon(Constant.Integer(integer))
-                                        val newCtx = FrameAwaitFunValue(intVal, ctx)
-                                        Compute(newCtx, env, cases(3))
-                                    case Data.B(bs) =>
-                                        // B branch (index 4) receives the bytestring value
-                                        if cases.size < 5 then
-                                            throw new CaseDataBranchError(
-                                              cases.size,
-                                              env,
-                                              lastSourcePos
-                                            )
-                                        val bsVal = VCon(Constant.ByteString(bs))
-                                        val newCtx = FrameAwaitFunValue(bsVal, ctx)
-                                        Compute(newCtx, env, cases(4))
+                                    case other =>
+                                        throw new CaseDataNonConstrError(other, env, lastSourcePos)
                             case Constant.Pair(left, right) =>
                                 // Pair has exactly 1 constructor that receives both elements
                                 if cases.size != 1 then
@@ -1522,7 +1521,7 @@ class CekMachine(
                             val argsSize = args.toScalaList.size
                             // Fire when the static selector expects more bindings (4+) than
                             // the case-on-Data path will provide for a Data.Constr scrutinee
-                            // (always 2: tag + argsList). A 4-arg selector means a native-UC
+                            // (always 1: the fields list). A 4-arg selector means a native-UC
                             // ProductCase selector applied to a Data value — the corruption.
                             if maxArity >= 4 then
                                 System.err.println(

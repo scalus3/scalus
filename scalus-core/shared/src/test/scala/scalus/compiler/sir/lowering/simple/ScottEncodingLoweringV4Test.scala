@@ -8,8 +8,9 @@ import scalus.uplc.eval.PlutusVM
 
 /** Tests for ScottEncodingLowering with van Rossem hard fork features.
   *
-  * Protocol version 11 uses Case on Data instruction instead of chooseData builtin. This test class
-  * verifies that the Scott encoding lowering works correctly with protocol version >= vanRossemPV.
+  * Protocol version 11 enables case-on-builtins (not on Data - Data matching still goes through the
+  * chooseData builtin). This test class verifies that the Scott encoding lowering works correctly
+  * with protocol version >= vanRossemPV.
   */
 class ScottEncodingLoweringV4Test extends SimpleLoweringTestBase:
 
@@ -21,5 +22,5 @@ class ScottEncodingLoweringV4Test extends SimpleLoweringTestBase:
           targetProtocolVersion = MajorProtocolVersion.vanRossemPV
         ).lower()
 
-    // Provide PlutusVM for evaluation (vanRossemPV for Case on Data support)
+    // Provide PlutusVM for evaluation (vanRossemPV for case-on-builtins support)
     override given vm: PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)

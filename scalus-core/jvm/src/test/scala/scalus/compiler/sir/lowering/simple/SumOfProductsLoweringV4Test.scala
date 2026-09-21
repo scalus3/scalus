@@ -9,8 +9,8 @@ import scalus.uplc.eval.PlutusVM
 /** Tests for SumOfProductsLowering with van Rossem hard fork features.
   *
   * SumOfProducts encoding always uses Constr/Case for ADTs. This test class explicitly uses
-  * targetProtocolVersion = vanRossemPV to test Case on Data instruction for Data type matching, as
-  * opposed to the default chooseData builtin approach.
+  * targetProtocolVersion = vanRossemPV to test case-on-builtins. Data type matching goes through
+  * the chooseData builtin here too: the PV11 VM rejects a Case with a Data scrutinee.
   */
 class SumOfProductsLoweringV4Test extends SimpleLoweringTestBase:
 
@@ -22,5 +22,5 @@ class SumOfProductsLoweringV4Test extends SimpleLoweringTestBase:
           targetProtocolVersion = MajorProtocolVersion.vanRossemPV
         ).lower()
 
-    // Provide PlutusVM for evaluation (vanRossemPV for Constr/Case and Case on Data support)
+    // Provide PlutusVM for evaluation (vanRossemPV for Constr/Case and case-on-builtins support)
     override given vm: PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
