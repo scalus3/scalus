@@ -36,13 +36,13 @@ class PlutusVM(
       semanticVariant
     )
 
+    // Both gates follow the protocol version only, like Plutus `defaultCaserBuiltinFor`
+    // (PlutusCore/Evaluation/Machine/Common/Eval.hs). Casing on Data (Data.Constr only, branch
+    // selected by the constructor tag) arrives one hard fork later than the rest of
+    // case-on-builtins: van Rossem (PV11) rejects a Data scrutinee, Dijkstra (PV12) accepts it.
     private val caseOnBuiltinsEnabled: Boolean =
-        protocolVersion >= MajorProtocolVersion.vanRossemPV || language == Language.PlutusV4
+        protocolVersion >= MajorProtocolVersion.vanRossemPV
 
-    // Casing on Data (Data.Constr only, branch selected by the constructor tag) arrives one hard
-    // fork later than the rest of case-on-builtins: van Rossem (PV11) rejects a Data scrutinee.
-    // Deliberately no `|| language == PlutusV4` here: a PlutusV4 target lowers for vanRossemPV
-    // (see SirToUplcV3Lowering.newLoweringContext), so it never emits a Case on Data.
     private val caseOnDataEnabled: Boolean =
         protocolVersion >= MajorProtocolVersion.dijkstraPV
 

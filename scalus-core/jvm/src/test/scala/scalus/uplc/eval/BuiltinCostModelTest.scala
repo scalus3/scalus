@@ -6,7 +6,7 @@ import scalus.uplc.*
 import scalus.uplc.builtin.platform
 
 class BuiltinCostModelTest extends AnyFunSuite:
-    test("BuiltinSemanticsVariant follows Van Rossem protocol mapping") {
+    test("BuiltinSemanticsVariant follows the Plutus protocol version mapping") {
         assert(
           BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
             MajorProtocolVersion.plominPV,
@@ -24,6 +24,19 @@ class BuiltinCostModelTest extends AnyFunSuite:
             MajorProtocolVersion.vanRossemPV,
             Language.PlutusV2
           ) == BuiltinSemanticsVariant.D
+        )
+        // PlutusV4 exists from Dijkstra (PV12) on and is variant E there
+        assert(
+          BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
+            MajorProtocolVersion.dijkstraPV,
+            Language.PlutusV4
+          ) == BuiltinSemanticsVariant.E
+        )
+        assertThrows[IllegalArgumentException](
+          BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
+            MajorProtocolVersion.vanRossemPV,
+            Language.PlutusV4
+          )
         )
     }
 

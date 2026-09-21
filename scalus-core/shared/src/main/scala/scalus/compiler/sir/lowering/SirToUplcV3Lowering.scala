@@ -119,9 +119,9 @@ class SirToUplcV3Lowering(
     def lastLoweredValue: Option[LoweredValue] = _lastLoweredValue
 
     def newLoweringContext: LoweringContext = {
-        // Backward compat: if targetLanguage == PlutusV4, force vanRossemPV
+        // A PlutusV4 target lowers for the protocol version that introduces the language
         val effectivePV =
-            if targetLanguage == Language.PlutusV4 then MajorProtocolVersion.vanRossemPV
+            if targetLanguage == Language.PlutusV4 then Language.PlutusV4.introducedInVersion
             else targetProtocolVersion
         val retval = LoweringContext(
           decls = MutableMap.empty,

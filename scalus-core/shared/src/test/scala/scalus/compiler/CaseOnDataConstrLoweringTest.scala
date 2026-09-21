@@ -1,7 +1,7 @@
 package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.MajorProtocolVersion
+import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.cardano.onchain.plutus.prelude.{List as PList, Option as POption}
 import scalus.cardano.onchain.plutus.v1.Credential
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType}
@@ -139,6 +139,16 @@ class CaseOnDataConstrLoweringTest extends AnyFunSuite:
         given Options = options(pv12)
         val term = lower(shapeWildcardSirFun, pv12)
         assert(hasCaseOnDataShape(term, 3), s"got:\n${term.pretty.render(200)}")
+    }
+
+    test("PlutusV4 target: match on a Data-Constr sum type is a Case on the Data scrutinee") {
+        // PlutusV4 is a Dijkstra language, so a V4 target lowers for PV12 whatever the
+        // targetProtocolVersion says
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        val term = fieldsSirFun.toUplc()
+        val uplcStr = term.pretty.render(200)
+        assert(hasCaseOnDataShape(term, 2), s"Expected Case on Data in UPLC, got:\n$uplcStr")
+        assert(!uplcStr.contains("unConstrData"), s"Unexpected unConstrData in UPLC:\n$uplcStr")
     }
 
     test("PV11: match on a Data-Constr sum type goes through unConstrData") {

@@ -213,7 +213,7 @@ object Builtins {
             MajorProtocolVersion.vanRossemPV -> Batches.batch6
           ),
           Language.PlutusV4 -> SortedMap(
-            MajorProtocolVersion.vanRossemPV -> (
+            MajorProtocolVersion.dijkstraPV -> (
               Batches.batch1 ++ Batches.batch2 ++
                   Batches.batch3 ++ Batches.batch4 ++
                   Batches.batch5 ++ Batches.batch6

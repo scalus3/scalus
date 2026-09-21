@@ -23,6 +23,15 @@
   representation compiles to it, replacing `unConstrData` + `fstPair` + `sndPair` + `case` on the
   tag. The default target stays PV11.
 
+### Changed
+
+- `Language.PlutusV4` is now a Dijkstra (PV12) language, as in Plutus `ledgerLanguageIntroducedIn`:
+  `introducedInVersion`, `Builtins.findBuiltinsIntroducedIn`, `PlutusScript.isWellFormed` and
+  `BuiltinSemanticsVariant.fromProtocolAndPlutusVersion` all key it on `dijkstraPV` (the latter
+  throws for a V4 script at PV11, where it used to return variant `E`). A `targetLanguage =
+  PlutusV4` compile target now lowers for PV12, so a match on a Data-represented sum type emits
+  `case` on `Data.Constr`.
+
 ## 1.2.1 (2026-09-14)
 
 npm-only release: it relaxes the Node floor and changes no Scala code.

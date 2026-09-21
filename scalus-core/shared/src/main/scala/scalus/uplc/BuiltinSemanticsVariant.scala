@@ -28,7 +28,7 @@ object BuiltinSemanticsVariant:
                 BuiltinSemanticsVariant.E
             case (pv, Language.PlutusV3) if pv >= MajorProtocolVersion.changPV =>
                 BuiltinSemanticsVariant.C
-            case (pv, Language.PlutusV4) if pv >= MajorProtocolVersion.vanRossemPV =>
+            case (pv, Language.PlutusV4) if pv >= MajorProtocolVersion.dijkstraPV =>
                 BuiltinSemanticsVariant.E
             case _ =>
                 throw new IllegalArgumentException(

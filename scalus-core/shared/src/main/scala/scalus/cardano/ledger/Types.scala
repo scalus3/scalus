@@ -369,11 +369,9 @@ enum Language extends java.lang.Enum[Language] {
     /** Plutus V3, introduced in Conway hard fork */
     case PlutusV3
 
-    /** Plutus V4, introduced in protocol version 11.
-      * @deprecated
-      *   There is no PlutusV4 in Cardano. Use PlutusV3 with targetProtocolVersion >= vanRossemPV
-      *   instead. Note: @deprecated on enum case isn't supported in Scala 3, deprecation enforced
-      *   at usage sites.
+    /** Plutus V4, introduced in the Dijkstra hard fork (protocol version 12), which is not enacted
+      * yet. No cost model exists for it and the ledger and the transaction builder reject V4
+      * scripts, so it cannot be evaluated on-chain. Prefer PlutusV3 with a `targetProtocolVersion`.
       */
     case PlutusV4
 
@@ -399,7 +397,7 @@ object Language {
             case Language.PlutusV1 => MajorProtocolVersion.alonzoPV
             case Language.PlutusV2 => MajorProtocolVersion.vasilPV
             case Language.PlutusV3 => MajorProtocolVersion.changPV
-            case Language.PlutusV4 => MajorProtocolVersion.vanRossemPV
+            case Language.PlutusV4 => MajorProtocolVersion.dijkstraPV
         }
     }
 

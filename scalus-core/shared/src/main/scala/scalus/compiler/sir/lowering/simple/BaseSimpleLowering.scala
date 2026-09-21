@@ -32,9 +32,9 @@ abstract class BaseSimpleLowering(
     private val _targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV
 ) extends DataLowering:
 
-    // Backward compat: if targetLanguage == PlutusV4, force vanRossemPV
+    // A PlutusV4 target lowers for the protocol version that introduces the language
     protected val targetProtocolVersion: MajorProtocolVersion =
-        if targetLanguage == Language.PlutusV4 then MajorProtocolVersion.vanRossemPV
+        if targetLanguage == Language.PlutusV4 then Language.PlutusV4.introducedInVersion
         else _targetProtocolVersion
 
     protected def builtinTerms = Meaning.allBuiltins.forcedBuiltins
