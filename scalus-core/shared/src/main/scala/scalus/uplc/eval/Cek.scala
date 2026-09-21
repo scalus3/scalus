@@ -933,6 +933,11 @@ class CekMachine(
         System.getProperty("scalus.assert.apply.data.to.uc") != null
     private val assertCaseDataArity: Boolean =
         System.getProperty("scalus.assert.case.data.arity") != null
+
+    /** Largest constructor tag that can index a `Term.Case` branch list. Hoisted so the unsigned
+      * comparison in the hot dispatch path does not allocate a `Word64` per case.
+      */
+    private val maxIndexableTag = Word64(Int.MaxValue.toLong)
     // Diagnostic for the "Case index N out of bounds for M branches" /
     // "Case on bool/list/unit branch missing" classes of failure. When set,
     // dumps the cases pretty-printed, the recent source trace, and a tail
@@ -1285,7 +1290,15 @@ class CekMachine(
             case FrameCases(env, cases, ctx) =>
                 value match
                     case VConstr(tag, args) =>
-                        require(tag.value < Int.MaxValue, s"Constructor tag too large: $tag")
+                        // A tag is a Word64 held in a signed Long, so compare unsigned: 2^63
+                        // and above are negative Longs, and a signed check would let `toInt`
+                        // truncate one to a live branch index. Rejecting everything above
+                        // Int.MaxValue is safe because branches are static syntax, never
+                        // built at run time (PlutusCore Note [Constr tag type]), and no
+                        // script can carry 2^31 of them. Plutus does the same at its own Int
+                        // width (Cek/Internal.hs: `i > maxBound::Int` before indexing).
+                        if tag.compareUnsigned(maxIndexableTag) > 0 then
+                            throw new MissingCaseBranch(tag, env, lastSourcePos)
                         val index = tag.value.toInt
                         if index < cases.size then
                             // Session-18 diagnostic (gated by -Dscalus.assert.apply.data.to.uc=1):

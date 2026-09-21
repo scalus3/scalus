@@ -188,6 +188,64 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
         assert(evalV4(term) == Const(Constant.Integer(42)))
     }
 
+    test("V4: Case on Constr with an out-of-range tag throws MissingCaseBranch") {
+        val term = Case(
+          Constr(Word64(2), Nil),
+          List(Const(Constant.String("zero")), Const(Constant.String("one")))
+        )
+        assertThrows[MissingCaseBranch](evalV4(term))
+    }
+
+    // A constructor tag is an unsigned 64-bit value stored in a signed Long, so every tag from
+    // 2^63 up is a negative Long. A signed range check lets those through and `toInt` then
+    // truncates to an arbitrary — usually in-range — branch index, silently running the wrong
+    // branch. Upstream answers MissingCaseBranch for any tag > maxBound::Int
+    // (`Cek/Internal.hs`). These pin the unsigned comparison.
+    test("V4: Case on Constr with a tag >= 2^63 throws MissingCaseBranch, not a wrong branch") {
+        def caseOn(tag: Word64): Term = Case(
+          Constr(tag, Nil),
+          List(Const(Constant.Integer(100)), Const(Constant.Integer(200)))
+        )
+        // 2^63: truncates to Int 0, which would have selected branch 0
+        val twoPow63 = Word64(Long.MinValue)
+        assert(twoPow63.toUnsignedString == "9223372036854775808")
+        assertThrows[MissingCaseBranch](evalV4(caseOn(twoPow63)))
+        // 2^63 + 1: truncates to Int 1, which would have selected branch 1
+        val twoPow63Plus1 = Word64(Long.MinValue + 1)
+        assert(twoPow63Plus1.toUnsignedString == "9223372036854775809")
+        assertThrows[MissingCaseBranch](evalV4(caseOn(twoPow63Plus1)))
+        // 2^64 - 1
+        assertThrows[MissingCaseBranch](evalV4(caseOn(Word64(-1L))))
+    }
+
+    test("V4: Case on Constr with a tag above Int range fails as a MachineError") {
+        // 2^32 + 1 truncates to Int 1. This used to fail a `require`, throwing
+        // IllegalArgumentException out of the machine instead of a MachineError.
+        val term = Case(
+          Constr(Word64(4294967297L), Nil),
+          List(Const(Constant.Integer(100)), Const(Constant.Integer(200)))
+        )
+        assertThrows[MissingCaseBranch](evalV4(term))
+    }
+
+    test("Constr tags >= 2^63 are legal UPLC: print unsigned, parse back, flat round-trip") {
+        // Any Word64 is a legal tag: UntypedPlutusCore/Parser.hs `constrTerm` rejects only
+        // values above maxBound :: Word64, and Note [Constr tag type] chose Word64 precisely
+        // to rule out negative tags. The printer used to write `tag.value`, a negative
+        // number, which no parser accepts.
+        val tag = Word64(Long.MinValue + 1) // 2^63 + 1
+        val term = Constr(tag, Nil)
+        val rendered = term.pretty.render(80)
+        assert(rendered == "(constr 9223372036854775809)", rendered)
+        UplcParser().parseTerm(rendered) match
+            case Right(Constr(parsedTag, Nil, _)) => assert(parsedTag == tag)
+            case other => fail(s"did not parse back to the same constr: $other")
+        val program = Program((1, 1, 0), term)
+        Program.fromFlatEncoded(program.flatEncoded).term match
+            case Constr(decodedTag, Nil, _) => assert(decodedTag == tag)
+            case other                      => fail(s"flat round-trip lost the tag: $other")
+    }
+
     // Large case tables - Fibonacci lookup with 1000+ branches
 
     test("V4: Case on integer with 1000+ branches - Fibonacci lookup table") {

@@ -61,6 +61,12 @@ case class Word64(value: Long) {
       */
     def toUnsignedString: String = java.lang.Long.toUnsignedString(value)
 
+    /** Renders the unsigned value, so a tag from 2^63 up never prints as a negative number. The
+      * case-class default showed the signed `Long`, which is wrong for a Word64 and leaked into
+      * `Term.show`, `Result.toString` and the CEK diagnostics.
+      */
+    override def toString: String = toUnsignedString
+
     /** Returns the hexadecimal string representation of this unsigned 64-bit value.
       *
       * @return

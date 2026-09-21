@@ -731,7 +731,9 @@ private[scalus] object TermPrinter {
                 val openP = rainbowChar('(', depth, style)
                 val closeP = rainbowChar(')', depth, style)
                 val argDocs = args.map(prettyTermWithDepth(_, style, depth + 1, decorate))
-                val body = kw("constr", style) & str(tag.value)
+                // The Word64, not `tag.value`: the latter is the signed Long and printed a
+                // negative tag for 2^63 and above, which no parser accepts.
+                val body = kw("constr", style) & str(tag)
                 if argDocs.isEmpty then openP + body + closeP
                 else
                     ((openP + body & intercalate(lineOrSpace, argDocs))
