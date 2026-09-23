@@ -1,5 +1,6 @@
 package scalus.cardano.ledger
 
+import io.bullet.borer.Cbor
 import org.openjdk.jmh.annotations.*
 import scalus.bloxbean.ResourcesUtxoResolver
 import scalus.uplc.builtin.Data
@@ -43,6 +44,11 @@ import scala.util.Try
   *   - `evaluateBlock`: Evaluates all transactions with redeemers in the selected block
   *   - `evaluateSingleTransaction`: Evaluates only the first transaction for detailed per-tx
   *     metrics
+  *   - `evaluateBlockFromCbor`, `evaluateSingleTransactionFromCbor`: the same, but each call first
+  *     decodes the transaction and its UTxO map from CBOR, as the JavaScript `evalPlutusScripts`
+  *     and an emulator or wallet do. The two methods above reuse the decoded `Transaction`, so
+  *     after the first iteration every script is already decoded and cached on it, and they never
+  *     measure script decoding.
   *
   * @param blockNumber
   *   The Cardano mainnet block number to benchmark (11553070, 11544748, or 11544518)
@@ -57,8 +63,14 @@ class PlutusScriptEvaluatorBenchmark {
     private var transactions: Seq[(Transaction, Map[TransactionInput, TransactionOutput])] =
         Seq.empty
 
-    // Create evaluator once with mainnet parameters since it doesn't change
-    private val evaluator = PlutusScriptEvaluator(CardanoInfo.mainnet, EvaluatorMode.Validate)
+    /** The same transactions and UTxO maps, as CBOR. */
+    private var encodedTransactions: Seq[(Array[Byte], Array[Byte])] = Seq.empty
+
+    // Create evaluator once with mainnet parameters since it doesn't change. It computes each
+    // script's cost rather than validating the declared ExUnits: the blocks predate the current
+    // mainnet cost models, under which some of their scripts exceed the budget they declared.
+    private val evaluator =
+        PlutusScriptEvaluator(CardanoInfo.mainnet, EvaluatorMode.EvaluateAndComputeCost)
 
     private val utxoResolver = new ResourcesUtxoResolver()
 
@@ -79,6 +91,15 @@ class PlutusScriptEvaluatorBenchmark {
             throw new IllegalStateException(
               s"No transactions with fully resolvable UTxOs found in block $blockNumber"
             )
+        encodedTransactions = transactions.map { (tx, utxos) =>
+            (tx.toCbor, Cbor.encode(utxos).toByteArray)
+        }
+    }
+
+    private def evaluateFromCbor(txCbor: Array[Byte], utxoCbor: Array[Byte]): Int = {
+        val tx = Transaction.fromCbor(txCbor)
+        val utxos = Cbor.decode(utxoCbor).to[Map[TransactionInput, TransactionOutput]].value
+        evaluator.evalPlutusScripts(tx, utxos).size
     }
 
     @Benchmark
@@ -100,5 +121,23 @@ class PlutusScriptEvaluatorBenchmark {
         val (tx, utxos) = transactions.head
         val redeemers = evaluator.evalPlutusScripts(tx, utxos)
         redeemers.size
+    }
+
+    @Benchmark
+    @BenchmarkMode(Array(Mode.AverageTime))
+    @OutputTimeUnit(TimeUnit.MILLISECONDS)
+    def evaluateBlockFromCbor(): Int = {
+        var totalRedeemers = 0
+        for (txCbor, utxoCbor) <- encodedTransactions do
+            totalRedeemers += evaluateFromCbor(txCbor, utxoCbor)
+        totalRedeemers
+    }
+
+    @Benchmark
+    @BenchmarkMode(Array(Mode.AverageTime))
+    @OutputTimeUnit(TimeUnit.MILLISECONDS)
+    def evaluateSingleTransactionFromCbor(): Int = {
+        val (txCbor, utxoCbor) = encodedTransactions.head
+        evaluateFromCbor(txCbor, utxoCbor)
     }
 }
