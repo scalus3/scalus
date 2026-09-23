@@ -449,6 +449,10 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq(
+        // ProfilingData gained `traces` (spec [TB-2]): constructor, apply and copy changed arity.
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.this"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.copy"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.apply"),
         // Inliner's private occurrence analysis now stores the exact count in Many. Scala emits
         // these enum helpers as public bytecode, but none belongs to the accessible Scala API.
         ProblemFilters.exclude[IncompatibleResultTypeProblem](

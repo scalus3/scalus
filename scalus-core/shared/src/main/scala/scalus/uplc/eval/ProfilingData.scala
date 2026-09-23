@@ -38,6 +38,16 @@ case class SourceTransition(
     count: Long
 )
 
+/** One `trace` call and the budget spent when the machine reached it.
+  *
+  * @param message
+  *   The traced text, exactly as [[Result.logs]] carries it
+  * @param budget
+  *   Everything spent from the start of the evaluation up to this trace. Cumulative, not the cost
+  *   of the trace itself: the cost between two traces is the difference of their budgets.
+  */
+case class TraceProfile(message: String, budget: ExUnits)
+
 /** Aggregated profiling data from a CEK evaluation.
   *
   * @param bySourceLocation
@@ -58,6 +68,9 @@ case class SourceTransition(
   * @param entryTrace
   *   The first distinct source locations executed, in order. Used to root the hot-path tree at the
   *   first contract location (the literal first step is often a framework/fallback location).
+  * @param traces
+  *   Every trace the script emitted, in order, each with the budget spent when it was emitted.
+  *   Empty when the script traced nothing.
   */
 case class ProfilingData(
     bySourceLocation: Seq[SourceLocationProfile],
@@ -66,7 +79,8 @@ case class ProfilingData(
     transitions: Seq[SourceTransition],
     totalBudget: ExUnits,
     prices: Option[ExUnitPrices] = None,
-    entryTrace: Seq[(String, Int)] = Nil
+    entryTrace: Seq[(String, Int)] = Nil,
+    traces: Seq[TraceProfile] = Nil
 ) {
 
     /** Attach execution-unit prices so the formatters emit a derived per-entry fee (lovelace). */

@@ -413,7 +413,7 @@ enum Term:
               result,
               spenderLogger.getSpentBudget,
               spenderLogger.costs.toMap,
-              spenderLogger.getLogsWithBudget
+              spenderLogger.getLogs.toSeq
             )
         catch
             case e: Exception =>
@@ -421,7 +421,7 @@ enum Term:
                   e,
                   spenderLogger.getSpentBudget,
                   spenderLogger.costs.toMap,
-                  spenderLogger.getLogsWithBudget
+                  spenderLogger.getLogs.toSeq
                 )
 
     /** Evaluate the term with profiling enabled.

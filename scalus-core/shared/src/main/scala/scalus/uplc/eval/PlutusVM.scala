@@ -179,8 +179,8 @@ class PlutusVM(
               term,
               spenderLogger.getSpentBudget,
               spenderLogger.costs.toMap,
-              spenderLogger.getLogsWithBudget,
-              profile = cek.getProfile
+              spenderLogger.getLogs.toSeq,
+              profile = cek.getProfile.map(_.copy(traces = spenderLogger.traces))
             )
         catch
             // Every exception becomes a failed result: the machine's own errors are script
@@ -191,8 +191,8 @@ class PlutusVM(
                   e,
                   spenderLogger.getSpentBudget,
                   spenderLogger.costs.toMap,
-                  spenderLogger.getLogsWithBudget,
-                  profile = cek.getProfile
+                  spenderLogger.getLogs.toSeq,
+                  profile = cek.getProfile.map(_.copy(traces = spenderLogger.traces))
                 )
     }
 

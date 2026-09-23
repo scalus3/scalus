@@ -796,6 +796,11 @@ final class TallyingBudgetSpenderLogger(val budgetSpender: BudgetSpender)
     private val _logs: ArrayBuffer[(String, ExUnits)] = ArrayBuffer.empty
     val logs: collection.IndexedSeq[(String, ExUnits)] = _logs
     def getLogs: Array[String] = _logs.map(_._1).toArray
+
+    /** Every trace with the budget spent when it was emitted, in order. */
+    def traces: Seq[TraceProfile] = _logs.map((msg, budget) => TraceProfile(msg, budget)).toSeq
+
+    @deprecated("use traces for the budgets, or getLogs for the bare text", "1.2.0")
     def getLogsWithBudget: Seq[String] =
         _logs.map((log, budget) => s"$log: ${budget.showJson}").toSeq
     def log(msg: String): Unit = _logs.append((msg, getSpentBudget))

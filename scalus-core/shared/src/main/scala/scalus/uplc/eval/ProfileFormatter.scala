@@ -457,6 +457,20 @@ object ProfileFormatter {
               )
               .mkString(",")
         )
+        sb.append("],\n")
+        sb.append("  \"traces\": [")
+        sb.append(
+          data.traces
+              .map(t =>
+                  s"""{"message":"${jsonEsc(
+                        t.message
+                      )}","mem":${t.budget.memory},"cpu":${t.budget.steps}${feeJson(
+                        t.budget.memory,
+                        t.budget.steps
+                      )}}"""
+              )
+              .mkString(",")
+        )
         sb.append("]\n}\n")
         sb.toString
     }

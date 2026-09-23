@@ -115,6 +115,21 @@ class ProfileFormatterTest extends AnyFunSuite {
         assert(json.contains("\"byFunction\""))
         assert(json.contains("\"transitions\""))
         assert(json.contains("\"fromLine\":3"))
+        assert(json.contains("\"traces\""))
+    }
+
+    test("toJson renders each trace with its cumulative budget and the conditional fee") {
+        // spec [TB-6]
+        val traced = data.copy(traces = Seq(TraceProfile("hi", ExUnits(100, 200))))
+        assert(ProfileFormatter.toJson(traced).contains("""{"message":"hi","mem":100,"cpu":200}"""))
+        val priced = traced.withPrices(
+          ExUnitPrices(NonNegativeInterval(577, 10000), NonNegativeInterval(721, 10000000))
+        )
+        assert(
+          ProfileFormatter
+              .toJson(priced)
+              .contains("""{"message":"hi","mem":100,"cpu":200,"fee":6}""")
+        )
     }
 
     test("toJson carries the profile.json schema version") {
