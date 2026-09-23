@@ -63,7 +63,7 @@ trait JsPlainValue extends js.Object {
 @JSExportTopLevel("Value")
 class JsValue(lovelace: js.BigInt) extends js.Object {
 
-    private var value: Value = Value(Coin(BigInt(lovelace.toString).toLong))
+    private var value: Value = Value(Coin(longOf(lovelace, "lovelace")))
 
     /** Lovelace plus native assets. Arity tells this apart from the lovelace-only constructor. */
     def this(lovelace: js.BigInt, assets: js.Array[JsAsset]) = {
@@ -147,7 +147,7 @@ object JsValue {
             acc + MultiAsset.asset(
               ScriptHash.fromHex(a.policyId),
               AssetName(ByteString.fromHex(a.assetName)),
-              BigInt(a.quantity.toString).toLong
+              longOf(a.quantity, "quantity")
             )
         }
 }

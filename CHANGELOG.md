@@ -14,6 +14,10 @@
   scrutinized, the branch is selected by the constructor tag and receives the fields list. The
   former five-branch form (one branch per `Data` variant) never existed in Plutus.
   `CaseDataBranchError` is deprecated; see `CaseDataNonConstrError` and `CaseIndexOutOfBounds`.
+- In JavaScript, a `bigint` input past 64 bits (a `Value`'s lovelace, an asset quantity, the
+  emulator's `minLovelace`, deposits and rewards) is a `TypeError` instead of silently wrapping to
+  a different number, and a `number` passed where a `bigint` is declared is read when it is a safe
+  integer.
 
 ### Added
 

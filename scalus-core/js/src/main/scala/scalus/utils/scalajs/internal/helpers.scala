@@ -46,12 +46,42 @@ private[scalus] object JsCbor {
 
 // ---- Numbers ----
 //
-// Conversions between Scala integers and JavaScript `bigint`.
+// Conversions between Scala integers and JavaScript `number`/`bigint`, and reading integers a
+// JavaScript caller passed in.
 //
 // Scala.js has no direct conversion between `Long` and `js.BigInt`: `js.BigInt` is built from a
 // `Double`, which is exact only up to 2^53, or from a `String`. The decimal string is the exact
-// route, so the conversion goes through it here and nowhere else.
+// route, so both directions go through it here and nowhere else.
+//
+// The readers take `js.Any` because the shipped bundle does not check `asInstanceOf`: a field
+// declared `bigint` may hold a `number`, a string or a fraction, and each must fail with a
+// `TypeError` rather than become a wrong value.
 
 extension (n: Long) private[scalus] def toJsBigInt: js.BigInt = js.BigInt(n.toString)
 
 extension (n: BigInt) private[scalus] def toJsBigInt: js.BigInt = js.BigInt(n.toString)
+
+/** A `number` that is a safe integer, or a `bigint` that fits 64 bits. */
+private[scalus] def longOf(value: js.Any, name: String): Long =
+    if js.typeOf(value) == "bigint" then
+        value.toString.toLongOption.getOrElse(typeError(s"$name must fit in 64 bits"))
+    else safeInteger(value, name).toLong
+
+/** A safe integer that fits `Int`: `.toInt` on a `Double` saturates rather than failing. */
+private[scalus] def intOf(value: js.Any, name: String): Int = {
+    val safe = safeInteger(value, name)
+    if !safe.isValidInt then typeError(s"$name must be an integer up to ${Int.MaxValue}")
+    safe.toInt
+}
+
+/** A `number` that is an integer JavaScript represents exactly. */
+private[scalus] def safeInteger(value: js.Any, name: String): Double = {
+    if !js.Dynamic.global.Number.isSafeInteger(value).asInstanceOf[Boolean] then
+        typeError(s"$name must be a safe integer")
+    value.asInstanceOf[Double]
+}
+
+// ---- Errors ----
+
+private[scalus] def typeError(message: String): Nothing =
+    throw js.JavaScriptException(new js.TypeError(message))

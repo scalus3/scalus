@@ -398,7 +398,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
 
         val withSource: UtxoQuery = UtxoQuery(source)
         val withMinLovelace: UtxoQuery = filter.minLovelace.toOption
-            .map(min => withSource && UtxoFilter.MinLovelace(Coin(BigInt(min.toString).toLong)))
+            .map(min => withSource && UtxoFilter.MinLovelace(Coin(longOf(min, "minLovelace"))))
             .getOrElse(withSource)
 
         // Applied last, after every source and filter above - not before.
@@ -900,7 +900,7 @@ object JEmulator {
         regs.toOption.toSeq.flatten.map { s =>
             EmulatorStakeRegistration(
               credential = parseCredential(s.credentialType, s.credentialHash),
-              rewards = Coin(s.rewards.toString.toLong),
+              rewards = Coin(longOf(s.rewards, "stakeRegistrations.rewards")),
               delegatedTo = s.delegatedTo.toOption.map { hex =>
                   PoolKeyHash.fromHex(hex)
               }
@@ -926,7 +926,7 @@ object JEmulator {
         regs.toOption.toSeq.flatten.map { d =>
             EmulatorDRepRegistration(
               credential = parseCredential(d.credentialType, d.credentialHash),
-              deposit = Coin(d.deposit.toString.toLong),
+              deposit = Coin(longOf(d.deposit, "drepRegistrations.deposit")),
               anchor = d.anchor.toOption.map(JsCbor.decode[Anchor])
             )
         }
@@ -1043,7 +1043,7 @@ object JEmulator {
     ): JEmulator = {
         val addresses = addressesBech32.toSeq.map(Address.fromString)
         val value = scalus.cardano.ledger.Value(
-          scalus.cardano.ledger.Coin(lovelacePerAddress.toString().toLong)
+          scalus.cardano.ledger.Coin(longOf(lovelacePerAddress, "lovelacePerAddress"))
         )
         val utxos = EmulatorBase.createInitialUtxos(addresses, value)
         new JEmulator(
