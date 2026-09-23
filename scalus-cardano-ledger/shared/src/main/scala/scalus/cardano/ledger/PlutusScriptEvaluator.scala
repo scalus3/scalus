@@ -20,20 +20,97 @@ enum EvaluatorMode extends Enum[EvaluatorMode] {
     case EvaluateAndComputeCost, Validate
 }
 
+/** Plutus script evaluation exception during phase-2 validation of a transaction.
+  *
+  * Thrown by [[PlutusScriptEvaluator]] when the script of `redeemer` fails: it evaluates `error`,
+  * exhausts its budget, gets an error from a builtin, or (Plutus V3) returns something other than
+  * unit. `getCause` says which. A cause that is not a [[scalus.uplc.eval.MachineError]] is a defect
+  * in Scalus, not a problem with the script.
+  *
+  * {{{
+  * Spend[0] failed: Error term evaluated
+  * script: 5a4b…e1
+  * spent budget: { mem: 12031, steps: 4830112 }
+  * logs:
+  * checking signatures
+  * }}}
+  *
+  * To run the failing script again on its own:
+  * {{{
+  * given PlutusVM = PlutusVM.makePlutusV3VM()
+  * e.args.foldLeft(e.script.get.deBruijnedProgram)(_.applyArg(_)).evaluateDebug
+  * }}}
+  *
+  * `redeemer` and `script` are `None`, and `args` is empty, only for an exception built through the
+  * pre-1.3 constructor.
+  */
 class PlutusScriptEvaluationException(
     message: String,
     cause: Throwable,
     val logs: Array[String],
     val failedScriptHash: ScriptHash,
     val spentBudget: ExUnits,
-    val failedSourcePosition: Option[ScalusSourcePos] = None
+    val failedSourcePosition: Option[ScalusSourcePos],
+    /** The redeemer whose script failed. */
+    val redeemer: Option[Redeemer],
+    /** The script that failed, exactly as the transaction or the UTxO set carried it. */
+    val script: Option[PlutusScript],
+    /** The `Data` arguments the evaluator applied, in application order. */
+    val args: Seq[Data]
 ) extends RuntimeException(
-      s"$message" +
-          failedSourcePosition.fold("")(pos => s"\nat ${pos.show}") +
-          s"\nspent budget: ${spentBudget.showJson}" +
-          s"\nlogs: ${logs.mkString("\n")}",
+      PlutusScriptEvaluationException.render(
+        message,
+        failedScriptHash,
+        spentBudget,
+        failedSourcePosition,
+        logs,
+        redeemer
+      ),
       cause
+    ) {
+
+    /** The constructor of releases before 1.3: no redeemer, no script, no arguments. */
+    def this(
+        message: String,
+        cause: Throwable,
+        logs: Array[String],
+        failedScriptHash: ScriptHash,
+        spentBudget: ExUnits,
+        failedSourcePosition: Option[ScalusSourcePos] = None
+    ) = this(
+      message,
+      cause,
+      logs,
+      failedScriptHash,
+      spentBudget,
+      failedSourcePosition,
+      None,
+      None,
+      Nil
     )
+}
+
+object PlutusScriptEvaluationException {
+
+    /** The message, one fact per line: `<tag>[<index>] failed: <machine message>`, the script hash,
+      * the source position when known, the units spent, then the traces.
+      */
+    private[ledger] def render(
+        message: String,
+        failedScriptHash: ScriptHash,
+        spentBudget: ExUnits,
+        failedSourcePosition: Option[ScalusSourcePos],
+        logs: Array[String],
+        redeemer: Option[Redeemer]
+    ): String = {
+        val head = redeemer.fold(message)(r => s"${r.tag}[${r.index}] failed: $message")
+        val position =
+            failedSourcePosition.filterNot(_.isEmpty).fold("")(pos => s"\nat ${pos.show}")
+        val traces = if logs.isEmpty then "" else logs.mkString("\nlogs:\n", "\n", "")
+        s"$head\nscript: ${failedScriptHash.toHex}$position" +
+            s"\nspent budget: { mem: ${spentBudget.memory}, steps: ${spentBudget.steps} }$traces"
+    }
+}
 
 /** Evaluates Plutus V1, V2 or V3 scripts using the provided transaction and UTxO set.
   *
@@ -737,8 +814,11 @@ object PlutusScriptEvaluator {
                           e,
                           finalLogs,
                           hash,
-                          spentBudget = spender.getSpentBudget,
-                          failedSourcePosition = Some(e.sourcePos)
+                          spender.getSpentBudget,
+                          Some(e.sourcePos),
+                          Some(redeemer),
+                          Some(plutusScript),
+                          args
                         )
                     case NonFatal(e) =>
                         val logs = logger.getLogs
@@ -750,7 +830,11 @@ object PlutusScriptEvaluator {
                           e,
                           finalLogs,
                           hash,
-                          spentBudget = spender.getSpentBudget
+                          spender.getSpentBudget,
+                          None,
+                          Some(redeemer),
+                          Some(plutusScript),
+                          args
                         )
             // Profiling is auxiliary output: it runs after the evaluation try so that a failure to
             // render the profile or write its files (read-only or deleted output dir, full disk)
