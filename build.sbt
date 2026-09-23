@@ -463,6 +463,15 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.uplc.transform.Inliner#OccurrenceInfo.guard"
         ),
+        // `PlutusScript` caches the program it decodes straight from CBOR in a new private field;
+        // Scala emits its accessors as abstract trait methods. The trait is sealed, so no class
+        // outside this artifact implements it and none can miss the accessors.
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.ledger.PlutusScript.scalus$cardano$ledger$PlutusScript$$_cachedDeBruijned"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.ledger.PlutusScript.scalus$cardano$ledger$PlutusScript$$_cachedDeBruijned_="
+        ),
         // Compiler-internal packages: no supported external implementors or instantiators;
         // excluded from the binary-compat promise (README: "compiler internals carry no
         // compatibility promise"; interop style guide: SIR compiler out of scope). Everything

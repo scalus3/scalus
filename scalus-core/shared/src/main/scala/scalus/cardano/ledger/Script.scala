@@ -35,8 +35,25 @@ sealed trait PlutusScript extends Script {
             deserialized
     }
 
-    /** Get the De Bruijn-indexed program, preserving source annotations when available. */
-    def deBruijnedProgram: DeBruijnedProgram = program.deBruijnedProgram
+    /** Program decoded straight from [[script]], for scripts built without an in-memory Program. */
+    @transient @volatile private var _cachedDeBruijned: DeBruijnedProgram | Null = null
+
+    /** Get the De Bruijn-indexed program, preserving source annotations when available.
+      *
+      * A script decoded from CBOR has no annotations to preserve, so it is decoded straight to the
+      * De Bruijn form the evaluator runs, without a round trip through named variables.
+      */
+    def deBruijnedProgram: DeBruijnedProgram = {
+        val p = _cachedProgram
+        if p != null then p.deBruijnedProgram
+        else
+            val d = _cachedDeBruijned
+            if d != null then d
+            else
+                val decoded = DeBruijnedProgram.fromCbor(script.bytes)
+                _cachedDeBruijned = decoded
+                decoded
+    }
 
     def toHex: String = script.toHex
 
