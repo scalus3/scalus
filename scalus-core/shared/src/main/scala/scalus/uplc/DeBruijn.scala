@@ -1,6 +1,8 @@
 package scalus.uplc
 import Term.*
 
+import scala.collection.mutable
+
 object DeBruijn:
     def deBruijnProgram(p: Program): DeBruijnedProgram =
         val term = DeBruijn.deBruijnTerm(p.term)
@@ -22,53 +24,68 @@ object DeBruijn:
 
     def deBruijnTerm(term: Term, throwOnFreeVariable: Boolean): Term =
         var unique = 0
+        // Level (count of enclosing binders, from 1) of the innermost binder of each name in scope,
+        // so a variable resolves in O(1) rather than by searching the enclosing binders.
+        val levels = mutable.HashMap.empty[String, Int]
 
-        def process(term: Term, env: List[String]): Term =
+        def process(term: Term, level: Int): Term =
             term match
                 case Var(name, ann) =>
-                    val idx = env.indexOf(name.name)
-                    if idx == -1 then
+                    val binderLevel = levels.getOrElse(name.name, 0)
+                    if binderLevel == 0 then
                         if throwOnFreeVariable then
+                            val inScope = levels.toSeq.sortBy(-_._2).map(_._1) // innermost first
                             throw new IllegalArgumentException(
-                              s"Unresolved variable '${name.name}' in De Bruijn conversion. Available variables in scope: [${env.mkString(", ")}]"
+                              s"Unresolved variable '${name.name}' in De Bruijn conversion. Available variables in scope: [${inScope.mkString(", ")}]"
                             )
                         else
                             unique -= 1
                             Var(name.copy(index = unique), ann) // free variable
-                    else Var(name.copy(index = idx + 1), ann) // 1-based index
-                case LamAbs(name, term, ann) => LamAbs(name, process(term, name :: env), ann)
-                case Apply(f, arg, ann)      => Apply(process(f, env), process(arg, env), ann)
-                case Force(term, ann)        => Force(process(term, env), ann)
-                case Delay(term, ann)        => Delay(process(term, env), ann)
-                case Constr(tag, args, ann)  => Constr(tag, args.map(process(_, env)), ann)
+                    else Var(name.copy(index = level - binderLevel + 1), ann) // 1-based index
+                case LamAbs(name, body, ann) =>
+                    val shadowed = levels.getOrElse(name, 0)
+                    levels(name) = level + 1
+                    val processed = process(body, level + 1)
+                    if shadowed == 0 then levels.remove(name) else levels(name) = shadowed
+                    LamAbs(name, processed, ann)
+                case Apply(f, arg, ann) =>
+                    Apply(process(f, level), process(arg, level), ann)
+                case Force(term, ann)       => Force(process(term, level), ann)
+                case Delay(term, ann)       => Delay(process(term, level), ann)
+                case Constr(tag, args, ann) => Constr(tag, args.map(process(_, level)), ann)
                 case Case(arg, cases, ann) =>
-                    Case(process(arg, env), cases.map(process(_, env)), ann)
+                    Case(process(arg, level), cases.map(process(_, level)), ann)
                 case _: Const   => term
                 case _: Builtin => term
                 case _: Error   => term
 
-        process(term, Nil)
+        process(term, 0)
 
     def fromDeBruijnTerm(term: Term): Term =
         var idx = 0
-        def go(term: Term, env: List[String]): Term = term match
+        // Binder names in scope, innermost on top: De Bruijn index i names binders(i - 1).
+        val binders = new mutable.Stack[String](64)
+
+        def go(term: Term): Term = term match
             case Var(name, ann) =>
-                val binderName =
-                    if name.index < 0 then name.name else env(name.index - 1) // 1-based index
-                Var(name.copy(name = binderName), ann)
+                if name.index < 0 then term // free variable keeps its name
+                else Var(name.copy(name = binders(name.index - 1)), ann) // 1-based index
             case LamAbs(_, term, ann) =>
-                val binderName = s"i$idx"
+                val binderName = "i" + idx
                 idx += 1
-                LamAbs(binderName, go(term, binderName :: env), ann)
-            case Apply(f, arg, ann) => Apply(go(f, env), go(arg, env), ann)
-            case Force(term, ann)   => Force(go(term, env), ann)
-            case Delay(term, ann)   => Delay(go(term, env), ann)
+                binders.push(binderName)
+                val body = go(term)
+                binders.pop()
+                LamAbs(binderName, body, ann)
+            case Apply(f, arg, ann) => Apply(go(f), go(arg), ann)
+            case Force(term, ann)   => Force(go(term), ann)
+            case Delay(term, ann)   => Delay(go(term), ann)
             case Constr(tag, args, ann) =>
-                Constr(tag, args.map(go(_, env)), ann)
+                Constr(tag, args.map(go), ann)
             case Case(arg, cases, ann) =>
-                Case(go(arg, env), cases.map(go(_, env)), ann)
+                Case(go(arg), cases.map(go), ann)
             case _: Const   => term
             case _: Builtin => term
             case _: Error   => term
 
-        go(term, Nil)
+        go(term)
