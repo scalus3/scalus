@@ -21,7 +21,26 @@ trait Flat[A]:
       * buffer, so it must never under-estimate.
       */
     def bitSize(a: A): Int
+
+    /** Writes `a` into `encode`.
+      *
+      * The buffer does not grow, so it must already have room for [[bitSize]] bits. Failing that is
+      * a defect in this instance rather than a problem with `a`: an under-estimating `bitSize`
+      * overruns the buffer with an `ArrayIndexOutOfBoundsException`, and a negative size is
+      * rejected by [[EncoderState]] with an `IllegalArgumentException`. Use
+      * [[FlatCodec.encode[A](value:A)*]] to get the sizing right.
+      */
     def encode(a: A, encode: EncoderState): Unit
+
+    /** Reads an `A`, advancing `decode` past the bits it consumed.
+      *
+      * Decoding stops as soon as it has an `A`; it does not check for trailing input, so a caller
+      * that requires the whole buffer to be consumed must check that itself.
+      *
+      * @throws FlatDecodingError
+      *   if the input is truncated or is not a valid encoding of `A`. Bytes from an untrusted
+      *   source are expected to fail this way; any other exception is a defect.
+      */
     def decode(decode: DecoderState): A
 
 given Flat[Unit] with
@@ -38,6 +57,20 @@ given Flat[Boolean] with
             case 1 => true
 
 type Uint8Array = Array[Byte]
+
+/** The input is not a valid Flat encoding of the expected type: truncated, or carrying a tag the
+  * format does not define.
+  *
+  * Decoding is the one part of this API that takes untrusted input, so this is part of its
+  * contract. Catch it to tell "these bytes are not a program" from "Scalus has a bug" - any other
+  * exception out of [[Flat.decode]] means the latter. It is thrown by [[DecoderState]] when the
+  * buffer runs out and by the individual decoders when they meet an undefined tag.
+  *
+  * Not sealed on purpose: a caller may want to distinguish a truncated buffer from an invalid tag,
+  * and a decoder for its own format may want a more specific subtype.
+  */
+class FlatDecodingError(message: String, cause: Throwable) extends RuntimeException(message, cause):
+    def this(message: String) = this(message, null)
 
 /** Prealigned Arrays of bytes PreAligned a ≡ PreAligned {preFiller :: Filler, preValue :: a}
   *
@@ -68,24 +101,29 @@ class ArrayByteFlat extends Flat[Array[Byte]]:
     def decode(decode: DecoderState): Array[Byte] =
         decode.filler()
         val size =
-            var numElems = decode.buffer(decode.currPtr) & 0xff
-            var decoderOffset = numElems + 1
-            var size = numElems
-            // calculate size
-            while numElems == 255 do
-                numElems = decode.buffer(decode.currPtr + decoderOffset) & 0xff
-                size += numElems
-                decoderOffset += numElems + 1
-            size
+            var offset = decode.currPtr
+            var total = 0
+            var numElems = -1
+            while numElems != 0 do
+                decode.ensureByteRange(offset, 1)
+                numElems = decode.buffer(offset) & 0xff
+                offset += 1
+                decode.ensureByteRange(offset, numElems)
+                total = Math.addExact(total, numElems)
+                offset += numElems
+            total
 
         val result = new Array[Byte](size)
+        decode.ensureByteRange(decode.currPtr, 1)
         var numElems = decode.buffer(decode.currPtr) & 0xff
         decode.currPtr += 1
         var resultOffset = 0
         while numElems > 0 do
+            decode.ensureByteRange(decode.currPtr, numElems)
             Array.copy(decode.buffer, decode.currPtr, result, resultOffset, numElems)
             decode.currPtr += numElems
             resultOffset += numElems
+            decode.ensureByteRange(decode.currPtr, 1)
             numElems = decode.buffer(decode.currPtr) & 0xff
             decode.currPtr += 1
         result
@@ -299,8 +337,15 @@ private def byteArraySize(arr: Uint8Array): Int =
 /** Mutable bit-level output buffer for flat encoding. Bits are accumulated into `currentByte`
   * (most-significant first) and flushed to `buffer` one byte at a time. The caller must pre-size
   * `bufferSize` from `Flat.bitSize` — the buffer does not grow.
+  *
+  * @throws IllegalArgumentException
+  *   if `bufferSize` is negative. A buffer that is merely too small is not detected here: the
+  *   overrun surfaces as an `ArrayIndexOutOfBoundsException` while encoding, which means the `Flat`
+  *   instance's `bitSize` under-estimates.
   */
 class EncoderState(bufferSize: Int):
+    require(bufferSize >= 0, s"EncoderState: bufferSize must be non-negative, got $bufferSize")
+
     val buffer: Array[Byte] = new Array(bufferSize)
     var nextPtr: Int = 0
     var usedBits: Int = 0
@@ -405,7 +450,13 @@ class DecoderState(
 
     def ensureBits(requiredBits: Int): Unit =
         if requiredBits > this.availableBits() then
-            throw new RuntimeException(
+            throw new FlatDecodingError(
+              "DecoderState: Not enough data available: " + this.toString
+            )
+
+    def ensureByteRange(offset: Int, requiredBytes: Int): Unit =
+        if offset < 0 || requiredBytes < 0 || offset > buffer.length - requiredBytes then
+            throw new FlatDecodingError(
               "DecoderState: Not enough data available: " + this.toString
             )
 

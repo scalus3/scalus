@@ -236,9 +236,7 @@ object Constant {
         def decode(decoder: DecoderState): Constant =
             val tags = listFlat[Int](using constantTypeTagFlat).decode(decoder)
             val (tpe, _) = decodeUni(tags)
-            val uniDecoder = flatForUni(tpe)
-            val decoded = uniDecoder.decode(decoder)
-            val result = Constant.fromValue(tpe, decoded)
-            result
+            val decoded = flatForUni(tpe).decode(decoder)
+            Constant.fromValue(tpe, decoded)
 
 }

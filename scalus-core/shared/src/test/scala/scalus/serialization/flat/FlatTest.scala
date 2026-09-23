@@ -13,6 +13,70 @@ import scalus.utils.Utils
 import scala.util.Random
 
 class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances:
+    test("truncated flat input retains its diagnostic") {
+        val error = intercept[RuntimeException] {
+            DecoderState(Array.emptyByteArray).bits8(1)
+        }
+        assert(
+          error.getMessage == "DecoderState: Not enough data available: " +
+              "DecoderState(currPtr:0,usedBits:0,buffer:)"
+        )
+        assert(error.isInstanceOf[FlatDecodingError])
+    }
+
+    test("malformed Flat tags use typed decoding failures") {
+        intercept[FlatDecodingError] { summon[Flat[Term]].decode(DecoderState(Array(0xa0.toByte))) }
+        intercept[FlatDecodingError] {
+            summon[Flat[DefaultFun]].decode(DecoderState(Array(0xfe.toByte)))
+        }
+        intercept[FlatDecodingError] { DefaultUni.decodeUni(List(99)) }
+    }
+
+    test("a constant tag naming an unapplied type constructor is a decoding failure") {
+        // decodeUni returns a bare ProtoList, ProtoPair or ProtoArray for tags 5, 6 and 12, none
+        // of which names a constant type. Reachable from any untrusted script, so it has to be
+        // the type callers report as a bad script rather than something that escapes as a defect.
+        for uni <- Seq(DefaultUni.ProtoList, DefaultUni.ProtoPair, DefaultUni.ProtoArray) do
+            val failure = intercept[FlatDecodingError](DefaultUni.flatForUni(uni))
+            assert(failure.getMessage == s"Unsupported uni: $uni")
+    }
+
+    test("BLS constants have no flat encoding, and the two directions fail differently") {
+        for uni <- Seq(
+              DefaultUni.BLS12_381_G1_Element,
+              DefaultUni.BLS12_381_G2_Element,
+              DefaultUni.BLS12_381_MlResult
+            )
+        do
+            val flat = DefaultUni.flatForUni(uni)
+            // Asking to encode one is a caller mistake: there is no encoding to produce.
+            intercept[UnsupportedOperationException](flat.bitSize(null))
+            intercept[UnsupportedOperationException](flat.encode(null, EncoderState(1)))
+            // A script claiming a BLS constant is malformed input rather than a defect, so this
+            // stays the type callers report as a bad script.
+            intercept[FlatDecodingError](flat.decode(DecoderState(Array(0.toByte))))
+    }
+
+    test("byte arrays size all chunks before copying") {
+        val malformed = Array[Byte](1, 1, 0xaa.toByte, 1, 0xbb.toByte, 0)
+        assert(
+          summon[Flat[Array[Byte]]]
+              .decode(DecoderState(malformed))
+              .sameElements(Array(0xaa.toByte, 0xbb.toByte))
+        )
+    }
+
+    test("byte arrays reject truncated chunks and missing terminators") {
+        List(
+          Array[Byte](1, 2, 0xaa.toByte),
+          Array[Byte](1, 1, 0xaa.toByte)
+        ).foreach { bytes =>
+            intercept[FlatDecodingError] {
+                summon[Flat[Array[Byte]]].decode(DecoderState(bytes))
+            }
+        }
+    }
+
     test("Flat bits") {
         val enc = new EncoderState(3)
         enc.bits(7, 64)

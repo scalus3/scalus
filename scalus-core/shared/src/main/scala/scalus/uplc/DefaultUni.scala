@@ -1,7 +1,7 @@
 package scalus.uplc
 
 import scalus.uplc.builtin.{ByteString, Data}
-import scalus.serialization.flat.{listFlat, Flat, given}
+import scalus.serialization.flat.{listFlat, DecoderState, EncoderState, Flat, FlatDecodingError, given}
 
 import scala.collection.immutable.List
 
@@ -87,27 +87,31 @@ object DefaultUni:
             case BLS12_381_G1_Element => blsStubFlat("bls12_381_G1_element")
             case BLS12_381_G2_Element => blsStubFlat("bls12_381_G2_element")
             case BLS12_381_MlResult   => blsStubFlat("bls12_381_MlResult")
-            case _                    => throw new Exception(s"Unsupported uni: $uni")
+            // Reachable from untrusted bytes: `decodeUni` returns a bare `ProtoList`, `ProtoPair`
+            // or `ProtoArray` for tags 5, 6 and 12, and none of those names a constant type.
+            case _ => throw new FlatDecodingError(s"Unsupported uni: $uni")
 
-    /** Stub Flat instance for BLS types. Matches Haskell Plutus behavior: the Flat instance exists
-      * (so containers like empty List[G1Element] can be serialized) but throws if actual value
-      * encoding/decoding is attempted.
+    /** Stub Flat instance for the BLS types, matching Haskell Plutus: the instance exists so that a
+      * container of them - an empty `List[G1Element]`, say - still has one, but no value of these
+      * types has a flat encoding.
+      *
+      * The two directions fail differently on purpose. Asking to encode one is a caller mistake,
+      * whereas a script claiming a BLS constant is malformed input rather than a defect, so
+      * decoding raises [[FlatDecodingError]] and callers report it as a bad script.
       */
     private def blsStubFlat(name: String): Flat[Any] =
         new Flat[Any]:
-            private def error() = throw new Exception(
-              s"Flat encoding is not supported for $name: use PrepareForSerialization transformer"
-            )
-            def bitSize(a: Any): Int = error()
-            def encode(a: Any, encode: scalus.serialization.flat.EncoderState): Unit = error()
-            def decode(decode: scalus.serialization.flat.DecoderState): Any = error()
+            private val message = s"$name has no flat encoding; use PrepareForSerialization"
+            def bitSize(a: Any): Int = throw new UnsupportedOperationException(message)
+            def encode(a: Any, encode: EncoderState): Unit =
+                throw new UnsupportedOperationException(message)
+            def decode(decode: DecoderState): Any = throw new FlatDecodingError(message)
 
     // Flat instance for BuiltinValue - structural encoding matching Plutus `Flat Value`
     // (PlutusCore/Value.hs): a list of (currency, list of (token, quantity)) in sorted key order,
     // built from the existing list/pair/ByteString/Integer flat instances (audit finding F2).
     private def builtinValueFlat: Flat[builtin.BuiltinValue] =
         new Flat[builtin.BuiltinValue]:
-            import scalus.serialization.flat.{DecoderState, EncoderState}
             type Entries = List[(builtin.ByteString, List[(builtin.ByteString, BigInt)])]
             val entriesFlat = summon[Flat[Entries]]
 
@@ -156,4 +160,4 @@ object DefaultUni:
             case 11 :: tail => (DefaultUni.BLS12_381_MlResult, tail)
             case 12 :: tail => (DefaultUni.ProtoArray, tail)
             case 13 :: tail => (DefaultUni.BuiltinValue, tail)
-            case _          => throw new Exception(s"Invalid uni: $state")
+            case _          => throw new FlatDecodingError(s"Invalid uni: $state")

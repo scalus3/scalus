@@ -1,6 +1,6 @@
 package scalus.uplc
 
-import scalus.serialization.flat.{DecoderState, EncoderState, Flat}
+import scalus.serialization.flat.{DecoderState, EncoderState, Flat, FlatDecodingError}
 
 /** Plutus Core built-in functions.
   *
@@ -1729,7 +1729,10 @@ object DefaultFun {
                 case 98  => ValueData
                 case 99  => UnValueData
                 case 100 => ScaleValue
-                case c   => throw new Exception(s"Invalid builtin function code: $c")
+                case c =>
+                    throw new FlatDecodingError(
+                      s"Invalid builtin function code: $c"
+                    )
 
 }
 

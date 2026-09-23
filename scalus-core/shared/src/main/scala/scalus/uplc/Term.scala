@@ -8,7 +8,7 @@ import scalus.*
 import scalus.cardano.ledger.Word64
 import scalus.compiler.sir.PrettyPrinter
 import scalus.serialization.flat
-import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
+import scalus.serialization.flat.{DecoderState, EncoderState, Flat, FlatDecodingError, given}
 import scalus.uplc.Constant.flatConstant
 import scalus.uplc.eval.*
 import scalus.utils.{Macros, Pretty, ScalusSourcePos, Style}
@@ -614,6 +614,8 @@ object Term {
                     )
                 case 9 =>
                     Term.Case(arg = decode(decoder), cases = flat.decode(decoder))
+                case invalid =>
+                    throw new FlatDecodingError(s"Invalid term tag: $invalid")
 
     /** Pretty[Term] instance with rainbow brackets based on nesting depth */
     given Pretty[Term] with
