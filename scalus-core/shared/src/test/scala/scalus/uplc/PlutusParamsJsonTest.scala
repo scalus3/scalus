@@ -14,14 +14,14 @@ class PlutusParamsJsonTest extends AnyFunSuite {
     test("V1 reads historical JSON without appended parameters") {
         val decoded = read[PlutusV1Params](prefixJson(v1.toJson, 166))
         assert(PlutusV1Params.toSeq(decoded).take(166) == costs.take(166))
-        assert(PlutusV1Params.toSeq(decoded).drop(166).forall(_ == 300_000_000L))
+        assert(PlutusV1Params.toSeq(decoded).drop(166).forall(_ == Long.MaxValue))
     }
 
     test("V2 reads historical JSON without appended parameters") {
         for size <- Seq(175, 185) do
             val decoded = read[PlutusV2Params](prefixJson(v2.toJson, size))
             assert(PlutusV2Params.toSeq(decoded).take(size) == costs.take(size))
-            assert(PlutusV2Params.toSeq(decoded).drop(size).forall(_ == 300_000_000L))
+            assert(PlutusV2Params.toSeq(decoded).drop(size).forall(_ == Long.MaxValue))
     }
 
     test("V1 and V2 JSON round trips retain every supplied parameter") {

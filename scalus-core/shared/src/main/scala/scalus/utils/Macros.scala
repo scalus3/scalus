@@ -433,13 +433,17 @@ object Macros {
                       val ref = Ref(value.symbol)
                       stmts += value
                       val size = '{ seq.size }
-                      // params.field1 = if idx < seq.size then seq(0) else 0L
-                      // ...
+                      // A parameter the supplied array does not reach is filled with
+                      // Long.MaxValue, as plutus does (PlutusLedgerApi.Common.ParamName,
+                      // `ledgerParams ++ repeat maxBound`). Costing saturates, so a builtin whose
+                      // parameters are all absent is priced beyond any budget and cannot run,
+                      // rather than being given a plausible cost nobody can tell from a real one.
+                      // params.field1 = if idx < seq.size then seq(0) else Long.MaxValue
                       for (field, index) <- fields.zipWithIndex do
                           val idx = Expr(index)
                           stmts += Assign(
                             ref.select(field),
-                            '{ if $idx < $size then seq($idx) else 300_000_000L }.asTerm
+                            '{ if $idx < $size then seq($idx) else Long.MaxValue }.asTerm
                           )
 
                       // { val params = new A(); params.field1 =...; params }

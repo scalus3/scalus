@@ -144,8 +144,24 @@ class PlutusVM(
         profiling: Boolean = false,
         tracing: Boolean = false,
         validateResult: Boolean = false
+    ): Result =
+        runWithBudgetTracking(
+          debruijnedTerm,
+          CountingBudgetSpender(),
+          profiling,
+          tracing,
+          validateResult
+        )
+
+    /** Shared tracked execution with an explicit budget spender. */
+    private[eval] def runWithBudgetTracking(
+        debruijnedTerm: Term,
+        budgetSpender: BudgetSpender,
+        profiling: Boolean,
+        tracing: Boolean,
+        validateResult: Boolean
     ): Result = {
-        val spenderLogger = TallyingBudgetSpenderLogger(CountingBudgetSpender())
+        val spenderLogger = TallyingBudgetSpenderLogger(budgetSpender)
         val cek = new CekMachine(
           machineParams,
           spenderLogger,
@@ -167,6 +183,9 @@ class PlutusVM(
               profile = cek.getProfile
             )
         catch
+            // Every exception becomes a failed result: the machine's own errors are script
+            // failures, anything else is a defect in Scalus. A fault inside a builtin arrives
+            // wrapped in `BuiltinError`, whose `cause` is the original exception.
             case e: Exception =>
                 Result.Failure(
                   e,

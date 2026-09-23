@@ -206,17 +206,13 @@ Scala 3 `given` aliases are already lazy; these four explicit `val`s were the an
 `BuiltinCostModel.vanRossemReferenceD/E = fromJsonString(inlineResource("builtinCostModel{D,E}.json"))`
 embeds each resource's pretty-printed **text** and parses it at runtime with upickle.
 
-They are read at exactly one place: `MachineParams.fromCostModels` substitutes the van Rossem
-costs for the fourteen builtins that a pre-PV11 cost model has no entries for. Two facts make
-this much smaller than it looks: only **14 of the ~100 fields** are ever read, and **D and E
-carry identical values for all fourteen**.
+They were read at exactly one place: `MachineParams.fromCostModels` substituted the van Rossem
+costs for the fourteen builtins that a pre-PV11 cost model has no entries for.
 
-**Fix, applied:** `VanRossemNewBuiltinCosts`, one literal set of fourteen costing functions
-generated from the JSON, used by `fromCostModels`. `vanRossemReferenceD/E` and
-`fromJsonString` stay exactly as they are, public and JSON-backed, and are simply no longer
-called, so DCE drops them from `scalus.js` and nothing breaks on the JVM. No MiMa impact.
-`VanRossemNewBuiltinCostsTest` compares all fourteen against both vendored models, so a
-resource change fails the build instead of silently mispricing a builtin.
+**Fix, applied:** that fallback is gone. A parameter the supplied cost model does not reach is now
+`Long.MaxValue`, as in Plutus, so nothing reads the reference models at runtime.
+`vanRossemReferenceD/E` and `fromJsonString` stay public and JSON-backed; they are simply no
+longer called, so DCE drops them from `scalus.js`. No MiMa impact.
 
 ### Group C – `Data`'s JSON codec
 

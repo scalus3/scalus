@@ -36,32 +36,29 @@ case class CekMachineCosts(
 )
 
 object CekMachineCosts {
-    val defaultMachineCostsA: CekMachineCosts = CekMachineCosts(
-      startupCost = ExUnits(100, 100),
-      varCost = ExUnits(100, 23000),
-      constCost = ExUnits(100, 23000),
-      lamCost = ExUnits(100, 23000),
-      delayCost = ExUnits(100, 23000),
-      forceCost = ExUnits(100, 23000),
-      applyCost = ExUnits(100, 23000),
-      builtinCost = ExUnits(100, 23000),
-      constrCost = ExUnits(100, 23000),
-      caseCost = ExUnits(100, 23000)
-    )
 
-    val defaultMachineCostsB: CekMachineCosts = CekMachineCosts(
-      startupCost = ExUnits(100, 100),
-      varCost = ExUnits(100, 16000),
-      constCost = ExUnits(100, 16000),
-      lamCost = ExUnits(100, 16000),
-      delayCost = ExUnits(100, 16000),
-      forceCost = ExUnits(100, 16000),
-      applyCost = ExUnits(100, 16000),
-      builtinCost = ExUnits(100, 16000),
-      constrCost = ExUnits(100, 16000),
-      caseCost = ExUnits(100, 16000)
-    )
+    /** Every CEK step in a semantics variant costs the same, so a variant is one `ExUnits` pair
+      * repeated across all nine steps. Startup is always 100/100. The variants differ only in the
+      * step cost: 23000 for A, 16000 for B.
+      */
+    private def uniform(memory: Long, stepCost: Long): CekMachineCosts = {
+        val step = ExUnits(memory = memory, steps = stepCost)
+        CekMachineCosts(
+          startupCost = ExUnits(memory = 100, steps = 100),
+          varCost = step,
+          constCost = step,
+          lamCost = step,
+          delayCost = step,
+          forceCost = step,
+          applyCost = step,
+          builtinCost = step,
+          constrCost = step,
+          caseCost = step
+        )
+    }
 
+    val defaultMachineCostsA: CekMachineCosts = uniform(100, 23000)
+    val defaultMachineCostsB: CekMachineCosts = uniform(100, 16000)
     val defaultMachineCostsC: CekMachineCosts = defaultMachineCostsB
     val defaultMachineCosts: CekMachineCosts = defaultMachineCostsC
 
@@ -217,7 +214,11 @@ object MachineParams {
                   language.ordinal,
                   costModels.models(Language.PlutusV3.ordinal)
                 )
-            case _ => costModels.models(language.ordinal)
+            case _ =>
+                costModels.models.getOrElse(
+                  language.ordinal,
+                  throw new IllegalArgumentException(s"no cost model for $language")
+                )
         val params = language match
             case Language.PlutusV1 => PlutusV1Params.fromSeq(costs)
             case Language.PlutusV2 => PlutusV2Params.fromSeq(costs)
@@ -228,55 +229,14 @@ object MachineParams {
           protocolVersion,
           language
         )
-        val base = BuiltinCostModel.fromPlutusParams(params, language, semvar)
-        // Preserve the historical PV11 reference fallback only when the entire new-builtin suffix
-        // is omitted. A supplied value of 300_000_000 is a cost, not evidence of a missing field.
-        val newBuiltinStart = language match
-            case Language.PlutusV1 | Language.PlutusV2 => 279
-            case Language.PlutusV3 | Language.PlutusV4 => 297
-        val needsReferenceNewBuiltins =
-            (semvar == BuiltinSemanticsVariant.D || semvar == BuiltinSemanticsVariant.E) &&
-                costs.length <= newBuiltinStart
-        val builtinCostModel =
-            if needsReferenceNewBuiltins then
-                // Variants D and E carry identical costs for all fourteen of these builtins, so
-                // one literal set covers both. Literals rather than the JSON-backed
-                // BuiltinCostModel.vanRossemReferenceD/E, which are upickle readers and would
-                // pull all of upickle into scalus.js; see docs/internal/JS_BUNDLE_SIZE.md.
-                val ref = VanRossemNewBuiltinCosts
-                base.copy(
-                  expModInteger = ref.expModInteger,
-                  dropList = ref.dropList,
-                  lengthOfArray = ref.lengthOfArray,
-                  listToArray = ref.listToArray,
-                  indexArray = ref.indexArray,
-                  bls12_381_G1_multiScalarMul = ref.bls12_381_G1_multiScalarMul,
-                  bls12_381_G2_multiScalarMul = ref.bls12_381_G2_multiScalarMul,
-                  insertCoin = ref.insertCoin,
-                  lookupCoin = ref.lookupCoin,
-                  unionValue = ref.unionValue,
-                  valueContains = ref.valueContains,
-                  valueData = ref.valueData,
-                  unValueData = ref.unValueData,
-                  scaleValue = ref.scaleValue
-                )
-            else base
-        val machineCosts = CekMachineCosts.fromPlutusParams(params)
-        val constrIndex = language match
-            case Language.PlutusV1                     => 175
-            case Language.PlutusV2                     => 185
-            case Language.PlutusV3 | Language.PlutusV4 => 193
-        // Historical V1/V2 models omit these CEK costs; never replace a supplied sentinel value.
+        // No length bookkeeping: a parameter the supplied array does not reach is already
+        // Long.MaxValue, so a builtin whose parameters are all absent is priced beyond any budget
+        // and cannot run. This is the rule plutus states in Note [Cost model parameters from the
+        // ledger's point of view]: too many entries are ignored, too few are padded, and neither
+        // is an error. It holds for a shortened model, a longer future one, and a custom network.
         MachineParams(
-          machineCosts = machineCosts.copy(
-            constrCost =
-                if costs.length <= constrIndex then CekMachineCosts.defaultMachineCosts.constrCost
-                else machineCosts.constrCost,
-            caseCost =
-                if costs.length <= constrIndex + 2 then CekMachineCosts.defaultMachineCosts.caseCost
-                else machineCosts.caseCost
-          ),
-          builtinCostModel = builtinCostModel,
+          machineCosts = CekMachineCosts.fromPlutusParams(params),
+          builtinCostModel = BuiltinCostModel.fromPlutusParams(params, language, semvar)
         )
     }
 

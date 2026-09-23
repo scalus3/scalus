@@ -40,12 +40,10 @@ class BuiltinCostModelTest extends AnyFunSuite:
         )
     }
 
-    test("van Rossem builtins fall back to Plutus reference costs when PV11 params are absent") {
-        // A pre-van-Rossem PlutusV3 cost model (297 entries) carries no PV11 builtin parameters,
-        // so reading them yields the 300_000_000 placeholder. At vanRossemPV the new builtins
-        // (dropList, value ops, expModInteger, multiScalarMul, ...) must instead be costed from
-        // the vendored Plutus reference model, while existing builtins keep their supplied costs.
-        // (Mainnet already carries the full 350-entry model, so simulate the legacy one.)
+    test("a model that predates a builtin prices it out rather than inventing a cost") {
+        // Was: the missing van Rossem parameters were filled from the Plutus reference model, so a
+        // script could use those builtins at a plausible cost. plutus instead pads with maxBound,
+        // which prices them beyond any budget - the node would refuse such a script, so we do too.
         val mainnetV3 =
             CardanoInfo.mainnet.protocolParams.costModels.models(Language.PlutusV3.languageId)
         val legacyCostModels = CostModels(Map(Language.PlutusV3.languageId -> mainnetV3.take(297)))
@@ -54,26 +52,22 @@ class BuiltinCostModelTest extends AnyFunSuite:
           Language.PlutusV3,
           MajorProtocolVersion.vanRossemPV
         )
-        assert(pv11.builtinCostModel.dropList == BuiltinCostModel.vanRossemReferenceE.dropList)
-        assert(
-          pv11.builtinCostModel.expModInteger == BuiltinCostModel.vanRossemReferenceE.expModInteger
+        val listArgs = Seq(
+          CekValue.VCon(Constant.Integer(1)),
+          CekValue.VCon(Constant.List(DefaultUni.Integer, List(Constant.Integer(1))))
         )
-        assert(
-          pv11.builtinCostModel.unionValue == BuiltinCostModel.vanRossemReferenceE.unionValue
-        )
+        assert(pv11.builtinCostModel.dropList.calculateCost(listArgs*).steps == Long.MaxValue)
 
-        // Existing builtins keep the supplied mainnet cost, not the reference value.
+        // A builtin the model does cover keeps its supplied cost, at either protocol version.
         val plomin = MachineParams.fromCostModels(
           legacyCostModels,
           Language.PlutusV3,
           MajorProtocolVersion.plominPV
         )
         assert(pv11.builtinCostModel.addInteger == plomin.builtinCostModel.addInteger)
-        // Pre-van-Rossem (variant C) does not apply the reference fallback.
-        assert(plomin.builtinCostModel.dropList != BuiltinCostModel.vanRossemReferenceE.dropList)
 
-        // The current mainnet (epoch 642+) cost model supplies real PV11 values, so no fallback
-        // is needed and the supplied values are used directly.
+        // The current mainnet model supplies every parameter, so nothing is padded and the
+        // supplied values match the reference ones the chain enacted.
         val mainnetPv11 =
             MachineParams.defaultParamsFor(Language.PlutusV3, MajorProtocolVersion.vanRossemPV)
         assert(
@@ -91,7 +85,7 @@ class BuiltinCostModelTest extends AnyFunSuite:
         assert(params.`scaleValue-memory-arguments-slope` == 350L)
 
         val legacyParams = PlutusV3Params.fromSeq(Seq.fill(297)(1L))
-        assert(legacyParams.`expModInteger-cpu-arguments-coefficient00` == 300_000_000L)
+        assert(legacyParams.`expModInteger-cpu-arguments-coefficient00` == Long.MaxValue)
     }
 
     test("PlutusV3 PV11 divideInteger uses above-and-below-diagonal costing") {
@@ -198,10 +192,11 @@ class BuiltinCostModelTest extends AnyFunSuite:
         assert(v2.size == 175)
         assert(v3.size == 251)
         assert(paramsV1.`addInteger-cpu-arguments-intercept` == 100788)
-        // not available pre-Plomin HF
-        assert(paramsV2.`integerToByteString-cpu-arguments-c0` == 300_000_000L)
-        assert(paramsV2.`byteStringToInteger-cpu-arguments-c0` == 300_000_000L)
-        assert(paramsV3.`andByteString-cpu-arguments-slope1` == 300_000_000L)
+        // Not available pre-Plomin: absent parameters are padded with maxBound, so the
+        // builtins that need them are priced out rather than given a plausible cost.
+        assert(paramsV2.`integerToByteString-cpu-arguments-c0` == Long.MaxValue)
+        assert(paramsV2.`byteStringToInteger-cpu-arguments-c0` == Long.MaxValue)
+        assert(paramsV3.`andByteString-cpu-arguments-slope1` == Long.MaxValue)
     }
 
     test("BuiltinCostModel from Blockfrost Plomin HF Protocol Parameters epoch 544") {
@@ -222,7 +217,7 @@ class BuiltinCostModelTest extends AnyFunSuite:
         assert(v3.size == 297)
         assert(paramsV1.`addInteger-cpu-arguments-intercept` == 100788)
         // for some reason, these values are absent in Blockfrost params
-        assert(paramsV2.`integerToByteString-cpu-arguments-c0` == 300_000_000L)
-        assert(paramsV2.`byteStringToInteger-cpu-arguments-c0` == 300_000_000L)
+        assert(paramsV2.`integerToByteString-cpu-arguments-c0` == Long.MaxValue)
+        assert(paramsV2.`byteStringToInteger-cpu-arguments-c0` == Long.MaxValue)
         assert(paramsV3.`andByteString-cpu-arguments-slope1` == 726)
     }

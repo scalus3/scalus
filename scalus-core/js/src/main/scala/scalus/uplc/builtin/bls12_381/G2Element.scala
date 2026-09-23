@@ -4,7 +4,6 @@ import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.NodeJsPlatformSpecific.{toByteString, toJsBigInt, toUint8Array}
 import scalus.uplc.builtin.PlatformSpecific
 
-import scala.scalajs.js
 import scala.compiletime.asMatchable
 import scala.annotation.targetName
 
@@ -40,30 +39,24 @@ object G2Element extends G2ElementOffchainApi:
 
     def fromCompressedByteString(byteString: ByteString): G2Element = {
         if byteString.size != 96 then
-            throw js.JavaScriptException(
-              js.Error(
-                s"Invalid length of bytes for compressed point of G2: expected 96, actual: ${byteString.size}, byteString: $byteString"
-              )
+            throw new IllegalArgumentException(
+              s"Invalid length of bytes for compressed point of G2: expected 96, actual: ${byteString.size}, byteString: $byteString"
             )
 
         if (byteString.bytes(0) & 0x40) != 0 && (byteString.bytes(0) & 0x30) != 0 then
-            throw js.JavaScriptException(
-              js.Error(
-                s"invalid encoding for compressed zero point of G2, byteString: $byteString"
-              )
+            throw new IllegalArgumentException(
+              s"invalid encoding for compressed zero point of G2, byteString: $byteString"
             )
 
-        G2Element(
-          BLS.G2.Point.fromRawBytes(byteString.toUint8Array)
-        )
+        // Noble rejects a point it cannot decode with its own Error, which is left as it is:
+        // the evaluator reports any exception a builtin raises as a failure.
+        G2Element(BLS.G2.Point.fromRawBytes(byteString.toUint8Array))
     }
 
     def hashToGroup(byteString: ByteString, dst: ByteString): G2Element = {
         if dst.size > 255 then
-            throw js.JavaScriptException(
-              js.Error(
-                s"Invalid length of bytes for dst parameter of hashToGroup of G2, expected: <= 255, actual: ${dst.size}"
-              )
+            throw new IllegalArgumentException(
+              s"Invalid length of bytes for dst parameter of hashToGroup of G2, expected: <= 255, actual: ${dst.size}"
             )
 
         G2Element(
