@@ -8,6 +8,7 @@ lowers to Untyped Plutus Core (UPLC), the language of Cardano smart contracts.
 
 **For smart contract development:** Use `/contract` skill
 **For smart contract testing:** Use `/contract-test` skill
+**For reviewing on-chain code** (`@Compile`, `extends Validator`): Use `/smart-contract-security-review` skill
 
 ## Commands
 
@@ -195,6 +196,13 @@ is out of scope for interop style rules and stays fully idiomatic Scala.
 - Keep messages short: 1-2 paragraphs
 - Mention key changes
 - Never add "Co-authored by Claude Code" or similar
+- Run `sbtn scalafmtAll` before every commit: `ci-jvm` fails on a single unformatted file
+
+## Changelog
+
+To write a CHANGELOG.md entry for a version, find the last version in CHANGELOG.md and list the
+changes with `git log v<last_version>..HEAD --oneline`. Follow the existing style and put the most
+important features and fixes first. Use a neutral voice; use bold only for migration hazards.
 
 ## Libraries in Tests
 

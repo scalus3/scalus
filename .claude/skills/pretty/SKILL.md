@@ -1,6 +1,6 @@
 ---
-description: Knowledge for writing Pretty typeclass instances using paiges Doc DSL
-globs: scalus-core/**/Pretty.scala, scalus-core/**/ledger/*.scala
+name: pretty
+description: Use when writing or changing a Pretty typeclass instance (paiges Doc DSL) in scalus-core, for example in scalus/utils/Pretty.scala or the cardano/ledger types.
 ---
 
 # Pretty Printer Writing Guide
@@ -168,8 +168,8 @@ given Pretty[MyEnum] with
 given Pretty[MyCaseClass] with
     def pretty(a: MyCaseClass, style: Style): Doc =
         val fields = List(
-            text("name:" & text(a.name)),
-            text("value:" & lit(str(a.value))
+            field("name", text(a.name), style),
+            field("value", lit(str(a.value), style), style)
         )
         (ctr("MyCaseClass", style) / stack(fields).indent(2)).grouped
 ```
