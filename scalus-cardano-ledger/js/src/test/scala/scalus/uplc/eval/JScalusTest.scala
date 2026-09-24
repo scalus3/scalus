@@ -10,6 +10,17 @@ import scala.scalajs.js.JSConverters.*
 
 class JScalusTest extends AnyFunSuite {
 
+    test("exported methods work detached from the Scalus object") {
+        val script = "545301010023357389210753756363657373004981"
+        val detached = JScalus
+            .asInstanceOf[js.Dynamic]
+            .applyDataArgToScript
+            .asInstanceOf[js.Function2[String, String, String]]
+        assert(
+          detached(script, "{\"int\":42}") == JScalus.applyDataArgToScript(script, "{\"int\":42}")
+        )
+    }
+
     test("JScalus.evalPlutusScripts with CBOR files") {
         // Read transaction CBOR bytes using platform-specific file I/O
         val txBytes = platform

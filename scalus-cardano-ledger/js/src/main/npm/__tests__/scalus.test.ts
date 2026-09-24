@@ -38,3 +38,12 @@ describe("Scalus.evaluateScriptProfile", () => {
     });
   }
 });
+
+test("Scalus methods work detached, as Math.max does", () => {
+  // Scala.js exports object members as prototype methods on `this`; bindExports binds them.
+  const script = "545301010023357389210753756363657373004981";
+  const { applyDataArgToScript, evaluateScript } = Scalus;
+  const applied = applyDataArgToScript(script, JSON.stringify({ int: 42 }));
+  expect(applied).toBe(Scalus.applyDataArgToScript(script, JSON.stringify({ int: 42 })));
+  expect(evaluateScript(applied).isSuccess).toBe(true);
+});

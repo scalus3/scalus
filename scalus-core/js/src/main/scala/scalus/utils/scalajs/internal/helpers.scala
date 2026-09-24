@@ -85,3 +85,40 @@ private[scalus] def safeInteger(value: js.Any, name: String): Double = {
 
 private[scalus] def typeError(message: String): Nothing =
     throw js.JavaScriptException(new js.TypeError(message))
+
+// ---- Exports ----
+
+/** Makes the `@JSExport` methods of an exported object callable detached, as
+  * `const { evaluateTx } = evaluator` or `const f = Scalus.evalPlutusScripts`.
+  *
+  * Call it first in the body of every `@JSExportTopLevel` object.
+  *
+  * Why it is needed: Scala.js exports the members of an object as it exports those of a class, as
+  * prototype methods that call `this.internalName(...)`. Called detached, `this` is undefined and
+  * the call throws. JavaScript expects the members of a namespace object to work detached, as
+  * `Math.max` and `JSON.parse` do, and the generated d.ts gives them no `this` type, so TypeScript
+  * accepts the detached call. scalus 0.18.1 worked by accident: the Closure Compiler rewrote the
+  * singleton's methods to plain closures. The Closure Compiler is gone (deprecated in Scala.js
+  * 1.21), and so was the accident; `@lucid-evolution/scalus-uplc` 0.1.x broke on 1.x.
+  *
+  * Alternatives rejected:
+  *   - `@JSExportTopLevel("uplc.applyArgs")`: Scala.js 1.x allows only plain identifiers, no
+  *     namespaces.
+  *   - `@JSExportTopLevel(name, moduleID = "uplc")` plus `export * as uplc` in the bundle entry:
+  *     native ESM namespaces, but it needs a multi-module build and d.ts namespaces the exporter
+  *     does not emit, and it cannot fix `Scalus`, whose shape is public.
+  *   - `@JSExport val f: js.FunctionN`: the d.ts loses the parameter docs and optional parameters,
+  *     and `def` to `val` breaks MiMa.
+  *   - A post-link wrapper that binds in the bundle entry: fixes only the npm bundle, and the
+  *     Scala.js tests never run it.
+  *
+  * Every function on the object's own prototype is bound, the mangled internal methods too; that is
+  * harmless and needs no list of names to keep in step.
+  */
+private[scalus] def bindExports(self: AnyRef): Unit = {
+    val obj = self.asInstanceOf[js.Dynamic]
+    val proto = js.Object.getPrototypeOf(self.asInstanceOf[js.Object])
+    for name <- js.Object.getOwnPropertyNames(proto) if name != "constructor" do
+        val member = js.Object.getOwnPropertyDescriptor(proto, name).asInstanceOf[js.Dynamic].value
+        if js.typeOf(member) == "function" then obj.updateDynamic(name)(member.bind(obj))
+}

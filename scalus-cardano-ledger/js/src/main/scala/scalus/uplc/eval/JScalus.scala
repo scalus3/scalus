@@ -20,6 +20,7 @@ import scala.scalajs.js.typedarray.Uint8Array
   */
 @JSExportTopLevel("Scalus")
 object JScalus {
+    bindExports(this)
 
     extension (self: ExUnits)
         /** Converts ExUnits to a JavaScript BigInt representation. */
