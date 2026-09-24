@@ -1,10 +1,10 @@
 package scalus.cardano.node
 
-import io.bullet.borer.Cbor
 import scalus.interop.{TsName, TsType}
 import scalus.uplc.DebugScript
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.JScalus
+import scalus.utils.scalajs.internal.*
 import scalus.cardano.address.{Address, StakeAddress}
 import scalus.cardano.ledger.rules.{Context, UtxoEnv}
 import scalus.cardano.ledger.*
@@ -15,7 +15,7 @@ import scala.util.control.NonFatal
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
-import scala.scalajs.js.typedarray.{byteArray2Int8Array, Uint8Array}
+import scala.scalajs.js.typedarray.Uint8Array
 
 /** An in-memory Cardano ledger for tests and local development.
   *
@@ -52,7 +52,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
 ) extends js.Object {
 
     private var emulator: Emulator = {
-        val utxos: Utxos = Cbor.decode(initialUtxosCbor.toArray.map(_.toByte)).to[Utxos].value
+        val utxos = JsCbor.decode[Utxos](initialUtxosCbor)
         val env =
             if slotConfig.underlying == SlotConfig.mainnet then UtxoEnv.testMainnet()
             else UtxoEnv.default
@@ -123,7 +123,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         txCborBytes: Uint8Array,
         extra: Utxos
     ): js.Array[JScalus.Redeemer] = {
-        val tx = Transaction.fromCbor(txCborBytes.toArray.map(_.toByte))
+        val tx = Transaction.fromCbor(txCborBytes.toByteArray)
         val info = emulator.cardanoInfo
         val evaluator = PlutusScriptEvaluator(
           slotConfig = info.slotConfig,
@@ -140,8 +140,8 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
                       tag = r.tag.toString,
                       index = r.index,
                       budget = JScalus.JSExUnits(
-                        steps = js.BigInt(r.exUnits.steps.toString),
-                        memory = js.BigInt(r.exUnits.memory.toString)
+                        steps = r.exUnits.steps.toJsBigInt,
+                        memory = r.exUnits.memory.toJsBigInt
                       )
                     )
                 }
@@ -232,7 +232,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       * other: a node would refuse these bytes too, just earlier.
       */
     private def decodeTx(txCborBytes: Uint8Array): Either[JSubmitResult, Transaction] =
-        try Right(Transaction.fromCbor(txCborBytes.toArray.map(_.toByte)))
+        try Right(Transaction.fromCbor(txCborBytes.toByteArray))
         catch
             case NonFatal(e) =>
                 Left(
@@ -271,8 +271,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       * ledger CDDL. `getAllUtxos` returns the same data instead as one small map per UTxO.
       */
     def getUtxosCbor(): Uint8Array = {
-        val bytes = Cbor.encode(emulator.utxos).toByteArray
-        new Uint8Array(byteArray2Int8Array(bytes).buffer)
+        JsCbor.encode(emulator.utxos)
     }
 
     /** The UTxOs that sit at one address.
@@ -290,8 +289,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         emulator.utxos.foreach { case (input, output) =>
             if output.address == address then
                 val utxo: Map[Input, Output] = Map(input -> output)
-                val bytes = Cbor.encode(utxo).toByteArray
-                result.push(new Uint8Array(byteArray2Int8Array(bytes).buffer))
+                result.push(JsCbor.encode(utxo))
         }
         result
     }
@@ -307,8 +305,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         val result = js.Array[Uint8Array]()
         emulator.utxos.foreach { case (input, output) =>
             val utxo: Map[Input, Output] = Map(input -> output)
-            val bytes = Cbor.encode(utxo).toByteArray
-            result.push(new Uint8Array(byteArray2Int8Array(bytes).buffer))
+            result.push(JsCbor.encode(utxo))
         }
         result
     }
@@ -425,7 +422,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         val cred = rewardAddressCredential(rewardAddressBech32)
         emulator.certState.dstate.rewards
             .get(cred)
-            .map(c => js.BigInt(c.value.toString))
+            .map(_.value.toJsBigInt)
             .orUndefined
     }
 
@@ -484,7 +481,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     def getTransaction(txHashHex: String): js.UndefOr[Uint8Array] =
         emulator
             .getTransaction(TransactionHash.fromHex(txHashHex))
-            .map(tx => new Uint8Array(byteArray2Int8Array(tx.toCbor).buffer))
+            .map(_.toCbor.toUint8Array)
             .orUndefined
 
     /** Every transaction this emulator has applied, oldest first. */
@@ -514,7 +511,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         js.Dynamic
             .literal(
               poolId = info.poolId.map(_.toHex).orUndefined,
-              rewards = js.BigInt(info.rewards.value.toString)
+              rewards = info.rewards.value.toJsBigInt
             )
             .asInstanceOf[JDelegationInfo]
     }
@@ -558,8 +555,8 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
                   .literal(
                     credential = credentialHex(entry.credential),
                     pool = entry.pool.map(_.toHex).orUndefined,
-                    stake = js.BigInt(entry.stake.value.toString),
-                    rewards = js.BigInt(entry.rewards.value.toString)
+                    stake = entry.stake.value.toJsBigInt,
+                    rewards = entry.rewards.value.toJsBigInt
                   )
                   .asInstanceOf[JsStakeDistributionEntry]
             )
@@ -583,10 +580,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         val hash = DataHash.fromHex(datumHashHex)
         emulator.datums
             .get(hash)
-            .map { data =>
-                val bytes = Cbor.encode(data).toByteArray
-                new Uint8Array(byteArray2Int8Array(bytes).buffer)
-            }
+            .map(JsCbor.encode(_))
             .orUndefined
     }
 
@@ -624,9 +618,8 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     @nowarn("cat=deprecation") // constructing this class's own handle to write a snapshot into
     def snapshot(): JEmulator = {
         val snapshotEmulator = emulator.snapshot()
-        val emptyUtxosCbor = Cbor.encode(Map.empty: Utxos).toByteArray
         val wrapper = new JEmulator(
-          new Uint8Array(byteArray2Int8Array(emptyUtxosCbor).buffer),
+          JsCbor.encode(Map.empty: Utxos),
           JsSlotConfig.wrap(emulator.currentContext.slotConfig),
           initialStakeRewards
         )
@@ -889,9 +882,6 @@ object JEmulator {
           "limit"
         )
 
-    private def decodeCbor[T: io.bullet.borer.Decoder](bytes: Uint8Array): T =
-        Cbor.decode(bytes.toArray.map(_.toByte)).to[T].value
-
     private def replaceEmulator(wrapper: JEmulator, e: Emulator): Unit =
         wrapper.emulator = e
 
@@ -921,7 +911,7 @@ object JEmulator {
         regs: js.UndefOr[js.Array[JPoolRegistration]]
     ): Seq[EmulatorPoolRegistration] =
         regs.toOption.toSeq.flatten.map { p =>
-            val params = decodeCbor[Certificate](p.params) match
+            val params = JsCbor.decode[Certificate](p.params) match
                 case pr: Certificate.PoolRegistration => pr
                 case other =>
                     throw new IllegalArgumentException(
@@ -937,7 +927,7 @@ object JEmulator {
             EmulatorDRepRegistration(
               credential = parseCredential(d.credentialType, d.credentialHash),
               deposit = Coin(d.deposit.toString.toLong),
-              anchor = d.anchor.toOption.map(decodeCbor[Anchor])
+              anchor = d.anchor.toOption.map(JsCbor.decode[Anchor])
             )
         }
 
@@ -951,9 +941,8 @@ object JEmulator {
     // pattern. Internal use is intentional, hence the suppression.
     @nowarn("cat=deprecation")
     private def wrapScalaEmulator(scalaEmulator: Emulator, slotConfig: JsSlotConfig): JEmulator = {
-        val emptyUtxosCbor = Cbor.encode(Map.empty: Utxos).toByteArray
         val wrapper = new JEmulator(
-          new Uint8Array(byteArray2Int8Array(emptyUtxosCbor).buffer),
+          JsCbor.encode(Map.empty: Utxos),
           slotConfig
         )
         replaceEmulator(wrapper, scalaEmulator)
@@ -1019,7 +1008,7 @@ object JEmulator {
     @deprecated("use Emulator.create", "1.2.0")
     @JSExportStatic
     def withState(state: JEmulatorInitialState, slotConfig: JsSlotConfig): JEmulator = {
-        val utxos = decodeCbor[Utxos](state.utxos)
+        val utxos = JsCbor.decode[Utxos](state.utxos)
         val initState = EmulatorInitialState(
           utxos = utxos,
           stakeRegistrations = parseStakeRegistrations(state.stakeRegistrations),
@@ -1057,9 +1046,8 @@ object JEmulator {
           scalus.cardano.ledger.Coin(lovelacePerAddress.toString().toLong)
         )
         val utxos = EmulatorBase.createInitialUtxos(addresses, value)
-        val cbor = Cbor.encode(utxos).toByteArray
         new JEmulator(
-          new Uint8Array(byteArray2Int8Array(cbor).buffer),
+          JsCbor.encode(utxos),
           slotConfig
         )
     }

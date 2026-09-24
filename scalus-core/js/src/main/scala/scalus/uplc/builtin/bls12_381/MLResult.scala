@@ -1,6 +1,6 @@
 package scalus.uplc.builtin.bls12_381
 
-import scalus.uplc.builtin.NodeJsPlatformSpecific.toByteString
+import scalus.utils.scalajs.internal.toByteString
 
 import scala.compiletime.asMatchable
 import scala.annotation.targetName

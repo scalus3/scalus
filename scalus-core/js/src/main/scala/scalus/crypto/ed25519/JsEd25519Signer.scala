@@ -2,9 +2,9 @@ package scalus.crypto.ed25519
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.*
-import scala.scalajs.js.typedarray.{Int8Array, Uint8Array}
-import scala.scalajs.js.JSConverters.*
+import scala.scalajs.js.typedarray.Uint8Array
 import scalus.uplc.builtin.ByteString
+import scalus.utils.scalajs.internal.*
 
 @JSImport("@noble/curves/ed25519", JSImport.Namespace)
 @js.native
@@ -49,20 +49,6 @@ object JsEd25519Signer extends Ed25519Signer:
     /** Ed25519 curve order L */
     private lazy val L: js.BigInt = NobleEd25519.ed25519.CURVE.n
 
-    private def toUint8Array(bs: ByteString): Uint8Array =
-        val int8Array = new Int8Array(bs.bytes.toJSArray)
-        new Uint8Array(int8Array.buffer, int8Array.byteOffset, int8Array.length)
-
-    private def toUint8ArrayFromArray(arr: Array[Byte]): Uint8Array =
-        val int8Array = new Int8Array(arr.toJSArray)
-        new Uint8Array(int8Array.buffer, int8Array.byteOffset, int8Array.length)
-
-    private def fromUint8Array(arr: Uint8Array): ByteString =
-        ByteString.unsafeFromArray(new Int8Array(arr.buffer, arr.byteOffset, arr.length).toArray)
-
-    private def uint8ArrayToArray(arr: Uint8Array): Array[Byte] =
-        new Int8Array(arr.buffer, arr.byteOffset, arr.length).toArray
-
     /** Convert little-endian bytes to BigInt. */
     private def bytesToBigInt(bytes: Array[Byte]): js.BigInt =
         val hex = bytes.reverse.map(b => f"${b & 0xff}%02x").mkString
@@ -77,8 +63,8 @@ object JsEd25519Signer extends Ed25519Signer:
         bytes.takeRight(32)
 
     override def sign(signingKey: SigningKey, message: ByteString): Signature =
-        val sig = NobleEd25519.ed25519.sign(toUint8Array(message), toUint8Array(signingKey))
-        Signature.unsafeFromByteString(fromUint8Array(sig))
+        val sig = NobleEd25519.ed25519.sign(message.toUint8Array, signingKey.toUint8Array)
+        Signature.unsafeFromByteString(sig.toByteString)
 
     /** Extended signing for BIP32-Ed25519/SLIP-001 HD wallets.
       *
@@ -102,16 +88,16 @@ object JsEd25519Signer extends Ed25519Signer:
 
         // Step 1: r = SHA-512(kR || message) mod L
         val rInput = kR ++ msgBytes
-        val rHash = uint8ArrayToArray(NobleSha512.sha512(toUint8ArrayFromArray(rInput)))
+        val rHash = NobleSha512.sha512(rInput.toUint8Array).toByteArray
         val r = bytesToBigInt(rHash) % L
 
         // Step 2: R = r * G (r is already < L, safe for multiply)
         val RPoint = NobleEd25519.ed25519.ExtendedPoint.BASE.multiply(r)
-        val RBytes = uint8ArrayToArray(RPoint.toRawBytes())
+        val RBytes = RPoint.toRawBytes().toByteArray
 
         // Step 3: k = SHA-512(R || A || message) mod L
         val kInput = RBytes ++ pk ++ msgBytes
-        val kHash = uint8ArrayToArray(NobleSha512.sha512(toUint8ArrayFromArray(kInput)))
+        val kHash = NobleSha512.sha512(kInput.toUint8Array).toByteArray
         val k = bytesToBigInt(kHash) % L
 
         // Step 4: S = (r + k * kL) mod L
@@ -130,14 +116,14 @@ object JsEd25519Signer extends Ed25519Signer:
     ): Boolean =
         try
             NobleEd25519.ed25519.verify(
-              toUint8Array(signature),
-              toUint8Array(message),
-              toUint8Array(verificationKey)
+              signature.toUint8Array,
+              message.toUint8Array,
+              verificationKey.toUint8Array
             )
         catch case _: Exception => false
 
     override def derivePublicKey(signingKey: SigningKey): VerificationKey =
-        val pubKey = NobleEd25519.ed25519.getPublicKey(toUint8Array(signingKey))
-        VerificationKey.unsafeFromByteString(fromUint8Array(pubKey))
+        val pubKey = NobleEd25519.ed25519.getPublicKey(signingKey.toUint8Array)
+        VerificationKey.unsafeFromByteString(pubKey.toByteString)
 
 given Ed25519Signer = JsEd25519Signer

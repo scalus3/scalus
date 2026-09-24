@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 
 import scalus.cardano.address.Network
 import scalus.interop.{TsName, TsType}
+import scalus.utils.scalajs.internal.*
 
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -92,17 +93,17 @@ class JsProtocolParams() extends js.Object {
     def maxTxSize: Double = params.maxTxSize.toDouble
     def maxValueSize: Double = params.maxValueSize.toDouble
 
-    def stakeAddressDeposit: js.BigInt = js.BigInt(params.stakeAddressDeposit.toString)
-    def stakePoolDeposit: js.BigInt = js.BigInt(params.stakePoolDeposit.toString)
-    def dRepDeposit: js.BigInt = js.BigInt(params.dRepDeposit.toString)
-    def govActionDeposit: js.BigInt = js.BigInt(params.govActionDeposit.toString)
-    def utxoCostPerByte: js.BigInt = js.BigInt(params.utxoCostPerByte.toString)
+    def stakeAddressDeposit: js.BigInt = params.stakeAddressDeposit.toJsBigInt
+    def stakePoolDeposit: js.BigInt = params.stakePoolDeposit.toJsBigInt
+    def dRepDeposit: js.BigInt = params.dRepDeposit.toJsBigInt
+    def govActionDeposit: js.BigInt = params.govActionDeposit.toJsBigInt
+    def utxoCostPerByte: js.BigInt = params.utxoCostPerByte.toJsBigInt
 
     def priceMemory: Double = params.executionUnitPrices.priceMemory.toDouble
     def priceSteps: Double = params.executionUnitPrices.priceSteps.toDouble
 
-    def maxTxExecutionMemory: js.BigInt = js.BigInt(params.maxTxExecutionUnits.memory.toString)
-    def maxTxExecutionSteps: js.BigInt = js.BigInt(params.maxTxExecutionUnits.steps.toString)
+    def maxTxExecutionMemory: js.BigInt = params.maxTxExecutionUnits.memory.toJsBigInt
+    def maxTxExecutionSteps: js.BigInt = params.maxTxExecutionUnits.steps.toJsBigInt
 
     def collateralPercentage: Double = params.collateralPercentage.toDouble
     def maxCollateralInputs: Double = params.maxCollateralInputs.toDouble

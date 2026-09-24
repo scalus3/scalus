@@ -1,14 +1,14 @@
 package scalus.cardano.ledger
 
-import io.bullet.borer.Cbor
 import scalus.cardano.address.Address
 import scalus.interop.TsName
 import scalus.uplc.builtin.Data
+import scalus.utils.scalajs.internal.*
 
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
-import scala.scalajs.js.typedarray.{byteArray2Int8Array, Uint8Array}
+import scala.scalajs.js.typedarray.Uint8Array
 import scala.util.control.NonFatal
 
 /** The structural form of [[JsUtxo]]. */
@@ -113,12 +113,12 @@ class JsUtxo(txHash0: String, outputIndex0: Double, address0: String, value0: Js
 
     /** The datum itself as CBOR, when the output carries it inline. */
     def inlineDatum: js.UndefOr[Uint8Array] = out.datumOption match
-        case Some(DatumOption.Inline(d)) => toUint8Array(Cbor.encode(d).toByteArray)
+        case Some(DatumOption.Inline(d)) => JsCbor.encode(d)
         case _                           => js.undefined
 
     /** The reference script as CBOR, when the output carries one. */
     def scriptRef: js.UndefOr[Uint8Array] =
-        out.scriptRef.map(r => toUint8Array(Cbor.encode(r).toByteArray)).orUndefined
+        out.scriptRef.map(JsCbor.encode(_)).orUndefined
 
     /** Which language `scriptRef` is written in. */
     def scriptLanguage: js.UndefOr[String] = out.scriptRef
@@ -134,7 +134,7 @@ class JsUtxo(txHash0: String, outputIndex0: Double, address0: String, value0: Js
 
     /** This UTxO as a one-entry CBOR map from input to output, the shape `getUtxosCbor` uses. */
     def toCbor(): Uint8Array =
-        toUint8Array(Cbor.encode(Map(in -> out): Utxos).toByteArray)
+        JsCbor.encode(Map(in -> out): Utxos)
 
     /** A copy carrying `hash` as a datum hash, in place of whatever datum this output had. */
     def withDatumHash(hash: String): JsUtxo =
@@ -142,13 +142,13 @@ class JsUtxo(txHash0: String, outputIndex0: Double, address0: String, value0: Js
 
     /** A copy carrying the CBOR-decoded value of `cbor` as its inline datum. */
     def withInlineDatum(cbor: Uint8Array): JsUtxo = {
-        val data = Cbor.decode(cbor.toArray.map(_.toByte)).to[Data].value
+        val data = JsCbor.decode[Data](cbor)
         JsUtxo.wrap(in, withOutput(datumOption = Some(DatumOption.Inline(data))))
     }
 
     /** A copy carrying the CBOR-decoded value of `cbor` as its reference script. */
     def withScriptRef(cbor: Uint8Array): JsUtxo = {
-        val scriptRef = Cbor.decode(cbor.toArray.map(_.toByte)).to[ScriptRef].value
+        val scriptRef = JsCbor.decode[ScriptRef](cbor)
         JsUtxo.wrap(in, withOutput(scriptRefOpt = Some(scriptRef)))
     }
 
@@ -181,9 +181,6 @@ class JsUtxo(txHash0: String, outputIndex0: Double, address0: String, value0: Js
         .asInstanceOf[JsPlainUtxo]
 
     override def toString(): String = s"Utxo($txHash#$outputIndex at $address)"
-
-    private def toUint8Array(bytes: Array[Byte]): Uint8Array =
-        new Uint8Array(byteArray2Int8Array(bytes).buffer)
 }
 
 object JsUtxo {
@@ -227,7 +224,7 @@ object JsUtxo {
       */
     @JSExportStatic
     def fromCbor(cbor: Uint8Array): JsUtxo = {
-        val utxos = Cbor.decode(cbor.toArray.map(_.toByte)).to[Utxos].value
+        val utxos = JsCbor.decode[Utxos](cbor)
         if utxos.size != 1 then
             throw new IllegalArgumentException(
               s"expected a CBOR map holding exactly one UTxO, got ${utxos.size} entries"

@@ -4,6 +4,7 @@ import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
 import scala.scalajs.js.typedarray.Uint8Array
 import scalus.uplc.builtin.ByteString
+import scalus.utils.scalajs.internal.*
 
 /** Platform-specific Ed25519 key pair generation for tests (JS implementation using @noble/curves).
   */
@@ -11,8 +12,8 @@ object KeyPairGenerator {
     def generateKeyPair(): (ByteString, ByteString) = {
         val privateKeyArray = Ed25519.utils.randomPrivateKey()
         val publicKeyArray = Ed25519.getPublicKey(privateKeyArray)
-        val privateKey = ByteString.fromArray(privateKeyArray.toArray.map(_.toByte))
-        val publicKey = ByteString.fromArray(publicKeyArray.toArray.map(_.toByte))
+        val privateKey = privateKeyArray.toByteString
+        val publicKey = publicKeyArray.toByteString
         (privateKey, publicKey)
     }
 

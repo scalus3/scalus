@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 
 import scalus.interop.TsName
 import scalus.uplc.builtin.ByteString
+import scalus.utils.scalajs.internal.*
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
@@ -71,7 +72,7 @@ class JsValue(lovelace: js.BigInt) extends js.Object {
     }
 
     /** Lovelace. A `bigint` because the ada supply exceeds `Number.MAX_SAFE_INTEGER`. */
-    def coin: js.BigInt = js.BigInt(value.coin.value.toString)
+    def coin: js.BigInt = value.coin.value.toJsBigInt
 
     /** The native assets, in ledger order. Empty for pure ada. */
     def assets: js.Array[JsAsset] = {
@@ -79,7 +80,7 @@ class JsValue(lovelace: js.BigInt) extends js.Object {
         value.assets.assets.foreach { case (policyId, byName) =>
             byName.foreach { case (name, quantity) =>
                 out.push(
-                  new JsAsset(policyId.toHex, name.bytes.toHex, js.BigInt(quantity.toString))
+                  new JsAsset(policyId.toHex, name.bytes.toHex, quantity.toJsBigInt)
                 )
             }
         }

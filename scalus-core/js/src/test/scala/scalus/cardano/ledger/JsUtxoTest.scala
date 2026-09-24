@@ -4,8 +4,9 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{Address, Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.uplc.builtin.{ByteString, Data}
 
+import scalus.utils.scalajs.internal.*
+
 import scala.scalajs.js
-import scala.scalajs.js.typedarray.{byteArray2Int8Array, Uint8Array}
 
 class JsUtxoTest extends AnyFunSuite {
 
@@ -13,8 +14,6 @@ class JsUtxoTest extends AnyFunSuite {
     private val address = Address.fromString(
       "addr_test1vzpwq95z3xyum8vqndgdd9mdnmafh3djcxnc6jemlgdmswcve6tkw"
     )
-
-    private def bytesOf(a: Array[Byte]): Uint8Array = new Uint8Array(byteArray2Int8Array(a).buffer)
 
     // A `js.UndefOr[_]` member access read directly inside `assert(...)` crashes the Scala.js JVM
     // backend ("Cannot emit primitive conversion from Ljava/lang/Object; to
@@ -113,7 +112,7 @@ class JsUtxoTest extends AnyFunSuite {
 
     test("withInlineDatum returns a new handle carrying the decoded inline datum") {
         val data: Data = Data.I(42)
-        val cbor = bytesOf(io.bullet.borer.Cbor.encode(data).toByteArray)
+        val cbor = JsCbor.encode(data)
         val utxo = JsUtxo.wrap(TransactionInput(hash, 0), TransactionOutput(address, Value.ada(1)))
         val updated = utxo.withInlineDatum(cbor)
         assert(updated.output.datumOption.contains(DatumOption.Inline(data)))
@@ -123,7 +122,8 @@ class JsUtxoTest extends AnyFunSuite {
 
     test("withScriptRef returns a new handle carrying the decoded reference script") {
         val script = Script.PlutusV3(ByteString.fromHex("00"))
-        val scriptRefCbor = bytesOf(io.bullet.borer.Cbor.encode(ScriptRef(script)).toByteArray)
+        val scriptRefCbor =
+            JsCbor.encode(ScriptRef(script))
         val utxo = JsUtxo.wrap(TransactionInput(hash, 0), TransactionOutput(address, Value.ada(1)))
         val updated = utxo.withScriptRef(scriptRefCbor)
         assert(updated.output.scriptRef.contains(ScriptRef(script)))

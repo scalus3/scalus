@@ -2,8 +2,8 @@ package scalus.crypto.ed25519
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.*
-import scala.scalajs.js.typedarray.{Int8Array, Uint8Array}
-import scala.scalajs.js.JSConverters.*
+import scala.scalajs.js.typedarray.Uint8Array
+import scalus.utils.scalajs.internal.*
 
 @JSImport("@noble/curves/ed25519", JSImport.Namespace)
 @js.native
@@ -42,13 +42,6 @@ object Ed25519MathPlatform {
     private val L: js.BigInt =
         js.BigInt("7237005577332262213973186563042994240857116359379907606001950938285454250989")
 
-    private def toUint8Array(bytes: Array[Byte]): Uint8Array =
-        val int8Array = new Int8Array(bytes.toJSArray)
-        new Uint8Array(int8Array.buffer, int8Array.byteOffset, int8Array.length)
-
-    private def fromUint8Array(arr: Uint8Array): Array[Byte] =
-        new Int8Array(arr.buffer, arr.byteOffset, arr.length).toArray
-
     /** Convert little-endian bytes to BigInt for JS. */
     private def bytesToBigInt(bytes: Array[Byte]): js.BigInt = {
         if bytes.isEmpty then js.BigInt(0)
@@ -74,6 +67,6 @@ object Ed25519MathPlatform {
         val scalarBigInt = bytesToBigInt(scalar)
         val reducedScalar = scalarBigInt % L
         val point = NobleEd25519Math.ed25519.ExtendedPoint.BASE.multiply(reducedScalar)
-        fromUint8Array(point.toRawBytes())
+        point.toRawBytes().toByteArray
     }
 }

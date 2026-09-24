@@ -1,7 +1,7 @@
 package scalus.uplc.builtin.bls12_381
 
 import scalus.uplc.builtin.ByteString
-import scalus.uplc.builtin.NodeJsPlatformSpecific.{toByteString, toJsBigInt, toUint8Array}
+import scalus.utils.scalajs.internal.{toByteString, toJsBigInt, toUint8Array}
 import scalus.uplc.builtin.PlatformSpecific
 
 import scala.compiletime.asMatchable

@@ -492,6 +492,8 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         // scalus.uplc.internal: public utilitarian tooling (UPLC source-map renderer, profile
         // report writer) whose contract is the on-disk artifact formats, not the Scala API.
         ProblemFilters.exclude[Problem]("scalus.uplc.internal.*"),
+        // scalus.utils.scalajs.internal: Scala.js-only conversion helpers, all private[scalus].
+        ProblemFilters.exclude[Problem]("scalus.utils.scalajs.internal.*"),
         // TxInfo.redeemers changed from SortedMap to AssocMap. Redeemer keys are positional -
         // the ledger's map is `Map (PlutusPurpose AsIx era) _` and AsIx keeps only the index -
         // so no content-based Ord can track their order, and a sorted map's short-circuiting

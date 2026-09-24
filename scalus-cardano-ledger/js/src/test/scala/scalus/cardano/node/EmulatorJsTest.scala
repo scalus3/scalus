@@ -10,18 +10,16 @@ import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
 import scalus.uplc.eval.JScalus
+import scalus.utils.scalajs.internal.*
 
 import scala.scalajs.js
-import scala.scalajs.js.typedarray.{byteArray2Int8Array, Uint8Array}
+import scala.scalajs.js.typedarray.Uint8Array
 
 class EmulatorJsTest extends AnyFunSuite {
 
     given testEnv: CardanoInfo = CardanoInfo.mainnet
     val genesisHash: TransactionHash =
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-
-    private def toUint8Array(bytes: Array[Byte]): Uint8Array =
-        new Uint8Array(byteArray2Int8Array(bytes).buffer)
 
     /** ScalaTest's `assert` macro crashes the Scala.js backend when it decomposes a raw
       * `js.UndefOr` member chain (confirmed twice already - see `JsUtxoTest.scala` and the
@@ -113,7 +111,7 @@ class EmulatorJsTest extends AnyFunSuite {
 
     test("Emulator.withRegisteredStakeCredentials allows zero-withdrawal without registration tx") {
         val (emulator, tx) = zeroWithdrawalFixture()
-        val result = emulator.submitTx(toUint8Array(tx.toCbor))
+        val result = emulator.submitTx(tx.toCbor.toUint8Array)
         assert(
           result.isSuccess,
           s"Zero-withdrawal should succeed with pre-registered credential: ${result.error}"
@@ -139,7 +137,7 @@ class EmulatorJsTest extends AnyFunSuite {
         val underfundedUtxos = Seq(input -> Output(alice, Value.ada(1)))
         val emulator = JEmulator.create(JsCardanoInfo.mainnet(), optionsWith(underfundedUtxos))
 
-        val result = emulator.submitTx(toUint8Array(tx.toCbor))
+        val result = emulator.submitTx(tx.toCbor.toUint8Array)
         assert(!result.isSuccess)
         // Routed through .toOption in a val first, not `result.errorRule.contains(...)` inline in
         // the assert: ScalaTest's assert macro decomposing a raw js.UndefOr member chain crashes
@@ -152,7 +150,7 @@ class EmulatorJsTest extends AnyFunSuite {
 
     test("submitTx answers with a result, not an exception, for bytes that are not a transaction") {
         val emulator = JEmulator.create(JsCardanoInfo.mainnet())
-        val result = emulator.submitTx(toUint8Array(Array[Byte](0)))
+        val result = emulator.submitTx(Array[Byte](0).toUint8Array)
         assert(!result.isSuccess, "undecodable bytes are a rejection, not an acceptance")
         // See the note above about js.UndefOr inside ScalaTest's assert macro.
         val errorRule = result.errorRule.toOption
@@ -164,12 +162,12 @@ class EmulatorJsTest extends AnyFunSuite {
 
     test("evaluateTx throws for bytes that are not a transaction, as its doc says") {
         val emulator = JEmulator.create(JsCardanoInfo.mainnet())
-        intercept[Throwable] { emulator.evaluateTx(toUint8Array(Array[Byte](0))) }
+        intercept[Throwable] { emulator.evaluateTx(Array[Byte](0).toUint8Array) }
     }
 
     test("evaluateTx resolves inputs against the emulator's own UTxO set") {
         val (emulator, tx) = zeroWithdrawalFixture()
-        val budgets = emulator.evaluateTx(toUint8Array(tx.toCbor))
+        val budgets = emulator.evaluateTx(tx.toCbor.toUint8Array)
         assert(budgets.length == 1, s"expected one redeemer, got ${budgets.length}")
         assert(budgets(0).tag == "Reward")
         assert(BigInt(budgets(0).budget.steps.toString) > 0)
@@ -177,7 +175,7 @@ class EmulatorJsTest extends AnyFunSuite {
 
     test("evaluateTx agrees with evalPlutusScripts given the same parameters") {
         val (emulator, tx) = zeroWithdrawalFixture()
-        val txCbor = toUint8Array(tx.toCbor)
+        val txCbor = tx.toCbor.toUint8Array
         val info = emulator.getCardanoInfo()
         val cm = info.protocolParams.costModels
         // Built explicitly by language, never by iterating a Map's `.values` - that relies on
@@ -208,7 +206,7 @@ class EmulatorJsTest extends AnyFunSuite {
               fromEmulator(i).budget.memory.toString == fromStandalone(i).budget.memory.toString,
               s"memory differs at $i: ${fromEmulator(i).budget.memory} vs ${fromStandalone(i).budget.memory}"
             )
-            assert(BigInt(fromEmulator(i).budget.steps.toString) > 0)
+            assert(fromEmulator(i).budget.steps > js.BigInt(0))
     }
 
     test("evaluateTx throws a real PlutusScriptEvaluationError for a failing script") {
@@ -242,7 +240,7 @@ class EmulatorJsTest extends AnyFunSuite {
         // spent payment UTxO is resolved only because it is passed as `additionalUtxos`.
         val caught = intercept[js.JavaScriptException] {
             emulator.evaluateTx(
-              toUint8Array(tx.toCbor),
+              tx.toCbor.toUint8Array,
               js.Array(JsUtxo.wrap(paymentInput, paymentOutput))
             )
         }
@@ -471,7 +469,7 @@ class EmulatorJsTest extends AnyFunSuite {
       "identifiers are hex everywhere: hasTx, getTransactionStatus, getTransaction, getAppliedTxs"
     ) {
         val (emulator, tx) = zeroWithdrawalFixture()
-        val result = emulator.submitTx(toUint8Array(tx.toCbor))
+        val result = emulator.submitTx(tx.toCbor.toUint8Array)
         assert(result.isSuccess, s"submission must succeed: ${result.error}")
         val hash = tx.id.toHex
 
@@ -484,7 +482,7 @@ class EmulatorJsTest extends AnyFunSuite {
         // transaction, so a stub that returns some other transaction's bytes would be caught.
         val fetched = optionOf(emulator.getTransaction(hash))
             .getOrElse(fail("submitted transaction must be found by hash"))
-        assert(Transaction.fromCbor(fetched.toArray.map(_.toByte)) == tx)
+        assert(Transaction.fromCbor(fetched.toByteArray) == tx)
         assert(optionOf(emulator.getTransaction("00" * 32)).isEmpty)
 
         // Checks both fields, not just length: a getAppliedTxs that dropped the slot or returned
@@ -511,7 +509,7 @@ class EmulatorJsTest extends AnyFunSuite {
 
         val found = optionOf(emulator.getDatum(datumHashHex))
             .getOrElse(fail("seeded datum must be found by hash"))
-        assert(ByteString.fromArray(found.toArray.map(_.toByte)).toHex == datumCborHex)
+        assert(ByteString.fromArray(found.toByteArray).toHex == datumCborHex)
         assert(optionOf(emulator.getDatum("00" * 32)).isEmpty)
     }
 
@@ -666,8 +664,8 @@ class EmulatorJsTest extends AnyFunSuite {
             .getOrElse(fail("credential missing from stake distribution"))
         // Distinct values on purpose - stake (from the UTxO) and rewards (from certState) come
         // from two different sources, so pinning both distinguishes a mapping that swapped them.
-        assert(BigInt(entry.stake.toString) == 250_000_000L)
-        assert(BigInt(entry.rewards.toString) == 1_000_000L)
+        assert(entry.stake == js.BigInt(250_000_000))
+        assert(entry.rewards == js.BigInt(1_000_000))
         assert(optionOf(entry.pool).contains(poolKeyHash.toHex))
     }
 }

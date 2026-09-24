@@ -1,10 +1,10 @@
 package scalus.uplc.eval
 
-import io.bullet.borer.Cbor
 import scalus.interop.TsType
 import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.*
 import scalus.uplc.{Constant, DeBruijnedProgram, Term}
+import scalus.utils.scalajs.internal.*
 
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -24,8 +24,8 @@ object JScalus {
     extension (self: ExUnits)
         /** Converts ExUnits to a JavaScript BigInt representation. */
         def toJSExUnits: JSExUnits = new JSExUnits(
-          steps = js.BigInt(self.steps.toString),
-          memory = js.BigInt(self.memory.toString)
+          steps = self.steps.toJsBigInt,
+          memory = self.memory.toJsBigInt
         )
 
     extension (self: Result)
@@ -242,11 +242,8 @@ object JScalus {
         protocolMajorVersion: Int = CardanoInfo.mainnet.majorProtocolVersion.version
     ): js.Array[Redeemer] = {
         try
-            val tx = Transaction.fromCbor(txCborBytes.toArray.map(_.toByte))
-            val utxo =
-                Cbor.decode(utxoCborBytes.toArray.map(_.toByte))
-                    .to[Map[TransactionInput, TransactionOutput]]
-                    .value
+            val tx = Transaction.fromCbor(txCborBytes.toByteArray)
+            val utxo = JsCbor.decode[Map[TransactionInput, TransactionOutput]](utxoCborBytes)
             val cms = CostModels(costModels.zipWithIndex.map { case (cm, lang) =>
                 lang -> cm.toIndexedSeq.map(_.toLong)
             }.toMap)
@@ -263,8 +260,8 @@ object JScalus {
                   tag = r.tag.toString,
                   index = r.index,
                   budget = JSExUnits(
-                    steps = js.BigInt(r.exUnits.steps.toString),
-                    memory = js.BigInt(r.exUnits.memory.toString)
+                    steps = r.exUnits.steps.toJsBigInt,
+                    memory = r.exUnits.memory.toJsBigInt
                   )
                 )
             results.toJSArray

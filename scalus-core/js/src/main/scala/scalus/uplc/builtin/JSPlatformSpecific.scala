@@ -3,9 +3,9 @@ package scalus.uplc.builtin
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
 import scala.scalajs.js
-import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.*
-import scala.scalajs.js.typedarray.Int8Array
+import scalus.utils.scalajs.internal as sjs
+import scalus.utils.scalajs.internal.toByteArray
 import scala.scalajs.js.typedarray.Uint8Array
 
 @JSImport("@noble/hashes/sha2", JSImport.Namespace)
@@ -87,18 +87,13 @@ object Builtins extends Builtins(using NodeJsPlatformSpecific)
 class Builtins(using ps: PlatformSpecific) extends AbstractBuiltins(using ps)
 
 trait NodeJsPlatformSpecific extends PlatformSpecific {
-    extension (bs: ByteString)
-        def toUint8Array: Uint8Array =
-            val int8Array = new Int8Array(bs.bytes.toJSArray)
-            new Uint8Array(int8Array.buffer, int8Array.byteOffset, int8Array.length)
+    // Delegates by call rather than extension syntax: inside this trait, `bs.toUint8Array` names
+    // these same extensions, which shadow the `scalus.utils.scalajs.internal` ones.
+    extension (bs: ByteString) def toUint8Array: Uint8Array = sjs.toUint8Array(bs)
 
-    extension (arr: Uint8Array)
-        def toByteString: ByteString =
-            ByteString.unsafeFromArray(
-              new Int8Array(arr.buffer, arr.byteOffset, arr.length).toArray
-            )
+    extension (arr: Uint8Array) def toByteString: ByteString = sjs.toByteString(arr)
 
-    extension (bigInt: BigInt) def toJsBigInt: js.BigInt = js.BigInt(bigInt.toString())
+    extension (bigInt: BigInt) def toJsBigInt: js.BigInt = sjs.toJsBigInt(bigInt)
 
     override def sha2_256(bs: ByteString): ByteString =
         Sha2.sha256(bs.toUint8Array).toByteString
@@ -302,22 +297,17 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
 
     override def readFile(path: String): Array[Byte] = {
         val fs = fileSystem
-        val buffer = fs.readFileSync(path).asInstanceOf[Uint8Array]
-        new Int8Array(buffer.buffer, buffer.byteOffset, buffer.length).toArray
+        fs.readFileSync(path).asInstanceOf[Uint8Array].toByteArray
     }
 
     override def writeFile(path: String, bytes: Array[Byte]): Unit = {
         val fs = fileSystem
-        val int8Array = new Int8Array(bytes.toJSArray)
-        val uint8Array = new Uint8Array(int8Array.buffer, int8Array.byteOffset, int8Array.length)
-        fs.writeFileSync(path, uint8Array)
+        fs.writeFileSync(path, sjs.toUint8Array(bytes))
     }
 
     override def appendFile(path: String, bytes: Array[Byte]): Unit = {
         val fs = fileSystem
-        val int8Array = new Int8Array(bytes.toJSArray)
-        val uint8Array = new Uint8Array(int8Array.buffer, int8Array.byteOffset, int8Array.length)
-        fs.appendFileSync(path, uint8Array)
+        fs.appendFileSync(path, sjs.toUint8Array(bytes))
     }
 
     override def createDirectories(path: String): Unit = {
