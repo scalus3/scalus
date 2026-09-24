@@ -163,6 +163,8 @@ class DifferentialFixtureGenTest extends AnyFunSuite {
         val tx = withdrawalTx(fixtureRedeemer)
         val txHex = hex(tx.toCbor)
         val utxoHex = hex(Cbor.encode(initialUtxos).toByteArray)
+        // The same UTxO as one `[input, output]` pair, which is what `evaluator.evaluateTx` takes.
+        val pairHex = hex(Cbor.encode(initialUtxos.head).toByteArray)
         // The script exactly as an SDK takes it: `Script.PlutusV3.script` is already the flat
         // program wrapped in one CBOR bytestring, which is what `applyDoubleCborEncoding` produces
         // and what `PlutusScript.from_cbor_hex` reads. `provider-lucid.test.ts` hands lucid this
@@ -172,6 +174,7 @@ class DifferentialFixtureGenTest extends AnyFunSuite {
 
         println(s"FIXTURE_TX_HEX=$txHex")
         println(s"FIXTURE_UTXO_HEX=$utxoHex")
+        println(s"FIXTURE_UTXO_PAIR_HEX=$pairHex")
         println(s"FIXTURE_SCRIPT_HEX=$scriptHex")
         println(s"FIXTURE_BUDGET mem=${budget.memory} steps=${budget.steps}")
 
@@ -188,6 +191,10 @@ class DifferentialFixtureGenTest extends AnyFunSuite {
         assert(
           fixtureConstant(fixtures, "scriptUtxoCborHex") == utxoHex,
           regenerate("scriptUtxoCborHex", utxoHex)
+        )
+        assert(
+          fixtureConstant(fixtures, "scriptUtxoPairHex") == pairHex,
+          regenerate("scriptUtxoPairHex", pairHex)
         )
         assert(
           fixtureConstant(fixtures, "contextSensitiveScriptHex") == scriptHex,

@@ -111,6 +111,12 @@ export const successScriptHex = "545301010023357389210753756363657373004981";
 export const failScriptHex = "450100002261";
 
 /**
+ * `(program 1.1.0 (lam ctx (force [[(force (builtin trace)) (con string "boom")] (delay (error))])))`
+ * Traces "boom", then fails. Single-CBOR.
+ */
+export const tracingFailScriptHex = "5101010025335738920104626f6f6d001601";
+
+/**
  * A transaction that really does run a Plutus script: a zero-lovelace withdrawal from a reward
  * address guarded by a PlutusV3 validator, so it carries exactly one `Reward` redeemer.
  *
@@ -161,3 +167,12 @@ export const scriptUtxoCborHex =
   "a18258200000000000000000000000000000000000000000000000000000000000000000" +
   "0082581d61c8c47610a36034aac6fc58848bdae5c278d994ff502c05455e3b3ee81b0000" +
   "00012a05f200";
+
+/**
+ * The same UTxO as one CBOR `[input, output]` pair, for `evaluator.evaluateTx`.
+ * Generated and guarded by DifferentialFixtureGenTest.
+ */
+export const scriptUtxoPairHex =
+  "8282582000000000000000000000000000000000000000000000000000000000000000" +
+  "000082581d61c8c47610a36034aac6fc58848bdae5c278d994ff502c05455e3b3ee81b0" +
+  "00000012a05f200";

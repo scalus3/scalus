@@ -9,7 +9,8 @@ import scalus.cardano.txbuilder.{ScriptSource, TwoArgumentPlutusScriptWitness, T
 import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
-import scalus.uplc.eval.JScalus
+import scalus.uplc.eval.{JPlutusScriptEvaluationError, JScalus}
+
 import scalus.utils.scalajs.internal.*
 
 import scala.scalajs.js
@@ -21,12 +22,9 @@ class EmulatorJsTest extends AnyFunSuite {
     val genesisHash: TransactionHash =
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
-    /** ScalaTest's `assert` macro crashes the Scala.js backend when it decomposes a raw
-      * `js.UndefOr` member chain (confirmed twice already - see `JsUtxoTest.scala` and the
-      * `errorRule` check below), so every `js.UndefOr` assertion in this file converts to `Option`
-      * first, outside the macro's view.
-      */
-    private def optionOf[A](u: js.UndefOr[A]): Option[A] = u.toOption
+    // Read a `js.UndefOr` inside `assert` through `.toOption`: ScalaTest's macro decomposing a raw
+    // `js.UndefOr` chain, such as `assert(r.errorRule.contains(x))`, crashes the Scala.js backend
+    // ("Cannot emit primitive conversion ... to Lscala/scalajs/js/$bar;").
 
     /** Builds a `JsUtxoFilter` literal; every argument left out stays `js.undefined`, matching what
       * a caller who only sets one or two fields would produce.
@@ -139,10 +137,6 @@ class EmulatorJsTest extends AnyFunSuite {
 
         val result = emulator.submitTx(tx.toCbor.toUint8Array)
         assert(!result.isSuccess)
-        // Routed through .toOption in a val first, not `result.errorRule.contains(...)` inline in
-        // the assert: ScalaTest's assert macro decomposing a raw js.UndefOr member chain crashes
-        // the Scala.js backend at compile time (see optionOf in JsUtxoTest.scala for the same
-        // workaround), so the UndefOr -> Option conversion has to happen outside the macro's view.
         val errorRule = result.errorRule.toOption
         assert(errorRule.contains("ValueNotConserved"), errorRule.toString)
         assert(result.logs.length == 0, "logs is always an array, empty when there are none")
@@ -152,7 +146,6 @@ class EmulatorJsTest extends AnyFunSuite {
         val emulator = JEmulator.create(JsCardanoInfo.mainnet())
         val result = emulator.submitTx(Array[Byte](0).toUint8Array)
         assert(!result.isSuccess, "undecodable bytes are a rejection, not an acceptance")
-        // See the note above about js.UndefOr inside ScalaTest's assert macro.
         val errorRule = result.errorRule.toOption
         assert(errorRule.contains("InvalidTransaction"), errorRule.toString)
         val error = result.error.toOption.getOrElse("")
@@ -162,7 +155,10 @@ class EmulatorJsTest extends AnyFunSuite {
 
     test("evaluateTx throws for bytes that are not a transaction, as its doc says") {
         val emulator = JEmulator.create(JsCardanoInfo.mainnet())
-        intercept[Throwable] { emulator.evaluateTx(Array[Byte](0).toUint8Array) }
+        val thrown = intercept[js.JavaScriptException] {
+            emulator.evaluateTx(Array[Byte](0).toUint8Array)
+        }
+        assert(thrown.exception.isInstanceOf[js.Error]) // spec [TX-12] [TX-14]
     }
 
     test("evaluateTx resolves inputs against the emulator's own UTxO set") {
@@ -245,7 +241,7 @@ class EmulatorJsTest extends AnyFunSuite {
             )
         }
         caught.exception match
-            case err: JScalus.JSPlutusScriptEvaluationError =>
+            case err: JPlutusScriptEvaluationError =>
                 // The point of extending js.Error: a raw JS `instanceof Error` check has to pass,
                 // not merely a Scala-side pattern match on the error's declared type. Widened to
                 // `Any` first so the check is a live runtime `instanceof`, not something the
@@ -256,8 +252,12 @@ class EmulatorJsTest extends AnyFunSuite {
                 )
                 assert(err.message.contains("always fails"))
                 assert(err.logs.nonEmpty)
+                // spec [TX-14] [ER-14]: the emulator throws the same enriched error.
+                assert(err.redeemer.toOption.map(_.tag).contains("Reward"))
+                assert(err.code.toOption.contains("SCRIPT_FAILURE"))
+                assert(err.args.toOption.isDefined)
             case other =>
-                fail(s"expected JSPlutusScriptEvaluationError, got: $other")
+                fail(s"expected JPlutusScriptEvaluationError, got: $other")
     }
 
     test("Emulator.create uses the network's own protocol parameters, not mainnet's") {
@@ -480,10 +480,12 @@ class EmulatorJsTest extends AnyFunSuite {
 
         // Not merely "isDefined": the returned CBOR must decode back to the exact submitted
         // transaction, so a stub that returns some other transaction's bytes would be caught.
-        val fetched = optionOf(emulator.getTransaction(hash))
+        val fetched = emulator
+            .getTransaction(hash)
+            .toOption
             .getOrElse(fail("submitted transaction must be found by hash"))
         assert(Transaction.fromCbor(fetched.toByteArray) == tx)
-        assert(optionOf(emulator.getTransaction("00" * 32)).isEmpty)
+        assert(emulator.getTransaction("00" * 32).toOption.isEmpty)
 
         // Checks both fields, not just length: a getAppliedTxs that dropped the slot or returned
         // the wrong hash would still pass a bare length check.
@@ -507,10 +509,12 @@ class EmulatorJsTest extends AnyFunSuite {
             .asInstanceOf[JsEmulatorOptions]
         val emulator = JEmulator.create(JsCardanoInfo.mainnet(), options)
 
-        val found = optionOf(emulator.getDatum(datumHashHex))
+        val found = emulator
+            .getDatum(datumHashHex)
+            .toOption
             .getOrElse(fail("seeded datum must be found by hash"))
         assert(ByteString.fromArray(found.toByteArray).toHex == datumCborHex)
-        assert(optionOf(emulator.getDatum("00" * 32)).isEmpty)
+        assert(emulator.getDatum("00" * 32).toOption.isEmpty)
     }
 
     test("time and slot move together") {
@@ -590,10 +594,10 @@ class EmulatorJsTest extends AnyFunSuite {
 
         val info = emulator.getDelegation(scriptStakeBech32)
         assert(info.rewards.toString == "1000000")
-        assert(optionOf(info.poolId).contains(poolKeyHash.toHex))
-        assert(optionOf(emulator.getStakeReward(scriptStakeBech32)).contains(js.BigInt("1000000")))
+        assert(info.poolId.toOption.contains(poolKeyHash.toHex))
+        assert(emulator.getStakeReward(scriptStakeBech32).toOption.contains(js.BigInt("1000000")))
 
-        assert(optionOf(emulator.getStakeReward(keyStakeBech32)).contains(js.BigInt("2000000")))
+        assert(emulator.getStakeReward(keyStakeBech32).toOption.contains(js.BigInt("2000000")))
 
         // A never-registered credential: rewards defaults to 0 (getDelegation), but
         // getStakeReward must come back undefined so the two are distinguishable.
@@ -604,8 +608,8 @@ class EmulatorJsTest extends AnyFunSuite {
             ).toBech32
                 .getOrElse(fail("test address must encode to bech32"))
         assert(emulator.getDelegation(neverRegisteredBech32).rewards.toString == "0")
-        assert(optionOf(emulator.getDelegation(neverRegisteredBech32).poolId).isEmpty)
-        assert(optionOf(emulator.getStakeReward(neverRegisteredBech32)).isEmpty)
+        assert(emulator.getDelegation(neverRegisteredBech32).poolId.toOption.isEmpty)
+        assert(emulator.getStakeReward(neverRegisteredBech32).toOption.isEmpty)
     }
 
     test("getDelegation and getStakeReward reject a string that is not a reward address") {
@@ -666,6 +670,6 @@ class EmulatorJsTest extends AnyFunSuite {
         // from two different sources, so pinning both distinguishes a mapping that swapped them.
         assert(entry.stake == js.BigInt(250_000_000))
         assert(entry.rewards == js.BigInt(1_000_000))
-        assert(optionOf(entry.pool).contains(poolKeyHash.toHex))
+        assert(entry.pool.toOption.contains(poolKeyHash.toHex))
     }
 }

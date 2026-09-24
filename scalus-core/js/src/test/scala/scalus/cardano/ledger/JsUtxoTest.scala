@@ -10,18 +10,14 @@ import scala.scalajs.js
 
 class JsUtxoTest extends AnyFunSuite {
 
+    // Read a `js.UndefOr` inside `assert` through `.toOption`: ScalaTest's macro decomposing a raw
+    // `js.UndefOr` chain, such as `assert(r.errorRule.contains(x))`, crashes the Scala.js backend
+    // ("Cannot emit primitive conversion ... to Lscala/scalajs/js/$bar;").
+
     private val hash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
     private val address = Address.fromString(
       "addr_test1vzpwq95z3xyum8vqndgdd9mdnmafh3djcxnc6jemlgdmswcve6tkw"
     )
-
-    // A `js.UndefOr[_]` member access read directly inside `assert(...)` crashes the Scala.js JVM
-    // backend ("Cannot emit primitive conversion from Ljava/lang/Object; to
-    // Lscala/scalajs/js/$bar;") - the ScalaTest `assert` macro's expression-capturing does not
-    // survive it. Verified: `assert(utxo.datumHash.isEmpty)` crashes; routing the same value
-    // through this helper first, so the macro only ever sees a plain `Option[A]`, does not. A bare
-    // `assert(x.toOption.isEmpty)` was NOT tried and is not known to be safe - use this helper.
-    private def optionOf[A](u: js.UndefOr[A]): Option[A] = u.toOption
 
     test("a wrapped UTxO exposes hex ids and a Value handle") {
         val utxo = JsUtxo.wrap(TransactionInput(hash, 3), TransactionOutput(address, Value.ada(7)))
@@ -29,10 +25,10 @@ class JsUtxoTest extends AnyFunSuite {
         assert(utxo.outputIndex == 3.0)
         assert(utxo.address == address.encode.get)
         assert(utxo.value.coin.toString == "7000000")
-        assert(optionOf(utxo.datumHash).isEmpty)
-        assert(optionOf(utxo.inlineDatum).isEmpty)
-        assert(optionOf(utxo.scriptRef).isEmpty)
-        assert(optionOf(utxo.scriptLanguage).isEmpty)
+        assert(utxo.datumHash.toOption.isEmpty)
+        assert(utxo.inlineDatum.toOption.isEmpty)
+        assert(utxo.scriptRef.toOption.isEmpty)
+        assert(utxo.scriptLanguage.toOption.isEmpty)
     }
 
     test("a UTxO built in JavaScript round-trips to the same ledger value") {
@@ -105,9 +101,9 @@ class JsUtxoTest extends AnyFunSuite {
         val hashHex = "1" * 64
         val updated = utxo.withDatumHash(hashHex)
         assert(updated.output.datumOption.contains(DatumOption.Hash(DataHash.fromHex(hashHex))))
-        assert(optionOf(updated.datumHash).contains(hashHex))
-        assert(optionOf(updated.inlineDatum).isEmpty)
-        assert(optionOf(utxo.datumHash).isEmpty)
+        assert(updated.datumHash.toOption.contains(hashHex))
+        assert(updated.inlineDatum.toOption.isEmpty)
+        assert(utxo.datumHash.toOption.isEmpty)
     }
 
     test("withInlineDatum returns a new handle carrying the decoded inline datum") {
@@ -116,8 +112,8 @@ class JsUtxoTest extends AnyFunSuite {
         val utxo = JsUtxo.wrap(TransactionInput(hash, 0), TransactionOutput(address, Value.ada(1)))
         val updated = utxo.withInlineDatum(cbor)
         assert(updated.output.datumOption.contains(DatumOption.Inline(data)))
-        assert(optionOf(updated.inlineDatum).isDefined)
-        assert(optionOf(updated.datumHash).isEmpty)
+        assert(updated.inlineDatum.toOption.isDefined)
+        assert(updated.datumHash.toOption.isEmpty)
     }
 
     test("withScriptRef returns a new handle carrying the decoded reference script") {
@@ -127,7 +123,7 @@ class JsUtxoTest extends AnyFunSuite {
         val utxo = JsUtxo.wrap(TransactionInput(hash, 0), TransactionOutput(address, Value.ada(1)))
         val updated = utxo.withScriptRef(scriptRefCbor)
         assert(updated.output.scriptRef.contains(ScriptRef(script)))
-        assert(optionOf(updated.scriptLanguage).contains("PlutusV3"))
+        assert(updated.scriptLanguage.toOption.contains("PlutusV3"))
     }
 
     test("toObject yields own enumerable properties, which the handle does not") {

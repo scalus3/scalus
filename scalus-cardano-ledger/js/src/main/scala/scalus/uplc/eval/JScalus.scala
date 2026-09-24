@@ -1,6 +1,5 @@
 package scalus.uplc.eval
 
-import scalus.interop.TsType
 import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.*
 import scalus.uplc.{Constant, DeBruijnedProgram, Term}
@@ -11,113 +10,17 @@ import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 import scala.scalajs.js.typedarray.Uint8Array
 
-/** Main API exported by Scalus.
+/** The `Scalus` namespace object.
   *
   * @deprecated
-  *   Use the top-level functions (`evaluateScript`, `evaluateScriptProfile`,
-  *   `applyDataArgToScript`, `evalPlutusScripts`) instead; this namespace object remains for
-  *   backwards compatibility.
+  *   Use the top-level exports instead; this namespace object remains for backwards compatibility.
+  *   `applyDataArgToScript` becomes `uplc.applyParamsToScript`, `evaluateScript` becomes
+  *   `evaluator.evaluateScript` with an `EvaluationOptions`, `evalPlutusScripts` becomes
+  *   `evaluator.evaluateTx`, and `evaluateScriptProfile` is not replaced.
   */
 @JSExportTopLevel("Scalus")
 object JScalus {
     bindExports(this)
-
-    extension (self: ExUnits)
-        /** Converts ExUnits to a JavaScript BigInt representation. */
-        def toJSExUnits: JSExUnits = new JSExUnits(
-          steps = self.steps.toJsBigInt,
-          memory = self.memory.toJsBigInt
-        )
-
-    extension (self: Result)
-        /** Converts Result to JSResult. When the result carries profiling data (i.e. it was
-          * produced with profiling enabled), the `profileJson` field is set to the profile rendered
-          * as JSON; otherwise it is `undefined`.
-          *
-          * Only the lightweight JSON rendering is exposed here on purpose: the HTML report and its
-          * source-annotation machinery live in `ProfileFormatter.toHtml` / `loadSources`, which are
-          * deliberately not referenced from the JS facade so they stay dead-code-eliminated out of
-          * the (transaction-builder) `scalus.js` bundle.
-          */
-        def toJSResult: JSResult =
-            val profileJson: js.UndefOr[String] = self.profile match
-                case Some(p) => ProfileFormatter.toJson(p)
-                case None    => js.undefined
-            self match
-                case s: Result.Success =>
-                    JSResult(
-                      isSuccess = true,
-                      budget = s.budget.toJSExUnits,
-                      logs = js.Array(s.logs*),
-                      profileJson = profileJson
-                    )
-                case f: Result.Failure =>
-                    JSResult(
-                      isSuccess = false,
-                      budget = f.budget.toJSExUnits,
-                      logs = js.Array(f.exception.getMessage +: f.logs*),
-                      profileJson = profileJson
-                    )
-
-    /** Execution units: what a script costs to run, in abstract machine memory and steps. A
-      * transaction pays a fee for the units its scripts declare, and the ledger rejects it if a
-      * script goes over what it declared.
-      */
-    @JSExportTopLevel("ExUnits")
-    class JSExUnits(val memory: js.BigInt, val steps: js.BigInt) extends js.Object
-
-    /** Outcome of evaluating one Plutus script. Read `isSuccess` first: the two outcomes differ in
-      * what `budget` and `logs` mean.
-      *
-      * @param budget
-      *   Units the machine spent. On failure this is what was spent before the script failed, and
-      *   zero when the script could not be decoded at all.
-      * @param logs
-      *   Trace output the script emitted, oldest first. On failure the failure message is
-      *   prepended, so `logs[0]` is the error and the traces follow it.
-      * @param profileJson
-      *   Profiling data as JSON; `undefined` unless the script was evaluated with profiling (see
-      *   [[evaluateScriptProfile]]).
-      */
-    @JSExportTopLevel("EvaluationResult")
-    @JSExportTopLevel("Result")
-    class JSResult(
-        val isSuccess: Boolean,
-        val budget: JSExUnits,
-        val logs: js.Array[String],
-        val profileJson: js.UndefOr[String]
-    ) extends js.Object
-
-    /** One redeemer of a transaction, together with the execution budget its script really used.
-      * `tag` and `index` together say which script this is, and match the redeemer in the
-      * transaction.
-      *
-      * `tag` is why the script ran: `"Spend"` for a script input, `"Mint"` for a minting policy,
-      * `"Cert"` for a certificate, `"Reward"` for a withdrawal, `"Voting"` for a vote, and
-      * `"Proposing"` for a governance proposal.
-      *
-      * @param index
-      *   Position within the group named by `tag`, counting from 0: for `"Spend"` it indexes the
-      *   transaction's inputs in ledger order, for `"Mint"` its minting policies, and so on.
-      */
-    @JSExportTopLevel("RedeemerBudget")
-    @JSExportTopLevel("Redeemer")
-    class Redeemer(
-        @TsType("\"Spend\" | \"Mint\" | \"Cert\" | \"Reward\" | \"Voting\" | \"Proposing\"")
-        val tag: String,
-        val index: Int,
-        val budget: JSExUnits
-    ) extends js.Object
-
-    /** Thrown by `evalPlutusScripts` when a Plutus script fails to evaluate. Carries the failure
-      * message and the script's trace logs. Extends `Error`, so `instanceof Error`, `.stack` and
-      * unhandled-rejection output all behave normally.
-      */
-    @JSExportTopLevel("PlutusScriptEvaluationError")
-    class JSPlutusScriptEvaluationError(
-        message: String,
-        val logs: js.Array[String]
-    ) extends js.Error(message)
 
     /** Applies one argument to a Plutus script and returns the applied script. Use it to bake a
       * parameter into a parameterized validator before you compute its script hash.
@@ -129,11 +32,14 @@ object JScalus {
       *   `{"constructor":0,"fields":[{"bytes":"deadbeef"}]}`.
       * @return
       *   The double-CBOR-encoded hex representation of the script with the argument applied.
+      * @deprecated
+      *   (since 1.2.0) Use `uplc.applyParamsToScript`, which takes a list of parameters and accepts
+      *   hex or bytes. It reads Data as CBOR rather than JSON, so convert first;
+      *   `uplc.applyParamsToScript(script, [cborHex])` then returns what this function returns.
       */
     @JSExport
     @JSExportTopLevel("applyDataArgToScript")
     def applyDataArgToScript(doubleCborHex: String, data: String): String = {
-        // Parse script and data from hex
         val program = DeBruijnedProgram.fromDoubleCborHex(doubleCborHex)
         val arg = Data.fromJson(data)
         val applied = program $ Term.Const(Constant.Data(arg))
@@ -151,26 +57,19 @@ object JScalus {
       *   The double-CBOR-encoded hex representation of the Plutus script.
       * @return
       *   The outcome, with the units spent and the trace logs.
+      * @deprecated
+      *   (since 1.2.0) Use `evaluator.evaluateScript(script, args, options)`, which takes the
+      *   language, protocol version and cost model explicitly instead of assuming Plutus V3 on
+      *   mainnet, and reports why a script failed in `error`.
+      *   `EvaluationOptions.mainnet("PlutusV3")` reproduces this function's configuration.
       */
     @JSExport
     @JSExportTopLevel("evaluateScript")
-    def evaluateScript(doubleCborHex: String): JSResult = {
+    def evaluateScript(doubleCborHex: String): JEvaluationResult =
         try
-            // Parse script from hex
             val program = DeBruijnedProgram.fromDoubleCborHex(doubleCborHex)
-            // Create appropriate VM based on version
-            val vm = PlutusVM.makePlutusV3VM()
-            // Evaluate script
-            vm.evaluateScriptDebug(program).toJSResult
-        catch
-            case exception: Exception =>
-                JSResult(
-                  isSuccess = false,
-                  budget = ExUnits.zero.toJSExUnits,
-                  logs = js.Array(exception.getMessage),
-                  profileJson = js.undefined
-                )
-    }
+            JEvaluationResult.legacy(PlutusVM.makePlutusV3VM().evaluateScriptDebug(program))
+        catch case exception: Exception => JEvaluationResult.unreadable(exception.getMessage)
 
     /** Evaluates a Plutus script with profiling enabled.
       *
@@ -178,31 +77,23 @@ object JScalus {
       * carries the machine's profiling data as JSON in `profileJson`: cost per source location,
       * cost per builtin, and the transition edges between them.
       *
-      * The renderer that turns that JSON into the interactive HTML report is a Scala-side tool
-      * (`ProfileFormatter`, in the Scalus library for the JVM). It is deliberately left out of this
-      * package to keep the bundle small, so from JavaScript you get the data, not the report.
-      *
       * @param doubleCborHex
       *   The double-CBOR-encoded hex representation of the Plutus script.
       * @return
       *   The outcome, with `profileJson` populated.
+      * @deprecated
+      *   (since 1.2.0) Not replaced: `evaluator.evaluateScript` does not profile. Attributing cost
+      *   to source lines needs the compiler output that produced the script, so profile from the
+      *   JVM, where `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full report.
+      *   This function keeps working meanwhile.
       */
     @JSExport
     @JSExportTopLevel("evaluateScriptProfile")
-    def evaluateScriptProfile(doubleCborHex: String): JSResult = {
+    def evaluateScriptProfile(doubleCborHex: String): JEvaluationResult =
         try
             val program = DeBruijnedProgram.fromDoubleCborHex(doubleCborHex)
-            val vm = PlutusVM.makePlutusV3VM()
-            vm.evaluateScriptProfile(program).toJSResult
-        catch
-            case exception: Exception =>
-                JSResult(
-                  isSuccess = false,
-                  budget = ExUnits.zero.toJSExUnits,
-                  logs = js.Array(exception.getMessage),
-                  profileJson = js.undefined
-                )
-    }
+            JEvaluationResult.legacy(PlutusVM.makePlutusV3VM().evaluateScriptProfile(program))
+        catch case exception: Exception => JEvaluationResult.unreadable(exception.getMessage)
 
     /** Evaluates every Plutus script a transaction runs, and reports what each one costs. Use it to
       * fill in a transaction's execution units before you balance and submit it.
@@ -229,9 +120,16 @@ object JScalus {
       *   One entry per redeemer of the transaction, carrying the units that redeemer's script
       *   spent.
       * @throws PlutusScriptEvaluationError
-      *   if a script fails; it carries the failure message and that script's trace logs. Only
-      *   script failures are reported this way: malformed transaction or UTxO CBOR surfaces as an
-      *   ordinary error instead.
+      *   if a script fails; it names the redeemer, classifies the failure, carries the script's
+      *   traces and the arguments the script saw.
+      * @throws Error
+      *   for any other failure: malformed transaction or UTxO CBOR, an input no entry of the UTxO
+      *   set resolves, a script the transaction does not carry.
+      * @deprecated
+      *   (since 1.2.0) Use `evaluator.evaluateTx(tx, utxos, slotConfig, costModels,
+      *   protocolMajorVersion)`, the same evaluation. It takes the resolved inputs as CBOR
+      *   `[input, output]` pairs instead of one map, the cost models by language name instead of by
+      *   position, and the protocol version explicitly instead of defaulting to mainnet's.
       */
     @JSExport
     @JSExportTopLevel("evalPlutusScripts")
@@ -241,36 +139,12 @@ object JScalus {
         slotConfig: JsSlotConfig,
         costModels: js.Array[js.Array[Double]],
         protocolMajorVersion: Int = CardanoInfo.mainnet.majorProtocolVersion.version
-    ): js.Array[Redeemer] = {
-        try
-            val tx = Transaction.fromCbor(txCborBytes.toByteArray)
-            val utxo = JsCbor.decode[Map[TransactionInput, TransactionOutput]](utxoCborBytes)
-            val cms = CostModels(costModels.zipWithIndex.map { case (cm, lang) =>
-                lang -> cm.toIndexedSeq.map(_.toLong)
-            }.toMap)
-            val evaluator = PlutusScriptEvaluator(
-              slotConfig = slotConfig.underlying,
-              initialBudget = ExUnits(Long.MaxValue, Long.MaxValue),
-              protocolMajorVersion = MajorProtocolVersion(protocolMajorVersion),
-              costModels = cms,
-              mode = EvaluatorMode.EvaluateAndComputeCost
-            )
-            val results =
-                for r <- evaluator.evalPlutusScripts(tx, utxo)
-                yield new Redeemer(
-                  tag = r.tag.toString,
-                  index = r.index,
-                  budget = JSExUnits(
-                    steps = r.exUnits.steps.toJsBigInt,
-                    memory = r.exUnits.memory.toJsBigInt
-                  )
-                )
-            results.toJSArray
-        catch
-            case e: PlutusScriptEvaluationException =>
-                throw js.JavaScriptException(
-                  JSPlutusScriptEvaluationError(e.getMessage, js.Array(e.logs*))
-                )
+    ): js.Array[JRedeemerBudget] = surfacingErrors {
+        val tx = Transaction.fromCbor(txCborBytes.toByteArray)
+        val utxo = JsCbor.decode[Map[TransactionInput, TransactionOutput]](utxoCborBytes)
+        val cms = CostModels(costModels.zipWithIndex.map { case (cm, lang) =>
+            lang -> cm.toIndexedSeq.map(_.toLong)
+        }.toMap)
+        JEvaluator.evaluate(tx, utxo, slotConfig.underlying, cms, protocolMajorVersion).toJSArray
     }
-
 }

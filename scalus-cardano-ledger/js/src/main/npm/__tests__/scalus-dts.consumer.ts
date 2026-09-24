@@ -16,23 +16,62 @@
 // and the program is exactly these two files.
 
 import {
+    CardanoInfo,
     Emulator,
     EmulatorInitialState,
+    EvaluationOptions,
+    EvaluationError,
     EvaluationResult,
     ExUnits,
     PlutusScriptEvaluationError,
+    ProtocolParams,
     RedeemerBudget,
     Redeemer,
     Result,
     Scalus,
     SlotConfig,
+    SlotConfigLike,
+    CostModelsLike,
     SubmitResult,
     DelegationInfo,
     applyDataArgToScript,
     evalPlutusScripts,
     evaluateScript,
     evaluateScriptProfile,
+    evaluator,
 } from "../scalus";
+// @ts-expect-error structural evaluation protocol parameters are no longer public
+import type { EvaluationProtocolParams } from "../scalus";
+
+const options: EvaluationOptions = EvaluationOptions.mainnet("PlutusV3");
+const protocolParams: ProtocolParams = CardanoInfo.mainnet().protocolParams;
+const suppliedV1: EvaluationOptions = EvaluationOptions.fromProtocolParams("PlutusV1", protocolParams);
+const suppliedV2: EvaluationOptions = EvaluationOptions.fromProtocolParams("PlutusV2", protocolParams);
+const suppliedV3: EvaluationOptions = EvaluationOptions.fromProtocolParams("PlutusV3", protocolParams);
+// @ts-expect-error `of` is gone: a plain object literal is an options record
+EvaluationOptions.of("PlutusV3", protocolParams.costModels.PlutusV3, 11);
+const bounded: EvaluationOptions = { ...options, maxBudget: { memory: 1, steps: 2n } };
+// @ts-expect-error a cost model needs its protocol version too
+EvaluationOptions.fromProtocolParams("PlutusV3", protocolParams.costModels.PlutusV3);
+// @ts-expect-error factories require ProtocolParams handles, not plain structural records
+EvaluationOptions.fromProtocolParams("PlutusV3", protocolParams.toObject());
+const copied: EvaluationOptions = { ...options };
+const readonlyCostModel: readonly (number | bigint)[] = options.costModel;
+// @ts-expect-error a cost may be a bigint, so a reader narrows before treating it as a number
+const onlyNumbers: readonly number[] = options.costModel;
+const bigintCosts: EvaluationOptions = { ...options, costModel: [1n, 2n, 3n] };
+const explicit: EvaluationOptions = {
+    plutusVersion: "PlutusV3",
+    protocolMajorVersion: 11,
+    costModel: readonlyCostModel,
+};
+// @ts-expect-error all required configuration fields must be present
+const missingCostModel: EvaluationOptions = {
+    plutusVersion: "PlutusV3",
+    protocolMajorVersion: 11,
+};
+// @ts-expect-error options are records, not factory objects
+const invalid: EvaluationOptions = EvaluationOptions;
 
 const bytes: Uint8Array = new Uint8Array([1, 2, 3]);
 const scriptHex = "545301010023357389210753756363657373004981";
@@ -46,6 +85,20 @@ const steps: bigint = evaluated.budget.steps;
 const memory: bigint = evaluated.budget.memory;
 const succeeded: boolean = evaluated.isSuccess;
 const logs: string[] = evaluated.logs;
+
+const readonlyArgs: readonly (string | Uint8Array)[] = ["182a", bytes];
+const configured: EvaluationResult = evaluator.evaluateScript(scriptHex, readonlyArgs, options);
+const structuredError: EvaluationError | undefined = configured.error;
+// @ts-expect-error raw traces are deliberately not a separate result field
+configured.traces;
+// @ts-expect-error options are required by the new evaluator
+evaluator.evaluateScript(scriptHex, readonlyArgs);
+// @ts-expect-error arguments are required by the new evaluator
+evaluator.evaluateScript(scriptHex, options);
+// @ts-expect-error the evaluator exposes exactly one method
+evaluator.evaluateUplc(scriptHex, readonlyArgs, options);
+// @ts-expect-error computed values are deliberately not part of this iteration
+configured.value;
 
 // profileJson is optional: it must be assignable to `string | undefined`, not to `string`.
 const profile: string | undefined = evaluateScriptProfile(applied).profileJson;
@@ -133,10 +186,24 @@ const currentSlot: number = emulator.getSlot();
 
 // Reference every binding once so this file is also a `noUnusedLocals`-clean sample.
 export const surface = {
+    options,
+    protocolParams,
+    suppliedV1,
+    suppliedV2,
+    suppliedV3,
+    bounded,
+    bigintCosts,
+    onlyNumbers,
+    copied,
+    explicit,
+    missingCostModel,
+    invalid,
     steps,
     memory,
     succeeded,
     logs,
+    configured,
+    structuredError,
     profile,
     firstTag,
     firstIndex,
@@ -168,3 +235,34 @@ const keyCredential: import("../scalus.js").UtxoFilter = { paymentCredential: "1
 const scriptCredential: import("../scalus.js").UtxoFilter = { paymentCredential: "11".repeat(28), paymentCredentialType: "script" };
 // @ts-expect-error credential kinds use the declared lower-case literals
 const invalidCredential: import("../scalus.js").UtxoFilter = { paymentCredentialType: "Key" };
+
+// The error's fields are declared, typed, and usable without a cast: `!` narrows away the
+// `undefined` the legacy 2-arg constructor leaves, it does not paper over the wrong type. spec [DOC-1]
+{
+  const probe = (e: PlutusScriptEvaluationError): readonly string[] => e.args!;
+  const purpose = (e: PlutusScriptEvaluationError): RedeemerBudget["tag"] => e.redeemer!.tag;
+  void probe;
+  void purpose;
+}
+
+// evaluateTx takes the shape each SDK already holds: a SlotConfig or CostModels handle, a plain
+// object with number fields (Lucid, Mesh, with extra fields), or bigint anchors (Evolution SDK).
+{
+  const meshSlots = { zeroTime: 1596059091000, zeroSlot: 4492800, slotLength: 1000, startEpoch: 208 };
+  const slots: SlotConfigLike[] = [
+    SlotConfig.mainnet,
+    meshSlots,
+    { zeroTime: 1596059091000, zeroSlot: 4492800, slotLength: 1000 },
+    { zeroTime: 1596059091000n, zeroSlot: 4492800n, slotLength: 1000 },
+  ];
+  const models: CostModelsLike[] = [
+    CardanoInfo.mainnet().protocolParams.costModels,
+    { PlutusV3: [1, 2, 3] },
+    { PlutusV2: [1n, 2n] },
+  ];
+  // @ts-expect-error slotLength is a number of milliseconds, never a bigint
+  const bigSlotLength: SlotConfigLike = { zeroTime: 0, zeroSlot: 0, slotLength: 1000n };
+  void slots;
+  void models;
+  void bigSlotLength;
+}

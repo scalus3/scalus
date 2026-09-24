@@ -26,6 +26,31 @@
   `Data.Constr`, and with `targetProtocolVersion = dijkstraPV` a match on a sum type in the Data
   representation compiles to it, replacing `unConstrData` + `fstPair` + `sndPair` + `case` on the
   tag. The default target stays PV11.
+- A CBOR-first evaluation API for JavaScript:
+  - `uplc.applyParamsToScript(script, params)` applies CBOR `Data` parameters and returns
+    double-CBOR hex, the contract of Lucid's and Mesh's function of the same name. It composes
+    byte-level primitives that are exported too: `uplc.decodeToFlat` (any script form to flat
+    bytes), `uplc.applyArgs`, `cbor.wrapBytes` / `cbor.unwrapBytes`, and `bytesToHex` /
+    `hexToBytes`. Scripts and arguments are hex or `Uint8Array`.
+  - `evaluator.evaluateScript(script, args, options)` runs one script under an explicit language,
+    protocol version and cost model. A failing script is a result whose `error.code` is
+    `SCRIPT_FAILURE`, `BUILTIN_FAILURE`, `INVALID_RETURN_VALUE`, `OUT_OF_BUDGET` or
+    `INTERNAL_ERROR`; input it cannot read throws a `TypeError`.
+  - `EvaluationOptions` is a plain record `{ plutusVersion, protocolMajorVersion, costModel,
+    maxBudget? }`, with factories `mainnet(version)` and `fromProtocolParams(version, params)`.
+    `maxBudget` bounds the run; without it, execution is not bounded.
+  - `evaluator.evaluateTx(tx, utxos, slotConfig, costModels, protocolMajorVersion)`: the
+    transaction as hex or bytes, its resolved inputs as CBOR `[input, output]` pairs, cost models
+    by language. Returns `RedeemerBudget[]`, the type `evalPlutusScripts` and
+    `Emulator.evaluateTx` already return.
+- `ExUnits.toJSON()`, so `JSON.stringify` works on results and errors that carry a `bigint`
+  budget.
+- `FlatDecodingError` is public: flat decoding raises it, and only it, for bytes that are not a
+  valid encoding.
+- `PlutusScriptEvaluationError` carries `redeemer` (with the budget spent before the failure),
+  `scriptHash`, `code`, `logs`, and `args`, the `Data` arguments the failing script was applied to,
+  each as CBOR hex. `args` is not enumerable, so printing the error stays readable. The JVM
+  `PlutusScriptEvaluationException` carries `redeemer`, `script` and `args` too.
 
 ### Changed
 
@@ -35,6 +60,30 @@
   throws for a V4 script at PV11, where it used to return variant `E`). A `targetLanguage =
   PlutusV4` compile target now lowers for PV12, so a match on a Data-represented sum type emits
   `case` on `Data.Constr`.
+- A script failure's message starts with the redeemer, `Spend[0] failed: …`, names the script
+  hash, prints the budget in raw units, and no longer renders an unknown source position as
+  `at :1:0 - 1:0`.
+- Every other failure reaching JavaScript from transaction evaluation is a native `Error` with
+  the evaluator's message, and unreadable input is a `TypeError`.
+- Evaluating a script whose language has no cost model fails with `no cost model for PlutusV2`
+  instead of `key not found: 1`.
+- A cost parameter the supplied cost model does not reach is `Long.MaxValue`, as in Plutus, so a
+  builtin without costs cannot run. It used to be `300_000_000`, a value inside the range of real
+  costs, and a pre-PV11 model fell back to the reference costs for the PV11 builtins. Supply the
+  full cost model of the protocol version you evaluate under.
+- The `Scalus` namespace object, `applyDataArgToScript`, `evaluateScript`,
+  `evaluateScriptProfile` and `evalPlutusScripts` are deprecated in favour of `uplc` and
+  `evaluator`; `evalPlutusScripts` becomes `evaluator.evaluateTx`.
+- Traces carry no budget suffix: `evaluateScript`, `evaluateScriptProfile`,
+  `PlutusVM.evaluateScriptDebug` and `Term.evaluateDebug` no longer append
+  `: { mem: …, cpu: … }` to each trace. The budget spent at each trace is now
+  `ProfilingData.traces` (a `TraceProfile(message, budget)` per trace, cumulative), which
+  `evaluateScriptProfile` renders as the `traces` array of `profileJson`.
+  `TallyingBudgetSpenderLogger.getLogsWithBudget` is deprecated.
+- A `protocolMajorVersion` or `slotLength` above 2147483647 is a `TypeError` instead of
+  silently becoming the largest version this build knows.
+- The TypeScript declarations of `PlutusScriptEvaluationError` list only the `(message, logs)`
+  constructor; the long form is internal.
 
 ## 1.2.1 (2026-09-14)
 

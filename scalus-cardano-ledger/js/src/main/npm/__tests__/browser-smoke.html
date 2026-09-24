@@ -7,7 +7,13 @@
   const result = document.querySelector("#result");
   try {
     const lib = await import("../scalus.js");
-    const tests = window.runAllSharedTests(lib.Scalus, lib.SlotConfig);
+    const tests = window.runAllSharedTests(lib.Scalus, lib.SlotConfig, {
+      uplc: lib.uplc,
+      cbor: lib.cbor,
+      bytesToHex: lib.bytesToHex,
+      evaluator: lib.evaluator,
+      EvaluationOptions: lib.EvaluationOptions,
+    });
     if (tests.some(t => !t.passed)) throw new Error(JSON.stringify(tests));
     const emulator = lib.Emulator.create(lib.CardanoInfo.preview());
     const hash = "11".repeat(28);

@@ -51,7 +51,8 @@ followed by 1.1.1. Six changes affect existing code:
   from the package root: `import { ExUnits } from "scalus"`.
 - **The evaluation functions are top-level exports too**, and two classes were renamed:
   `Result` is now `EvaluationResult` and `Redeemer` is now `RedeemerBudget`. Prefer
-  `import { evaluateScript } from "scalus"` over `Scalus.evaluateScript`. The `Scalus`
+  `import { evaluateScript } from "scalus"` over `Scalus.evaluateScript`; since 1.2.0 both are
+  deprecated in favour of `evaluator.evaluateScript` and `evaluator.evaluateTx`. The `Scalus`
   object and the old class names still work as deprecated **value** aliases and will be
   removed in a later release.
 - **`Scalus.Result` and `Scalus.Redeemer` in a type position no longer compile.** Version
@@ -175,8 +176,8 @@ for (const r of emulator.evaluateTx(txCborBytes)) {
 emulator.evaluateTx(txCborBytes, [new Utxo(txHash, 0, scriptAddress, Value.ada(5n))]);
 ```
 
-A failing script throws `PlutusScriptEvaluationError`, which extends `Error` and carries the
-script's trace logs in `.logs`.
+A failing script throws `PlutusScriptEvaluationError`, the same error `evaluator.evaluateTx`
+throws; see "When a script fails" below.
 
 ### Time Control
 
@@ -268,69 +269,306 @@ Complete, runnable adapters for both are in this package's test suite, at
 
 ## Plutus Script Evaluation
 
-### Evaluate a Single Script
+`uplc` applies arguments to a script, and `evaluator` runs it. Both take CBOR, so whatever your
+SDK already produces is what you pass in.
+
+### Apply arguments and evaluate
 
 ```typescript
-import { applyDataArgToScript, evaluateScript } from "scalus";
+import { uplc, evaluator, EvaluationOptions } from "scalus";
 
-// Scripts are represented as double-CBOR-encoded hex strings
 const script = "545301010023357389210753756363657373004981";
+const options = EvaluationOptions.mainnet("PlutusV3");
 
-// Apply a data argument (Plutus Data JSON format)
-const applied = applyDataArgToScript(script, JSON.stringify({ int: 42 }));
-
-const result = evaluateScript(applied);
-// { isSuccess: true, budget: { memory: 1032n, steps: 203598n }, logs: [] }
+const result = evaluator.evaluateScript(script, ["182a"], options);
+// { isSuccess: true, budget: { memory: 1032n, steps: 203598n }, logs: [...] }
 ```
 
-### Profile a Script
-
-`evaluateScriptProfile` evaluates like `evaluateScript` and also returns the CEK machine
-profiling data as JSON in `profileJson`: cost per source location, cost per builtin, and the
-transition edges.
+Scripts and arguments are each a hex `string` or a `Uint8Array`, and the two mix freely:
 
 ```typescript
-const result = evaluateScriptProfile(applied);
-const profile = JSON.parse(result.profileJson!);
+evaluator.evaluateScript(scriptBytes, ["182a", argumentBytes], options);
 ```
 
-This package gives you the data, not the report. The renderer that turns the JSON into the
-interactive HTML report (`ProfileFormatter`) is a Scala-side tool, shipped with the Scalus
-library for the JVM; it is left out here so the bundle stays small.
+Arguments apply left to right, so `[datum, redeemer, context]` is the order the script sees.
+
+A script may arrive as raw flat, single CBOR or double CBOR; all are accepted, and none is guessed
+at (a flat program never starts with a CBOR byte-string header).
+
+To bake parameters into a script, `uplc.applyParamsToScript` has the contract of Lucid's and
+Mesh's function of the same name: any script form in, double-CBOR hex out.
+
+```typescript
+uplc.applyParamsToScript(blueprintCompiledCode, [paramCbor]);   // double-CBOR hex
+```
+
+It is a composition of byte-level primitives, which also build any other form a tool expects:
+
+```typescript
+import { uplc, cbor, bytesToHex } from "scalus";
+
+const flat = uplc.applyArgs(uplc.decodeToFlat(script), [paramCbor]);  // flat program bytes
+const single = cbor.wrapBytes(flat);                // blueprint compiledCode, script hash input
+const double = cbor.wrapBytes(single);              // Lucid and Mesh script objects, .plutus files
+bytesToHex(double);                                 // hexToBytes goes the other way
+```
+
+CBOR round trips preserve the *value*, not the original bytes. Semantically equal Data can have
+more than one encoding, so do not use this path to reproduce a datum hash.
+
+### Feeding it from Lucid, Mesh or the Evolution SDK
+
+Serialize with the SDK you already use, then hand over the bytes. No Scalus-specific Data type,
+no JSON step. Each of these produces identical CBOR:
+
+```typescript
+import { Data as LucidData, Constr } from "@lucid-evolution/lucid";
+import { toPlutusData } from "@meshsdk/core-cst";
+import * as EvolutionData from "@evolution-sdk/evolution/Data";
+
+const fromLucid = LucidData.to(new Constr(0, [42n, "deadbeef"]));       // Data.to, not Data.do
+const fromMesh = toPlutusData({ alternative: 0, fields: [42n, "deadbeef"] }).toCbor().toString();
+const fromEvolution = EvolutionData.toCBORBytes(EvolutionData.constr(0n, [42n]));
+
+evaluator.evaluateScript(script, [fromLucid], options);
+```
+
+`LucidData` above is a local import alias for Lucid's `Data`; the SDKs are test dependencies of
+this package, never runtime ones.
+
+### Evaluation options
+
+`EvaluationOptions` is both the record type and the factory object, so the same import works in
+type and value position:
+
+```typescript
+const options: EvaluationOptions = EvaluationOptions.mainnet("PlutusV3");
+```
+
+Options are plain records. Copy and adjust them with object spread:
+
+```typescript
+const forV2: EvaluationOptions = {
+  ...options,
+  plutusVersion: "PlutusV2",
+  costModel: params.costModels.PlutusV2,
+};
+```
+
+A field this API does not know is ignored rather than rejected, so spreading a record that
+carries extra keys is safe.
+
+| Field | Meaning |
+| --- | --- |
+| `plutusVersion` | `"PlutusV1"`, `"PlutusV2"` or `"PlutusV3"`; the bytes do not carry it |
+| `protocolMajorVersion` | Picks builtin semantics and costing rules |
+| `costModel` | That language's parameters, in protocol order |
+| `maxBudget` | Optional `{ memory, steps }`, as `number` or `bigint`: the most the script may spend |
+
+There is no implicit default: the first three fields are required. `EvaluationOptions.mainnet(version)`
+fills them from the protocol parameters bundled with this release of Scalus, a snapshot rather
+than a live query, so pin your own parameters for reproducible tests and supply the target
+network's for production.
+
+For custom parameters, pass a `ProtocolParams` handle rather than a plain object:
+
+```typescript
+import { CardanoInfo, ProtocolParams } from "scalus";
+
+EvaluationOptions.fromProtocolParams("PlutusV3", CardanoInfo.mainnet().protocolParams);
+EvaluationOptions.fromProtocolParams("PlutusV3", ProtocolParams.fromBlockfrostJson(json));
+```
+
+`fromBlockfrostJson` is the only JSON reader exported to JavaScript. For any other provider, take
+the positional cost array out of its response and write the record yourself:
+
+```typescript
+const options: EvaluationOptions = {
+  plutusVersion: "PlutusV3",
+  protocolMajorVersion: 11,
+  costModel: json.cost_models_raw.PlutusV3,
+};
+```
+
+**No cost-model length is rejected.** A short model configures and prices out what it does not
+cover: a parameter the array does not reach costs more than any budget, so a builtin whose
+parameters are absent cannot run, rather than being given a plausible cost nobody could tell from
+a real one. That is what plutus does, and it is what lets a custom network, an older chain and a
+future longer model all configure.
+
+### The validator return rule
+
+`evaluateScript` enforces CIP-117: under Plutus V3 a validator must return unit. Under V1 and V2
+any result is accepted, as the ledger accepts it.
+
+The rule is checked *after* the machine stops, so a rejected result still carries the budget the
+program really spent and the traces it emitted. That is how you cost a pure on-chain function
+that returns something other than unit — read `error.code`, not `isSuccess`:
+
+```typescript
+const r = evaluator.evaluateScript(program, [], options);   // program returns (con integer 3)
+r.isSuccess;        // false
+r.error?.code;      // "INVALID_RETURN_VALUE"
+r.budget.steps;     // the real cost, as if it had succeeded
+```
+
+It does not build a `ScriptContext`, resolve UTxOs, or validate a transaction. For that, use
+`evaluator.evaluateTx` or the `Emulator`.
+
+**Bound untrusted scripts with `maxBudget`.** Without it there is no ceiling, so a script that
+does not terminate does not return. With it, a script that spends more stops with
+`OUT_OF_BUDGET`, and `budget` says what it spent:
+
+```typescript
+const r = evaluator.evaluateScript(script, [context], { ...options, maxBudget: redeemer.exUnits });
+if (r.error?.code === "OUT_OF_BUDGET") { /* spent more than the redeemer declared */ }
+```
+
+### Failures
+
+A script that fails is an outcome, not an exception: `isSuccess` is `false`, and `error` says why.
+
+```typescript
+const result = evaluator.evaluateScript(failingScript, [], options);
+result.error;   // { code: "SCRIPT_FAILURE", message: "..." }
+result.logs;    // the script's traces, and nothing else
+result.budget;  // what it spent before failing
+```
+
+| `code` | Meaning |
+| --- | --- |
+| `SCRIPT_FAILURE` | The script failed, for example by evaluating `error` |
+| `BUILTIN_FAILURE` | A builtin rejected its arguments |
+| `INVALID_RETURN_VALUE` | A Plutus V3 script returned something other than unit |
+| `OUT_OF_BUDGET` | The script spent more than `maxBudget` |
+| `INTERNAL_ERROR` | A defect in Scalus, not in your script: please report it |
+
+Branch on `code`; the `message` text is free to improve. The result, `error` included, is plain
+data: `JSON.stringify(result)` works, with the budget as decimal strings. The budget spent at each
+trace is in the profile: `evaluateScriptProfile` returns `profileJson` whose `traces` array pairs
+every message with the cumulative `mem` and `cpu`.
+
+A call that cannot be read throws a `TypeError` instead: a script or an argument that is not hex
+or bytes of the right CBOR, or options with a missing or mistyped field. The `uplc` utilities
+throw the same way.
+
+`evaluator.evaluateTx` and `evalPlutusScripts` throw on a failing script too, because a
+transaction has no partial success; see "When a script fails" under "Evaluate All Scripts in a
+Transaction".
+
+### Profiling
+
+`evaluator` does not profile. A profile attributes cost to source lines, which needs the compiler
+output that produced the script, so it belongs to the build rather than to the runtime. Profile
+from the JVM, where `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full
+interactive report.
+
+The deprecated `evaluateScriptProfile(script)` still works and still fills `profileJson`, on a
+Plutus V3 mainnet machine only.
+
+### Migrating from the earlier entry points
+
+`applyDataArgToScript`, `evaluateScript`, `evaluateScriptProfile` and `evalPlutusScripts` still
+work exactly as before. All four are deprecated; three have a replacement in the explicit API:
+
+| Was | Now |
+| --- | --- |
+| `applyDataArgToScript(script, json)` | `uplc.applyParamsToScript(script, [cbor])` |
+| `evaluateScript(script)` | `evaluator.evaluateScript(script, args, EvaluationOptions.mainnet("PlutusV3"))` |
+| `evaluateScriptProfile(script)` | no replacement — `evaluator` does not profile; keep using this, or profile from the JVM |
+| `evalPlutusScripts(tx, utxoMap, slotConfig, [v1, v2, v3])` | `evaluator.evaluateTx(tx, utxoPairs, slotConfig, { PlutusV1: v1, PlutusV2: v2, PlutusV3: v3 }, 11)` |
 
 ### Evaluate All Scripts in a Transaction
+
+`evaluator.evaluateTx` takes what a transaction builder already holds: the transaction, its
+resolved inputs as CBOR `[input, output]` pairs, the slot configuration, and the cost models by
+language.
+
+```typescript
+import { evaluator } from "scalus";
+
+const budgets = evaluator.evaluateTx(
+  txCborHex,                           // string | Uint8Array
+  utxos,                               // (string | Uint8Array)[]: one [input, output] pair each
+  { zeroTime, zeroSlot, slotLength },  // zeroTime and zeroSlot may be number or bigint
+  { PlutusV2: plutusV2Costs, PlutusV3: plutusV3Costs },
+  11,                                  // protocol major version
+);
+
+for (const r of budgets) {
+  console.log(`${r.tag}[${r.index}]: ${r.budget.memory} mem, ${r.budget.steps} steps`);
+}
+```
+
+A pair is `transaction_unspent_output` from the ledger CDDL. CML's
+`TransactionUnspentOutput.to_cbor_bytes()`, CST's `TransactionUnspentOutput.toCbor()` and a CIP-30
+wallet's `getUtxos()` all produce it, so nothing needs assembling. A later pair with the same input
+replaces an earlier one. The slot configuration is a `SlotConfigLike` and the cost models a
+`CostModelsLike`: a `SlotConfig` or a `CostModels` fits, and so does any plain object with those
+fields. Extra fields are ignored.
+
+Each `r.tag` is one of `"Spend"`, `"Mint"`, `"Cert"`, `"Reward"`, `"Voting"` or `"Proposing"`,
+and `r.index` is the position within that group, counting from 0. An SDK adapter maps those six
+names to its own spelling; that table is most of the adapter.
+
+The deprecated `evalPlutusScripts` still works for a caller that holds the UTxO set as one CBOR
+map:
 
 ```typescript
 import { evalPlutusScripts, SlotConfig } from "scalus";
 
 // One cost model per Plutus version, indexed by position: [0] is V1, [1] is V2, [2] is V3.
 // Give a model for every version the transaction uses; an earlier version cannot be skipped.
-const costModels = [plutusV1Costs, plutusV2Costs, plutusV3Costs]; // number[][]
+const costModels = [plutusV1Costs, plutusV2Costs, plutusV3Costs];
+const redeemers = evalPlutusScripts(txCborBytes, utxoMapCborBytes, SlotConfig.mainnet, costModels);
+```
 
-const redeemers = evalPlutusScripts(
-  txCborBytes,        // Uint8Array
-  utxoCborBytes,      // Uint8Array: CBOR map, input -> output
-  SlotConfig.mainnet,
-  costModels
-);
+#### When a script fails
 
-for (const r of redeemers) {
-  console.log(`${r.tag}[${r.index}]: ${r.budget.memory} mem, ${r.budget.steps} steps`);
+Both throw `PlutusScriptEvaluationError`, which extends `Error`. Its message names the redeemer,
+the script, the units spent and the traces, so a caller that only prints the message still learns
+what failed:
+
+```
+Spend[0] failed: Error evaluated
+script: 8a8c37e9775e3369118ef4946ce1534ca64690382825207d05c72b17
+spent budget: { mem: 1132, steps: 219598 }
+logs:
+boom
+```
+
+The same facts are fields:
+
+```typescript
+try {
+  evaluator.evaluateTx(tx, utxos, slotConfig, costModels, 11);
+} catch (e) {
+  if (e instanceof PlutusScriptEvaluationError) {
+    e.redeemer;    // { tag: "Spend", index: 0, budget: { memory, steps } }, spent before failing
+    e.scriptHash;  // hex
+    e.code;        // "SCRIPT_FAILURE" | "BUILTIN_FAILURE" | "INVALID_RETURN_VALUE" | "INTERNAL_ERROR"
+    e.logs;        // the script's traces
+    e.args;        // the Data arguments it was applied to, each as CBOR hex, in order
+  }
 }
 ```
 
-Each `r.tag` is one of `"Spend"`, `"Mint"`, `"Cert"`, `"Reward"`, `"Voting"` or
-`"Proposing"`, and `r.index` is the position within that group, counting from 0.
+`args` is a property like the others, but not an enumerable one, so `console.log(e)` and
+`JSON.stringify(e)` stay readable instead of printing a screenful of script-context hex. Decode it
+when you want to see what the script saw; `scriptHash` says which script saw it, and you already
+hold that script, in the transaction or in the UTxO you passed.
 
-On failure, `evalPlutusScripts` throws a `PlutusScriptEvaluationError` with
-`.message` and `.logs` (the script's trace output). Only script failures arrive that way;
-malformed transaction or UTxO CBOR throws an ordinary error. `evaluateScript` and
-`evaluateScriptProfile` never throw at all: they report a failure as a result with
-`isSuccess: false` and the message in `logs[0]`.
+Anything else that stops evaluation, such as an input no pair resolves or a script the transaction
+does not carry, throws a plain `Error`; input that cannot be read throws `TypeError`.
+
+In TypeScript the six fields are declared optional, because the two-argument constructor
+`new PlutusScriptEvaluationError(message, logs)` leaves them `undefined`. An error thrown by
+`evaluateTx` always carries them, so after the `instanceof` check `e.redeemer!` is safe.
 
 ### Plutus Data JSON Format
 
-Data arguments passed to `applyDataArgToScript` use the standard Plutus Data JSON encoding:
+The deprecated `applyDataArgToScript` takes its argument in the standard Plutus Data JSON
+encoding. `uplc.applyParamsToScript` takes CBOR instead; convert before calling it.
 
 ```jsonc
 { "int": 42 }

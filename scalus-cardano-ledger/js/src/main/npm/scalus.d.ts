@@ -85,6 +85,17 @@ export interface CostModels {
   readonly PlutusV3: number[];
 }
 
+/**
+ * Cost parameters per Plutus language, each in protocol-parameter order and each a safe-integer
+ * `number` or a `bigint`. A `CostModels` has them, and so does a plain object from any SDK; a
+ * language the transaction does not use may be absent, and other fields are ignored.
+ */
+export interface CostModelsLike {
+  readonly PlutusV1?: readonly (number | bigint)[];
+  readonly PlutusV2?: readonly (number | bigint)[];
+  readonly PlutusV3?: readonly (number | bigint)[];
+}
+
 /** DRep registration entry for `EmulatorInitialState`. */
 export interface DRepRegistration {
   /** Credential type: "key" for pub key hash, "script" for script hash. */
@@ -161,8 +172,8 @@ export class Emulator {
    * about a transaction, and has no shape in which to say "there was no transaction". Bytes from
    * an untrusted source therefore need a `try`.
    *
-   * @throws PlutusScriptEvaluationError if a script fails; it carries the failure message and that script's trace logs.
-   * @throws Error if `txCborBytes` does not decode as a transaction.
+   * @throws PlutusScriptEvaluationError if a script fails; it names the redeemer, classifies the failure, carries the script's traces and the arguments the script saw.
+   * @throws Error for any other failure: `txCborBytes` does not decode as a transaction, an input no UTxO resolves, a script the transaction does not carry.
    */
   evaluateTx(txCborBytes: Uint8Array): RedeemerBudget[];
   /**
@@ -405,38 +416,107 @@ export interface EmulatorOptions {
 }
 
 /**
- * Outcome of evaluating one Plutus script. Read `isSuccess` first: the two outcomes differ in
- * what `budget` and `logs` mean.
+ * Why a script did not succeed.
+ *
+ * Branch on `code` rather than on `message`, whose wording may improve. `INTERNAL_ERROR` means
+ * a defect in Scalus, not a problem with the script: report it.
  */
+export interface EvaluationError {
+  /**
+   * `SCRIPT_FAILURE`: the script failed, for example by evaluating `error`. `BUILTIN_FAILURE`: a
+   * builtin rejected its arguments. `INVALID_RETURN_VALUE`: a Plutus V3 script returned
+   * something other than unit. `OUT_OF_BUDGET`: the script spent more than `maxBudget`.
+   * `INTERNAL_ERROR`: a defect in Scalus.
+   */
+  readonly code: "SCRIPT_FAILURE" | "BUILTIN_FAILURE" | "INVALID_RETURN_VALUE" | "OUT_OF_BUDGET" | "INTERNAL_ERROR";
+  /** What went wrong, in prose. The wording may change between releases. */
+  readonly message: string;
+}
+
+/** Factories for `EvaluationOptions`. A plain object literal with the same fields works too. */
+export const EvaluationOptions: {
+  /**
+   * Options from a `ProtocolParams` handle, as returned by `CardanoInfo`, an emulator's
+   * `getProtocolParameters()`, or `ProtocolParams.fromBlockfrostJson`.
+   *
+   * @throws TypeError if the parameters have no cost model for `plutusVersion`
+   */
+  fromProtocolParams(plutusVersion: "PlutusV1" | "PlutusV2" | "PlutusV3", params: ProtocolParams): EvaluationOptions;
+  /**
+   * Options from Scalus's bundled mainnet snapshot at protocol version 11. It makes no network
+   * request, so it does not follow later parameter changes.
+   */
+  mainnet(plutusVersion: "PlutusV1" | "PlutusV2" | "PlutusV3"): EvaluationOptions;
+};
+
+/**
+ * How to run one script: the language, the protocol version, the cost model and, optionally, a
+ * budget limit.
+ */
+export interface EvaluationOptions {
+  /**
+   * Which Plutus language the script is written in. The script bytes do not carry it, and the
+   * same bytes cost differently under different languages.
+   */
+  readonly plutusVersion: "PlutusV1" | "PlutusV2" | "PlutusV3";
+  /**
+   * The Cardano major protocol version to evaluate under. It selects the builtin semantics and
+   * the costing rules.
+   */
+  readonly protocolMajorVersion: number;
+  /**
+   * That language's cost parameters, in protocol-parameter order, each a safe-integer `number`
+   * or a `bigint`. The factories fill it with numbers.
+   *
+   * Any length is accepted. A builtin whose parameters the array does not reach is priced beyond
+   * any budget, as in Plutus.
+   */
+  readonly costModel: readonly (number | bigint)[];
+  /**
+   * The most the script may spend, for example the ex-units its redeemer declares. A script that
+   * exceeds it stops with `OUT_OF_BUDGET`. Without it, execution is not bounded.
+   */
+  readonly maxBudget?: ExUnitsLike;
+}
+
+/** Outcome of evaluating one Plutus script. Read `isSuccess` first. */
 export class EvaluationResult {
   constructor(isSuccess: boolean, budget: ExUnits, logs: readonly string[], profileJson?: string);
+  /** Whether the script ran to completion and returned a value the ledger accepts. */
   readonly isSuccess: boolean;
-  /**
-   * Units the machine spent. On failure this is what was spent before the script failed, and
-   * zero when the script could not be decoded at all.
-   */
+  /** Units the machine spent. On failure, what was spent before the script failed. */
   readonly budget: ExUnits;
   /**
-   * Trace output the script emitted, oldest first. On failure the failure message is
-   * prepended, so `logs[0]` is the error and the traces follow it.
+   * Trace output the script emitted, oldest first. From the deprecated `evaluateScript` and
+   * `evaluateScriptProfile`, a failure's message comes first.
    */
   readonly logs: string[];
-  /**
-   * Profiling data as JSON; `undefined` unless the script was evaluated with profiling (see
-   * {@link evaluateScriptProfile}).
-   */
+  /** Profiling data as JSON; set only by the deprecated `evaluateScriptProfile`. */
   readonly profileJson?: string;
+  /** Why the script did not succeed. Set by `evaluator.evaluateScript` on failure. */
+  readonly error?: EvaluationError;
 }
 
 /**
- * Execution units: what a script costs to run, in abstract machine memory and steps. A
- * transaction pays a fee for the units its scripts declare, and the ledger rejects it if a
- * script goes over what it declared.
+ * Execution units: what a script costs to run, in abstract machine memory and steps. A transaction
+ * pays a fee for the units its scripts declare, and the ledger rejects it if a script goes over
+ * what it declared.
  */
 export class ExUnits {
   constructor(memory: bigint, steps: bigint);
   readonly memory: bigint;
   readonly steps: bigint;
+  /** The units as decimal strings, so `JSON.stringify` works: it throws on a `bigint`. */
+  toJSON(): { memory: string; steps: string };
+}
+
+/**
+ * Execution units as a plain record: `memory` and `steps`, each a safe-integer `number` or a
+ * `bigint`. An `ExUnits` fits, and so does any `{ memory, steps }` object.
+ */
+export interface ExUnitsLike {
+  readonly memory: number | bigint;
+  readonly steps: number | bigint;
 }
 
 /** Identifies one transaction output: the pair a `TransactionInput` is made of. */
@@ -501,13 +581,36 @@ export interface PlainValue {
 }
 
 /**
- * Thrown by `evalPlutusScripts` when a Plutus script fails to evaluate. Carries the failure
- * message and the script's trace logs. Extends `Error`, so `instanceof Error`, `.stack` and
- * unhandled-rejection output all behave normally.
+ * Thrown by `evaluator.evaluateTx`, `evalPlutusScripts` and `Emulator.evaluateTx` when a Plutus
+ * script fails. Extends `Error`, so `instanceof Error`, `.stack` and unhandled-rejection output
+ * all behave normally.
+ *
+ * `args` is an own property but not an enumerable one: it holds the script context, and printing
+ * kilobytes of hex by default would bury the fields that say what failed.
+ *
+ * From JavaScript, construct with `(message, logs)`.
  */
 export class PlutusScriptEvaluationError extends Error {
+  /**
+   * The constructor of releases before 1.3. An error built through it has no redeemer, hash,
+   * code or arguments.
+   */
   constructor(message: string, logs: readonly string[]);
+  /** The failing script's own `trace` output, oldest first. Empty if it emitted none. */
   readonly logs: string[];
+  /** Which redeemer failed. Its `budget` is what the script spent before it failed. */
+  readonly redeemer?: RedeemerBudget;
+  /** Hash of the failing script, as lowercase hex. */
+  readonly scriptHash?: string;
+  /** Why it failed, classified the same way `evaluator.evaluateScript` classifies. */
+  readonly code?: "SCRIPT_FAILURE" | "BUILTIN_FAILURE" | "INVALID_RETURN_VALUE" | "OUT_OF_BUDGET" | "INTERNAL_ERROR";
+  /**
+   * The `Data` arguments the script was applied to, each as CBOR hex, in order: for a `PlutusV3`
+   * script the script context alone, for a `PlutusV1` or `PlutusV2` spend the datum, the redeemer
+   * and the script context.
+   */
+  readonly args?: readonly string[];
+  readonly name: string;
 }
 
 /** Pool registration entry for `EmulatorInitialState`. */
@@ -580,15 +683,16 @@ export class ProtocolParams {
    * The only JSON entry point exported to JavaScript. `cardano-cli query protocol-parameters`
    * output is readable from Scala but not from here: it is devops-tool output rather than
    * something a browser or Node client has to hand, and exporting the reader would pull the JSON
-   * derivation for six more ledger types into the bundle for a path nothing uses.
+   * derivation for six more ledger types into the bundle. To configure an evaluation from any
+   * other provider, put its cost array in an `EvaluationOptions` record instead of parsing a
+   * whole parameter set.
    */
   static fromBlockfrostJson(json: string): ProtocolParams;
 }
 
 /**
- * One redeemer of a transaction, together with the execution budget its script really used.
- * `tag` and `index` together say which script this is, and match the redeemer in the
- * transaction.
+ * One redeemer of a transaction, together with the execution budget its script really used. `tag`
+ * and `index` together say which script this is, and match the redeemer in the transaction.
  *
  * `tag` is why the script ran: `"Spend"` for a script input, `"Mint"` for a minting policy,
  * `"Cert"` for a certificate, `"Reward"` for a withdrawal, `"Voting"` for a vote, and
@@ -596,19 +700,21 @@ export class ProtocolParams {
  */
 export class RedeemerBudget {
   constructor(tag: "Spend" | "Mint" | "Cert" | "Reward" | "Voting" | "Proposing", index: number, budget: ExUnits);
+  /** Why the script ran, and so which group `index` counts within. */
   readonly tag: "Spend" | "Mint" | "Cert" | "Reward" | "Voting" | "Proposing";
   /**
    * Position within the group named by `tag`, counting from 0: for `"Spend"` it indexes the
    * transaction's inputs in ledger order, for `"Mint"` its minting policies, and so on.
    */
   readonly index: number;
+  /** What this redeemer's script actually spent, to put in the transaction. */
   readonly budget: ExUnits;
 }
 
 /**
- * Main API exported by Scalus.
+ * The `Scalus` namespace object.
  *
- * @deprecated Use the top-level functions (`evaluateScript`, `evaluateScriptProfile`, `applyDataArgToScript`, `evalPlutusScripts`) instead; this namespace object remains for backwards compatibility.
+ * @deprecated Use the top-level exports instead; this namespace object remains for backwards compatibility. `applyDataArgToScript` becomes `uplc.applyParamsToScript`, `evaluateScript` becomes `evaluator.evaluateScript` with an `EvaluationOptions`, `evalPlutusScripts` becomes `evaluator.evaluateTx`, and `evaluateScriptProfile` is not replaced.
  */
 export const Scalus: {
   /**
@@ -618,6 +724,7 @@ export const Scalus: {
    * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
    * @param data The argument in the standard Plutus Data JSON encoding, for example `{"int":42}` or `{"constructor":0,"fields":[{"bytes":"deadbeef"}]}`.
    * @returns The double-CBOR-encoded hex representation of the script with the argument applied.
+   * @deprecated (since 1.2.0) Use `uplc.applyParamsToScript`, which takes a list of parameters and accepts hex or bytes. It reads Data as CBOR rather than JSON, so convert first; `uplc.applyParamsToScript(script, [cborHex])` then returns what this function returns.
    */
   applyDataArgToScript(doubleCborHex: string, data: string): string;
   /**
@@ -630,6 +737,7 @@ export const Scalus: {
    *
    * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
    * @returns The outcome, with the units spent and the trace logs.
+   * @deprecated (since 1.2.0) Use `evaluator.evaluateScript(script, args, options)`, which takes the language, protocol version and cost model explicitly instead of assuming Plutus V3 on mainnet, and reports why a script failed in `error`. `EvaluationOptions.mainnet("PlutusV3")` reproduces this function's configuration.
    */
   evaluateScript(doubleCborHex: string): EvaluationResult;
   /**
@@ -639,12 +747,9 @@ export const Scalus: {
    * carries the machine's profiling data as JSON in `profileJson`: cost per source location,
    * cost per builtin, and the transition edges between them.
    *
-   * The renderer that turns that JSON into the interactive HTML report is a Scala-side tool
-   * (`ProfileFormatter`, in the Scalus library for the JVM). It is deliberately left out of this
-   * package to keep the bundle small, so from JavaScript you get the data, not the report.
-   *
    * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
    * @returns The outcome, with `profileJson` populated.
+   * @deprecated (since 1.2.0) Not replaced: `evaluator.evaluateScript` does not profile. Attributing cost to source lines needs the compiler output that produced the script, so profile from the JVM, where `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full report. This function keeps working meanwhile.
    */
   evaluateScriptProfile(doubleCborHex: string): EvaluationResult;
   /**
@@ -657,7 +762,9 @@ export const Scalus: {
    * @param costModels One cost model per Plutus language version, indexed by position: `costModels[0]` is Plutus V1, `[1]` is V2, `[2]` is V3. Each inner array holds that version's cost parameters in protocol-parameter order. Give a model for every version the transaction uses; since the position is the version, an earlier version cannot be skipped.
    * @param protocolMajorVersion Cardano protocol major version, which picks the builtin semantics and the costing rules. Defaults to the current mainnet version, 11 (van Rossem).
    * @returns One entry per redeemer of the transaction, carrying the units that redeemer's script spent.
-   * @throws PlutusScriptEvaluationError if a script fails; it carries the failure message and that script's trace logs. Only script failures are reported this way: malformed transaction or UTxO CBOR surfaces as an ordinary error instead.
+   * @throws PlutusScriptEvaluationError if a script fails; it names the redeemer, classifies the failure, carries the script's traces and the arguments the script saw.
+   * @throws Error for any other failure: malformed transaction or UTxO CBOR, an input no entry of the UTxO set resolves, a script the transaction does not carry.
+   * @deprecated (since 1.2.0) Use `evaluator.evaluateTx(tx, utxos, slotConfig, costModels, protocolMajorVersion)`, the same evaluation. It takes the resolved inputs as CBOR `[input, output]` pairs instead of one map, the cost models by language name instead of by position, and the protocol version explicitly instead of defaulting to mainnet's.
    */
   evalPlutusScripts(txCborBytes: Uint8Array, utxoCborBytes: Uint8Array, slotConfig: SlotConfig, costModels: readonly (readonly number[])[], protocolMajorVersion?: number): RedeemerBudget[];
 };
@@ -702,6 +809,19 @@ export class SlotConfig {
   static readonly preview: SlotConfig;
   /** Preprod testnet slot configuration (slot 86400 = start of epoch 4, after 4 Byron epochs) */
   static readonly preprod: SlotConfig;
+}
+
+/**
+ * The slot arithmetic `evaluator.evaluateTx` reads. A `SlotConfig` has it, and so does a plain
+ * object from any SDK; other fields are ignored.
+ */
+export interface SlotConfigLike {
+  /** POSIX time in milliseconds at which slot `zeroSlot` starts. */
+  readonly zeroTime: number | bigint;
+  /** The slot the configuration is anchored at. */
+  readonly zeroSlot: number | bigint;
+  /** Slot length in milliseconds. */
+  readonly slotLength: number;
 }
 
 /** One row of `Emulator.getStakeDistribution`. */
@@ -896,8 +1016,24 @@ export class Value {
  * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
  * @param data The argument in the standard Plutus Data JSON encoding, for example `{"int":42}` or `{"constructor":0,"fields":[{"bytes":"deadbeef"}]}`.
  * @returns The double-CBOR-encoded hex representation of the script with the argument applied.
+ * @deprecated (since 1.2.0) Use `uplc.applyParamsToScript`, which takes a list of parameters and accepts hex or bytes. It reads Data as CBOR rather than JSON, so convert first; `uplc.applyParamsToScript(script, [cborHex])` then returns what this function returns.
  */
 export function applyDataArgToScript(doubleCborHex: string, data: string): string;
+
+/** The bytes as lowercase hex. */
+export function bytesToHex(bytes: Uint8Array): string;
+
+/** A CBOR byte-string envelope, one layer at a time. */
+export const cbor: {
+  /** Wraps bytes in one CBOR byte string: flat to single CBOR, or single to double. */
+  wrapBytes(bytes: Uint8Array): Uint8Array;
+  /**
+   * Removes one CBOR byte-string layer: double CBOR to single, or single to flat.
+   *
+   * @throws TypeError if the bytes are not a CBOR byte string
+   */
+  unwrapBytes(bytes: Uint8Array): Uint8Array;
+};
 
 /**
  * Evaluates every Plutus script a transaction runs, and reports what each one costs. Use it to
@@ -909,7 +1045,9 @@ export function applyDataArgToScript(doubleCborHex: string, data: string): strin
  * @param costModels One cost model per Plutus language version, indexed by position: `costModels[0]` is Plutus V1, `[1]` is V2, `[2]` is V3. Each inner array holds that version's cost parameters in protocol-parameter order. Give a model for every version the transaction uses; since the position is the version, an earlier version cannot be skipped.
  * @param protocolMajorVersion Cardano protocol major version, which picks the builtin semantics and the costing rules. Defaults to the current mainnet version, 11 (van Rossem).
  * @returns One entry per redeemer of the transaction, carrying the units that redeemer's script spent.
- * @throws PlutusScriptEvaluationError if a script fails; it carries the failure message and that script's trace logs. Only script failures are reported this way: malformed transaction or UTxO CBOR surfaces as an ordinary error instead.
+ * @throws PlutusScriptEvaluationError if a script fails; it names the redeemer, classifies the failure, carries the script's traces and the arguments the script saw.
+ * @throws Error for any other failure: malformed transaction or UTxO CBOR, an input no entry of the UTxO set resolves, a script the transaction does not carry.
+ * @deprecated (since 1.2.0) Use `evaluator.evaluateTx(tx, utxos, slotConfig, costModels, protocolMajorVersion)`, the same evaluation. It takes the resolved inputs as CBOR `[input, output]` pairs instead of one map, the cost models by language name instead of by position, and the protocol version explicitly instead of defaulting to mainnet's.
  */
 export function evalPlutusScripts(txCborBytes: Uint8Array, utxoCborBytes: Uint8Array, slotConfig: SlotConfig, costModels: readonly (readonly number[])[], protocolMajorVersion?: number): RedeemerBudget[];
 
@@ -923,6 +1061,7 @@ export function evalPlutusScripts(txCborBytes: Uint8Array, utxoCborBytes: Uint8A
  *
  * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
  * @returns The outcome, with the units spent and the trace logs.
+ * @deprecated (since 1.2.0) Use `evaluator.evaluateScript(script, args, options)`, which takes the language, protocol version and cost model explicitly instead of assuming Plutus V3 on mainnet, and reports why a script failed in `error`. `EvaluationOptions.mainnet("PlutusV3")` reproduces this function's configuration.
  */
 export function evaluateScript(doubleCborHex: string): EvaluationResult;
 
@@ -933,14 +1072,101 @@ export function evaluateScript(doubleCborHex: string): EvaluationResult;
  * carries the machine's profiling data as JSON in `profileJson`: cost per source location,
  * cost per builtin, and the transition edges between them.
  *
- * The renderer that turns that JSON into the interactive HTML report is a Scala-side tool
- * (`ProfileFormatter`, in the Scalus library for the JVM). It is deliberately left out of this
- * package to keep the bundle small, so from JavaScript you get the data, not the report.
- *
  * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
  * @returns The outcome, with `profileJson` populated.
+ * @deprecated (since 1.2.0) Not replaced: `evaluator.evaluateScript` does not profile. Attributing cost to source lines needs the compiler output that produced the script, so profile from the JVM, where `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full report. This function keeps working meanwhile.
  */
 export function evaluateScriptProfile(doubleCborHex: string): EvaluationResult;
+
+/** Synchronous evaluation of one script, or of every script of a transaction. */
+export const evaluator: {
+  /**
+   * Applies the arguments to the script, runs it, and reports what it cost.
+   *
+   * A script that fails comes back as a result with `isSuccess: false` and an `error` saying
+   * why, together with the budget it spent and the traces it emitted. A Plutus V3 script must
+   * return unit (CIP-117); V1 and V2 may return anything, as in the ledger.
+   *
+   * The script is not checked against the language and protocol you name: a builtin that
+   * protocol never had still runs. Whether a chain would accept the script is
+   * `Script.isWellFormed`'s question.
+   *
+   * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR
+   * @param args the arguments, each a CBOR-encoded `Data`, applied left to right
+   * @param options the language, protocol version and cost model, and optionally a `maxBudget`
+   * @throws TypeError if the script, an argument or the options cannot be read
+   */
+  evaluateScript(script: string | Uint8Array, args: readonly (string | Uint8Array)[], options: EvaluationOptions): EvaluationResult;
+  /**
+   * Evaluates every Plutus script of a transaction and reports what each redeemer cost.
+   *
+   * The resolved inputs arrive as CBOR `[input, output]` pairs, `transaction_unspent_output` in
+   * the ledger CDDL: CML's `TransactionUnspentOutput.to_cbor_bytes()`, CST's
+   * `TransactionUnspentOutput.toCbor()` and a CIP-30 wallet's `getUtxos()` all produce it. A
+   * later pair with the same input replaces an earlier one.
+   *
+   * @param tx the transaction, as hex or bytes
+   * @param utxos the resolved inputs and reference inputs, one `[input, output]` pair each, as hex or bytes
+   * @param slotConfig the chain's slot arithmetic: a `SlotConfig`, or any object with the same three fields
+   * @param costModels cost parameters per language, keyed by name: a `CostModels`, or any object with some of its fields
+   * @param protocolMajorVersion picks the builtin semantics and the costing rules
+   * @returns one entry per redeemer, carrying the units that redeemer's script spent
+   * @throws PlutusScriptEvaluationError if a script fails; it names the redeemer and carries the arguments the script saw
+   * @throws TypeError if an input cannot be read as described
+   * @throws Error if the transaction evaluator stops for any other reason: an input no pair resolves, a script the transaction does not carry, a missing datum
+   */
+  evaluateTx(tx: string | Uint8Array, utxos: readonly (string | Uint8Array)[], slotConfig: SlotConfigLike, costModels: CostModelsLike, protocolMajorVersion: number): RedeemerBudget[];
+};
+
+/**
+ * The bytes a hex string spells, in either case.
+ *
+ * @throws TypeError if the string has an odd length or a non-hex character
+ */
+export function hexToBytes(hex: string): Uint8Array;
+
+/**
+ * UPLC scripts as bytes.
+ *
+ * The primitives work on flat program bytes: `decodeToFlat` takes a script in any form a caller
+ * holds, and `applyArgs` applies arguments to it. Together with `cbor.wrapBytes` and
+ * `bytesToHex` they compose into any envelope a tool expects. `applyParamsToScript` is the
+ * common composition in one call. Every member throws a `TypeError` for input it cannot read.
+ */
+export const uplc: {
+  /**
+   * The flat program bytes of a script, whatever form it arrives in.
+   *
+   * Takes hex or bytes of raw flat, single CBOR or double CBOR. Only the envelopes are read, so
+   * this is cheap and the script's own bytes come back unchanged; the program is decoded where
+   * it is used, by `applyArgs` or the evaluator.
+   *
+   * @param script the script, as hex or bytes
+   * @returns the flat program bytes
+   */
+  decodeToFlat(script: string | Uint8Array): Uint8Array;
+  /**
+   * Applies `Data` arguments to a flat program, left to right.
+   *
+   * @param flat the flat program bytes, as `decodeToFlat` returns them
+   * @param args the arguments, each a CBOR-encoded `Data`, as hex or bytes
+   * @returns the applied program, as flat bytes
+   */
+  applyArgs(flat: Uint8Array, args: readonly (string | Uint8Array)[]): Uint8Array;
+  /**
+   * Applies CBOR-encoded `Data` parameters to a script and returns it as double-CBOR hex.
+   *
+   * The same contract as Lucid's and Mesh's `applyParamsToScript`: any script form in, the
+   * double-CBOR hex their script objects hold out. It is
+   * `bytesToHex(cbor.wrapBytes(cbor.wrapBytes(uplc.applyArgs(uplc.decodeToFlat(script),
+   * params))))`.
+   *
+   * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR
+   * @param params the parameters, each a CBOR-encoded `Data`, as hex or bytes
+   * @returns the applied script, double-CBOR, as lowercase hex
+   */
+  applyParamsToScript(script: string | Uint8Array, params: readonly (string | Uint8Array)[]): string;
+};
 
 /** @deprecated Use RedeemerBudget instead. */
 export { RedeemerBudget as Redeemer };

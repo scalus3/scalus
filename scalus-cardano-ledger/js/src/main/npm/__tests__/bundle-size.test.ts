@@ -55,7 +55,7 @@ describe("scalus.js bundle", () => {
     });
 
     test("should be smaller than 2.3MB", () => {
-        // About 2.17 MiB since the tzdb exclusion (lever 5); the 2.3 MiB cap leaves ~140 KiB of
+        // About 2.19 MiB since the tzdb exclusion (lever 5); the 2.3 MiB cap leaves ~110 KiB of
         // headroom. `ProtocolParams.fromBlockfrostJson`/`toBlockfrostJson` still re-link upickle
         // and ujson for ~117 KB, which is a deliberate, recorded trade (the jsoniter port that
         // would have recovered it broke scalus-native and was reverted). The limit guards the next

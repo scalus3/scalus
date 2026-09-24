@@ -241,7 +241,9 @@ object JsProtocolParams {
       * The only JSON entry point exported to JavaScript. `cardano-cli query protocol-parameters`
       * output is readable from Scala but not from here: it is devops-tool output rather than
       * something a browser or Node client has to hand, and exporting the reader would pull the JSON
-      * derivation for six more ledger types into the bundle for a path nothing uses.
+      * derivation for six more ledger types into the bundle. To configure an evaluation from any
+      * other provider, put its cost array in an `EvaluationOptions` record instead of parsing a
+      * whole parameter set.
       */
     @JSExportStatic
     def fromBlockfrostJson(json: String): JsProtocolParams = wrap(

@@ -2,9 +2,11 @@ package scalus.utils.scalajs.internal
 
 import io.bullet.borer.{Cbor, Decoder, Encoder}
 import scalus.uplc.builtin.ByteString
+import scalus.utils.Hex
 
 import scala.scalajs.js
 import scala.scalajs.js.typedarray.{byteArray2Int8Array, int8Array2ByteArray, Int8Array, Uint8Array}
+import scala.util.control.NonFatal
 
 // Helpers for the Scala.js facades that the npm package exports. They are all in this one file, so
 // a single read shows every helper there is.
@@ -81,10 +83,54 @@ private[scalus] def safeInteger(value: js.Any, name: String): Double = {
     value.asInstanceOf[Double]
 }
 
+// ---- Inputs ----
+//
+// Readers for byte and array inputs a JavaScript caller passed in. Like `longOf`, each takes the
+// name of what it reads, and throws a `TypeError` naming it when the value cannot be read.
+
+/** The bytes of a `string | Uint8Array`: hex is parsed, bytes are copied. */
+private[scalus] def bytesOf(value: js.Any, name: String): Array[Byte] =
+    if js.typeOf(value) == "string" then
+        try Hex.hexToBytes(value.asInstanceOf[String])
+        catch case e: IllegalArgumentException => typeError(s"$name: ${e.getMessage}")
+    else if value.isInstanceOf[Uint8Array] then value.asInstanceOf[Uint8Array].toByteArray
+    else typeError(s"$name must be a hexadecimal string or Uint8Array")
+
+/** The elements of an array, each paired with its name, `name[i]`.
+  *
+  * Checked, because anything else would read as length `undefined`: no elements, silently.
+  */
+private[scalus] def arrayOf(value: js.Any, name: String): IndexedSeq[(js.Any, String)] = {
+    if !js.Array.isArray(value) then typeError(s"$name must be an array")
+    val array = value.asInstanceOf[js.Array[js.Any]]
+    IndexedSeq.tabulate(array.length)(i => (array(i), s"$name[$i]"))
+}
+
+/** The bytes of a `string | Uint8Array`, decoded; any failure to decode is a `TypeError`. */
+private[scalus] def decodeOf[A](value: js.Any, name: String)(decode: Array[Byte] => A): A =
+    decodeBytes(bytesOf(value, name), name)(decode)
+
+/** Bytes decoded; any failure to decode is a `TypeError` naming them. */
+private[scalus] def decodeBytes[A](bytes: Array[Byte], name: String)(decode: Array[Byte] => A): A =
+    try decode(bytes)
+    catch
+        case e: js.JavaScriptException => throw e
+        case NonFatal(e)               => typeError(s"$name is not valid: ${e.getMessage}")
+
 // ---- Errors ----
 
 private[scalus] def typeError(message: String): Nothing =
     throw js.JavaScriptException(new js.TypeError(message))
+
+/** Runs `body` so that whatever escapes is something JavaScript can read: a JS error passes through
+  * untouched, any other Scala failure becomes a plain `Error` with its message.
+  */
+private[scalus] def surfacingErrors[A](body: => A): A =
+    try body
+    catch
+        case e: js.JavaScriptException => throw e
+        case NonFatal(e) =>
+            throw js.JavaScriptException(new js.Error(Option(e.getMessage).getOrElse(e.toString)))
 
 // ---- Exports ----
 

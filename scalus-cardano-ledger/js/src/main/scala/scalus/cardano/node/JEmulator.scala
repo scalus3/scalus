@@ -3,7 +3,7 @@ package scalus.cardano.node
 import scalus.interop.{TsName, TsType}
 import scalus.uplc.DebugScript
 import scalus.uplc.builtin.{ByteString, Data}
-import scalus.uplc.eval.JScalus
+import scalus.uplc.eval.{JEvaluator, JRedeemerBudget}
 import scalus.utils.scalajs.internal.*
 import scalus.cardano.address.{Address, StakeAddress}
 import scalus.cardano.ledger.rules.{Context, UtxoEnv}
@@ -100,11 +100,13 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       * an untrusted source therefore need a `try`.
       *
       * @throws PlutusScriptEvaluationError
-      *   if a script fails; it carries the failure message and that script's trace logs.
+      *   if a script fails; it names the redeemer, classifies the failure, carries the script's
+      *   traces and the arguments the script saw.
       * @throws Error
-      *   if `txCborBytes` does not decode as a transaction.
+      *   for any other failure: `txCborBytes` does not decode as a transaction, an input no UTxO
+      *   resolves, a script the transaction does not carry.
       */
-    def evaluateTx(txCborBytes: Uint8Array): js.Array[JScalus.Redeemer] =
+    def evaluateTx(txCborBytes: Uint8Array): js.Array[JRedeemerBudget] =
         evaluateTxWith(txCborBytes, Map.empty)
 
     /** As above, plus UTxOs the emulator does not hold - outputs of a transaction not yet
@@ -113,7 +115,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     def evaluateTx(
         txCborBytes: Uint8Array,
         additionalUtxos: js.Array[JsUtxo]
-    ): js.Array[JScalus.Redeemer] =
+    ): js.Array[JRedeemerBudget] =
         evaluateTxWith(
           txCborBytes,
           additionalUtxos.toSeq.map(u => u.input -> u.output).toMap
@@ -122,36 +124,20 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     private def evaluateTxWith(
         txCborBytes: Uint8Array,
         extra: Utxos
-    ): js.Array[JScalus.Redeemer] = {
-        val tx = Transaction.fromCbor(txCborBytes.toByteArray)
-        val info = emulator.cardanoInfo
-        val evaluator = PlutusScriptEvaluator(
-          slotConfig = info.slotConfig,
-          initialBudget = ExUnits(Long.MaxValue, Long.MaxValue),
-          protocolMajorVersion = info.majorProtocolVersion,
-          costModels = info.protocolParams.costModels,
-          mode = EvaluatorMode.EvaluateAndComputeCost
-        )
-        try
-            evaluator
-                .evalPlutusScripts(tx, emulator.utxos ++ extra)
-                .map { r =>
-                    new JScalus.Redeemer(
-                      tag = r.tag.toString,
-                      index = r.index,
-                      budget = JScalus.JSExUnits(
-                        steps = r.exUnits.steps.toJsBigInt,
-                        memory = r.exUnits.memory.toJsBigInt
-                      )
-                    )
-                }
-                .toJSArray
-        catch
-            case e: PlutusScriptEvaluationException =>
-                throw js.JavaScriptException(
-                  JScalus.JSPlutusScriptEvaluationError(e.getMessage, js.Array(e.logs*))
+    ): js.Array[JRedeemerBudget] =
+        surfacingErrors {
+            val tx = Transaction.fromCbor(txCborBytes.toByteArray)
+            val info = emulator.cardanoInfo
+            JEvaluator
+                .evaluate(
+                  tx,
+                  emulator.utxos ++ extra,
+                  info.slotConfig,
+                  info.protocolParams.costModels,
+                  info.majorProtocolVersion.version
                 )
-    }
+                .toJSArray
+        }
 
     /** Validates a transaction and, if it passes, applies it to the ledger state.
       *

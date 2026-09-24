@@ -1111,6 +1111,22 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       name := "scalus-cardano-ledger",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq(
+        // Scala.js only: the result and error types of the JS facade moved out of the `JScalus`
+        // object to top-level classes. Their JavaScript names and shapes are unchanged.
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.JScalus$JSExUnits"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.JScalus$JSResult"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.JScalus$Redeemer"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.JScalus$JSPlutusScriptEvaluationError"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.JScalus.toJSExUnits"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.JScalus.toJSResult"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.uplc.eval.JScalus.evaluateScript"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.uplc.eval.JScalus.evaluateScriptProfile"
+        ),
         // DefaultImpl is a private nested class (MiMa still sees its members); the protected
         // evalScript hook now takes the TransactionHash instead of a pre-encoded hex String,
         // so the default evaluation path skips hex encoding entirely.

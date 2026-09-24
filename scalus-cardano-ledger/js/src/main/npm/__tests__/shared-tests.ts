@@ -490,11 +490,108 @@ export function testEvalPlutusScripts(
 }
 
 /**
+ * The CBOR-first API, as the browser sees it. Deliberately typed structurally here, like the
+ * other browser-facing interfaces in this file, so the harness stays independent of the
+ * generated declarations.
+ */
+interface CborFirstApi {
+  uplc: {
+    decodeToFlat(script: string | Uint8Array): Uint8Array;
+    applyArgs(flat: Uint8Array, args: readonly (string | Uint8Array)[]): Uint8Array;
+    applyParamsToScript(script: string | Uint8Array, params: readonly (string | Uint8Array)[]): string;
+  };
+  cbor: { wrapBytes(bytes: Uint8Array): Uint8Array };
+  bytesToHex(bytes: Uint8Array): string;
+  evaluator: {
+    evaluateScript(
+      script: string | Uint8Array,
+      args: readonly (string | Uint8Array)[],
+      options: unknown
+    ): {
+      isSuccess: boolean;
+      budget: { memory: bigint; steps: bigint };
+      logs: string[];
+      error?: { code: string; message: string };
+    };
+  };
+  EvaluationOptions: { mainnet(plutusVersion: "PlutusV3"): unknown };
+}
+
+/**
+ * Exercises `uplc` and `evaluator` in a real browser: normalize the envelope, apply an argument,
+ * evaluate with explicit options, and check that a bad call still returns a structured result
+ * rather than throwing. No Buffer, no SDK modules, no Vitest.
+ */
+export function testCborFirstApi(api: CborFirstApi): TestResult[] {
+  const results: TestResult[] = [];
+  const { uplc, cbor, bytesToHex, evaluator, EvaluationOptions } = api;
+
+  try {
+    const options = EvaluationOptions.mainnet("PlutusV3");
+    const flat = uplc.applyArgs(uplc.decodeToFlat(successScriptHex), ["182a"]);
+    const applied = cbor.wrapBytes(cbor.wrapBytes(flat));
+
+    results.push({
+      name: "uplc: applyArgs returns bytes",
+      passed: flat instanceof Uint8Array && flat.length > 0,
+      message: `got ${Object.prototype.toString.call(flat)}`,
+    });
+
+    results.push({
+      name: "uplc: applyParamsToScript is the composition",
+      passed: uplc.applyParamsToScript(successScriptHex, ["182a"]) === bytesToHex(applied),
+    });
+
+    const result = evaluator.evaluateScript(successScriptHex, ["182a"], options);
+    results.push({
+      name: "evaluator: evaluateScript succeeds with explicit options",
+      passed: result.isSuccess === true && result.error === undefined,
+      message: result.error ? result.error.message : undefined,
+    });
+
+    results.push({
+      name: "evaluator: success reports a non-zero budget",
+      passed: result.budget.memory > 0n && result.budget.steps > 0n,
+      message: `memory: ${result.budget.memory}, steps: ${result.budget.steps}`,
+    });
+
+    results.push({
+      name: "evaluator: bytes and hex agree",
+      passed:
+        evaluator.evaluateScript(applied, [], options).isSuccess ===
+        evaluator.evaluateScript(bytesToHex(applied), [], options).isSuccess,
+    });
+
+    let thrown: unknown;
+    try {
+      evaluator.evaluateScript("zz", [], options);
+    } catch (error) {
+      thrown = error;
+    }
+    results.push({
+      name: "evaluator: a malformed script throws TypeError",
+      passed: thrown instanceof TypeError,
+      message: `thrown: ${String(thrown)}`,
+    });
+  } catch (error) {
+    results.push({
+      name: "CBOR-first API: no test threw",
+      passed: false,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return results;
+}
+
+/**
  * Run all tests - used by browser
  */
 export function runAllTests(
   Scalus: ScalusAPI,
-  SlotConfig: SlotConfigStatic
+  SlotConfig: SlotConfigStatic,
+  // Optional so the older manual harness in test-browser.js keeps working unchanged.
+  cborFirst?: CborFirstApi
 ): TestResult[] {
   return [
     ...testApplyDataArgToScript(Scalus),
@@ -502,6 +599,7 @@ export function runAllTests(
     ...testEvaluateScriptProfile(Scalus),
     ...testSlotConfig(SlotConfig),
     ...testEvalPlutusScripts(Scalus, SlotConfig),
+    ...(cborFirst ? testCborFirstApi(cborFirst) : []),
   ];
 }
 
@@ -510,6 +608,7 @@ if (typeof window !== "undefined") {
   (window as unknown as Record<string, unknown>).runAllSharedTests = runAllTests;
   (window as unknown as Record<string, unknown>).testApplyDataArgToScript = testApplyDataArgToScript;
   (window as unknown as Record<string, unknown>).testEvaluateScript = testEvaluateScript;
+  (window as unknown as Record<string, unknown>).testCborFirstApi = testCborFirstApi;
   (window as unknown as Record<string, unknown>).testEvaluateScriptProfile = testEvaluateScriptProfile;
   (window as unknown as Record<string, unknown>).testSlotConfig = testSlotConfig;
   (window as unknown as Record<string, unknown>).testEvalPlutusScripts = testEvalPlutusScripts;
