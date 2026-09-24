@@ -117,9 +117,9 @@ ThisBuild / watchForceTriggerOnAnyChange := true
 
 // Enable parallel execution
 ThisBuild / parallelExecution := true
-Global / concurrentRestrictions := Seq(
-  Tags.limitAll(java.lang.Runtime.getRuntime.availableProcessors())
-)
+// No `Global / concurrentRestrictions` override: sbt's default is already
+// `Tags.limitAll(SystemProcessors) :: Nil` when parallelExecution is true
+// (EvaluateTask.defaultRestrictions), so restating it here bought nothing.
 
 Compile / doc / scalacOptions ++= Seq(
   "-groups",

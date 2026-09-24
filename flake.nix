@@ -39,9 +39,12 @@
 
       # Common JVM options for both app and sbt JVM
       commonDevJvmOpts = [
-        # Memory settings - use percentage of physical RAM for portability
-        "-XX:InitialRAMPercentage=25.0" # Initial heap: 25% of physical RAM
-        "-XX:MaxRAMPercentage=75.0" # Max heap: 75% of physical RAM
+        # NO heap settings here. .jvmopts owns them, for sbt and for CI alike.
+        # The sbt launcher puts SBT_OPTS after .jvmopts on the java command line,
+        # so a heap flag here would silently override the committed one, and a
+        # percentage of physical RAM oversubscribes a machine that runs one sbtn
+        # server per worktree. Leaving SBT_OPTS free also makes it the place for
+        # a personal override, via a gitignored .envrc.local.
         "-Xss64m" # Stack size for deep recursive calls in compiler
 
         # Enable native access for BLST JNI library (required for Java 22+)
@@ -104,7 +107,6 @@
 
               # JIT settings optimized for compilation workloads
               "-XX:CompileThreshold=1000" # Compile hot methods after 1000 invocations
-              "-XX:+AlwaysPreTouch" # Pre-touch heap pages to avoid GC pauses during compilation
 
               # SBT-specific optimizations
               "-Dsbt.boot.lock=false" # Disable boot lock file (faster concurrent sbt instances)
@@ -201,11 +203,11 @@
 
             # Common JVM options for CI environment (Java 21 - more conservative settings)
             ciCommonJvmOpts = [
-              # Memory settings - fixed heap to avoid OOM on 16GB GitHub Actions runners.
-              # MaxRAMPercentage=75% gives ~12GB heap, leaving too little for Node.js
-              # (Scala.js tests), Nix, and OS — causing the OOM killer to SIGTERM the runner.
-              "-Xms2g" # Initial heap: 2GB
-              "-Xmx7g" # Max heap: 7GB (leaves ~9GB for Node.js, Nix, OS on 16GB runner)
+              # NO heap settings here either: .jvmopts caps the heap at 8g, for CI
+              # and for developers alike. That leaves ~8GB for Node.js (Scala.js
+              # tests), Nix and the OS on a 16GB GitHub Actions runner. Do not
+              # restore a percentage: MaxRAMPercentage=75% gave a ~12GB heap and
+              # the OOM killer SIGTERMed the runner on every CI-JS run.
               "-Xss64m" # Stack size for deep recursive calls in compiler
 
               # Garbage Collection - G1GC for stability

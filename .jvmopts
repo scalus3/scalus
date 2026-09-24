@@ -1,15 +1,31 @@
-# Memory settings - use percentage of physical RAM for portability
-# Initial heap: 25% of physical RAM
--XX:InitialRAMPercentage=25.0
-# Max heap: 75% of physical RAM
--XX:MaxRAMPercentage=75.0
+# JVM options for the sbt launcher and the sbtn server.
+#
+# This file is the single source of heap settings. flake.nix must not set them:
+# the sbt launcher puts SBT_OPTS *after* .jvmopts on the java command line, so
+# anything the devshell exports wins silently.
+#
+# To override locally without committing, either:
+#   - this repo only: export SBT_OPTS in a gitignored .envrc.local
+#   - every sbt project: add "-J-Xmx12g" to ~/.config/sbt/sbtopts
+
+# Fixed heap, NOT a percentage of physical RAM. A percentage assumes one JVM
+# owns the machine. In practice many live at once: one sbtn server per worktree,
+# plus bloop, plus forked test JVMs. At MaxRAMPercentage=75 every one of them was
+# allowed three quarters of the machine, and ci-js grew into it (js/test links
+# six Scala.js modules in the sbt JVM, and G1 never collects below the cap).
+-Xmx8g
 -Xss64M
 
 -XX:+UseG1GC
 
 # Memory optimizations
 -XX:+UseStringDeduplication
--XX:+UseCompressedOops
+
+# Give unused heap back to the OS while a worktree server sits idle (JEP 346).
+# This is what makes several servers survivable at once. The flag is manageable,
+# so it can also be switched on for a running server:
+#   jcmd <pid> VM.set_flag G1PeriodicGCInterval 60000
+-XX:G1PeriodicGCInterval=60000
 
 # Code cache settings for better JIT performance
 -XX:ReservedCodeCacheSize=512m
@@ -23,8 +39,9 @@
 # While it speeds up initial startup, it prevents C2 JIT optimization
 # which makes subsequent compilations 30-50% slower in long-running sbtn server
 
-# Pre-touch heap to avoid GC pauses during compilation
--XX:+AlwaysPreTouch
+# NOTE: Do NOT add -XX:+AlwaysPreTouch here. It commits and touches the whole
+# initial heap at startup, which is a per-server RSS tax when several share a
+# machine. It only pays off for a single dedicated JVM.
 
 # SBT-specific optimizations
 -Dsbt.boot.lock=false

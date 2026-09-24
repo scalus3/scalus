@@ -12,7 +12,9 @@ lowers to Untyped Plutus Core (UPLC), the language of Cardano smart contracts.
 
 ## Commands
 
-Prefer `sbtn` over `sbt`, when `sbtn` is aviable and not hangs. 
+Prefer `sbtn` over `sbt`, when `sbtn` is aviable and not hangs.
+Exception: in a git worktree, prefer one-shot `sbt` and shut the server down when done. See
+[Working in a git worktree with sbt](#working-in-a-git-worktree-with-sbt).
 
 | Command          | Purpose                                              |
 |------------------|------------------------------------------------------|
@@ -55,6 +57,12 @@ one one-time fix is needed inside the worktree:
    ```
 
    It is git-ignored, so it won't show up in `git status`.
+
+2. **Shut the sbt server down when the task ends: `sbtn shutdown`.** Each server keeps its own heap
+   (`-Xmx8g`, from `.jvmopts`), so several worktrees at once can exhaust RAM. Divide the machine's
+   RAM by 8 GB, leave a few GB for the OS, and keep at most that many servers alive. In a throwaway
+   worktree, prefer a one-shot `sbt`, which returns its memory on exit; keep the long-lived `sbtn`
+   daemon for the primary checkout. Never start a second sbt in a checkout that already has one.
 
 ## Architecture
 
