@@ -1,6 +1,7 @@
 package scalus.cardano.ledger
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.uplc.builtin.ByteString
 
 import scala.scalajs.js
 
@@ -42,6 +43,28 @@ class JsValueTest extends AnyFunSuite {
             (policy + "ef") -> "7"
           ).sorted
         )
+    }
+
+    test("the constructor sums duplicate units and drops zeros, as adding one by one does") {
+        val (p, q) = ("0" * 56, "1" * 56)
+        val assets = js.Array(
+          new JsAsset(p, "aa", js.BigInt("5")),
+          new JsAsset(q, "aa", js.BigInt("0")),
+          new JsAsset(p, "aa", js.BigInt("2")),
+          new JsAsset(p, "bb", js.BigInt("3")),
+          new JsAsset(p, "bb", js.BigInt("-3")),
+          new JsAsset(q, "cc", js.BigInt("1"))
+        )
+        val byAdding = assets.toSeq.foldLeft(MultiAsset.empty) { (acc, a) =>
+            acc + MultiAsset.asset(
+              ScriptHash.fromHex(a.policyId),
+              AssetName(ByteString.fromHex(a.assetName)),
+              a.quantity.toString.toLong
+            )
+        }
+        val built = new JsValue(js.BigInt("1"), assets).underlying.assets
+        assert(built == byAdding)
+        assert(built.assets.keySet.size == 2 && built.assets(ScriptHash.fromHex(p)).size == 1)
     }
 
     test("wrap stores the ledger value by reference, so a round trip copies nothing") {
