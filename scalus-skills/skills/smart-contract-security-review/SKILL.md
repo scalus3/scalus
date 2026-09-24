@@ -1,6 +1,6 @@
 ---
 name: smart-contract-security-review
-description: Security review for Scalus/Cardano smart contracts. Analyzes @Compile annotated validators for vulnerabilities like redirect attacks, inexact value validation, missing token verification, ADA-only comparisons, rounding direction, and self-dealing. Use when reviewing on-chain code, before deploying validators, or when /security-review is invoked. Requires explicit path argument.
+description: Security review for Scalus/Cardano smart contracts. Analyzes @Compile annotated validators for vulnerabilities like redirect attacks, inexact value validation, missing token verification, ADA-only comparisons, rounding direction, and self-dealing. Use when reviewing on-chain code, before deploying validators, or when /smart-contract-security-review is invoked. Requires explicit path argument.
 ---
 
 # Smart Contract Security Review
@@ -108,7 +108,7 @@ Checklist rules:
 
 ## False Positive Verification
 
-**CRITICAL**: Before reporting ANY vulnerability, you MUST verify exploitability by tracing code execution with a concrete attack transaction.
+Before you report a vulnerability, verify that it is exploitable: trace the code with a concrete attack transaction. A pattern match alone produces false positives.
 
 ### Verification Method: Attack Transaction Tracing
 
@@ -123,11 +123,11 @@ For each potential vulnerability:
 2. **Execute the validator logic mentally with this transaction**
    - Go line-by-line through the validator code
    - Track what each variable evaluates to with your attack tx
-   - Check EVERY `require()` statement - does it pass or fail?
+   - Check each `require()` statement - does it pass or fail?
 
-3. **If ANY require fails, the attack fails → False Positive**
+3. If a `require` fails, the attack fails: the finding is a false positive.
 
-4. **Only report if ALL requires pass with the attack transaction**
+4. Report the finding only if every `require` passes with the attack transaction.
 
 ### Example: V005 Double Satisfaction Verification
 

@@ -10,7 +10,7 @@ the Cardano ledger. It includes phase 1 & 2 validation.
 
 ## File structure for testing a validator
 
-Three files are typically involved:
+Four files are typically involved:
 
 - **Validator** — the on-chain logic (e.g. `MyValidator.scala`)
 - **Contract** — compiles the validator into a `PlutusV3` value (e.g. `MyContract.scala`)
@@ -35,8 +35,9 @@ val scriptAddress = applied.address(network)
 ### Transactions file
 
 `CardanoInfo` (aliased as `env`) carries network/protocol config and is provided by `ScalusTest`
-via `TestUtil.testEnvironment`. Pass `evaluator = PlutusScriptEvaluator.constMaxBudget(env)` when
-the `TxBuilder` needs to run scripts (i.e. for spending transactions).
+via `TestUtil.testEnvironment`. Spending transactions need an evaluator.
+`evaluator = PlutusScriptEvaluator.constMaxBudget(env)` skips script evaluation while the builder
+balances the transaction. The Emulator still runs the scripts when you submit.
 
 ```scala
 case class MyTransactions(

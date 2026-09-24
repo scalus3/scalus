@@ -228,14 +228,8 @@ val powerOf2 = pow(BigInt(2), n)
 ## Compiler Options That Affect Budget
 
 ```scala
-given Options = Options(
-  // Use V3 lowering for better optimizations (CSE, CaseConstr)
-  targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-  // Disable error traces for production — saves budget on every require
-  generateErrorTraces = false,
-  // Enable UPLC optimizer pipeline
-  optimizeUplc = true
-)
+// V3 lowering, no error traces, UPLC optimizer on
+private given Options = Options.release
 ```
 
 ## Measuring Budget
