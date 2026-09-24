@@ -10,7 +10,7 @@ import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{platform, Data}
 import scalus.uplc.eval.*
 import scalus.uplc.internal.ProfileReportWriter
-import scalus.uplc.{DeBruijnedProgram, DebugScript, Term}
+import scalus.uplc.{DeBruijn, DeBruijnedProgram, DebugScript, Term}
 import scalus.utils.ScalusSourcePos
 import scalus.cardano.ledger.internal.Logger
 
@@ -691,6 +691,17 @@ object PlutusScriptEvaluator {
         ): Result = {
             // Parse UPLC program from CBOR
             val program = plutusScript.deBruijnedProgram
+
+            // The ledger rejects an open script before running it. The arguments are constants, so
+            // checking the script is the same as checking the applied term, as Plutus does.
+            for name <- DeBruijn.checkScope(program.term) do
+                throw new PlutusScriptEvaluationException(
+                  s"Script is not closed: variable '${name.name}' has De Bruijn index ${name.index} with no binder",
+                  null,
+                  Array.empty,
+                  plutusScript.scriptHash,
+                  spentBudget = ExUnits.zero
+                )
 
             // Apply arguments to the program
             val applied = args.foldLeft(program): (acc, arg) =>

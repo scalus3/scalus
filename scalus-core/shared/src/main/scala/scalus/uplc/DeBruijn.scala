@@ -89,3 +89,27 @@ object DeBruijn:
             case _: Error   => term
 
         go(term)
+
+    /** Checks that a De Bruijn term is closed, exactly as the Cardano ledger checks a script before
+      * running it (Plutus `mkTermToEvaluate` runs `UntypedPlutusCore.Check.Scope.checkScope`).
+      *
+      * Every variable must have an index from 1 to the number of enclosing binders. Like Plutus,
+      * this does not look inside `Constr` or `Case`: an out-of-scope index there passes, and fails
+      * only if evaluation reaches it. That is a Plutus quirk the ledger rules now depend on, see
+      * https://github.com/IntersectMBO/plutus/issues/7965.
+      *
+      * @return
+      *   the first variable out of scope, or `None` if there is none
+      */
+    def checkScope(term: Term): Option[NamedDeBruijn] =
+        def go(term: Term, level: Int): Option[NamedDeBruijn] = term match
+            case Var(name, _) =>
+                if name.index > 0 && name.index <= level then None else Some(name)
+            case LamAbs(_, body, _) => go(body, level + 1)
+            case Apply(f, arg, _) =>
+                val inF = go(f, level)
+                if inF.isDefined then inF else go(arg, level)
+            case Force(term, _) => go(term, level)
+            case Delay(term, _) => go(term, level)
+            case _              => None
+        go(term, 0)

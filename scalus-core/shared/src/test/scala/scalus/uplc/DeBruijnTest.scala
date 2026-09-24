@@ -79,6 +79,23 @@ class DeBruijnTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbitr
         assertThrows[IndexOutOfBoundsException](DeBruijn.fromDeBruijnTerm(lam("x")(ix("x", 2))))
     }
 
+    test("checkScope accepts a closed term") {
+        assert(DeBruijn.checkScope(lam("x", "y")(ix("x", 2) $ ix("y", 1))).isEmpty)
+    }
+
+    test("checkScope reports an index 0 or past the enclosing binders, wherever it sits") {
+        assert(DeBruijn.checkScope(lam("x")(ix("x", 0))) == Some(NamedDeBruijn("x", 0)))
+        assert(
+          DeBruijn.checkScope(lam("x")(ix("x", 1) $ Force(Delay(ix("y", 2))))) ==
+              Some(NamedDeBruijn("y", 2))
+        )
+    }
+
+    test("checkScope does not look inside Constr or Case, like the Cardano ledger") {
+        assert(DeBruijn.checkScope(lam("x")(Constr(Word64.Zero, List(ix("y", 5))))).isEmpty)
+        assert(DeBruijn.checkScope(lam("x")(Case(ix("y", 5), Nil))).isEmpty)
+    }
+
     test("fromDeBruijnTerm(deBruijnTerm(t)) == t") {
         forAll { (t: Term) =>
             val deBruijnedTerm = DeBruijn.deBruijnTerm(t)
