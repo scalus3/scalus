@@ -141,7 +141,7 @@ export interface DelegationInfo {
  * transactions against mainnet's parameters. `Emulator.create` takes a `CardanoInfo`, in which the
  * two cannot disagree.
  *
- * @param initialUtxosCbor The UTxO set to start from, as CBOR: a map whose keys are transaction inputs (a `[transactionHash, outputIndex]` pair) and whose values are transaction outputs, as in the Cardano ledger CDDL. This is the same shape `getUtxosCbor` gives back.
+ * @param initialUtxosCbor The UTxO set to start from, as CBOR: a map whose keys are transaction inputs (a `[transactionHash, outputIndex]` pair) and whose values are transaction outputs, as in the Cardano ledger CDDL. This is the same shape `getUtxosCbor` gives back. An array of `[input, output]` pairs, as `Utxo.toCbor` writes each, is read too.
  * @param slotConfig Slot arithmetic for the emulated network, for example `SlotConfig.preview`.
  * @param initialStakeRewards Stake credentials to register before the first transaction: a map from a hex-encoded 28-byte script hash to a reward balance in lovelace, written as a decimal string. Only script credentials can be seeded here; use `Emulator.withState` to seed key credentials. A balance of `"0"` is the usual case: a reward (staking) validator only runs when a transaction withdraws from its address, and a withdrawal of zero lovelace is enough, but the address must already be registered for the transaction to be valid.
  */
@@ -178,9 +178,10 @@ export class Emulator {
   evaluateTx(txCborBytes: Uint8Array): RedeemerBudget[];
   /**
    * As above, plus UTxOs the emulator does not hold - outputs of a transaction not yet
-   * submitted, typically.
+   * submitted, typically. Each is a `Utxo` or an `[input, output]` pair as hex or bytes, as
+   * `evaluator.evaluateTx` takes them.
    */
-  evaluateTx(txCborBytes: Uint8Array, additionalUtxos: readonly Utxo[]): RedeemerBudget[];
+  evaluateTx(txCborBytes: Uint8Array, additionalUtxos: readonly (string | Uint8Array | Utxo)[]): RedeemerBudget[];
   /**
    * Validates a transaction and, if it passes, applies it to the ledger state.
    *
@@ -918,14 +919,26 @@ export class Utxo {
   readonly scriptRef?: Uint8Array;
   /** Which language `scriptRef` is written in. */
   readonly scriptLanguage?: string;
-  /** This UTxO as a one-entry CBOR map from input to output, the shape `getUtxosCbor` uses. */
+  /**
+   * This UTxO as CBOR `[input, output]`, CIP-30's `transaction_unspent_output`: the shape
+   * `evaluator.evaluateTx` reads, and what CML, CST and a wallet's `getUtxos()` produce.
+   */
   toCbor(): Uint8Array;
   /** A copy carrying `hash` as a datum hash, in place of whatever datum this output had. */
   withDatumHash(hash: string): Utxo;
   /** A copy carrying the CBOR-decoded value of `cbor` as its inline datum. */
   withInlineDatum(cbor: Uint8Array): Utxo;
-  /** A copy carrying the CBOR-decoded value of `cbor` as its reference script. */
-  withScriptRef(cbor: Uint8Array): Utxo;
+  /**
+   * A copy carrying `script` as its reference script.
+   *
+   * Takes the script as `{ type, script }`, the shape Lucid's `Script` has: `script` is hex or
+   * bytes, the native-script CBOR for `"Native"`, and for Plutus the program as raw flat, single
+   * or double CBOR. Also takes the ledger's `script_ref` CBOR, as `scriptRef` returns it. A
+   * Plutus program is stored as given, not checked.
+   *
+   * @throws TypeError if `script` is neither form, its hex is invalid, or a `"Native"` script or a `script_ref` does not decode
+   */
+  withScriptRef(script: Uint8Array | { readonly type: "Native" | "PlutusV1" | "PlutusV2" | "PlutusV3"; readonly script: string | Uint8Array }): Utxo;
   /**
    * A plain object with the same fields.
    *
@@ -936,7 +949,8 @@ export class Utxo {
   toObject(): PlainUtxo;
   toString(): string;
   /**
-   * Read back what `toCbor` wrote: a CBOR map holding exactly one input-to-output entry.
+   * Read back what `toCbor` wrote: CBOR `[input, output]`. Also reads the one-entry map
+   * `{input: output}` that `toCbor` wrote up to 1.2.
    *
    * A map of any other size is rejected, an empty one and a many-entry one alike. Taking the
    * first entry of a many-entry map would drop the rest without a word, and which one survived
@@ -1036,6 +1050,17 @@ export const cbor: {
 };
 
 /**
+ * The hash a datum is identified by, in an output's datum hash or a witness set.
+ *
+ * Hashes the CBOR exactly as given: two encodings of the same `Data` hash differently, as on
+ * the ledger.
+ *
+ * @param data the datum, CBOR-encoded `Data`, as hex or bytes
+ * @returns the 32-byte hash, as lowercase hex
+ */
+export function dataHash(data: string | Uint8Array): string;
+
+/**
  * Evaluates every Plutus script a transaction runs, and reports what each one costs. Use it to
  * fill in a transaction's execution units before you balance and submit it.
  *
@@ -1102,11 +1127,12 @@ export const evaluator: {
    *
    * The resolved inputs arrive as CBOR `[input, output]` pairs, `transaction_unspent_output` in
    * the ledger CDDL: CML's `TransactionUnspentOutput.to_cbor_bytes()`, CST's
-   * `TransactionUnspentOutput.toCbor()` and a CIP-30 wallet's `getUtxos()` all produce it. A
-   * later pair with the same input replaces an earlier one.
+   * `TransactionUnspentOutput.toCbor()`, a CIP-30 wallet's `getUtxos()` and `Utxo.toCbor()` all
+   * produce it. A `Utxo` itself is taken too, with no encoding step. A later entry with the same
+   * input replaces an earlier one.
    *
    * @param tx the transaction, as hex or bytes
-   * @param utxos the resolved inputs and reference inputs, one `[input, output]` pair each, as hex or bytes
+   * @param utxos the resolved inputs and reference inputs, each a `Utxo` or an `[input, output]` pair as hex or bytes
    * @param slotConfig the chain's slot arithmetic: a `SlotConfig`, or any object with the same three fields
    * @param costModels cost parameters per language, keyed by name: a `CostModels`, or any object with some of its fields
    * @param protocolMajorVersion picks the builtin semantics and the costing rules
@@ -1115,7 +1141,7 @@ export const evaluator: {
    * @throws TypeError if an input cannot be read as described
    * @throws Error if the transaction evaluator stops for any other reason: an input no pair resolves, a script the transaction does not carry, a missing datum
    */
-  evaluateTx(tx: string | Uint8Array, utxos: readonly (string | Uint8Array)[], slotConfig: SlotConfigLike, costModels: CostModelsLike, protocolMajorVersion: number): RedeemerBudget[];
+  evaluateTx(tx: string | Uint8Array, utxos: readonly (string | Uint8Array | Utxo)[], slotConfig: SlotConfigLike, costModels: CostModelsLike, protocolMajorVersion: number): RedeemerBudget[];
 };
 
 /**
@@ -1124,6 +1150,17 @@ export const evaluator: {
  * @throws TypeError if the string has an odd length or a non-hex character
  */
 export function hexToBytes(hex: string): Uint8Array;
+
+/**
+ * The hash a script is identified by: its policy id, or its payment credential.
+ *
+ * Takes the script as `Utxo.withScriptRef` does: `{ type, script }`, with a Plutus program in
+ * any CBOR wrapping, or the ledger's `script_ref` CBOR. The wrapping does not change the hash.
+ *
+ * @returns the 28-byte hash, as lowercase hex
+ * @throws TypeError if `script` is neither form, its hex is invalid, or a `"Native"` script or a `script_ref` does not decode
+ */
+export function scriptHash(script: Uint8Array | { readonly type: "Native" | "PlutusV1" | "PlutusV2" | "PlutusV3"; readonly script: string | Uint8Array }): string;
 
 /**
  * UPLC scripts as bytes.

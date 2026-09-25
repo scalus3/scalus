@@ -8,6 +8,7 @@ import scalus.utils.scalajs.internal.*
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
+import scala.scalajs.js.typedarray.Uint8Array
 
 /** Synchronous evaluation of one script, or of every script of a transaction. */
 @JSExportTopLevel("evaluator")
@@ -61,13 +62,15 @@ object JEvaluator {
       *
       * The resolved inputs arrive as CBOR `[input, output]` pairs, `transaction_unspent_output` in
       * the ledger CDDL: CML's `TransactionUnspentOutput.to_cbor_bytes()`, CST's
-      * `TransactionUnspentOutput.toCbor()` and a CIP-30 wallet's `getUtxos()` all produce it. A
-      * later pair with the same input replaces an earlier one.
+      * `TransactionUnspentOutput.toCbor()`, a CIP-30 wallet's `getUtxos()` and `Utxo.toCbor()` all
+      * produce it. A `Utxo` itself is taken too, with no encoding step. A later entry with the same
+      * input replaces an earlier one.
       *
       * @param tx
       *   the transaction, as hex or bytes
       * @param utxos
-      *   the resolved inputs and reference inputs, one `[input, output]` pair each, as hex or bytes
+      *   the resolved inputs and reference inputs, each a `Utxo` or an `[input, output]` pair as
+      *   hex or bytes
       * @param slotConfig
       *   the chain's slot arithmetic: a `SlotConfig`, or any object with the same three fields
       * @param costModels
@@ -88,7 +91,7 @@ object JEvaluator {
     @JSExport
     def evaluateTx(
         @TsType("string | Uint8Array") tx: js.Any,
-        @TsType("readonly (string | Uint8Array)[]") utxos: js.Any,
+        @TsType("readonly (string | Uint8Array | Utxo)[]") utxos: js.Any,
         slotConfig: JSlotConfigLike,
         costModels: JCostModelsLike,
         protocolMajorVersion: Double
@@ -117,11 +120,21 @@ object JEvaluator {
         ).toJSArray
     }
 
-    /** The UTxO map the evaluator wants, from `[input, output]` pairs. A later pair wins. */
-    private[eval] def utxoMapOf(utxos: js.Any): Map[TransactionInput, TransactionOutput] =
-        arrayOf(utxos, "utxos")
-            .map(decodeOf(_, _)(Cbor.decode(_).to[(TransactionInput, TransactionOutput)].value))
-            .toMap
+    /** The UTxO map the evaluator wants, from `Utxo`s and `[input, output]` pairs. A later entry
+      * wins.
+      */
+    private[scalus] def utxoMapOf(
+        utxos: js.Any,
+        arrayName: String = "utxos"
+    ): Map[TransactionInput, TransactionOutput] =
+        arrayOf(utxos, arrayName).map { (value, name) =>
+            if value.isInstanceOf[JsUtxo] then
+                val utxo = value.asInstanceOf[JsUtxo]
+                (utxo.input, utxo.output)
+            else if js.typeOf(value) == "string" || value.isInstanceOf[Uint8Array] then
+                decodeOf(value, name)(Cbor.decode(_).to[Utxo].value.toTuple)
+            else typeError(s"$name must be a hexadecimal string, a Uint8Array or a Utxo")
+        }.toMap
 
     /** The evaluation every transaction-level entry point runs, and the one place a failing script
       * becomes a `PlutusScriptEvaluationError`.

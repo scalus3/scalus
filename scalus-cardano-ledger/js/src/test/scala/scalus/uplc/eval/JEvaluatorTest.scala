@@ -3,7 +3,7 @@ package scalus.uplc.eval
 import io.bullet.borer.Cbor
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network
-import scalus.cardano.ledger.{CardanoInfo, ExUnits, JsSlotConfig, Output, SlotConfig, TransactionInput, TransactionOutput, Value}
+import scalus.cardano.ledger.{CardanoInfo, ExUnits, JsSlotConfig, JsUtxo, Output, SlotConfig, TransactionInput, TransactionOutput, Value}
 import scalus.testing.kit.Party.Alice
 import scalus.uplc.*
 import scalus.uplc.Constant.given
@@ -284,6 +284,20 @@ class JEvaluatorTest extends AnyFunSuite {
           )
         )
         assert(resolved == Map(input -> second))
+    }
+
+    test("a Utxo is taken as it is, mixed with pairs, and the later entry still wins") {
+        val (_, utxos) = SampleTransactions.withdrawal(SampleTransactions.succeedingV3)
+        val (input, first) = utxos.head
+        val second = Output(Alice.address(Network.Mainnet), Value.ada(4999))
+        val handle = JsUtxo.wrap(input, second)
+        assert(JEvaluator.utxoMapOf(js.Array[js.Any](handle)) == Map(input -> second))
+        val mixed = js.Array[js.Any](handle, Hex.bytesToHex(pairBytes(input -> first)))
+        assert(JEvaluator.utxoMapOf(mixed) == Map(input -> first))
+        val e = intercept[js.JavaScriptException](
+          JEvaluator.utxoMapOf(js.Array[js.Any](handle, js.Dynamic.literal()))
+        ).exception
+        assert(e.isInstanceOf[js.TypeError] && e.toString.contains("utxos[1]"), e)
     }
 
     test("bigint slot fields are accepted and mean the same as numbers") {

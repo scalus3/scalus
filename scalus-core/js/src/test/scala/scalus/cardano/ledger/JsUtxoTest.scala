@@ -1,8 +1,10 @@
 package scalus.cardano.ledger
 
+import io.bullet.borer.Cbor
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{Address, Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.uplc.builtin.{ByteString, Data}
+import scalus.utils.Hex
 
 import scalus.utils.scalajs.internal.*
 
@@ -94,6 +96,82 @@ class JsUtxoTest extends AnyFunSuite {
         val back = JsUtxo.fromCbor(utxo.toCbor())
         assert(back.txHash == utxo.txHash)
         assert(back.value.coin.toString == utxo.value.coin.toString)
+    }
+
+    test("toCbor writes [input, output]; fromCbor also reads the one-entry map of 1.2") {
+        val (in, out) = (TransactionInput(hash, 2), TransactionOutput(address, Value.ada(1)))
+        val cbor = JsUtxo.wrap(in, out).toCbor().toByteArray
+        assert(cbor.sameElements(Cbor.encode((in, out)).toByteArray))
+        assert(cbor(0) == 0x82.toByte)
+        val oldMap = Cbor.encode(Map(in -> out)).toByteArray
+        for bytes <- Seq(cbor, oldMap) do
+            val back = JsUtxo.fromCbor(bytes.toUint8Array)
+            assert(back.input == in && back.output == out)
+        val twoEntries = Cbor.encode(Map(in -> out, TransactionInput(hash, 3) -> out)).toByteArray
+        assertThrows[IllegalArgumentException](JsUtxo.fromCbor(twoEntries.toUint8Array))
+    }
+
+    test("Utxos decoders read the ledger map, [input, output] pairs, or either") {
+        val (a, b) = (TransactionInput(hash, 0), TransactionInput(hash, 1))
+        val (x, y) =
+            (TransactionOutput(address, Value.ada(1)), TransactionOutput(address, Value.ada(2)))
+        val map = Cbor.encode(Map(a -> x, b -> y)).toByteArray
+        val pairs = Cbor.encode(Vector(Utxo(a, x), Utxo(b, y), Utxo(a, y))).toByteArray
+        assert(Cbor.decode(map).to(using Utxos.mapDecoder).value == Map(a -> x, b -> y))
+        // A later pair with the same input replaces an earlier one.
+        assert(Cbor.decode(pairs).to(using Utxos.pairsDecoder).value == Map(a -> y, b -> y))
+        assert(Cbor.decode(map).to(using Utxos.mapOrPairsDecoder).value == Map(a -> x, b -> y))
+        assert(Cbor.decode(pairs).to(using Utxos.mapOrPairsDecoder).value == Map(a -> y, b -> y))
+    }
+
+    test("withScriptRef takes { type, script } with the Plutus script in any wrapping") {
+        val flat = Array[Byte](1, 1, 0, 0x33, 0x70)
+        val single = Cbor.encode(flat).toByteArray
+        val double = Cbor.encode(single).toByteArray
+        val utxo = JsUtxo.wrap(TransactionInput(hash, 0), TransactionOutput(address, Value.ada(1)))
+        val expected = ScriptRef(Script.PlutusV2(ByteString.unsafeFromArray(single)))
+        for script <- Seq[js.Any](flat.toUint8Array, Hex.bytesToHex(single), double.toUint8Array) do
+            val record = js.Dynamic.literal(`type` = "PlutusV2", script = script)
+            assert(utxo.withScriptRef(record).output.scriptRef.contains(expected))
+
+        val native = Timelock.TimeStart(5)
+        val record = js.Dynamic.literal(`type` = "Native", script = Hex.bytesToHex(native.toCbor))
+        assert(
+          utxo.withScriptRef(record).output.scriptRef.contains(ScriptRef(Script.Native(native)))
+        )
+
+        for bad <- Seq[js.Any](
+              js.Dynamic.literal(`type` = "PlutusV4", script = "00"),
+              js.Dynamic.literal(`type` = "Native", script = "zz"),
+              "00"
+            )
+        do
+            val e = intercept[js.JavaScriptException](utxo.withScriptRef(bad)).exception
+            assert(e.isInstanceOf[js.TypeError], e)
+    }
+
+    test("scriptHash ignores the wrapping; dataHash hashes the CBOR as given") {
+        val flat = Array[Byte](1, 1, 0, 0x33, 0x70)
+        val single = Cbor.encode(flat).toByteArray
+        val expected = Script.PlutusV3(ByteString.unsafeFromArray(single)).scriptHash.toHex
+        for script <- Seq[js.Any](flat.toUint8Array, Hex.bytesToHex(single)) do
+            assert(
+              JsHashes.scriptHash(
+                js.Dynamic.literal(`type` = "PlutusV3", script = script)
+              ) == expected
+            )
+        val scriptRef =
+            JsCbor.encode(ScriptRef(Script.PlutusV3(ByteString.unsafeFromArray(single))))
+        assert(JsHashes.scriptHash(scriptRef) == expected)
+        val native = Timelock.TimeStart(5)
+        val nativeRecord =
+            js.Dynamic.literal(`type` = "Native", script = Hex.bytesToHex(native.toCbor))
+        assert(JsHashes.scriptHash(nativeRecord) == native.scriptHash.toHex)
+
+        val data: Data = Data.I(42)
+        assert(JsHashes.dataHash("182a") == DatumOption.Inline(data).dataHash.toHex)
+        // A non-canonical encoding of the same integer hashes differently, as on the ledger.
+        assert(JsHashes.dataHash("19002a") != JsHashes.dataHash("182a"))
     }
 
     test("withDatumHash returns a new handle carrying that hash, leaving the original untouched") {

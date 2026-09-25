@@ -1,7 +1,9 @@
 package scalus.cardano.ledger
 
+import io.bullet.borer.{Cbor, Decoder}
 import scalus.cardano.address.Address
-import scalus.interop.TsName
+import scalus.interop.{TsName, TsType}
+import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
 import scalus.utils.scalajs.internal.*
 
@@ -132,9 +134,10 @@ class JsUtxo(txHash0: String, outputIndex0: Double, address0: String, value0: Js
         }
         .orUndefined
 
-    /** This UTxO as a one-entry CBOR map from input to output, the shape `getUtxosCbor` uses. */
-    def toCbor(): Uint8Array =
-        JsCbor.encode(Map(in -> out): Utxos)
+    /** This UTxO as CBOR `[input, output]`, CIP-30's `transaction_unspent_output`: the shape
+      * `evaluator.evaluateTx` reads, and what CML, CST and a wallet's `getUtxos()` produce.
+      */
+    def toCbor(): Uint8Array = JsCbor.encode(Utxo(in, out))
 
     /** A copy carrying `hash` as a datum hash, in place of whatever datum this output had. */
     def withDatumHash(hash: String): JsUtxo =
@@ -146,10 +149,23 @@ class JsUtxo(txHash0: String, outputIndex0: Double, address0: String, value0: Js
         JsUtxo.wrap(in, withOutput(datumOption = Some(DatumOption.Inline(data))))
     }
 
-    /** A copy carrying the CBOR-decoded value of `cbor` as its reference script. */
-    def withScriptRef(cbor: Uint8Array): JsUtxo = {
-        val scriptRef = JsCbor.decode[ScriptRef](cbor)
-        JsUtxo.wrap(in, withOutput(scriptRefOpt = Some(scriptRef)))
+    /** A copy carrying `script` as its reference script.
+      *
+      * Takes the script as `{ type, script }`, the shape Lucid's `Script` has: `script` is hex or
+      * bytes, the native-script CBOR for `"Native"`, and for Plutus the program as raw flat, single
+      * or double CBOR. Also takes the ledger's `script_ref` CBOR, as `scriptRef` returns it. A
+      * Plutus program is stored as given, not checked.
+      *
+      * @throws TypeError
+      *   if `script` is neither form, its hex is invalid, or a `"Native"` script or a `script_ref`
+      *   does not decode
+      */
+    def withScriptRef(
+        @TsType(
+          "Uint8Array | { readonly type: \"Native\" | \"PlutusV1\" | \"PlutusV2\" | \"PlutusV3\"; readonly script: string | Uint8Array }"
+        ) script: js.Any
+    ): JsUtxo = {
+        JsUtxo.wrap(in, withOutput(scriptRefOpt = Some(ScriptRef(JsUtxo.scriptOf(script)))))
     }
 
     /** A new output over this one's address and value, changing only what is passed in. Always
@@ -211,7 +227,8 @@ object JsUtxo {
         private[scalus] def output: TransactionOutput = self.out
     }
 
-    /** Read back what `toCbor` wrote: a CBOR map holding exactly one input-to-output entry.
+    /** Read back what `toCbor` wrote: CBOR `[input, output]`. Also reads the one-entry map
+      * `{input: output}` that `toCbor` wrote up to 1.2.
       *
       * A map of any other size is rejected, an empty one and a many-entry one alike. Taking the
       * first entry of a many-entry map would drop the rest without a word, and which one survived
@@ -224,12 +241,42 @@ object JsUtxo {
       */
     @JSExportStatic
     def fromCbor(cbor: Uint8Array): JsUtxo = {
-        val utxos = JsCbor.decode[Utxos](cbor)
+        val utxos = JsCbor.decode(cbor)(using pairOrMap)
         if utxos.size != 1 then
             throw new IllegalArgumentException(
               s"expected a CBOR map holding exactly one UTxO, got ${utxos.size} entries"
             )
         val (input, output) = utxos.head
         wrap(input, output)
+    }
+
+    /** `[input, output]`, or a CBOR map as `toCbor` wrote it up to 1.2. */
+    private val pairOrMap: Decoder[Utxos] = Decoder { r =>
+        if r.hasMapHeader || r.hasMapStart then Utxos.mapDecoder.read(r)
+        else Map(r.read[Utxo]().toTuple)
+    }
+
+    /** The script of a ledger `script_ref` as bytes, or of a `{ type, script }` record. A Plutus
+      * script comes back as the ledger holds it, the flat program in one CBOR byte string, whatever
+      * wrapping it arrived in.
+      */
+    private[scalus] def scriptOf(script: js.Any): Script =
+        if script.isInstanceOf[Uint8Array] then
+            decodeOf(script, "script")(Cbor.decode(_).to[ScriptRef].value).script
+        else scriptOfRecord(script)
+
+    private def scriptOfRecord(record: js.Any): Script = {
+        if js.typeOf(record) != "object" || record == null then
+            typeError("script must be a Uint8Array or a { type, script } object")
+        val fields = record.asInstanceOf[js.Dynamic]
+        def plutus =
+            ByteString.unsafeFromArray(Cbor.encode(flatOf(fields.script, "script")).toByteArray)
+        fields.`type`.asInstanceOf[Any] match
+            case "Native"   => Script.Native(decodeOf(fields.script, "script")(Timelock.fromCbor))
+            case "PlutusV1" => Script.PlutusV1(plutus)
+            case "PlutusV2" => Script.PlutusV2(plutus)
+            case "PlutusV3" => Script.PlutusV3(plutus)
+            case other =>
+                typeError(s"script.type must be Native, PlutusV1, PlutusV2 or PlutusV3, got $other")
     }
 }

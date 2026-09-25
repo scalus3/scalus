@@ -10,6 +10,7 @@ import {
   evalPlutusScripts,
   PlutusScriptEvaluationError,
   SlotConfig,
+  Utxo,
 } from "../scalus";
 import {
   costModels,
@@ -38,6 +39,16 @@ describe("evaluator.evaluateTx", () => {
     expect(fromHex).toEqual(fromMap);
     expect(fromBytes).toEqual(fromMap);
     expect(fromMap).toEqual([{ tag: "Reward", index: 0, budget: { memory: 32318n, steps: 8754898n } }]);
+  });
+
+  test("evaluateTx takes a Utxo, or the pair its toCbor() writes", () => {
+    const utxo = Utxo.fromCbor(hexToBytes(scriptUtxoCborHex)); // the map form of 1.2
+    expect(utxo.toCbor()).toEqual(hexToBytes(scriptUtxoPairHex));
+    const expected = evaluator.evaluateTx(scriptTxCborHex, [scriptUtxoPairHex], slotConfig, byName, 11);
+    expect(evaluator.evaluateTx(scriptTxCborHex, [utxo.toCbor()], slotConfig, byName, 11)).toEqual(expected);
+    // the Utxo itself, with no encoding step
+    expect(evaluator.evaluateTx(scriptTxCborHex, [utxo], slotConfig, byName, 11)).toEqual(expected);
+    expect(() => evaluator.evaluateTx(scriptTxCborHex, [{} as never], slotConfig, byName, 11)).toThrow(TypeError);
   });
 
   test("bigint slot fields and extra fields are accepted", () => {

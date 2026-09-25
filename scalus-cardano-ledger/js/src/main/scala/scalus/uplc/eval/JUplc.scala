@@ -1,13 +1,12 @@
 package scalus.uplc.eval
 
-import io.bullet.borer.{Cbor, Decoder}
+import io.bullet.borer.Cbor
 import scalus.interop.TsType
 import scalus.uplc.DeBruijnedProgram
 import scalus.uplc.builtin.Data
 import scalus.utils.Hex
 import scalus.utils.scalajs.internal.*
 
-import scala.annotation.tailrec
 import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 import scala.scalajs.js.typedarray.Uint8Array
@@ -92,34 +91,6 @@ object JUplc {
 
     private[eval] def applyAll(program: DeBruijnedProgram, args: List[Data]): DeBruijnedProgram =
         args.foldLeft(program)(_.applyArg(_))
-
-    private def flatOf(input: js.Any, name: String): Array[Byte] =
-        stripLayers(bytesOf(input, name), name)
-
-    /** Strips CBOR byte-string layers until the flat program is reached: a flat program starts with
-      * its major version, the CBOR integer 1, so the first item that is not a byte string is the
-      * program.
-      */
-    @tailrec private def stripLayers(bytes: Array[Byte], name: String): Array[Byte] =
-        byteStringLayer(bytes, name) match
-            case Some(inner) => stripLayers(inner, name)
-            case None        => bytes
-
-    /** The content of `bytes` if they are exactly one CBOR byte string, `None` if they do not start
-      * with one.
-      */
-    private def byteStringLayer(bytes: Array[Byte], name: String): Option[Array[Byte]] =
-        decodeBytes(bytes, name)(
-          Cbor.decode(_).withPrefixOnly.to[Option[Array[Byte]]](using byteString).value
-        )
-
-    private val byteString: Decoder[Option[Array[Byte]]] = Decoder { r =>
-        if r.hasBytes then
-            val content = r.readByteArray()
-            r.readEndOfInput()
-            Some(content)
-        else None
-    }
 }
 
 /** A CBOR byte-string envelope, one layer at a time. */

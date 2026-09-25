@@ -33,7 +33,8 @@ import scala.scalajs.js.typedarray.Uint8Array
   * @param initialUtxosCbor
   *   The UTxO set to start from, as CBOR: a map whose keys are transaction inputs (a
   *   `[transactionHash, outputIndex]` pair) and whose values are transaction outputs, as in the
-  *   Cardano ledger CDDL. This is the same shape `getUtxosCbor` gives back.
+  *   Cardano ledger CDDL. This is the same shape `getUtxosCbor` gives back. An array of
+  *   `[input, output]` pairs, as `Utxo.toCbor` writes each, is read too.
   * @param slotConfig
   *   Slot arithmetic for the emulated network, for example `SlotConfig.preview`.
   * @param initialStakeRewards
@@ -52,7 +53,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
 ) extends js.Object {
 
     private var emulator: Emulator = {
-        val utxos = JsCbor.decode[Utxos](initialUtxosCbor)
+        val utxos = JsCbor.decode(initialUtxosCbor)(using Utxos.mapOrPairsDecoder)
         val env =
             if slotConfig.underlying == SlotConfig.mainnet then UtxoEnv.testMainnet()
             else UtxoEnv.default
@@ -110,20 +111,18 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         evaluateTxWith(txCborBytes, Map.empty)
 
     /** As above, plus UTxOs the emulator does not hold - outputs of a transaction not yet
-      * submitted, typically.
+      * submitted, typically. Each is a `Utxo` or an `[input, output]` pair as hex or bytes, as
+      * `evaluator.evaluateTx` takes them.
       */
     def evaluateTx(
         txCborBytes: Uint8Array,
-        additionalUtxos: js.Array[JsUtxo]
+        @TsType("readonly (string | Uint8Array | Utxo)[]") additionalUtxos: js.Any
     ): js.Array[JRedeemerBudget] =
-        evaluateTxWith(
-          txCborBytes,
-          additionalUtxos.toSeq.map(u => u.input -> u.output).toMap
-        )
+        evaluateTxWith(txCborBytes, JEvaluator.utxoMapOf(additionalUtxos, "additionalUtxos"))
 
     private def evaluateTxWith(
         txCborBytes: Uint8Array,
-        extra: Utxos
+        extra: => Utxos
     ): js.Array[JRedeemerBudget] =
         surfacingErrors {
             val tx = Transaction.fromCbor(txCborBytes.toByteArray)
@@ -994,7 +993,7 @@ object JEmulator {
     @deprecated("use Emulator.create", "1.2.0")
     @JSExportStatic
     def withState(state: JEmulatorInitialState, slotConfig: JsSlotConfig): JEmulator = {
-        val utxos = JsCbor.decode[Utxos](state.utxos)
+        val utxos = JsCbor.decode(state.utxos)(using Utxos.mapOrPairsDecoder)
         val initState = EmulatorInitialState(
           utxos = utxos,
           stakeRegistrations = parseStakeRegistrations(state.stakeRegistrations),

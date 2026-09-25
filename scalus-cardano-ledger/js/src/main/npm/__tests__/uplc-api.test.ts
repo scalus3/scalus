@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { EvaluationOptions, Scalus, bytesToHex, cbor, evaluator, hexToBytes, uplc } from "../scalus";
+import { EvaluationOptions, Scalus, bytesToHex, cbor, dataHash, evaluator, hexToBytes, scriptHash, uplc } from "../scalus";
 import { successScriptHex } from "./fixtures";
 
 const double = "545301010023357389210753756363657373004981";
@@ -43,4 +43,15 @@ test("namespace methods work detached, as Math.max does", () => {
   expect(applyDataArgToScript(successScriptHex, JSON.stringify({ int: 42 }))).toBe(applied);
   expect(evaluateScript(successScriptHex, ["182a"], EvaluationOptions.mainnet("PlutusV3")).isSuccess).toBe(true);
   expect(legacyEvaluate(applied).isSuccess).toBe(true);
+});
+
+test("scriptHash ignores the CBOR wrapping; dataHash hashes the bytes as given", () => {
+  const flat = uplc.decodeToFlat(double);
+  const hash = scriptHash({ type: "PlutusV3", script: double });
+  expect(hash).toMatch(/^[0-9a-f]{56}$/);
+  expect(scriptHash({ type: "PlutusV3", script: flat })).toBe(hash);
+  expect(scriptHash({ type: "PlutusV2", script: flat })).not.toBe(hash);
+  expect(dataHash("182a")).toMatch(/^[0-9a-f]{64}$/);
+  expect(dataHash("19002a")).not.toBe(dataHash("182a"));
+  expect(() => scriptHash({ type: "PlutusV9", script: flat } as never)).toThrow(TypeError);
 });

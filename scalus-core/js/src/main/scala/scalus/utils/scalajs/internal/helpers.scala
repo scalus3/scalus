@@ -4,6 +4,7 @@ import io.bullet.borer.{Cbor, Decoder, Encoder}
 import scalus.uplc.builtin.ByteString
 import scalus.utils.Hex
 
+import scala.annotation.tailrec
 import scala.scalajs.js
 import scala.scalajs.js.typedarray.{byteArray2Int8Array, int8Array2ByteArray, Int8Array, Uint8Array}
 import scala.util.control.NonFatal
@@ -116,6 +117,35 @@ private[scalus] def decodeBytes[A](bytes: Array[Byte], name: String)(decode: Arr
     catch
         case e: js.JavaScriptException => throw e
         case NonFatal(e)               => typeError(s"$name is not valid: ${e.getMessage}")
+
+/** The flat program bytes of a script as hex or bytes of raw flat, single or double CBOR. */
+private[scalus] def flatOf(input: js.Any, name: String): Array[Byte] =
+    stripLayers(bytesOf(input, name), name)
+
+/** Strips CBOR byte-string layers until the flat program is reached: a flat program starts with its
+  * major version, the CBOR integer 1, so the first item that is not a byte string is the program.
+  */
+@tailrec
+private def stripLayers(bytes: Array[Byte], name: String): Array[Byte] =
+    byteStringLayer(bytes, name) match
+        case Some(inner) => stripLayers(inner, name)
+        case None        => bytes
+
+/** The content of `bytes` if they are exactly one CBOR byte string, `None` if they do not start
+  * with one.
+  */
+private def byteStringLayer(bytes: Array[Byte], name: String): Option[Array[Byte]] =
+    decodeBytes(bytes, name)(
+      Cbor.decode(_).withPrefixOnly.to[Option[Array[Byte]]](using byteString).value
+    )
+
+private val byteString: Decoder[Option[Array[Byte]]] = Decoder { r =>
+    if r.hasBytes then
+        val content = r.readByteArray()
+        r.readEndOfInput()
+        Some(content)
+    else None
+}
 
 // ---- Errors ----
 

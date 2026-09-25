@@ -258,6 +258,13 @@ class EmulatorJsTest extends AnyFunSuite {
                 assert(err.args.toOption.isDefined)
             case other =>
                 fail(s"expected JPlutusScriptEvaluationError, got: $other")
+
+        // The same input as a CBOR `[input, output]` pair resolves too: the script runs and fails.
+        val pair = JsCbor.encode(Utxo(paymentInput, paymentOutput))
+        val fromPair = intercept[js.JavaScriptException](
+          emulator.evaluateTx(tx.toCbor.toUint8Array, js.Array[js.Any](pair))
+        ).exception
+        assert(fromPair.isInstanceOf[JPlutusScriptEvaluationError], fromPair)
     }
 
     test("Emulator.create uses the network's own protocol parameters, not mainnet's") {

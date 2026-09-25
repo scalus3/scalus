@@ -40,11 +40,20 @@
     maxBudget? }`, with factories `mainnet(version)` and `fromProtocolParams(version, params)`.
     `maxBudget` bounds the run; without it, execution is not bounded.
   - `evaluator.evaluateTx(tx, utxos, slotConfig, costModels, protocolMajorVersion)`: the
-    transaction as hex or bytes, its resolved inputs as CBOR `[input, output]` pairs, cost models
-    by language. Returns `RedeemerBudget[]`, the type `evalPlutusScripts` and
+    transaction as hex or bytes, its resolved inputs as `Utxo`s or CBOR `[input, output]` pairs,
+    cost models by language. Returns `RedeemerBudget[]`, the type `evalPlutusScripts` and
     `Emulator.evaluateTx` already return.
 - `ExUnits.toJSON()`, so `JSON.stringify` works on results and errors that carry a `bigint`
   budget.
+- `Utxo.withScriptRef` also takes `{ type, script }`, the shape Lucid's `Script` has: the script as
+  hex or bytes, a Plutus program as raw flat, single or double CBOR.
+- `scriptHash({ type, script })` and `dataHash(cbor)`: the hash of a script, whatever its CBOR
+  wrapping, and of a datum's CBOR as given.
+- `Emulator.evaluateTx` takes its additional UTxOs as `Utxo`s or CBOR `[input, output]` pairs,
+  as `evaluator.evaluateTx` does.
+- `Utxos.mapDecoder`, `Utxos.pairsDecoder` and `Utxos.mapOrPairsDecoder` read a UTxO set as the
+  ledger's CBOR map, as an array of `[input, output]` pairs, or as either; `Utxo` has a borer
+  codec for the `[input, output]` pair.
 - `FlatDecodingError` is public: flat decoding raises it, and only it, for bytes that are not a
   valid encoding.
 - `PlutusScriptEvaluationError` carries `redeemer` (with the budget spent before the failure),
@@ -54,6 +63,10 @@
 
 ### Changed
 
+- **`Utxo.toCbor()` writes `[input, output]`**, CIP-30's `transaction_unspent_output`, instead of a
+  one-entry map `{input: output}`, so its result goes straight into `evaluator.evaluateTx`.
+  `Utxo.fromCbor` reads both forms, and the deprecated `Emulator` constructor reads a UTxO set in
+  either form.
 - `Language.PlutusV4` is now a Dijkstra (PV12) language, as in Plutus `ledgerLanguageIntroducedIn`:
   `introducedInVersion`, `Builtins.findBuiltinsIntroducedIn`, `PlutusScript.isWellFormed` and
   `BuiltinSemanticsVariant.fromProtocolAndPlutusVersion` all key it on `dijkstraPV` (the latter

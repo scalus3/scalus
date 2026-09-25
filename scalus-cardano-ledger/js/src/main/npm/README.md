@@ -172,7 +172,8 @@ for (const r of emulator.evaluateTx(txCborBytes)) {
   console.log(`${r.tag}[${r.index}]: ${r.budget.memory} mem, ${r.budget.steps} steps`);
 }
 
-// Inputs the emulator does not hold yet go in the second argument.
+// Inputs the emulator does not hold yet go in the second argument, as Utxos or
+// [input, output] CBOR pairs, the same as evaluator.evaluateTx takes.
 emulator.evaluateTx(txCborBytes, [new Utxo(txHash, 0, scriptAddress, Value.ada(5n))]);
 ```
 
@@ -336,6 +337,19 @@ evaluator.evaluateScript(script, [fromLucid], options);
 `LucidData` above is a local import alias for Lucid's `Data`; the SDKs are test dependencies of
 this package, never runtime ones.
 
+### Script and datum hashes
+
+```typescript
+import { dataHash, scriptHash } from "scalus";
+
+scriptHash({ type: "PlutusV3", script: compiledCode });  // policy id or credential, hex
+scriptHash({ type: "Native", script: nativeScriptCbor });
+dataHash(datumCborHex);                                   // the datum hash, hex
+```
+
+`scriptHash` takes the script in the shape `Utxo.withScriptRef` does, and a Plutus program in any
+CBOR wrapping gives the same hash. `dataHash` hashes the CBOR exactly as given, as the ledger does.
+
 ### Evaluation options
 
 `EvaluationOptions` is both the record type and the factory object, so the same import works in
@@ -489,7 +503,7 @@ import { evaluator } from "scalus";
 
 const budgets = evaluator.evaluateTx(
   txCborHex,                           // string | Uint8Array
-  utxos,                               // (string | Uint8Array)[]: one [input, output] pair each
+  utxos,                               // (string | Uint8Array | Utxo)[]: a Utxo, or one [input, output] pair
   { zeroTime, zeroSlot, slotLength },  // zeroTime and zeroSlot may be number or bigint
   { PlutusV2: plutusV2Costs, PlutusV3: plutusV3Costs },
   11,                                  // protocol major version
@@ -502,10 +516,18 @@ for (const r of budgets) {
 
 A pair is `transaction_unspent_output` from the ledger CDDL. CML's
 `TransactionUnspentOutput.to_cbor_bytes()`, CST's `TransactionUnspentOutput.toCbor()` and a CIP-30
-wallet's `getUtxos()` all produce it, so nothing needs assembling. A later pair with the same input
-replaces an earlier one. The slot configuration is a `SlotConfigLike` and the cost models a
-`CostModelsLike`: a `SlotConfig` or a `CostModels` fits, and so does any plain object with those
-fields. Extra fields are ignored.
+wallet's `getUtxos()` all produce it, so nothing needs assembling. A `Utxo` goes in as it is, with
+no encoding step. A later entry with the same input replaces an earlier one. An SDK that encodes
+the input and the output separately, as the Evolution SDK does, joins them under the CBOR header
+of a two-element array:
+
+```typescript
+const pair = new Uint8Array([0x82, ...TransactionInput.toCBORBytes(input), ...TxOut.toCBORBytes(output)]);
+```
+
+The slot configuration is a `SlotConfigLike` and the cost models a `CostModelsLike`: a
+`SlotConfig` or a `CostModels` fits, and so does any plain object with those fields. Extra fields
+are ignored.
 
 Each `r.tag` is one of `"Spend"`, `"Mint"`, `"Cert"`, `"Reward"`, `"Voting"` or `"Proposing"`,
 and `r.index` is the position within that group, counting from 0. An SDK adapter maps those six
