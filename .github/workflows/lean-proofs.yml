@@ -24,16 +24,16 @@ jobs:
         with:
           path: |
             ~/.elan
-            scalus-verification/lean/.lake
-          key: lean-${{ hashFiles('scalus-verification/lean/lean-toolchain', 'scalus-verification/lean/lake-manifest.json') }}
+            scalus-verification/src/main/lean/.lake
+          key: lean-${{ hashFiles('scalus-verification/src/main/lean/lean-toolchain', 'scalus-verification/src/main/lean/lake-manifest.json') }}
       - name: Build the proof suite
-        working-directory: scalus-verification/lean
+        working-directory: scalus-verification/src/main/lean
         run: |
-          nix develop ../..#lean --accept-flake-config --command bash -c "lake build"
+          nix develop ../../../..#lean --accept-flake-config --command bash -c "lake build"
       - name: Run the proofs
-        working-directory: scalus-verification/lean
+        working-directory: scalus-verification/src/main/lean
         run: |
-          nix develop ../..#lean --accept-flake-config --command bash -c '
+          nix develop ../../../..#lean --accept-flake-config --command bash -c '
             fail=0
             declare -A expected=(
               ["ScalusProofs/Sanity.lean"]=3
