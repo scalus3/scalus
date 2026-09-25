@@ -45,7 +45,9 @@ jobs:
           echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
           exit $BUILD_EXIT_CODE
       - name: Verify exported Lean UPLC is fresh
-        if: matrix.name == 'lts'
+        # The default compiler's job: the committed files are exported with 3.3.8. Keep this in
+        # step with the matrix names above; a name that matches no job skips the check silently.
+        if: matrix.name == '3.3.8'
         run: |
           nix develop .#ci --accept-flake-config --command bash -c "sbt --batch exportLeanUplc"
           git diff --exit-code scalus-verification/src/main/lean/ScalusProofs/Generated \
