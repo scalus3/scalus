@@ -267,7 +267,7 @@ lazy val root: Project = project
       scalusUtxoCell.jvm,
       scalusDesignPatterns,
       bench,
-      scalusLeanProofs,
+      scalusVerification,
       `scalus-bloxbean-cardano-client-lib`,
       scalusEthereumKzgCeremony,
       scalusSbtPlugin,
@@ -294,7 +294,7 @@ lazy val jvm: Project = project
       scalusDesignPatterns,
       bench,
       llmApiGen,
-      scalusLeanProofs,
+      scalusVerification,
       `scalus-bloxbean-cardano-client-lib`,
       scalusEthereumKzgCeremony,
     )
@@ -1099,26 +1099,28 @@ generateLlmsApi := Def.taskDyn {
     (llmApiGen / Compile / runMain).toTask(s" scalus.llmapi.LlmApiGen $argLine")
 }.value
 
-// Compiles selected prelude functions to UPLC and exports them for the Lean/Blaster
-// proof suite in scalus-lean-proofs/lean. See
+// Formal verification of Scalus code; see docs/design/verification-overview.md.
+// Today it compiles selected prelude functions to UPLC and exports them for the
+// Lean/Blaster proof suite in scalus-verification/lean. See
 // docs/superpowers/specs/2026-08-27-lean-blaster-uplc-proofs-design.md
-lazy val scalusLeanProofs = project
-    .in(file("scalus-lean-proofs"))
+lazy val scalusVerification = project
+    .in(file("scalus-verification"))
     .dependsOn(scalus.jvm)
     .disablePlugins(MimaPlugin)
     .settings(
-      name := "scalus-lean-proofs",
+      name := "scalus-verification",
       publish / skip := true,
       run / fork := true,
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
       PluginDependency
     )
 
-lazy val exportLeanUplc = taskKey[Unit]("Regenerate scalus-lean-proofs/lean/ScalusProofs/Generated")
+lazy val exportLeanUplc =
+    taskKey[Unit]("Regenerate scalus-verification/lean/ScalusProofs/Generated")
 exportLeanUplc := Def.taskDyn {
-    val outDir = ((ThisBuild / baseDirectory).value / "scalus-lean-proofs" / "lean" /
+    val outDir = ((ThisBuild / baseDirectory).value / "scalus-verification" / "lean" /
         "ScalusProofs" / "Generated").getAbsolutePath
-    (scalusLeanProofs / Compile / runMain).toTask(s" scalus.lean.ExportUplc $outDir")
+    (scalusVerification / Compile / runMain).toTask(s" scalus.verify.ExportUplc $outDir")
 }.value
 
 // Cardano Ledger domain model and CBOR serialization

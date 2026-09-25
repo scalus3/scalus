@@ -1,4 +1,4 @@
-package scalus.lean
+package scalus.verify
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.utils.Hex

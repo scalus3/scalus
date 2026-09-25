@@ -24,14 +24,14 @@ jobs:
         with:
           path: |
             ~/.elan
-            scalus-lean-proofs/lean/.lake
-          key: lean-${{ hashFiles('scalus-lean-proofs/lean/lean-toolchain', 'scalus-lean-proofs/lean/lake-manifest.json') }}
+            scalus-verification/lean/.lake
+          key: lean-${{ hashFiles('scalus-verification/lean/lean-toolchain', 'scalus-verification/lean/lake-manifest.json') }}
       - name: Build the proof suite
-        working-directory: scalus-lean-proofs/lean
+        working-directory: scalus-verification/lean
         run: |
           nix develop ../..#lean --accept-flake-config --command bash -c "lake build"
       - name: Run the proofs
-        working-directory: scalus-lean-proofs/lean
+        working-directory: scalus-verification/lean
         run: |
           nix develop ../..#lean --accept-flake-config --command bash -c '
             fail=0
