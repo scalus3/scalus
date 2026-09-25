@@ -17,17 +17,17 @@ a validator actually runs on chain.
 ## Layout
 
 - `src/main/scala/scalus/verify/` - the target catalogue and the exporter.
-- `lean/ScalusProofs/Generated/` - **generated and committed**. One `.flat` hex file per
+- `src/main/lean/ScalusProofs/Generated/` - **generated and committed**. One `.flat` hex file per
   target plus `Targets.lean`. Never edit by hand; run `sbt exportLeanUplc`.
-- `lean/ScalusProofs/*.lean` - the hand-written properties.
+- `src/main/lean/ScalusProofs/*.lean` - the hand-written properties.
 
 ## Running
 
 ```bash
-sbt exportLeanUplc                      # regenerate lean/ScalusProofs/Generated
-cd scalus-verification/lean
-nix develop ../..#lean --accept-flake-config --command bash -c 'lake build'
-nix develop ../..#lean --accept-flake-config --command bash -c 'lake env lean ScalusProofs/Math.lean'
+sbt exportLeanUplc                      # regenerate src/main/lean/ScalusProofs/Generated
+cd scalus-verification/src/main/lean
+nix develop ../../../..#lean --accept-flake-config --command bash -c 'lake build'
+nix develop ../../../..#lean --accept-flake-config --command bash -c 'lake env lean ScalusProofs/Math.lean'
 ```
 
 Expect `✅ Valid` per theorem and `✅ Expected Falsified` per negative control. Anything
@@ -39,8 +39,8 @@ else, including `Undetermined`, is a failure.
    Scala test runs those samples through Scalus's own CEK, so a wrong expectation is caught
    before it reaches Lean.
 2. `sbt exportLeanUplc`, and commit the generated files.
-3. Calibrate a budget (see below), then write the properties in a `lean/ScalusProofs/*.lean`
-   file. Every group needs a negative control.
+3. Calibrate a budget (see below), then write the properties in a
+   `src/main/lean/ScalusProofs/*.lean` file. Every group needs a negative control.
 
 ## The budget rule
 

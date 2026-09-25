@@ -4,8 +4,9 @@ Date: 2026-08-27
 Status: implemented (Tasks 1-6, 8); Task 7 (codegen equivalence) deferred
 
 > The module described here was renamed from `scalus-lean-proofs` to `scalus-verification`
-> (sbt project `scalusVerification`, Scala package `scalus.lean` → `scalus.verify`) on 2026-09-25.
-> Paths below use the old names.
+> (sbt project `scalusVerification`, Scala package `scalus.lean` → `scalus.verify`) on
+> 2026-09-25, and its Lean workspace moved from `lean/` to `src/main/lean/`. Paths below use the
+> old names.
 
 ## Goal
 
