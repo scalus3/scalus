@@ -16,7 +16,8 @@ a validator actually runs on chain.
 
 ## Layout
 
-- `src/main/scala/scalus/verify/` - the target catalogue and the exporter.
+- `src/main/scala/scalus/verify/` - `Prop` and its combinators (`forAll`, `exists`,
+  `existsWith`, `denotes`, `equal`), `Quantifiable`, the target catalogue and the exporter.
 - `src/main/lean/ScalusProofs/Generated/` - **generated and committed**. One `.flat` hex file per
   target plus `Targets.lean`. Never edit by hand; run `sbt exportLeanUplc`.
 - `src/main/lean/ScalusProofs/*.lean` - the hand-written properties.
