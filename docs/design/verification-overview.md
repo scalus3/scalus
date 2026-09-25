@@ -81,26 +81,36 @@ backend can consume.
 ```scala
 package scalus.verify
 
-sealed trait Prop
+enum Prop { ... }                   // the runtime form; see below
 
 def forAll[A: Quantifiable](body: A => Prop): Prop
 def exists[A: Quantifiable](body: A => Prop): Prop
-def existsWith[A: Quantifiable](witness: A)(body: A => Prop): Prop
-def denotes[A](e: A): Prop          // e evaluates without error
-def equal[A](a: A, b: A): Prop      // logical (structural) equality
+def existsWith[A: Quantifiable](witness: => A)(body: A => Prop): Prop
+def denotes[A](e: => A): Prop       // e evaluates without error
+def equal[A](a: => A, b: => A): Prop  // logical (structural) equality
+def atom(b: => Boolean): Prop       // explicit atom, e.g. to negate at the Prop level
 
-given Conversion[Boolean, Prop]     // a Boolean expression is an atom
+implicit def booleanToProp(b: => Boolean): Prop   // a Boolean expression is an atom
 
-extension (b: Boolean)
+extension (b: => Boolean)
     def ==>(q: Prop): Prop          // so `cond ==> p` works without an explicit lift
+    def implies(q: Prop): Prop
 
-extension (p: Prop)
-    def &&(q: Prop): Prop
-    def ||(q: Prop): Prop
-    def ==>(q: Prop): Prop
-    def <=>(q: Prop): Prop
-    def unary_! : Prop
+// members of Prop
+def &&(q: Prop): Prop
+def ||(q: Prop): Prop
+def ==>(q: Prop): Prop
+def <=>(q: Prop): Prop
+def unary_! : Prop
+def implies(q: Prop): Prop          // ==> with the lowest precedence
+def iff(q: Prop): Prop              // <=> with the lowest precedence
 ```
+
+Implemented in `scalus-verification/.../scalus/verify/Prop.scala`. There `Prop` is an `enum`
+holding the statement's runtime form, and the Boolean conversion takes its argument by name, so
+an atom is evaluated only when checked and an exception makes it false. Scala ranks an operator by
+its first character, so `==>` binds like `==` and `<=>` like `<`, both tighter than `&&` and `||`:
+`p && q ==> r` means `p && (q ==> r)`. The alphanumeric aliases `implies` and `iff` bind loosest.
 
 The example `∀x ∃y. x·y > z` is written:
 
@@ -161,8 +171,9 @@ exactly the distinction the user wrote.
 
 ### 3.4 Quantifiable types
 
-`Quantifiable[A]` marks a type that can be quantified over. It provides a ScalaCheck generator for
-the runtime interpretation. The static information comes from the type itself at reification: the
+`Quantifiable[A]` marks a type that can be quantified over. For the runtime interpretation it
+provides edge cases, tried first and in order (zero, the empty string, the empty list), and a
+ScalaCheck generator for the rest. The static information comes from the type itself at reification: the
 `SIRType`, the Lean type, and how a Lean value is lifted to a UPLC term.
 
 | Version | Types |
@@ -179,8 +190,9 @@ only as targets (§3.6).
 A theorem expression is interpreted twice.
 
 1. **Reified**, at compile time. It becomes `PropIR` (§4), which the proving tactics consume.
-2. **Run**, on the JVM. The HOAS value is evaluated: `forAll` samples its generator,
-   `existsWith` evaluates its witness, and `exists` without a witness is untestable. This powers
+2. **Run**, on the JVM. The HOAS value is evaluated by `Prop.check`: `forAll` tries edge cases
+   and then random values, `existsWith` is checked in its Skolemized form, and `exists` without a
+   witness holds only if some drawn value satisfies it, and is undetermined otherwise. This powers
    the `scalacheck` tactic, and it is what replays counterexamples from the solvers (§5.2).
 
 Both interpretations come from the same source expression, so they cannot drift apart.
@@ -263,6 +275,24 @@ Both forms elaborate to the same statement, with `f` bound to the target:
   treat `f` abstractly. `lean-direct` can do that (and later `smt` and `kernel`). `blaster-uplc`
   cannot abstract a callee inside compiled code, so it checks each contract as a statement about
   the function's whole compiled program.
+
+### 3.8 Calls and the function table
+
+A statement calls a function explicitly, with `call(f, arg)(r => P)` (the call returns and `P(r)`
+holds: total correctness) or `whenReturns(f, arg)(r => P)` (if it returns, `P(r)` holds: partial
+correctness, the contract form of §3.7). The call node stores only a typed name, a
+`FunctionRef[A, R]`, and each proof method looks the function up in a **function table**.
+
+- **The name is the function's identity**: for a `@Compile` definition, the fully-qualified name
+  SIR uses (`…prelude.Math$.clamp`), taken from a method reference by `FunctionDef(Math.clamp)`;
+  otherwise a synthetic name without dots. It is never a file name or a Lean identifier.
+- **An entry holds one representation per proof method**, and each method takes the one it needs:
+  the compiled UPLC for `blaster-uplc`, the SIR (or a declared Lean mapping) for `lean-direct`, and
+  the function as ordinary Scala for `scalacheck`. `FunctionDef(Math.clamp)` provides the first three. A method that
+  finds its representation missing fails with an error naming the function, rather than
+  reporting anything about the code.
+
+Implemented in `scalus-verification/.../scalus/verify/Function.scala`.
 
 ---
 
@@ -555,7 +585,9 @@ final case class Goal(statement: Statement, hypotheses: List[Thm], config: Map[S
 **Lowering.**
 
 1. Compile every `TermIR` to UPLC, and every `@Compile` function target standalone. A compiled
-   script target is taken as it is. Today compilation uses
+   script target is taken as it is. Each program is exported under its **content hash**, and its
+   Lean identifier is derived from the function's qualified SIR name. A function's name is its
+   identity in the function table, never a file name. Today compilation uses
    `Options.releaseUntagged.copy(valueBuiltins = false)`, as `scalus-verification` does (see
    Limits). A script target compiled with other options cannot be checked until the Lean model
    gains those builtins.
