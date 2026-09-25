@@ -1,4 +1,4 @@
-package scalus.lean
+package scalus.verify
 
 import scalus.utils.Hex
 
