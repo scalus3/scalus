@@ -1,7 +1,7 @@
 {
   "name": "scalus",
   "version": "1.2.1",
-  "description": "Scalus – Cardano on-chain / off-chain toolkit compiled with Scala.js",
+  "description": "Scalus \u2013 Cardano on-chain / off-chain toolkit compiled with Scala.js",
   "type": "module",
   "files": [
     "scalus.js",
@@ -30,7 +30,7 @@
   "scripts": {
     "test": "npm run typecheck && npm run typecheck:providers && npm run typecheck:integrations && vitest run",
     "typecheck": "tsc --noEmit --strict --target es2020 --moduleResolution bundler --module esnext scalus.d.ts __tests__/scalus-dts.consumer.ts",
-    "typecheck:providers": "tsc --noEmit --strict --skipLibCheck --target es2020 --moduleResolution bundler --module esnext scalus.d.ts __tests__/provider-mesh.test.ts __tests__/provider-lucid.test.ts __tests__/collision.test.ts __tests__/object-api-guards.test.ts __tests__/evaluate-tx.test.ts __tests__/lucid-evaluator-errors.test.ts",
+    "typecheck:providers": "tsc --noEmit --strict --skipLibCheck --target es2020 --moduleResolution bundler --module esnext scalus.d.ts __tests__/provider-mesh.test.ts __tests__/provider-lucid.test.ts __tests__/collision.test.ts __tests__/object-api-guards.test.ts __tests__/evaluate-tx.test.ts __tests__/lucid-evaluator-errors.test.ts __tests__/balance.test.ts __tests__/balance-mesh.test.ts",
     "test:watch": "vitest",
     "build:browser-tests": "esbuild __tests__/shared-tests.ts --bundle --outfile=shared-tests-bundle.js --format=iife --global-name=SharedTests",
     "test:browser": "npm run build:browser-tests && node __tests__/run-browser.mjs",

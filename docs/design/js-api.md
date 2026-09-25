@@ -15,6 +15,7 @@ generated from the Scaladoc, and in the package README.
 | `evaluator.evaluateScript(script, args, options)` | one script under an `EvaluationOptions` record |
 | `evaluator.evaluateTx(tx, utxos, slotConfig, costModels, protocolMajorVersion)` | every script of a transaction |
 | `Emulator.evaluateTx(tx, utxos?)` | the same, with the emulator's own ledger state |
+| `balancer.balanceTx(tx, utxos, slotConfig, params, changeOutputIndex, extraSigners)` | experimental: the fee, the execution units and one change output, to a fixpoint |
 | `scriptHash`, `dataHash` | a script's hash whatever its wrapping; a datum's hash over its CBOR as given |
 | `Scalus.*`, top-level `evaluateScript`, `evaluateScriptProfile`, `applyDataArgToScript`, `evalPlutusScripts` | deprecated, kept working |
 
@@ -67,6 +68,37 @@ handles directly, with no CBOR round trip. `Emulator.getUtxosCbor()` stays a map
 does. Scala.js emits object members as `this`-based prototype methods, so every
 `@JSExportTopLevel` object calls `bindExports(this)` first. The rejected alternatives are listed on
 `bindExports` in `scalus.utils.scalajs.internal`.
+
+**No default arguments in an exported function.** `balanceTx` takes `extraSigners` always, `[]`
+when there are none, rather than making it optional. Scala.js does not compile a default parameter
+to a JavaScript one: it emits a rest parameter plus a `this`-bound helper, as in
+`evalPlutusScripts(r, n, a, e, ...i) { ... i[0] === void 0 ? this.b55() : i[0] | 0 }`. So
+`Function.length` understates the arity, resolving the default depends on `this` (the breakage
+`bindExports` exists to prevent), and the value is silently coerced. Two overloads avoid all three
+but make an optional array read as two functions; a required parameter is plainer than either.
+
+**Balancing settles numbers, not policy.** `balanceTx` takes the index of a change output the
+caller already placed, and only converges the three values that depend on each other: every
+redeemer's execution units, the fee, and that output's lovelace. Coin selection, change splitting
+and multi-asset policy stay with the SDK, which is why the parameter is an index rather than an
+address. It is `TransactionBuilder.balanceContext`, so dummy signatures are added before the fee is
+computed and removed after, and the evaluator is built by the `PlutusScriptEvaluator(cardanoInfo,
+mode)` overload `TxBuilder` uses, so the scripts are limited together by `maxTxExecutionUnits` as
+the ledger limits them. Signers are inferred from the inputs; `extraSigners` covers the keys a
+native script needs, which a script address hides. A balancing failure is `TxBalancingError` with a
+`code`; a failing script stays `PlutusScriptEvaluationError`, because that is the evaluator's
+failure, not the balancer's.
+
+**Protocol parameters as a record, not a handle only.** `balanceTx` needs fee, min-ada and
+collateral parameters that `evaluateTx` does not, and takes `ProtocolParamsLike`: every integer is
+`number | bigint`, so a `ProtocolParams` handle satisfies it structurally and so does a plain
+object an SDK builds from numbers it already holds, with no Blockfrost JSON round trip. Reusing
+`PlainProtocolParams` was tried first and is wrong: it declares `bigint` for the deposits and
+execution units, so an SDK holding plain numbers - MeshJS's `Protocol` is all `number` and `string`
+- cannot pass typecheck even though the runtime accepts it. All three paths were measured to give
+the same fee. Fields the record does not carry stay at zero, because
+balancing reads fees, min-ada, collateral, the cost models and the protocol version, and never a
+governance, block or pool parameter.
 
 **One bundle.** One package, one `scalus.js` ES module. Subpath entries were measured to save 0 to
 7%: the size is the Plutus VM, which every entry needs.

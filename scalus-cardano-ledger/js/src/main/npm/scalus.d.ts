@@ -692,6 +692,40 @@ export class ProtocolParams {
 }
 
 /**
+ * The protocol parameters balancing reads, as a record any SDK can build from numbers it already
+ * holds. A `ProtocolParams` handle satisfies it, and so does the `PlainProtocolParams` its
+ * `toObject()` returns, so all three work.
+ *
+ * Every integer takes a `number` or a `bigint`: lovelace and execution units exceed 2^53 in
+ * principle, but the values an SDK carries are usually plain numbers. The two prices are ratios,
+ * so they are always `number`.
+ *
+ * Fields absent from this record stay at zero inside Scalus. Balancing reads fees, min-ada,
+ * collateral, the cost models and the protocol version, and never a governance, block or pool
+ * parameter.
+ */
+export interface ProtocolParamsLike {
+  readonly txFeePerByte: number | bigint;
+  readonly txFeeFixed: number | bigint;
+  readonly maxTxSize: number | bigint;
+  readonly maxValueSize: number | bigint;
+  readonly stakeAddressDeposit: number | bigint;
+  readonly stakePoolDeposit: number | bigint;
+  readonly dRepDeposit: number | bigint;
+  readonly govActionDeposit: number | bigint;
+  readonly utxoCostPerByte: number | bigint;
+  readonly priceMemory: number;
+  readonly priceSteps: number;
+  readonly maxTxExecutionMemory: number | bigint;
+  readonly maxTxExecutionSteps: number | bigint;
+  readonly collateralPercentage: number | bigint;
+  readonly maxCollateralInputs: number | bigint;
+  readonly minFeeRefScriptCostPerByte: number | bigint;
+  readonly protocolMajorVersion: number | bigint;
+  readonly costModels: CostModelsLike;
+}
+
+/**
  * One redeemer of a transaction, together with the execution budget its script really used. `tag`
  * and `index` together say which script this is, and match the redeemer in the transaction.
  *
@@ -889,6 +923,22 @@ export interface SubmitResult {
 }
 
 /**
+ * Thrown by `balancer.balanceTx` when the transaction cannot be balanced. A script that fails is
+ * not this: it throws `PlutusScriptEvaluationError`, because that is the evaluator's failure.
+ *
+ * Branch on `code`, not on the message.
+ */
+export class TxBalancingError extends Error {
+  constructor(message: string, code: "INSUFFICIENT_FUNDS" | "NOT_CONVERGED");
+  /**
+   * `INSUFFICIENT_FUNDS` when the change output cannot hold min-ada, `NOT_CONVERGED` when the fee,
+   * the execution units and the change do not settle.
+   */
+  readonly code: "INSUFFICIENT_FUNDS" | "NOT_CONVERGED";
+  readonly name: string;
+}
+
+/**
  * One unspent output: where it is, whose it is, and what it holds.
  *
  * Holds the ledger's own input and output, so a `Utxo` a query hands you can be handed straight
@@ -1033,6 +1083,80 @@ export class Value {
  * @deprecated (since 1.2.0) Use `uplc.applyParamsToScript`, which takes a list of parameters and accepts hex or bytes. It reads Data as CBOR rather than JSON, so convert first; `uplc.applyParamsToScript(script, [cborHex])` then returns what this function returns.
  */
 export function applyDataArgToScript(doubleCborHex: string, data: string): string;
+
+/** Balancing a transaction: the fee, the execution units and one change output, to a fixpoint. */
+export const balancer: {
+  /**
+   * Balances a transaction you have already built: sets every redeemer's execution units, the
+   * fee, and the lovelace of one change output, until the three agree.
+   *
+   * EXPERIMENTAL. This may change shape or be removed in any release, including a patch one. It
+   * is published to be used and reported on, not to be depended upon yet.
+   *
+   * Coin selection and change placement stay with you. This only settles the numbers, so your
+   * own policy for choosing inputs and splitting change is untouched: name the output that
+   * should absorb the difference, and its lovelace is the only field edited.
+   *
+   * Why it is a loop. A script sees the whole transaction, so adding change can change what the
+   * script costs, which changes the fee, which changes the change. Each pass evaluates the
+   * scripts, writes the redeemers and the script data hash, prices the transaction, moves the
+   * difference into the change output, and starts again; it returns when a pass changes nothing.
+   * Dummy signatures are added before the fee is priced and removed afterwards, so the fee pays
+   * for the witnesses the transaction will really carry.
+   *
+   * The scripts are limited together by the protocol's `maxTxExecutionMemory` and
+   * `maxTxExecutionSteps`, exactly as a node limits them, so a transaction whose scripts do not
+   * fit fails here instead of being rejected after you submit it.
+   *
+   * ```ts
+   * import { balancer, CardanoInfo } from "scalus";
+   *
+   * const info = CardanoInfo.preprod();
+   * const utxos = await provider.fetchAddressUTxOs(myAddress); // or Utxo handles, or CBOR pairs
+   *
+   * // `1` is the index of the change output in the transaction you built.
+   * const balanced = balancer.balanceTx(
+   *   unbalancedTxCbor, utxos, info.slotConfig, info.protocolParams, 1, [],
+   * );
+   * ```
+   *
+   * `extraSigners` is the keys that will sign but that the transaction does not name. Pass `[]`
+   * when there are none, which is the usual case.
+   *
+   * The signers are otherwise worked out for you: every input and collateral input paying to a
+   * key address needs that key's signature, and so does anything in the transaction's own
+   * required-signers field. Reference inputs are read-only and need none. That matters because
+   * each signature is about 101 bytes, so a fee priced for the wrong number of them is wrong by
+   * roughly 4,400 lovelace each.
+   *
+   * What cannot be worked out is a native script. Its input sits at a script address, so the
+   * keys its `ScriptAll` or `ScriptAny` requires are invisible from the transaction, and a fee
+   * priced without them is short one witness per key and rejected. Name them here:
+   *
+   * ```ts
+   * // A 2-of-2 native script input: neither key can be inferred from the script address.
+   * const balanced = balancer.balanceTx(
+   *   tx, utxos, info.slotConfig, info.protocolParams, 1,
+   *   ["1c7f...28-byte-key-hash", "9ab3...28-byte-key-hash"],
+   * );
+   * ```
+   *
+   * These are added to the inferred signers, never used instead of them, because an inferred
+   * signer is required whatever you pass. A hash given twice counts once.
+   *
+   * @param tx the transaction to balance, as hex or CBOR bytes
+   * @param utxos every UTxO the transaction's inputs, collateral inputs and reference inputs name. Each is a `Utxo`, or a CIP-30 `[input, output]` pair as hex or bytes
+   * @param slotConfig slot arithmetic for the network, so a script sees the validity interval as POSIX times
+   * @param params the protocol parameters, either a `ProtocolParams` or a plain record of the same fields. Fees, min-ada, collateral, the cost models and the protocol version all come from here
+   * @param changeOutputIndex which output of the transaction absorbs the difference, counting from 0
+   * @param extraSigners hex key hashes, 28 bytes each, for signatures the transaction does not name. `[]` for none
+   * @returns the balanced transaction, as CBOR bytes. Sign these bytes; changing them afterwards invalidates the fee
+   * @throws TypeError if an argument cannot be read, or `changeOutputIndex` is not an output of the transaction
+   * @throws PlutusScriptEvaluationError if one of the transaction's scripts fails, or together they exceed the protocol's maximum
+   * @throws TxBalancingError with `code: "INSUFFICIENT_FUNDS"` if the change output cannot hold min-ada, or `code: "NOT_CONVERGED"` if the numbers never settle
+   */
+  balanceTx(tx: string | Uint8Array, utxos: readonly (string | Uint8Array | Utxo)[], slotConfig: SlotConfigLike, params: ProtocolParamsLike, changeOutputIndex: number, extraSigners: readonly string[]): Uint8Array;
+};
 
 /** The bytes as lowercase hex. */
 export function bytesToHex(bytes: Uint8Array): string;
