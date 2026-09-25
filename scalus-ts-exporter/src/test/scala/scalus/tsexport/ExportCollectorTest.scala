@@ -5,8 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 class ExportCollectorTest extends AnyFunSuite {
     private lazy val result = ExportCollector.collect(
       List(InspectorFixture.fixtureClasses),
-      InspectorFixture.fixtureClasspath,
-      InspectorFixture.sourceRoot
+      InspectorFixture.fixtureClasspath
     )
 
     private def decl(name: String): TsDecl =
@@ -187,7 +186,7 @@ class ExportCollectorTest extends AnyFunSuite {
         )
     }
 
-    test("constructor-parameter val docs survive; @constructor becomes the ctor doc") {
+    test("a @param documents the property, and leaves the class doc") {
         val r = decl("Rect").asInstanceOf[TsDecl.Cls]
         assert(r.members.exists {
             case p: TsMember.Property =>
@@ -205,8 +204,9 @@ class ExportCollectorTest extends AnyFunSuite {
         assert(
           ctor.doc.map(_.lines) == Some(List("Creates a rectangle from its width and height."))
         )
-        // @constructor is moved off the class doc, the rest of it stays
-        assert(r.doc.get.lines == List("A rectangle.", "", "@param width the width in pixels"))
+        // @constructor and @param are both moved off the class doc - the first to the
+        // constructor, the second to the property - and the rest of it stays
+        assert(r.doc.get.lines == List("A rectangle."))
     }
 
     test("a preceding one-line annotated definition does not donate its doc") {
@@ -360,28 +360,6 @@ class ExportCollectorTest extends AnyFunSuite {
         assert(msgs.exists(m => m.contains("BadOpaque")))
     }
 
-    test("ownsPrecedingDoc accepts only blank lines, annotations and the definition head") {
-        import ExportCollector.ownsPrecedingDoc
-        assert(ownsPrecedingDoc(""))
-        assert(ownsPrecedingDoc("\n    def "))
-        assert(ownsPrecedingDoc("\n    val "))
-        assert(ownsPrecedingDoc("\n@JSExportTopLevel(\"Point\")\nclass "))
-        assert(ownsPrecedingDoc("\n@JSExport\n@JSExportTopLevel(\"twice\")\n    def "))
-        assert(ownsPrecedingDoc("\n@JSExport def "))
-        assert(ownsPrecedingDoc("\n    private def "))
-        // a complete definition in between owns the comment instead
-        assert(!ownsPrecedingDoc("\n@JSExport def a(): Unit = ()\n@JSExport def "))
-        // meta-annotations: @(TsType @field)(...) is how a constructor-val's PROPERTY type is
-        // narrowed, and it must not cost the member its doc comment
-        assert(ownsPrecedingDoc("\n@(TsType @field)(\"\\\"a\\\" | \\\"b\\\"\")\n    val "))
-        assert(ownsPrecedingDoc("\n@(TsType @field)(\"x\")\n@JSExport\n    def "))
-        assert(ownsPrecedingDoc("\n@scalus.interop.TsIgnore\n    def "))
-
-        assert(!ownsPrecedingDoc("\n    val width: Double,\n    val "))
-        assert(!ownsPrecedingDoc("\nclass Probe")) // the class's own doc is not the ctor's
-        assert(!ownsPrecedingDoc("\n  someCall()\n  def "))
-    }
-
     test("an interface and its factory object can share a top-level name") {
         val shared = result.module.decls.filter(_.name == "EvaluationOptions")
         assert(shared.count(_.isInstanceOf[TsDecl.Iface]) == 1)
@@ -427,8 +405,7 @@ class ExportCollectorTest extends AnyFunSuite {
     test("empty or missing tasty root is an error, not an empty module") {
         val empty = ExportCollector.collect(
           List(InspectorFixture.sourceRoot + "/no-such-dir"),
-          InspectorFixture.fixtureClasspath,
-          InspectorFixture.sourceRoot
+          InspectorFixture.fixtureClasspath
         )
         assert(empty.module.decls.isEmpty)
         assert(
@@ -442,7 +419,6 @@ class ExportCollectorTest extends AnyFunSuite {
         val filtered = ExportCollector.collect(
           List(InspectorFixture.fixtureClasses),
           InspectorFixture.fixtureClasspath,
-          InspectorFixture.sourceRoot,
           excludes = List("tsfixtures.Bad", "tsfixtures.Conf")
         )
         assert(!filtered.module.decls.exists(_.name == "Config"))
@@ -458,7 +434,6 @@ class ExportCollectorTest extends AnyFunSuite {
         val filtered = ExportCollector.collect(
           List(InspectorFixture.fixtureClasses),
           InspectorFixture.fixtureClasspath,
-          InspectorFixture.sourceRoot,
           excludes = List("tsfixtures.Bad")
         )
         assert(filtered.errors.isEmpty)

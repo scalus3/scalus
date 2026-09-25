@@ -2,6 +2,7 @@ package tsfixtures
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
+import scalus.interop.TsIgnore
 
 /** A class with more than one constructor.
   *
@@ -32,4 +33,29 @@ object RetiredCtor {
     @JSExportStatic
     @annotation.nowarn("cat=deprecation")
     def of(n: Double): RetiredCtor = new RetiredCtor(n)
+}
+
+/** Two constructors, and a `js.UndefOr` parameter on the primary.
+  *
+  * `js.UndefOr[A]` is the Scala 2 pseudo-union `js.|[A, Unit]` in the scalajs-library pickles. A
+  * compiler in Scala.js mode unpickles it as the union `A | Unit`, which erases to `Object`; one
+  * without `-scalajs` keeps the class `js.|`. A second constructor makes every reference to the
+  * primary `<init>` match by exact signature, so an inspector without `-scalajs` fails to unpickle
+  * this class with `undefined: this # -1`.
+  */
+@JSExportTopLevel("OptionalCtor")
+class OptionalCtor(val head: String, val detail: js.UndefOr[String]) extends js.Object {
+    def this(head: String) = this(head, js.undefined)
+}
+
+/** A primary constructor kept out of the declarations.
+  *
+  * Scala.js dispatches exported constructors by argument count and gives no default for a missing
+  * argument, so a TypeScript overload with optional trailing parameters would accept calls that
+  * throw at runtime. `@TsIgnore` on the primary leaves only the secondary in the `.d.ts`.
+  */
+@JSExportTopLevel("IgnoredPrimary")
+class IgnoredPrimary @TsIgnore() (val head: String, val detail: js.UndefOr[String])
+    extends js.Object {
+    def this(head: String) = this(head, js.undefined)
 }

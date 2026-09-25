@@ -31,9 +31,8 @@ class SmokeTest extends AnyFunSuite {
                 }
             }
         }
-        val ok = TastyInspector.inspectAllTastyFiles(
+        val ok = ScalaJsTastyInspector.inspectAllTastyFiles(
           InspectorFixture.tastyFilesUnder(InspectorFixture.fixtureClasses),
-          Nil,
           InspectorFixture.fixtureClasspath
         )(inspector)
         assert(ok, "inspector reported failure")

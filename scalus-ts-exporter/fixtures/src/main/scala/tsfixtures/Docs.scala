@@ -2,17 +2,17 @@ package tsfixtures
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.*
+import scalus.interop.TsType
 
 /** A rectangle.
   *
   * @constructor
   *   Creates a rectangle from its width and height.
   * @param width
-  *   the width in pixels
+  *   The width, measured in pixels.
   */
 @JSExportTopLevel("Rect")
 class Rect(
-    /** The width, measured in pixels. */
     val width: Double,
     val height: Double
 ) extends js.Object
@@ -58,3 +58,18 @@ class Documented extends js.Object {
       */
     def pick[A](a: A): A = a
 }
+
+/** A member whose annotation scalafmt wrapped across lines.
+  *
+  * The annotation used to cost the parameter its documentation, back when the exporter looked for
+  * the comment in the source text. `@param` reaches it from the class comment instead.
+  *
+  * @param kind
+  *   The kind, documented although its annotation spans three lines.
+  */
+@JSExportTopLevel("WrappedAnnotation")
+class WrappedAnnotation(
+    @TsType(
+      "\"one\" | \"two\" | \"three\" | \"four\" | \"five\" | \"six\" | \"seven\" | \"eight\" | \"nine\""
+    ) val kind: String
+) extends js.Object

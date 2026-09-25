@@ -5,6 +5,7 @@ import scala.collection.mutable
 import scala.util.Using
 import scala.quoted.*
 import scala.tasty.inspector.*
+import dotty.tools.dotc.util.CommentParsing
 
 /** Walks TASTy trees and builds a [[TsModule]] from `@JSExport*`-annotated symbols. */
 object ExportCollector {
@@ -39,15 +40,12 @@ object ExportCollector {
       *   directories containing .tasty files of the modules to export
       * @param classpath
       *   full dependency classpath of those modules
-      * @param sourceRoot
-      *   base directory for resolving relative TASTy source paths (docs fallback)
       * @param excludes
       *   Scala FQN prefixes to skip (declarations and errors)
       */
     def collect(
         tastyRoots: List[String],
         classpath: List[String],
-        sourceRoot: String,
         excludes: List[String] = Nil
     ): Result = {
         val decls = mutable.ListBuffer.empty[TsDecl]
@@ -194,10 +192,75 @@ object ExportCollector {
                         s"@deprecated$message$since"
                     }
 
+                /** The `@param` sections of `owner`'s comment, by parameter name.
+                  *
+                  * A parameter's own doc comment is the one thing TASTy does not carry: it reaches
+                  * neither the field, the accessor, nor the constructor's parameter symbol. So a
+                  * constructor val is documented the way Scaladoc has always documented a
+                  * parameter, with `@param` on the class, and this hands that text to the property
+                  * the parameter becomes. The compiler's own comment parser finds the sections;
+                  * `dotty.tools.dotc.ast.MainProxies` reads `@main` argument docs the same way.
+                  */
+                def paramDocsOf(owner: Symbol): Map[String, TsDoc] =
+                    owner.docstring.fold(Map.empty) { raw =>
+                        val sections = CommentParsing.tagIndex(raw)
+                        CommentParsing.paramDocs(raw, "@param", sections).flatMap {
+                            (name, section) =>
+                                val (from, to) = CommentParsing.extractSectionText(raw, section)
+                                // the section text starts where `@param <name>` stopped, so its
+                                // first line still carries that indentation; the rest keep the
+                                // `*` margins `convert` strips anyway
+                                val text = raw.substring(from, to)
+                                DocConverter.convert(s"/**$text*/").map(name -> dedent(_))
+                        }
+                    }
+
+                /** Drops the indentation a `@param` continuation line carries.
+                  *
+                  * `@param x` puts its text on the next line, indented past the tag; once the
+                  * comment frame is off, that indent is left on every line. Removing the common one
+                  * keeps a nested list or fence indented relative to the rest.
+                  */
+                def dedent(doc: TsDoc): TsDoc = {
+                    val indents =
+                        doc.lines.filter(_.trim.nonEmpty).map(l => l.length - l.stripLeading.length)
+                    val common = if indents.isEmpty then 0 else indents.min
+                    TsDoc(
+                      doc.lines.map(l =>
+                          if l.length >= common then l.drop(common) else l.stripLeading
+                      )
+                    )
+                }
+
+                /** `paramDocsOf` is per class, but it is asked per property; parse each once. */
+                val paramDocCache = mutable.Map.empty[Symbol, Map[String, TsDoc]]
+
+                def paramDoc(sym: Symbol): Option[TsDoc] =
+                    paramDocCache.getOrElseUpdate(sym.owner, paramDocsOf(sym.owner)).get(sym.name)
+
+                /** A class comment without the `@param` sections that its properties took.
+                  *
+                  * A parameter that becomes a property is documented on that property, and TSDoc
+                  * has no use for `@param` on a class, so leaving the section here would print the
+                  * text twice. A parameter that becomes nothing - a plain constructor argument -
+                  * keeps its section, because this is the only place its text can go. `convert` has
+                  * already folded each section onto its `@param` line.
+                  */
+                def withoutParamSections(cls: Symbol, doc: TsDoc): TsDoc = {
+                    def taken(line: String) = line.stripPrefix("@param ").takeWhile(_ != ' ')
+                    val onProperties = cls.declarations.collect {
+                        case d if !d.flags.is(Flags.Private) => d.name
+                    }.toSet
+                    val kept = doc.lines.filterNot(l =>
+                        l.startsWith("@param ") && onProperties.contains(taken(l))
+                    )
+                    TsDoc(kept.reverse.dropWhile(_.isEmpty).reverse)
+                }
+
                 def docOf(sym: Symbol): Option[TsDoc] = {
                     val written = sym.docstring
                         .flatMap(DocConverter.convert)
-                        .orElse(docFromSource(sym))
+                        .orElse(paramDoc(sym))
                     val fromAnnotation = deprecationOf(sym)
                     written match
                         case Some(doc)
@@ -206,31 +269,6 @@ object ExportCollector {
                             Some(TsDoc(doc.lines :+ fromAnnotation.get))
                         case Some(doc) => Some(doc)
                         case None      => fromAnnotation.map(line => TsDoc(List(line)))
-                }
-
-                def docFromSource(sym: Symbol): Option[TsDoc] =
-                    for
-                        pos <- sym.pos
-                        // an inspected source file usually reports empty content, so fall back
-                        // to reading it off disk; Some("") must not short-circuit that
-                        content <- pos.sourceFile.content.filter(_.nonEmpty).orElse {
-                            val p = Paths.get(pos.sourceFile.path)
-                            val resolved =
-                                if p.isAbsolute then p else Paths.get(sourceRoot).resolve(p)
-                            if Files.exists(resolved) then Some(Files.readString(resolved))
-                            else None
-                        }
-                        doc <- extractPrecedingDoc(content, pos.start)
-                    yield doc
-
-                def extractPrecedingDoc(content: String, defStart: Int): Option[TsDoc] = {
-                    val before = content.substring(0, math.min(defStart, content.length))
-                    val end = before.lastIndexOf("*/")
-                    if end < 0 || !ownsPrecedingDoc(before.substring(end + 2)) then None
-                    else
-                        val start = before.lastIndexOf("/**")
-                        if start < 0 || start > end then None
-                        else DocConverter.convert(before.substring(start, end + 2))
                 }
 
                 // ---- member building ----------------------------------------------------
@@ -539,7 +577,12 @@ object ExportCollector {
                         (sym.primaryConstructor +: sym.declarations.filter(
                           _.isClassConstructor
                         )).distinct
-                            .filter(c => c.exists && !c.flags.is(Flags.Private))
+                            .filter(c =>
+                                c.exists && !c.flags.is(Flags.Private) && annots(
+                                  c,
+                                  TsIgnoreAnnot
+                                ).isEmpty
+                            )
                     val ctor = ctorSymbols.flatMap(c => methodOverload(sym, c)) match
                         case Nil       => Nil
                         case overloads =>
@@ -604,6 +647,7 @@ object ExportCollector {
                         do emitTopLevelFun(sym, m)
                     } else {
                         val (clsDoc, ctorDoc) = docOf(sym)
+                            .map(withoutParamSections(sym, _))
                             .map(DocConverter.splitConstructorTag)
                             .getOrElse((None, None))
                         decls += TsDecl.Cls(
@@ -668,7 +712,7 @@ object ExportCollector {
                       name,
                       classTypeParams(sym),
                       atPosition(input = inputOnly)(ownAndInheritedMembers(sym)),
-                      docOf(sym),
+                      docOf(sym).map(withoutParamSections(sym, _)),
                       inputOnly = inputOnly
                     )
                 }
@@ -700,7 +744,7 @@ object ExportCollector {
         val tastyFiles = tastyRoots.flatMap(walkTasty)
         // An inspection that fails (typically stale class directories left by an incremental
         // build, or a missing classpath entry) must NOT silently produce an empty .d.ts.
-        val inspected = TastyInspector.inspectAllTastyFiles(tastyFiles, Nil, classpath)(inspector)
+        val inspected = ScalaJsTastyInspector.inspectAllTastyFiles(tastyFiles, classpath)(inspector)
         val inspectionErrors =
             if tastyFiles.isEmpty then
                 List(
@@ -744,34 +788,6 @@ object ExportCollector {
             .sorted
             .map(n => ExportError(n, s"duplicate top-level TypeScript declaration name '$n'"))
         Result(TsModule(decls.toList), inspectionErrors ++ errors.toList ++ collisionErrors)
-    }
-
-    /** `@Ann`, `@Ann(args)`, `@pkg.Ann`, and the meta-annotation form `@(Ann @field)(args)`. */
-    private val annotationPattern = raw"@(?:\w+(?:\.\w+)*|\([^)]*\))(?:\(.*\))?"
-
-    private val annotationOnly = annotationPattern.r
-
-    /** Whitespace, annotations, and the modifier/keyword head of the definition itself. */
-    private val definitionHead =
-        raw"(?:" + annotationPattern + raw"\s*)*(?:(?:private|protected|final|override|implicit|lazy|inline" +
-            raw"|infix|open|transparent|abstract|sealed|opaque|case|given|def|val|var|class" +
-            raw"|trait|object|type|enum)\b\s*)*"
-
-    private val definitionHeadRe = definitionHead.r
-
-    /** Does the definition starting right after `between` own the doc comment before it?
-      *
-      * Only blank lines and standalone annotations may separate the two, ending with the modifier
-      * and keyword head of that very definition. A complete definition in between - a one-line
-      * annotated member, say - means the comment documents that one instead.
-      */
-    private[tsexport] def ownsPrecedingDoc(between: String): Boolean = {
-        val lines = between.linesIterator.map(_.trim).toList
-        lines match
-            case Nil => true
-            case _ =>
-                lines.init.forall(l => l.isEmpty || annotationOnly.matches(l)) &&
-                definitionHeadRe.matches(lines.last)
     }
 
     private def walkTasty(root: String): List[String] = {

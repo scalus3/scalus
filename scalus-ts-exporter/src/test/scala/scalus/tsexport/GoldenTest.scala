@@ -14,7 +14,6 @@ class GoldenTest extends AnyFunSuite {
           tastyRoots = List(InspectorFixture.fixtureClasses),
           classpath = InspectorFixture.fixtureClasspath,
           output = "unused",
-          sourceRoot = InspectorFixture.sourceRoot,
           excludes = List("tsfixtures.Bad")
         )
         Main.run(cfg) match
@@ -75,8 +74,6 @@ class GoldenTest extends AnyFunSuite {
                 s"x${java.io.File.pathSeparator}y",
                 "--output",
                 "out.d.ts",
-                "--source-root",
-                "/root",
                 "--exclude",
                 "p1",
                 "--exclude",
@@ -88,7 +85,6 @@ class GoldenTest extends AnyFunSuite {
         assert(cfg.tastyRoots == List("a", "b"))
         assert(cfg.classpath == List("x", "y"))
         assert(cfg.output == "out.d.ts")
-        assert(cfg.sourceRoot == "/root")
         assert(cfg.excludes == List("p1", "p2"))
     }
 }

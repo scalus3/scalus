@@ -67,22 +67,23 @@ object JScalus {
 
     /** Outcome of evaluating one Plutus script. Read `isSuccess` first: the two outcomes differ in
       * what `budget` and `logs` mean.
+      *
+      * @param budget
+      *   Units the machine spent. On failure this is what was spent before the script failed, and
+      *   zero when the script could not be decoded at all.
+      * @param logs
+      *   Trace output the script emitted, oldest first. On failure the failure message is
+      *   prepended, so `logs[0]` is the error and the traces follow it.
+      * @param profileJson
+      *   Profiling data as JSON; `undefined` unless the script was evaluated with profiling (see
+      *   [[evaluateScriptProfile]]).
       */
     @JSExportTopLevel("EvaluationResult")
     @JSExportTopLevel("Result")
     class JSResult(
         val isSuccess: Boolean,
-        /** Units the machine spent. On failure this is what was spent before the script failed, and
-          * zero when the script could not be decoded at all.
-          */
         val budget: JSExUnits,
-        /** Trace output the script emitted, oldest first. On failure the failure message is
-          * prepended, so `logs[0]` is the error and the traces follow it.
-          */
         val logs: js.Array[String],
-        /** Profiling data as JSON; `undefined` unless the script was evaluated with profiling (see
-          * [[evaluateScriptProfile]]).
-          */
         val profileJson: js.UndefOr[String]
     ) extends js.Object
 
@@ -93,15 +94,16 @@ object JScalus {
       * `tag` is why the script ran: `"Spend"` for a script input, `"Mint"` for a minting policy,
       * `"Cert"` for a certificate, `"Reward"` for a withdrawal, `"Voting"` for a vote, and
       * `"Proposing"` for a governance proposal.
+      *
+      * @param index
+      *   Position within the group named by `tag`, counting from 0: for `"Spend"` it indexes the
+      *   transaction's inputs in ledger order, for `"Mint"` its minting policies, and so on.
       */
     @JSExportTopLevel("RedeemerBudget")
     @JSExportTopLevel("Redeemer")
     class Redeemer(
         @TsType("\"Spend\" | \"Mint\" | \"Cert\" | \"Reward\" | \"Voting\" | \"Proposing\"")
         val tag: String,
-        /** Position within the group named by `tag`, counting from 0: for `"Spend"` it indexes the
-          * transaction's inputs in ledger order, for `"Mint"` its minting policies, and so on.
-          */
         val index: Int,
         val budget: JSExUnits
     ) extends js.Object

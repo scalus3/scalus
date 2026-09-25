@@ -5,14 +5,13 @@ import java.nio.file.{Files, Paths}
 /** CLI: generate a `.d.ts` file from the TASTy of Scala.js modules.
   *
   * Usage: `--tasty-root <dir>` (repeatable) `--classpath <path-list>` `--output <file>`
-  * `--source-root <dir>` (default ".") `--exclude <fqnPrefix>` (repeatable)
+  * `--exclude <fqnPrefix>` (repeatable)
   */
 object Main {
     case class Config(
         tastyRoots: List[String] = Nil,
         classpath: List[String] = Nil,
         output: String = "",
-        sourceRoot: String = ".",
         excludes: List[String] = Nil
     )
 
@@ -27,14 +26,13 @@ object Main {
         case "--tasty-root" :: v :: rest => parse(rest, cfg.copy(tastyRoots = v :: cfg.tastyRoots))
         case "--classpath" :: v :: rest =>
             parse(rest, cfg.copy(classpath = v.split(java.io.File.pathSeparator).toList))
-        case "--output" :: v :: rest      => parse(rest, cfg.copy(output = v))
-        case "--source-root" :: v :: rest => parse(rest, cfg.copy(sourceRoot = v))
-        case "--exclude" :: v :: rest     => parse(rest, cfg.copy(excludes = v :: cfg.excludes))
-        case other :: _                   => Left(s"unknown argument: $other")
+        case "--output" :: v :: rest  => parse(rest, cfg.copy(output = v))
+        case "--exclude" :: v :: rest => parse(rest, cfg.copy(excludes = v :: cfg.excludes))
+        case other :: _               => Left(s"unknown argument: $other")
 
     def run(cfg: Config): Either[List[ExportError], String] = {
         val result =
-            ExportCollector.collect(cfg.tastyRoots, cfg.classpath, cfg.sourceRoot, cfg.excludes)
+            ExportCollector.collect(cfg.tastyRoots, cfg.classpath, cfg.excludes)
         if result.errors.nonEmpty then Left(result.errors)
         else Right(Emitter.emit(result.module))
     }

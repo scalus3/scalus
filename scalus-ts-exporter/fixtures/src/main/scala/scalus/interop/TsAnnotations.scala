@@ -18,5 +18,7 @@ final class TsName(val name: String) extends StaticAnnotation
 
 /** Excludes the annotated member from the TypeScript definitions emitted by scalus-ts-exporter.
   * Same-FQN local copy so the fixtures project does not depend on scalus-core.
+  *
+  * On a constructor it hides that overload; the class keeps its other constructors.
   */
 final class TsIgnore extends StaticAnnotation

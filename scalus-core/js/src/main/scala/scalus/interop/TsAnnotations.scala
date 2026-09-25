@@ -17,5 +17,7 @@ final class TsName(val name: String) extends StaticAnnotation
   * This affects the `.d.ts` and nothing else: the member is still an export root, so everything it
   * reaches stays in `scalus.js`. For a Scala-facing-only member, prefer an extension method on the
   * companion object, which is not a root. See `docs/internal/JS_BUNDLE_SIZE.md`.
+  *
+  * On a constructor it hides that overload; the class keeps its other constructors.
   */
 final class TsIgnore extends StaticAnnotation

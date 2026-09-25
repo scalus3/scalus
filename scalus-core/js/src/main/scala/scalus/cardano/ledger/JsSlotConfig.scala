@@ -8,6 +8,17 @@ import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
   * Encodes the linear (post-Byron) era as an anchor point: slot `zeroSlot` starts at `zeroTime`
   * (POSIX milliseconds) and falls at the beginning of epoch `zeroEpoch`; slots are `slotLength`
   * milliseconds long and epochs are `epochLength` slots long.
+  *
+  * @param zeroTime
+  *   POSIX time in milliseconds at which slot `zeroSlot` starts.
+  * @param zeroSlot
+  *   The slot this config is anchored at: the first slot of the linear (post-Byron) era.
+  * @param slotLength
+  *   Slot length in milliseconds.
+  * @param epochLength
+  *   Epoch length in slots.
+  * @param zeroEpoch
+  *   Number of the epoch that begins at `zeroSlot`.
   */
 // Implementation notes, deliberately NOT scaladoc: this file's scaladoc is published to npm as
 // scalus.d.ts, where `JsSlotConfig` and Scala-side type names mean nothing to the reader.
@@ -30,15 +41,10 @@ import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
 // through `wrap`/`underlying` is lossless for anything this API can carry.
 @JSExportTopLevel("SlotConfig")
 class JsSlotConfig(
-    /** POSIX time in milliseconds at which slot `zeroSlot` starts. */
     val zeroTime: Double,
-    /** The slot this config is anchored at: the first slot of the linear (post-Byron) era. */
     val zeroSlot: Double,
-    /** Slot length in milliseconds. */
     val slotLength: Double,
-    /** Epoch length in slots. */
     val epochLength: Double = 432000,
-    /** Number of the epoch that begins at `zeroSlot`. */
     val zeroEpoch: Double = 0
 ) extends js.Object {
 

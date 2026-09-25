@@ -1290,7 +1290,6 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
               .map(_.data.getAbsolutePath)
               .mkString(java.io.File.pathSeparator)
           val out = ((Compile / sourceDirectory).value / "npm" / "scalus.d.ts").getAbsolutePath
-          val srcRoot = (ThisBuild / baseDirectory).value.getAbsolutePath
           val args = List(
             "--tasty-root",
             coreClasses,
@@ -1299,9 +1298,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
             "--classpath",
             cp,
             "--output",
-            out,
-            "--source-root",
-            srcRoot
+            out
           )
           // `run / runner` (not the config-scoped `runner`) is the forked one, see the
           // `Compile / run / fork` setting on scalusTsExporter.

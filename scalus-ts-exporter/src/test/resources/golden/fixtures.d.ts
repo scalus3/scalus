@@ -186,6 +186,19 @@ export class Generics {
   widen<A extends object>(a: A): Box<A>;
 }
 
+/**
+ * A primary constructor kept out of the declarations.
+ *
+ * Scala.js dispatches exported constructors by argument count and gives no default for a missing
+ * argument, so a TypeScript overload with optional trailing parameters would accept calls that
+ * throw at runtime. `@TsIgnore` on the primary leaves only the secondary in the `.d.ts`.
+ */
+export class IgnoredPrimary {
+  constructor(head: string);
+  readonly head: string;
+  readonly detail?: string;
+}
+
 export interface Inner {
   readonly id: string;
 }
@@ -269,6 +282,22 @@ export class OneLiners {
   b(): number;
 }
 
+/**
+ * Two constructors, and a `js.UndefOr` parameter on the primary.
+ *
+ * `js.UndefOr[A]` is the Scala 2 pseudo-union `js.|[A, Unit]` in the scalajs-library pickles. A
+ * compiler in Scala.js mode unpickles it as the union `A | Unit`, which erases to `Object`; one
+ * without `-scalajs` keeps the class `js.|`. A second constructor makes every reference to the
+ * primary `<init>` match by exact signature, so an inspector without `-scalajs` fails to unpickle
+ * this class with `undefined: this # -1`.
+ */
+export class OptionalCtor {
+  constructor(head: string, detail?: string);
+  constructor(head: string);
+  readonly head: string;
+  readonly detail?: string;
+}
+
 /** Only ever handed BACK, like SubmitResult: its arrays stay mutable. */
 export interface OutputInfo {
   readonly notes: string[];
@@ -280,24 +309,17 @@ export class Partial {
   visible(a: bigint): bigint;
 }
 
-/**
- * A point.
- *
- * @param x the x coordinate
- */
+/** A point. */
 export class Point {
   constructor(x: number, y: number);
+  /** the x coordinate */
   readonly x: number;
   readonly y: number;
   /** Distance to {@link Point} `other`. */
   dist(other: Point): number;
 }
 
-/**
- * A rectangle.
- *
- * @param width the width in pixels
- */
+/** A rectangle. */
 export class Rect {
   /** Creates a rectangle from its width and height. */
   constructor(width: number, height: number);
@@ -381,6 +403,18 @@ export const Tools: {
   twice(x: number): number;
   concat(a: string, b?: string): string;
 };
+
+/**
+ * A member whose annotation scalafmt wrapped across lines.
+ *
+ * The annotation used to cost the parameter its documentation, back when the exporter looked for
+ * the comment in the source text. `@param` reaches it from the class comment instead.
+ */
+export class WrappedAnnotation {
+  constructor(kind: "one" | "two" | "three" | "four" | "five" | "six" | "seven" | "eight" | "nine");
+  /** The kind, documented although its annotation spans three lines. */
+  readonly kind: "one" | "two" | "three" | "four" | "five" | "six" | "seven" | "eight" | "nine";
+}
 
 /** Doubles. */
 export function twice(x: number): number;
