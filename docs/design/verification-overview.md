@@ -9,7 +9,7 @@ are proved. It fixes four layers and the contracts between them:
 2. **Reification**, a compile-time mapping from a subset of Scala expressions to `Prop`, using a
    higher-order abstract syntax (HOAS) embedding.
 3. **Theorems**, Scala values that pair a statement with the tactic that must prove it.
-4. **Tactics**, the pluggable backends that discharge a statement: `lean-uplc`, `lean-direct`,
+4. **Tactics**, the pluggable backends that discharge a statement: `blaster-uplc`, `lean-direct`,
    `scalacheck`, and later others.
 
 The statement side lives in Scala, type-checked by scalac against the real definitions. The proof
@@ -21,11 +21,12 @@ side stays in the backends: Lean 4, Blaster and Z3 today.
 
 Three pieces of work exist, and none of them connects to the others yet.
 
-- **`scalus-lean-proofs`** (branch `worktree-lean-proofs`). It compiles prelude functions to UPLC,
-  exports them, and proves 17 theorems about the exported bytes with Blaster. It is the first
-  instance of what this document calls the `lean-uplc` tactic. Its statements, step budgets,
-  anti-vacuity guards and negative controls are all **written by hand in Lean**. See
-  `scalus-lean-proofs/README.md` and
+- **`scalus-verification`** (formerly `scalus-lean-proofs`; branch `worktree-lean-proofs`). It
+  compiles prelude functions to UPLC, exports them, and proves 17 theorems about the exported
+  bytes with Blaster. It is the first instance of what this document calls the `blaster-uplc`
+  tactic. Its statements, step budgets, anti-vacuity guards and negative controls are all
+  **written by hand in Lean**. See
+  `scalus-verification/README.md` and
   `docs/superpowers/specs/2026-08-27-lean-blaster-uplc-proofs-design.md`.
 - **`spec.requires` / `spec.ensures` / `spec.ensuresResult`** (local branch
   `feature/verification-blaster`, not pushed). These are in-body specification clauses. They are
@@ -43,18 +44,19 @@ backend can consume.
 ## 2. Architecture at a glance
 
 ```
- Scala source     theorem("abs_nonneg", abs) { f => forAll[BigInt](x => f(x) >= 0) }
-                  (HOAS surface: ordinary Scala, type-checked by scalac)
+ Scala source     theorem("abs_nonneg", Math.abs) { f => forAll[BigInt](x => f(x) >= 0) }
+                  def clamp(...) = { spec.requires(lo <= hi); spec.ensuresResult(r => ...); ... }
+                  (HOAS surface and function contracts: ordinary Scala, type-checked by scalac)
       │
-      │  reify — macro at compile time; atoms compiled to SIR by the Scalus plugin
+      │  reify — at compile time, from the SIR the Scalus plugin produces (§4.3)
       ▼
- PropIR           ∀ (x : Integer). Atom(λ f x. f x ≥ 0)   with f := target `abs`
+ PropIR           ∀ (x : Integer). Atom(λ f x. f x ≥ 0)   with f := target `Math.abs`
                   (first-order, typed binders, SIR atoms, serializable)
       │
       │  tactic
-      ├──► lean-uplc    Lean workspace: #import_uplc / #prep_uplc + generated theorem + blaster
-      ├──► lean-direct  Lean workspace: shallow translation to native Lean + blaster / Lean tactics
-      ├──► scalacheck   runtime interpretation of the same HOAS term
+      ├──► blaster-uplc  Lean workspace: #import_uplc / #prep_uplc + generated theorem + blaster
+      ├──► lean-direct   Lean workspace: functions and statements mapped to Lean + blaster / tactics
+      ├──► scalacheck    runtime interpretation of the same HOAS term
       ▼
  Verdict ──► Thm (subject, oracles, assumptions) ──► report, proof cache, policy tests
 ```
@@ -64,7 +66,8 @@ backend can consume.
 | `Prop` | A logical statement. At the surface it is built from HOAS combinators; internally it is `PropIR`. |
 | Atom | A quantifier-free Boolean expression in the `@Compile` subset. It is the only executable part of a `Prop`. |
 | Binder | A quantified variable with a static type. |
-| Target | A compiled program the statement is about, such as a `PlutusV3[A]`. |
+| Target | What the statement is about: a `@Compile` function, or a compiled script such as a `PlutusV3[A]`. |
+| Contract | A function's precondition and postcondition, written in its body (`spec.*`) or next to it (`contract(f)`). |
 | Theorem | A named statement, plus its expected outcome and the tactic that should discharge it. |
 | Tactic | A backend that turns a statement into a verdict. |
 | `Thm` | The result of a successful discharge. It carries its subject, its oracles and its assumptions. |
@@ -121,9 +124,22 @@ represented by binders of the host language (Scala lambdas). This gives us:
 - **A runtime interpretation for free.** `forAll` can store its function and be run on generated
   values (§3.5).
 
-The price is that a Scala function is opaque at runtime: you cannot look inside `A => Prop`. The
-first-order structure therefore has to be recovered from the typed syntax tree **at compile time**.
-That is the reification step of §4.
+The price is that a plain Scala closure is opaque at runtime: you cannot look inside `A => Prop`.
+
+**`@Compile` code is the exception.** The Scalus plugin compiles every `@Compile` object to SIR and
+stores it in the object itself, in the generated `sirModule` and `sirDeps` fields
+(`scalus-plugin/.../SIRPreprocessor.scala:33-34`). The linker can compile any of its definitions
+to UPLC on demand. So:
+
+- a function defined in a `@Compile` object is not opaque. It has typed SIR at runtime, and
+  `blaster-uplc` can verify its compiled code directly, with no hand-written export (§3.6);
+- a statement compiled by the plugin is not opaque either. That covers contracts in `@Compile`
+  objects, and statements passed to `theorem` / `contract`, which hand them to `compile(...)`.
+  Its lambdas, the quantifier binders, are SIR `LamAbs` nodes carrying their `SIRType`s. This is
+  the reification route this design recommends (§4.3).
+
+Only a frontend without the Scalus plugin, which is ctproof's situation, has to recover the lambdas
+from Scala's typed tree with a macro.
 
 ### 3.3 Semantics
 
@@ -171,25 +187,82 @@ Both interpretations come from the same source expression, so they cannot drift 
 
 ### 3.6 Targets: what a statement is about
 
-A statement quantifies over values, but it is *about* functions. An atom can mention a function in
-two ways.
+A statement quantifies over values, but it is *about* functions. The functions a statement is
+about are its **targets**. They are bound by HOAS, like any other variable:
 
-- **Directly.** In `Math.abs(x) >= 0`, `Math.abs` is compiled together with the atom. The claim is
-  about the function as compiled in that context, and the optimizer may specialize it. This is
-  fine for lemmas about the prelude.
-- **Through a target binder.**
+```scala
+theorem("abs_nonneg", Math.abs) { f => forAll[BigInt](x => f(x) >= 0) }
+```
 
-  ```scala
-  val abs: PlutusV3[BigInt => BigInt] = PlutusV3.compile((x: BigInt) => Math.abs(x))
-  theorem("abs_nonneg", abs) { f => forAll[BigInt](x => f(x) >= 0) }
-  ```
+A target is one of two things.
 
-  `f` is bound by HOAS like any other variable. Each tactic instantiates it with its own view of
-  the same compiled program. `lean-uplc` uses the program's UPLC term, verbatim. `lean-direct`
-  uses the translation of its SIR. `scalacheck` uses the JVM function, or the program run on the
-  Scalus CEK.
+- **A `@Compile` function**, named directly (`Math.abs`, `VestingValidator.linearVesting`). Its SIR
+  is available (§3.2), so no export step is needed. `blaster-uplc` compiles it standalone, exactly as
+  `ProofTargets` does by hand today with `PlutusV3.compile((x: BigInt) => Math.abs(x))`, and embeds
+  that program verbatim. `lean-direct` translates its SIR. `scalacheck` calls the JVM method.
+  An `inline def`, such as `Math.abs`, `Math.min` and `Math.max`, has no SIR definition of its
+  own. A target that names one stands for its eta-expansion (`x => Math.abs(x)`), which is
+  compiled the same way.
+- **A compiled script**, such as a `PlutusV3[A]` value or a contract's compiled validator. This
+  is what ties a claim to a **script hash**, so claims about a deployed contract name the script.
 
-**Rule: claims about contracts use targets.** Only a target ties a proof to a script hash.
+Each tactic instantiates a target with its own view of the same definition. The claim is therefore
+about the target, whichever tactic proves it.
+
+An atom can also call a function without naming it as a target: `Math.abs(x) >= 0` inside a
+statement about something else. The function is then compiled *together with the atom*. For
+`blaster-uplc` that is a different claim, because the optimizer may inline or specialize the function
+in that context. That is acceptable for helpers used inside a statement, but anything the
+statement is *about* should be a target.
+
+### 3.7 Function contracts: pre- and postconditions
+
+The most common statement about a function has one shape: for all arguments that satisfy a
+precondition, the result satisfies a postcondition. It is first-class, and it can be written in two
+equivalent forms.
+
+**In the function's body**, with the `spec` clauses of `feature/verification-blaster`:
+
+```scala
+@Compile
+object Math {   // illustrative: the prelude's clamp carries no clauses today
+    def clamp(x: BigInt, lo: BigInt, hi: BigInt): BigInt = {
+        spec.requires(lo <= hi)
+        spec.ensuresResult[BigInt](r => lo <= r && r <= hi)
+        if x < lo then lo else if x > hi then hi else x
+    }
+}
+```
+
+**Next to the function**, as a function-property statement. This form suits functions you do not
+own, or a contract that belongs to a proof suite rather than to the code:
+
+```scala
+contract(Math.clamp)(
+  requires = (x, lo, hi) => lo <= hi,
+  ensures = (x, lo, hi) => r => lo <= r && r <= hi
+)
+```
+
+Both forms elaborate to the same statement, with `f` bound to the target:
+
+```
+∀ args. requires(args) ⇒ ( denotes(f(args)) ⇒ ensures(args)(f(args)) )
+```
+
+- **Partial correctness is the default.** The reading is "if `f` returns, the result is good".
+  For a validator handler it is exactly "if the script succeeds, `P` holds", because rejection
+  *is* an error. Totality is a separate, explicit clause (`spec.total`, or `total = true`), which
+  adds `requires(args) ⇒ denotes(f(args))`.
+- **In-body clauses cost nothing on-chain.** They are erased before the code reaches UPLC. On
+  `feature/verification-blaster`, `VestingValidator` compiled to the same 2046 bytes and the same
+  script hash with and without them. That was measured on an older master and needs re-checking.
+- **Contracts compose.** When a `@Compile` function `g` calls `f`, `f`'s precondition at that call
+  site is an obligation of `g`, and `f`'s proved postcondition can be assumed about the call. That
+  modular use needs a verification-condition generator over `g`'s SIR, and a backend that can
+  treat `f` abstractly. `lean-direct` can do that (and later `smt` and `kernel`). `blaster-uplc`
+  cannot abstract a callee inside compiled code, so it checks each contract as a statement about
+  the function's whole compiled program.
 
 ---
 
@@ -217,42 +290,92 @@ These are rejected with a compile error:
 
 ### 4.2 Algorithm
 
-The reifier is a macro over the typed tree.
+The reifier works over a typed tree. In the recommended route that tree is the statement's SIR; in
+the alternative it is Scala's typed tree, inside a macro (§4.3). The steps are the same.
 
-1. **Recognize the combinators** by symbol (`scalus.verify.forAll`, …).
+1. **Recognize the combinators** (`scalus.verify.forAll`, …) and the `spec` clauses.
 2. **Turn every binder into a `Binder(name, SIRType)`** with a fresh unique name, and keep the
    list of binders in scope, in order. Target binders come first.
-3. **Lambda-lift every leaf (`bool` or `term`)** over the binders in scope and wrap it in a
-   compile call. The atom `x * y > z` under the scope `[z, x, y]` becomes:
+3. **Lambda-lift every leaf (`bool` or `term`)** over the binders in scope, so that each leaf
+   becomes a closed SIR lambda. Under the scope `[z, x, y]`, the atom `x * y > z` becomes
+   `λ z x y. x * y > z`.
+   - In the SIR route the leaf is already a SIR subterm, so this is a SIR-to-SIR rewrite.
+   - In the macro route the leaf is wrapped in a compile call, and the plugin produces its SIR:
+     `compileWithOptions(opts, (z: BigInt) => (x: BigInt) => (y: BigInt) => x * y > z)`.
 
-   ```scala
-   compileWithOptions(opts, (z: BigInt) => (x: BigInt) => (y: BigInt) => x * y > z)
-   ```
+   Both Lean tactics can use a closed lambda directly: `blaster-uplc` applies it to lifted constants,
+   and `lean-direct` instantiates its body with Lean variables.
+4. **Produce the `PropIR` value.** The runtime interpretation of §3.5 needs no extra work in the
+   SIR route: `@Compile` code is also ordinary JVM code, so the same statement simply runs. The
+   macro route emits one expression that builds both `PropIR` and the original HOAS value.
 
-   Each leaf becomes a closed SIR lambda. Both Lean tactics can use that directly: `lean-uplc`
-   applies it to lifted constants, and `lean-direct` instantiates its body with Lean variables.
-4. **Emit one expression** that builds both the `PropIR` value (with the compiled atoms) and the
-   original HOAS value (for §3.5).
+### 4.3 Two routes to a typed tree
 
-### 4.3 Why a macro, and why it works with the existing plugin
-
-Scala 3.3.8 runs its phases in this order:
+All three Scala versions the build supports, 3.3.8 (the default), 3.8.4 and 3.9.0, run the relevant
+phases in this order (checked with `-Xshow-phases`):
 
 ```
 typer → posttyper → [ScalusPrepare] → pickler → inlining (macros) → firstTransform → [Scalus] → patternMatcher
 ```
 
-- Macros expand in `inlining`. The main `Scalus` phase runs after `firstTransform`
-  (`scalus-plugin/.../Plugin.scala:169`), and it compiles `compile` and `compileWithOptions` calls
-  itself (`Plugin.scala:273-276`). So the compile calls the reifier emits are turned into SIR by
-  the existing plugin. **The first version needs no plugin changes.**
-- A macro uses `quotes.reflect`, not the compiler's internal trees. That is what makes a frontend
-  shared with ctproof possible (§8.3).
-- `ScalusPrepare` runs *before* `inlining`, so it still sees `spec.*` calls that inlining later
-  erases. That is where capturing `spec` clauses would happen (§8.2).
+**Route 1 (recommended): statements are compiled to SIR, and reified from it.** A statement
+reaches the plugin in one of two ways, and neither needs a macro:
 
-A spike must confirm step 3 end to end: that macro-generated compile calls get their options and
-SIR exactly like hand-written ones.
+- **Contracts** sit in `@Compile` objects, next to the code they describe.
+- **`theorem`, `refute` and `contract`** are `inline` wrappers that pass their statement lambda to
+  `compile(...)`, which the plugin already intercepts. The suite object itself stays plain Scala,
+  so its tactic configuration never goes through the plugin.
+
+Either way the plugin compiles the statement to SIR like any other code:
+
+- the quantifier lambdas are `LamAbs` nodes with their `SIRType`s, and the atoms are already SIR
+  subterms;
+- targets and helper functions resolve through the normal linker;
+- in-body `spec` clauses are handled by the same plugin, in the same pass as the function they
+  describe.
+
+The verification runner takes the statement's SIR from the `compile` result, or from the object's
+`sirModule` for in-body contracts, and reifies it. Code and statements share one representation.
+
+The work lies in the plugin:
+
+- **Combinators as intrinsics.** `forAll`, `==>`, `denotes` and the other combinators must be
+  compiled as recognizable intrinsics, and lowering one to UPLC must be an error.
+- **`Prop` in SIR.** `Prop` needs a SIR type.
+- **`spec` clauses must reach the `Scalus` phase.** Today they are `inline` no-ops that `inlining`
+  erases first. Two ways to change that:
+  - `ScalusPrepare`, which runs before `inlining`, rewrites each clause into a marker call that
+    survives it;
+  - or the clauses stop being `inline`, and the plugin moves their arguments into the definition's
+    `AnnotationsDecl.data` and deletes the call.
+
+  Either way the clause is erased from the code's SIR, so the on-chain bytes do not change.
+
+**Route 2: a macro over Scala's typed tree.** For a frontend that does not run the Scalus plugin:
+
+- **Emitted compile calls are handled by the plugin.** Macros expand in `inlining`. The main
+  `Scalus` phase runs after `firstTransform` (`scalus-plugin/.../Plugin.scala:169`), and it
+  compiles `compile` and `compileWithOptions` calls itself (`Plugin.scala:273-276`). So the
+  compile calls the macro emits become SIR with no plugin changes. A spike must confirm that they
+  get their options and SIR exactly like hand-written calls.
+- **It is the route ctproof can share.** A macro uses `quotes.reflect`, not the compiler's
+  internal trees, and ctproof has no SIR (§8.3).
+
+**Recommendation.** Take Route 1 for Scalus: function contracts need the plugin anyway, and SIR
+already carries everything reification needs. Share the *surface API and semantics* with ctproof,
+and let ctproof keep its own macro reifier (Route 2) over the same combinators.
+
+**What actually has to be SIR, and why.** Not the statement as a whole.
+
+| Part | SIR? | Why |
+|---|---|---|
+| Atoms and witnesses | **yes** | They are executable code. `blaster-uplc` compiles them to UPLC, and `lean-direct` translates them from SIR. Only the Scalus compiler can produce either. |
+| Binder types | as `SIRType`s | They decide the Lean binder type and how a value is lifted to a UPLC constant. The plugin already computes them. |
+| The skeleton (quantifiers, connectives) | **no** | It only has to be captured at compile time, because a runtime closure is opaque. It is stored as `PropIR`. Compiling the whole statement through `compile(...)` is just a cheap way to capture it without writing a macro; that SIR is an intermediate step, not the stored form. |
+| Contracts | **stored with the function's SIR** | A contract is part of a function's interface. Verifying a caller, possibly in another module or another jar, needs the callee's contract (§3.7). Kept in the definition's `AnnotationsDecl.data`, it travels in `sirModule` with the code it describes. |
+
+So cross-module use is the reason for exactly one case, contracts. Standalone theorems in a proof
+suite are consumed only by the runner, and need SIR only for their atoms.
 
 ### 4.4 `PropIR`
 
@@ -271,10 +394,21 @@ enum PropIR:
 
 final case class Binder(name: String, tp: SIRType)
 final case class TermIR(params: List[Binder], body: SIR)   // closed lambda over `params`
+
+enum TargetRef:
+    case Function(fullName: String, sir: SIR)   // a @Compile definition, or an inline def's eta-expansion
+    case Script(program: Program)                // a compiled script, e.g. `PlutusV3[A].program`
+
+enum Origin:
+    case Theorem                                 // theorem(...) / refute(...)
+    case Contract(inBody: Boolean)               // spec.* clauses, or contract(f)(...)
+    case Harvested                               // from a `require` (§8.4)
+
 final case class Statement(
     name: String,
     targets: List[TargetRef],
     prop: PropIR,
+    origin: Origin,
     pos: SIRPosition
 )
 ```
@@ -290,23 +424,26 @@ cache (§5.4).
 ### 5.1 Syntax
 
 ```scala
-object MathProofs extends ProofSuite {
-    val abs = PlutusV3.compile((x: BigInt) => Math.abs(x))
-    val min = PlutusV3.compile((x: BigInt) => (y: BigInt) => Math.min(x, y))
-    val max = PlutusV3.compile((x: BigInt) => (y: BigInt) => Math.max(x, y))
+object MathProofs extends ProofSuite {     // plain Scala; each statement is compiled to SIR (§4.3)
+    theorem("abs_total", Math.abs) { f => forAll[BigInt](x => denotes(f(x))) }
+        .by(blasterUplc(budget = 40))
 
-    theorem("abs_total", abs) { f => forAll[BigInt](x => denotes(f(x))) }
-        .by(leanUplc(budget = 40))
+    theorem("abs_nonneg", Math.abs) { f => forAll[BigInt](x => f(x) >= 0) }
+        .by(blasterUplc(budget = 40))
 
-    theorem("abs_nonneg", abs) { f => forAll[BigInt](x => f(x) >= 0) }
-        .by(leanUplc(budget = 40))
+    theorem("min_max_sum", Math.min, Math.max) { (mn, mx) =>
+        forAll[BigInt](x => forAll[BigInt](y => mn(x, y) + mx(x, y) === x + y))
+    }.by(blasterUplc(budget = 40))
 
-    theorem("min_max_sum", min, max) { (mn, mx) =>
-        forAll[BigInt](x => forAll[BigInt](y => mn(x)(y) + mx(x)(y) === x + y))
-    }.by(leanUplc(budget = 40))
+    refute("abs_positive", Math.abs) { f => forAll[BigInt](x => f(x) > 0) }   // x = 0
+        .by(blasterUplc(budget = 40))
 
-    refute("abs_positive", abs) { f => forAll[BigInt](x => f(x) > 0) }   // x = 0
-        .by(leanUplc(budget = 40))
+    // the contract of §3.7, proved about clamp's compiled code
+    verifyContract(Math.clamp).by(blasterUplc(budget = 60))
+
+    // a claim about a deployed contract names its script, which fixes the script hash
+    theorem("vesting_needs_signature", VestingContract.compiled) { script => ... }
+        .by(blasterUplc(budget = 9000))
 
     theorem("mul_unbounded") {
         forAll[BigInt](z => forAll[BigInt](x =>
@@ -343,7 +480,8 @@ enum Verdict:
     case Unsupported(reason: String)
 
 enum Subject:
-    case Script(hash: ScriptHash)   // the exact bytes (lean-uplc)
+    case Program(hash: ScriptHash)  // the exact bytes: a contract script, or a @Compile function
+                                    // compiled standalone (blaster-uplc)
     case Source(sirHash: String)    // SIR semantics; trusts the compiler for the bytes (lean-direct)
     case Jvm                        // Scala semantics (scalacheck)
 
@@ -368,7 +506,7 @@ level can then be checked by an ordinary test:
 ```scala
 test("vesting authorisation is proved about the shipped script") {
     val thm = VestingProofs.beneficiarySigns.result.get
-    assert(thm.subject == Subject.Script(VestingContract.scriptHash))
+    assert(thm.subject == Subject.Program(VestingContract.scriptHash))
     assert(!thm.oracles.exists(_.isInstanceOf[Oracle.Tested]))
 }
 ```
@@ -382,18 +520,18 @@ test("vesting authorisation is proved about the shipped script") {
   IR, the targets' script hashes, the tactic and its configuration, and the backend pins (Lean
   toolchain, Blaster and PlutusCore revisions).
 - **At test time**, `Thm`s are read from the cache, and policy tests like the one above run.
-- **In CI**, keep the split that `scalus-lean-proofs` already uses. At PR time, a cheap check that
+- **In CI**, keep the split that `scalus-verification` already uses. At PR time, a cheap check that
   the statements and targets still match the cache. Nightly, the full proof run.
 
 ### 5.5 Lemmas and composition
 
 - `.by(leanDirect.using(lemmaA, lemmaB))` adds proved `Thm`s as hypotheses. The result's oracles
   and assumptions are the union over everything used. A lemma whose subject is `Source` cannot
-  support a claim whose subject is `Script`. The result is downgraded to `Source`, or the
+  support a claim whose subject is `Program`. The result is downgraded to `Source`, or the
   combination is rejected.
 - Structural steps can run on the Scala side before a backend is called: `split` breaks ∧ into
   subgoals, `cases(x)` splits over constructors, `intro` introduces a binder. Each subgoal can use
-  its own tactic, as in `.by(split(leanUplc(40), leanDirect))`.
+  its own tactic, as in `.by(split(blasterUplc(40), leanDirect))`.
 - This is the seed of a Scala-side proof kernel. A full LCF-style kernel is deliberately not part
   of this design (§6.7).
 
@@ -412,13 +550,15 @@ trait Tactic {
 final case class Goal(statement: Statement, hypotheses: List[Thm], config: Map[String, String])
 ```
 
-### 6.2 `lean-uplc`: proofs about the compiled bytes
+### 6.2 `blaster-uplc`: proofs about the compiled bytes
 
 **Lowering.**
 
-1. Compile every `TermIR` to UPLC. Today this uses
-   `Options.releaseUntagged.copy(valueBuiltins = false)`, as `scalus-lean-proofs` does (see
-   Limits).
+1. Compile every `TermIR` to UPLC, and every `@Compile` function target standalone. A compiled
+   script target is taken as it is. Today compilation uses
+   `Options.releaseUntagged.copy(valueBuiltins = false)`, as `scalus-verification` does (see
+   Limits). A script target compiled with other options cannot be checked until the Lean model
+   gains those builtins.
 2. Apply each atom program to the target terms with a plain `Term.Apply`, and run **no
    optimization across that boundary**. The target's bytes then appear unchanged inside the
    program that Lean evaluates.
@@ -456,7 +596,7 @@ without a step limit (§5.2).
   domain. The user must write the restriction into the statement, for example
   `(Math.abs(x) < 65536) ==> …`. It then shows up in the report instead of hiding in a budget
   number.
-- The anti-vacuity guards of `scalus-lean-proofs` are no longer what soundness rests on. They stay
+- The anti-vacuity guards of `scalus-verification` are no longer what soundness rests on. They stay
   useful as an early warning that a budget has become too small.
 
 Compare with today's hand-written shape, `fromFrameToInt (p.prop x) = some r → r ≥ 0`. There the
@@ -483,24 +623,55 @@ calibration: Scalus meters CPU and memory, while PlutusCoreBlaster counts machin
 - Blaster passes ∃ to Z3 as an SMT quantifier, so goals with alternating quantifiers can come back
   Undetermined. Prefer `existsWith`.
 
-**Subject:** `Script(hash)`. **Oracles:** `Blaster`.
+**Subject:** `Program(hash)`. **Oracles:** `Blaster`.
 
-### 6.3 `lean-direct`: proofs about the source semantics
+### 6.3 `lean-direct`: mapping to functions and statements defined in Lean
 
-**Translation.** `PropIR` and its SIR atoms are translated to Lean terms over native Lean types:
+Instead of evaluating compiled code, `lean-direct` maps each Scalus function a statement uses to a
+**Lean function**, and the statement to a **Lean proposition** over those functions. The proof is
+then ordinary Lean: `blaster`, or a Lean tactic script, with Lean's libraries available.
 
-- `BigInt` → PlutusCore `Integer`, `Boolean` → `Bool`, `ByteString` → PlutusCore `ByteString`;
-- `List` and `Option` → their Lean counterparts;
-- case classes and enums → generated `structure` / `inductive`.
+**Where the Lean function comes from.** There are two sources.
 
-Scalus definitions reached from atoms are handled in one of two ways. They are mapped through a
-**prelude bridge**, a table from known prelude functions to Lean definitions whose correspondence
-is trusted. Or they are translated from their SIR into Lean `def`s. For recursive definitions,
-termination is the open question.
+- **Generated** from the function's SIR, as a shallow translation over native Lean types:
+  - `BigInt` → PlutusCore `Integer`, `Boolean` → `Bool`, `ByteString` → PlutusCore `ByteString`;
+  - `List` and `Option` → their Lean counterparts;
+  - case classes and enums → generated `structure` / `inductive`.
 
-**Partiality.** SIR `Error` translates to an `Option` or `Except` result. An atom becomes
-`t = some true`, and `denotes` becomes `isSome`. There is no fuel, so the polarity rule is not
-needed.
+  Recursive definitions need a termination argument in Lean. How to produce one is an open
+  question.
+- **Declared.** The user maps a Scalus function to a Lean term of the matching type: a definition
+  from Lean core or Mathlib, or a hand-written Lean specification.
+
+  ```scala
+  leanMapping(Math.gcd, "fun a b => (Int.gcd a b : Int)")
+  ```
+
+  Statements about `Math.gcd` can then use everything Lean already knows about `Int.gcd`
+  (`Int.gcd_comm`, `Int.gcd_dvd_left`, …). A statement can be mapped the same way, to an existing
+  Lean theorem whose proof then closes it.
+
+**A declared mapping is a claim, and it can be proved.** `leanMapping(f, g)` asserts
+`∀ args. f(args) = g(args)`, including that `f` returns at all. Whether that holds for every
+input, for example at zero or for negative arguments, is exactly what proving the mapping settles.
+It is never trusted silently:
+
+- until it is proved, every `Thm` that relies on it lists it among its assumptions;
+- it is a statement like any other, so it can be proved. `blaster-uplc` is the natural tactic,
+  because its generated Lean theorem can mention `g` directly: "the compiled `Math.gcd` applied to
+  `a b` halts within the budget with `(Int.gcd a b : Int)`".
+
+**Proving mappings with `blaster-uplc` combines the two tactics.** `blaster-uplc` ties the Lean
+function to the compiled bytes, once. Lean then reasons about the Lean function, with induction
+and its libraries. A theorem proved this way is about the bytes (subject `Program`), on the
+domain the mapping was proved for. When a function's step count grows with its input, as `gcd`'s
+does, that domain needs an explicit restriction (§6.2), and every theorem that goes through the
+mapping inherits it.
+
+**Partiality.** A generated function returns `Option` or `Except`, and SIR `Error` becomes `none`.
+An atom becomes `t = some true`, and `denotes` becomes `isSome`. A mapping to a total Lean
+function also claims that the Scalus function is total on the mapped domain. There is no fuel, so
+the polarity rule is not needed.
 
 **Equality.** `===` maps to Lean `=`. This is sound because Scalus accepts only `Eq.derived` and
 `Eq.structural` (`SIRCompiler.scala:1352`). `Eq.structural(f)` is itself an unchecked user claim.
@@ -511,11 +682,13 @@ Each use is recorded as an assumption on the `Thm`, and it is a natural obligati
 `leanDirect(tactic = "induction xs <;> blaster")`. That script is the escape for the lack of
 automatic induction in SMT.
 
-**Trade-off.** It gets induction, quantifier-rich statements, no fuel, and faster SMT on native
-integers. The price is a trusted translator, and claims about the source rather than the bytes.
+**Trade-off.** It gets induction, quantifier-rich statements, no fuel, Lean's libraries, and
+faster SMT on native integers. The price is trust in the generated translation, or in declared
+mappings until they are proved.
 
-**Subject:** `Source`. **Oracles:** `Blaster`, or `LeanKernel` when the script does not use
-`blaster`.
+**Subject:** `Program(hash)` when every function the statement uses goes through a mapping proved
+by `blaster-uplc`; otherwise `Source`, with unproved mappings listed as assumptions.
+**Oracles:** `Blaster`, or `LeanKernel` when the script does not use `blaster`.
 
 ### 6.4 `lean-manual`
 
@@ -550,8 +723,8 @@ everywhere it is used.
 
 | Tactic | Subject | What a Valid verdict rests on | Handles ∃ | Induction | Needs fuel |
 |---|---|---|---|---|---|
-| `lean-uplc` | script bytes | Lean CEK model, Blaster axiom, Z3, polarity rule | poorly (use witnesses) | no | yes |
-| `lean-direct` | source (SIR) | the above minus the CEK, plus translator and prelude bridge; the compiler, for the bytes | yes | via Lean tactics | no |
+| `blaster-uplc` | compiled bytes | Lean CEK model, Blaster axiom, Z3, polarity rule | poorly (use witnesses) | no | yes |
+| `lean-direct` | source (SIR), or compiled bytes via proved mappings | Blaster axiom or Lean kernel, Z3; the generated translation, or the declared mappings (proved by `blaster-uplc`, or assumed) | yes | via Lean tactics | no |
 | `lean-manual` | either | Lean kernel (plus Blaster if used) | yes | yes | depends |
 | `scalacheck` | JVM or bytes | nothing: evidence only | witnesses only | no | no |
 
@@ -567,63 +740,51 @@ everywhere it is used.
   - Blaster's translation, which closes goals with `axiom blasterProven`;
   - Z3;
   - our own lowering: the polarity rule, the value lifting, the verbatim target embedding;
-  - and, for `lean-direct`, the translator and the prelude bridge.
+  - and, for `lean-direct`, the generated translation, plus any declared mapping that has not
+    been proved.
 - **Negative controls are required.** A suite that uses a Lean tactic must contain at least one
   `refute` for each combination of target, tactic and budget, and the runner fails a suite that
   does not. A broken template or a vacuous encoding would otherwise report Valid for everything,
-  indistinguishable from success. `scalus-lean-proofs` already follows this rule by hand.
+  indistinguishable from success. `scalus-verification` already follows this rule by hand.
 - **Counterexamples are replayed** (§5.2). A solver model alone is not a finding.
 
 ---
 
 ## 8. Relation to other work
 
-### 8.1 `scalus-lean-proofs`
+### 8.1 The existing `blaster-uplc` suite
 
-This module is the first `lean-uplc` instance, with hand-written statements. Migrating it is Phase
-0 of the plan:
+The `scalus-verification` module is the intended home for everything in this document. Today it
+holds the first `blaster-uplc` instance, with hand-written statements. Migrating that suite is Phase 0
+of the plan:
 
 - the 17 theorems and their negative controls are restated in Scala, and must produce the same
   verdicts;
-- `ProofTarget` becomes a target;
+- each `ProofTarget` becomes a `@Compile` function target (`Math.abs`, …), so the hand-written
+  `PlutusV3.compile(...)` wrappers go away;
 - its `samples` feed `scalacheck`;
 - `Generated/` and the hand-written `.lean` files are produced by the runner.
 
-### 8.2 `spec` clauses
+### 8.2 `spec` clauses on `feature/verification-blaster`
 
-A method's `spec` clauses become one generated statement whose target is the method itself:
-
-```scala
-def linearVesting(cfg: Config, t: BigInt): BigInt = {
-    spec.requires(cfg.duration > 0)
-    spec.ensuresResult[BigInt](r => r >= 0 && r <= cfg.initialAmount)
-    ...
-}
-// ≡ theorem("linearVesting.ensures", linearVesting) { f =>
-//       forAll[Config](cfg => forAll[BigInt](t =>
-//           (cfg.duration > 0) ==> { val r = f(cfg, t); r >= 0 && r <= cfg.initialAmount }))
-//   }
-```
-
-- For a validator handler, `ensures(P)` reads as `succeeds(ctx) ==> P(ctx)`.
-- On that branch, the clauses were measured to erase completely: `VestingValidator` compiled to the
-  same 2046 bytes and the same script hash with and without them. That measurement was taken on an
-  older master and needs re-checking after a rebase.
-- Capturing the clauses needs a hook that sees them before inlining erases them. That is
-  `ScalusPrepare` (§4.3), or a macro annotation on the method.
+That branch holds the `spec` clauses of §3.7 and an annotated `VestingValidator`, and nothing
+else. §3.7 gives the clauses their meaning, and §4.3 how the plugin captures them. The branch is
+about 308 commits behind master, and `VestingValidator` has been rewritten since, so the
+annotations have to be redone against the current validator. The branch has no remote copy.
 
 ### 8.3 ctproof: a common frontend
 
 What can be shared:
 
-1. the surface combinators and the reifier;
+1. the surface combinators (§3.1) and the contract forms (§3.7);
 2. `PropIR`, made generic in the leaf representation, so that one structure serves both
    (`PropIR[Leaf]`, with `Leaf = TermIR` over SIR for Scalus, and ctproof's `Expr` AST for
    ctproof);
-3. the semantics of atoms and `denotes`.
+3. the semantics of atoms, `denotes` and contracts.
 
-The reifier takes an **atom elaborator** as a parameter. Scalus's emits the compile calls of §4.2.
-ctproof's translates the atom's tree into its type-level `Expr` at macro-expansion time.
+The reifiers differ. Scalus reifies from SIR (§4.3, Route 1). ctproof has no SIR, so it uses a
+macro over Scala's typed tree (Route 2), translating each atom into its type-level `Expr` at
+macro-expansion time.
 
 A refinement `Checked[A, P]` is a `Prop` with one free variable, which in HOAS is `A => Prop`.
 ctproof's quantifier-free type-level AST is the quantifier-free fragment of `PropIR`.
@@ -646,27 +807,34 @@ same place.
 
 | Phase | Deliverables | Exit criterion |
 |---|---|---|
-| **0** | `scalus.verify` surface (`Prop`, `forAll`, connectives, `Quantifiable` for `BigInt`/`Boolean`/`ByteString`); macro reifier; `PropIR` with flat serialization; `lean-uplc` for ∀-prefix statements with the polarity rule; `sbt verify` generating a Lean workspace and parsing verdicts | the `Math.lean` theorems and controls, restated in Scala, give the same verdicts; generated files replace the hand-written ones |
-| **1** | `exists` / `existsWith`, `denotes`, `equal`; `refute` with replay; `scalacheck`; `Thm`, report, cache; PR-time freshness check and nightly run | a suite without a negative control fails; a planted spurious counterexample is reported as spurious |
-| **2** | `lean-direct` for integers, `Bool`, `ByteString`, `List`, `Option` and case classes; prelude bridge; `using`, `split`, `cases` | a list lemma proved with `induction xs <;> blaster` from a Scala statement |
-| **3** | validators: `ScriptContext` targets with the CardanoLedgerApiBlaster validity predicates; `spec` capture; bring `feature/verification-blaster` forward | one real contract (Vesting) with authorisation and conservation properties proved about its script hash |
-| **4** | ctproof on the shared frontend; a Scala kernel only if a lemma backlog demands it | ctproof's `@pre` / `@post` examples elaborate through `PropIR` |
+| **0** | `scalus.verify` surface (`Prop`, `forAll`, connectives, `Quantifiable` for `BigInt`/`Boolean`/`ByteString`); `theorem` / `refute` as `compile` wrappers; the SIR reifier; `PropIR` with flat serialization; `@Compile` function and script targets; `blaster-uplc` for ∀-prefix statements with the polarity rule; `sbt verify` generating a Lean workspace and parsing verdicts | the `Math.lean` theorems and controls, restated in Scala over `Math.*` targets, give the same verdicts; generated files replace the hand-written ones |
+| **1** | `exists` / `existsWith`, `denotes`, `equal`; `refute` with replay; `scalacheck`; external contracts (`contract(f)`, `verifyContract`); `Thm`, report, cache; PR-time freshness check and nightly run | a suite without a negative control fails; a planted spurious counterexample is reported as spurious; `Math.clamp`'s contract proved about its compiled code |
+| **2** | in-body `spec` capture in the plugin; `lean-direct` for integers, `Bool`, `ByteString`, `List`, `Option` and case classes; declared Lean mappings, proved by `blaster-uplc`; `using`, `split`, `cases`; contract VCG for modular proofs | adding clauses leaves the script hash unchanged; a list lemma proved with `induction xs <;> blaster`; a Mathlib `Int.gcd` theorem transferred to the compiled `Math.gcd` through a proved mapping; a caller's obligation discharged with its callee's contract |
+| **3** | validators: `ScriptContext` targets with the CardanoLedgerApiBlaster validity predicates; bring `feature/verification-blaster`'s Vesting annotations forward | one real contract (Vesting) with authorisation and conservation properties proved about its script hash |
+| **4** | ctproof on the shared surface; a Scala kernel only if a lemma backlog demands it | ctproof's `@pre` / `@post` examples elaborate through `PropIR` |
 
 ---
 
 ## 10. Open questions
 
-1. **Reifier placement.** A macro gives portability and sharing with ctproof. A plugin phase would
-   see more. This design recommends the macro, pending the spike in §4.3.
-2. **`spec` capture.** `ScalusPrepare`, or a macro annotation?
-3. **`Prop` versus `Boolean` connectives.** `a && b` on two Booleans stays one atom. Should
+1. **Reification route.** This design recommends SIR (Route 1) for Scalus, and a macro only for
+   ctproof. A spike must confirm two things: that the combinators compile to recognizable SIR
+   intrinsics, and that `theorem`'s `inline` wrapper hands the statement lambda to `compile`
+   intact.
+2. **`spec` capture.** A marker call inserted by `ScalusPrepare` before inlining, or non-`inline`
+   clauses that the plugin intercepts and moves into `AnnotationsDecl.data`?
+3. **Contract semantics.** Partial correctness by default, with totality opt-in (§3.7). Is
+   `spec.total` the right spelling, and should validators default differently from helpers?
+4. **`Prop` versus `Boolean` connectives.** `a && b` on two Booleans stays one atom. Should
    `lean-direct` split it when both sides are total?
-4. **Calling convention for target binders** with non-primitive argument types. The atom's call
+5. **Calling convention for target binders** with non-primitive argument types. The atom's call
    `f(x)` must use the same representation, `Data` or `UplcConstr`, as the target's parameter.
-5. **Budget calibration** between Scalus CEK metering and PlutusCoreBlaster step counts.
-6. **Commit policy.** Should the cache and the generated Lean workspace be committed, as
+6. **Budget calibration** between Scalus CEK metering and PlutusCoreBlaster step counts.
+7. **Commit policy.** Should the cache and the generated Lean workspace be committed, as
    `Generated/` is today, so Lean builds without a JVM?
-7. **Where the ctproof-shared module lives**, and under which name.
-8. **The default domain for validator inputs:** well-formed values or raw `Data` (§3.3).
-9. **Naming:** `scalus.verify`, `theorem` / `refute`, and `spec.requires` next to the prelude's
-   `require`.
+8. **Where the ctproof-shared module lives**, and under which name.
+9. **The default domain for validator inputs:** well-formed values or raw `Data` (§3.3).
+10. **Where mappings are declared.** `leanMapping(f, "…")` in the verification module, or an
+    annotation on the function itself, which would tie core code to Lean names?
+11. **Naming:** `scalus.verify`, `theorem` / `refute`, and `spec.requires` next to the prelude's
+    `require`.
