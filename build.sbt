@@ -1115,8 +1115,11 @@ lazy val scalusVerification = project
     .disablePlugins(MimaPlugin)
     .settings(
       name := "scalus-verification",
+      crossScalaVersions := supportedScalaVersions,
       publish / skip := true,
       run / fork := true,
+      // scalus.verify.Quantifiable draws values for the runtime interpretation of a Prop
+      libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.19.0",
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
       PluginDependency
     )
