@@ -309,6 +309,7 @@ object PlutusScriptEvaluator {
             vm: PlutusVM,
             plutusScript: PlutusScript,
             debugScripts: Map[ScriptHash, DebugScript],
+            limit: ExUnits,
             args: Data*
         ): Result = {
             Result.Success(
@@ -330,6 +331,9 @@ object PlutusScriptEvaluator {
       *
       * @param slotConfig
       * @param initialBudget
+      *   The budget of the whole transaction. In `EvaluateAndComputeCost` mode each script runs
+      *   within what the scripts before it left, and exceeding it is a budget failure. `Validate`
+      *   mode limits each script by its redeemer's declared units instead.
       * @param protocolMajorVersion
       * @param costModels
       * @param mode
@@ -576,13 +580,37 @@ object PlutusScriptEvaluator {
                     val (evaluatedRedeemer, sc) = {
                         val result = plutusScript match
                             case ps: Script.PlutusV1 =>
-                                evalPlutusV1Script(tx, txInfoV1, redeemer, ps, datum, debugScripts)
+                                evalPlutusV1Script(
+                                  tx,
+                                  txInfoV1,
+                                  redeemer,
+                                  ps,
+                                  datum,
+                                  debugScripts,
+                                  remainingBudget
+                                )
 
                             case ps: Script.PlutusV2 =>
-                                evalPlutusV2Script(tx, txInfoV2, redeemer, ps, datum, debugScripts)
+                                evalPlutusV2Script(
+                                  tx,
+                                  txInfoV2,
+                                  redeemer,
+                                  ps,
+                                  datum,
+                                  debugScripts,
+                                  remainingBudget
+                                )
 
                             case ps: Script.PlutusV3 =>
-                                evalPlutusV3Script(tx, txInfoV3, redeemer, ps, datum, debugScripts)
+                                evalPlutusV3Script(
+                                  tx,
+                                  txInfoV3,
+                                  redeemer,
+                                  ps,
+                                  datum,
+                                  debugScripts,
+                                  remainingBudget
+                                )
 
                             case _: Script.PlutusV4 => unsupportedV4
 
@@ -642,7 +670,8 @@ object PlutusScriptEvaluator {
             redeemer: Redeemer,
             plutusScript: PlutusScript,
             datum: Option[Data],
-            debugScripts: Map[ScriptHash, DebugScript]
+            debugScripts: Map[ScriptHash, DebugScript],
+            limit: ExUnits
         ): (Result, v1.ScriptContext) = {
             // Build V1 script context using pre-computed TxInfo
             val purpose = getScriptPurposeV1(tx, redeemer)
@@ -661,6 +690,7 @@ object PlutusScriptEvaluator {
               plutusV1VM,
               plutusScript,
               debugScripts,
+              limit,
               datum.toSeq :+ redeemer.data :+ ctxData*
             ) -> scriptContext
         }
@@ -684,7 +714,8 @@ object PlutusScriptEvaluator {
             redeemer: Redeemer,
             plutusScript: PlutusScript,
             datum: Option[Data],
-            debugScripts: Map[ScriptHash, DebugScript]
+            debugScripts: Map[ScriptHash, DebugScript],
+            limit: ExUnits
         ): (Result, v2.ScriptContext) = {
             // Build V2 script context using pre-computed TxInfo
             val purpose = getScriptPurposeV2(tx, redeemer)
@@ -703,6 +734,7 @@ object PlutusScriptEvaluator {
               plutusV2VM,
               plutusScript,
               debugScripts,
+              limit,
               datum.toSeq :+ redeemer.data :+ ctxData*
             ) -> scriptContext
         }
@@ -726,7 +758,8 @@ object PlutusScriptEvaluator {
             redeemer: Redeemer,
             plutusScript: PlutusScript,
             datum: Option[Data],
-            debugScripts: Map[ScriptHash, DebugScript]
+            debugScripts: Map[ScriptHash, DebugScript],
+            limit: ExUnits
         ): (Result, v3.ScriptContext) = {
             // Build V3 script context using pre-computed TxInfo
             val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
@@ -745,6 +778,7 @@ object PlutusScriptEvaluator {
               plutusV3VM,
               plutusScript,
               debugScripts,
+              limit,
               ctxData
             ) -> scriptContext
         }
@@ -764,6 +798,7 @@ object PlutusScriptEvaluator {
             vm: PlutusVM,
             plutusScript: PlutusScript,
             debugScripts: Map[ScriptHash, DebugScript],
+            limit: ExUnits,
             args: Data*
         ): Result = {
             // Parse UPLC program from CBOR
@@ -790,13 +825,20 @@ object PlutusScriptEvaluator {
 
             // Create budget spender based on evaluation mode
             val spender = mode match
-                case EvaluatorMode.EvaluateAndComputeCost => CountingBudgetSpender()
+                case EvaluatorMode.EvaluateAndComputeCost => RestrictingBudgetSpender(limit)
                 case EvaluatorMode.Validate =>
                     RestrictingBudgetSpenderWithScriptDump(
                       redeemer.exUnits,
                       report.dumps(DumpArtifact.BudgetLog),
                       budgetLogPath
                     )
+
+            // A diagnostic replay is bounded too, or a script that does not terminate would never
+            // return. Validate mode replays within the transaction's budget, not the declared
+            // units, which a draft transaction leaves at zero.
+            val replayLimit = mode match
+                case EvaluatorMode.EvaluateAndComputeCost => limit
+                case EvaluatorMode.Validate               => initialBudget
 
             val logger = Log()
             val hash = plutusScript.scriptHash
@@ -807,7 +849,8 @@ object PlutusScriptEvaluator {
                     case e: StackTraceMachineError =>
                         val logs = logger.getLogs
                         val finalLogs =
-                            if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
+                            if logs.isEmpty then
+                                replayWithDiagnostics(debugScripts, hash, args, replayLimit)
                             else logs
                         throw new PlutusScriptEvaluationException(
                           e.getMessage,
@@ -823,7 +866,8 @@ object PlutusScriptEvaluator {
                     case NonFatal(e) =>
                         val logs = logger.getLogs
                         val finalLogs =
-                            if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
+                            if logs.isEmpty then
+                                replayWithDiagnostics(debugScripts, hash, args, replayLimit)
                             else logs
                         throw new PlutusScriptEvaluationException(
                           e.getMessage,
@@ -863,7 +907,8 @@ object PlutusScriptEvaluator {
         private def replayWithDiagnostics(
             debugScripts: Map[ScriptHash, DebugScript],
             hash: ScriptHash,
-            args: Seq[Data]
+            args: Seq[Data],
+            limit: ExUnits
         ): Array[String] = {
             debugScripts.get(hash) match
                 case None => Array.empty
@@ -878,7 +923,7 @@ object PlutusScriptEvaluator {
                             case _: Script.PlutusV2 => plutusV2VM
                             case _: Script.PlutusV3 => plutusV3VM
                             case _: Script.PlutusV4 => unsupportedV4
-                        val replaySpender = CountingBudgetSpender()
+                        val replaySpender = RestrictingBudgetSpender(limit)
                         val replayLogger = Log()
                         var replayFailed = false
                         try debugVm.evaluateScript(debugApplied, replaySpender, replayLogger)

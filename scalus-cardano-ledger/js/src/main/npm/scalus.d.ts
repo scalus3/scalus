@@ -1142,6 +1142,14 @@ export const evaluator: {
    * @throws Error if the transaction evaluator stops for any other reason: an input no pair resolves, a script the transaction does not carry, a missing datum
    */
   evaluateTx(tx: string | Uint8Array, utxos: readonly (string | Uint8Array | Utxo)[], slotConfig: SlotConfigLike, costModels: CostModelsLike, protocolMajorVersion: number): RedeemerBudget[];
+  /**
+   * As above, with the scripts of the whole transaction limited to `maxBudget` together, as the
+   * ledger limits them to the protocol's maximum transaction execution units. A script that
+   * would exceed what the scripts before it left fails with `OUT_OF_BUDGET`.
+   *
+   * @param maxBudget the execution units all the transaction's scripts may spend together
+   */
+  evaluateTx(tx: string | Uint8Array, utxos: readonly (string | Uint8Array | Utxo)[], slotConfig: SlotConfigLike, costModels: CostModelsLike, protocolMajorVersion: number, maxBudget: ExUnitsLike): RedeemerBudget[];
 };
 
 /**

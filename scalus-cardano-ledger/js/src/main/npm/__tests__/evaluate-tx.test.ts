@@ -51,6 +51,20 @@ describe("evaluator.evaluateTx", () => {
     expect(() => evaluator.evaluateTx(scriptTxCborHex, [{} as never], slotConfig, byName, 11)).toThrow(TypeError);
   });
 
+  test("an optional maxBudget limits the whole transaction", () => {
+    const [r] = evaluator.evaluateTx(scriptTxCborHex, [scriptUtxoPairHex], slotConfig, byName, 11);
+    const at = { memory: r.budget.memory, steps: r.budget.steps };
+    expect(evaluator.evaluateTx(scriptTxCborHex, [scriptUtxoPairHex], slotConfig, byName, 11, at)).toEqual([r]);
+    const below = { memory: r.budget.memory, steps: r.budget.steps - 1n };
+    try {
+      evaluator.evaluateTx(scriptTxCborHex, [scriptUtxoPairHex], slotConfig, byName, 11, below);
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(PlutusScriptEvaluationError);
+      expect((e as PlutusScriptEvaluationError).code).toBe("OUT_OF_BUDGET");
+    }
+  });
+
   test("bigint slot fields and extra fields are accepted", () => {
     // spec [TX-5]
     const slotConfigWithExtra = {

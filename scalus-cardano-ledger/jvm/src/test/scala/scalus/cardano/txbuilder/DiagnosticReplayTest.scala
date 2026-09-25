@@ -100,6 +100,32 @@ class DiagnosticReplayTest extends AnyFunSuite {
         )
     }
 
+    test("the diagnostic replay stays within the budget that stopped the script") {
+        // An unbounded replay would never return for a script that does not terminate; here it
+        // would reach "expected failure", past the budget that stopped the script at its start.
+        val tinyBudget = PlutusScriptEvaluator(
+          slotConfig = env.slotConfig,
+          initialBudget = ExUnits(1, 1),
+          protocolMajorVersion = env.majorProtocolVersion,
+          costModels = env.protocolParams.costModels,
+          mode = EvaluatorMode.EvaluateAndComputeCost
+        )
+        val scriptUtxo = createScriptLockedUtxo(failingScriptRelease.script)
+        val paymentUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
+
+        val ex = intercept[TxBuilderException.BalancingException] {
+            TxBuilder(env, tinyBudget)
+                .spend(paymentUtxo)
+                .collaterals(collateralUtxo)
+                .spend(scriptUtxo, Data.unit, failingScriptRelease)
+                .payTo(Bob.address, Value.ada(1))
+                .build(changeTo = Alice.address)
+        }
+        assert(ex.isScriptFailure)
+        assert(ex.scriptLogs.get.isEmpty, s"expected a bounded replay, got: ${ex.scriptLogs.get}")
+    }
+
     test("plain PlutusScript without debug script produces empty logs") {
         val scriptUtxo = createScriptLockedUtxo(failingScriptRelease.script)
         val paymentUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get

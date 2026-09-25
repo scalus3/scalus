@@ -507,6 +507,7 @@ const budgets = evaluator.evaluateTx(
   { zeroTime, zeroSlot, slotLength },  // zeroTime and zeroSlot may be number or bigint
   { PlutusV2: plutusV2Costs, PlutusV3: plutusV3Costs },
   11,                                  // protocol major version
+  // optional: { memory, steps } the whole transaction may spend, e.g. maxTxExecutionUnits
 );
 
 for (const r of budgets) {

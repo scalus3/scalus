@@ -95,6 +95,34 @@ object JEvaluator {
         slotConfig: JSlotConfigLike,
         costModels: JCostModelsLike,
         protocolMajorVersion: Double
+    ): js.Array[JRedeemerBudget] =
+        evaluateTxWithin(tx, utxos, slotConfig, costModels, protocolMajorVersion, js.undefined)
+
+    /** As above, with the scripts of the whole transaction limited to `maxBudget` together, as the
+      * ledger limits them to the protocol's maximum transaction execution units. A script that
+      * would exceed what the scripts before it left fails with `OUT_OF_BUDGET`.
+      *
+      * @param maxBudget
+      *   the execution units all the transaction's scripts may spend together
+      */
+    @JSExport
+    def evaluateTx(
+        @TsType("string | Uint8Array") tx: js.Any,
+        @TsType("readonly (string | Uint8Array | Utxo)[]") utxos: js.Any,
+        slotConfig: JSlotConfigLike,
+        costModels: JCostModelsLike,
+        protocolMajorVersion: Double,
+        maxBudget: JExUnitsLike
+    ): js.Array[JRedeemerBudget] =
+        evaluateTxWithin(tx, utxos, slotConfig, costModels, protocolMajorVersion, maxBudget)
+
+    private def evaluateTxWithin(
+        tx: js.Any,
+        utxos: js.Any,
+        slotConfig: JSlotConfigLike,
+        costModels: JCostModelsLike,
+        protocolMajorVersion: Double,
+        maxBudget: js.Any
     ): js.Array[JRedeemerBudget] = surfacingErrors {
         val transaction = decodeOf(tx, "tx")(Transaction.fromCbor(_))
         val resolved = utxoMapOf(utxos)
@@ -116,7 +144,8 @@ object JEvaluator {
           resolved,
           slotsConfig,
           CostModels(byLanguage.toMap),
-          protocol
+          protocol,
+          JExUnits.exUnitsOf(maxBudget, "maxBudget")
         ).toJSArray
     }
 
@@ -144,11 +173,12 @@ object JEvaluator {
         utxo: Map[TransactionInput, TransactionOutput],
         slotConfig: SlotConfig,
         costModels: CostModels,
-        protocolMajorVersion: Int
+        protocolMajorVersion: Int,
+        maxBudget: Option[ExUnits] = None
     ): Seq[JRedeemerBudget] = surfacingErrors {
         val evaluator = PlutusScriptEvaluator(
           slotConfig = slotConfig,
-          initialBudget = ExUnits(Long.MaxValue, Long.MaxValue),
+          initialBudget = maxBudget.getOrElse(ExUnits.enormous),
           protocolMajorVersion = MajorProtocolVersion(protocolMajorVersion),
           costModels = costModels,
           mode = EvaluatorMode.EvaluateAndComputeCost

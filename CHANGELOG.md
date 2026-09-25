@@ -51,6 +51,8 @@
   wrapping, and of a datum's CBOR as given.
 - `Emulator.evaluateTx` takes its additional UTxOs as `Utxo`s or CBOR `[input, output]` pairs,
   as `evaluator.evaluateTx` does.
+- `evaluator.evaluateTx` takes an optional sixth argument, `maxBudget`, which limits the scripts of
+  the whole transaction together, as `maxTxExecutionUnits` does on the ledger.
 - `Utxos.mapDecoder`, `Utxos.pairsDecoder` and `Utxos.mapOrPairsDecoder` read a UTxO set as the
   ledger's CBOR map, as an array of `[input, output]` pairs, or as either; `Utxo` has a borer
   codec for the `[input, output]` pair.
@@ -63,6 +65,11 @@
 
 ### Changed
 
+- `PlutusScriptEvaluator` in `EvaluateAndComputeCost` mode enforces its `initialBudget` for the
+  whole transaction: each script runs within what the scripts before it left, and a transaction
+  over the limit fails with a budget error while its costs are computed. `TxBuilder` passes the
+  protocol's `maxTxExecutionUnits`, so it now reports such a transaction at build time rather than
+  at submission. It used to count without a limit.
 - **`Utxo.toCbor()` writes `[input, output]`**, CIP-30's `transaction_unspent_output`, instead of a
   one-entry map `{input: output}`, so its result goes straight into `evaluator.evaluateTx`.
   `Utxo.fromCbor` reads both forms, and the deprecated `Emulator` constructor reads a UTxO set in

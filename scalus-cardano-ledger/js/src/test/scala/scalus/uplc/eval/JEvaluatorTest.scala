@@ -300,6 +300,36 @@ class JEvaluatorTest extends AnyFunSuite {
         assert(e.isInstanceOf[js.TypeError] && e.toString.contains("utxos[1]"), e)
     }
 
+    test("maxBudget limits the transaction's scripts together: at the cost passes, below fails") {
+        val (tx, utxos) = SampleTransactions.withdrawal(SampleTransactions.succeedingV3)
+        val pairs = js.Array[js.Any](utxos.toSeq.map(pairBytes).map(_.toUint8Array)*)
+        def run(limit: js.Any) = JEvaluator.evaluateTx(
+          tx.toCbor.toUint8Array,
+          pairs,
+          slotConfigRecord,
+          costModelsRecord,
+          protocol,
+          limit.asInstanceOf[JExUnitsLike]
+        )
+        val cost = JEvaluator
+            .evaluateTx(tx.toCbor.toUint8Array, pairs, slotConfigRecord, costModelsRecord, protocol)
+            .head
+            .budget
+        val exact = js.Dynamic.literal(memory = cost.memory, steps = cost.steps)
+        assert(
+          budgets(run(exact)).map(b => (b._3, b._4)) == Seq(
+            (cost.memory.toString, cost.steps.toString)
+          )
+        )
+        val below = js.Dynamic.literal(memory = cost.memory, steps = cost.steps - js.BigInt(1))
+        intercept[js.JavaScriptException](run(below)).exception match
+            case e: JPlutusScriptEvaluationError =>
+                assert(e.code.toOption.contains("OUT_OF_BUDGET"), e)
+            case other => fail(s"expected OUT_OF_BUDGET, got $other")
+        val bad = intercept[js.JavaScriptException](run(js.Dynamic.literal(memory = 1))).exception
+        assert(bad.isInstanceOf[js.TypeError], bad)
+    }
+
     test("bigint slot fields are accepted and mean the same as numbers") {
         // spec [TX-5]
         val (tx, utxos) = SampleTransactions.withdrawal(SampleTransactions.succeedingV3)

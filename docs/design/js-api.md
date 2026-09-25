@@ -38,8 +38,9 @@ a chain would accept the program is `PlutusScript.isWellFormed`'s question. For 
 **Explicit evaluation options.** `EvaluationOptions` is a plain record: language, protocol version,
 cost model, optional `maxBudget`. There is no silent default protocol version: the PV10 to PV11
 default change in 1.x changed every budget without an error. `maxBudget` exists because Midgard
-evaluates untrusted scripts. A cost parameter the model does not reach is `Long.MaxValue`, as in
-Plutus.
+evaluates untrusted scripts; `evaluateTx` takes the same record as an optional last argument,
+limiting the scripts of the whole transaction together as the ledger does. A cost parameter the
+model does not reach is `Long.MaxValue`, as in Plutus.
 
 **Two error channels.** A script that fails is a result (`isSuccess: false`, `error.code`, the
 budget and traces it earned); a transaction script that fails throws
