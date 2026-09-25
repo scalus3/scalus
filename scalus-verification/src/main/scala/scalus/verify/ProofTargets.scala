@@ -1,4 +1,4 @@
-package scalus.lean
+package scalus.verify
 
 import scalus.*
 // Wildcard, not a selective import: `List.foldLeft` and friends are extension methods that a

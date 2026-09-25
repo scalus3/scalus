@@ -1,6 +1,12 @@
-# scalus-lean-proofs
+# scalus-verification
 
-Proves properties of Scalus prelude functions against the **compiled UPLC**, not against the
+Formal verification of Scalus code. The overall design, with statements written in Scala and
+proved by pluggable tactics, is in
+[`docs/design/verification-overview.md`](../docs/design/verification-overview.md). What exists
+today is the first `blaster-uplc` backend, described below. This module was called
+`scalus-lean-proofs`, with Scala package `scalus.lean`, until 2026-09-25.
+
+It proves properties of Scalus prelude functions against the **compiled UPLC**, not against the
 Scala source, using IOG's [Blaster](https://github.com/input-output-hk/Lean-blaster) SMT
 backend for Lean 4 and their [Lean model of UPLC](https://github.com/input-output-hk/PlutusCoreBlaster).
 
@@ -10,7 +16,7 @@ a validator actually runs on chain.
 
 ## Layout
 
-- `src/main/scala/scalus/lean/` - the target catalogue and the exporter.
+- `src/main/scala/scalus/verify/` - the target catalogue and the exporter.
 - `lean/ScalusProofs/Generated/` - **generated and committed**. One `.flat` hex file per
   target plus `Targets.lean`. Never edit by hand; run `sbt exportLeanUplc`.
 - `lean/ScalusProofs/*.lean` - the hand-written properties.
@@ -19,7 +25,7 @@ a validator actually runs on chain.
 
 ```bash
 sbt exportLeanUplc                      # regenerate lean/ScalusProofs/Generated
-cd scalus-lean-proofs/lean
+cd scalus-verification/lean
 nix develop ../..#lean --accept-flake-config --command bash -c 'lake build'
 nix develop ../..#lean --accept-flake-config --command bash -c 'lake env lean ScalusProofs/Math.lean'
 ```
