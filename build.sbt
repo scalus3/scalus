@@ -1101,7 +1101,7 @@ generateLlmsApi := Def.taskDyn {
 
 // Formal verification of Scalus code; see docs/design/verification-overview.md.
 // Today it compiles selected prelude functions to UPLC and exports them for the
-// Lean/Blaster proof suite in scalus-verification/lean. See
+// Lean/Blaster proof suite in scalus-verification/src/main/lean. See
 // docs/superpowers/specs/2026-08-27-lean-blaster-uplc-proofs-design.md
 lazy val scalusVerification = project
     .in(file("scalus-verification"))
@@ -1116,10 +1116,10 @@ lazy val scalusVerification = project
     )
 
 lazy val exportLeanUplc =
-    taskKey[Unit]("Regenerate scalus-verification/lean/ScalusProofs/Generated")
+    taskKey[Unit]("Regenerate scalus-verification/src/main/lean/ScalusProofs/Generated")
 exportLeanUplc := Def.taskDyn {
-    val outDir = ((ThisBuild / baseDirectory).value / "scalus-verification" / "lean" /
-        "ScalusProofs" / "Generated").getAbsolutePath
+    val outDir = ((ThisBuild / baseDirectory).value / "scalus-verification" / "src" / "main" /
+        "lean" / "ScalusProofs" / "Generated").getAbsolutePath
     (scalusVerification / Compile / runMain).toTask(s" scalus.verify.ExportUplc $outDir")
 }.value
 

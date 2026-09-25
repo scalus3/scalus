@@ -170,7 +170,7 @@
             '';
           };
         # Lean 4 + Z3 for the scalus-verification module. `elan` fetches the exact
-        # toolchain named in scalus-verification/lean/lean-toolchain (v4.24.0).
+        # toolchain named in scalus-verification/src/main/lean/lean-toolchain (v4.24.0).
         # Blaster documents Z3 4.15.2; nixpkgs 25.11 ships 4.15.4, which works.
         lean = pkgs.mkShell {
           buildInputs = [ pkgs.bashInteractive ];

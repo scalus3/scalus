@@ -48,9 +48,9 @@ jobs:
         if: matrix.name == 'lts'
         run: |
           nix develop .#ci --accept-flake-config --command bash -c "sbt --batch exportLeanUplc"
-          git diff --exit-code scalus-verification/lean/ScalusProofs/Generated \
+          git diff --exit-code scalus-verification/src/main/lean/ScalusProofs/Generated \
             || (echo "Exported UPLC is stale - run 'sbt exportLeanUplc' and commit" && exit 1)
-          UNTRACKED=$(git status --porcelain scalus-verification/lean/ScalusProofs/Generated)
+          UNTRACKED=$(git status --porcelain scalus-verification/src/main/lean/ScalusProofs/Generated)
           test -z "$UNTRACKED" \
             || (echo "Exported UPLC has untracked files - run 'git add' and commit:" && echo "$UNTRACKED" && exit 1)
       - name: Report test results
