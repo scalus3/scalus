@@ -11,7 +11,7 @@ import scala.scalanative.build.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "1.1.0"
+val scalusStableVersion = "1.2.0"
 // The MiMa-checked stable surface is scalus-core, scalus-cardano-ledger and
 // scalus-bloxbean-cardano-client-lib (see docs/superpowers/specs/2026-07-28-1.0.0-m1-release-plan-design.md).
 // Re-baseline at each milestone: bump scalusStableVersion after the release artifacts are on
@@ -449,24 +449,16 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq(
+        // `VanRossemNewBuiltinCosts` was the table a pre-PV11 cost model fell back to for the
+        // PV11 builtins. That fallback was the bug: a model missing a parameter silently ran on
+        // reference costs instead of refusing to run. An absent parameter is now `Long.MaxValue`,
+        // as in Plutus, so the table has no callers and is deleted.
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.VanRossemNewBuiltinCosts"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.VanRossemNewBuiltinCosts$"),
         // ProfilingData gained `traces` (spec [TB-2]): constructor, apply and copy changed arity.
         ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.this"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.copy"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.apply"),
-        // Inliner's private occurrence analysis now stores the exact count in Many. Scala emits
-        // these enum helpers as public bytecode, but none belongs to the accessible Scala API.
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.uplc.transform.Inliner#OccurrenceInfo.Many"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.uplc.transform.Inliner#OccurrenceInfo.values"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.uplc.transform.Inliner#OccurrenceInfo.valueOf"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.uplc.transform.Inliner#OccurrenceInfo.guard"
-        ),
         // `PlutusScript` caches the program it decodes straight from CBOR in a new private field;
         // Scala emits its accessors as abstract trait methods. The trait is sealed, so no class
         // outside this artifact implements it and none can miss the accessors.
@@ -493,108 +485,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         // report writer) whose contract is the on-disk artifact formats, not the Scala API.
         ProblemFilters.exclude[Problem]("scalus.uplc.internal.*"),
         // scalus.utils.scalajs.internal: Scala.js-only conversion helpers, all private[scalus].
-        ProblemFilters.exclude[Problem]("scalus.utils.scalajs.internal.*"),
-        // TxInfo.redeemers changed from SortedMap to AssocMap. Redeemer keys are positional -
-        // the ledger's map is `Map (PlutusPurpose AsIx era) _` and AsIx keeps only the index -
-        // so no content-based Ord can track their order, and a sorted map's short-circuiting
-        // lookup silently missed present keys. AssocMap does a linear Eq scan, as
-        // PlutusTx.AssocMap and Aiken's Pairs do. Deliberate breaking change; the on-chain Data
-        // encoding is unchanged, since both carry @UplcRepr(PackedDataMap).
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.onchain.plutus.v2.TxInfo.apply"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.onchain.plutus.v2.TxInfo.copy"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.onchain.plutus.v2.TxInfo.this"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.apply"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.copy"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.this"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.onchain.plutus.v2.TxInfo._10"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.onchain.plutus.v2.TxInfo.copy$default$10"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.onchain.plutus.v2.TxInfo.redeemers"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.<init>$default$10"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo._10"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.copy$default$10"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.redeemers"
-        ),
-        // StaticArgumentTransformation moved to scalus.compiler.sir.transform. Its public surface
-        // (`apply`, `SatSuffix`) is preserved by a @deprecated forwarder at the old location, so
-        // no filter is needed for it. These four are its Scala-*private* nested helper classes.
-        // `private` on a nested class does not survive to the JVM: the class becomes its own
-        // class file, whose access_flags cannot express ACC_PRIVATE, and scalac marks it public
-        // in the InnerClasses attribute too - Scala enforces template-privacy from TASTy at
-        // compile time, not via JVM flags. MiMa reads bytecode, so it sees a public class
-        // disappear. No Scala caller could ever have referenced them.
-        ProblemFilters.exclude[MissingClassProblem](
-          "scalus.compiler.sir.StaticArgumentTransformation$Analysis"
-        ),
-        ProblemFilters.exclude[MissingClassProblem](
-          "scalus.compiler.sir.StaticArgumentTransformation$Lam"
-        ),
-        ProblemFilters.exclude[MissingClassProblem](
-          "scalus.compiler.sir.StaticArgumentTransformation$Lam$"
-        ),
-        ProblemFilters.exclude[MissingClassProblem](
-          "scalus.compiler.sir.StaticArgumentTransformation$Rewriter"
-        ),
-        // Options gained the `letChainRegroup` flag (T5 let-chain regrouping), which changes the
-        // arity of the generated apply/copy/constructor. It is declared LAST in the case class so
-        // no positional accessor (_N, copy$default$N) shifts - the four problems MiMa reports are
-        // this/copy and the two apply overloads, covered by the three filters below.
-        // Source-compatible: the field has a default, and callers use named arguments or copy().
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.this"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.copy"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.apply"),
-        // Deleted: both compared only the GovAction constructor ordinal, so distinct proposals
-        // compared equal and a SortedSet would have silently dropped one - a violation of the
-        // Ordering contract, not merely a weak order. Neither was used: proposalProcedures is a
-        // TaggedOrderedSet, which preserves submitter order and never sorts.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.GovAction.given_Ordering_GovAction"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.ProposalProcedure.given_Ordering_ProposalProcedure"
-        ),
-        // Scala.js only: the JS SlotConfig no longer has these members. Every public member of
-        // a @JSExportTopLevel js.Object is a linker export root, so one mentioning
-        // java.time.Instant kept the ~800 KB IANA timezone database in scalus.js, for an API
-        // JavaScript callers cannot use anyway. The JVM and Native SlotConfig still have them;
-        // shared code converts through POSIX milliseconds. See docs/internal/JS_BUNDLE_SIZE.md.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.SlotConfig.slotToInstant"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.SlotConfig.instantToSlot"
-        ),
-        // The upickle ReadWriter vals no longer run in their enclosing object's constructor, so
-        // touching a domain companion no longer builds a JSON codec, which is what kept upickle
-        // in scalus.js. No API member changed; this package object simply no longer needs a
-        // static initializer. See docs/internal/JS_BUNDLE_SIZE.md.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.uplc.eval.CostModel#package.<clinit>"
-        )
+        ProblemFilters.exclude[Problem]("scalus.utils.scalajs.internal.*")
       ),
 
       // enable when debug compilation of tests
@@ -654,60 +545,17 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // Disable doc due to scaladoc NPE bug on JS platform
       Compile / doc / sources := Seq.empty,
       Test / doc / sources := Seq.empty,
-      // `SlotConfig` used to be forked per platform: a `Long` case class in jvm/ and native/, and
-      // a separate `Double`, `js.Object`-extending, `@JSExportTopLevel("SlotConfig")` class in
-      // js/. Shared code - `CardanoInfo`, `LedgerToPlutusTranslation`'s validity bounds - compiled
-      // against whichever its platform supplied, and papered over the difference with `.toLong`.
-      // There is now one shared `Long` case class, and the exported JavaScript class is the
-      // separate `JsSlotConfig` handle, whose members keep the `number` signatures and the `Double`
-      // arithmetic the npm package published. So the only artifact that changes is this one, and
-      // only in its *Scala* signatures: the `_sjs1_3` `SlotConfig` loses `js.Object` and moves from
-      // `Double` to `Long`.
-      //
-      // Filters, not a source change: the replacement is the task. Safe for the same reason as the
-      // `JEmulator` filters below - these members exist to be called from JavaScript, and the only
-      // way to call them is the `scalus` npm bundle, which is linked from this repo and
+      // Scala.js only. Safe because these members exist to be called from JavaScript, and the
+      // only way to call them is the `scalus` npm bundle, which is linked from this repo and
       // re-published with it, so no consumer can be holding the previous signatures. Per symbol
       // rather than a wildcard: `scalus.cardano.ledger` is a MIXED package (CLAUDE.md), so a
       // wildcard there would also pre-authorise breaks in the ledger domain types.
       mimaBinaryIssueFilters ++= Seq(
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.SlotConfig"),
-        ProblemFilters
-            .exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.SlotConfig.this"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.SlotConfig.zeroTime"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.SlotConfig.zeroSlot"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.SlotConfig.slotLength"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.SlotConfig.epochLength"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.SlotConfig.zeroEpoch"
-        ),
+        // `JsUtxo.withScriptRef` widened its parameter from `Uint8Array` to `js.Any` so it also
+        // takes hex and Lucid's `{ type, script }`. A JS caller cannot tell: every argument that
+        // linked before still links. Only a Scala caller of this JS-only export would notice.
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.SlotConfig.slotToTime"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.SlotConfig.timeToSlot"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.SlotConfig.epochOf"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.SlotConfig.firstSlotOfEpoch"
-        ),
-        // The `epochLength`/`zeroEpoch` constructor defaults, which MiMa sees twice: once as the
-        // class's static forwarder and once as the companion's method.
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.SlotConfig.<init>$default$4"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.SlotConfig.<init>$default$5"
+          "scalus.cardano.ledger.JsUtxo.withScriptRef"
         )
       )
     )
@@ -1007,14 +855,6 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       scalacOptions ++= commonScalacOptions,
       jvmReleaseTarget,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
-      mimaBinaryIssueFilters ++= Seq(
-        // Removed: it ordered staking credentials by raw hash bytes, ignoring whether the
-        // credential is a script or a key, which is an order no node emits. Withdrawal
-        // ordering now goes through ledgerOrderedWithdrawals / getWithdrawals in Interop.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.bloxbean.Interop#package.given_Ordering_StakingHash"
-        )
-      ),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "org.slf4j" % "slf4j-api" % slf4jVersion,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
@@ -1128,13 +968,8 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
           "scalus.uplc.eval.JScalus.evaluateScriptProfile"
         ),
         // DefaultImpl is a private nested class (MiMa still sees its members); the protected
-        // evalScript hook now takes the TransactionHash instead of a pre-encoded hex String,
-        // so the default evaluation path skips hex encoding entirely.
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.evalScript"
-        ),
-        // ...and it now takes the budget each script may spend, so EvaluateAndComputeCost mode
-        // enforces the transaction's initialBudget.
+        // evalScript hook now takes the budget each script may spend, so EvaluateAndComputeCost
+        // mode enforces the transaction's initialBudget.
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.evalScript"
         ),
@@ -1146,18 +981,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // The proposal does declare the public facade unfrozen for a release or two as well; when
         // a break there is actually needed, it gets its own filter naming the symbol, so the thing
         // being broken is visible in review rather than pre-authorised in bulk.
-        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*"),
-        // Task 1 (ts-emulator-provider-parity): SubmitError gained a `rule: String` member so a
-        // rejection can name the condition that produced it, not just carry a prose message.
-        // Safe without breaking anyone: `SubmitError` is `sealed`, so every implementor is in
-        // this repo and gained the member in the same commit. The concrete cases deliberately
-        // implement it from data they already carry rather than taking a new constructor
-        // parameter — a trailing parameter would change `apply`/`copy`/`unapply` on case classes
-        // that ship in the 1.1.0 JVM artifact and are the return type of every
-        // `BlockchainProvider.submit`, breaking every downstream `case ValueNotConserved(msg)`.
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.SubmitError.rule"
-        )
+        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*")
       ),
       crossScalaVersions := supportedScalaVersions,
       scalacOptions ++= commonScalacOptions,
@@ -1188,60 +1012,16 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     )
     .jsSettings(jsModuleSettings *)
     .jsSettings(
-      // JS-only facade, so these belong here and not in the shared settings: submitTx (both
-      // overloads) and getDelegation narrowed their return types from js.Dynamic to typed
-      // js.Object traits (spec 2026-08-03 TS definitions generator, decision "Typed returns +
-      // MiMa filters"). Runtime shape unchanged. Verified required: without them
-      // `scalusCardanoLedgerJS/mimaReportBinaryIssues` reports 3 problems against
-      // org.scalus:scalus-cardano-ledger_sjs1_3:1.1.0.
+      // JS-only facade, so this belongs here and not in the shared settings. Safe for the same
+      // reason as the `scalus` project's JS filters: these members exist to be called from
+      // JavaScript, and the only way to call them is the `scalus` npm bundle, which is linked
+      // from this repo and re-published with it, so no consumer holds the previous signatures.
       mimaBinaryIssueFilters ++= Seq(
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.node.JEmulator.submitTx"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.node.JEmulator.getDelegation"
-        ),
-        // Task 12 (ts-emulator-provider-parity): identifiers moved from raw bytes to hex
-        // everywhere, and absence moved from `null` to `js.UndefOr`/`undefined`. `hasTx` and
-        // `getDatum` took a `Uint8Array`, now a hex `String`; `getDelegation` took a CBOR-encoded
-        // credential, now a bech32 reward address (also a `String`, but a different one - not the
-        // same intended contract, hence a fresh filter alongside the pre-existing one above);
-        // `getStakeReward`'s parameter stayed a `String` but its result moved from
-        // `js.BigInt | Null` to `js.UndefOr[js.BigInt]`. The break is intended, and nothing
-        // published pins the old shapes: these members exist to be called from JavaScript, and the
-        // only way to call them is the `scalus` npm bundle, which is linked from this repo and
-        // re-published with it, so a consumer cannot be holding the previous signatures.
+        // `JEmulator.evaluateTx` widened its UTxO parameter from `js.Array` to `js.Any` so it
+        // also takes CBOR `[input, output]` pairs, matching `evaluator.evaluateTx`. As with
+        // `JsUtxo.withScriptRef`, no JS call that linked before stops linking.
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.node.JEmulator.hasTx"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.node.JEmulator.getDatum"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.node.JEmulator.getDelegation"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.node.JEmulator.getStakeReward"
-        ),
-        // `SlotConfig` is now one shared `Long` case class, and the class JavaScript sees is the
-        // `JsSlotConfig` handle - see the matching block in the `scalus` project for the full
-        // reasoning. These four members take a slot config from JavaScript, so their Scala
-        // parameter type moved from `SlotConfig` to `JsSlotConfig`. Their *JavaScript* signature
-        // is unchanged: the handle keeps the `number` members and the `Double` arithmetic the npm
-        // package published, and `scalus.d.ts` is unchanged for `SlotConfig` too. Safe for the
-        // same reason as the filters above - the only way to call these is the `scalus` npm
-        // bundle, relinked and republished from this repo.
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.node.JEmulator.this"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.node.JEmulator.withState"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.node.JEmulator.withAddresses"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.uplc.eval.JScalus.evalPlutusScripts"
+          "scalus.cardano.node.JEmulator.evaluateTx"
         )
       ),
       // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).
