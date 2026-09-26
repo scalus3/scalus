@@ -1,109 +1,67 @@
 # Changelog
 
-## Unreleased
+## 1.3.0
 
-### Fixed
-
-- Pattern matching on the builtin `Data` type (`Data.Constr` / `Map` / `List` / `I` / `B`) compiled
-  for protocol version 11 - the default target - produced a `case` on a `Data` scrutinee, which a
-  van Rossem node rejects: PV11 has `case` on `bool`, `unit`, `integer`, `list` and `pair`, not on
-  `data`. The Scalus VM accepted that term, so tests and the Emulator passed while the script failed
-  on-chain. The match is now lowered through `chooseData` on every target (all three lowering
-  backends), and the VM rejects `case` on `Data` at PV11 with `CaseDataNotSupportedError`.
-- `case` on `Data` in the VM and the JIT now has the Plutus semantics: only `Data.Constr` is
-  scrutinized, the branch is selected by the constructor tag and receives the fields list. The
-  former five-branch form (one branch per `Data` variant) never existed in Plutus.
-  `CaseDataBranchError` is deprecated; see `CaseDataNonConstrError` and `CaseIndexOutOfBounds`.
-- In JavaScript, a `bigint` input past 64 bits (a `Value`'s lovelace, an asset quantity, the
-  emulator's `minLovelace`, deposits and rewards) is a `TypeError` instead of silently wrapping to
-  a different number, and a `number` passed where a `bigint` is declared is read when it is a safe
-  integer.
+Scalus 1.3 balances transactions from JavaScript, evaluates scripts two to three times faster from
+CBOR, and corrects Plutus cost-model and 64-bit tag handling.
 
 ### Added
 
-- Protocol version 12 (Dijkstra): `MajorProtocolVersion.dijkstraPV` / `ProtocolVersion.dijkstraPV`.
-  A PV12 VM (`PlutusVM.makePlutusV3VM(MajorProtocolVersion.dijkstraPV)`) evaluates `case` on
-  `Data.Constr`, and with `targetProtocolVersion = dijkstraPV` a match on a sum type in the Data
-  representation compiles to it, replacing `unConstrData` + `fstPair` + `sndPair` + `case` on the
-  tag. The default target stays PV11.
-- A CBOR-first evaluation API for JavaScript:
-  - `uplc.applyParamsToScript(script, params)` applies CBOR `Data` parameters and returns
-    double-CBOR hex, the contract of Lucid's and Mesh's function of the same name. It composes
-    byte-level primitives that are exported too: `uplc.decodeToFlat` (any script form to flat
-    bytes), `uplc.applyArgs`, `cbor.wrapBytes` / `cbor.unwrapBytes`, and `bytesToHex` /
-    `hexToBytes`. Scripts and arguments are hex or `Uint8Array`.
-  - `evaluator.evaluateScript(script, args, options)` runs one script under an explicit language,
-    protocol version and cost model. A failing script is a result whose `error.code` is
-    `SCRIPT_FAILURE`, `BUILTIN_FAILURE`, `INVALID_RETURN_VALUE`, `OUT_OF_BUDGET` or
-    `INTERNAL_ERROR`; input it cannot read throws a `TypeError`.
-  - `EvaluationOptions` is a plain record `{ plutusVersion, protocolMajorVersion, costModel,
-    maxBudget? }`, with factories `mainnet(version)` and `fromProtocolParams(version, params)`.
-    `maxBudget` bounds the run; without it, execution is not bounded.
-  - `evaluator.evaluateTx(tx, utxos, slotConfig, costModels, protocolMajorVersion)`: the
-    transaction as hex or bytes, its resolved inputs as `Utxo`s or CBOR `[input, output]` pairs,
-    cost models by language. Returns `RedeemerBudget[]`, the type `evalPlutusScripts` and
-    `Emulator.evaluateTx` already return.
-- `ExUnits.toJSON()`, so `JSON.stringify` works on results and errors that carry a `bigint`
-  budget.
-- `Utxo.withScriptRef` also takes `{ type, script }`, the shape Lucid's `Script` has: the script as
-  hex or bytes, a Plutus program as raw flat, single or double CBOR.
-- `scriptHash({ type, script })` and `dataHash(cbor)`: the hash of a script, whatever its CBOR
-  wrapping, and of a datum's CBOR as given.
-- `Emulator.evaluateTx` takes its additional UTxOs as `Utxo`s or CBOR `[input, output]` pairs,
-  as `evaluator.evaluateTx` does.
-- `evaluator.evaluateTx` takes an optional sixth argument, `maxBudget`, which limits the scripts of
-  the whole transaction together, as `maxTxExecutionUnits` does on the ledger.
-- `Utxos.mapDecoder`, `Utxos.pairsDecoder` and `Utxos.mapOrPairsDecoder` read a UTxO set as the
-  ledger's CBOR map, as an array of `[input, output]` pairs, or as either; `Utxo` has a borer
-  codec for the `[input, output]` pair.
-- `FlatDecodingError` is public: flat decoding raises it, and only it, for bytes that are not a
-  valid encoding.
-- `PlutusScriptEvaluationError` carries `redeemer` (with the budget spent before the failure),
-  `scriptHash`, `code`, `logs`, and `args`, the `Data` arguments the failing script was applied to,
-  each as CBOR hex. `args` is not enumerable, so printing the error stays readable. The JVM
-  `PlutusScriptEvaluationException` carries `redeemer`, `script` and `args` too.
+- `balancer.balanceTx` settles a transaction's execution units, fee, and change together in
+  JavaScript. Coin selection and change placement stay with the caller. **Experimental.**
+- A CBOR-first JavaScript API: `uplc.applyParamsToScript`, `evaluator.evaluateScript`, and
+  `evaluator.evaluateTx`, with `EvaluationOptions` records and a per-transaction budget.
+- Protocol version 12 (Dijkstra) support, including `case` on `Data.Constr` when targeting it.
+- `scriptHash`, `dataHash`, `ExUnits.toJSON()`, CIP-30 `[input, output]` UTxO decoders, and
+  `Utxo.withScriptRef` for Lucid's `Script` shape.
+- `PlutusScriptEvaluationError` carries the redeemer, script hash, logs, and the failing script's
+  arguments. `FlatDecodingError` is public and is the only error flat decoding raises.
 
 ### Changed
 
-- `PlutusScriptEvaluator` in `EvaluateAndComputeCost` mode enforces its `initialBudget` for the
-  whole transaction: each script runs within what the scripts before it left, and a transaction
-  over the limit fails with a budget error while its costs are computed. `TxBuilder` passes the
-  protocol's `maxTxExecutionUnits`, so it now reports such a transaction at build time rather than
-  at submission. It used to count without a limit.
-- **`Utxo.toCbor()` writes `[input, output]`**, CIP-30's `transaction_unspent_output`, instead of a
-  one-entry map `{input: output}`, so its result goes straight into `evaluator.evaluateTx`.
-  `Utxo.fromCbor` reads both forms, and the deprecated `Emulator` constructor reads a UTxO set in
-  either form.
-- `Language.PlutusV4` is now a Dijkstra (PV12) language, as in Plutus `ledgerLanguageIntroducedIn`:
-  `introducedInVersion`, `Builtins.findBuiltinsIntroducedIn`, `PlutusScript.isWellFormed` and
-  `BuiltinSemanticsVariant.fromProtocolAndPlutusVersion` all key it on `dijkstraPV` (the latter
-  throws for a V4 script at PV11, where it used to return variant `E`). A `targetLanguage =
-  PlutusV4` compile target now lowers for PV12, so a match on a Data-represented sum type emits
-  `case` on `Data.Constr`.
-- A script failure's message starts with the redeemer, `Spend[0] failed: …`, names the script
-  hash, prints the budget in raw units, and no longer renders an unknown source position as
-  `at :1:0 - 1:0`.
-- Every other failure reaching JavaScript from transaction evaluation is a native `Error` with
-  the evaluator's message, and unreadable input is a `TypeError`.
-- Evaluating a script whose language has no cost model fails with `no cost model for PlutusV2`
-  instead of `key not found: 1`.
-- A cost parameter the supplied cost model does not reach is `Long.MaxValue`, as in Plutus, so a
-  builtin without costs cannot run. It used to be `300_000_000`, a value inside the range of real
-  costs, and a pre-PV11 model fell back to the reference costs for the PV11 builtins. Supply the
-  full cost model of the protocol version you evaluate under.
-- The `Scalus` namespace object, `applyDataArgToScript`, `evaluateScript`,
-  `evaluateScriptProfile` and `evalPlutusScripts` are deprecated in favour of `uplc` and
-  `evaluator`; `evalPlutusScripts` becomes `evaluator.evaluateTx`.
-- Traces carry no budget suffix: `evaluateScript`, `evaluateScriptProfile`,
-  `PlutusVM.evaluateScriptDebug` and `Term.evaluateDebug` no longer append
-  `: { mem: …, cpu: … }` to each trace. The budget spent at each trace is now
-  `ProfilingData.traces` (a `TraceProfile(message, budget)` per trace, cumulative), which
-  `evaluateScriptProfile` renders as the `traces` array of `profileJson`.
-  `TallyingBudgetSpenderLogger.getLogsWithBudget` is deprecated.
-- A `protocolMajorVersion` or `slotLength` above 2147483647 is a `TypeError` instead of
-  silently becoming the largest version this build knows.
-- The TypeScript declarations of `PlutusScriptEvaluationError` list only the `(message, logs)`
-  constructor; the long form is internal.
+- Evaluating scripts decoded from CBOR is **2.5–3.1x faster** on the JVM and **30–50% faster** in
+  `scalus.js`. De Bruijn conversion is **3.5–3.8x faster** on larger programs.
+- Building a `Value` from 1,295 assets in JavaScript drops from **337 ms to 3.6 ms**.
+- `scalus.js` is **21% smaller** minified: the IANA timezone database is no longer linked in.
+- **Breaking:** `PlutusScriptEvaluator` in `EvaluateAndComputeCost` mode enforces the transaction's
+  `maxTxExecutionUnits`, so an over-budget transaction fails at build time, not on submission.
+- **Breaking:** a cost parameter the supplied model does not reach is `Long.MaxValue`, as in Plutus,
+  so an incomplete model cannot run. Supply the full model for your protocol version.
+- **Breaking:** `Utxo.toCbor()` writes CIP-30 `[input, output]` instead of a one-entry map;
+  `fromCbor` still reads both.
+- **Breaking:** `Language.PlutusV4` is a Dijkstra (PV12) language, as in Plutus
+  `ledgerLanguageIntroducedIn`.
+- Script failures name the redeemer and script hash. Every other JavaScript evaluation failure is a
+  native `Error`, and unreadable input is a `TypeError`.
+- Traces no longer carry a budget suffix; per-trace budgets are in `ProfilingData.traces`.
+
+### Deprecated
+
+- The `Scalus` namespace object, `applyDataArgToScript`, `evaluateScript`, `evaluateScriptProfile`,
+  and `evalPlutusScripts`. Use `uplc` and `evaluator`; `evalPlutusScripts` becomes
+  `evaluator.evaluateTx`.
+- `CaseDataBranchError` and `TallyingBudgetSpenderLogger.getLogsWithBudget`.
+
+### Removed
+
+- `VanRossemNewBuiltinCosts`. Its fallback was the defect: an incomplete cost model ran on reference
+  costs instead of refusing to run.
+
+### Fixed
+
+- Matching on `Data` at protocol version 11 compiled to a `case` on a `Data` scrutinee, which a van
+  Rossem node rejects. Tests and the Emulator passed while the script failed on chain. It now lowers
+  through `chooseData`. **Affected script hashes change.**
+- PV11 cost models were read by count, so half of a 332-parameter model was dropped, and a
+  governance-set cost of exactly `300_000_000` was replaced by Scalus's own reference value.
+- `Data` constructor indices and CEK constructor tags are unsigned 64-bit. Above 2^63,
+  `serialiseData` produced a different hash than a node, and `constr` selected a live branch where a
+  node answers `MissingCaseBranch`.
+- Scripts with out-of-scope variables are rejected before evaluation, as the ledger rejects them.
+- JavaScript exports survive destructuring: `const { evalPlutusScripts } = Scalus` no longer throws,
+  which is how `@lucid-evolution/scalus-uplc` calls them.
+- JavaScript rejects a `bigint` past 64 bits instead of silently wrapping it, and reads a `number`
+  where a `bigint` is declared when it is a safe integer.
 
 ## 1.2.1 (2026-09-14)
 
