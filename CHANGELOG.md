@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.3.0
+## 1.3.0 (2026-09-28)
 
 Scalus 1.3 balances transactions from JavaScript, evaluates scripts two to three times faster from
 CBOR, and corrects Plutus cost-model and 64-bit tag handling.
