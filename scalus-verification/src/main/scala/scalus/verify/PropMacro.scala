@@ -2,33 +2,78 @@ package scalus.verify
 
 import scala.quoted.*
 
-/** Builds the leaves of a [[Prop]] from Scala expressions, naming each after its source text. */
+/** Compiles expression leaves into SIR for the runtime [[Prop]] object. */
 private[verify] object PropMacro {
 
-    def atom(b: Expr[Boolean])(using Quotes): Expr[Prop] =
-        '{ Prop.Atom(${ Expr(debugName(b)) }, () => $b) }
+    def forAll[A: Type](body: Expr[A => Boolean])(using Quotes): Expr[Prop] = {
+        import quotes.reflect.*
+        val pos = body.asTerm.pos
+        val id = (pos.start.toLong << 32) | (pos.end.toLong & 0xffffffffL)
+        '{ Props.compiledForAll[A](scalus.compiler.compile($body), ${ Expr(id) }) }
+    }
+
+    def exists[A: Type](body: Expr[A => Boolean])(using Quotes): Expr[Prop] = {
+        import quotes.reflect.*
+        val pos = body.asTerm.pos
+        val id = (pos.start.toLong << 32) | (pos.end.toLong & 0xffffffffL)
+        '{ Props.compiledExists[A](scalus.compiler.compile($body), ${ Expr(id) }, None) }
+    }
+
+    def existsLet[A: Type](witness: Expr[A], body: Expr[A => Boolean])(using
+        Quotes
+    ): Expr[Prop] = {
+        import quotes.reflect.*
+        val pos = body.asTerm.pos
+        val id = (pos.start.toLong << 32) | (pos.end.toLong & 0xffffffffL)
+        '{
+            Props.compiledExists[A](
+              scalus.compiler.compile($body),
+              ${ Expr(id) },
+              Some(PropExpr.SIRExpr[A](scalus.compiler.compile($witness)))
+            )
+        }
+    }
+
+    def call[A: Type, R: Type](
+        fn: Expr[FunctionRef[A, R]],
+        arg: Expr[A],
+        body: Expr[R => Boolean],
+        total: Boolean
+    )(using Quotes): Expr[Prop] = {
+        import quotes.reflect.*
+        val pos = body.asTerm.pos
+        val id = (pos.start.toLong << 32) | (pos.end.toLong & 0xffffffffL)
+        '{
+            Props.compiledCall[A, R](
+              $fn,
+              PropExpr.SIRExpr[A](scalus.compiler.compile($arg)),
+              scalus.compiler.compile($body),
+              ${ Expr(id) },
+              ${ Expr(total) }
+            )
+        }
+    }
+
+    def callDef[A: Type, R: Type](
+        fn: Expr[FunctionDef[A, R]],
+        arg: Expr[A],
+        body: Expr[R => Boolean],
+        total: Boolean
+    )(using Quotes): Expr[Prop] = call('{ $fn.ref }, arg, body, total)
+
+    def test(b: Expr[Boolean])(using Quotes): Expr[Prop] =
+        '{ Prop.Bool(PropExpr.SIRExpr[Boolean](scalus.compiler.compile($b))) }
 
     def denotes[A: Type](e: Expr[A])(using Quotes): Expr[Prop] =
-        '{ Prop.Denotes(${ Expr(debugName(e)) }, () => $e) }
+        '{ Prop.Denotes(PropExpr.SIRExpr[A](scalus.compiler.compile($e))) }
 
     def equal[A: Type](a: Expr[A], b: Expr[A])(using Quotes): Expr[Prop] = {
-        val name = s"${sourceText(a)} equals ${sourceText(b)} (${position(a)})"
-        '{ Prop.Equal(${ Expr(name) }, () => $a, () => $b) }
+        '{
+            Prop.Equal(
+              PropExpr.SIRExpr[A](scalus.compiler.compile($a)),
+              PropExpr.SIRExpr[A](scalus.compiler.compile($b))
+            )
+        }
     }
 
-    /** The expression's source text and position, e.g. `Math.abs(x) > 0 (PropTest.scala:19)`. */
-    private def debugName(e: Expr[Any])(using Quotes): String =
-        s"${sourceText(e)} (${position(e)})"
-
-    private def sourceText(e: Expr[Any])(using Quotes): String = {
-        import quotes.reflect.*
-        val term = e.asTerm
-        term.pos.sourceCode.getOrElse(term.show).replaceAll("\\s+", " ").trim
-    }
-
-    private def position(e: Expr[Any])(using Quotes): String = {
-        import quotes.reflect.*
-        val pos = e.asTerm.pos
-        s"${pos.sourceFile.name}:${pos.startLine + 1}"
-    }
 }

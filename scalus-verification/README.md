@@ -16,8 +16,12 @@ a validator actually runs on chain.
 
 ## Layout
 
-- `src/main/scala/scalus/verify/` - `Prop` and its combinators (`forAll`, `exists`,
-  `existsWith`, `denotes`, `equal`), `Quantifiable`, the target catalogue and the exporter.
+- `src/main/scala/scalus/verify/` - `Prop` and the `Props` syntax (`forAll`, `exists`,
+  `existsLet`, `denotes`, `equal`), `Quantifiable`, `Verifier`, the target catalogue and the
+  exporter. `Prop` captures statements without evaluating them; `Verifier` registers functions
+  and named or automatically named statements, then passes goals to tactics. A successful proof
+  retains a backend-specific `ProofArtifact`. No tactic is wired to this runtime API yet.
+  A ScalaCheck backend is a separate extension described in the design, not part of this core.
 - `src/main/lean/ScalusProofs/Generated/` - **generated and committed**. One `.flat` hex file per
   target plus `Targets.lean`. Never edit by hand; run `sbt exportLeanUplc`.
 - `src/main/lean/ScalusProofs/*.lean` - the hand-written properties.

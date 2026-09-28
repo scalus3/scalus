@@ -23,17 +23,25 @@ final case class FunctionRef[A, R](name: String) {
     def displayName: String = name.substring(name.lastIndexOf('.') + 1)
 }
 
+object FunctionRef {
+
+    /** Names a method of a `@Compile` object without compiling it to a UPLC program. */
+    inline def apply[A, R](inline f: A => R): FunctionRef[A, R] =
+        FunctionRef[A, R](FunctionMacro.qualifiedName(f))
+
+    inline def apply[A, B, R](inline f: (A, B) => R): FunctionRef[(A, B), R] =
+        FunctionRef[(A, B), R](FunctionMacro.qualifiedName(f))
+
+    inline def apply[A, B, C, R](inline f: (A, B, C) => R): FunctionRef[(A, B, C), R] =
+        FunctionRef[(A, B, C), R](FunctionMacro.qualifiedName(f))
+}
+
 /** One way of seeing a function, needed by some proof method. Keys compare by identity. */
 final class Representation[T] private (val name: String) {
     override def toString: String = name
 }
 
 object Representation {
-
-    /** The function as ordinary Scala, which the `scalacheck` method ([[Prop.check]]) calls.
-      * [[FunctionDef.scalacheck]] gives it its type.
-      */
-    val Scalacheck: Representation[Any => Any] = new Representation("scalacheck")
 
     /** The compiled UPLC program, which a `blaster-uplc` proof is about. */
     val Uplc: Representation[Program] = new Representation("uplc")
@@ -78,13 +86,8 @@ final class FunctionDef[A, R] private (
     /** The names of the representations this entry has. */
     def available: Set[String] = representations.keySet.map(_.name)
 
-    def scalacheck: Option[A => R] = get(Representation.Scalacheck).map(_.asInstanceOf[A => R])
-
     def withRepresentation[T](representation: Representation[T], value: => T): FunctionDef[A, R] =
         new FunctionDef(ref, representations.updated(representation, FunctionDef.Lazy(value)))
-
-    def withScalacheck(f: A => R): FunctionDef[A, R] =
-        withRepresentation(Representation.Scalacheck, f.asInstanceOf[Any => Any])
 
     def withLeanMapping(term: String): FunctionDef[A, R] =
         withRepresentation(Representation.LeanMapping, term)
@@ -120,16 +123,14 @@ object FunctionDef {
         new FunctionDef(FunctionRef(name), Map.empty)
     }
 
-    /** Adds what compiling a function gives: its SIR, its UPLC program and its Scala form. */
+    /** Adds what compiling a function gives: its SIR and its UPLC program. */
     def fromCompiled[A, R](
         entry: FunctionDef[A, R],
-        compiled: PlutusV3[?],
-        scalacheck: A => R
+        compiled: PlutusV3[?]
     ): FunctionDef[A, R] =
         entry
             .withRepresentation(Representation.Sir, compiled.sir)
             .withRepresentation(Representation.Uplc, compiled.program)
-            .withScalacheck(scalacheck)
 
     /** A one-parameter `@Compile` method, named after it and compiled with the module's pinned
       * options ([[ProofTargets.options]]): `FunctionDef(Helpers.double)`.
@@ -137,16 +138,14 @@ object FunctionDef {
     inline def apply[A, R](inline f: A => R): FunctionDef[A, R] =
         fromCompiled(
           qualified[A, R](FunctionMacro.qualifiedName(f)),
-          PlutusV3.compile(f)(using ProofTargets.options),
-          a => f(a)
+          PlutusV3.compile(f)(using ProofTargets.options)
         )
 
     /** A two-parameter `@Compile` method, taking its arguments as a pair. */
     inline def apply[A, B, R](inline f: (A, B) => R): FunctionDef[(A, B), R] =
         fromCompiled(
           qualified[(A, B), R](FunctionMacro.qualifiedName(f)),
-          PlutusV3.compile(f)(using ProofTargets.options),
-          args => f(args._1, args._2)
+          PlutusV3.compile(f)(using ProofTargets.options)
         )
 
     /** A three-parameter `@Compile` method, taking its arguments as a triple:
@@ -155,8 +154,7 @@ object FunctionDef {
     inline def apply[A, B, C, R](inline f: (A, B, C) => R): FunctionDef[(A, B, C), R] =
         fromCompiled(
           qualified[(A, B, C), R](FunctionMacro.qualifiedName(f)),
-          PlutusV3.compile(f)(using ProofTargets.options),
-          args => f(args._1, args._2, args._3)
+          PlutusV3.compile(f)(using ProofTargets.options)
         )
 
     /** Any one-parameter function under a synthetic name, compiled with the pinned options:
@@ -165,8 +163,7 @@ object FunctionDef {
     inline def named[A, R](name: String, inline f: A => R): FunctionDef[A, R] =
         fromCompiled(
           synthetic[A, R](name),
-          PlutusV3.compile(f)(using ProofTargets.options),
-          a => f(a)
+          PlutusV3.compile(f)(using ProofTargets.options)
         )
 }
 
