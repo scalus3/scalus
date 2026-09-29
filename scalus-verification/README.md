@@ -17,14 +17,57 @@ a validator actually runs on chain.
 ## Layout
 
 - `src/main/scala/scalus/verify/` - `Prop` and the `Props` syntax (`forAll`, `exists`,
-  `existsLet`, `denotes`, `equal`), `Quantifiable`, `Verifier`, the target catalogue and the
-  exporter. `Prop` captures statements without evaluating them; `Verifier` registers functions
-  and named or automatically named statements, then passes goals to tactics. A successful proof
-  retains a backend-specific `ProofArtifact`. No tactic is wired to this runtime API yet.
-  A ScalaCheck backend is a separate extension described in the design, not part of this core.
+  `existsLet`, `denotes`, `equal`), `Quantifiable`, and `Verifier`. `Prop` captures statements
+  without evaluating them; `Verifier` registers functions and named or automatically named
+  statements, then passes goals to tactics. A successful proof retains a backend-specific
+  `ProofArtifact`.
+- `src/main/scala/scalus/verify/lean/` - common `Prop` to Lean proposition generation. The first
+  version supports `Boolean` and `BigInt`; other data types fail explicitly.
+- `src/main/scala/scalus/verify/uplcblaster/` - the `UplcBlaster` tactic, its compile options,
+  current target catalogue, and UPLC exporter. The tactic proves statements of the form
+  `forall x1 ... forall xn, body`, where each `xi` is a `BigInt` or `Boolean` and `body` has no
+  quantifiers (see "Runtime statements" below). A ScalaCheck backend is a separate extension
+  described in the design, not part of this core.
 - `src/main/lean/ScalusProofs/Generated/` - **generated and committed**. One `.flat` hex file per
   target plus `Targets.lean`. Never edit by hand; run `sbt exportLeanUplc`.
 - `src/main/lean/ScalusProofs/*.lean` - the hand-written properties.
+
+## Runtime statements
+
+`UplcBlaster` proves a `Prop` about compiled UPLC without any hand-written Lean:
+
+```scala
+val verifier = Verifier.empty
+val minBound = verifier.statement(
+  "min_lower_bound",
+  forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x && Math.min(x, y) <= y)
+)
+verifier.verify(minBound, UplcBlaster(budget = 100)) // Proven
+```
+
+The body may combine Boolean tests, total calls, `denotes` and `equal` with `&&`, `||`, `!`, `==>`
+and `<=>`. Each test becomes its own closed UPLC predicate over the quantified values. The tactic
+writes a Lean file in a temporary directory that imports them, runs `lake env lean` in this
+workspace, and reads Blaster's verdict. The workspace must be built (`lake build`).
+
+- **Valid** means the statement holds without the budget. A test in a positive position must halt
+  within the budget with `true`; one in a negative position (a premise, or under `!`) must only
+  not halt with `false`. The Lean machine reports both an exhausted budget and a failing program as
+  `State.Error`, and reading each test this way turns both into the safe answer (design doc §6.2).
+- **Falsified** is replayed on the Scalus CEK with a large budget. If the statement is false
+  there too, the result is `Refuted` with the counterexample; otherwise it is `Inconclusive`, and
+  the message says the counterexample is spurious. A spurious counterexample means the budget is
+  too small.
+- Anything else, including other binder types or a quantifier inside the body, is
+  `Inconclusive`.
+
+`UplcBlasterTest` runs these proofs when `lake` is on the `PATH` and the workspace is built.
+Otherwise the tests that need Lean are canceled, as they are in ci-jvm.
+
+A call of a function registered in the verifier is linked to that function's compiled program, so
+the proof is about those exact bytes. Other `@Compile` definitions a test uses are compiled with
+the test. `Prop.Call` accepts only a `BigInt` or `Boolean` argument and result today, because a
+multi-parameter function takes a tuple in `Prop` but is curried in UPLC.
 
 ## Running
 

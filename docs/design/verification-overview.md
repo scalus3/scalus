@@ -584,6 +584,21 @@ val result: VerificationResult = verifier.prove(claim, tactic)
 Here `tactic` is a proof backend implementing `Tactic`. The following source syntax is planned;
 target capture and nested `Prop` bodies are not implemented yet.
 
+The initial `UplcBlaster` implementation owns the backend's compile options, existing target
+catalogue and `exportUplc` operation under `scalus.verify.uplcblaster`. It implements `Tactic` for
+a universal prefix over `BigInt` and `Boolean` followed by a quantifier-free body. Each leaf of the
+body (a Boolean test, a total call, `denotes`, `equal`) is compiled to its own UPLC predicate over
+the quantified values. The connectives become a Lean proposition that reads each leaf by the
+polarity rule of §6.2. The tactic runs Lean, and replays a counterexample on the Scalus CEK before
+it reports `Refuted` (§5.2). `forAll` accepts one, two or three binders with a Boolean body, as in
+`forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x)`. A body with `Prop` connectives still has
+to be assembled from `Prop` nodes.
+
+Common direct Lean generation lives in `scalus.verify.lean.LeanExporter`. It translates `Prop`
+structure and SIR expressions over `Boolean` and `BigInt`; unsupported types and operations fail
+explicitly. It is shared infrastructure for `lean-direct` and for generated proposition text used
+by other Lean-backed tactics.
+
 ```scala
 object MathProofs {                        // plain Scala; each statement is compiled to SIR (§4.3)
     val verifier = Verifier.default
@@ -698,8 +713,8 @@ passing samples alone do not qualify. `VerificationResult.Proven` returns the `P
 registered `Theorem` is available as a lemma for later goals. An artifact carries the backend's proof material and any target
 identity needed to check what was verified. Tactics are responsible for validating artifacts and
 deciding whether an artifact-backed lemma applies to a goal. The verifier checks that the statement
-is registered, that explicit `Prop.Call` references exist in its function table, and that used
-lemmas are available. The proof retains its artifact and lemma dependencies. A spurious
+is registered and that used lemmas are available. Each tactic resolves the function references it
+supports from the goal's function table. The proof retains its artifact and lemma dependencies. A spurious
 model, timeout, or unsupported goal is `Inconclusive`. The result has explicit proven, refuted,
 and inconclusive cases.
 

@@ -2,6 +2,7 @@ package scalus.verify
 
 import scalus.compiler.sir.SIR
 import scalus.uplc.{PlutusV3, Program}
+import scalus.verify.uplcblaster.UplcBlaster
 
 /** The typed name of a function in a [[FunctionTable]].
   *
@@ -133,19 +134,19 @@ object FunctionDef {
             .withRepresentation(Representation.Uplc, compiled.program)
 
     /** A one-parameter `@Compile` method, named after it and compiled with the module's pinned
-      * options ([[ProofTargets.options]]): `FunctionDef(Helpers.double)`.
+      * options ([[UplcBlaster.options]]): `FunctionDef(Helpers.double)`.
       */
     inline def apply[A, R](inline f: A => R): FunctionDef[A, R] =
         fromCompiled(
           qualified[A, R](FunctionMacro.qualifiedName(f)),
-          PlutusV3.compile(f)(using ProofTargets.options)
+          PlutusV3.compile(f)(using UplcBlaster.options)
         )
 
     /** A two-parameter `@Compile` method, taking its arguments as a pair. */
     inline def apply[A, B, R](inline f: (A, B) => R): FunctionDef[(A, B), R] =
         fromCompiled(
           qualified[(A, B), R](FunctionMacro.qualifiedName(f)),
-          PlutusV3.compile(f)(using ProofTargets.options)
+          PlutusV3.compile(f)(using UplcBlaster.options)
         )
 
     /** A three-parameter `@Compile` method, taking its arguments as a triple:
@@ -154,7 +155,7 @@ object FunctionDef {
     inline def apply[A, B, C, R](inline f: (A, B, C) => R): FunctionDef[(A, B, C), R] =
         fromCompiled(
           qualified[(A, B, C), R](FunctionMacro.qualifiedName(f)),
-          PlutusV3.compile(f)(using ProofTargets.options)
+          PlutusV3.compile(f)(using UplcBlaster.options)
         )
 
     /** Any one-parameter function under a synthetic name, compiled with the pinned options:
@@ -163,7 +164,7 @@ object FunctionDef {
     inline def named[A, R](name: String, inline f: A => R): FunctionDef[A, R] =
         fromCompiled(
           synthetic[A, R](name),
-          PlutusV3.compile(f)(using ProofTargets.options)
+          PlutusV3.compile(f)(using UplcBlaster.options)
         )
 }
 
