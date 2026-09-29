@@ -1,4 +1,4 @@
-package scalus.verify
+package scalus.verify.uplcblaster
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.utils.Hex
@@ -17,7 +17,7 @@ class ExportUplcTest extends AnyFunSuite {
 
     test("writes one flat file per target plus Targets.lean") {
         withTempDir { dir =>
-            ExportUplc.write(dir)
+            UplcBlaster.exportUplc(dir)
             ProofTargets.all.foreach { t =>
                 assert(Files.exists(dir.resolve(s"${t.name}.flat")), s"missing ${t.name}.flat")
             }
@@ -27,7 +27,7 @@ class ExportUplcTest extends AnyFunSuite {
 
     test("flat files are lowercase hex that round-trips to the original program") {
         withTempDir { dir =>
-            ExportUplc.write(dir)
+            UplcBlaster.exportUplc(dir)
             ProofTargets.all.foreach { t =>
                 val hex = Files.readString(dir.resolve(s"${t.name}.flat"))
                 assert(hex.matches("[0-9a-f]+"), s"${t.name}.flat is not lowercase hex")
@@ -41,7 +41,7 @@ class ExportUplcTest extends AnyFunSuite {
 
     test("Targets.lean has an import and a native_decide check per sample") {
         withTempDir { dir =>
-            ExportUplc.write(dir)
+            UplcBlaster.exportUplc(dir)
             val lean = Files.readString(dir.resolve("Targets.lean"))
             ProofTargets.all.foreach { t =>
                 assert(
@@ -61,8 +61,8 @@ class ExportUplcTest extends AnyFunSuite {
     test("export is deterministic") {
         withTempDir { a =>
             withTempDir { b =>
-                ExportUplc.write(a)
-                ExportUplc.write(b)
+                UplcBlaster.exportUplc(a)
+                UplcBlaster.exportUplc(b)
                 ProofTargets.all.foreach { t =>
                     val fa = Files.readString(a.resolve(s"${t.name}.flat"))
                     val fb = Files.readString(b.resolve(s"${t.name}.flat"))

@@ -967,7 +967,8 @@ lazy val exportLeanUplc =
 exportLeanUplc := Def.taskDyn {
     val outDir = ((ThisBuild / baseDirectory).value / "scalus-verification" / "src" / "main" /
         "lean" / "ScalusProofs" / "Generated").getAbsolutePath
-    (scalusVerification / Compile / runMain).toTask(s" scalus.verify.ExportUplc $outDir")
+    (scalusVerification / Compile / runMain)
+        .toTask(s" scalus.verify.uplcblaster.UplcBlaster $outDir")
 }.value
 
 // Cardano Ledger domain model and CBOR serialization
