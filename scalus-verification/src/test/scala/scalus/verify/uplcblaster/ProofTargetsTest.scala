@@ -1,4 +1,4 @@
-package scalus.verify
+package scalus.verify.uplcblaster
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*

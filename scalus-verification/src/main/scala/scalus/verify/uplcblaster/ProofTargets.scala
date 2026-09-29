@@ -1,4 +1,4 @@
-package scalus.verify
+package scalus.verify.uplcblaster
 
 import scalus.*
 // Wildcard, not a selective import: `List.foldLeft` and friends are extension methods that a
@@ -18,7 +18,7 @@ object ProofTargets {
       * and no CIP-138 array builtins, so a program using them cannot be decoded. Everything else is
       * the normal release lowering, so PV11 `case` is exercised.
       */
-    val options: Options = Options.releaseUntagged.copy(valueBuiltins = false)
+    val options: Options = UplcBlaster.options
 
     private given Options = options
 

@@ -1,4 +1,4 @@
-package scalus.verify
+package scalus.verify.uplcblaster
 
 import scalus.uplc.Program
 
