@@ -220,6 +220,10 @@
               blst
               pandoc
               texliveSmall
+              # Lean 4 + Z3, as in the `lean` shell, so UplcBlasterTest can run its proofs
+              # (after `lake build` in scalus-verification/src/main/lean).
+              elan
+              z3
               # cardano-cli
             ];
             shellHook = ''
