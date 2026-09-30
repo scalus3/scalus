@@ -2,7 +2,9 @@
 
 Formal verification of Scalus code. Statements are written in Scala and proved by pluggable
 tactics; the design is in
-[`docs/design/verification-overview.md`](../docs/design/verification-overview.md). What exists
+[`docs/design/verification-overview.md`](../docs/design/verification-overview.md), and how the
+built parts work in
+[`docs/design/verification-details/`](../docs/design/verification-details/). What exists
 today is the first backend, the `blaster-uplc` tactic `UplcBlaster`, described below. This module
 was called `scalus-lean-proofs`, with Scala package `scalus.lean`, until 2026-09-25.
 
@@ -142,8 +144,8 @@ gone; re-run `lake update` and commit the new `lake-manifest.json`.
 branch, and an `Option` match and a `List` fold. `gcd`, `gcd` compiled without the optimizer, and
 `sqrt` are checked only on samples. Not implemented: `gcd` properties, `sqrt`/`isSqrt`, `log2`,
 `pow`, `Data` round-trips, and codegen equivalence. See
-[`docs/superpowers/specs/2026-08-27-lean-blaster-uplc-proofs-design.md`](../docs/superpowers/specs/2026-08-27-lean-blaster-uplc-proofs-design.md)'s
-"What is not proved, and why" for the reasons.
+[what `PreludeProofsTest` covers](../docs/design/verification-details/uplc-blaster.md#what-preludeproofstest-covers)
+for the reasons.
 
 ## Limitations
 

@@ -54,7 +54,9 @@ trait LeanProofs extends Assertions {
             case (verifier, statement, VerificationResult.Proven(proof)) =>
                 val artifact = proof.artifact.asInstanceOf[UplcBlaster.Artifact]
                 artifact.kind match
-                    case ProofKind.Blaster    => assert(artifact.output.contains("✅ Valid"))
+                    case ProofKind.Blaster =>
+                        if !artifact.output.contains("✅ Valid") then
+                            fail(s"expected a valid proof, got ${artifact.output}")
                     case ProofKind.LeanNative => assert(!artifact.output.contains("error"))
                     case other                => fail(s"unexpected proof kind $other")
                 assert(verifier.theorems.exists(_.statement eq statement))

@@ -88,8 +88,10 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         )
 
         val wrong = forAll[BigInt, BigInt]((x, y) => Prop(x <= y) ==> Prop(Math.min(x, y) == y))
+        // println(s"wrong: $wrong")
         val (x, y, _) = split2(wrong)
         val counterexample = refuted(wrong, budget = 60)
+        // println(s"counterexample: $counterexample")
         assert(integer(counterexample(x.name)) < integer(counterexample(y.name)), counterexample)
     }
 
