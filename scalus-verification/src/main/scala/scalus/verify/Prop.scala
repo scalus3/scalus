@@ -79,22 +79,25 @@ object Props {
     def forAllSIR[A](ident: PropExpr.Ident[A], body: Prop): Prop = Prop.Forall(ident, body)
 
     /** Every value of `A` satisfies the body. The body is a statement about the lambda's parameter,
-      * such as `forAll[BigInt](x => Math.abs(x) >= 0)` or
-      * `forAll[BigInt](x => denotes(BigInt(10) / x) ==> Prop(x != BigInt(0)))`. The parameter may
-      * be used in the body's tests and expressions, not to compute the statement itself.
+      * such as `forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x != BigInt(0)))`, or a Boolean
+      * test, such as `forAll[BigInt](x => Math.abs(x) >= 0)`. A Boolean body is one test, whatever
+      * it contains: `if`, `match` and local `val`s included. In a statement, the parameter may be
+      * used in its tests and expressions, not to compute the statement itself.
       */
-    inline def forAll[A: Quantifiable](inline body: A => Prop): Prop =
+    inline def forAll[A: Quantifiable](inline body: A => Prop | Boolean): Prop =
         ${ PropMacro.forAll[A]('body) }
 
     /** A statement about two universally quantified values:
       * `forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x)` is `∀ x. ∀ y. Bool(...)`.
       */
-    inline def forAll[A: Quantifiable, B: Quantifiable](inline body: (A, B) => Prop): Prop =
+    inline def forAll[A: Quantifiable, B: Quantifiable](
+        inline body: (A, B) => Prop | Boolean
+    ): Prop =
         ${ PropMacro.forAll2[A, B]('body) }
 
     /** A statement about three universally quantified values. */
     inline def forAll[A: Quantifiable, B: Quantifiable, C: Quantifiable](
-        inline body: (A, B, C) => Prop
+        inline body: (A, B, C) => Prop | Boolean
     ): Prop = ${ PropMacro.forAll3[A, B, C]('body) }
 
     /** Constructs an explicit existential quantifier from an identifier and a proposition. */
@@ -105,54 +108,56 @@ object Props {
     ): Prop = Prop.Exists(ident, witness, body)
 
     /** Some value of `A` satisfies the body. */
-    inline def exists[A: Quantifiable](inline body: A => Prop): Prop =
+    inline def exists[A: Quantifiable](inline body: A => Prop | Boolean): Prop =
         ${ PropMacro.exists[A]('body) }
 
     /** Some value of `A` satisfies the body, and `witness` supplies that value. */
-    inline def existsLet[A: Quantifiable](inline witness: A)(inline body: A => Prop): Prop =
+    inline def existsLet[A: Quantifiable](inline witness: A)(
+        inline body: A => Prop | Boolean
+    ): Prop =
         ${ PropMacro.existsLet[A]('witness, 'body) }
 
     /** `fn` applied to `arg` returns, and its result satisfies the body. */
     inline def callRef[A, R](fn: FunctionRef[A, R], inline arg: A)(
-        inline body: R => Prop
+        inline body: R => Prop | Boolean
     ): Prop = ${ PropMacro.call('fn, 'arg, 'body, true) }
 
     /** Names a method of a `@Compile` object and states a property of its result. */
     inline def call[A, R](inline f: A => R, inline arg: A)(
-        inline body: R => Prop
+        inline body: R => Prop | Boolean
     ): Prop = callRef(FunctionRef(f), arg)(body)
 
     inline def call[A, B, R](inline f: (A, B) => R, inline arg: (A, B))(
-        inline body: R => Prop
+        inline body: R => Prop | Boolean
     ): Prop = callRef(FunctionRef(f), arg)(body)
 
     inline def call[A, B, C, R](inline f: (A, B, C) => R, inline arg: (A, B, C))(
-        inline body: R => Prop
+        inline body: R => Prop | Boolean
     ): Prop = callRef(FunctionRef(f), arg)(body)
 
     inline def call[A, R](fn: FunctionDef[A, R], inline arg: A)(
-        inline body: R => Prop
+        inline body: R => Prop | Boolean
     ): Prop = ${ PropMacro.callDef('fn, 'arg, 'body, true) }
 
     /** Whenever `fn` applied to `arg` returns, its result satisfies the body. */
     inline def whenReturnsRef[A, R](fn: FunctionRef[A, R], inline arg: A)(
-        inline body: R => Prop
+        inline body: R => Prop | Boolean
     ): Prop = ${ PropMacro.call('fn, 'arg, 'body, false) }
 
     inline def whenReturns[A, R](inline f: A => R, inline arg: A)(
-        inline body: R => Prop
+        inline body: R => Prop | Boolean
     ): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
 
     inline def whenReturns[A, B, R](inline f: (A, B) => R, inline arg: (A, B))(
-        inline body: R => Prop
+        inline body: R => Prop | Boolean
     ): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
 
     inline def whenReturns[A, B, C, R](inline f: (A, B, C) => R, inline arg: (A, B, C))(
-        inline body: R => Prop
+        inline body: R => Prop | Boolean
     ): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
 
     inline def whenReturns[A, R](fn: FunctionDef[A, R], inline arg: A)(
-        inline body: R => Prop
+        inline body: R => Prop | Boolean
     ): Prop = ${ PropMacro.callDef('fn, 'arg, 'body, false) }
 
     /** The SIR type of a statement variable, from the compiled identity lambda `(v: A) => v`. */

@@ -52,10 +52,8 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
     test("quantifies over Boolean values") {
         proven(
           forAll[Boolean, BigInt]((flag, x) =>
-              Prop(
-                if flag then Math.max(x, BigInt(0)) >= BigInt(0)
-                else Math.min(x, BigInt(0)) <= BigInt(0)
-              )
+              if flag then Math.max(x, BigInt(0)) >= BigInt(0)
+              else Math.min(x, BigInt(0)) <= BigInt(0)
           ),
           budget = 60
         )
@@ -71,15 +69,15 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
 
     test("proves connectives over separately compiled tests, with each test read by polarity") {
         val implication =
-            forAll[BigInt, BigInt]((x, y) => Prop(x <= y) ==> Prop(Math.min(x, y) == x))
+            forAll[BigInt, BigInt]((x, y) => (x <= y) ==> (Math.min(x, y) == x))
         assert(lowered(implication, FunctionTable.empty).leaves.size == 2)
         proven(implication, budget = 60)
         proven(
-          forAll[BigInt, BigInt]((x, y) => Prop(x <= y) <=> Prop(Math.min(x, y) == x)),
+          forAll[BigInt, BigInt]((x, y) => (x <= y) <=> (Math.min(x, y) == x)),
           budget = 60
         )
         proven(
-          forAll[BigInt, BigInt]((x, y) => !Prop(x <= y) ==> Prop(Math.min(x, y) == y)),
+          forAll[BigInt, BigInt]((x, y) => !Prop(x <= y) ==> (Math.min(x, y) == y)),
           budget = 60
         )
         proven(
@@ -87,7 +85,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
           budget = 60
         )
 
-        val wrong = forAll[BigInt, BigInt]((x, y) => Prop(x <= y) ==> Prop(Math.min(x, y) == y))
+        val wrong = forAll[BigInt, BigInt]((x, y) => (x <= y) ==> (Math.min(x, y) == y))
         // println(s"wrong: $wrong")
         val (x, y, _) = split2(wrong)
         val counterexample = refuted(wrong, budget = 60)
@@ -129,9 +127,9 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
     }
 
     test("denotes in a premise restricts a statement to the inputs where a program returns") {
-        proven(forAll[BigInt](x => denotes(BigInt(10) / x) ==> Prop(x != BigInt(0))), budget = 40)
+        proven(forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x != BigInt(0))), budget = 40)
 
-        val positive = forAll[BigInt](x => denotes(BigInt(10) / x) ==> Prop(x > BigInt(0)))
+        val positive = forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x > BigInt(0)))
         val x = positive match
             case Prop.Forall(x, _) => x
             case other             => fail(s"expected a universal proposition, got $other")
@@ -203,7 +201,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         )
         proven(
           forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-              Prop(lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+              (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
           ),
           120,
           clamp
