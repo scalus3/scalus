@@ -43,7 +43,7 @@ verifier.addFunction(clamp)
 val inRange = verifier.statement(
   "clamp_in_range",
   forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-      Prop(lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+      (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
   )
 )
 verifier.verify(inRange, UplcBlaster(budget = 120)) // Proven
@@ -82,10 +82,14 @@ the proof is about those exact bytes. A call is total: it claims that the functi
 is called with a tuple written out, as in `callRef(clamp.ref, (x, lo, hi))(r => lo <= r)`, and its
 program is applied to each value in turn. Arguments and results must be `BigInt` or `Boolean`.
 
-Binder bodies are statements, so quantifiers, calls and connectives nest:
-`forAll[BigInt](x => denotes(BigInt(10) / x) ==> Prop(x != BigInt(0)))`. Each test or expression
-is compiled as a closed lambda over the variables it uses. A variable may only be used inside them:
-for a Boolean `if`, write `Prop(if c then a else b)` around the whole condition.
+A binder's body is a statement or a Boolean. Statements nest quantifiers, calls and connectives:
+`forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x != BigInt(0)))`. A Boolean body is one test,
+`if`, `match` and local `val`s included: `forAll[Boolean, BigInt]((c, x) => if c then x > 0 else x < 0)`.
+A Boolean operand of a connective is one test too. Each test or expression is compiled as a closed
+lambda over the variables it uses. In a statement body, a variable may only be used inside them:
+an `if` that chooses between statements is a compile error; state the cases with `==>`.
+`Prop(...)` is needed only to make a Boolean a separate test on purpose: `!Prop(t)` holds when
+`t` fails, while `!t` is one test that fails with it.
 
 ## Running
 

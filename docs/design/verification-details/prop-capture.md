@@ -28,9 +28,10 @@ before it inlines the call. In
 forAll[BigInt](x => Prop(x > 0) ==> call(Math.abs, x)(r => r == x))
 ```
 
-the macros of `Prop(...)`, `call(...)` and the Boolean `r == x` expand first, while `x` and `r`
-are still parameters of the enclosing lambdas. `forAll`'s macro expands last, and it sees a
-lambda whose body is already code that builds a `Prop`. This order decides the design:
+the macros of `Prop(...)` and `call(...)` expand first, while `x` and `r` are still parameters of
+the enclosing lambdas; `call`'s body `r == x` becomes its one test. `forAll`'s macro expands last,
+and it sees a lambda whose body is already code that builds a `Prop`. This order decides the
+design:
 
 - a leaf is expanded first, sees free references to parameters of enclosing lambdas, and closes
   over them;
@@ -43,7 +44,8 @@ A leaf is an expression of the statement that becomes SIR.
 
 | Syntax | Leaf |
 |---|---|
-| `Prop(b)`, or a `Boolean` where a `Prop` is expected (`booleanToProp`) | the test `b` |
+| a binder's body of type `Boolean` | the whole body, one test |
+| `Prop(b)`, or a `Boolean` operand of a connective (`booleanToProp`) | the test `b` |
 | `denotes(e)` | `e` |
 | `equal(a, b)` | `a` and `b` |
 | `call(f, arg)(…)`, `whenReturns(f, arg)(…)` | `arg` |
@@ -72,13 +74,26 @@ table; `UplcBlaster` links them ([uplc-blaster.md](uplc-blaster.md#linking)).
 
 The binders are `forAll` (one to three parameters, outermost first), `exists`, `existsLet`, and
 the result of `call` or `whenReturns`. A call's argument uses the enclosing scope; its result
-is in scope only in the continuation. `PropMacro.binders` does four things:
+is in scope only in the continuation. A body has the type `Prop | Boolean`. `PropMacro.binders`
+does three things:
 
 1. It removes `Inlined` wrappers without bindings, type ascriptions and empty blocks, and requires
    a lambda literal with the expected number of parameters.
-2. It reports a compile error at every remaining use of a parameter in the body (next section).
-3. It builds one `PropExpr.Ident` per parameter, with its name, an id and its SIR type.
-4. It keeps the body, which, once the inner macros have expanded, builds the rest of the `Prop`.
+2. It builds one `PropExpr.Ident` per parameter, with its name, an id and its SIR type.
+3. It turns the body into the binder's statement, by the body's type:
+   - **`Boolean`**: the whole body is one test, compiled as a leaf. It may use the binder's
+     parameters and the enclosing binders' variables anywhere, so an `if`, a `match` or a local
+     `val` needs no wrapper.
+   - **`Prop`**: the body, once the inner macros have expanded, builds the rest of the statement.
+     The macro reports a compile error at every remaining use of a parameter (next section), and
+     stops there.
+   - **Both**, an `if` or `match` with a statement in one branch and a Boolean in another: a
+     compile error.
+
+A Boolean operand of a connective, as in `(lo <= hi) ==> call(...)`, becomes a test through the
+implicit conversion `booleanToProp`. `Prop(b)` is only needed to make a Boolean a separate test
+on purpose: `!Prop(t)` holds when `t` fails, while a Boolean body `!t` is one test that fails with
+it.
 
 The SIR type comes from compiling the identity lambda `(value: T) => value` and reading the type
 of its parameter (`Props.variableType`), so the plugin decides the type exactly as it would for
@@ -97,11 +112,14 @@ statement moves. Nothing stores them yet; a proof cache keyed on a statement's c
 
 ## What is rejected, and why
 
-- **A binder variable used outside a leaf.** Once the inner macros have expanded, a binder's body
-  should not use its parameter. A use that remains is at the `Prop` level, as in
-  `forAll[Boolean](flag => if flag then p else q)`. There the shape of the statement depends on
-  the variable's value, which is outside the fragment (overview §4.1). The error message
-  suggests `Prop(if flag then a else b)` for a Boolean conditional.
+- **A binder variable used outside a leaf of a statement body.** Once the inner macros have
+  expanded, a statement body should not use its parameter. A use that remains is at the `Prop`
+  level, as in `forAll[Boolean](flag => if flag then p else q)` with statements `p` and `q`. There
+  the shape of the statement depends on the variable's value, which is outside the fragment
+  (overview §4.1). The error message suggests stating the cases with `==>`, as
+  `(flag ==> p) && (!flag ==> q)`, and points out that an `if` over Boolean tests is one test.
+- **A body that is a statement in one branch and a Boolean in another.** Its type is
+  `Prop | Boolean`, and it is neither one test nor a statement.
 - **A binder's lambda inside an inline expansion with bindings.** When an `inline def` with
   parameters that are not `inline` wraps a statement, its expansion is an `Inlined` node that
   binds those parameters as local values, and the lambda's body may use them. A statement cannot

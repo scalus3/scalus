@@ -104,6 +104,30 @@ class PropTest extends AnyFunSuite {
             case other => fail(s"expected a call under two quantifiers, got $other")
     }
 
+    test("a Boolean body is one test, with its if, match and local values") {
+        forAll[Boolean, BigInt]((flag, x) => if flag then x > BigInt(0) else x < BigInt(0)) match
+            case Prop.Forall(flag, Prop.Forall(x, Prop.Bool(PropExpr.SIRExpr(body)))) =>
+                assert(flag.tp == SIRType.Boolean && x.tp == SIRType.Integer)
+                assert(body.toString.contains(flag.name) && body.toString.contains(x.name), body)
+            case other => fail(s"expected one test under two quantifiers, got $other")
+
+        forAll[BigInt](x => { val y = x + 1; y > x }) match
+            case Prop.Forall(x, Prop.Bool(PropExpr.SIRExpr(body))) =>
+                assert(body.toString.contains(x.name), body)
+            case other => fail(s"expected one test with a local value, got $other")
+
+        forAll[BigInt](x =>
+            callRef(div10.ref, x)(r =>
+                (x == BigInt(0)) match
+                    case true  => r == BigInt(0)
+                    case false => r <= BigInt(10)
+            )
+        ) match
+            case Prop.Forall(x, Prop.Call(_, _, r, true, Prop.Bool(PropExpr.SIRExpr(body)))) =>
+                assert(body.toString.contains(x.name) && body.toString.contains(r.name), body)
+            case other => fail(s"expected a call continuing with one test, got $other")
+    }
+
     test("a variable used to compute the statement itself is a compile error") {
         val errors = scala.compiletime.testing.typeCheckErrors(
           """import scalus.verify.*
@@ -111,6 +135,22 @@ class PropTest extends AnyFunSuite {
              forAll[BigInt](x => if x > BigInt(0) then Prop(true) else Prop(false))"""
         )
         assert(errors.exists(_.message.contains("is a variable of the statement")), errors)
+        // The macro stops at its own error, before it builds a body out of the variable's scope.
+        assert(!errors.exists(_.message.contains("outside the scope")), errors)
+    }
+
+    test("a body that is a statement in one branch and a Boolean in another is a compile error") {
+        val errors = scala.compiletime.testing.typeCheckErrors(
+          """import scalus.verify.*
+             import scalus.verify.Props.*
+             forAll[BigInt](x =>
+                 if BigInt(1) > BigInt(0) then denotes(BigInt(10) / x) else x > BigInt(0)
+             )"""
+        )
+        assert(
+          errors.exists(_.message.contains("a statement in one branch and a Boolean test")),
+          errors
+        )
     }
 
     test("a method reference is named as SIR names it, a lambda by its synthetic name") {

@@ -196,14 +196,14 @@ class PreludeProofsTest extends AnyFunSuite with LeanProofs {
     test("clamp stays in range, and keeps a value already in range") {
         proven(
           forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-              Prop(lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+              (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
           ),
           120,
           clamp
         )
         proven(
           forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-              Prop(lo <= x && x <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => r == x)
+              (lo <= x && x <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => r == x)
           ),
           120,
           clamp
@@ -220,13 +220,13 @@ class PreludeProofsTest extends AnyFunSuite with LeanProofs {
 
     test("exp2 of a negative exponent is zero") {
         proven(
-          forAll[BigInt](e => Prop(e < BigInt(0)) ==> callRef(exp2.ref, e)(r => r == BigInt(0))),
+          forAll[BigInt](e => (e < BigInt(0)) ==> callRef(exp2.ref, e)(r => r == BigInt(0))),
           60,
           exp2
         )
         // negative control
         refuted(
-          forAll[BigInt](e => Prop(e < BigInt(0)) ==> callRef(exp2.ref, e)(r => r == BigInt(1))),
+          forAll[BigInt](e => (e < BigInt(0)) ==> callRef(exp2.ref, e)(r => r == BigInt(1))),
           60,
           exp2
         )
@@ -235,14 +235,14 @@ class PreludeProofsTest extends AnyFunSuite with LeanProofs {
     test("an Option match doubles a positive value and defaults otherwise") {
         proven(
           forAll[BigInt](x =>
-              Prop(x > BigInt(0)) ==> callRef(optDoubleOrDefault.ref, x)(r => r == x * 2)
+              (x > BigInt(0)) ==> callRef(optDoubleOrDefault.ref, x)(r => r == x * 2)
           ),
           160,
           optDoubleOrDefault
         )
         proven(
           forAll[BigInt](x =>
-              Prop(x <= BigInt(0)) ==> callRef(optDoubleOrDefault.ref, x)(r => r == BigInt(-1))
+              (x <= BigInt(0)) ==> callRef(optDoubleOrDefault.ref, x)(r => r == BigInt(-1))
           ),
           160,
           optDoubleOrDefault

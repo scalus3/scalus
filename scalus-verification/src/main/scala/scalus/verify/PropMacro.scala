@@ -11,21 +11,22 @@ import scala.quoted.*
   * [[Props.openVariables]] removes the lambda's parameters and names their occurrences after the
   * binders. A binder (`forAll`, `exists`, `existsLet` and a call's result) then finds its lambda's
   * body free of its parameters, and keeps the body, which builds the rest of the statement. A
-  * parameter still used there computes the statement itself, which is a compile error.
+  * parameter still used there computes the statement itself, which is a compile error. A body of
+  * type `Boolean` is itself a leaf: one test over the binder's parameters and the enclosing ones.
   *
   * A binder and a leaf name a variable the same way, from its symbol ([[variableName]]).
   */
 private[verify] object PropMacro {
 
-    def forAll[A: Type](body: Expr[A => Prop])(using Quotes): Expr[Prop] =
+    def forAll[A: Type](body: Expr[A => Prop | Boolean])(using Quotes): Expr[Prop] =
         binders(body, List(Type.of[A]), "forAll")((idents, inner) => universal(idents, inner))
 
-    def forAll2[A: Type, B: Type](body: Expr[(A, B) => Prop])(using Quotes): Expr[Prop] =
+    def forAll2[A: Type, B: Type](body: Expr[(A, B) => Prop | Boolean])(using Quotes): Expr[Prop] =
         binders(body, List(Type.of[A], Type.of[B]), "forAll")((idents, inner) =>
             universal(idents, inner)
         )
 
-    def forAll3[A: Type, B: Type, C: Type](body: Expr[(A, B, C) => Prop])(using
+    def forAll3[A: Type, B: Type, C: Type](body: Expr[(A, B, C) => Prop | Boolean])(using
         Quotes
     ): Expr[Prop] =
         binders(body, List(Type.of[A], Type.of[B], Type.of[C]), "forAll")((idents, inner) =>
@@ -40,12 +41,14 @@ private[verify] object PropMacro {
             '{ Prop.Forall($ident.asInstanceOf[PropExpr.Ident[Any]], $inner) }
         )
 
-    def exists[A: Type](body: Expr[A => Prop])(using Quotes): Expr[Prop] =
+    def exists[A: Type](body: Expr[A => Prop | Boolean])(using Quotes): Expr[Prop] =
         binders(body, List(Type.of[A]), "exists")((idents, inner) =>
             '{ Prop.Exists(${ idents.head.asExprOf[PropExpr.Ident[A]] }, None, $inner) }
         )
 
-    def existsLet[A: Type](witness: Expr[A], body: Expr[A => Prop])(using Quotes): Expr[Prop] =
+    def existsLet[A: Type](witness: Expr[A], body: Expr[A => Prop | Boolean])(using
+        Quotes
+    ): Expr[Prop] =
         binders(body, List(Type.of[A]), "existsLet")((idents, inner) =>
             '{
                 Prop.Exists(
@@ -59,7 +62,7 @@ private[verify] object PropMacro {
     def call[A: Type, R: Type](
         fn: Expr[FunctionRef[A, R]],
         arg: Expr[A],
-        body: Expr[R => Prop],
+        body: Expr[R => Prop | Boolean],
         total: Boolean
     )(using Quotes): Expr[Prop] =
         binders(body, List(Type.of[R]), "call")((idents, inner) =>
@@ -77,7 +80,7 @@ private[verify] object PropMacro {
     def callDef[A: Type, R: Type](
         fn: Expr[FunctionDef[A, R]],
         arg: Expr[A],
-        body: Expr[R => Prop],
+        body: Expr[R => Prop | Boolean],
         total: Boolean
     )(using Quotes): Expr[Prop] = call('{ $fn.ref }, arg, body, total)
 
@@ -88,8 +91,11 @@ private[verify] object PropMacro {
     def equal[A: Type](a: Expr[A], b: Expr[A])(using Quotes): Expr[Prop] =
         '{ Prop.Equal(${ leaf(a) }, ${ leaf(b) }) }
 
-    /** Checks that the leaves of the lambda literal `body` have closed over its parameters, and
-      * passes the binders' identifiers and the lambda's body to `build`.
+    /** Passes the binders' identifiers and the lambda literal `body`'s statement to `build`.
+      *
+      * A body of type `Boolean` is one test, compiled as a leaf over the lambda's parameters and
+      * the enclosing binders' variables, so it may use them anywhere. A body of type `Prop` must
+      * have its leaves closed over the lambda's parameters already.
       */
     private def binders(body: Expr[Any], types: List[Type[?]], kind: String)(
         build: (List[Expr[PropExpr.Ident[?]]], Expr[Prop]) => Expr[Prop]
@@ -102,19 +108,19 @@ private[verify] object PropMacro {
                   s"$kind requires a lambda literal of ${types.size} parameters",
                   other.pos
                 )
-        val symbols = params.map(_.symbol).toSet
-        new TreeTraverser {
-            override def traverseTree(tree: Tree)(owner: Symbol): Unit = tree match
-                case ident: Ident if symbols.contains(ident.symbol) =>
-                    report.error(
-                      s"${ident.name} is a variable of the statement: it can be used in the " +
-                          "statement's tests and expressions, not to compute the statement itself. " +
-                          "An if or match that chooses between statements is not supported; for " +
-                          "one Boolean test, write Prop(...) around the whole condition",
-                      ident.pos
-                    )
-                case _ => traverseTreeChildren(tree)(owner)
-        }.traverseTree(rhs)(Symbol.spliceOwner)
+        val bodyType = rhs.tpe.widen
+        val statement =
+            if bodyType <:< TypeRepr.of[Boolean] then
+                '{ Prop.Bool(${ leaf(rhs.asExprOf[Boolean]) }) }
+            else if bodyType <:< TypeRepr.of[Prop] then
+                checkClosed(rhs, params.map(_.symbol).toSet)
+                rhs.changeOwner(Symbol.spliceOwner).asExprOf[Prop]
+            else
+                report.errorAndAbort(
+                  s"the body of $kind is a statement in one branch and a Boolean test in another. " +
+                      choiceHint,
+                  rhs.pos
+                )
         val idents = params.zip(types).map { (param, tpe) =>
             val name = variableName(param.symbol)
             val id = positionId(param.pos)
@@ -128,7 +134,38 @@ private[verify] object PropMacro {
                         )
                     }
         }
-        build(idents, rhs.changeOwner(Symbol.spliceOwner).asExprOf[Prop])
+        build(idents, statement)
+    }
+
+    private val choiceHint =
+        "An if or match that chooses between statements is not supported: state each case with " +
+            "==>, as (c ==> p) && (!c ==> q). An if or match over Boolean tests is itself one test."
+
+    /** Reports every use of `symbols` left in a statement body, where the leaves have already
+      * replaced their own uses. A remaining use computes the statement itself.
+      */
+    private def checkClosed(using
+        Quotes
+    )(
+        rhs: quotes.reflect.Term,
+        symbols: Set[quotes.reflect.Symbol]
+    ): Unit = {
+        import quotes.reflect.*
+        val uses = new TreeAccumulator[List[Ident]] {
+            override def foldTree(found: List[Ident], tree: Tree)(owner: Symbol): List[Ident] =
+                tree match
+                    case ident: Ident if symbols.contains(ident.symbol) => ident :: found
+                    case _ => foldOverTree(found, tree)(owner)
+        }.foldTree(Nil, rhs)(Symbol.spliceOwner).reverse
+        uses.foreach { ident =>
+            report.error(
+              s"${ident.name} is a variable of the statement: it can be used in the statement's " +
+                  s"tests and expressions, not to compute the statement itself. $choiceHint",
+              ident.pos
+            )
+        }
+        // The body cannot be built with a variable out of its scope.
+        if uses.nonEmpty then throw new scala.quoted.runtime.StopMacroExpansion
     }
 
     /** An expression of the statement compiled to SIR. When it uses variables of enclosing binders,
@@ -137,7 +174,9 @@ private[verify] object PropMacro {
     private def leaf[A: Type](e: Expr[A])(using Quotes): Expr[PropExpr[A]] = {
         import quotes.reflect.*
         val variables = binderVariables(e.asTerm)
-        if variables.isEmpty then '{ PropExpr.SIRExpr[A](scalus.compiler.compile($e)) }
+        if variables.isEmpty then
+            val closed = e.asTerm.changeOwner(Symbol.spliceOwner).asExprOf[A]
+            '{ PropExpr.SIRExpr[A](scalus.compiler.compile($closed)) }
         else
             val names = variables.map(variableName)
             val methodType = MethodType(variables.map(_.name))(

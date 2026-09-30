@@ -93,10 +93,10 @@ import Props.*
 enum Prop { ... }                   // explicit runtime logical object; see below
 
 object Props {
-    inline def forAll[A: Quantifiable](inline body: A => Prop): Prop // also of 2 and 3 binders
-    def forAllSIR[A](ident: PropExpr.Ident[A], body: Prop): Prop    // runtime constructor
-    inline def exists[A: Quantifiable](inline body: A => Prop): Prop
-    inline def existsLet[A: Quantifiable](inline witness: A)(inline body: A => Prop): Prop
+    inline def forAll[A: Quantifiable](inline body: A => Prop | Boolean): Prop // also 2 and 3 binders
+    def forAllSIR[A](ident: PropExpr.Ident[A], body: Prop): Prop              // runtime constructor
+    inline def exists[A: Quantifiable](inline body: A => Prop | Boolean): Prop
+    inline def existsLet[A: Quantifiable](inline witness: A)(inline body: A => Prop | Boolean): Prop
     def existsSIR[A](ident: PropExpr.Ident[A], witness: Option[PropExpr[A]], body: Prop): Prop
     inline def denotes[A](inline e: A): Prop
     inline def equal[A](inline a: A, inline b: A): Prop
@@ -138,13 +138,13 @@ claim is false at `x = 0, z = 0`, which makes it a good negative control.
 `existsLet` is the explicit-witness form of an existential. Its signature can be read as:
 
 ```scala
-inline def existsLet[A: Quantifiable](inline witness: A)(inline body: A => Prop): Prop
+inline def existsLet[A: Quantifiable](inline witness: A)(inline body: A => Prop | Boolean): Prop
 ```
 
 - `A: Quantifiable` says that values of type `A` may be used as quantified values.
 - `witness` is a term that supplies one particular value of type `A`. It may refer to
   variables bound by surrounding `forAll`/`exists` expressions.
-- `body: A => Prop` describes what must hold for that supplied value.
+- `body` describes what must hold for that supplied value: a statement, or a Boolean test.
 
 Logically, `existsLet(w)(body)` means `body(w)`: it proves an existential by naming the witness
 instead of asking the backend to search for one. For example:
@@ -170,11 +170,15 @@ Capture (§4.3) makes two changes:
 
 The quantifier stays in `Prop`; the computation in each leaf is SIR.
 
-A binder variable used outside a leaf would make the shape of the statement depend on its value,
-so it is a compile error. For example, an `if` or `match` that chooses between statements is
-outside the subset of §4.1. A Boolean conditional belongs inside one test,
-`Prop(if flag then a else b)`. A body that is a plain Boolean expression becomes one test through
-an implicit conversion.
+A binder's body is either a statement or a Boolean. A Boolean body is one test, whatever it
+contains, so `forAll[Boolean, BigInt]((flag, x) => if flag then x > 0 else x < 0)` is a single
+test, and so is a body with a `match` or local `val`s. A Boolean operand of a connective also
+becomes one test, through an implicit conversion: in `(lo <= hi) ==> call(...)`, `lo <= hi` is a
+test.
+
+In a statement body, a binder variable used outside a leaf would make the shape of the statement
+depend on its value, so it is a compile error. For example, an `if` or `match` that chooses
+between statements is outside the subset of §4.1; state the cases with `==>` instead.
 
 The explicit representation gives the verifier stable scoping, serialization and backend access.
 How the macros build it is described in
@@ -293,7 +297,7 @@ generators and evaluator are backend concerns and are not part of the `Prop` mod
 | `call(fn, x)(r => Prop(r.amount >= 0))` | A `Prop.Call` naming a function-table entry, with a result binder and a test in its continuation (§3.8). |
 
 The outer formula handles logical connectives and quantifiers; SIR handles the computation inside
-each test. A Boolean conditional such as `Prop(if flag then x > 0 else x < 0)` stays inside the
+each test. A Boolean conditional such as `if flag then x > 0 else x < 0` stays inside the
 test as `SIR.IfThenElse`. A conditional returning `Prop` is outside the accepted subset (§4.1).
 
 A helper call such as `Math.abs(x)` can therefore occur inside the test's expression even when
@@ -403,9 +407,10 @@ T     ::= a Quantifiable type, statically known
 The free variables of `bool` and `term` must be binders in scope, target binders, or anything
 `compile` already accepts (constants, `@Compile` definitions).
 
-The capture macros do not accept `{ val v = term; prop }` yet. A binder variable used in `term` is
-outside every leaf, and `v` is not a binder, so leaves cannot close over it.
-`existsLet(term)(v => prop)` states the same thing.
+The capture macros do not accept `{ val v = term; prop }` yet, where `prop` is a statement. A
+binder variable used in `term` is outside every leaf, and `v` is not a binder, so leaves cannot
+close over it. `existsLet(term)(v => prop)` states the same thing. When the block is a Boolean, it
+is one test and is accepted.
 
 These are rejected with a compile error:
 
@@ -613,7 +618,7 @@ accepts one, two or three binders, and its body is any statement of the fragment
 ```scala
 val clamp = FunctionDef(Math.clamp)
 forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-    Prop(lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+    (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
 )
 ```
 
