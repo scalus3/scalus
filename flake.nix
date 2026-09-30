@@ -342,6 +342,11 @@
               libsodium
               secp256k1
               blst
+              # Lean 4 + Z3 for the Lean-Proofs workflow, which builds the Lean workspace and runs
+              # the scalus-verification proofs through sbt. Without a built workspace, as in
+              # ci-jvm, the tests that run Lean are canceled.
+              elan
+              z3
             ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.chromium ];
             shellHook = ''
               unlink plutus-conformance 2>/dev/null || true

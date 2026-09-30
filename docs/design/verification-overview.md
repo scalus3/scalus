@@ -21,13 +21,11 @@ side stays in the backends: Lean 4, Blaster and Z3 today.
 
 Three pieces of work exist, and none of them connects to the others yet.
 
-- **`scalus-verification`** (formerly `scalus-lean-proofs`; branch `worktree-lean-proofs`). It
-  compiles prelude functions to UPLC, exports them, and proves 17 theorems about the exported
-  bytes with Blaster. It is the first instance of what this document calls the `blaster-uplc`
-  tactic. Its statements, step budgets, anti-vacuity guards and negative controls are all
-  **written by hand in Lean**. See
-  `scalus-verification/README.md` and
-  `docs/superpowers/specs/2026-08-27-lean-blaster-uplc-proofs-design.md`.
+- **`scalus-verification`** (formerly `scalus-lean-proofs`). It holds the `scalus.verify`
+  statement model and the first `blaster-uplc` tactic, `UplcBlaster`, which proves `Prop`
+  statements about compiled UPLC through Lean and Blaster. The suite of theorems about prelude
+  functions that was first written by hand in Lean is now stated in Scala (`PreludeProofsTest`,
+  §8.1). See `scalus-verification/README.md`.
 - **`spec.requires` / `spec.ensures` / `spec.ensuresResult`** (local branch
   `feature/verification-blaster`, not pushed). These are in-body specification clauses. They are
   `inline` no-ops, so they erase completely from the compiled script. Nothing gives them meaning
@@ -123,8 +121,8 @@ forAll[BigInt](z => forAll[BigInt](x =>
 ))
 ```
 
-The current Boolean-only macros cannot yet compile these nested `Prop` bodies. Without the
-`x ≠ 0` guard the claim is false at `x = 0, z = 0`, which makes it a good negative control.
+Binder bodies are statements, so this nests as written (§3.2). Without the `x ≠ 0` guard the
+claim is false at `x = 0, z = 0`, which makes it a good negative control.
 
 `existsLet` is the explicit-witness form of an existential. Its signature can be read as:
 
@@ -151,12 +149,21 @@ By contrast, `exists[BigInt](y => y > x)` leaves the witness to the verification
 
 ### 3.2 Scala syntax and the runtime object
 
-The Scala lambdas in `forAll(x => x > 0)` and `exists(x => x > 0)` are source notation. The
-macros compile each Boolean lambda to SIR, extract its SIR parameter and body, and construct a
-`Prop.Forall` or `Prop.Exists` with a `PropExpr.Ident` and a `Prop.Bool` body. `existsLet` also
-compiles its witness to SIR. The quantifier stays in `Prop`; its Boolean computation is SIR.
-`call` and `whenReturns` likewise compile the argument and Boolean continuation to SIR. General
-`Prop` bodies and nested quantifiers remain design work.
+The Scala lambdas of `forAll`, `exists`, `existsLet` and a call's continuation are source
+notation for binders, and their bodies are statements. The compiler inlines from the inside out,
+so a statement's leaves are captured first. Each leaf (a Boolean test, the operand of `denotes`
+or `equal`, a call's argument, an `existsLet` witness) is compiled as a closed lambda over the
+binder variables it uses, `(x, y) => e`, never as an expression with free variables. At runtime
+the lambda's parameters are removed and their occurrences named after the binders, from the
+parameter and the offset of its declaration (`x_1234`). The binder's macro then finds its body
+free of its parameter, and builds a `Prop.Forall`, `Prop.Exists` or `Prop.Call` with a
+`PropExpr.Ident` around it. The quantifier stays in `Prop`; the computation in each leaf is SIR.
+
+A binder used anywhere else in its body computes the statement itself, which is a compile error:
+an `if` or `match` that chooses between statements is outside the subset of §4.1. A Boolean
+conditional belongs inside one test, `Prop(if flag then a else b)`. A body that is a plain Boolean
+expression becomes one test through an implicit conversion. A binder's lambda that reaches the
+macro inside an inline expansion with bindings is not supported, because the body may use them.
 
 The explicit representation gives the verifier stable scoping, serialization and backend access.
 
@@ -245,9 +252,8 @@ its `Proof`. The same statement can be checked by several tactics without being 
 A target is one of two things.
 
 - **A `@Compile` function**, named directly (`Math.abs`, `VestingValidator.linearVesting`). Its SIR
-  is available (§3.2), so no export step is needed. `blaster-uplc` compiles it standalone, exactly as
-  `ProofTargets` does by hand today with `PlutusV3.compile((x: BigInt) => Math.abs(x))`, and embeds
-  that program verbatim. `lean-direct` translates its SIR. An optional testing backend supplies
+  is available (§3.2), so no export step is needed. `blaster-uplc` compiles it standalone, as
+  `FunctionDef(Math.clamp)` does, and embeds that program verbatim. `lean-direct` translates its SIR. An optional testing backend supplies
   any additional representation it needs.
   An `inline def`, such as `Math.abs`, `Math.min` and `Math.max`, has no SIR definition of its
   own. A target that names one stands for its eta-expansion (`x => Math.abs(x)`), which is
@@ -355,12 +361,16 @@ The call node stores only a typed name, a
   `FunctionDef(Math.clamp)` provides SIR and UPLC. A backend can add a representation under its own
   `Representation.custom` key, for example a Scala callback for a testing backend. A method that
   finds its representation missing fails with an error naming the function.
+- **A function of several parameters takes them as one tuple.** An entry records its `arity`, and
+  a call passes a tuple written out as `(a, b, ...)`. Its compiled programs are curried, so
+  `blaster-uplc` applies the program to each component in turn. A function of one parameter whose
+  type is a tuple takes the whole tuple.
 
 Implemented in `scalus-verification/.../scalus/verify/Function.scala`.
 
 For example, `FunctionRef(Math.clamp)` obtains the SIR method name without compiling a UPLC
-program. `call(Math.clamp, (x, lo, hi))(r => r >= lo)` captures the same reference and compiles
-the argument and Boolean result condition to SIR. `callRef(ref, arg)(r => condition)` uses a
+program. `call(Math.clamp, (x, lo, hi))(r => r >= lo)` captures the same reference, compiles the
+argument to SIR, and binds the result `r` in the continuation, which is a statement. `callRef(ref, arg)(r => condition)` uses a
 reference already in hand. The verifier still needs a matching `FunctionDef` in its function
 table to analyze the named method.
 
@@ -582,17 +592,27 @@ val result: VerificationResult = verifier.prove(claim, tactic)
 ```
 
 Here `tactic` is a proof backend implementing `Tactic`. The following source syntax is planned;
-target capture and nested `Prop` bodies are not implemented yet.
+target capture is not implemented yet.
 
-The initial `UplcBlaster` implementation owns the backend's compile options, existing target
-catalogue and `exportUplc` operation under `scalus.verify.uplcblaster`. It implements `Tactic` for
+The initial `UplcBlaster` implementation, with its compile options, lives under
+`scalus.verify.uplcblaster`. It implements `Tactic` for
 a universal prefix over `BigInt` and `Boolean` followed by a quantifier-free body. Each leaf of the
 body (a Boolean test, a total call, `denotes`, `equal`) is compiled to its own UPLC predicate over
 the quantified values. The connectives become a Lean proposition that reads each leaf by the
 polarity rule of §6.2. The tactic runs Lean, and replays a counterexample on the Scalus CEK before
-it reports `Refuted` (§5.2). `forAll` accepts one, two or three binders with a Boolean body, as in
-`forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x)`. A body with `Prop` connectives still has
-to be assembled from `Prop` nodes.
+it reports `Refuted` (§5.2). A closed statement, one without quantified variables, has nothing for
+Blaster to search: Lean decides it by running its predicates on the computable `runProgramFor`
+with `native_decide` (proof kind `LeanNative`). This also covers programs Blaster cannot reduce on
+concrete inputs, such as those reaching `integerToByteString`, whose model uses `Nat.log2`
+(input-output-hk/Lean-blaster#273). `forAll` accepts one, two or three binders, and its body is any
+statement of the fragment:
+
+```scala
+val clamp = FunctionDef(Math.clamp)
+forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
+    Prop(lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+)
+```
 
 Common direct Lean generation lives in `scalus.verify.lean.LeanExporter`. It translates `Prop`
 structure and SIR expressions over `Boolean` and `BigInt`; unsupported types and operations fail
@@ -699,6 +719,7 @@ object Verifier {
 enum ProofKind:
     case Blaster                    // goal closed by `axiom blasterProven`, not by a kernel proof
     case LeanKernel
+    case LeanNative                 // decided by `native_decide`: trusts the Lean compiler
 
 final class Theorem private[verify] (val statement: Statement, val proof: Proof)
 
@@ -837,12 +858,12 @@ without a step limit (§5.2).
   domain. The user must write the restriction into the statement, for example
   `(Math.abs(x) < 65536) ==> …`. It then shows up in the report instead of hiding in a budget
   number.
-- The anti-vacuity guards of `scalus-verification` are no longer what soundness rests on. They stay
-  useful as an early warning that a budget has become too small.
+- Anti-vacuity guards, which the former hand-written suite ran at each budget, are not what
+  soundness rests on.
 
-Compare with today's hand-written shape, `fromFrameToInt (p.prop x) = some r → r ≥ 0`. There the
-premise is read strongly in a negative position, so the theorem says nothing about inputs that
-need more steps than the budget.
+Compare with the shape of the former hand-written theorems, `fromFrameToInt (p.prop x) = some r → r ≥ 0`.
+There the premise is read strongly in a negative position, so the theorem says nothing about inputs
+that need more steps than the budget.
 
 **Budgets.** The user states the budget per verification request. Proof cost grows steeply with the budget. On a
 `gcd` theorem whose worst input needs 203 steps, budget 250 proved in 2 s, 350 took 52 s, and 500
@@ -987,6 +1008,8 @@ Unproved premises leave the goal open.
     (1134 cases);
   - Blaster's translation, which closes goals with `axiom blasterProven`;
   - Z3;
+  - for a closed statement decided by `native_decide`, the Lean compiler, through the axiom
+    `Lean.ofReduceBool`, instead of Blaster and Z3;
   - our own lowering: the polarity rule, the value lifting, the verbatim target embedding, and
     the `runFor` runner. Proving that a program fails takes the model's `State.Error` as a
     Plutus evaluation failure, so the model must not fail where Plutus returns a value. The
@@ -997,7 +1020,8 @@ Unproved premises leave the goal open.
 - **Negative controls are required.** A suite that uses a Lean tactic must contain at least one
   `refute` for each combination of target, tactic and budget, and the runner fails a suite that
   does not. A broken template or a vacuous encoding would otherwise report Valid for everything,
-  indistinguishable from success. `scalus-verification` already follows this rule by hand.
+  indistinguishable from success. `PreludeProofsTest` follows this rule per function; the runner
+  does not enforce it yet.
 - **Counterexamples are replayed** (§5.2). A solver model alone is not a finding.
 
 ---
@@ -1006,16 +1030,18 @@ Unproved premises leave the goal open.
 
 ### 8.1 The existing `blaster-uplc` suite
 
-The `scalus-verification` module is the intended home for everything in this document. Today it
-holds the first `blaster-uplc` instance, with hand-written statements. Migrating that suite is Phase 0
-of the plan:
+The `scalus-verification` module is the intended home for everything in this document. Its first
+`blaster-uplc` suite was written by hand in Lean, over UPLC exported by a target catalogue
+(`ProofTargets`). It is now stated in Scala, in `PreludeProofsTest`:
 
-- the 17 theorems and their negative controls are restated in Scala, and must produce the same
-  verdicts;
-- each `ProofTarget` becomes a `@Compile` function target (`Math.abs`, …), so the hand-written
-  `PlutusV3.compile(...)` wrappers go away;
-- its `samples` feed `scalacheck`;
-- `Generated/` and the hand-written `.lean` files are produced by the runner.
+- the theorems of `Math.lean` and `Data.lean` are `Prop` statements over `FunctionDef` targets,
+  proved by `UplcBlaster`; every function has a negative control;
+- a call is total and its conclusion is read strongly, so each theorem also claims that the
+  function returns, and the separate totality theorems are implied;
+- the samples, which were `native_decide` checks in the generated `Targets.lean`, are closed
+  statements: they are checked on the Scalus CEK and decided in Lean by evaluation;
+- the target catalogue, the exporter, `Generated/` and the hand-written `.lean` files are gone.
+  Lean's generated input is written to a temporary directory for each check.
 
 ### 8.2 `spec` clauses on `feature/verification-blaster`
 
@@ -1061,8 +1087,8 @@ same place.
 5. **Calling convention for target binders** with non-primitive argument types. The test's call
    `f(x)` must use the same representation, `Data` or `UplcConstr`, as the target's parameter.
 6. **Budget calibration** between Scalus CEK metering and PlutusCoreBlaster step counts.
-7. **Commit policy.** Should the cache and the generated Lean workspace be committed, as
-   `Generated/` is today, so Lean builds without a JVM?
+7. **Commit policy.** Should the proof cache and the generated Lean input be committed, so Lean
+   builds without a JVM?
 8. **The default domain for validator inputs:** well-formed values or raw `Data` (§3.3).
 9. **Where mappings are declared.** `leanMapping(f, "…")` in the verification module, or an
     annotation on the function itself, which would tie core code to Lean names?

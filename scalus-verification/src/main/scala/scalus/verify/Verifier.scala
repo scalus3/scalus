@@ -7,8 +7,17 @@ final class Statement private[verify] (val name: String, val prop: Prop) {
 
 /** Which proof mechanism checked an artifact. */
 enum ProofKind {
+
+    /** Closed by Blaster through Z3, which Lean admits with the axiom `blasterProven`. */
     case Blaster
+
+    /** Checked by the Lean kernel, with no axiom beyond Lean's own. */
     case LeanKernel
+
+    /** Decided by evaluation with `native_decide`, which trusts the Lean compiler through the axiom
+      * `Lean.ofReduceBool`.
+      */
+    case LeanNative
 }
 
 /** Backend-specific proof material retained with a theorem.

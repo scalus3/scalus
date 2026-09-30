@@ -1024,10 +1024,9 @@ generateLlmsApi := Def.taskDyn {
     (llmApiGen / Compile / runMain).toTask(s" scalus.llmapi.LlmApiGen $argLine")
 }.value
 
-// Formal verification of Scalus code; see docs/design/verification-overview.md.
-// Today it compiles selected prelude functions to UPLC and exports them for the
-// Lean/Blaster proof suite in scalus-verification/src/main/lean. See
-// docs/superpowers/specs/2026-08-27-lean-blaster-uplc-proofs-design.md
+// Formal verification of Scalus code; see docs/design/verification-overview.md and
+// scalus-verification/README.md. The UplcBlaster tactic runs Lean in the workspace at
+// scalus-verification/src/main/lean.
 lazy val scalusVerification = project
     .in(file("scalus-verification"))
     .dependsOn(scalus.jvm)
@@ -1040,15 +1039,6 @@ lazy val scalusVerification = project
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
       PluginDependency
     )
-
-lazy val exportLeanUplc =
-    taskKey[Unit]("Regenerate scalus-verification/src/main/lean/ScalusProofs/Generated")
-exportLeanUplc := Def.taskDyn {
-    val outDir = ((ThisBuild / baseDirectory).value / "scalus-verification" / "src" / "main" /
-        "lean" / "ScalusProofs" / "Generated").getAbsolutePath
-    (scalusVerification / Compile / runMain)
-        .toTask(s" scalus.verify.uplcblaster.UplcBlaster $outDir")
-}.value
 
 // Cardano Ledger domain model and CBOR serialization
 lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
