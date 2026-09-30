@@ -49,8 +49,8 @@ val inRange = verifier.statement(
 verifier.verify(inRange, UplcBlaster(budget = 120)) // Proven
 ```
 
-`UplcBlaster` proves statements with a prefix of universal quantifiers over `BigInt` and
-`Boolean`, and a body without quantifiers: Boolean tests, calls, `denotes` and `equal`,
+`UplcBlaster` proves statements with a prefix of universal quantifiers over `BigInt`, `Boolean`
+and `Data`, and a body without quantifiers: Boolean tests, calls, `denotes` and `equal`,
 combined with `&&`, `||`, `!`, `==>` and `<=>`. Each test becomes its own closed UPLC predicate
 over the quantified values. The tactic writes a Lean file in a temporary directory that imports
 them, runs `lake env lean` in this workspace, and reads Blaster's verdict. The workspace must be
@@ -84,7 +84,7 @@ within the budget on every input: a run that exhausts the budget counts as one t
 so `p` must then hold, and a partial function that loops on some inputs cannot be proved. Other
 `@Compile` definitions a test uses are compiled with the test. A function of several parameters is
 called with a tuple written out, as in `callRef(clamp.ref, (x, lo, hi))(r => lo <= r)`, and its
-program is applied to each value in turn. Arguments and results must be `BigInt` or `Boolean`.
+program is applied to each value in turn. Arguments and results must be `BigInt`, `Boolean` or `Data`.
 
 A binder's body is a statement or a Boolean. Statements nest quantifiers, calls and connectives:
 `forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x != BigInt(0)))`. A Boolean body is one test,
@@ -166,9 +166,11 @@ for the reasons.
    evidence for that model is that it passes the plutus-conformance corpus.
 4. **`Value` and array builtins are out of scope.** Targets must compile with
    `valueBuiltins = false`; the model has no CIP-153 or CIP-138 builtins.
-5. **Functions reaching the CIP-121/122 bitwise builtins cannot be proved generically.**
-   Blaster cannot translate `BitVec`, whose width is a value index rather than a type
-   parameter, and `ByteString` is built on it. Any property quantifying over a symbolic input
-   whose CEK trace reaches `shiftByteString`, `integerToByteString` or `byteStringToInteger`
-   fails to translate, at every budget. This is why `Math.exp2` is proved only on its
+5. **Functions reading single bytes or reaching the CIP-121/122 bitwise builtins cannot be
+   proved generically.** Blaster cannot translate `BitVec`, whose width is a value index rather
+   than a type parameter. The model reads a byte through a `Char`, whose value is a `BitVec 32`,
+   and the bitwise builtins use `BitVec` directly. Any property quantifying over a symbolic input
+   whose CEK trace reaches `indexByteString`, `shiftByteString`, `integerToByteString` or
+   `byteStringToInteger` fails to translate, at every budget. Comparing, appending and measuring
+   byte strings, as `Data` values need, translate. This is why `Math.exp2` is proved only on its
    `exp < 0` early return.
