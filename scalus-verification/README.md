@@ -84,7 +84,9 @@ within the budget on every input: a run that exhausts the budget counts as one t
 so `p` must then hold, and a partial function that loops on some inputs cannot be proved. Other
 `@Compile` definitions a test uses are compiled with the test. A function of several parameters is
 called with a tuple written out, as in `callRef(clamp.ref, (x, lo, hi))(r => lo <= r)`, and its
-program is applied to each value in turn. Arguments and results must be `BigInt`, `Boolean` or `Data`.
+program is applied to each value in turn. Arguments and results can have any type, case classes
+included: the compiler passes them. A `FunctionDef` records how its program takes its arguments,
+and the tactic rejects a function compiled with options that pass them differently.
 
 A binder's body is a statement or a Boolean. Statements nest quantifiers, calls and connectives:
 `forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x != BigInt(0)))`. A Boolean body is one test,

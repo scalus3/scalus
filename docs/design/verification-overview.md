@@ -375,6 +375,10 @@ The call node stores only a typed name, a
   `FunctionDef(Math.clamp)` provides SIR and UPLC. A backend can add a representation under its own
   `Representation.custom` key, for example a Scala callback for a testing backend. A method that
   finds its representation missing fails with an error naming the function.
+- **An entry records its calling convention.** `FunctionDef.fromCompiled` adds a `UplcSignature`:
+  the representation in which the V3 lowering passes each parameter and the result, computed with
+  the options the program was compiled with. `blaster-uplc` checks it against the one its tests
+  call the function with.
 - **A function of several parameters takes them as one tuple.** An entry records its `arity`, and
   a call passes a tuple written out as `(a, b, ...)`. Its compiled programs are curried, so
   `blaster-uplc` applies the program to each component in turn. A function of one parameter whose
@@ -876,8 +880,9 @@ while PlutusCoreBlaster counts machine steps.
 
 **Limits.**
 
-- Binders and values are `BigInt`, `Boolean` or `Data` for now. Case classes are not supported
-  yet; state them over `Data` with `FromData`.
+- Quantified variables are `BigInt`, `Boolean` or `Data` for now; values inside tests, such as
+  call arguments and results, can have any type. A case class cannot be quantified over yet;
+  quantify over its fields, or over `Data` with `FromData`.
 - Programs must be compiled without the CIP-153 `Value` and CIP-138 array builtins, which the
   Lean model lacks. A ledger `Value` represented as `Data` is unaffected.
 - Programs that read single bytes or reach the CIP-121/122 bitwise builtins cannot be proved over
@@ -1080,8 +1085,10 @@ same place.
    `spec.total` the right spelling, and should validators default differently from helpers?
 3. **`Prop` versus `Boolean` connectives.** `a && b` on two Booleans stays one test. Should
    `lean-direct` split it when both sides are total?
-4. **Calling convention for target binders** with non-primitive argument types. The test's call
-   `f(x)` must use the same representation, `Data` or `UplcConstr`, as the target's parameter.
+4. **Calling convention across representations.** For `blaster-uplc` this is settled: tests and
+   programs both use each type's default representation, recorded as a `UplcSignature` and
+   checked (see `verification-details/uplc-blaster.md`). Open: `lean-direct`'s mapping proofs
+   and claims about a program's raw boundary need a Lean encoding per representation.
 5. **Budget calibration** between Scalus CEK metering and PlutusCoreBlaster step counts.
 6. **Commit policy.** Should the proof cache and the generated Lean input be committed, so Lean
    builds without a JVM?

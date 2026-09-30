@@ -30,15 +30,20 @@ Prop ──lower──► Lowered(binders, body: LeafFormula, leaves: Vector[Pro
   - a test, `Prop.Bool`;
   - a total `call` whose continuation is a test or another total call;
   - a partial call, `whenReturns(f, a)(r => p)`, whose continuation is the same;
-  - `denotes(e)`, where `e` is a `BigInt`, a `Boolean` or a `Data` value;
-  - `equal(a, b)` over those types.
+  - `denotes(e)`, where `e` has any type;
+  - `equal(a, b)` over `BigInt`, `Boolean` or `Data`.
 
-Call arguments and results have those types too.
+Only quantified variables are limited to `BigInt`, `Boolean` and `Data`, because Lean builds their
+values. A call's arguments and result, and the operand of `denotes`, can have any type: they live
+inside a test's program, and the compiler passes them. The exception is a function registered
+without SIR, which has no declared type: a call to it can pass only `BigInt`, `Boolean` and `Data`
+values (see "The calling convention").
 
 `<=>` becomes two implications, because each of its operands occurs in both polarities. Anything
 else lowers to `Left(reason)`, which the tactic returns as `Inconclusive`. That covers other
 binder types, a quantifier after the prefix, a call whose continuation uses connectives or
-`whenReturns`, and call arguments or results of other types.
+`whenReturns`, a polymorphic function, and a function whose program takes its arguments
+differently from how the tests pass them.
 
 ## Leaves and `LeafFormula`
 
@@ -95,7 +100,28 @@ the whole expression.
 
 So a registered function's compiled bytes appear unchanged inside the predicate, and no
 optimization runs across that boundary. A `@Compile` function that is not registered is compiled
-together with the test, so the optimizer may inline it.
+together with the test, so the optimizer may inline it. Other external references, such as the
+compiler's own support functions behind `d.to[A]`, are left to the lowering.
+
+**The calling convention.** The V3 lowering passes every value across a function's boundary in
+its type's default representation (`SirTypeUplcGenerator.defaultRepresentation`): an integer as a
+constant, a plain case class as a builtin `list data` of its fields (`ProdDataList`), a sum type
+as `Data` (`DataConstr`), a type marked `@UplcRepr(UplcConstr)` as `constr` terms. A function
+value's representation is `LambdaRepresentation(default(input), default(output))`, and a compiled
+program's top-level value is converted to it, so a test calling a linked function and the
+function's own program agree when both are lowered with the same options:
+
+- the call's `ExternalVar` has the function's declared type, from its SIR, so an enum constructor
+  such as `Circle(r)` is passed as the enum;
+- `FunctionDef.fromCompiled` records the program's `UplcSignature`, the representation of each
+  parameter and of the result, computed with the options it was compiled with;
+- `lower` computes, from the same declared type, the signature the tests call it with under
+  `UplcBlaster.options`, and returns `Left` on a mismatch, such as a program lowered by another
+  backend. Both sides come from one type, so they differ only where the options do;
+- a function registered with a UPLC program but no SIR has no declared type and no signature.
+  A call to it takes its type from the values, which fixes the form only of `BigInt`, `Boolean`
+  and `Data`, so other values are refused: an enum constructor would otherwise be passed as a
+  list of its fields.
 
 ## Reading leaves by polarity
 
@@ -216,7 +242,8 @@ A falsification under the budget can be spurious: a positive leaf that needs mor
 false. `replay` works in four steps:
 
 1. It reads Blaster's counterexample and completes it: a binder the model leaves unconstrained
-   takes `0`, `false` or `I 0`. A value it cannot read, such as a byte string with a character
+   takes `0`, `false` or `I 0`. Blaster omits such a binder, or Z3 answers with its SMT name,
+   such as `$0`. A value it cannot read, such as a byte string with a character
    above 255, makes the result `Inconclusive`.
 2. It applies each leaf's program to the values.
 3. It evaluates each program on the Scalus CEK, with a budget of a hundred times the mainnet
@@ -280,9 +307,10 @@ fails instead of being canceled. In `ci-jvm` those tests are canceled.
 
 ## Limits
 
-- **Types.** Binders, call arguments and results, and the operands of `denotes` and `equal` must
-  be `BigInt`, `Boolean` or `Data`. `Quantifiable` also covers `ByteString`, which the tactic
-  rejects. Case classes are not supported yet; state them over `Data` with `FromData`.
+- **Types.** Quantified variables and the operands of `equal` must be `BigInt`, `Boolean` or
+  `Data`. `Quantifiable` also covers `ByteString`, which the tactic rejects. A case class cannot
+  be quantified over yet; quantify over its fields and build it in the test, or over `Data` with
+  `denotes(d.to[A]) ==> …`. Call arguments and results can have any type.
 - **Byte-level builtins.** Blaster cannot translate `BitVec`, whose width is a value index rather
   than a type parameter. The model stores a byte string as a `String`, so comparing, appending
   and measuring byte strings translate, but reading one byte (`indexByteString`) goes through a

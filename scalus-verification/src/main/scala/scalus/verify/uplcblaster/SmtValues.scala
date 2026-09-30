@@ -12,6 +12,10 @@ import scalus.uplc.builtin.{ByteString, Data}
   * `(PlutusCore.ByteString.….ByteString.mk "ABC")`, one character per byte. Constructors of `Data`
   * are qualified, as in `PlutusCore.Data.PlutusCore.DataInternal.Data.I`. A string literal follows
   * SMT-LIB: `""` is a quote, and `\u{…}` is a character by its code point.
+  *
+  * Where the model leaves a value, or part of one, unconstrained, Z3 answers with the SMT name of a
+  * variable, such as `$0`. Any value serves there, so it reads as a default: `0`, `false`, `I 0`,
+  * the empty list or byte string.
   */
 private[uplcblaster] object SmtValues {
 
@@ -24,9 +28,13 @@ private[uplcblaster] object SmtValues {
     def integer(text: String): Either[String, BigInt] = term(text).flatMap(toInteger)
 
     def boolean(text: String): Either[String, Boolean] = text.trim match
-        case "true"  => Right(true)
-        case "false" => Right(false)
-        case other   => Left(s"expected a Boolean, got $other")
+        case "true"                        => Right(true)
+        case "false"                       => Right(false)
+        case other if unconstrained(other) => Right(false)
+        case other                         => Left(s"expected a Boolean, got $other")
+
+    /** The SMT name of a variable, which Z3 answers for a value it leaves unconstrained. */
+    private def unconstrained(text: String): Boolean = text.startsWith("$")
 
     def data(text: String): Either[String, Data] = term(text).flatMap(toData)
 
@@ -126,6 +134,7 @@ private[uplcblaster] object SmtValues {
         case Nil                         => Left("an empty term")
 
     private def toInteger(node: Node): Either[String, BigInt] = node match
+        case Node.Atom(text) if unconstrained(text)                     => Right(BigInt(0))
         case Node.Atom(text) if text.nonEmpty && text.forall(_.isDigit) => Right(BigInt(text))
         case Node.Apply(List(Node.Atom("-"), value))                    => toInteger(value).map(-_)
         case other => Left(s"expected an integer, got $other")
@@ -137,6 +146,7 @@ private[uplcblaster] object SmtValues {
             case _                          => None
 
     private def toData(node: Node): Either[String, Data] = node match
+        case Node.Atom(text) if unconstrained(text) => Right(Data.I(0))
         case Node.Apply(Node.Atom(name) :: arguments) =>
             (dataConstructor(name), arguments) match
                 case (Some("I"), List(value)) => toInteger(value).map(Data.I(_))
@@ -154,12 +164,14 @@ private[uplcblaster] object SmtValues {
         case other => Left(s"expected a Data value, got $other")
 
     private def toPair(node: Node): Either[String, (Data, Data)] = node match
+        case Node.Atom(text) if unconstrained(text) => Right(Data.I(0) -> Data.I(0))
         case Node.Apply(List(Node.Atom("Prod.mk"), key, value)) =>
             for k <- toData(key); v <- toData(value) yield k -> v
         case other => Left(s"expected a pair, got $other")
 
     private def toList[A](node: Node, element: Node => Either[String, A]): Either[String, List[A]] =
         node match
+            case Node.Atom(text) if unconstrained(text) => Right(Nil)
             case Node.Apply(List(Node.Atom("List.cons"), head, tail)) =>
                 for h <- element(head); t <- toList(tail, element) yield h :: t
             case Node.Apply(Node.Atom("as") :: Node.Atom("List.nil") :: _) |
@@ -169,6 +181,7 @@ private[uplcblaster] object SmtValues {
 
     /** A byte string, one character per byte. A character above 255 is no byte. */
     private def toBytes(node: Node): Either[String, ByteString] = node match
+        case Node.Atom(text) if unconstrained(text) => Right(ByteString.empty)
         case Node.Apply(List(Node.Atom(name), Node.Text(value)))
             if name.endsWith("ByteString.mk") =>
             val codePoints = value.codePoints().toArray

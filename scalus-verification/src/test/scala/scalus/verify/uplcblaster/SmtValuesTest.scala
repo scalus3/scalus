@@ -52,6 +52,18 @@ class SmtValuesTest extends AnyFunSuite {
         assert(SmtValues.data(s"""($data.B ($bytes "\\u{100}"))""").isLeft)
     }
 
+    test("a value the model leaves unconstrained reads as a default, alone or nested") {
+        assert(SmtValues.integer("$0") == Right(BigInt(0)))
+        assert(SmtValues.boolean("$1") == Right(false))
+        assert(SmtValues.data("$2") == Right(Data.I(0)))
+        assert(
+          SmtValues.data(s"($data.List (List.cons ($data.I 3) $$3))") ==
+              Right(Data.List(PList(Data.I(3))))
+        )
+        assert(SmtValues.data(s"($data.Constr $$4 $$5)") == Right(Data.Constr(0, PList.Nil)))
+        assert(SmtValues.data(s"($data.B $$6)") == Right(Data.B(ByteString.empty)))
+    }
+
     test("malformed terms are reported, not thrown") {
         assert(SmtValues.data(s"($data.I 1").isLeft)
         assert(SmtValues.data(s"""($data.B ($bytes "abc))""").isLeft)
