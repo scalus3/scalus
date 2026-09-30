@@ -126,6 +126,32 @@ statement moves. Nothing stores them yet; a proof cache keyed on a statement's c
   keep them, so this is a compile error, not a statement that is silently wrong.
 - **More than three parameters in one `forAll`.** Nest `forAll`s instead.
 
+## Contracts
+
+`Props.contract(f)(requires, ensures)` and `Props.totalContract` (`PropMacro.contract`) take two
+lambda literals, `requires = (x, lo, hi) => …` and `ensures = (x, lo, hi) => r => …`, and build
+
+```
+∀ x lo hi. requires ==> whenReturns(f, (x, lo, hi))(r => ensures)
+```
+
+with a total `call` for `totalContract`. The quantified variables are the parameters of
+`requires`, whose types the overload fixed. The call is built as `call` builds one, with the
+argument `(x, lo, hi)` made from references to them and `ensures`' inner lambda `r => …` as its
+continuation. The bodies of both lambdas become statements as a binder's body does: a `Boolean` is
+one test, and a statement must use the parameters only in its leaves.
+
+The two lambdas declare their parameters separately, so `ensures`' `lo` is another symbol than
+`requires`' `lo`, with another name. `ensures`' leaves were compiled before the contract macro
+expands, because expansion goes from the inside out, and they are already closed over its own
+names. So the macro cannot rename them in the tree. It emits `Props.renameVariables` instead, which
+renames `ensures`' variables after those of `requires` in the built statement at runtime, in its
+SIR and its binders.
+
+The macro returns a `Contract`: the statement, with the function and totality it already knows.
+`Verifier.contract(name, contract)` records `Origin.Contract(f, total)` from it, so a statement
+that is not a contract cannot be declared as one; `Verifier.contracts(f)` lists them.
+
 ## Function references
 
 `FunctionRef(Math.clamp)` and `FunctionDef(Math.clamp)` take the function's name from the method

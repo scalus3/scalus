@@ -1,8 +1,20 @@
 package scalus.verify
 
-/** A named proposition declared in a [[Verifier]]. */
-final class Statement private[verify] (val name: String, val prop: Prop) {
+/** A named proposition declared in a [[Verifier]], and where it comes from. */
+final class Statement private[verify] (val name: String, val prop: Prop, val origin: Origin) {
     override def toString: String = s"Statement($name)"
+}
+
+/** Where a statement comes from. */
+enum Origin {
+
+    /** Declared with [[Verifier.statement]]. */
+    case Explicit
+
+    /** The contract of `function`, declared with [[Verifier.contract]]. A total one claims that the
+      * function returns where its precondition holds.
+      */
+    case Contract(function: FunctionRef[?, ?], total: Boolean)
 }
 
 /** Which proof mechanism checked an artifact. */
@@ -94,11 +106,28 @@ final class Verifier private () {
         functionTable = updated
     }
 
-    def statement(name: String, prop: Prop): Statement = {
+    def statement(name: String, prop: Prop): Statement = declare(name, prop, Origin.Explicit)
+
+    /** Declares the contract of a function, built by [[Props.contract]] or [[Props.totalContract]].
+      * It is proved like any statement, and [[contracts]] finds it by its function.
+      */
+    def contract(name: String, contract: Contract): Statement =
+        declare(name, contract.prop, Origin.Contract(contract.function, contract.total))
+
+    /** The contracts declared for `function`, by name. */
+    def contracts(function: FunctionRef[?, ?]): List[Statement] =
+        declarations.values
+            .filter(_.origin match
+                case Origin.Contract(of, _) => of == function
+                case Origin.Explicit        => false)
+            .toList
+            .sortBy(_.name)
+
+    private def declare(name: String, prop: Prop, origin: Origin): Statement = {
         require(name.trim.nonEmpty, "a statement name must be non-empty")
         require(!declarations.contains(name), s"a statement named $name is already declared")
         require(!proven.contains(name), s"a theorem named $name is already available")
-        val declared = new Statement(name, prop)
+        val declared = new Statement(name, prop, origin)
         declarations = declarations.updated(name, declared)
         declared
     }

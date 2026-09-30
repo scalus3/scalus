@@ -326,14 +326,26 @@ object Math {   // illustrative: the prelude's clamp carries no clauses today
 ```
 
 **Next to the function**, as a function-property statement. This form suits functions you do not
-own, or a contract that belongs to a proof suite rather than to the code:
+own, or a contract that belongs to a proof suite rather than to the code. It is implemented:
 
 ```scala
-contract(Math.clamp)(
-  requires = (x, lo, hi) => lo <= hi,
-  ensures = (x, lo, hi) => r => lo <= r && r <= hi
+val clamp = FunctionDef(Math.clamp)
+val clampInRange = verifier.contract(
+  "clamp_in_range",
+  contract(clamp)(
+    requires = (x, lo, hi) => lo <= hi,
+    ensures = (x, lo, hi) => r => lo <= r && r <= hi
+  )
 )
+verifier.verify(clampInRange, UplcBlaster(budget = 120)) // Proven
 ```
+
+`Props.contract` builds the statement below, with `whenReturns`; `Props.totalContract` builds it
+with `call`. Both return a `Contract`: the statement, and the function and totality it is about.
+`verifier.contract` registers it as the function's contract (`Origin.Contract`), and
+`verifier.contracts(clamp.ref)` finds it. The parameters must
+be quantifiable. How the two lambdas come to speak of the same variables is in
+[statement capture](verification-details/prop-capture.md#contracts).
 
 Both forms elaborate to the same statement, with `f` bound to the target:
 
@@ -343,7 +355,7 @@ Both forms elaborate to the same statement, with `f` bound to the target:
 
 - **Partial correctness is the default.** The reading is "if `f` returns, the result is good".
   For a validator handler it is exactly "if the script succeeds, `P` holds", because rejection
-  *is* an error. Totality is a separate, explicit clause (`spec.total`, or `total = true`), which
+  *is* an error. Totality is a separate, explicit clause (`spec.total`, or `totalContract`), which
   adds `requires(args) ⇒ denotes(f(args))`.
 - **In-body clauses cost nothing on-chain.** They are erased before the code reaches UPLC. On
   `feature/verification-blaster`, `VestingValidator` compiled to the same 2046 bytes and the same
@@ -534,7 +546,7 @@ enum TargetRef:
 
 enum Origin:
     case Explicit                                // statement(...) / refute(...)
-    case Contract(inBody: Boolean)               // spec.* clauses, or contract(f)(...)
+    case Contract(function: FunctionRef[?, ?], total: Boolean) // contract(f)(...); later spec.*
     case Harvested                               // from a `require` (§8.4)
 
 final case class Statement(
