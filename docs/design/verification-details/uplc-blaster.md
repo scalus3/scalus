@@ -29,13 +29,14 @@ Prop ──lower──► Lowered(binders, body: LeafFormula, leaves: Vector[Pro
 - a body without quantifiers, built with `&&`, `||`, `!`, `==>` and `<=>` from these leaves:
   - a test, `Prop.Bool`;
   - a total `call` whose continuation is a test or another total call;
+  - a partial call, `whenReturns(f, a)(r => p)`, whose continuation is the same;
   - `denotes(e)`, where `e` is a `BigInt` or a `Boolean`;
   - `equal(a, b)` over `BigInt` or `Boolean`.
 
 `<=>` becomes two implications, because each of its operands occurs in both polarities. Anything
 else lowers to `Left(reason)`, which the tactic returns as `Inconclusive`. That covers other
-binder types, a quantifier after the prefix, `whenReturns`, a call whose continuation uses
-connectives, and call arguments or results of other types.
+binder types, a quantifier after the prefix, a call whose continuation uses connectives or
+`whenReturns`, and call arguments or results of other types.
 
 ## Leaves and `LeafFormula`
 
@@ -49,9 +50,18 @@ replaces each leaf with its index in `Lowered.leaves`.
 | `Call(f, a, r, total = true, k)` | `λ x1 … xn. (λ r. k)(f a1 … am)` | `Test(i)` |
 | `Equal(a, b)` | `λ x1 … xn. a = b`, with `equalsInteger` or Boolean equality | `Test(i)` |
 | `Denotes(e)` | `λ x1 … xn. e` | `Denotes(i)` |
+| `Call(f, a, r, total = false, k)` | `λ x1 … xn. f a1 … am`, and the total call's program | `Implies(Denotes(i), Test(i + 1))` |
 
 Every program takes all the binders' values, in the order of the prefix, whether it uses them or
 not.
+
+A partial call, `whenReturns(f, a)(r => k)`, is rewritten to `denotes(f(a)) ==> call(f, a)(r => k)`
+before it is lowered: if the function returns, the continuation holds of its result. The
+`denotes` leaf returns the function's result rather than a Boolean. Where the call is a
+conclusion, the polarity rule reads that `denotes` weakly, so a run of `f` that exhausts the
+budget counts as one that may return, and the continuation must then hold within the budget. A
+partial function that loops on some inputs therefore cannot be proved. Both leaves run the
+function's program.
 
 **Why one program per leaf.** A statement's truth depends on more than two outcomes per leaf. A
 leaf can return a value, fail, or exhaust the budget. `!` on a `Prop` is true when a test fails,
