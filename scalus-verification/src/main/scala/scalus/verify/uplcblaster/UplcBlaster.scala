@@ -20,10 +20,11 @@ import scala.jdk.CollectionConverters.*
   * followed by a quantifier-free body: tests, total calls, `denotes`, `equal` and the connectives.
   * Every test in the body is compiled to its own closed UPLC predicate over the quantified values
   * (see [[UplcBlaster.lower]]). The Lean CEK model runs each predicate for at most `budget` steps,
-  * and Blaster decides the resulting proposition. Each test is read according to its polarity
-  * (design doc §6.2), so a proof at any budget holds without the budget. A counterexample is
-  * replayed on the Scalus CEK before it is reported as a refutation. Other statement shapes are
-  * inconclusive.
+  * keeping a failing program apart from an exhausted budget, and Blaster decides the resulting
+  * proposition. Each test is read according to its polarity (design doc §6.2), so a proof at any
+  * budget holds without the budget, and a statement that a program fails can be proved. A
+  * counterexample is replayed on the Scalus CEK before it is reported as a refutation. Other
+  * statement shapes are inconclusive.
   */
 final class UplcBlaster private (val budget: Int, val leanDirectory: Path) extends Tactic {
     require(budget > 0, "the UPLC Blaster budget must be positive")
@@ -534,20 +535,23 @@ object UplcBlaster {
 
     /** Renders a formula with each leaf read by its polarity (design doc §6.2).
       *
-      * In a positive position a test must halt within the budget with `true`. In a negative
-      * position it must not halt with `false`: the machine returns `State.Error` both when a
-      * program fails and when the budget runs out, so an error there counts as possibly `true`.
-      * `denotes` is read likewise: it halts, and in a negative position it holds. Strengthening
+      * Each predicate runs with `ScalusProofs.Run.runFor`, where `State.Error` means that the
+      * program failed and a run that exhausts the budget ends in a state that has neither halted
+      * nor failed. In a positive position a test must halt within the budget with `true`. In a
+      * negative position it must neither halt with `false` nor fail within the budget, so a run
+      * that exhausts the budget counts as possibly `true`. `denotes` is read likewise: it halts
+      * within the budget, and in a negative position it does not fail within it. Strengthening
       * positive and weakening negative occurrences gives a proposition that implies the statement.
       */
     private def renderFormula(formula: Formula, arguments: String, positive: Boolean): String =
         formula match
             case Formula.Test(leaf) =>
-                val state = s"(prepared$leaf.prop$arguments)"
+                val state = s"(prepared$leaf$arguments)"
                 if positive then s"(fromFrameToBool $state = some true)"
-                else s"(fromFrameToBool $state ≠ some false)"
+                else s"(fromFrameToBool $state ≠ some false ∧ failed $state = false)"
             case Formula.Denotes(leaf) =>
-                if positive then s"(isSuccessful (prepared$leaf.prop$arguments))" else "True"
+                val state = s"(prepared$leaf$arguments)"
+                if positive then s"(isSuccessful $state)" else s"(failed $state = false)"
             case Formula.And(left, right) =>
                 s"(${renderFormula(left, arguments, positive)} ∧ ${renderFormula(right, arguments, positive)})"
             case Formula.Or(left, right) =>
@@ -568,17 +572,17 @@ object UplcBlaster {
         val terms = goal.binders.zip(names).map { (binder, name) =>
             s"Term.Const $$ Const.${leanType(binder.tp)} $name"
         }
-        // `#prep_uplc` also accepts no conversion function, but then fails to elaborate its
-        // empty argument list, so a statement without binders passes an empty `arguments`.
+        // A statement without binders passes its empty argument list as a plain `List Term`.
         val arguments = (("def arguments" +: declarations) :+
             s": List Term := [${terms.mkString(", ")}]").mkString(" ")
-        val prepared =
-            flats.indices.map(index => s"#prep_uplc prepared$index leaf$index arguments $budget")
+        val prepared = flats.indices.map(index =>
+            s"#prep_uplc_run prepared$index leaf$index arguments $budget"
+        )
         val formula = renderFormula(goal.body, names.map(" " + _).mkString, positive = true)
         val proposition =
             if declarations.isEmpty then formula else s"∀ ${declarations.mkString(" ")}, $formula"
 
-        s"""import ScalusProofs.Prelude
+        s"""import ScalusProofs.Run
            |
            |namespace ScalusProofs.Runtime
            |
@@ -586,15 +590,7 @@ object UplcBlaster {
            |open PlutusCore.UPLC
            |open PlutusCore.UPLC.Term
            |open PlutusCore.UPLC.Utils
-           |open PlutusCore.UPLC.CekMachine
-           |
-           |/-- The Boolean a halted machine returned. Blaster translates this projection on every
-           |    goal; a `Prop`-valued match on `.Halt (.VCon (Const.Bool true))` fails to translate
-           |    (on `Fin`) whenever the goal is falsifiable. -/
-           |def fromFrameToBool (s : State) : Option Bool :=
-           |  match s with
-           |  | .Halt (.VCon (Const.Bool b)) => some b
-           |  | _ => none
+           |open ScalusProofs.Run
            |
            |${imports.mkString("\n")}
            |

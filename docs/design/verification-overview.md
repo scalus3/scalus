@@ -811,6 +811,15 @@ the budget must depend on its position.
 `denotes` is read the same way, with success in place of `true`. `<=>` is split into two
 implications before translation, because its tests occur in both positions.
 
+The weak reading needs a failure told apart from an exhausted budget, and PlutusCore's
+`runSteps` returns `State.Error` for both. The tactic therefore runs each test with
+`ScalusProofs.Run.runFor` (`#prep_uplc_run`), which makes the same steps but ends an exhausted run
+in the state it reached. `State.Error` then means that the program failed within *b* steps. That
+makes failure provable: `!denotes(e)`, and `!Bool(e)` for an `e` that fails, hold when the program
+fails within the budget. With `runSteps` alone the weak reading of `denotes` would be `True`, and
+a premise `denotes(f(x))`, which is the partial-correctness reading of §3.7, would carry no
+information.
+
 *Why this is sound.* Let T be the unbudgeted truth of a test, S_b the strong reading and W_b the
 weak one. Then S_b ⊆ T ⊆ W_b. Replacing positive occurrences with something stronger and negative
 occurrences with something weaker gives a formula that implies the original one. **A Valid verdict
@@ -978,7 +987,11 @@ Unproved premises leave the goal open.
     (1134 cases);
   - Blaster's translation, which closes goals with `axiom blasterProven`;
   - Z3;
-  - our own lowering: the polarity rule, the value lifting, the verbatim target embedding;
+  - our own lowering: the polarity rule, the value lifting, the verbatim target embedding, and
+    the `runFor` runner. Proving that a program fails takes the model's `State.Error` as a
+    Plutus evaluation failure, so the model must not fail where Plutus returns a value. The
+    conformance suite's success cases check exactly that; its failure cases run on `runSteps`,
+    and cannot tell a failure from an exhausted budget;
   - and, for `lean-direct`, the generated translation, plus any declared mapping that has not
     been proved.
 - **Negative controls are required.** A suite that uses a Lean tactic must contain at least one
