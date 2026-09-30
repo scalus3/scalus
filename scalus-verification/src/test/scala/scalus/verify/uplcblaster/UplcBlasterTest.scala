@@ -16,6 +16,8 @@ import java.nio.file.Files
 class UplcBlasterTest extends AnyFunSuite with LeanProofs {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
+    private val div10 = FunctionDef.named("div10", (x: BigInt) => BigInt(10) / x)
+
     private def lowered(prop: Prop, functions: FunctionTable): UplcBlaster.Lowered =
         UplcBlaster.lower(prop, functions) match
             case Right(lowered) => lowered
@@ -191,6 +193,35 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         proven(callRef(increment.ref, BigInt(41))(r => r == BigInt(42)), 40, increment)
     }
 
+    test("a partial call claims its continuation only when the function returns") {
+        val partial = forAll[BigInt](x => whenReturns(div10, x)(r => x != BigInt(0)))
+        lowered(partial, FunctionTable(div10)).body match
+            case UplcBlaster.LeafFormula.Implies(
+                  UplcBlaster.LeafFormula.Denotes(0),
+                  UplcBlaster.LeafFormula.Test(1)
+                ) =>
+            case other => fail(s"expected denotes(div10(x)) ==> call(div10, x), got $other")
+        proven(partial, 60, div10)
+
+        // The total call also claims that div10 returns, which it does not at 0.
+        val total = forAll[BigInt](x => call(div10, x)(r => x != BigInt(0)))
+        val x = total match
+            case Prop.Forall(x, _) => x
+            case other             => fail(s"expected a universal proposition, got $other")
+        val counterexample = refuted(total, 60, div10)
+        assert(integer(counterexample(x.name)) == 0, counterexample)
+
+        // negative control: where div10 returns, its result is checked
+        refuted(forAll[BigInt](x => whenReturns(div10, x)(r => r > BigInt(0))), 60, div10)
+
+        // A call that fails satisfies any continuation.
+        assert(
+          proven(whenReturns(div10, BigInt(0))(r => r == BigInt(42)), 60, div10) ==
+              ProofKind.LeanNative
+        )
+        refuted(call(div10, BigInt(0))(r => r == BigInt(42)), 60, div10)
+    }
+
     test("calls a function of several parameters through its own compiled program") {
         val clamp = FunctionDef(Math.clamp)
         assert(clamp.arity == 3)
@@ -291,5 +322,12 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
           FunctionTable(first)
         )
         assert(paired.left.exists(_.contains("call argument")), paired)
+
+        // A partial call is split into two leaves, which a call's continuation cannot hold.
+        val nested = UplcBlaster.lower(
+          callRef(div10.ref, BigInt(1))(r => whenReturnsRef(div10.ref, r)(s => s == BigInt(1))),
+          FunctionTable(div10)
+        )
+        assert(nested.left.exists(_.contains("whenReturns inside a call's continuation")), nested)
     }
 }

@@ -50,7 +50,7 @@ verifier.verify(inRange, UplcBlaster(budget = 120)) // Proven
 ```
 
 `UplcBlaster` proves statements with a prefix of universal quantifiers over `BigInt` and
-`Boolean`, and a body without quantifiers: Boolean tests, total calls, `denotes` and `equal`,
+`Boolean`, and a body without quantifiers: Boolean tests, calls, `denotes` and `equal`,
 combined with `&&`, `||`, `!`, `==>` and `<=>`. Each test becomes its own closed UPLC predicate
 over the quantified values. The tactic writes a Lean file in a temporary directory that imports
 them, runs `lake env lean` in this workspace, and reads Blaster's verdict. The workspace must be
@@ -77,9 +77,13 @@ of Blaster and Z3. This also works for programs Blaster cannot reduce, such as t
 `integerToByteString` ([Lean-blaster#273](https://github.com/input-output-hk/Lean-blaster/issues/273)).
 
 A call of a function registered in the verifier is linked to that function's compiled program, so
-the proof is about those exact bytes. A call is total: it claims that the function returns. Other
-`@Compile` definitions a test uses are compiled with the test. A function of several parameters
-is called with a tuple written out, as in `callRef(clamp.ref, (x, lo, hi))(r => lo <= r)`, and its
+the proof is about those exact bytes. A `call` is total: it claims that the function returns.
+`whenReturns(f, a)(r => p)` is partial: it claims `p` only where the function returns, and is
+proved as `denotes(f(a)) ==> call(f, a)(r => p)`. The proof still needs `f` to return or fail
+within the budget on every input: a run that exhausts the budget counts as one that may return,
+so `p` must then hold, and a partial function that loops on some inputs cannot be proved. Other
+`@Compile` definitions a test uses are compiled with the test. A function of several parameters is
+called with a tuple written out, as in `callRef(clamp.ref, (x, lo, hi))(r => lo <= r)`, and its
 program is applied to each value in turn. Arguments and results must be `BigInt` or `Boolean`.
 
 A binder's body is a statement or a Boolean. Statements nest quantifiers, calls and connectives:

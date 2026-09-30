@@ -606,7 +606,8 @@ target capture is not implemented yet.
 prefix over `BigInt` and `Boolean` followed by a quantifier-free body.
 
 - Each leaf of the body (a Boolean test, a total call, `denotes`, `equal`) is compiled to its own
-  UPLC predicate over the quantified values.
+  UPLC predicate over the quantified values. A partial call, `whenReturns`, is
+  `denotes(f(a)) ==> call(f, a)(…)`, the form of §3.7.
 - The connectives become a Lean proposition that reads each leaf by the polarity rule of §6.2.
 - The tactic replays a counterexample on the Scalus CEK before it reports `Refuted` (§5.2).
 - A closed statement, one without quantified variables, is decided by evaluation in Lean instead

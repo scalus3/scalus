@@ -17,9 +17,9 @@ import scala.jdk.CollectionConverters.*
 /** Proves [[scalus.verify.Prop]] statements about their compiled UPLC with Lean Blaster.
   *
   * The supported fragment is a prefix of universal quantifiers over `BigInt` and `Boolean` values,
-  * followed by a quantifier-free body: tests, total calls, `denotes`, `equal` and the connectives.
-  * Every test in the body is compiled to its own closed UPLC predicate over the quantified values
-  * (see [[UplcBlaster.lower]]). The Lean CEK model runs each predicate for at most `budget` steps,
+  * followed by a quantifier-free body: tests, calls, `denotes`, `equal` and the connectives. Every
+  * test in the body is compiled to its own closed UPLC predicate over the quantified values (see
+  * [[UplcBlaster.lower]]). The Lean CEK model runs each predicate for at most `budget` steps,
   * keeping a failing program apart from an exhausted budget, and Blaster decides the resulting
   * proposition. Each test is read according to its polarity (design doc §6.2), so a proof at any
   * budget holds without the budget, and a statement that a program fails can be proved. A closed
@@ -43,10 +43,10 @@ final class UplcBlaster private (val budget: Int, val leanDirectory: Path) exten
 
 object UplcBlaster {
 
-    /** What Lean reported about a statement, and which compiled predicates it was about.
+    /** What Lean reported about a statement, and which compiled programs it was about.
       *
       * @param programHashes
-      *   the SHA-256 of each predicate's CBOR, in the order of [[Lowered.leaves]]
+      *   the SHA-256 of each leaf's program CBOR, in the order of [[Lowered.leaves]]
       * @param counterexample
       *   for a refutation, the value of each quantified variable, by name, as replayed on the
       *   Scalus CEK; empty otherwise
@@ -67,8 +67,10 @@ object UplcBlaster {
       * The leaves of a statement are the nodes of its [[Prop]] tree that are not connectives:
       * tests, calls, `denotes` and `equal`. [[lower]] compiles each leaf into a closed UPLC program
       * in [[Lowered.leaves]], and a `LeafFormula` keeps the connectives around them, with each leaf
-      * replaced by its index there. `<=>` is already split into two implications. Both the Lean
-      * proposition (`renderFormula`) and the replay of a counterexample (`holds`) are read from it.
+      * replaced by its index there. `<=>` is already split into two implications, and a partial
+      * call `whenReturns(f, a)(k)` is already `denotes(f(a)) ==> call(f, a)(k)`, two leaves. Both
+      * the Lean proposition (`renderFormula`) and the replay of a counterexample (`holds`) are read
+      * from it.
       */
     enum LeafFormula {
 
@@ -111,10 +113,11 @@ object UplcBlaster {
     /** Lowers a statement in the supported fragment, or explains why it is outside it.
       *
       * The fragment is a prefix of universal quantifiers over `BigInt` and `Boolean` followed by a
-      * body without quantifiers. The body's leaves are Boolean tests, total calls whose
-      * continuation is a test or another total call, `denotes` and `equal` over `BigInt` or
-      * `Boolean`. Its connectives are `&&`, `||`, `!`, `==>` and `<=>`. `<=>` becomes two
-      * implications, because its operands occur in both polarities.
+      * body without quantifiers. The body's leaves are Boolean tests, calls whose continuation is a
+      * test or another total call, `denotes` and `equal` over `BigInt` or `Boolean`. Its
+      * connectives are `&&`, `||`, `!`, `==>` and `<=>`. `<=>` becomes two implications, because
+      * its operands occur in both polarities. A partial call, `whenReturns(f, a)(r => p)`, becomes
+      * `denotes(f(a)) ==> call(f, a)(r => p)`: its two leaves run the function's program each.
       *
       * A call of a function in `functions` is linked to that function's compiled program, so the
       * function's bytes appear unchanged in the predicate. A function of several parameters is
@@ -129,6 +132,17 @@ object UplcBlaster {
                 leaves.size - 1
             }
             def loop(current: Prop): Either[String, LeafFormula] = current match
+                case Prop.Call(fn, arg, result, false, body) =>
+                    for
+                        _ <- supportedResult(result)
+                        returns <- returnsSir(fn, arg, result.tp, functions)
+                        formula <- loop(
+                          Prop.Implies(
+                            Prop.Denotes(PropExpr.SIRExpr(returns)),
+                            Prop.Call(fn, arg, result, true, body)
+                          )
+                        )
+                    yield formula
                 case _: Prop.Bool | _: Prop.Call[?, ?] =>
                     predicate(current, binders, functions).map(term => LeafFormula.Test(leaf(term)))
                 case Prop.Equal(left, right) =>
@@ -193,17 +207,14 @@ object UplcBlaster {
                 val body = expressionSir(expr)
                 require(body.tp == SIRType.Boolean, s"a test has type ${body.tp.show}")
                 Right(body)
-            case Prop.Call(_, _, result, true, _) if !supportedType(result.tp) =>
-                Left(
-                  s"a call result of type ${result.tp.show} is not supported, only BigInt and Boolean"
-                )
             case Prop.Call(fn, arg, result, true, body) =>
                 for
+                    _ <- supportedResult(result)
                     arguments <- callArguments(expressionSir(arg), functions(fn).arity)
                     continuation <- predicateSir(body, functions)
                 yield callSir(fn, arguments, result, continuation)
             case Prop.Call(_, _, _, false, _) =>
-                Left("partial whenReturns calls are not supported")
+                Left("a whenReturns inside a call's continuation is not supported")
             case _ =>
                 Left("a call's continuation must be a test or another total call")
 
@@ -219,21 +230,55 @@ object UplcBlaster {
         val annotations = AnnotationsDecl.empty
         val (argumentDeclarations, values) = arguments.map(declarations).unzip
         val (continuationDeclarations, test) = declarations(continuation)
-        // The function is curried: it takes one argument per parameter.
-        val types = values.scanRight(result.tp)((value, rest) => SIRType.Fun(value.tp, rest))
-        val function: AnnotatedSIR = SIR.ExternalVar("", fn.name, types.head, annotations)
-        val called = values.zip(types.tail).foldLeft(function) { case (applied, (value, tp)) =>
-            SIR.Apply(applied, value, tp, annotations)
-        }
         val continued = SIR.Apply(
           SIR.LamAbs(SIR.Var(result.name, result.tp, annotations), test, Nil, annotations),
-          called,
+          application(fn, values, result.tp),
           SIRType.Boolean,
           annotations
         )
-        (argumentDeclarations.flatten ++ continuationDeclarations)
-            .distinctBy(_.name)
-            .foldRight[SIR](continued)((data, body) => SIR.Decl(data, body))
+        withDeclarations(argumentDeclarations.flatten ++ continuationDeclarations, continued)
+    }
+
+    /** The call of a partial `whenReturns` on its own, `fn(arguments...)`, for the `denotes` that
+      * guards its continuation. The data declarations around the arguments move outside it.
+      */
+    private def returnsSir(
+        fn: FunctionRef[?, ?],
+        arg: PropExpr[?],
+        resultType: SIRType,
+        functions: FunctionTable
+    ): Either[String, SIR] = {
+        callArguments(expressionSir(arg), functions(fn).arity).map { arguments =>
+            val (argumentDeclarations, values) = arguments.map(declarations).unzip
+            withDeclarations(argumentDeclarations.flatten, application(fn, values, resultType))
+        }
+    }
+
+    private def supportedResult(result: PropExpr.Ident[?]): Either[String, Unit] =
+        if supportedType(result.tp) then Right(())
+        else
+            Left(
+              s"a call result of type ${result.tp.show} is not supported, only BigInt and Boolean"
+            )
+
+    /** `expression` inside the data declarations collected from its pieces, each declared once. */
+    private def withDeclarations(data: List[DataDecl], expression: AnnotatedSIR): SIR =
+        data.distinctBy(_.name).foldRight[SIR](expression)((decl, body) => SIR.Decl(decl, body))
+
+    /** `fn` applied to `values`, one at a time: a function's program is curried. `fn` is an
+      * `ExternalVar` that [[compileSirFunction]] links to the function's own program.
+      */
+    private def application(
+        fn: FunctionRef[?, ?],
+        values: List[AnnotatedSIR],
+        resultType: SIRType
+    ): AnnotatedSIR = {
+        val annotations = AnnotationsDecl.empty
+        val types = values.scanRight(resultType)((value, rest) => SIRType.Fun(value.tp, rest))
+        val function: AnnotatedSIR = SIR.ExternalVar("", fn.name, types.head, annotations)
+        values.zip(types.tail).foldLeft(function) { case (applied, (value, tp)) =>
+            SIR.Apply(applied, value, tp, annotations)
+        }
     }
 
     /** The data declarations the compiler put around an expression, and the expression. */
