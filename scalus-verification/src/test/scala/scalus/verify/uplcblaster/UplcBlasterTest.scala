@@ -6,7 +6,7 @@ import scalus.cardano.onchain.plutus.prelude.Math
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRBuiltins, SIRType}
 import scalus.uplc.{Constant, Term}
 import scalus.uplc.Term.asTerm
-import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.{Builtins, ByteString, Data}
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.verify.*
 import scalus.verify.Props.*
@@ -220,6 +220,52 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
               ProofKind.LeanNative
         )
         refuted(call(div10, BigInt(0))(r => r == BigInt(42)), 60, div10)
+    }
+
+    test("quantifies over Data, and reads a Data counterexample back") {
+        proven(forAll[Data](d => equal(d, d)), budget = 40)
+        proven(forAll[BigInt](x => equal(Builtins.unIData(Builtins.iData(x)), x)), budget = 40)
+        proven(
+          forAll[Data](d =>
+              denotes(Builtins.unIData(d)) ==> equal(Builtins.iData(Builtins.unIData(d)), d)
+          ),
+          budget = 60
+        )
+
+        // negative control: an I value can hold a negative integer
+        val nonNegative =
+            forAll[Data](d => denotes(Builtins.unIData(d)) ==> (Builtins.unIData(d) >= BigInt(0)))
+        val d = nonNegative match
+            case Prop.Forall(d, _) => d
+            case other             => fail(s"expected a universal proposition, got $other")
+        refuted(nonNegative, budget = 60)(d.name) match
+            case Constant.Data(Data.I(value)) => assert(value < 0, value)
+            case other                        => fail(s"expected an I value, got $other")
+
+        // A counterexample that nests: a list with an element.
+        val empty = forAll[Data](d =>
+            denotes(Builtins.nullList(Builtins.unListData(d))) ==>
+                Builtins.nullList(Builtins.unListData(d))
+        )
+        val list = empty match
+            case Prop.Forall(list, _) => list
+            case other                => fail(s"expected a universal proposition, got $other")
+        refuted(empty, budget = 60)(list.name) match
+            case Constant.Data(Data.List(values)) => assert(!values.isEmpty, values)
+            case other                            => fail(s"expected a List value, got $other")
+    }
+
+    test("calls take and return Data") {
+        val wrap = FunctionDef.named("wrap", (x: BigInt) => Builtins.iData(x))
+        val unwrap = FunctionDef.named("unwrap", (d: Data) => Builtins.unIData(d))
+        proven(forAll[BigInt](x => callRef(wrap.ref, x)(r => r == Builtins.iData(x))), 60, wrap)
+        proven(forAll[Data](d => whenReturns(unwrap, d)(r => Builtins.iData(r) == d)), 60, unwrap)
+        // negative control: unwrap does not return on every Data value
+        refuted(forAll[Data](d => call(unwrap, d)(r => Builtins.iData(r) == d)), 60, unwrap)
+        assert(
+          proven(callRef(wrap.ref, BigInt(3))(r => r == Data.I(BigInt(3))), 60, wrap) ==
+              ProofKind.LeanNative
+        )
     }
 
     test("calls a function of several parameters through its own compiled program") {

@@ -603,7 +603,7 @@ Here `tactic` is a proof backend implementing `Tactic`. The following source syn
 target capture is not implemented yet.
 
 `UplcBlaster`, in `scalus.verify.uplcblaster`, is the first `Tactic`. It accepts a universal
-prefix over `BigInt` and `Boolean` followed by a quantifier-free body.
+prefix over `BigInt`, `Boolean` and `Data` followed by a quantifier-free body.
 
 - Each leaf of the body (a Boolean test, a total call, `denotes`, `equal`) is compiled to its own
   UPLC predicate over the quantified values. A partial call, `whenReturns`, is
@@ -876,10 +876,12 @@ while PlutusCoreBlaster counts machine steps.
 
 **Limits.**
 
-- Binders and values are `BigInt` or `Boolean` for now.
+- Binders and values are `BigInt`, `Boolean` or `Data` for now. Case classes are not supported
+  yet; state them over `Data` with `FromData`.
 - Programs must be compiled without the CIP-153 `Value` and CIP-138 array builtins, which the
   Lean model lacks. A ledger `Value` represented as `Data` is unaffected.
-- Programs that reach the CIP-121/122 bitwise builtins cannot be proved over symbolic inputs.
+- Programs that read single bytes or reach the CIP-121/122 bitwise builtins cannot be proved over
+  symbolic inputs.
 - PlutusCore is pinned to a fork until PR #40 merges.
 - Blaster passes ∃ to Z3 as an SMT quantifier, so goals with alternating quantifiers can come back
   Undetermined. Prefer `existsLet`.

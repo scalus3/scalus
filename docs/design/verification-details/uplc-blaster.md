@@ -25,13 +25,15 @@ Prop ──lower──► Lowered(binders, body: LeafFormula, leaves: Vector[Pro
 
 `UplcBlaster.lower` accepts:
 
-- a prefix of universal quantifiers over `BigInt` and `Boolean`;
+- a prefix of universal quantifiers over `BigInt`, `Boolean` and `Data`;
 - a body without quantifiers, built with `&&`, `||`, `!`, `==>` and `<=>` from these leaves:
   - a test, `Prop.Bool`;
   - a total `call` whose continuation is a test or another total call;
   - a partial call, `whenReturns(f, a)(r => p)`, whose continuation is the same;
-  - `denotes(e)`, where `e` is a `BigInt` or a `Boolean`;
-  - `equal(a, b)` over `BigInt` or `Boolean`.
+  - `denotes(e)`, where `e` is a `BigInt`, a `Boolean` or a `Data` value;
+  - `equal(a, b)` over those types.
+
+Call arguments and results have those types too.
 
 `<=>` becomes two implications, because each of its operands occurs in both polarities. Anything
 else lowers to `Left(reason)`, which the tactic returns as `Inconclusive`. That covers other
@@ -48,7 +50,7 @@ replaces each leaf with its index in `Lowered.leaves`.
 |---|---|---|
 | `Bool(b)` | `λ x1 … xn. b` | `Test(i)` |
 | `Call(f, a, r, total = true, k)` | `λ x1 … xn. (λ r. k)(f a1 … am)` | `Test(i)` |
-| `Equal(a, b)` | `λ x1 … xn. a = b`, with `equalsInteger` or Boolean equality | `Test(i)` |
+| `Equal(a, b)` | `λ x1 … xn. a = b`, with `equalsInteger`, `equalsData` or Boolean equality | `Test(i)` |
 | `Denotes(e)` | `λ x1 … xn. e` | `Denotes(i)` |
 | `Call(f, a, r, total = false, k)` | `λ x1 … xn. f a1 … am`, and the total call's program | `Implies(Denotes(i), Test(i + 1))` |
 
@@ -140,7 +142,8 @@ reject `State.Error`, which might be an exhausted budget, so it would be `True`.
 
 ## The Lean check
 
-For a statement over `x0 : BigInt` and `x1 : Boolean` with one leaf, the tactic writes:
+For a statement over `x0 : BigInt` and `x1 : Boolean` with one leaf, the tactic writes the file
+below. A `Data` binder is declared as `(x2 : Data)` and passed as `Const.Data x2`.
 
 ```lean
 import ScalusProofs.Run
@@ -168,6 +171,15 @@ The verdict is read from Blaster's output:
 - `✅ Valid`;
 - `❌ Falsified`, followed by lines `- xN: value` for the counterexample;
 - `⚠️ Undetermined`.
+
+Blaster has no machine-readable output: it reports only these log messages. Each counterexample
+value is Z3's answer to `(eval xN)`, an SMT-LIB term that can span several indented lines, as a
+`Data` value does. `SmtValues` reads it: `(- 1)` is a negative integer, `List.cons` and
+`(as List.nil …)` build a list, `Prod.mk` a pair, and `(….ByteString.mk "ABC")` a byte string,
+one character per byte, with SMT-LIB string escapes. Internally, `Blaster.Smt.Translate.main`
+returns a structured `Result` (`Valid`, `Falsified` with the `name: value` strings, or
+`Undetermined`). If the log format changes, a command in `Run.lean` can call it and print JSON
+instead; the values would still be SMT-LIB terms.
 
 Any other output, such as a translation error or a missing workspace, is returned in the
 `Inconclusive` message. The message drops the `Successfully decoded` lines and is cut to 500
@@ -203,8 +215,9 @@ All leaves are evaluated in the one Lean process.
 A falsification under the budget can be spurious: a positive leaf that needs more steps reads as
 false. `replay` works in four steps:
 
-1. It completes Blaster's counterexample: a binder the model leaves unconstrained takes `0` or
-   `false`.
+1. It reads Blaster's counterexample and completes it: a binder the model leaves unconstrained
+   takes `0`, `false` or `I 0`. A value it cannot read, such as a byte string with a character
+   above 255, makes the result `Inconclusive`.
 2. It applies each leaf's program to the values.
 3. It evaluates each program on the Scalus CEK, with a budget of a hundred times the mainnet
    per-transaction limit. That budget only guards against a program that does not terminate.
@@ -268,12 +281,15 @@ fails instead of being canceled. In `ci-jvm` those tests are canceled.
 ## Limits
 
 - **Types.** Binders, call arguments and results, and the operands of `denotes` and `equal` must
-  be `BigInt` or `Boolean`. `Quantifiable` also covers `ByteString` and `Data`, which the tactic
-  rejects.
-- **Bitwise builtins.** Blaster cannot translate `BitVec`, whose width is a value index rather
-  than a type parameter, and PlutusCore's `ByteString` is built on it. A statement with binders
-  fails to translate, at every budget, when its programs reach `shiftByteString`,
-  `integerToByteString` or `byteStringToInteger`. `Math.exp2`'s branch for `exp ≥ 0` is
+  be `BigInt`, `Boolean` or `Data`. `Quantifiable` also covers `ByteString`, which the tactic
+  rejects. Case classes are not supported yet; state them over `Data` with `FromData`.
+- **Byte-level builtins.** Blaster cannot translate `BitVec`, whose width is a value index rather
+  than a type parameter. The model stores a byte string as a `String`, so comparing, appending
+  and measuring byte strings translate, but reading one byte (`indexByteString`) goes through a
+  `Char`, whose `UInt32` value is a `BitVec 32`, and the bitwise builtins use `BitVec` directly. A
+  statement with binders fails to translate, at every budget, when its programs reach
+  `indexByteString`, `shiftByteString`, `integerToByteString` or `byteStringToInteger` on a
+  symbolic value. `Math.exp2`'s branch for `exp ≥ 0` is
   `byteStringToInteger(shiftByteString(hex"01", exp % 8) ++ integerToByteString(true, exp / 8, 0))`,
   so it is proved only for `exp < 0`.
 - **`Value` and array builtins.** PlutusCoreBlaster's flat decoder has the CIP-153 `Value` and
@@ -305,7 +321,8 @@ What is not stated, and why:
   an input range in the statement. The budgets it then needs are where proof cost explodes.
 - **`sqrt` and `isSqrt`.** `sqrt` needs about 405 steps, which is also where proof cost explodes.
 - **`log2` and `pow`.** They reach the bitwise builtins.
-- **`Data` round-trips.** They need `Data` binders.
+- **`Data` round-trips** of case classes. `Data` binders make them expressible now, as
+  `forAll[Data](d => denotes(d.to[A]) ==> …)`; none is stated yet.
 - **Codegen equivalence** (optimizer on and off, PV10 and PV11, the lowering backends). It can now
   be stated:
 

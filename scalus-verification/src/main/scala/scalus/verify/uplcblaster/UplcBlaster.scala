@@ -5,6 +5,7 @@ import scalus.cardano.ledger.ExUnits
 import scalus.compiler.Options
 import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, DataDecl, SIR, SIRBuiltins, SIRType}
 import scalus.uplc.{Constant, DeBruijn, Program, Term}
+import scalus.uplc.builtin.Data
 import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.utils.{Hex, Utils}
 import scalus.verify.*
@@ -16,7 +17,7 @@ import scala.jdk.CollectionConverters.*
 
 /** Proves [[scalus.verify.Prop]] statements about their compiled UPLC with Lean Blaster.
   *
-  * The supported fragment is a prefix of universal quantifiers over `BigInt` and `Boolean` values,
+  * The supported fragment is a prefix of universal quantifiers over `BigInt`, `Boolean` and `Data`,
   * followed by a quantifier-free body: tests, calls, `denotes`, `equal` and the connectives. Every
   * test in the body is compiled to its own closed UPLC predicate over the quantified values (see
   * [[UplcBlaster.lower]]). The Lean CEK model runs each predicate for at most `budget` steps,
@@ -112,9 +113,9 @@ object UplcBlaster {
 
     /** Lowers a statement in the supported fragment, or explains why it is outside it.
       *
-      * The fragment is a prefix of universal quantifiers over `BigInt` and `Boolean` followed by a
-      * body without quantifiers. The body's leaves are Boolean tests, calls whose continuation is a
-      * test or another total call, `denotes` and `equal` over `BigInt` or `Boolean`. Its
+      * The fragment is a prefix of universal quantifiers over `BigInt`, `Boolean` and `Data`
+      * followed by a body without quantifiers. The body's leaves are Boolean tests, calls whose
+      * continuation is a test or another total call, `denotes` and `equal` over those types. Its
       * connectives are `&&`, `||`, `!`, `==>` and `<=>`. `<=>` becomes two implications, because
       * its operands occur in both polarities. A partial call, `whenReturns(f, a)(r => p)`, becomes
       * `denotes(f(a)) ==> call(f, a)(r => p)`: its two leaves run the function's program each.
@@ -172,7 +173,14 @@ object UplcBlaster {
             loop(body).map(formula => Lowered(binders, formula, leaves.toVector))
         }
 
-    private def supportedType(tp: SIRType): Boolean = tp == SIRType.Integer || tp == SIRType.Boolean
+    private def supportedType(tp: SIRType): Boolean =
+        tp == SIRType.Integer || tp == SIRType.Boolean || isData(tp)
+
+    /** `Data`, or one of its constructors, such as the type of `Data.I(x)`. */
+    private def isData(tp: SIRType): Boolean = tp match
+        case SIRType.SumCaseClass(decl, _)         => decl.name == SIRType.Data.name
+        case SIRType.CaseClass(_, _, Some(parent)) => isData(parent)
+        case _                                     => false
 
     private def universalPrefix(prop: Prop): Either[String, (List[PropExpr.Ident[?]], Prop)] = {
         @annotation.tailrec
@@ -182,7 +190,10 @@ object UplcBlaster {
         ): Either[String, (List[PropExpr.Ident[?]], Prop)] = current match
             case Prop.Forall(ident, body) =>
                 if supportedType(ident.tp) then loop(body, ident :: binders)
-                else Left(s"a ${ident.tp.show} binder is not supported, only BigInt and Boolean")
+                else
+                    Left(
+                      s"a ${ident.tp.show} binder is not supported, only BigInt, Boolean and Data"
+                    )
             case body => Right(binders.reverse -> body)
 
         loop(prop, Nil)
@@ -258,7 +269,7 @@ object UplcBlaster {
         if supportedType(result.tp) then Right(())
         else
             Left(
-              s"a call result of type ${result.tp.show} is not supported, only BigInt and Boolean"
+              s"a call result of type ${result.tp.show} is not supported, only BigInt, Boolean and Data"
             )
 
     /** `expression` inside the data declarations collected from its pieces, each declared once. */
@@ -299,7 +310,7 @@ object UplcBlaster {
             values.find(value => !supportedType(value.tp)) match
                 case Some(value) =>
                     Left(
-                      s"a call argument of type ${value.tp.show} is not supported, only BigInt and Boolean"
+                      s"a call argument of type ${value.tp.show} is not supported, only BigInt, Boolean and Data"
                     )
                 case None => Right(values)
         }
@@ -327,7 +338,18 @@ object UplcBlaster {
     /** `left` and `right` evaluate to equal values. */
     private def equality(left: SIR, right: SIR): Either[String, SIR] = {
         val annotations = AnnotationsDecl.empty
-        if left.tp != right.tp then Left(s"cannot compare ${left.tp.show} with ${right.tp.show}")
+        if isData(left.tp) && isData(right.tp) then
+            Right(withExpressions(left, right) { (l, r) =>
+                val partial = SIR.Apply(
+                  SIRBuiltins.equalsData,
+                  l,
+                  SIRType.Fun(SIRType.Data.tp, SIRType.Boolean),
+                  annotations
+                )
+                SIR.Apply(partial, r, SIRType.Boolean, annotations)
+            })
+        else if left.tp != right.tp then
+            Left(s"cannot compare ${left.tp.show} with ${right.tp.show}")
         else
             left.tp match
                 case SIRType.Integer =>
@@ -524,8 +546,17 @@ object UplcBlaster {
       * the predicate needs more steps. Only a counterexample under which the statement is false
       * without the budget is a refutation.
       */
-    private def replay(goal: Lowered, artifact: Artifact): VerificationResult = {
-        val values = counterexample(goal.binders, artifact.output)
+    private def replay(goal: Lowered, artifact: Artifact): VerificationResult =
+        counterexample(goal.binders, artifact.output) match
+            case Left(error) =>
+                VerificationResult.Inconclusive(s"cannot read Lean's counterexample: $error")
+            case Right(values) => replayValues(goal, artifact, values)
+
+    private def replayValues(
+        goal: Lowered,
+        artifact: Artifact,
+        values: List[Constant]
+    ): VerificationResult = {
         val shown = goal.binders
             .zip(values)
             .map((binder, value) => s"${binder.name} = ${display(value)}")
@@ -551,42 +582,47 @@ object UplcBlaster {
 
     private val counterexampleLine = """-\s+x(\d+):\s+(.+?)\s*$""".r.unanchored
 
-    /** The values of Blaster's counterexample, in binder order. A binder the model leaves
-      * unconstrained takes `0` or `false`; the replay checks the completed assignment.
+    /** The values of Blaster's counterexample, in binder order, or why they cannot be read. A
+      * binder the model leaves unconstrained takes `0`, `false` or `I 0`; the replay checks the
+      * completed assignment.
+      *
+      * A value can span several lines: a `Data` value is printed as a term over the lines after
+      * `- xN:`, each indented.
       */
     private def counterexample(
         binders: List[PropExpr.Ident[?]],
         output: String
-    ): List[Constant] = {
-        val reported = output.linesIterator.collect { case counterexampleLine(index, value) =>
-            index.toInt -> value
-        }.toMap
-        binders.zipWithIndex.map { (binder, index) =>
-            val text = reported.get(index)
-            binder.tp match
-                case SIRType.Integer =>
-                    Constant.Integer(
-                      text.fold(BigInt(0))(value =>
-                          BigInt(value.filterNot(c => c == '(' || c == ')' || c.isWhitespace))
-                      )
-                    )
-                case SIRType.Boolean =>
-                    text match
-                        case None          => Constant.Bool(false)
-                        case Some("true")  => Constant.Bool(true)
-                        case Some("false") => Constant.Bool(false)
-                        case Some(other) =>
-                            throw new IllegalStateException(
-                              s"unexpected Boolean in Blaster's counterexample: $other"
-                            )
-                case other =>
-                    throw new IllegalStateException(s"unexpected ${other.show} binder")
+    ): Either[String, List[Constant]] = {
+        // (values found so far, whether the last line belonged to a value)
+        val (found, _) = output.linesIterator.foldLeft((List.empty[(Int, String)], false)) {
+            case ((found, continuing), line) =>
+                line match
+                    case counterexampleLine(index, value) => ((index.toInt -> value) :: found, true)
+                    case _ if continuing && line.headOption.exists(_.isWhitespace) =>
+                        val (index, value) = found.head
+                        ((index -> s"$value ${line.trim}") :: found.tail, true)
+                    case _ => (found, false)
+        }
+        val reported = found.toMap
+        binders.zipWithIndex.foldRight[Either[String, List[Constant]]](Right(Nil)) {
+            case ((binder, index), rest) =>
+                val text = reported.get(index)
+                val value: Either[String, Constant] = binder.tp match
+                    case SIRType.Integer =>
+                        text.fold(Right(BigInt(0)))(SmtValues.integer).map(Constant.Integer(_))
+                    case SIRType.Boolean =>
+                        text.fold(Right(false))(SmtValues.boolean).map(Constant.Bool(_))
+                    case tp if isData(tp) =>
+                        text.fold(Right(Data.I(0)))(SmtValues.data).map(Constant.Data(_))
+                    case other => Left(s"a ${other.show} binder has no counterexample value")
+                for v <- value.left.map(error => s"${binder.name}: $error"); r <- rest yield v :: r
         }
     }
 
     private def display(value: Constant): String = value match
         case Constant.Integer(integer) => integer.toString
         case Constant.Bool(boolean)    => boolean.toString
+        case Constant.Data(data)       => data.toString
         case other                     => other.toString
 
     private def evaluate(program: Program, values: List[Constant]): Outcome = {
@@ -653,9 +689,10 @@ object UplcBlaster {
         }
 
     private def leanType(tp: SIRType): String = tp match
-        case SIRType.Integer => "Integer"
-        case SIRType.Boolean => "Bool"
-        case other           => throw new IllegalStateException(s"unexpected ${other.show} binder")
+        case SIRType.Integer  => "Integer"
+        case SIRType.Boolean  => "Bool"
+        case tp if isData(tp) => "Data"
+        case other            => throw new IllegalStateException(s"unexpected ${other.show} binder")
 
     /** Renders a formula with each leaf read by its polarity (design doc §6.2).
       *
@@ -732,6 +769,7 @@ object UplcBlaster {
            |
            |open PlutusCore.Integer (Integer)
            |open PlutusCore.UPLC
+           |open PlutusCore.Data (Data)
            |open PlutusCore.UPLC.Term
            |open PlutusCore.UPLC.Utils
            |open ScalusProofs.Run
