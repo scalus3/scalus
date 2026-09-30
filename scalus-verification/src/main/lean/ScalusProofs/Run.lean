@@ -8,8 +8,9 @@ import Blaster
     steps, but a run that is still going after its budget ends in the state it reached. After
     `runFor`, `State.Error` means that the program failed within the budget.
 
-    `#prep_uplc_run` is `#prep_uplc` over `runFor`. The `UplcBlaster` tactic generates its Lean
-    checks with it. -/
+    `#prep_uplc_run` is `#prep_uplc` over `runFor`. The `UplcBlaster` tactic proves statements with
+    quantified variables with it and Blaster. A closed statement it decides with `native_decide`
+    over `runProgramFor`, which is computable, so every reading below is a `Bool`. -/
 
 namespace ScalusProofs.Run
 
@@ -43,6 +44,13 @@ def fromFrameToBool (s : State) : Option Bool :=
 def failed (s : State) : Bool :=
   match s with
   | .Error => true
+  | _ => false
+
+/-- The run halted: the program returned within the budget. Unlike `isSuccessful`, it is a
+    `Bool`, so `native_decide` can evaluate it. -/
+def halted (s : State) : Bool :=
+  match s with
+  | .Halt _ => true
   | _ => false
 
 section

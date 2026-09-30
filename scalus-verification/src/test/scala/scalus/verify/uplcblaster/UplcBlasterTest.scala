@@ -11,59 +11,10 @@ import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.verify.*
 import scalus.verify.Props.*
 
-import java.io.File
-import java.nio.file.{Files, Path}
+import java.nio.file.Files
 
-class UplcBlasterTest extends AnyFunSuite {
+class UplcBlasterTest extends AnyFunSuite with LeanProofs {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
-
-    private val leanDirectory = Path.of("scalus-verification", "src", "main", "lean")
-
-    /** Whether Lean can run here: `lake` on the `PATH` and a built workspace. The ci-jvm shell has
-      * neither, so the tests that run Lean are canceled there. Build the workspace with
-      * `lake build` in the `lean` dev shell (see the module README) to run them.
-      */
-    private lazy val leanAvailable: Boolean =
-        sys.env
-            .getOrElse("PATH", "")
-            .split(File.pathSeparator)
-            .exists(directory => Files.isExecutable(Path.of(directory, "lake"))) &&
-            Files.isRegularFile(
-              leanDirectory.resolve(".lake/build/lib/lean/ScalusProofs/Run.olean")
-            )
-
-    /** Declares `prop` in a fresh verifier and runs [[UplcBlaster]] on it through Lean. */
-    private def run(
-        prop: Prop,
-        budget: Int,
-        functions: Seq[FunctionDef[?, ?]] = Nil
-    ): (Verifier, Statement, VerificationResult) = {
-        assume(leanAvailable, s"requires lake and a built Lean workspace in $leanDirectory")
-        val verifier = Verifier.empty
-        functions.foreach(verifier.addFunction)
-        val statement = verifier.statement(prop)
-        (verifier, statement, verifier.verify(statement, UplcBlaster(budget, leanDirectory)))
-    }
-
-    private def proven(prop: Prop, budget: Int, functions: FunctionDef[?, ?]*): Unit =
-        run(prop, budget, functions) match
-            case (verifier, statement, VerificationResult.Proven(proof)) =>
-                assert(proof.artifact.kind == ProofKind.Blaster)
-                assert(proof.artifact.asInstanceOf[UplcBlaster.Artifact].output.contains("✅ Valid"))
-                assert(verifier.theorems.exists(_.statement eq statement))
-            case (_, _, other) => fail(s"expected a proof, got $other")
-
-    /** The replayed counterexample of a refuted statement. */
-    private def refuted(prop: Prop, budget: Int): Map[String, Constant] =
-        run(prop, budget) match
-            case (verifier, _, VerificationResult.Refuted(proof)) =>
-                assert(verifier.theorems.isEmpty)
-                proof.artifact.asInstanceOf[UplcBlaster.Artifact].counterexample.toMap
-            case (_, _, other) => fail(s"expected a refutation, got $other")
-
-    private def integer(value: Constant): BigInt = value match
-        case Constant.Integer(integer) => integer
-        case other                     => fail(s"expected an integer, got $other")
 
     private def lowered(prop: Prop, functions: FunctionTable): UplcBlaster.Lowered =
         UplcBlaster.lower(prop, functions) match
@@ -74,16 +25,6 @@ class UplcBlasterTest extends AnyFunSuite {
     private def split2(prop: Prop): (PropExpr.Ident[?], PropExpr.Ident[?], Prop) = prop match
         case Prop.Forall(x, Prop.Forall(y, body)) => (x, y, body)
         case other => fail(s"expected two universal quantifiers, got $other")
-
-    /** The Boolean body of a two-value `forAll`, over the variables `x` and `y` instead of its own.
-      * The plugin gives every lambda parameter a unique SIR name.
-      */
-    private def bodyOver(x: PropExpr.Ident[?], y: PropExpr.Ident[?], prop: Prop): Prop =
-        prop match
-            case Prop.Forall(a, Prop.Forall(b, Prop.Bool(PropExpr.SIRExpr(sir)))) =>
-                val renamed = SIR.renameFreeVars(sir, Map(a.name -> x.name, b.name -> y.name))
-                Prop.Bool(PropExpr.SIRExpr(renamed))
-            case other => fail(s"expected a two-value Boolean forAll, got $other")
 
     test("proves an addition identity through compiled UPLC and Lean Blaster") {
         proven(forAll[BigInt](x => x + BigInt(0) == x), budget = 40)
@@ -111,8 +52,10 @@ class UplcBlasterTest extends AnyFunSuite {
     test("quantifies over Boolean values") {
         proven(
           forAll[Boolean, BigInt]((flag, x) =>
-              if flag then Math.max(x, BigInt(0)) >= BigInt(0)
-              else Math.min(x, BigInt(0)) <= BigInt(0)
+              Prop(
+                if flag then Math.max(x, BigInt(0)) >= BigInt(0)
+                else Math.min(x, BigInt(0)) <= BigInt(0)
+              )
           ),
           budget = 60
         )
@@ -127,24 +70,31 @@ class UplcBlasterTest extends AnyFunSuite {
     }
 
     test("proves connectives over separately compiled tests, with each test read by polarity") {
-        val (x, y, premise) = split2(forAll[BigInt, BigInt]((x, y) => x <= y))
-        val isX = bodyOver(x, y, forAll[BigInt, BigInt]((x, y) => Math.min(x, y) == x))
-        val isY = bodyOver(x, y, forAll[BigInt, BigInt]((x, y) => Math.min(x, y) == y))
-        def both(body: Prop): Prop = Prop.Forall(x, Prop.Forall(y, body))
-
-        val implication = both(premise ==> isX)
+        val implication =
+            forAll[BigInt, BigInt]((x, y) => Prop(x <= y) ==> Prop(Math.min(x, y) == x))
         assert(lowered(implication, FunctionTable.empty).leaves.size == 2)
         proven(implication, budget = 60)
-        proven(both(premise <=> isX), budget = 60)
-        proven(both(!premise ==> isY), budget = 60)
-        proven(both(premise || isY), budget = 60)
+        proven(
+          forAll[BigInt, BigInt]((x, y) => Prop(x <= y) <=> Prop(Math.min(x, y) == x)),
+          budget = 60
+        )
+        proven(
+          forAll[BigInt, BigInt]((x, y) => !Prop(x <= y) ==> Prop(Math.min(x, y) == y)),
+          budget = 60
+        )
+        proven(
+          forAll[BigInt, BigInt]((x, y) => Prop(x <= y) || Prop(Math.min(x, y) == y)),
+          budget = 60
+        )
 
-        val counterexample = refuted(both(premise ==> isY), budget = 60)
+        val wrong = forAll[BigInt, BigInt]((x, y) => Prop(x <= y) ==> Prop(Math.min(x, y) == y))
+        val (x, y, _) = split2(wrong)
+        val counterexample = refuted(wrong, budget = 60)
         assert(integer(counterexample(x.name)) < integer(counterexample(y.name)), counterexample)
     }
 
     test("a falsification caused by too small a budget is reported as spurious") {
-        run(forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x), budget = 3) match
+        run(forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x), 3, Nil) match
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("spurious"), reason)
             case (_, _, other) => fail(s"expected an inconclusive result, got $other")
@@ -156,10 +106,17 @@ class UplcBlasterTest extends AnyFunSuite {
         refuted(denotes(BigInt(7) / BigInt(0)), budget = 40)
     }
 
+    test("a closed statement is decided by evaluation, one with variables by Blaster") {
+        assert(proven(denotes(BigInt(7) / BigInt(2)), budget = 40) == ProofKind.LeanNative)
+        assert(
+          proven(forAll[BigInt](x => denotes(x + BigInt(1))), budget = 40) == ProofKind.Blaster
+        )
+    }
+
     test("proves that a program fails, apart from a budget that runs out") {
         proven(!denotes(BigInt(7) / BigInt(0)), budget = 40)
         refuted(!denotes(BigInt(7) / BigInt(2)), budget = 40)
-        run(!denotes(BigInt(7) / BigInt(0)), budget = 2) match
+        run(!denotes(BigInt(7) / BigInt(0)), 2, Nil) match
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("spurious"), reason)
             case (_, _, other) => fail(s"expected an inconclusive result, got $other")
@@ -170,33 +127,13 @@ class UplcBlasterTest extends AnyFunSuite {
     }
 
     test("denotes in a premise restricts a statement to the inputs where a program returns") {
-        val (x, nonzero) = forAll[BigInt](x => x != BigInt(0)) match
-            case Prop.Forall(x, body) => (x, body)
-            case other                => fail(s"expected a universal proposition, got $other")
-        val positive = forAll[BigInt](x => x > BigInt(0)) match
-            case Prop.Forall(y, Prop.Bool(PropExpr.SIRExpr(sir))) =>
-                Prop.Bool(PropExpr.SIRExpr(SIR.renameFreeVars(sir, Map(y.name -> x.name))))
-            case other => fail(s"expected a universal Boolean proposition, got $other")
-        val annotations = AnnotationsDecl.empty
-        val divideTen = SIR.Apply(
-          SIRBuiltins.divideInteger,
-          SIR.Const(Constant.Integer(10), SIRType.Integer, annotations),
-          SIRType.Fun(SIRType.Integer, SIRType.Integer),
-          annotations
-        )
-        val quotient = Prop.Denotes(
-          PropExpr.SIRExpr[BigInt](
-            SIR.Apply(
-              divideTen,
-              SIR.Var(x.name, SIRType.Integer, annotations),
-              SIRType.Integer,
-              annotations
-            )
-          )
-        )
+        proven(forAll[BigInt](x => denotes(BigInt(10) / x) ==> Prop(x != BigInt(0))), budget = 40)
 
-        proven(Prop.Forall(x, quotient ==> nonzero), budget = 40)
-        val counterexample = refuted(Prop.Forall(x, quotient ==> positive), budget = 40)
+        val positive = forAll[BigInt](x => denotes(BigInt(10) / x) ==> Prop(x > BigInt(0)))
+        val x = positive match
+            case Prop.Forall(x, _) => x
+            case other             => fail(s"expected a universal proposition, got $other")
+        val counterexample = refuted(positive, budget = 40)
         assert(integer(counterexample(x.name)) < 0, counterexample)
     }
 
@@ -226,7 +163,7 @@ class UplcBlasterTest extends AnyFunSuite {
         )
 
         val lower = lowered(prop, FunctionTable.empty)
-        assert(lower.body == UplcBlaster.Formula.Test(0))
+        assert(lower.body == UplcBlaster.LeafFormula.Test(0))
         val applied = lower.leaves.head $ BigInt(1).asTerm $ BigInt(2).asTerm
         applied.term.evaluateDebug match
             case success: Result.Success => assert(success.term == Term.Const(Constant.Bool(true)))
@@ -254,6 +191,82 @@ class UplcBlasterTest extends AnyFunSuite {
         proven(callRef(increment.ref, BigInt(41))(r => r == BigInt(42)), 40, increment)
     }
 
+    test("calls a function of several parameters through its own compiled program") {
+        val clamp = FunctionDef(Math.clamp)
+        assert(clamp.arity == 3)
+        proven(
+          callRef(clamp.ref, (BigInt(9), BigInt(1), BigInt(5)))(r => r == BigInt(5)),
+          80,
+          clamp
+        )
+        proven(
+          forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
+              Prop(lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+          ),
+          120,
+          clamp
+        )
+
+        val unguarded = forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
+            callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+        )
+        val (lo, hi) = unguarded match
+            case Prop.Forall(_, Prop.Forall(lo, Prop.Forall(hi, _))) => (lo, hi)
+            case other => fail(s"expected three universal quantifiers, got $other")
+        val counterexample = refuted(unguarded, 120, clamp)
+        assert(integer(counterexample(lo.name)) > integer(counterexample(hi.name)), counterexample)
+    }
+
+    test("a call's continuation can call another function") {
+        val min = FunctionDef.named("min", (x: BigInt, y: BigInt) => Math.min(x, y))
+        val max = FunctionDef.named("max", (x: BigInt, y: BigInt) => Math.max(x, y))
+        proven(
+          forAll[BigInt, BigInt]((x, y) =>
+              callRef(min.ref, (x, y))(a => callRef(max.ref, (x, y))(b => a + b == x + y))
+          ),
+          120,
+          min,
+          max
+        )
+    }
+
+    test("Blaster's error comes back in the inconclusive result") {
+        // For `e >= 0`, `exp2` reaches the bitwise builtins, whose `ByteString` is built on
+        // `BitVec`, which Blaster cannot translate (README, Limitations). When it can, this test
+        // needs another statement Blaster rejects.
+        val exp2 = FunctionDef(Math.exp2)
+        run(forAll[BigInt](e => callRef(exp2.ref, e)(r => r >= BigInt(0))), 120, Seq(exp2)) match
+            case (verifier, _, VerificationResult.Inconclusive(reason)) =>
+                assert(reason.startsWith("Lean exited with code 1: "), reason)
+                assert(
+                  reason.contains("error: Inductive datatype with instance parameters"),
+                  reason
+                )
+                assert(reason.contains("not supported: `BitVec"), reason)
+                assert(!reason.contains("Successfully decoded"), reason)
+                assert(verifier.theorems.isEmpty)
+            case (_, _, other) => fail(s"expected an inconclusive result, got $other")
+    }
+
+    test("a workspace without the ScalusProofs library is reported with Lean's error") {
+        requireLean()
+        // The workspace's own toolchain, so elan does not look for a default one.
+        val empty = Files.createTempDirectory("scalus-empty-lean-workspace-")
+        val toolchain = empty.resolve("lean-toolchain")
+        Files.copy(leanDirectory.resolve("lean-toolchain"), toolchain)
+        try
+            val verifier = Verifier.empty
+            val statement = verifier.statement(forAll[BigInt](x => x + BigInt(0) == x))
+            verifier.verify(statement, UplcBlaster(40, empty)) match
+                case VerificationResult.Inconclusive(reason) =>
+                    assert(reason.startsWith("Lean exited with code 1: "), reason)
+                    assert(reason.contains("unknown module prefix 'ScalusProofs'"), reason)
+                case other => fail(s"expected an inconclusive result, got $other")
+        finally
+            Files.deleteIfExists(toolchain)
+            Files.deleteIfExists(empty)
+    }
+
     test("statements outside the fragment are inconclusive") {
         val quantified = forAll[BigInt](x => x > 0) match
             case Prop.Forall(ident, body) =>
@@ -271,11 +284,12 @@ class UplcBlasterTest extends AnyFunSuite {
                 assert(reason.contains("ByteString binder"), reason)
             case other => fail(s"expected an inconclusive result, got $other")
 
-        val clamp = FunctionDef(Math.clamp)
-        val tupled = UplcBlaster.lower(
-          call(Math.clamp, (BigInt(2), BigInt(0), BigInt(10)))(r => r == BigInt(2)),
-          FunctionTable(clamp)
+        // A function of one parameter whose type is a pair takes the whole pair.
+        val first = FunctionDef.named("first", (pair: (BigInt, BigInt)) => pair._1)
+        val paired = UplcBlaster.lower(
+          callRef(first.ref, (BigInt(1), BigInt(2)))(r => r == BigInt(1)),
+          FunctionTable(first)
         )
-        assert(tupled.left.exists(_.contains("call argument")), tupled)
+        assert(paired.left.exists(_.contains("call argument")), paired)
     }
 }

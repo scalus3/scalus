@@ -3,8 +3,8 @@ package scalus.verify.uplcblaster
 import scalus.*
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.Options
-import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, SIR, SIRBuiltins, SIRType}
-import scalus.uplc.{Constant, DeBruijn, NamedDeBruijn, Program, Term}
+import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, DataDecl, SIR, SIRBuiltins, SIRType}
+import scalus.uplc.{Constant, DeBruijn, Program, Term}
 import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.utils.{Hex, Utils}
 import scalus.verify.*
@@ -22,17 +22,15 @@ import scala.jdk.CollectionConverters.*
   * (see [[UplcBlaster.lower]]). The Lean CEK model runs each predicate for at most `budget` steps,
   * keeping a failing program apart from an exhausted budget, and Blaster decides the resulting
   * proposition. Each test is read according to its polarity (design doc §6.2), so a proof at any
-  * budget holds without the budget, and a statement that a program fails can be proved. A
-  * counterexample is replayed on the Scalus CEK before it is reported as a refutation. Other
-  * statement shapes are inconclusive.
+  * budget holds without the budget, and a statement that a program fails can be proved. A closed
+  * statement, without quantified variables, has nothing to search for: Lean decides it by running
+  * its predicates, with `native_decide` ([[ProofKind.LeanNative]]). A counterexample is replayed on
+  * the Scalus CEK before it is reported as a refutation. Other statement shapes are inconclusive.
   */
 final class UplcBlaster private (val budget: Int, val leanDirectory: Path) extends Tactic {
     require(budget > 0, "the UPLC Blaster budget must be positive")
 
     override val name: String = "uplc-blaster"
-
-    /** Exports the current UPLC catalogue in the form consumed by the Lean workspace. */
-    def exportUplc(directory: Path): Seq[Path] = UplcBlaster.exportUplc(directory)
 
     override def discharge(goal: Goal): VerificationResult =
         UplcBlaster.lower(goal.statement.prop, goal.functions) match
@@ -52,29 +50,37 @@ object UplcBlaster {
       * @param counterexample
       *   for a refutation, the value of each quantified variable, by name, as replayed on the
       *   Scalus CEK; empty otherwise
+      * @param kind
+      *   [[ProofKind.Blaster]] for a statement with quantified variables, and
+      *   [[ProofKind.LeanNative]] for a closed statement, which Lean decides by evaluation
       */
     final case class Artifact(
         programHashes: List[String],
         budget: Int,
         output: String,
-        counterexample: List[(String, Constant)]
-    ) extends ProofArtifact {
-        override val kind: ProofKind = ProofKind.Blaster
-    }
+        counterexample: List[(String, Constant)],
+        kind: ProofKind
+    ) extends ProofArtifact
 
-    /** The quantifier-free body of a lowered statement. A leaf is an index into [[Lowered.leaves]].
+    /** The quantifier-free body of a lowered statement, over its leaves.
+      *
+      * The leaves of a statement are the nodes of its [[Prop]] tree that are not connectives:
+      * tests, calls, `denotes` and `equal`. [[lower]] compiles each leaf into a closed UPLC program
+      * in [[Lowered.leaves]], and a `LeafFormula` keeps the connectives around them, with each leaf
+      * replaced by its index there. `<=>` is already split into two implications. Both the Lean
+      * proposition (`renderFormula`) and the replay of a counterexample (`holds`) are read from it.
       */
-    enum Formula {
+    enum LeafFormula {
 
         /** The predicate returns `true`. */
         case Test(leaf: Int)
 
         /** The predicate returns without an error. */
         case Denotes(leaf: Int)
-        case And(left: Formula, right: Formula)
-        case Or(left: Formula, right: Formula)
-        case Not(inner: Formula)
-        case Implies(premise: Formula, conclusion: Formula)
+        case And(left: LeafFormula, right: LeafFormula)
+        case Or(left: LeafFormula, right: LeafFormula)
+        case Not(inner: LeafFormula)
+        case Implies(premise: LeafFormula, conclusion: LeafFormula)
     }
 
     /** A statement lowered for Lean: its universal binders, its body, and one closed UPLC program
@@ -82,14 +88,9 @@ object UplcBlaster {
       */
     final case class Lowered(
         binders: List[PropExpr.Ident[?]],
-        body: Formula,
+        body: LeafFormula,
         leaves: Vector[Program]
     )
-
-    /** Budget used only by the generated differential checks. Large enough for every target;
-      * `runSteps` short-circuits once the machine halts, so an oversized value costs nothing.
-      */
-    private val guardBudget = 20000
 
     /** The Scalus CEK budget for replaying a counterexample: a hundred times the mainnet
       * per-transaction limit. It only guards against a predicate that does not terminate.
@@ -116,8 +117,9 @@ object UplcBlaster {
       * implications, because its operands occur in both polarities.
       *
       * A call of a function in `functions` is linked to that function's compiled program, so the
-      * function's bytes appear unchanged in the predicate. Other `@Compile` definitions a test uses
-      * are compiled together with the test.
+      * function's bytes appear unchanged in the predicate. A function of several parameters is
+      * called with a tuple written out as `(a, b, ...)`, and its program is applied to each value
+      * in turn. Other `@Compile` definitions a test uses are compiled together with the test.
       */
     def lower(prop: Prop, functions: FunctionTable): Either[String, Lowered] =
         universalPrefix(prop).flatMap { case (binders, body) =>
@@ -126,28 +128,30 @@ object UplcBlaster {
                 leaves += Program.plutusV3(term)
                 leaves.size - 1
             }
-            def loop(current: Prop): Either[String, Formula] = current match
+            def loop(current: Prop): Either[String, LeafFormula] = current match
                 case _: Prop.Bool | _: Prop.Call[?, ?] =>
-                    predicate(current, binders, functions).map(term => Formula.Test(leaf(term)))
+                    predicate(current, binders, functions).map(term => LeafFormula.Test(leaf(term)))
                 case Prop.Equal(left, right) =>
                     equality(expressionSir(left), expressionSir(right)).map(test =>
-                        Formula.Test(leaf(compileSirFunction(binders, test, functions)))
+                        LeafFormula.Test(leaf(compileSirFunction(binders, test, functions)))
                     )
                 case Prop.Denotes(expr) =>
                     val value = expressionSir(expr)
                     if supportedType(value.tp) then
-                        Right(Formula.Denotes(leaf(compileSirFunction(binders, value, functions))))
+                        Right(
+                          LeafFormula.Denotes(leaf(compileSirFunction(binders, value, functions)))
+                        )
                     else Left(s"denotes over ${value.tp.show} is not supported")
                 case Prop.And(left, right) =>
-                    for l <- loop(left); r <- loop(right) yield Formula.And(l, r)
+                    for l <- loop(left); r <- loop(right) yield LeafFormula.And(l, r)
                 case Prop.Or(left, right) =>
-                    for l <- loop(left); r <- loop(right) yield Formula.Or(l, r)
-                case Prop.Not(inner) => loop(inner).map(Formula.Not(_))
+                    for l <- loop(left); r <- loop(right) yield LeafFormula.Or(l, r)
+                case Prop.Not(inner) => loop(inner).map(LeafFormula.Not(_))
                 case Prop.Implies(premise, conclusion) =>
-                    for p <- loop(premise); c <- loop(conclusion) yield Formula.Implies(p, c)
+                    for p <- loop(premise); c <- loop(conclusion) yield LeafFormula.Implies(p, c)
                 case Prop.Iff(left, right) =>
                     for l <- loop(left); r <- loop(right)
-                    yield Formula.And(Formula.Implies(l, r), Formula.Implies(r, l))
+                    yield LeafFormula.And(LeafFormula.Implies(l, r), LeafFormula.Implies(r, l))
                 case _: Prop.Forall[?] | _: Prop.Exists[?] =>
                     Left("a quantifier after the universal prefix is not supported")
 
@@ -176,36 +180,104 @@ object UplcBlaster {
         prop: Prop,
         binders: List[PropExpr.Ident[?]],
         functions: FunctionTable
-    ): Either[String, Term] = prop match
-        case Prop.Bool(expr) =>
-            val body = expressionSir(expr)
-            require(body.tp == SIRType.Boolean, s"a test has type ${body.tp.show}")
-            Right(compileSirFunction(binders, body, functions))
-        // A function of several parameters takes them as one tuple in a `Prop.Call`, while its
-        // UPLC program is curried, so only single BigInt or Boolean arguments are passed today.
-        case Prop.Call(_, arg, _, true, _) if !supportedType(expressionSir(arg).tp) =>
-            Left(
-              s"a call argument of type ${expressionSir(arg).tp.show} is not supported, only BigInt and Boolean"
-            )
-        case Prop.Call(_, _, result, true, _) if !supportedType(result.tp) =>
-            Left(
-              s"a call result of type ${result.tp.show} is not supported, only BigInt and Boolean"
-            )
-        case Prop.Call(fn, arg, result, true, body) =>
-            predicate(body, binders :+ result, functions).map { continuation =>
-                val argument = applyParameters(
-                  compileSirFunction(binders, expressionSir(arg), functions),
-                  binders
+    ): Either[String, Term] =
+        predicateSir(prop, functions).map(body => compileSirFunction(binders, body, functions))
+
+    /** A test, or a total call continuing with one, as one Boolean SIR expression over the
+      * statement's variables. A call is `(result => continuation)(fn(arguments...))`, where `fn` is
+      * an `ExternalVar` that [[compileSirFunction]] links to the function's own program.
+      */
+    private def predicateSir(prop: Prop, functions: FunctionTable): Either[String, SIR] =
+        prop match
+            case Prop.Bool(expr) =>
+                val body = expressionSir(expr)
+                require(body.tp == SIRType.Boolean, s"a test has type ${body.tp.show}")
+                Right(body)
+            case Prop.Call(_, _, result, true, _) if !supportedType(result.tp) =>
+                Left(
+                  s"a call result of type ${result.tp.show} is not supported, only BigInt and Boolean"
                 )
-                val called = Term.Apply(functions(fn)(Representation.Uplc).term, argument)
-                val continued = Term.Apply(applyParameters(continuation, binders), called)
-                binders.foldRight(continued) { (binder, current) =>
-                    Term.LamAbs(binder.name, current)
-                }
-            }
-        case Prop.Call(_, _, _, false, _) => Left("partial whenReturns calls are not supported")
-        case _ =>
-            Left("a call's continuation must be a test or another total call")
+            case Prop.Call(fn, arg, result, true, body) =>
+                for
+                    arguments <- callArguments(expressionSir(arg), functions(fn).arity)
+                    continuation <- predicateSir(body, functions)
+                yield callSir(fn, arguments, result, continuation)
+            case Prop.Call(_, _, _, false, _) =>
+                Left("partial whenReturns calls are not supported")
+            case _ =>
+                Left("a call's continuation must be a test or another total call")
+
+    /** `(result => continuation)(fn(arguments...))`. The data declarations around the pieces move
+      * outside the whole expression.
+      */
+    private def callSir(
+        fn: FunctionRef[?, ?],
+        arguments: List[SIR],
+        result: PropExpr.Ident[?],
+        continuation: SIR
+    ): SIR = {
+        val annotations = AnnotationsDecl.empty
+        val (argumentDeclarations, values) = arguments.map(declarations).unzip
+        val (continuationDeclarations, test) = declarations(continuation)
+        // The function is curried: it takes one argument per parameter.
+        val types = values.scanRight(result.tp)((value, rest) => SIRType.Fun(value.tp, rest))
+        val function: AnnotatedSIR = SIR.ExternalVar("", fn.name, types.head, annotations)
+        val called = values.zip(types.tail).foldLeft(function) { case (applied, (value, tp)) =>
+            SIR.Apply(applied, value, tp, annotations)
+        }
+        val continued = SIR.Apply(
+          SIR.LamAbs(SIR.Var(result.name, result.tp, annotations), test, Nil, annotations),
+          called,
+          SIRType.Boolean,
+          annotations
+        )
+        (argumentDeclarations.flatten ++ continuationDeclarations)
+            .distinctBy(_.name)
+            .foldRight[SIR](continued)((data, body) => SIR.Decl(data, body))
+    }
+
+    /** The data declarations the compiler put around an expression, and the expression. */
+    private def declarations(sir: SIR): (List[DataDecl], AnnotatedSIR) = sir match
+        case SIR.Decl(data, term) =>
+            val (inner, expression) = declarations(term)
+            (data :: inner) -> expression
+        case expression: AnnotatedSIR => Nil -> expression
+
+    /** The arguments a call passes to a function of `arity` parameters, one per parameter. A
+      * function of several parameters takes them in the statement as a tuple, written out as
+      * `(a, b, ...)`.
+      */
+    private def callArguments(argument: SIR, arity: Int): Either[String, List[SIR]] = {
+        val arguments =
+            if arity == 1 then Right(List(argument)) else tupleComponents(argument, arity)
+        arguments.flatMap { values =>
+            values.find(value => !supportedType(value.tp)) match
+                case Some(value) =>
+                    Left(
+                      s"a call argument of type ${value.tp.show} is not supported, only BigInt and Boolean"
+                    )
+                case None => Right(values)
+        }
+    }
+
+    /** The components of a tuple of `arity` values written out as `(a, b, ...)`. The definitions
+      * the compiler put around the tuple stay around each component.
+      */
+    private def tupleComponents(sir: SIR, arity: Int): Either[String, List[SIR]] = sir match
+        case SIR.Decl(data, term) =>
+            tupleComponents(term, arity).map(_.map(component => SIR.Decl(data, component)))
+        case SIR.Let(bindings, body, flags, anns) =>
+            tupleComponents(body, arity).map(
+              _.map(component => SIR.Let(bindings, component, flags, anns))
+            )
+        case SIR.Constr(name, _, arguments, _, _)
+            if name == s"scala.Tuple$arity" && arguments.size == arity =>
+            Right(arguments)
+        case other =>
+            Left(
+              s"a function of $arity parameters takes a tuple of $arity values written out as " +
+                  s"(a, b, ...), not an expression of type ${other.tp.show}"
+            )
 
     /** `left` and `right` evaluate to equal values. */
     private def equality(left: SIR, right: SIR): Either[String, SIR] = {
@@ -272,13 +344,6 @@ object UplcBlaster {
         case PropExpr.Ident(name, _, tp) =>
             SIR.Var(name, tp, AnnotationsDecl.empty)
 
-    private def applyParameters(
-        function: Term,
-        parameters: List[PropExpr.Ident[?]]
-    ): Term = parameters.foldLeft(function) { (current, parameter) =>
-        Term.Apply(current, Term.Var(NamedDeBruijn(parameter.name)))
-    }
-
     /** Removes the module definitions of functions in `functions` from around an expression.
       * `Compiler.compile` put them there; their remaining `ExternalVar` occurrences become explicit
       * parameters, filled with the functions' own UPLC programs. Definitions of other functions
@@ -298,7 +363,8 @@ object UplcBlaster {
             val liveNames = live(freeVariables(unlinkedBody))
             val kept = candidates.filter(binding => liveNames.contains(binding.name))
             if kept.isEmpty then unlinkedBody else SIR.Let(kept, unlinkedBody, flags, anns)
-        case other => other
+        case SIR.Decl(data, term) => SIR.Decl(data, unlinkModuleDefinitions(term, functions))
+        case other                => other
 
     private def externalVariables(sir: SIR): List[(String, SIRType)] = sir match
         case SIR.ExternalVar(_, name, tp, _) => List(name -> tp)
@@ -365,6 +431,7 @@ object UplcBlaster {
                 Files.writeString(flat, Hex.bytesToHex(program.cborEncoded).toLowerCase)
                 flat
             }
+            val closed = goal.binders.isEmpty
             val source = temporary.resolve("Check.lean")
             Files.writeString(source, renderCheck(goal, flats, budget))
             val process = new ProcessBuilder("lake", "env", "lean", source.toString)
@@ -379,16 +446,22 @@ object UplcBlaster {
               ),
               budget,
               output.trim,
-              Nil
+              Nil,
+              if closed then ProofKind.LeanNative else ProofKind.Blaster
             )
-            if output.contains("✅ Valid") then VerificationResult.Proven(Proof(artifact))
+            def failure = VerificationResult.Inconclusive(
+              s"Lean exited with code $exit: ${concise(output)}"
+            )
+            if closed then
+                if exit == 0 then VerificationResult.Proven(Proof(artifact))
+                else if output.contains("`native_decide` evaluated that the proposition") then
+                    replay(goal, artifact)
+                else failure
+            else if output.contains("✅ Valid") then VerificationResult.Proven(Proof(artifact))
             else if output.contains("❌ Falsified") then replay(goal, artifact)
             else if output.contains("⚠️ Undetermined") then
                 VerificationResult.Inconclusive("UPLC Blaster was undetermined")
-            else
-                VerificationResult.Inconclusive(
-                  s"Lean exited with code $exit: ${concise(output)}"
-                )
+            else failure
         finally
             Files.walk(temporary).iterator().asScala.toList.reverse.foreach(Files.deleteIfExists)
     }
@@ -400,7 +473,7 @@ object UplcBlaster {
         case Exhausted
     }
 
-    /** Replays Blaster's counterexample on the Scalus CEK, without Lean's step budget (§5.2).
+    /** Replays Lean's counterexample on the Scalus CEK, without Lean's step budget (§5.2).
       *
       * A falsification under the budget may be spurious: a strong reading of a test is false when
       * the predicate needs more steps. Only a counterexample under which the statement is false
@@ -412,6 +485,8 @@ object UplcBlaster {
             .zip(values)
             .map((binder, value) => s"${binder.name} = ${display(value)}")
             .mkString(", ")
+        val falsification =
+            if shown.isEmpty then "Lean's falsification" else s"Lean's counterexample ($shown)"
         val outcomes = goal.leaves.map(evaluate(_, values))
         holds(goal.body, outcomes) match
             case Some(false) =>
@@ -420,12 +495,12 @@ object UplcBlaster {
                 )
             case Some(true) =>
                 VerificationResult.Inconclusive(
-                  s"Blaster's counterexample ($shown) is spurious: the statement holds there on the " +
-                      s"Scalus CEK, so a test needs more than ${artifact.budget} steps"
+                  s"$falsification is spurious: the statement holds there on the Scalus CEK, so a " +
+                      s"test needs more than ${artifact.budget} steps"
                 )
             case None =>
                 VerificationResult.Inconclusive(
-                  s"replaying Blaster's counterexample ($shown) exhausted the replay budget"
+                  s"replaying $falsification exhausted the replay budget"
                 )
     }
 
@@ -489,35 +564,39 @@ object UplcBlaster {
     /** The truth of a formula under the semantics of §3.3, or `None` when a predicate it depends on
       * did not finish within the replay budget.
       */
-    private def holds(formula: Formula, outcomes: Vector[Outcome]): Option[Boolean] =
+    private def holds(formula: LeafFormula, outcomes: Vector[Outcome]): Option[Boolean] =
         formula match
-            case Formula.Test(leaf) =>
+            case LeafFormula.Test(leaf) =>
                 outcomes(leaf) match
                     case Outcome.Returned(Term.Const(Constant.Bool(value), _)) => Some(value)
                     case Outcome.Returned(_)                                   => Some(false)
                     case Outcome.Failed                                        => Some(false)
                     case Outcome.Exhausted                                     => None
-            case Formula.Denotes(leaf) =>
+            case LeafFormula.Denotes(leaf) =>
                 outcomes(leaf) match
                     case Outcome.Returned(_) => Some(true)
                     case Outcome.Failed      => Some(false)
                     case Outcome.Exhausted   => None
-            case Formula.And(left, right) =>
+            case LeafFormula.And(left, right) =>
                 (holds(left, outcomes), holds(right, outcomes)) match
                     case (Some(false), _) | (_, Some(false)) => Some(false)
                     case (Some(true), Some(true))            => Some(true)
                     case _                                   => None
-            case Formula.Or(left, right) =>
+            case LeafFormula.Or(left, right) =>
                 (holds(left, outcomes), holds(right, outcomes)) match
                     case (Some(true), _) | (_, Some(true)) => Some(true)
                     case (Some(false), Some(false))        => Some(false)
                     case _                                 => None
-            case Formula.Not(inner) => holds(inner, outcomes).map(!_)
-            case Formula.Implies(premise, conclusion) =>
-                holds(Formula.Or(Formula.Not(premise), conclusion), outcomes)
+            case LeafFormula.Not(inner) => holds(inner, outcomes).map(!_)
+            case LeafFormula.Implies(premise, conclusion) =>
+                holds(LeafFormula.Or(LeafFormula.Not(premise), conclusion), outcomes)
 
+    /** Lean's output, without the lines that report each imported program, and shortened. */
     private def concise(output: String): String = {
-        val normalized = output.linesIterator.map(_.trim).filter(_.nonEmpty).mkString(" ")
+        val normalized = output.linesIterator
+            .map(_.trim)
+            .filter(line => line.nonEmpty && !line.startsWith("Successfully decoded"))
+            .mkString(" ")
         if normalized.length <= 500 then normalized else normalized.take(497) + "..."
     }
 
@@ -542,45 +621,65 @@ object UplcBlaster {
       * that exhausts the budget counts as possibly `true`. `denotes` is read likewise: it halts
       * within the budget, and in a negative position it does not fail within it. Strengthening
       * positive and weakening negative occurrences gives a proposition that implies the statement.
+      *
+      * `state` is the Lean expression for the final state of a leaf's run. Every reading is a
+      * `Bool` comparison, so Blaster can translate it and `native_decide` can evaluate it.
       */
-    private def renderFormula(formula: Formula, arguments: String, positive: Boolean): String =
+    private def renderFormula(
+        formula: LeafFormula,
+        state: Int => String,
+        positive: Boolean
+    ): String =
+        def render(inner: LeafFormula, positive: Boolean) = renderFormula(inner, state, positive)
         formula match
-            case Formula.Test(leaf) =>
-                val state = s"(prepared$leaf$arguments)"
-                if positive then s"(fromFrameToBool $state = some true)"
-                else s"(fromFrameToBool $state ≠ some false ∧ failed $state = false)"
-            case Formula.Denotes(leaf) =>
-                val state = s"(prepared$leaf$arguments)"
-                if positive then s"(isSuccessful $state)" else s"(failed $state = false)"
-            case Formula.And(left, right) =>
-                s"(${renderFormula(left, arguments, positive)} ∧ ${renderFormula(right, arguments, positive)})"
-            case Formula.Or(left, right) =>
-                s"(${renderFormula(left, arguments, positive)} ∨ ${renderFormula(right, arguments, positive)})"
-            case Formula.Not(inner) => s"(¬ ${renderFormula(inner, arguments, !positive)})"
-            case Formula.Implies(premise, conclusion) =>
-                s"(${renderFormula(premise, arguments, !positive)} → ${renderFormula(conclusion, arguments, positive)})"
+            case LeafFormula.Test(leaf) =>
+                if positive then s"(fromFrameToBool ${state(leaf)} = some true)"
+                else
+                    s"(fromFrameToBool ${state(leaf)} ≠ some false ∧ failed ${state(leaf)} = false)"
+            case LeafFormula.Denotes(leaf) =>
+                if positive then s"(halted ${state(leaf)} = true)"
+                else s"(failed ${state(leaf)} = false)"
+            case LeafFormula.And(left, right) =>
+                s"(${render(left, positive)} ∧ ${render(right, positive)})"
+            case LeafFormula.Or(left, right) =>
+                s"(${render(left, positive)} ∨ ${render(right, positive)})"
+            case LeafFormula.Not(inner) => s"(¬ ${render(inner, !positive)})"
+            case LeafFormula.Implies(premise, conclusion) =>
+                s"(${render(premise, !positive)} → ${render(conclusion, positive)})"
 
+    /** The Lean check of a lowered statement. A statement with quantified variables is proved by
+      * Blaster over `#prep_uplc_run`. A closed statement has nothing to search for: its predicates
+      * run on the computable `runProgramFor`, and `native_decide` evaluates the proposition.
+      */
     private def renderCheck(goal: Lowered, flats: Vector[Path], budget: Int): String = {
-        val names = goal.binders.indices.map(index => s"x$index").toList
-        val declarations = goal.binders.zip(names).map { (binder, name) =>
-            s"($name : ${leanType(binder.tp)})"
-        }
         val imports = flats.zipWithIndex.map { (flat, index) =>
             val path = leanString(flat.toAbsolutePath.toString)
             s"""#import_uplc leaf$index PlutusV3 single_cbor_hex "$path""""
         }
-        val terms = goal.binders.zip(names).map { (binder, name) =>
-            s"Term.Const $$ Const.${leanType(binder.tp)} $name"
-        }
-        // A statement without binders passes its empty argument list as a plain `List Term`.
-        val arguments = (("def arguments" +: declarations) :+
-            s": List Term := [${terms.mkString(", ")}]").mkString(" ")
-        val prepared = flats.indices.map(index =>
-            s"#prep_uplc_run prepared$index leaf$index arguments $budget"
-        )
-        val formula = renderFormula(goal.body, names.map(" " + _).mkString, positive = true)
-        val proposition =
-            if declarations.isEmpty then formula else s"∀ ${declarations.mkString(" ")}, $formula"
+        val check =
+            if goal.binders.isEmpty then
+                val state = (leaf: Int) => s"(runProgramFor leaf$leaf.script [] $budget)"
+                s"example : ${renderFormula(goal.body, state, positive = true)} := by native_decide"
+            else
+                val names = goal.binders.indices.map(index => s"x$index").toList
+                val declarations = goal.binders.zip(names).map { (binder, name) =>
+                    s"($name : ${leanType(binder.tp)})"
+                }
+                val terms = goal.binders.zip(names).map { (binder, name) =>
+                    s"Term.Const $$ Const.${leanType(binder.tp)} $name"
+                }
+                val arguments = (("def arguments" +: declarations) :+
+                    s": List Term := [${terms.mkString(", ")}]").mkString(" ")
+                val prepared = flats.indices.map(index =>
+                    s"#prep_uplc_run prepared$index leaf$index arguments $budget"
+                )
+                val state = (leaf: Int) => s"(prepared$leaf${names.map(" " + _).mkString})"
+                val formula = renderFormula(goal.body, state, positive = true)
+                s"""$arguments
+                   |
+                   |${prepared.mkString("\n")}
+                   |
+                   |#blaster (gen-cex: 1) [∀ ${declarations.mkString(" ")}, $formula]""".stripMargin
 
         s"""import ScalusProofs.Run
            |
@@ -594,66 +693,9 @@ object UplcBlaster {
            |
            |${imports.mkString("\n")}
            |
-           |$arguments
-           |
-           |${prepared.mkString("\n")}
-           |
-           |#blaster (gen-cex: 1) [$proposition]
+           |$check
            |
            |end ScalusProofs.Runtime
            |""".stripMargin
-    }
-
-    private def header: String =
-        s"""-- Generated by `sbt exportLeanUplc`. Do not edit by hand.
-           |--
-           |-- Each `example` below asserts that the Lean CEK machine produces the value Scalus's
-           |-- own JVM CEK produced for the same arguments, so the two implementations are checked
-           |-- against each other on every build. A failing check most often means the compiled
-           |-- program changed, not that the Lean model is wrong.
-           |import ScalusProofs.Prelude
-           |
-           |namespace ScalusProofs.Generated
-           |open PlutusCore.Integer (Integer)
-           |open ScalusProofs.Prelude
-           |
-           |set_option warn.sorry false
-           |""".stripMargin
-
-    private def renderArgs(args: Seq[BigInt]): String =
-        args.map(a => if a < 0 then s"($a)" else a.toString).mkString("[", ", ", "]")
-
-    private def renderExpected(value: BigInt): String =
-        if value < 0 then s"($value)" else value.toString
-
-    private def renderTarget(target: ProofTarget): String = {
-        val uplcImport =
-            s"""#import_uplc ${target.leanName} PlutusV3 single_cbor_hex "ScalusProofs/Generated/${target.name}.flat""""
-        val checks = target.samples.map { case (args, expected) =>
-            s"""example : runInts ${target.leanName} ${renderArgs(args)} $guardBudget """ +
-                s"""= some ${renderExpected(expected)} := by native_decide"""
-        }
-        (uplcImport +: checks).mkString("\n") + "\n"
-    }
-
-    /** Regenerates the committed UPLC inputs for the existing Lean proof suite. */
-    def exportUplc(directory: Path): Seq[Path] = {
-        Files.createDirectories(directory)
-        val flats = ProofTargets.all.map { target =>
-            val path = directory.resolve(s"${target.name}.flat")
-            Files.writeString(path, Hex.bytesToHex(target.program.cborEncoded).toLowerCase)
-            path
-        }
-        val body = ProofTargets.all.map(renderTarget).mkString("\n")
-        val lean = directory.resolve("Targets.lean")
-        Files.writeString(lean, s"$header\n$body\nend ScalusProofs.Generated\n")
-        flats :+ lean
-    }
-
-    def main(args: Array[String]): Unit = {
-        require(args.nonEmpty, "usage: UplcBlaster <outputDir>")
-        val written = exportUplc(Path.of(args(0)))
-        written.foreach(path => println(s"wrote $path"))
-        println(s"${written.size} files, ${ProofTargets.all.size} targets")
     }
 }

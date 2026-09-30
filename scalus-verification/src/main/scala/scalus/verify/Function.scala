@@ -62,13 +62,19 @@ object Representation {
 /** One entry of a [[FunctionTable]]: a named function and the representations it has, one per proof
   * method that can use it.
   *
-  * A function of several parameters takes them as one tuple. Representations are computed on first
-  * use, so an entry costs nothing for a method nobody runs.
+  * `arity` is the number of parameters the function takes. A function of several parameters takes
+  * them in a call as one tuple of `arity` values, while its compiled programs are curried: they
+  * take the values one at a time. A function of one parameter whose type is a tuple takes the whole
+  * tuple. Representations are computed on first use, so an entry costs nothing for a method nobody
+  * runs.
   */
 final class FunctionDef[A, R] private (
     val ref: FunctionRef[A, R],
+    val arity: Int,
     representations: Map[Representation[?], FunctionDef.Lazy]
 ) {
+    require(arity > 0, s"a function takes at least one parameter: ${ref.name}")
+
     def name: String = ref.name
 
     def get[T](representation: Representation[T]): Option[T] =
@@ -88,7 +94,11 @@ final class FunctionDef[A, R] private (
     def available: Set[String] = representations.keySet.map(_.name)
 
     def withRepresentation[T](representation: Representation[T], value: => T): FunctionDef[A, R] =
-        new FunctionDef(ref, representations.updated(representation, FunctionDef.Lazy(value)))
+        new FunctionDef(
+          ref,
+          arity,
+          representations.updated(representation, FunctionDef.Lazy(value))
+        )
 
     def withLeanMapping(term: String): FunctionDef[A, R] =
         withRepresentation(Representation.LeanMapping, term)
@@ -107,21 +117,31 @@ object FunctionDef {
         def apply(value: => Any): Lazy = new Lazy(() => value)
     }
 
-    /** An entry with no representations yet, under a qualified name. Prefer the overloads that take
-      * a method reference, which cannot get the name wrong.
+    /** An entry of one parameter with no representations yet, under a qualified name. Prefer the
+      * overloads that take a method reference, which cannot get the name wrong.
       */
-    def qualified[A, R](name: String): FunctionDef[A, R] = {
+    def qualified[A, R](name: String): FunctionDef[A, R] = qualified(name, 1)
+
+    /** An entry of `arity` parameters with no representations yet, under a qualified name. */
+    def qualified[A, R](name: String, arity: Int): FunctionDef[A, R] = {
         require(name.contains('.'), s"a qualified name contains a dot: $name")
-        new FunctionDef(FunctionRef(name), Map.empty)
+        new FunctionDef(FunctionRef(name), arity, Map.empty)
     }
 
-    /** An entry with no representations yet, for a function without a SIR definition of its own. */
-    def synthetic[A, R](name: String): FunctionDef[A, R] = {
+    /** An entry of one parameter with no representations yet, for a function without a SIR
+      * definition of its own.
+      */
+    def synthetic[A, R](name: String): FunctionDef[A, R] = synthetic(name, 1)
+
+    /** An entry of `arity` parameters with no representations yet, for a function without a SIR
+      * definition of its own.
+      */
+    def synthetic[A, R](name: String, arity: Int): FunctionDef[A, R] = {
         require(
           name.nonEmpty && !name.contains('.'),
           s"a synthetic name is non-empty and has no dot, so it cannot collide with a qualified one: $name"
         )
-        new FunctionDef(FunctionRef(name), Map.empty)
+        new FunctionDef(FunctionRef(name), arity, Map.empty)
     }
 
     /** Adds what compiling a function gives: its SIR and its UPLC program. */
@@ -145,7 +165,7 @@ object FunctionDef {
     /** A two-parameter `@Compile` method, taking its arguments as a pair. */
     inline def apply[A, B, R](inline f: (A, B) => R): FunctionDef[(A, B), R] =
         fromCompiled(
-          qualified[(A, B), R](FunctionMacro.qualifiedName(f)),
+          qualified[(A, B), R](FunctionMacro.qualifiedName(f), 2),
           PlutusV3.compile(f)(using UplcBlaster.options)
         )
 
@@ -154,7 +174,7 @@ object FunctionDef {
       */
     inline def apply[A, B, C, R](inline f: (A, B, C) => R): FunctionDef[(A, B, C), R] =
         fromCompiled(
-          qualified[(A, B, C), R](FunctionMacro.qualifiedName(f)),
+          qualified[(A, B, C), R](FunctionMacro.qualifiedName(f), 3),
           PlutusV3.compile(f)(using UplcBlaster.options)
         )
 
@@ -164,6 +184,23 @@ object FunctionDef {
     inline def named[A, R](name: String, inline f: A => R): FunctionDef[A, R] =
         fromCompiled(
           synthetic[A, R](name),
+          PlutusV3.compile(f)(using UplcBlaster.options)
+        )
+
+    /** Any two-parameter function under a synthetic name, taking its arguments as a pair. */
+    inline def named[A, B, R](name: String, inline f: (A, B) => R): FunctionDef[(A, B), R] =
+        fromCompiled(
+          synthetic[(A, B), R](name, 2),
+          PlutusV3.compile(f)(using UplcBlaster.options)
+        )
+
+    /** Any three-parameter function under a synthetic name, taking its arguments as a triple. */
+    inline def named[A, B, C, R](
+        name: String,
+        inline f: (A, B, C) => R
+    ): FunctionDef[(A, B, C), R] =
+        fromCompiled(
+          synthetic[(A, B, C), R](name, 3),
           PlutusV3.compile(f)(using UplcBlaster.options)
         )
 }

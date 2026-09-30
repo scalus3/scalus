@@ -26,39 +26,17 @@ jobs:
             ~/.elan
             scalus-verification/src/main/lean/.lake
           key: lean-${{ hashFiles('scalus-verification/src/main/lean/lean-toolchain', 'scalus-verification/src/main/lean/lake-manifest.json') }}
-      - name: Build the proof suite
+      - name: Build the Lean workspace
         working-directory: scalus-verification/src/main/lean
         run: |
-          nix develop ../../../..#lean --accept-flake-config --command bash -c "lake build"
+          nix develop ../../../..#ci --accept-flake-config --command bash -c "lake build"
       - name: Run the proofs
-        working-directory: scalus-verification/src/main/lean
+        # SCALUS_REQUIRE_LEAN makes a test that cannot run Lean fail instead of being canceled,
+        # so the proofs cannot pass by not running.
+        env:
+          SCALUS_REQUIRE_LEAN: "1"
         run: |
-          nix develop ../../../..#lean --accept-flake-config --command bash -c '
-            fail=0
-            declare -A expected=(
-              ["ScalusProofs/Sanity.lean"]=5
-              ["ScalusProofs/Math.lean"]=11
-              ["ScalusProofs/Data.lean"]=6
-            )
-            for f in ScalusProofs/Sanity.lean ScalusProofs/Math.lean ScalusProofs/Data.lean; do
-              echo "=== $f ==="
-              out=$(lake env lean "$f" 2>&1)
-              rc=$?
-              echo "$out"
-              count=$(printf "%s" "$out" | grep -o "✅" | wc -l | tr -d " ")
-              if [ "$rc" -ne 0 ]; then
-                echo "FAILED ($f): lean exited $rc"
-                fail=1
-              elif printf "%s" "$out" | grep -qE "Undetermined|❌"; then
-                echo "FAILED ($f): unexpected verdict"
-                fail=1
-              elif [ "$count" -ne "${expected[$f]}" ]; then
-                echo "FAILED ($f): expected ${expected[$f]} checkmarks, got $count (a sorry or a missing check can hide as a plain pass)"
-                fail=1
-              fi
-            done
-            exit $fail
-          '
+          nix develop .#ci --accept-flake-config --command bash -c "sbt --batch scalusVerification/test"
       - name: Report results
         uses: sarisia/actions-status-discord@v1
         if: always()
