@@ -392,6 +392,46 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         refuted(forAll[Data](d => denotes(d.to[BlasterPair])), budget = 160)
     }
 
+    test("a contract is proved about its function's compiled program") {
+        val clamp = FunctionDef(Math.clamp)
+        proven(
+          contract(clamp)(
+            requires = (x, lo, hi) => lo <= hi,
+            ensures = (x, lo, hi) => r => lo <= r && r <= hi
+          ).prop,
+          120,
+          clamp
+        )
+        proven(
+          totalContract(clamp)(
+            requires = (x, lo, hi) => lo <= hi,
+            ensures = (x, lo, hi) => r => lo <= r && r <= hi
+          ).prop,
+          120,
+          clamp
+        )
+        // negative control: without its precondition the range can be empty
+        refuted(
+          contract(clamp)(
+            requires = (x, lo, hi) => true,
+            ensures = (x, lo, hi) => r => lo <= r && r <= hi
+          ).prop,
+          120,
+          clamp
+        )
+        // A partial contract holds where the function fails; a total one does not.
+        proven(
+          contract(div10)(requires = x => true, ensures = x => r => x != BigInt(0)).prop,
+          60,
+          div10
+        )
+        refuted(
+          totalContract(div10)(requires = x => true, ensures = x => r => x != BigInt(0)).prop,
+          60,
+          div10
+        )
+    }
+
     test("calls a function of several parameters through its own compiled program") {
         val clamp = FunctionDef(Math.clamp)
         assert(clamp.arity == 3)

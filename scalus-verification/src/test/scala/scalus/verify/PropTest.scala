@@ -128,6 +128,65 @@ class PropTest extends AnyFunSuite {
             case other => fail(s"expected a call continuing with one test, got $other")
     }
 
+    test("a contract states requires ==> whenReturns ensures over the function's parameters") {
+        val inRange = contract(clamp)(
+          requires = (x, lo, hi) => lo <= hi,
+          ensures = (x, lo, hi) => r => lo <= r && r <= hi
+        )
+        assert(inRange.function == clamp.ref && !inRange.total)
+        inRange.prop match
+            case Prop.Forall(
+                  x,
+                  Prop.Forall(
+                    lo,
+                    Prop.Forall(
+                      hi,
+                      Prop.Implies(
+                        Prop.Bool(PropExpr.SIRExpr(pre)),
+                        Prop.Call(
+                          fn,
+                          PropExpr.SIRExpr(arg),
+                          r,
+                          false,
+                          Prop.Bool(PropExpr.SIRExpr(post))
+                        )
+                      )
+                    )
+                  )
+                ) =>
+                assert(fn == clamp.ref)
+                assert(pre.toString.contains(lo.name) && pre.toString.contains(hi.name), pre)
+                assert(List(x, lo, hi).forall(v => arg.toString.contains(v.name)), arg)
+                // ensures names its own parameters; they are renamed after those of requires
+                assert(List(lo, hi, r).forall(v => post.toString.contains(v.name)), post)
+            case other => fail(s"expected a contract over three parameters, got $other")
+
+        val total = totalContract(div10)(
+          requires = x => x != BigInt(0),
+          ensures = x => r => r * x <= BigInt(10)
+        )
+        assert(total.function == div10.ref && total.total)
+        total.prop match
+            case Prop.Forall(_, Prop.Implies(_, Prop.Call(fn, _, _, true, _))) =>
+                assert(fn == div10.ref)
+            case other => fail(s"expected a total contract, got $other")
+
+        // A statement in ensures is renamed as well.
+        contract(div10)(
+          requires = x => x > BigInt(0),
+          ensures = x => r => Prop(r >= BigInt(0)) && Prop(r <= x * BigInt(10))
+        ).prop match
+            case Prop.Forall(
+                  x,
+                  Prop.Implies(
+                    _,
+                    Prop.Call(_, _, _, _, Prop.And(_, Prop.Bool(PropExpr.SIRExpr(bound))))
+                  )
+                ) =>
+                assert(bound.toString.contains(x.name), bound)
+            case other => fail(s"expected a contract with a statement in ensures, got $other")
+    }
+
     test("a variable used to compute the statement itself is a compile error") {
         val errors = scala.compiletime.testing.typeCheckErrors(
           """import scalus.verify.*

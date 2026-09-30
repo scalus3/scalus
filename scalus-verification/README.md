@@ -97,6 +97,29 @@ an `if` that chooses between statements is a compile error; state the cases with
 `Prop(...)` is needed only to make a Boolean a separate test on purpose: `!Prop(t)` holds when
 `t` fails, while `!t` is one test that fails with it.
 
+### Contracts
+
+A contract states a function's precondition and postcondition (design doc §3.7):
+
+```scala
+val clamp = FunctionDef(Math.clamp)
+verifier.addFunction(clamp)
+val inRange = verifier.contract(
+  "clamp_in_range",
+  contract(clamp)(
+    requires = (x, lo, hi) => lo <= hi,
+    ensures = (x, lo, hi) => r => lo <= r && r <= hi
+  )
+)
+verifier.verify(inRange, UplcBlaster(budget = 120)) // Proven
+```
+
+`contract` is partial: `∀ args. requires(args) ==> whenReturns(f, args)(r => ensures(args)(r))`,
+so a call that fails satisfies it. `totalContract` also claims that the function returns where
+`requires` holds. `verifier.contract` registers the statement as the function's contract, and
+`verifier.contracts(clamp.ref)` lists them. The function's parameters must be quantifiable:
+`BigInt`, `Boolean` or `Data`.
+
 ## Running
 
 ```bash

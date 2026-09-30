@@ -73,6 +73,11 @@ enum Prop {
     infix def iff(q: Prop): Prop = Iff(this, q)
 }
 
+/** The contract of a function, built by [[Props.contract]] or [[Props.totalContract]]: the
+  * statement `prop`, and the function and totality it is about. [[Verifier.contract]] declares it.
+  */
+final case class Contract(function: FunctionRef[?, ?], total: Boolean, prop: Prop)
+
 object Props {
 
     /** Constructs an explicit universal quantifier from an identifier and a proposition. */
@@ -159,6 +164,90 @@ object Props {
     inline def whenReturns[A, R](fn: FunctionDef[A, R], inline arg: A)(
         inline body: R => Prop | Boolean
     ): Prop = ${ PropMacro.callDef('fn, 'arg, 'body, false) }
+
+    /** The contract of a function of one parameter: for every argument that satisfies `requires`, a
+      * result the function returns satisfies `ensures` (partial correctness, design doc §3.7):
+      * `∀ x. requires(x) ==> whenReturns(fn, x)(r => ensures(x)(r))`. A failing call satisfies it;
+      * use [[totalContract]] to claim that the function returns.
+      *
+      * {{{
+      * contract(div10)(requires = x => x != BigInt(0), ensures = x => r => r * x <= BigInt(10))
+      * }}}
+      */
+    inline def contract[A: Quantifiable, R](fn: FunctionDef[A, R])(
+        inline requires: A => Prop | Boolean,
+        inline ensures: A => R => Prop | Boolean
+    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, false) }
+
+    /** The contract of a function of two parameters; see [[contract]]. */
+    inline def contract[A: Quantifiable, B: Quantifiable, R](fn: FunctionDef[(A, B), R])(
+        inline requires: (A, B) => Prop | Boolean,
+        inline ensures: (A, B) => R => Prop | Boolean
+    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, false) }
+
+    /** The contract of a function of three parameters; see [[contract]].
+      *
+      * {{{
+      * contract(clamp)(
+      *   requires = (x, lo, hi) => lo <= hi,
+      *   ensures = (x, lo, hi) => r => lo <= r && r <= hi
+      * )
+      * }}}
+      */
+    inline def contract[A: Quantifiable, B: Quantifiable, C: Quantifiable, R](
+        fn: FunctionDef[(A, B, C), R]
+    )(
+        inline requires: (A, B, C) => Prop | Boolean,
+        inline ensures: (A, B, C) => R => Prop | Boolean
+    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, false) }
+
+    /** The contract of a function of one parameter, with totality: for every argument that
+      * satisfies `requires`, the function returns, and its result satisfies `ensures`.
+      */
+    inline def totalContract[A: Quantifiable, R](fn: FunctionDef[A, R])(
+        inline requires: A => Prop | Boolean,
+        inline ensures: A => R => Prop | Boolean
+    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, true) }
+
+    /** The total contract of a function of two parameters; see [[totalContract]]. */
+    inline def totalContract[A: Quantifiable, B: Quantifiable, R](fn: FunctionDef[(A, B), R])(
+        inline requires: (A, B) => Prop | Boolean,
+        inline ensures: (A, B) => R => Prop | Boolean
+    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, true) }
+
+    /** The total contract of a function of three parameters; see [[totalContract]]. */
+    inline def totalContract[A: Quantifiable, B: Quantifiable, C: Quantifiable, R](
+        fn: FunctionDef[(A, B, C), R]
+    )(
+        inline requires: (A, B, C) => Prop | Boolean,
+        inline ensures: (A, B, C) => R => Prop | Boolean
+    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, true) }
+
+    /** `prop` with the statement variables in `names` renamed, in its expressions and binders. */
+    private[verify] def renameVariables(prop: Prop, names: Map[String, String]): Prop = {
+        def expression[A](expr: PropExpr[A]): PropExpr[A] = expr match
+            case PropExpr.SIRExpr(sir)    => PropExpr.SIRExpr(SIR.renameFreeVars(sir, names))
+            case ident: PropExpr.Ident[A] => identifier(ident)
+        def identifier[A](ident: PropExpr.Ident[A]): PropExpr.Ident[A] =
+            names
+                .get(ident.name)
+                .fold(ident)(name => new PropExpr.Ident[A](name, ident.id, ident.tp))
+        def loop(current: Prop): Prop = current match
+            case Prop.Bool(expr)         => Prop.Bool(expression(expr))
+            case Prop.Denotes(expr)      => Prop.Denotes(expression(expr))
+            case Prop.Equal(left, right) => Prop.Equal(expression(left), expression(right))
+            case Prop.Call(fn, arg, result, total, body) =>
+                Prop.Call(fn, expression(arg), identifier(result), total, loop(body))
+            case Prop.Forall(ident, body) => Prop.Forall(identifier(ident), loop(body))
+            case Prop.Exists(ident, witness, body) =>
+                Prop.Exists(identifier(ident), witness.map(expression), loop(body))
+            case Prop.And(left, right)     => Prop.And(loop(left), loop(right))
+            case Prop.Or(left, right)      => Prop.Or(loop(left), loop(right))
+            case Prop.Implies(left, right) => Prop.Implies(loop(left), loop(right))
+            case Prop.Iff(left, right)     => Prop.Iff(loop(left), loop(right))
+            case Prop.Not(inner)           => Prop.Not(loop(inner))
+        if names.isEmpty then prop else loop(prop)
+    }
 
     /** The SIR type of a statement variable, from the compiled identity lambda `(v: A) => v`. */
     private[verify] def variableType(identity: SIR): SIRType =
