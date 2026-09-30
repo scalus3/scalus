@@ -3,20 +3,45 @@ package scalus.verify.uplcblaster
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude.Math
-import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRBuiltins, SIRType}
-import scalus.uplc.{Constant, Term}
+import scalus.compiler.Compile
+import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRBuiltins, SIRType, TargetLoweringBackend}
+import scalus.compiler.sir.lowering.{PrimitiveRepresentation, ProductCaseClassRepresentation, SumCaseClassRepresentation}
+import scalus.uplc.{Constant, PlutusV3, Term}
 import scalus.uplc.Term.asTerm
-import scalus.uplc.builtin.{Builtins, ByteString, Data}
+import scalus.uplc.builtin.{Builtins, ByteString, Data, FromData, ToData}
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.verify.*
 import scalus.verify.Props.*
 
 import java.nio.file.Files
 
+case class BlasterPair(a: BigInt, b: BigInt) derives FromData, ToData
+
+@Compile
+object BlasterPair
+
+enum BlasterShape derives FromData, ToData:
+    case Circle(r: BigInt)
+    case Rect(w: BigInt, h: BigInt)
+
+@Compile
+object BlasterShape
+
 class UplcBlasterTest extends AnyFunSuite with LeanProofs {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
     private val div10 = FunctionDef.named("div10", (x: BigInt) => BigInt(10) / x)
+
+    private val makePair =
+        FunctionDef.named("makePair", (a: BigInt, b: BigInt) => BlasterPair(a, b))
+    private val sum = FunctionDef.named("sum", (p: BlasterPair) => p.a + p.b)
+    private val area = FunctionDef.named(
+      "area",
+      (s: BlasterShape) =>
+          s match
+              case BlasterShape.Circle(r)  => r
+              case BlasterShape.Rect(w, h) => w * h
+    )
 
     private def lowered(prop: Prop, functions: FunctionTable): UplcBlaster.Lowered =
         UplcBlaster.lower(prop, functions) match
@@ -268,6 +293,105 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         )
     }
 
+    test("a compiled function records how its program takes its arguments and returns") {
+        import PrimitiveRepresentation.Constant
+        import ProductCaseClassRepresentation.ProdDataList
+        import SumCaseClassRepresentation.DataConstr
+        def signature(function: FunctionDef[?, ?]) = function.get(Representation.UplcSignature)
+        // A plain case class travels as a builtin list of its fields, an enum as Data.
+        assert(signature(sum) == Some(UplcSignature.Represented(List(ProdDataList), Constant)))
+        assert(
+          signature(makePair) ==
+              Some(UplcSignature.Represented(List(Constant, Constant), ProdDataList))
+        )
+        assert(signature(area) == Some(UplcSignature.Represented(List(DataConstr), Constant)))
+    }
+
+    test("a function compiled with another lowering backend is not linked into the tests") {
+        val options =
+            UplcBlaster.options.copy(targetLoweringBackend =
+                TargetLoweringBackend.SumOfProductsLowering
+            )
+        val increment = FunctionDef.fromCompiled(
+          FunctionDef.synthetic[BigInt, BigInt]("increment"),
+          PlutusV3.compile((x: BigInt) => x + BigInt(1))(using options)
+        )
+        val lowered = UplcBlaster.lower(
+          forAll[BigInt](x => callRef(increment.ref, x)(r => r > x)),
+          FunctionTable(increment)
+        )
+        assert(lowered.left.exists(_.contains("SumOfProductsLowering")), lowered)
+    }
+
+    test("a function with only a UPLC program is called with BigInt, Boolean and Data only") {
+        // Without SIR there is no declared type, so the tests cannot know how its program takes a
+        // case class: `Circle(r)` alone would be passed as a list of fields, not as the enum.
+        val areaProgram = FunctionDef
+            .synthetic[BlasterShape, BigInt]("areaProgram")
+            .withRepresentation(Representation.Uplc, area(Representation.Uplc))
+        val shaped = UplcBlaster.lower(
+          forAll[BigInt](r => callRef(areaProgram.ref, BlasterShape.Circle(r))(x => x == r)),
+          FunctionTable(areaProgram)
+        )
+        assert(shaped.left.exists(_.contains("has no SIR")), shaped)
+
+        val incrementProgram = FunctionDef
+            .synthetic[BigInt, BigInt]("incrementProgram")
+            .withRepresentation(
+              Representation.Uplc,
+              PlutusV3.compile((x: BigInt) => x + BigInt(1))(using UplcBlaster.options).program
+            )
+        val lowered = UplcBlaster.lower(
+          forAll[BigInt](x => callRef(incrementProgram.ref, x)(r => r > x)),
+          FunctionTable(incrementProgram)
+        )
+        assert(lowered.isRight, lowered)
+    }
+
+    test("calls take and return case classes, each in its own representation") {
+        proven(
+          forAll[BigInt, BigInt]((a, b) =>
+              callRef(makePair.ref, (a, b))(p => p.a == a && p.b == b)
+          ),
+          240,
+          makePair
+        )
+        proven(
+          forAll[BigInt, BigInt]((a, b) => callRef(sum.ref, BlasterPair(a, b))(r => r == a + b)),
+          240,
+          sum
+        )
+        // An enum's constructor is passed as the enum.
+        proven(
+          forAll[BigInt](r => callRef(area.ref, BlasterShape.Circle(r))(x => x == r)),
+          240,
+          area
+        )
+        // One function's result is another's argument.
+        proven(
+          forAll[BigInt, BigInt]((a, b) =>
+              callRef(makePair.ref, (a, b))(p => callRef(sum.ref, p)(r => r == a + b))
+          ),
+          400,
+          makePair,
+          sum
+        )
+        // negative control
+        refuted(
+          forAll[BigInt, BigInt]((a, b) => callRef(sum.ref, BlasterPair(a, b))(r => r == a)),
+          240,
+          sum
+        )
+        // A function of one parameter whose type is a pair takes the whole pair.
+        val first = FunctionDef.named("first", (pair: (BigInt, BigInt)) => pair._1)
+        proven(callRef(first.ref, (BigInt(1), BigInt(2)))(r => r == BigInt(1)), 240, first)
+    }
+
+    test("denotes of a case class, and decoding one from Data") {
+        proven(forAll[BigInt](x => denotes(BlasterPair(x, x))), budget = 40)
+        refuted(forAll[Data](d => denotes(d.to[BlasterPair])), budget = 160)
+    }
+
     test("calls a function of several parameters through its own compiled program") {
         val clamp = FunctionDef(Math.clamp)
         assert(clamp.arity == 3)
@@ -360,14 +484,6 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
             case VerificationResult.Inconclusive(reason) =>
                 assert(reason.contains("ByteString binder"), reason)
             case other => fail(s"expected an inconclusive result, got $other")
-
-        // A function of one parameter whose type is a pair takes the whole pair.
-        val first = FunctionDef.named("first", (pair: (BigInt, BigInt)) => pair._1)
-        val paired = UplcBlaster.lower(
-          callRef(first.ref, (BigInt(1), BigInt(2)))(r => r == BigInt(1)),
-          FunctionTable(first)
-        )
-        assert(paired.left.exists(_.contains("call argument")), paired)
 
         // A partial call is split into two leaves, which a call's continuation cannot hold.
         val nested = UplcBlaster.lower(

@@ -1,6 +1,10 @@
 package scalus.verify
 
-import scalus.compiler.sir.SIR
+import scalus.cardano.ledger.Language
+import scalus.compiler.Options
+import scalus.compiler.sir.{SIR, SIRType, TargetLoweringBackend}
+import scalus.compiler.sir.lowering.{InOutRepresentationPair, LambdaRepresentation, LoweredValueRepresentation, LoweringContext}
+import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.uplc.{PlutusV3, Program}
 import scalus.verify.uplcblaster.UplcBlaster
 
@@ -50,6 +54,9 @@ object Representation {
     /** The function's SIR, which `lean-direct` translates into a Lean definition. */
     val Sir: Representation[SIR] = new Representation("sir")
 
+    /** How the [[Uplc]] program takes its parameters and returns its result. */
+    val UplcSignature: Representation[UplcSignature] = new Representation("uplc-signature")
+
     /** A Lean term the function is declared equal to, for `lean-direct`. It is a claim until it is
       * proved, typically by `blaster-uplc` (design doc §6.3).
       */
@@ -57,6 +64,75 @@ object Representation {
 
     /** A representation for a proof method defined elsewhere. */
     def custom[T](name: String): Representation[T] = new Representation(name)
+}
+
+/** How a compiled program takes its parameters and returns its result.
+  *
+  * The V3 lowering passes every value across a function's boundary in its type's default
+  * representation: a `BigInt` as an integer constant, a plain case class as a builtin list of
+  * `Data` fields, a sum type as `Data`, a type marked `@UplcRepr(UplcConstr)` as `constr` terms.
+  * The default depends on the type, its annotations and the target, so it is computed here with the
+  * same call the lowering makes. A program can be applied to another only when both agree on it.
+  */
+enum UplcSignature {
+
+    /** The V3 lowering's representation of each parameter, in order, and of the result. */
+    case Represented(
+        parameters: List[LoweredValueRepresentation],
+        result: LoweredValueRepresentation
+    )
+
+    /** Another lowering backend, whose calling convention is its own. */
+    case Backend(backend: TargetLoweringBackend)
+
+    /** Whether two signatures are the same calling convention. Representations compare by
+      * [[LoweredValueRepresentation.stableKey]], which ignores the identity of type references.
+      */
+    def agrees(other: UplcSignature): Boolean = (this, other) match
+        case (Represented(parameters, result), Represented(otherParameters, otherResult)) =>
+            parameters.map(_.stableKey) == otherParameters.map(_.stableKey) &&
+            result.stableKey == otherResult.stableKey
+        case _ => this == other
+
+    def show: String = this match
+        case Represented(parameters, result) =>
+            (parameters.map(_.show) :+ result.show).mkString(" -> ")
+        case Backend(backend) => s"the $backend backend"
+}
+
+object UplcSignature {
+
+    /** The signature of a function of type `tp` and `arity` parameters, lowered with `options` for
+      * `language`, which is the program's own: `PlutusV3.compile` lowers for Plutus V3.
+      */
+    def of(tp: SIRType, arity: Int, options: Options, language: Language): UplcSignature =
+        if options.targetLoweringBackend != TargetLoweringBackend.SirToUplcV3Lowering then
+            Backend(options.targetLoweringBackend)
+        else
+            // The target settings of SirToUplcV3Lowering.newLoweringContext, without the support
+            // bindings it lowers, which default representations do not read.
+            val protocolVersion =
+                if language == Language.PlutusV4 then Language.PlutusV4.introducedInVersion
+                else options.targetProtocolVersion
+            given LoweringContext =
+                LoweringContext(targetLanguage = language, targetProtocolVersion = protocolVersion)
+            val (parameters, result) = split(SirTypeUplcGenerator.defaultRepresentation(tp), arity)
+            Represented(parameters, result)
+
+    private def split(
+        representation: LoweredValueRepresentation,
+        arity: Int
+    ): (List[LoweredValueRepresentation], LoweredValueRepresentation) =
+        if arity == 0 then Nil -> representation
+        else
+            representation match
+                case LambdaRepresentation(_, InOutRepresentationPair(parameter, rest)) =>
+                    val (parameters, result) = split(rest, arity - 1)
+                    (parameter :: parameters) -> result
+                case other =>
+                    throw new IllegalArgumentException(
+                      s"a function of $arity more parameters has the representation ${other.show}"
+                    )
 }
 
 /** One entry of a [[FunctionTable]]: a named function and the representations it has, one per proof
@@ -144,7 +220,9 @@ object FunctionDef {
         new FunctionDef(FunctionRef(name), arity, Map.empty)
     }
 
-    /** Adds what compiling a function gives: its SIR and its UPLC program. */
+    /** Adds what compiling a function gives: its SIR, its UPLC program and that program's
+      * signature.
+      */
     def fromCompiled[A, R](
         entry: FunctionDef[A, R],
         compiled: PlutusV3[?]
@@ -152,6 +230,10 @@ object FunctionDef {
         entry
             .withRepresentation(Representation.Sir, compiled.sir)
             .withRepresentation(Representation.Uplc, compiled.program)
+            .withRepresentation(
+              Representation.UplcSignature,
+              UplcSignature.of(compiled.sir.tp, entry.arity, compiled.options, compiled.language)
+            )
 
     /** A one-parameter `@Compile` method, named after it and compiled with the module's pinned
       * options ([[UplcBlaster.options]]): `FunctionDef(Helpers.double)`.

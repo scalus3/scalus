@@ -182,11 +182,17 @@ class PropTest extends AnyFunSuite {
         assert(lambdaErrors.exists(_.message.contains("other arguments")))
     }
 
-    test("a compiled entry carries SIR and UPLC; backend representations can be added") {
-        assert(clamp.available == Set("sir", "uplc"))
+    test(
+      "a compiled entry carries SIR, UPLC and its signature; backend representations can be added"
+    ) {
+        assert(clamp.available == Set("sir", "uplc", "uplc-signature"))
         assert(clamp(Representation.Uplc).term.toString.nonEmpty)
+        clamp(Representation.UplcSignature) match
+            case UplcSignature.Represented(parameters, result) =>
+                assert(parameters.size == 3 && (result :: parameters).forall(_.show == "Constant"))
+            case other => fail(s"expected the V3 lowering's signature, got $other")
         val mapped = clamp.withLeanMapping("fun x lo hi => max lo (min x hi)")
-        assert(mapped.available == Set("sir", "uplc", "lean-mapping"))
+        assert(mapped.available == Set("sir", "uplc", "uplc-signature", "lean-mapping"))
         assertThrows[NoSuchElementException](clamp(Representation.LeanMapping))
     }
 

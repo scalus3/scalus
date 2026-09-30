@@ -115,7 +115,8 @@ object UplcBlaster {
       *
       * The fragment is a prefix of universal quantifiers over `BigInt`, `Boolean` and `Data`
       * followed by a body without quantifiers. The body's leaves are Boolean tests, calls whose
-      * continuation is a test or another total call, `denotes` and `equal` over those types. Its
+      * continuation is a test or another total call, `denotes`, and `equal` over those types. A
+      * call's arguments and result, and the operand of `denotes`, can have any type. Its
       * connectives are `&&`, `||`, `!`, `==>` and `<=>`. `<=>` becomes two implications, because
       * its operands occur in both polarities. A partial call, `whenReturns(f, a)(r => p)`, becomes
       * `denotes(f(a)) ==> call(f, a)(r => p)`: its two leaves run the function's program each.
@@ -126,54 +127,59 @@ object UplcBlaster {
       * in turn. Other `@Compile` definitions a test uses are compiled together with the test.
       */
     def lower(prop: Prop, functions: FunctionTable): Either[String, Lowered] =
-        universalPrefix(prop).flatMap { case (binders, body) =>
-            val leaves = ArrayBuffer.empty[Program]
-            def leaf(term: Term): Int = {
-                leaves += Program.plutusV3(term)
-                leaves.size - 1
-            }
-            def loop(current: Prop): Either[String, LeafFormula] = current match
-                case Prop.Call(fn, arg, result, false, body) =>
-                    for
-                        _ <- supportedResult(result)
-                        returns <- returnsSir(fn, arg, result.tp, functions)
-                        formula <- loop(
-                          Prop.Implies(
-                            Prop.Denotes(PropExpr.SIRExpr(returns)),
-                            Prop.Call(fn, arg, result, true, body)
-                          )
+        checkSignatures(prop, functions).flatMap(_ => universalPrefix(prop)).flatMap {
+            case (binders, body) =>
+                val leaves = ArrayBuffer.empty[Program]
+                def leaf(term: Term): Int = {
+                    leaves += Program.plutusV3(term)
+                    leaves.size - 1
+                }
+                def loop(current: Prop): Either[String, LeafFormula] = current match
+                    case Prop.Call(fn, arg, result, false, body) =>
+                        for
+                            returns <- returnsSir(fn, arg, result.tp, functions)
+                            formula <- loop(
+                              Prop.Implies(
+                                Prop.Denotes(PropExpr.SIRExpr(returns)),
+                                Prop.Call(fn, arg, result, true, body)
+                              )
+                            )
+                        yield formula
+                    case _: Prop.Bool | _: Prop.Call[?, ?] =>
+                        predicate(current, binders, functions)
+                            .map(term => LeafFormula.Test(leaf(term)))
+                    case Prop.Equal(left, right) =>
+                        equality(expressionSir(left), expressionSir(right)).map(test =>
+                            LeafFormula.Test(leaf(compileSirFunction(binders, test, functions)))
                         )
-                    yield formula
-                case _: Prop.Bool | _: Prop.Call[?, ?] =>
-                    predicate(current, binders, functions).map(term => LeafFormula.Test(leaf(term)))
-                case Prop.Equal(left, right) =>
-                    equality(expressionSir(left), expressionSir(right)).map(test =>
-                        LeafFormula.Test(leaf(compileSirFunction(binders, test, functions)))
-                    )
-                case Prop.Denotes(expr) =>
-                    val value = expressionSir(expr)
-                    if supportedType(value.tp) then
+                    case Prop.Denotes(expr) =>
+                        val value = expressionSir(expr)
                         Right(
                           LeafFormula.Denotes(leaf(compileSirFunction(binders, value, functions)))
                         )
-                    else Left(s"denotes over ${value.tp.show} is not supported")
-                case Prop.And(left, right) =>
-                    for l <- loop(left); r <- loop(right) yield LeafFormula.And(l, r)
-                case Prop.Or(left, right) =>
-                    for l <- loop(left); r <- loop(right) yield LeafFormula.Or(l, r)
-                case Prop.Not(inner) => loop(inner).map(LeafFormula.Not(_))
-                case Prop.Implies(premise, conclusion) =>
-                    for p <- loop(premise); c <- loop(conclusion) yield LeafFormula.Implies(p, c)
-                case Prop.Iff(left, right) =>
-                    for l <- loop(left); r <- loop(right)
-                    yield LeafFormula.And(LeafFormula.Implies(l, r), LeafFormula.Implies(r, l))
-                case _: Prop.Forall[?] | _: Prop.Exists[?] =>
-                    Left("a quantifier after the universal prefix is not supported")
+                    case Prop.And(left, right) =>
+                        for l <- loop(left); r <- loop(right) yield LeafFormula.And(l, r)
+                    case Prop.Or(left, right) =>
+                        for l <- loop(left); r <- loop(right) yield LeafFormula.Or(l, r)
+                    case Prop.Not(inner) => loop(inner).map(LeafFormula.Not(_))
+                    case Prop.Implies(premise, conclusion) =>
+                        for p <- loop(premise); c <- loop(conclusion)
+                        yield LeafFormula.Implies(p, c)
+                    case Prop.Iff(left, right) =>
+                        for l <- loop(left); r <- loop(right)
+                        yield LeafFormula.And(LeafFormula.Implies(l, r), LeafFormula.Implies(r, l))
+                    case _: Prop.Forall[?] | _: Prop.Exists[?] =>
+                        Left("a quantifier after the universal prefix is not supported")
 
-            loop(body).map(formula => Lowered(binders, formula, leaves.toVector))
+                loop(body).map(formula => Lowered(binders, formula, leaves.toVector))
         }
 
-    private def supportedType(tp: SIRType): Boolean =
+    /** A type a quantified variable can have. Lean passes a quantified value to the tests'
+      * programs, so its UPLC form must be one Lean can build. Values inside a test, such as a
+      * call's arguments and result, can have any type: the compiler lowers them, and Lean never
+      * sees them.
+      */
+    private def quantifiable(tp: SIRType): Boolean =
         tp == SIRType.Integer || tp == SIRType.Boolean || isData(tp)
 
     /** `Data`, or one of its constructors, such as the type of `Data.I(x)`. */
@@ -189,7 +195,7 @@ object UplcBlaster {
             binders: List[PropExpr.Ident[?]]
         ): Either[String, (List[PropExpr.Ident[?]], Prop)] = current match
             case Prop.Forall(ident, body) =>
-                if supportedType(ident.tp) then loop(body, ident :: binders)
+                if quantifiable(ident.tp) then loop(body, ident :: binders)
                 else
                     Left(
                       s"a ${ident.tp.show} binder is not supported, only BigInt, Boolean and Data"
@@ -220,10 +226,10 @@ object UplcBlaster {
                 Right(body)
             case Prop.Call(fn, arg, result, true, body) =>
                 for
-                    _ <- supportedResult(result)
                     arguments <- callArguments(expressionSir(arg), functions(fn).arity)
                     continuation <- predicateSir(body, functions)
-                yield callSir(fn, arguments, result, continuation)
+                    call <- callSir(fn, arguments, result, continuation, functions)
+                yield call
             case Prop.Call(_, _, _, false, _) =>
                 Left("a whenReturns inside a call's continuation is not supported")
             case _ =>
@@ -236,18 +242,21 @@ object UplcBlaster {
         fn: FunctionRef[?, ?],
         arguments: List[SIR],
         result: PropExpr.Ident[?],
-        continuation: SIR
-    ): SIR = {
+        continuation: SIR,
+        functions: FunctionTable
+    ): Either[String, SIR] = {
         val annotations = AnnotationsDecl.empty
         val (argumentDeclarations, values) = arguments.map(declarations).unzip
         val (continuationDeclarations, test) = declarations(continuation)
-        val continued = SIR.Apply(
-          SIR.LamAbs(SIR.Var(result.name, result.tp, annotations), test, Nil, annotations),
-          application(fn, values, result.tp),
-          SIRType.Boolean,
-          annotations
-        )
-        withDeclarations(argumentDeclarations.flatten ++ continuationDeclarations, continued)
+        application(fn, values, result.tp, functions).map { called =>
+            val continued = SIR.Apply(
+              SIR.LamAbs(SIR.Var(result.name, result.tp, annotations), test, Nil, annotations),
+              called,
+              SIRType.Boolean,
+              annotations
+            )
+            withDeclarations(argumentDeclarations.flatten ++ continuationDeclarations, continued)
+        }
     }
 
     /** The call of a partial `whenReturns` on its own, `fn(arguments...)`, for the `denotes` that
@@ -259,18 +268,12 @@ object UplcBlaster {
         resultType: SIRType,
         functions: FunctionTable
     ): Either[String, SIR] = {
-        callArguments(expressionSir(arg), functions(fn).arity).map { arguments =>
-            val (argumentDeclarations, values) = arguments.map(declarations).unzip
-            withDeclarations(argumentDeclarations.flatten, application(fn, values, resultType))
-        }
+        for
+            arguments <- callArguments(expressionSir(arg), functions(fn).arity)
+            (argumentDeclarations, values) = arguments.map(declarations).unzip
+            called <- application(fn, values, resultType, functions)
+        yield withDeclarations(argumentDeclarations.flatten, called)
     }
-
-    private def supportedResult(result: PropExpr.Ident[?]): Either[String, Unit] =
-        if supportedType(result.tp) then Right(())
-        else
-            Left(
-              s"a call result of type ${result.tp.show} is not supported, only BigInt, Boolean and Data"
-            )
 
     /** `expression` inside the data declarations collected from its pieces, each declared once. */
     private def withDeclarations(data: List[DataDecl], expression: AnnotatedSIR): SIR =
@@ -278,19 +281,77 @@ object UplcBlaster {
 
     /** `fn` applied to `values`, one at a time: a function's program is curried. `fn` is an
       * `ExternalVar` that [[compileSirFunction]] links to the function's own program.
+      *
+      * The variable has the function's declared type, from its SIR, so the lowering passes each
+      * value as the function's program takes it: an enum's constructor, such as `Circle(r)`, is
+      * passed as the enum. A function without SIR has no declared type, so its type comes from the
+      * values and the result. Only `BigInt`, `Boolean` and `Data` have one form whatever their
+      * static type, so only those can be passed to it.
       */
     private def application(
         fn: FunctionRef[?, ?],
         values: List[AnnotatedSIR],
-        resultType: SIRType
-    ): AnnotatedSIR = {
+        resultType: SIRType,
+        functions: FunctionTable
+    ): Either[String, AnnotatedSIR] = {
         val annotations = AnnotationsDecl.empty
-        val types = values.scanRight(resultType)((value, rest) => SIRType.Fun(value.tp, rest))
-        val function: AnnotatedSIR = SIR.ExternalVar("", fn.name, types.head, annotations)
-        values.zip(types.tail).foldLeft(function) { case (applied, (value, tp)) =>
-            SIR.Apply(applied, value, tp, annotations)
+        val types = functions(fn).get(Representation.Sir) match
+            case Some(sir) => curriedTypes(sir.tp, values.size, fn)
+            case None =>
+                val valueTypes = values.map(_.tp) :+ resultType
+                valueTypes.find(tp => !quantifiable(tp)) match
+                    case Some(tp) =>
+                        Left(
+                          s"${fn.displayName} has no SIR, so a call cannot pass a ${tp.show}: " +
+                              "only BigInt, Boolean and Data"
+                        )
+                    case None =>
+                        val declared = valueTypes
+                            .map(tp => if isData(tp) then SIRType.Data.tp else tp)
+                            .reduceRight(SIRType.Fun(_, _))
+                        Right(curriedTypesOf(declared, values.size))
+        types.map { types =>
+            val function: AnnotatedSIR = SIR.ExternalVar("", fn.name, types.head, annotations)
+            values.zip(types.tail).foldLeft(function) { case (applied, (value, tp)) =>
+                SIR.Apply(applied, value, tp, annotations)
+            }
         }
     }
+
+    /** A function's declared type and the types left after applying it to each of `arity` values,
+      * or why it cannot be called that way.
+      */
+    private def curriedTypes(
+        tp: SIRType,
+        arity: Int,
+        fn: FunctionRef[?, ?]
+    ): Either[String, List[SIRType]] =
+        unwrap(tp) match
+            case SIRType.TypeLambda(_, _) =>
+                Left(s"${fn.displayName} is polymorphic, which calls do not support yet")
+            case _ if functionDepth(tp) < arity =>
+                Left(s"${fn.displayName} has the type ${tp.show}, not one of $arity parameters")
+            case _ => Right(curriedTypesOf(tp, arity))
+
+    /** A type without the wrappers that leave it what it is: annotations and type proxies. */
+    private def unwrap(tp: SIRType): SIRType = tp match
+        case SIRType.Annotated(inner, _)           => unwrap(inner)
+        case SIRType.TypeProxy(ref) if ref != null => unwrap(ref)
+        case other                                 => other
+
+    /** How many parameters a curried function type takes. */
+    private def functionDepth(tp: SIRType): Int = unwrap(tp) match
+        case SIRType.Fun(_, rest) => 1 + functionDepth(rest)
+        case _                    => 0
+
+    /** The types left after applying a curried function type to each of `arity` values. */
+    private def curriedTypesOf(tp: SIRType, arity: Int): List[SIRType] =
+        if arity == 0 then List(tp)
+        else
+            unwrap(tp) match
+                case SIRType.Fun(_, rest) => tp :: curriedTypesOf(rest, arity - 1)
+                case other =>
+                    throw new IllegalStateException(s"expected a function type, got ${other.show}")
 
     /** The data declarations the compiler put around an expression, and the expression. */
     private def declarations(sir: SIR): (List[DataDecl], AnnotatedSIR) = sir match
@@ -303,18 +364,8 @@ object UplcBlaster {
       * function of several parameters takes them in the statement as a tuple, written out as
       * `(a, b, ...)`.
       */
-    private def callArguments(argument: SIR, arity: Int): Either[String, List[SIR]] = {
-        val arguments =
-            if arity == 1 then Right(List(argument)) else tupleComponents(argument, arity)
-        arguments.flatMap { values =>
-            values.find(value => !supportedType(value.tp)) match
-                case Some(value) =>
-                    Left(
-                      s"a call argument of type ${value.tp.show} is not supported, only BigInt, Boolean and Data"
-                    )
-                case None => Right(values)
-        }
-    }
+    private def callArguments(argument: SIR, arity: Int): Either[String, List[SIR]] =
+        if arity == 1 then Right(List(argument)) else tupleComponents(argument, arity)
 
     /** The components of a tuple of `arity` values written out as `(a, b, ...)`. The definitions
       * the compiler put around the tuple stay around each component.
@@ -383,10 +434,11 @@ object UplcBlaster {
         functions: FunctionTable
     ): Term = {
         val unlinkedBody = unlinkModuleDefinitions(body, functions)
-        val linked = externalVariables(unlinkedBody)
-            .filter((name, _) => functions.contains(name))
-            .distinctBy(_._1)
-        val unbound = freeVariables(unlinkedBody) -- binders.map(_.name) -- linked.map(_._1)
+        val external = externalVariables(unlinkedBody).distinctBy(_._1)
+        val linked = external.filter((name, _) => functions.contains(name))
+        // Other external references, such as the compiler's own support functions behind
+        // `d.to[A]`, are resolved by the lowering, which reports one it does not know.
+        val unbound = freeVariables(unlinkedBody) -- binders.map(_.name) -- external.map(_._1)
         require(
           unbound.isEmpty,
           s"UPLC proposition body has free variables: ${unbound.toList.sorted.mkString(", ")}"
@@ -404,6 +456,58 @@ object UplcBlaster {
             val definition = functions(FunctionRef[Any, Any](name))
             Term.Apply(term, definition(Representation.Uplc).term)
         }
+    }
+
+    /** Checks that the tests call each function the statement uses the way its program takes its
+      * arguments, or explains the difference.
+      *
+      * A test calls a function as a variable of its declared type, and the lowering passes values
+      * across that call in the representations [[UplcSignature.of]] gives for that type under the
+      * tactic's options. The function's program records the ones its own options gave, which can
+      * differ, as another lowering backend's do. Linking the two would compose programs that
+      * disagree. Both sides are computed from the declared type, so they differ only by the
+      * options.
+      */
+    private def checkSignatures(prop: Prop, functions: FunctionTable): Either[String, Unit] = {
+        val names = usedFunctions(prop).filter(functions.contains).distinct
+        names.iterator
+            .flatMap { name =>
+                val definition = functions(FunctionRef[Any, Any](name))
+                for
+                    sir <- definition.get(Representation.Sir)
+                    signature <- definition.get(Representation.UplcSignature)
+                    expected = UplcSignature.of(
+                      sir.tp,
+                      definition.arity,
+                      options,
+                      options.targetLanguage
+                    )
+                    if !expected.agrees(signature)
+                yield s"the program of ${definition.ref.displayName} takes ${signature.show}, but " +
+                    s"the tests call it as ${expected.show}; compile it with UplcBlaster.options"
+            }
+            .nextOption()
+            .toLeft(())
+    }
+
+    /** The names of the functions a statement calls or refers to in its expressions. */
+    private def usedFunctions(prop: Prop): List[String] = {
+        def expression(expr: PropExpr[?]): List[String] = expr match
+            case PropExpr.SIRExpr(sir) => externalVariables(sir).map(_._1)
+            case _: PropExpr.Ident[?]  => Nil
+        prop match
+            case Prop.Bool(expr)                => expression(expr)
+            case Prop.Denotes(expr)             => expression(expr)
+            case Prop.Equal(left, right)        => expression(left) ++ expression(right)
+            case Prop.Call(fn, arg, _, _, body) => fn.name :: expression(arg) ++ usedFunctions(body)
+            case Prop.Forall(_, body)           => usedFunctions(body)
+            case Prop.Exists(_, witness, body) =>
+                witness.toList.flatMap(expression) ++ usedFunctions(body)
+            case Prop.And(left, right)     => usedFunctions(left) ++ usedFunctions(right)
+            case Prop.Or(left, right)      => usedFunctions(left) ++ usedFunctions(right)
+            case Prop.Implies(left, right) => usedFunctions(left) ++ usedFunctions(right)
+            case Prop.Iff(left, right)     => usedFunctions(left) ++ usedFunctions(right)
+            case Prop.Not(inner)           => usedFunctions(inner)
     }
 
     private def expressionSir(expr: PropExpr[?]): SIR = expr match
@@ -583,8 +687,8 @@ object UplcBlaster {
     private val counterexampleLine = """-\s+x(\d+):\s+(.+?)\s*$""".r.unanchored
 
     /** The values of Blaster's counterexample, in binder order, or why they cannot be read. A
-      * binder the model leaves unconstrained takes `0`, `false` or `I 0`; the replay checks the
-      * completed assignment.
+      * binder the model leaves unconstrained, which Blaster omits or Z3 names instead of valuing,
+      * takes `0`, `false` or `I 0`; the replay checks the completed assignment.
       *
       * A value can span several lines: a `Data` value is printed as a term over the lines after
       * `- xN:`, each indented.
