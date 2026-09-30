@@ -7,6 +7,11 @@ Status: implemented (Tasks 1-6, 8); Task 7 (codegen equivalence) deferred
 > (sbt project `scalusVerification`, Scala package `scalus.lean` → `scalus.verify`) on
 > 2026-09-25, and its Lean workspace moved from `lean/` to `src/main/lean/`. Paths below use the
 > old names.
+>
+> **Superseded** on 2026-09-30. The hand-written Lean suite, the target catalogue and the exporter
+> described here are gone; the properties are stated in Scala and proved by the `UplcBlaster`
+> tactic. See `docs/design/verification-details/uplc-blaster.md`. This document is kept as the
+> record of the spike and its measurements.
 
 ## Goal
 
