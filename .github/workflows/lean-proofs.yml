@@ -36,7 +36,7 @@ jobs:
           nix develop ../../../..#lean --accept-flake-config --command bash -c '
             fail=0
             declare -A expected=(
-              ["ScalusProofs/Sanity.lean"]=3
+              ["ScalusProofs/Sanity.lean"]=5
               ["ScalusProofs/Math.lean"]=11
               ["ScalusProofs/Data.lean"]=6
             )

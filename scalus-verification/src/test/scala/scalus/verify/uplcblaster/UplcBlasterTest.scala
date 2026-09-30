@@ -29,7 +29,7 @@ class UplcBlasterTest extends AnyFunSuite {
             .split(File.pathSeparator)
             .exists(directory => Files.isExecutable(Path.of(directory, "lake"))) &&
             Files.isRegularFile(
-              leanDirectory.resolve(".lake/build/lib/lean/ScalusProofs/Prelude.olean")
+              leanDirectory.resolve(".lake/build/lib/lean/ScalusProofs/Run.olean")
             )
 
     /** Declares `prop` in a fresh verifier and runs [[UplcBlaster]] on it through Lean. */
@@ -154,6 +154,50 @@ class UplcBlasterTest extends AnyFunSuite {
         proven(equal(BigInt(2) + BigInt(3), BigInt(5)), budget = 40)
         proven(denotes(BigInt(7) / BigInt(2)), budget = 40)
         refuted(denotes(BigInt(7) / BigInt(0)), budget = 40)
+    }
+
+    test("proves that a program fails, apart from a budget that runs out") {
+        proven(!denotes(BigInt(7) / BigInt(0)), budget = 40)
+        refuted(!denotes(BigInt(7) / BigInt(2)), budget = 40)
+        run(!denotes(BigInt(7) / BigInt(0)), budget = 2) match
+            case (_, _, VerificationResult.Inconclusive(reason)) =>
+                assert(reason.contains("spurious"), reason)
+            case (_, _, other) => fail(s"expected an inconclusive result, got $other")
+    }
+
+    test("a failing test does not hold, so its negation does") {
+        proven(!Prop(BigInt(7) / BigInt(0) > BigInt(0)), budget = 40)
+    }
+
+    test("denotes in a premise restricts a statement to the inputs where a program returns") {
+        val (x, nonzero) = forAll[BigInt](x => x != BigInt(0)) match
+            case Prop.Forall(x, body) => (x, body)
+            case other                => fail(s"expected a universal proposition, got $other")
+        val positive = forAll[BigInt](x => x > BigInt(0)) match
+            case Prop.Forall(y, Prop.Bool(PropExpr.SIRExpr(sir))) =>
+                Prop.Bool(PropExpr.SIRExpr(SIR.renameFreeVars(sir, Map(y.name -> x.name))))
+            case other => fail(s"expected a universal Boolean proposition, got $other")
+        val annotations = AnnotationsDecl.empty
+        val divideTen = SIR.Apply(
+          SIRBuiltins.divideInteger,
+          SIR.Const(Constant.Integer(10), SIRType.Integer, annotations),
+          SIRType.Fun(SIRType.Integer, SIRType.Integer),
+          annotations
+        )
+        val quotient = Prop.Denotes(
+          PropExpr.SIRExpr[BigInt](
+            SIR.Apply(
+              divideTen,
+              SIR.Var(x.name, SIRType.Integer, annotations),
+              SIRType.Integer,
+              annotations
+            )
+          )
+        )
+
+        proven(Prop.Forall(x, quotient ==> nonzero), budget = 40)
+        val counterexample = refuted(Prop.Forall(x, quotient ==> positive), budget = 40)
+        assert(integer(counterexample(x.name)) < 0, counterexample)
     }
 
     test("requires a positive symbolic execution budget") {

@@ -52,8 +52,11 @@ workspace, and reads Blaster's verdict. The workspace must be built (`lake build
 
 - **Valid** means the statement holds without the budget. A test in a positive position must halt
   within the budget with `true`; one in a negative position (a premise, or under `!`) must only
-  not halt with `false`. The Lean machine reports both an exhausted budget and a failing program as
-  `State.Error`, and reading each test this way turns both into the safe answer (design doc §6.2).
+  neither halt with `false` nor fail within the budget. `denotes` is read the same way. The
+  predicates run with `ScalusProofs.Run.runFor`, which keeps a failing program (`State.Error`)
+  apart from an exhausted budget, so a statement that a program fails, such as
+  `!denotes(BigInt(7) / BigInt(0))`, can be proved. PlutusCore's own `runSteps`, used by
+  `#prep_uplc` and the hand-written proofs, reports both as `State.Error` (design doc §6.2).
 - **Falsified** is replayed on the Scalus CEK with a large budget. If the statement is false
   there too, the result is `Refuted` with the counterexample; otherwise it is `Inconclusive`, and
   the message says the counterexample is spurious. A spurious counterexample means the budget is
