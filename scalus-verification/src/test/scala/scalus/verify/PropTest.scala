@@ -2,7 +2,7 @@ package scalus.verify
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.prelude.Math
-import scalus.compiler.sir.SIRType
+import scalus.compiler.sir.{SIR, SIRType}
 import Props.*
 
 class PropTest extends AnyFunSuite {
@@ -71,6 +71,46 @@ class PropTest extends AnyFunSuite {
         partial match
             case Prop.Call(fn, _, _, false, _) => assert(fn == div10.ref)
             case other                         => fail(s"expected a partial call, got $other")
+    }
+
+    test("leaves under nested binders compile closed lambdas over the binders' variables") {
+        forAll[BigInt](x => exists[BigInt](y => Prop(y > x))) match
+            case Prop.Forall(x, Prop.Exists(y, None, Prop.Bool(PropExpr.SIRExpr(body)))) =>
+                assert(x.tp == SIRType.Integer && y.tp == SIRType.Integer)
+                assert(x.name != y.name)
+                assert(!body.isInstanceOf[SIR.LamAbs], body)
+                assert(body.toString.contains(x.name) && body.toString.contains(y.name), body)
+            case other => fail(s"expected a universal and an existential quantifier, got $other")
+
+        forAll[BigInt](x => denotes(BigInt(10) / x)) match
+            case Prop.Forall(x, Prop.Denotes(PropExpr.SIRExpr(body))) =>
+                assert(body.toString.contains(x.name), body)
+            case other => fail(s"expected a universal denotes, got $other")
+    }
+
+    test("a call's argument and continuation use the variables of enclosing binders") {
+        forAll[BigInt, BigInt]((lo, hi) =>
+            callRef(clamp.ref, (BigInt(0), lo, hi))(r => lo <= r)
+        ) match
+            case Prop.Forall(
+                  lo,
+                  Prop.Forall(
+                    hi,
+                    Prop.Call(_, PropExpr.SIRExpr(arg), r, true, Prop.Bool(PropExpr.SIRExpr(test)))
+                  )
+                ) =>
+                assert(arg.toString.contains(lo.name) && arg.toString.contains(hi.name), arg)
+                assert(test.toString.contains(lo.name) && test.toString.contains(r.name), test)
+            case other => fail(s"expected a call under two quantifiers, got $other")
+    }
+
+    test("a variable used to compute the statement itself is a compile error") {
+        val errors = scala.compiletime.testing.typeCheckErrors(
+          """import scalus.verify.*
+             import scalus.verify.Props.*
+             forAll[BigInt](x => if x > BigInt(0) then Prop(true) else Prop(false))"""
+        )
+        assert(errors.exists(_.message.contains("is a variable of the statement")), errors)
     }
 
     test("a method reference is named as SIR names it, a lambda by its synthetic name") {

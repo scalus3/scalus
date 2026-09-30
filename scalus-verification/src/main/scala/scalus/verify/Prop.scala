@@ -1,6 +1,6 @@
 package scalus.verify
 
-import scalus.compiler.sir.{AnnotationsDecl, Binding, SIR, SIRType}
+import scalus.compiler.sir.{SIR, SIRType}
 import scala.language.implicitConversions
 
 enum PropExpr[A] {
@@ -78,40 +78,24 @@ object Props {
     /** Constructs an explicit universal quantifier from an identifier and a proposition. */
     def forAllSIR[A](ident: PropExpr.Ident[A], body: Prop): Prop = Prop.Forall(ident, body)
 
-    /** Source syntax for a Boolean universal property. The Scala lambda is compiled to SIR. */
-    inline def forAll[A: Quantifiable](inline body: A => Boolean): Prop =
+    /** Every value of `A` satisfies the body. The body is a statement about the lambda's parameter,
+      * such as `forAll[BigInt](x => Math.abs(x) >= 0)` or
+      * `forAll[BigInt](x => denotes(BigInt(10) / x) ==> Prop(x != BigInt(0)))`. The parameter may
+      * be used in the body's tests and expressions, not to compute the statement itself.
+      */
+    inline def forAll[A: Quantifiable](inline body: A => Prop): Prop =
         ${ PropMacro.forAll[A]('body) }
 
-    /** Source syntax for a Boolean property of two universally quantified values:
+    /** A statement about two universally quantified values:
       * `forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x)` is `∀ x. ∀ y. Bool(...)`.
       */
-    inline def forAll[A: Quantifiable, B: Quantifiable](inline body: (A, B) => Boolean): Prop =
+    inline def forAll[A: Quantifiable, B: Quantifiable](inline body: (A, B) => Prop): Prop =
         ${ PropMacro.forAll2[A, B]('body) }
 
-    /** Source syntax for a Boolean property of three universally quantified values. */
+    /** A statement about three universally quantified values. */
     inline def forAll[A: Quantifiable, B: Quantifiable, C: Quantifiable](
-        inline body: (A, B, C) => Boolean
+        inline body: (A, B, C) => Prop
     ): Prop = ${ PropMacro.forAll3[A, B, C]('body) }
-
-    /** Unpacks the compiled lambda and keeps its SIR variable in the Boolean body. */
-    private[verify] def compiledForAll[A](lambda: SIR, id: Long): Prop =
-        compiledLambda("forAll", lambda) match
-            case (param, term) =>
-                forAllSIR(
-                  PropExpr.Ident[A](param.name, id, param.tp),
-                  Prop.Bool(PropExpr.SIRExpr(term))
-                )
-
-    /** Unpacks a compiled lambda of `ids.size` parameters into nested universal quantifiers, one
-      * per parameter, around its Boolean body.
-      */
-    private[verify] def compiledForAll(lambda: SIR, ids: List[Long]): Prop = {
-        val (params, term) = compiledLambdas("forAll", lambda, ids.size)
-        params.zip(ids).foldRight[Prop](Prop.Bool(PropExpr.SIRExpr(term))) {
-            case ((param, id), body) =>
-                forAllSIR(PropExpr.Ident[Any](param.name, id, param.tp), body)
-        }
-    }
 
     /** Constructs an explicit existential quantifier from an identifier and a proposition. */
     def existsSIR[A](
@@ -120,100 +104,75 @@ object Props {
         body: Prop
     ): Prop = Prop.Exists(ident, witness, body)
 
-    /** Some value of `A` makes the Boolean body hold. */
-    inline def exists[A: Quantifiable](inline body: A => Boolean): Prop =
+    /** Some value of `A` satisfies the body. */
+    inline def exists[A: Quantifiable](inline body: A => Prop): Prop =
         ${ PropMacro.exists[A]('body) }
 
-    /** Some value of `A` makes the Boolean body hold, and `witness` supplies that value. */
-    inline def existsLet[A: Quantifiable](inline witness: A)(inline body: A => Boolean): Prop =
+    /** Some value of `A` satisfies the body, and `witness` supplies that value. */
+    inline def existsLet[A: Quantifiable](inline witness: A)(inline body: A => Prop): Prop =
         ${ PropMacro.existsLet[A]('witness, 'body) }
 
-    /** Unpacks the compiled lambda and keeps its SIR variable in the Boolean body. */
-    private[verify] def compiledExists[A](
-        lambda: SIR,
-        id: Long,
-        witness: Option[PropExpr[A]]
-    ): Prop =
-        compiledLambda("exists", lambda) match
-            case (param, term) =>
-                existsSIR(
-                  PropExpr.Ident[A](param.name, id, param.tp),
-                  witness,
-                  Prop.Bool(PropExpr.SIRExpr(term))
-                )
-
-    /** `fn` applied to `arg` returns, and its result satisfies the Boolean body. */
+    /** `fn` applied to `arg` returns, and its result satisfies the body. */
     inline def callRef[A, R](fn: FunctionRef[A, R], inline arg: A)(
-        inline body: R => Boolean
+        inline body: R => Prop
     ): Prop = ${ PropMacro.call('fn, 'arg, 'body, true) }
 
     /** Names a method of a `@Compile` object and states a property of its result. */
     inline def call[A, R](inline f: A => R, inline arg: A)(
-        inline body: R => Boolean
+        inline body: R => Prop
     ): Prop = callRef(FunctionRef(f), arg)(body)
 
     inline def call[A, B, R](inline f: (A, B) => R, inline arg: (A, B))(
-        inline body: R => Boolean
+        inline body: R => Prop
     ): Prop = callRef(FunctionRef(f), arg)(body)
 
     inline def call[A, B, C, R](inline f: (A, B, C) => R, inline arg: (A, B, C))(
-        inline body: R => Boolean
+        inline body: R => Prop
     ): Prop = callRef(FunctionRef(f), arg)(body)
 
     inline def call[A, R](fn: FunctionDef[A, R], inline arg: A)(
-        inline body: R => Boolean
+        inline body: R => Prop
     ): Prop = ${ PropMacro.callDef('fn, 'arg, 'body, true) }
 
-    /** Whenever `fn` applied to `arg` returns, its result satisfies the Boolean body. */
+    /** Whenever `fn` applied to `arg` returns, its result satisfies the body. */
     inline def whenReturnsRef[A, R](fn: FunctionRef[A, R], inline arg: A)(
-        inline body: R => Boolean
+        inline body: R => Prop
     ): Prop = ${ PropMacro.call('fn, 'arg, 'body, false) }
 
     inline def whenReturns[A, R](inline f: A => R, inline arg: A)(
-        inline body: R => Boolean
+        inline body: R => Prop
     ): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
 
     inline def whenReturns[A, B, R](inline f: (A, B) => R, inline arg: (A, B))(
-        inline body: R => Boolean
+        inline body: R => Prop
     ): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
 
     inline def whenReturns[A, B, C, R](inline f: (A, B, C) => R, inline arg: (A, B, C))(
-        inline body: R => Boolean
+        inline body: R => Prop
     ): Prop = whenReturnsRef(FunctionRef(f), arg)(body)
 
     inline def whenReturns[A, R](fn: FunctionDef[A, R], inline arg: A)(
-        inline body: R => Boolean
+        inline body: R => Prop
     ): Prop = ${ PropMacro.callDef('fn, 'arg, 'body, false) }
 
-    /** Unpacks the compiled continuation lambda and keeps its result variable in the body. */
-    private[verify] def compiledCall[A, R](
-        fn: FunctionRef[A, R],
-        arg: PropExpr[A],
-        lambda: SIR,
-        id: Long,
-        total: Boolean
-    ): Prop =
-        compiledLambda("call", lambda) match
-            case (param, term) =>
-                Prop.Call(
-                  fn,
-                  arg,
-                  PropExpr.Ident[R](param.name, id, param.tp),
-                  total,
-                  Prop.Bool(PropExpr.SIRExpr(term))
-                )
+    /** The SIR type of a statement variable, from the compiled identity lambda `(v: A) => v`. */
+    private[verify] def variableType(identity: SIR): SIRType =
+        compiledLambdas("a statement variable", identity, 1)._1.head.tp
 
-    /** Compiler supplied definitions surround a lambda when its body references a `@Compile`
-      * method. The proposition keeps those references as `ExternalVar`s; a backend resolves them
-      * from its function table using the representation it consumes.
+    /** An expression of the statement from the closed lambda it was compiled as: the lambda's body,
+      * with each parameter named after the statement variable it stands for, in order.
       */
-    private def compiledLambda(kind: String, sir: SIR): (SIR.Var, SIR) = {
-        val (params, term) = compiledLambdas(kind, sir, 1)
-        params.head -> term
+    private[verify] def openVariables(lambda: SIR, names: List[String]): SIR = {
+        val (params, body) = compiledLambdas("an expression of a statement", lambda, names.size)
+        SIR.renameFreeVars(body, params.map(_.name).zip(names).toMap)
     }
 
-    /** Like [[compiledLambda]] for a curried lambda of `arity` parameters. The definitions around
-      * the lambda move inside all of its parameters.
+    /** The parameters of a compiled curried lambda of `arity` parameters, and its body.
+      *
+      * Compiler supplied definitions surround a lambda when its body references a `@Compile`
+      * method; they move inside all of its parameters. The statement keeps those references as
+      * `ExternalVar`s, which a backend resolves from its function table using the representation it
+      * consumes.
       */
     private def compiledLambdas(kind: String, sir: SIR, arity: Int): (List[SIR.Var], SIR) = {
         def parameters(current: SIR, remaining: Int): (List[SIR.Var], SIR) =
@@ -228,19 +187,16 @@ object Props {
                           s"$kind requires a monomorphic SIR lambda of $arity parameters: $other"
                         )
 
+        // Definitions and data declarations around the lambda, innermost first.
         @annotation.tailrec
-        def loop(
-            current: SIR,
-            wrappers: List[(List[Binding], SIR.LetFlags, AnnotationsDecl)]
-        ): (List[SIR.Var], SIR) = current match
+        def loop(current: SIR, wrappers: List[SIR => SIR]): (List[SIR.Var], SIR) = current match
             case lambda: SIR.LamAbs =>
                 val (params, term) = parameters(lambda, arity)
-                val wrapped = wrappers.foldLeft(term) { case (body, (bindings, flags, anns)) =>
-                    SIR.Let(bindings, body, flags, anns)
-                }
-                params -> wrapped
+                params -> wrappers.foldLeft(term)((body, wrap) => wrap(body))
             case SIR.Let(bindings, body, flags, anns) =>
-                loop(body, (bindings, flags, anns) :: wrappers)
+                loop(body, (inner => SIR.Let(bindings, inner, flags, anns)) :: wrappers)
+            case SIR.Decl(data, body) =>
+                loop(body, (inner => SIR.Decl(data, inner)) :: wrappers)
             case other =>
                 throw new IllegalArgumentException(
                   s"$kind requires a monomorphic SIR lambda: $other"
