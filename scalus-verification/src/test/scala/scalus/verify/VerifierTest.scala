@@ -132,4 +132,23 @@ class VerifierTest extends AnyFunSuite {
         assert(verifier.statement(Prop(BigInt(2) > BigInt(0))).name == "statement_2")
         assert(verifier.statement(Prop(BigInt(3) > BigInt(0))).name == "statement_3")
     }
+
+    test("a contract is registered with its function") {
+        val double = FunctionDef.named("double", (x: BigInt) => x * BigInt(2))
+        val verifier = Verifier.empty
+        val doubled = verifier.contract(
+          "double_even",
+          contract(double)(requires = x => true, ensures = x => r => r % BigInt(2) == BigInt(0))
+        )
+        assert(doubled.origin == Origin.Contract(double.ref, total = false))
+        assert(verifier.contracts(double.ref) == List(doubled))
+        assert(verifier.contracts(increment.ref).isEmpty)
+        val total = verifier.contract(
+          "double_total",
+          totalContract(double)(requires = x => true, ensures = x => r => r == x + x)
+        )
+        assert(total.origin == Origin.Contract(double.ref, total = true))
+        assert(verifier.contracts(double.ref) == List(doubled, total))
+        assert(verifier.statement("plain", Prop(BigInt(1) > BigInt(0))).origin == Origin.Explicit)
+    }
 }

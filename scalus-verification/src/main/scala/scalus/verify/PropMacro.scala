@@ -91,50 +91,140 @@ private[verify] object PropMacro {
     def equal[A: Type](a: Expr[A], b: Expr[A])(using Quotes): Expr[Prop] =
         '{ Prop.Equal(${ leaf(a) }, ${ leaf(b) }) }
 
-    /** Passes the binders' identifiers and the lambda literal `body`'s statement to `build`.
-      *
-      * A body of type `Boolean` is one test, compiled as a leaf over the lambda's parameters and
-      * the enclosing binders' variables, so it may use them anywhere. A body of type `Prop` must
-      * have its leaves closed over the lambda's parameters already.
+    /** Passes the binders' identifiers and the statement of the lambda literal `body`
+      * ([[statementOf]]) to `build`.
       */
     private def binders(body: Expr[Any], types: List[Type[?]], kind: String)(
         build: (List[Expr[PropExpr.Ident[?]]], Expr[Prop]) => Expr[Prop]
     )(using Quotes): Expr[Prop] = {
         import quotes.reflect.*
-        val (params, rhs) = strip(body.asTerm) match
-            case Lambda(params, rhs) if params.size == types.size => params -> rhs
-            case other =>
-                report.errorAndAbort(
-                  s"$kind requires a lambda literal of ${types.size} parameters",
-                  other.pos
-                )
-        val bodyType = rhs.tpe.widen
-        val statement =
-            if bodyType <:< TypeRepr.of[Boolean] then
-                '{ Prop.Bool(${ leaf(rhs.asExprOf[Boolean]) }) }
-            else if bodyType <:< TypeRepr.of[Prop] then
-                checkClosed(rhs, params.map(_.symbol).toSet)
-                rhs.changeOwner(Symbol.spliceOwner).asExprOf[Prop]
-            else
-                report.errorAndAbort(
-                  s"the body of $kind is a statement in one branch and a Boolean test in another. " +
-                      choiceHint,
-                  rhs.pos
-                )
-        val idents = params.zip(types).map { (param, tpe) =>
-            val name = variableName(param.symbol)
-            val id = positionId(param.pos)
-            tpe match
-                case '[t] =>
-                    '{
-                        new PropExpr.Ident[t](
-                          ${ Expr(name) },
-                          ${ Expr(id) },
-                          Props.variableType(scalus.compiler.compile((value: t) => value))
-                        )
-                    }
-        }
+        val (params, rhs) = lambdaOf(
+          body.asTerm,
+          Some(types.size),
+          s"$kind requires a lambda literal of ${types.size} parameters"
+        )
+        val statement = statementOf(rhs, params.map(_.symbol).toSet, kind)
+        val idents = params.zip(types).map((param, tpe) => ident(param.symbol, param.pos, tpe))
         build(idents, statement)
+    }
+
+    /** The statement a lambda's body states about its parameters `symbols`.
+      *
+      * A body of type `Boolean` is one test, compiled as a leaf over the lambda's parameters and
+      * the enclosing binders' variables, so it may use them anywhere. A body of type `Prop` must
+      * have its leaves closed over the lambda's parameters already.
+      */
+    private def statementOf(using
+        Quotes
+    )(
+        rhs: quotes.reflect.Term,
+        symbols: Set[quotes.reflect.Symbol],
+        kind: String
+    ): Expr[Prop] = {
+        import quotes.reflect.*
+        val bodyType = rhs.tpe.widen
+        if bodyType <:< TypeRepr.of[Boolean] then '{ Prop.Bool(${ leaf(rhs.asExprOf[Boolean]) }) }
+        else if bodyType <:< TypeRepr.of[Prop] then
+            checkClosed(rhs, symbols)
+            rhs.changeOwner(Symbol.spliceOwner).asExprOf[Prop]
+        else
+            report.errorAndAbort(
+              s"the body of $kind is a statement in one branch and a Boolean test in another. " +
+                  choiceHint,
+              rhs.pos
+            )
+    }
+
+    /** The identifier of the statement variable a lambda's parameter stands for. */
+    private def ident(using
+        Quotes
+    )(
+        symbol: quotes.reflect.Symbol,
+        pos: quotes.reflect.Position,
+        tpe: Type[?]
+    ): Expr[PropExpr.Ident[?]] = {
+        val name = variableName(symbol)
+        val id = positionId(pos)
+        tpe match
+            case '[t] =>
+                '{
+                    new PropExpr.Ident[t](
+                      ${ Expr(name) },
+                      ${ Expr(id) },
+                      Props.variableType(scalus.compiler.compile((value: t) => value))
+                    )
+                }
+    }
+
+    /** The parameters and body of the lambda literal `term`, of `arity` parameters when given. */
+    private def lambdaOf(using
+        Quotes
+    )(
+        term: quotes.reflect.Term,
+        arity: Option[Int],
+        message: => String
+    ): (List[quotes.reflect.ValDef], quotes.reflect.Term) = {
+        import quotes.reflect.*
+        strip(term) match
+            case Lambda(params, rhs) if arity.forall(_ == params.size) => params -> rhs
+            case other => report.errorAndAbort(message, other.pos)
+    }
+
+    /** `∀ args. requires(args) ==> whenReturns(fn, args)(r => ensures(args)(r))`, or a total `call`
+      * in place of `whenReturns` (design doc §3.7), with the function and its totality.
+      *
+      * The arguments are the parameters of `requires`, whose types the overload of `Props.contract`
+      * fixed. `ensures` names its own parameters, and its leaves were compiled before this macro,
+      * closed over them. At runtime they are renamed after the parameters of `requires`, so both
+      * lambdas speak of the same variables.
+      */
+    def contract[Arg: Type, R: Type](
+        fn: Expr[FunctionDef[Arg, R]],
+        requires: Expr[Any],
+        ensures: Expr[Any],
+        total: Boolean
+    )(using Quotes): Expr[Contract] = {
+        import quotes.reflect.*
+        val (params, pre) = lambdaOf(requires.asTerm, None, "requires must be a lambda literal")
+        val arity = params.size
+        val (ensureParams, result) = lambdaOf(
+          ensures.asTerm,
+          Some(arity),
+          s"ensures must be a lambda literal of $arity parameters"
+        )
+        // `call` binds the result; the parameters of `ensures` may be used only in its leaves.
+        val (_, post) = lambdaOf(
+          result,
+          Some(1),
+          "ensures must return a lambda literal of the function's result, as in (x, y) => r => ..."
+        )
+        if post.tpe.widen <:< TypeRepr.of[Prop] then
+            checkClosed(post, ensureParams.map(_.symbol).toSet)
+        val precondition = statementOf(pre, params.map(_.symbol).toSet, "requires")
+        val idents = params.map(param => ident(param.symbol, param.pos, param.tpt.tpe.asType))
+        val refs = params.map(param => Ref(param.symbol))
+        val argument = refs match
+            case List(one) => one.asExprOf[Arg]
+            case _ =>
+                val tuple = Ref(defn.TupleClass(arity).companionModule)
+                Select.overloaded(tuple, "apply", params.map(_.tpt.tpe), refs).asExprOf[Arg]
+        val call = PropMacro.call[Arg, R](
+          '{ $fn.ref },
+          argument,
+          result.asExprOf[R => Prop | Boolean],
+          total
+        )
+        val renames = Expr(
+          ensureParams
+              .map(param => variableName(param.symbol))
+              .zip(params.map(param => variableName(param.symbol)))
+              .toMap
+        )
+        val prop = universal(
+          idents,
+          '{ Prop.Implies($precondition, Props.renameVariables($call, $renames)) }
+        )
+        '{ Contract($fn.ref, ${ Expr(total) }, $prop) }
     }
 
     private val choiceHint =
