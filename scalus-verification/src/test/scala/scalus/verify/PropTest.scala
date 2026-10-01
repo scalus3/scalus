@@ -128,9 +128,9 @@ class PropTest extends AnyFunSuite {
             case other => fail(s"expected a call continuing with one test, got $other")
     }
 
-    test("a contract states requires ==> whenReturns ensures over the function's parameters") {
+    test("a contract states expects ==> whenReturns ensures over the function's parameters") {
         val inRange = contract(clamp)(
-          requires = (x, lo, hi) => lo <= hi,
+          expects = (x, lo, hi) => lo <= hi,
           ensures = (x, lo, hi) => r => lo <= r && r <= hi
         )
         assert(inRange.function == clamp.ref && !inRange.total)
@@ -157,12 +157,12 @@ class PropTest extends AnyFunSuite {
                 assert(fn == clamp.ref)
                 assert(pre.toString.contains(lo.name) && pre.toString.contains(hi.name), pre)
                 assert(List(x, lo, hi).forall(v => arg.toString.contains(v.name)), arg)
-                // ensures names its own parameters; they are renamed after those of requires
+                // ensures names its own parameters; they are renamed after those of expects
                 assert(List(lo, hi, r).forall(v => post.toString.contains(v.name)), post)
             case other => fail(s"expected a contract over three parameters, got $other")
 
         val total = totalContract(div10)(
-          requires = x => x != BigInt(0),
+          expects = x => x != BigInt(0),
           ensures = x => r => r * x <= BigInt(10)
         )
         assert(total.function == div10.ref && total.total)
@@ -173,7 +173,7 @@ class PropTest extends AnyFunSuite {
 
         // A statement in ensures is renamed as well.
         contract(div10)(
-          requires = x => x > BigInt(0),
+          expects = x => x > BigInt(0),
           ensures = x => r => Prop(r >= BigInt(0)) && Prop(r <= x * BigInt(10))
         ).prop match
             case Prop.Forall(
@@ -196,6 +196,45 @@ class PropTest extends AnyFunSuite {
         assert(errors.exists(_.message.contains("is a variable of the statement")), errors)
         // The macro stops at its own error, before it builds a body out of the variable's scope.
         assert(!errors.exists(_.message.contains("outside the scope")), errors)
+    }
+
+    test("succeeds, fails, returnsWhen and failsWhen are syntax over a total call") {
+        succeeds(div10, BigInt(2)) match
+            case Prop.Call(fn, _, _, true, Prop.Bool(_)) => assert(fn == div10.ref)
+            case other => fail(s"expected a total call, got $other")
+        fails(div10, BigInt(0)) match
+            case Prop.Not(Prop.Call(fn, _, _, true, Prop.Bool(_))) => assert(fn == div10.ref)
+            case other => fail(s"expected a negated total call, got $other")
+
+        failsWhen(div10)(x => x == BigInt(0)) match
+            case Prop.Forall(
+                  x,
+                  Prop.Implies(
+                    Prop.Bool(PropExpr.SIRExpr(when)),
+                    Prop.Not(Prop.Call(fn, PropExpr.SIRExpr(arg), _, true, Prop.Bool(_)))
+                  )
+                ) =>
+                assert(fn == div10.ref)
+                assert(when.toString.contains(x.name) && arg.toString.contains(x.name))
+            case other => fail(s"expected for all x, when ==> not call, got $other")
+
+        returnsWhen(clamp)((x, lo, hi) => lo <= hi) match
+            case Prop.Forall(
+                  x,
+                  Prop.Forall(
+                    lo,
+                    Prop.Forall(
+                      hi,
+                      Prop.Implies(
+                        Prop.Bool(_),
+                        Prop.Call(fn, PropExpr.SIRExpr(arg), _, true, Prop.Bool(_))
+                      )
+                    )
+                  )
+                ) =>
+                assert(fn == clamp.ref)
+                assert(List(x, lo, hi).forall(v => arg.toString.contains(v.name)), arg)
+            case other => fail(s"expected three quantifiers around when ==> call, got $other")
     }
 
     test("a statement cannot be built inside a @Compile object") {

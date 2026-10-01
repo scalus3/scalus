@@ -171,22 +171,22 @@ private[verify] object PropMacro {
             case other => report.errorAndAbort(message, other.pos)
     }
 
-    /** `∀ args. requires(args) ==> whenReturns(fn, args)(r => ensures(args)(r))`, or a total `call`
+    /** `∀ args. expects(args) ==> whenReturns(fn, args)(r => ensures(args)(r))`, or a total `call`
       * in place of `whenReturns` (design doc §3.7), with the function and its totality.
       *
-      * The arguments are the parameters of `requires`, whose types the overload of `Props.contract`
+      * The arguments are the parameters of `expects`, whose types the overload of `Props.contract`
       * fixed. `ensures` names its own parameters, and its leaves were compiled before this macro,
-      * closed over them. At runtime they are renamed after the parameters of `requires`, so both
+      * closed over them. At runtime they are renamed after the parameters of `expects`, so both
       * lambdas speak of the same variables.
       */
     def contract[Arg: Type, R: Type](
         fn: Expr[FunctionDef[Arg, R]],
-        requires: Expr[Any],
+        expects: Expr[Any],
         ensures: Expr[Any],
         total: Boolean
     )(using Quotes): Expr[Contract] = {
         import quotes.reflect.*
-        val (params, pre) = lambdaOf(requires.asTerm, None, "requires must be a lambda literal")
+        val (params, pre) = lambdaOf(expects.asTerm, None, "expects must be a lambda literal")
         val arity = params.size
         val (ensureParams, result) = lambdaOf(
           ensures.asTerm,
@@ -201,17 +201,11 @@ private[verify] object PropMacro {
         )
         if post.tpe.widen <:< TypeRepr.of[Prop] then
             checkClosed(post, ensureParams.map(_.symbol).toSet)
-        val precondition = statementOf(pre, params.map(_.symbol).toSet, "requires")
+        val precondition = statementOf(pre, params.map(_.symbol).toSet, "expects")
         val idents = params.map(param => ident(param.symbol, param.pos, param.tpt.tpe.asType))
-        val refs = params.map(param => Ref(param.symbol))
-        val argument = refs match
-            case List(one) => one.asExprOf[Arg]
-            case _ =>
-                val tuple = Ref(defn.TupleClass(arity).companionModule)
-                Select.overloaded(tuple, "apply", params.map(_.tpt.tpe), refs).asExprOf[Arg]
         val call = PropMacro.call[Arg, R](
           '{ $fn.ref },
-          argument,
+          argumentOf[Arg](params),
           result.asExprOf[R => Prop | Boolean],
           total
         )
@@ -226,6 +220,43 @@ private[verify] object PropMacro {
           '{ Prop.Implies($precondition, Props.renameVariables($call, $renames)) }
         )
         '{ Contract($fn.ref, ${ Expr(total) }, $prop) }
+    }
+
+    /** A function's argument from the parameters of a lambda that stand for it: the parameter
+      * itself, or the tuple of several, as a call passes them.
+      */
+    private def argumentOf[Arg: Type](using
+        Quotes
+    )(
+        params: List[quotes.reflect.ValDef]
+    ): Expr[Arg] = {
+        import quotes.reflect.*
+        params.map(param => Ref(param.symbol)) match
+            case List(one) => one.asExprOf[Arg]
+            case refs =>
+                val tuple = Ref(defn.TupleClass(refs.size).companionModule)
+                Select.overloaded(tuple, "apply", params.map(_.tpt.tpe), refs).asExprOf[Arg]
+    }
+
+    /** `∀ args. when(args) ==> succeeds(fn, args)`, or `==> fails(fn, args)`: the function returns,
+      * or fails, on every argument that satisfies `when`. `succeeds` is the total call
+      * `call(fn, args)(_ => true)`, and `fails` is its negation, so this is only syntax over
+      * existing statements.
+      */
+    def returnsOrFailsWhen[Arg: Type, R: Type](
+        fn: Expr[FunctionDef[Arg, R]],
+        when: Expr[Any],
+        fails: Boolean
+    )(using Quotes): Expr[Prop] = {
+        import quotes.reflect.*
+        val kind = if fails then "failsWhen" else "returnsWhen"
+        val (params, condition) = lambdaOf(when.asTerm, None, s"$kind requires a lambda literal")
+        val premise = statementOf(condition, params.map(_.symbol).toSet, kind)
+        val idents = params.map(param => ident(param.symbol, param.pos, param.tpt.tpe.asType))
+        val returns =
+            call[Arg, R]('{ $fn.ref }, argumentOf[Arg](params), '{ (_: R) => true }, total = true)
+        val conclusion = if fails then '{ Prop.Not($returns) } else returns
+        universal(idents, '{ Prop.Implies($premise, $conclusion) })
     }
 
     private val choiceHint =
@@ -321,7 +352,7 @@ private[verify] object PropMacro {
                 report.errorAndAbort(
                   s"a statement cannot be built inside the @Compile ${owner.name.stripSuffix("$")}, " +
                       "whose code the Scalus plugin compiles. State it outside compiled code, as a " +
-                      "Props statement or an external contract(f)(requires, ensures)"
+                      "Props statement or an external contract(f)(expects, ensures)"
                 )
             case None => ()
     }

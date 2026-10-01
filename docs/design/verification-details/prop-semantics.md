@@ -46,6 +46,20 @@ error anywhere makes the whole test fail.
 A call runs the function's own compiled program, not a copy compiled with the test; how values
 cross that boundary is in [the tactic's calling convention](uplc-blaster.md#linking).
 
+Four forms are syntax over the total call, with no node of their own:
+
+| Written | Means |
+|---|---|
+| `succeeds(f, a)` | `call(f, a)(_ => true)`: the call returns |
+| `fails(f, a)` | `!succeeds(f, a)`: the call does not return |
+| `returnsWhen(f)(args => c)` | `∀ args. c ==> succeeds(f, args)` |
+| `failsWhen(f)(args => c)` | `∀ args. c ==> fails(f, args)` |
+
+`fails` holds of a call that does not return, which by its meaning includes one that never
+terminates. A bounded tactic proves the stronger fact, that the call fails within the budget,
+and tells that apart from a budget that runs out (§5). `!Prop(t)` is a different statement: it
+also holds when the test `t` returns `false`.
+
 ## 4. Connectives
 
 Connectives between statements are classical: `&&`, `||`, `!`, `==>`, `<=>` as in Lean and SMT.
@@ -77,18 +91,18 @@ spurious and is replayed without the budget. See overview §6.2 and
 A contract of `f` (implemented as `Props.contract`, `Props.totalContract`) is
 
 ```
-∀ args. requires(args) ⇒ whenReturns(f, args)(r => ensures(args)(r))     partial
-∀ args. requires(args) ⇒ call(f, args)(r => ensures(args)(r))            total
+∀ args. expects(args) ⇒ whenReturns(f, args)(r => ensures(args)(r))      partial
+∀ args. expects(args) ⇒ call(f, args)(r => ensures(args)(r))             total
 ```
 
-- **`requires` is an obligation of every caller, and an assumption of `f`.** Proving the contract
+- **`expects` is an obligation of every caller, and an assumption of `f`.** Proving the contract
   assumes it; using the contract at a call site requires showing it there.
-- **`ensures` is a guarantee of `f`**, under `requires`. A caller may assume it about the result.
+- **`ensures` is a guarantee of `f`**, under `expects`. A caller may assume it about the result.
 - **Partial correctness is the default**: a contract says nothing about arguments on which `f`
-  fails. The total form also claims that `f` returns where `requires` holds.
+  fails. The total form also claims that `f` returns where `expects` holds.
 - **An entry point has no trusted caller.** A validator receives whatever a transaction
-  supplies, so no one establishes its `requires`: a precondition there is an unsound assumption.
-  A validator's contract has `requires = true`, and a condition the validator relies on is
+  supplies, so no one establishes its `expects`: a precondition there is an unsound assumption.
+  A validator's contract has `expects = true`, and a condition the validator relies on is
   checked at runtime with `require`. What the validator guarantees is then an `ensures` on its
   success: "if the script succeeds, the transaction is signed by the beneficiary".
 
@@ -100,13 +114,15 @@ A contract can be written next to the code it describes:
 @Compile
 object Math {
     def clamp(x: BigInt, lo: BigInt, hi: BigInt): BigInt = {
-        Spec.requires(lo <= hi)
+        Spec.expects(lo <= hi)
         (if x < lo then lo else if x > hi then hi else x).ensuring(r => lo <= r && r <= hi)
     }
 }
 ```
 
-- **`Spec.requires(c)`, at the top of the body,** is the contract's precondition. Several
+- **`Spec.expects(c)`, at the top of the body,** is the contract's precondition. It is not
+  called `requires`: the prelude's `require` is a runtime check, and the two words would read
+  as one. Several
   clauses are conjoined. Placing them first makes the precondition read as part of the signature,
   as in Stainless and Dafny, and lets the reifier find them without analysing control flow.
 - **`body.ensuring(r => c)`** is the postcondition, over the result `r` and the parameters. It
@@ -115,17 +131,17 @@ object Math {
   it written.
 - **`Spec.total`** (open, overview §10 question 2) would make the contract total.
 
-It means exactly the external contract `contract(clamp)(requires, ensures)` of §6, and is
+It means exactly the external contract `contract(clamp)(expects, ensures)` of §6, and is
 registered with `Origin.Contract(clamp, total)` when the function table is built from the
 object (see [function tables](prop-capture.md#function-tables-from-compile-objects-proposed)).
 
 ## 8. Design questions
 
-### 8.1 Where preconditions come from: `Spec.requires`, `require`, or inference
+### 8.1 Where preconditions come from: `Spec.expects`, `require`, or inference
 
 Three sources can describe when a function may be called.
 
-1. **An explicit `Spec.requires`** states intent: what callers must establish.
+1. **An explicit `Spec.expects`** states intent: what callers must establish.
 2. **The prelude's `require(c)`** compiles to `if c then () else error`. It is behaviour, not an
    assumption: the function fails unless `c` holds. Harvested, it gives a derived fact,
    `denotes(f(args)) ⇒ c(args)`: after a successful call, `c` held. For a validator, that is
@@ -137,46 +153,101 @@ Three sources can describe when a function may be called.
    enumeration, exponential only in the number of branches, which is small in practice;
    recursion needs summaries or bounded unrolling.
 
-**Recommendation.** `Spec.requires` is the contract; `require` is behaviour.
+**Recommendation.** `Spec.expects` is the contract; `require` is behaviour.
 
 - Methodologically, a specification says what the function *should* require, independently of
   how it is written; an inferred condition says what it *does* require, and changes with every
   refactoring. Verification is the check that the two agree, so the inferred one cannot replace
   the stated one.
-- Modularity needs the stated one: a caller is checked against the callee's `requires` without
+- Modularity needs the stated one: a caller is checked against the callee's `expects` without
   analysing the callee's body, and a large inferred condition would leak implementation into
   every caller.
 - Harvesting `require` and inference are still valuable, as tools: to suggest a missing
-  `Spec.requires`, to discharge trivial obligations, and to check that a stated precondition
-  makes the function total (`requires ⇒ denotes(f(args))`, the total contract).
+  `Spec.expects`, to discharge trivial obligations, and to check that a stated precondition
+  makes the function total (`expects ⇒ denotes(f(args))`, the total contract).
 
-### 8.2 Whether `Spec.requires` has runtime semantics
+### 8.2 Whether `Spec.expects` has runtime semantics
 
 - **On chain: none, by default.** The clause is erased before lowering, so the script's bytes and
   hash do not change (measured for `VestingValidator` on the earlier branch). A precondition
   exists to save the check, which callers have established; paying for it on chain would turn it
   into a `require`.
 - **On the JVM: checked.** `@Compile` code also runs as Scala, in tests and the emulator. There
-  `Spec.requires(c)` throws when `c` is false, and `ensuring` checks the result, which catches a
+  `Spec.expects(c)` throws when `c` is false, and `ensuring` checks the result, which catches a
   violated contract in ordinary tests at no on-chain cost.
 - **On chain, optionally checked.** A compiler option, off by default, would lower the clauses
   as `require`, like assertions in a debug build, to test a contract on the CEK.
 - **Callers are checked by the verifier, not by scalac.** That a call site establishes the
-  callee's `requires` is a proof obligation over the caller's path condition, which needs a
+  callee's `expects` is a proof obligation over the caller's path condition, which needs a
   solver. `sbt verify` reports an unproved obligation, and can fail the build; scalac could
   catch only syntactic cases, such as a constant argument that violates a constant precondition.
 
 So there is no duplication: a condition that must hold against adversarial input is a `require`
-(behaviour, paid on chain); a condition that trusted callers establish is a `Spec.requires`
+(behaviour, paid on chain); a condition that trusted callers establish is a `Spec.expects`
 (free on chain, checked off chain and by the verifier).
 
-### 8.3 Validators
+### 8.3 Runtime checks in contracts: found, not written; `returnsWhen` and `failsWhen`
 
-A `Spec.requires` on a validator's entry point is unsound (§6), so the verifier should reject it.
+Should a contract mention a function's runtime checks, its `require`s?
+
+**Not by restating them.** They are behaviour, and the verifier reads behaviour from the code.
+Finding them is part of verification:
+
+- a tactic that runs the code, as `blaster-uplc` does, executes them: a caller's call-site
+  obligation runs the callee's own program, so a callee's `require` already constrains what its
+  callers are held to;
+- a modular tactic, which treats a callee abstractly, harvests them from SIR (§8.1): each
+  `require(c)` on a path gives the derived fact `succeeds(f(args)) ⇒ c`, and the verifier can
+  report the harvested condition, `checks(f, args)`, to the user.
+
+**Failure is already a statement.** `!denotes(e)` says that `e` does not return, and for a
+function `fails(f, args)` says it of a call (§3). `returnsWhen(f)(c)` and `failsWhen(f)(c)` state,
+as statements of their own, when a function is meant to return and when to fail; they are
+implemented.
+
+**Proposed: the same two as clauses of a contract**, next to `expects` and `ensures`, each a
+sufficient condition:
+
+```scala
+contract(withdraw)(
+  expects = (owner, amount, ctx) => true,          // an entry point has no trusted caller
+  returnsWhen = (owner, amount, ctx) => ctx.signedBy(owner) && amount <= ctx.balance,
+  failsWhen = (owner, amount, ctx) => !ctx.signedBy(owner),
+  ensures = (owner, amount, ctx) => r => …
+)
+```
+
+```
+∀ args. expects(args) ⇒   (returnsWhen(args) ⇒ succeeds(f, args))
+                         ∧ (failsWhen(args) ⇒ fails(f, args))
+                         ∧ whenReturns(f, args)(r => ensures(args)(r))
+```
+
+- **`failsWhen`** is what the function must reject. For a validator this is safety: nothing is
+  spent without authorisation. It is the stated counterpart of the runtime checks, and proving
+  it checks them against the intention.
+- **`returnsWhen`** is what the function must accept. For a validator this is liveness:
+  authorised spends are not locked.
+- **The two need not cover every argument.** Between them the contract says nothing, which
+  matters in practice: a validator's exact success condition includes every way its input can
+  fail to decode, and few specifications want to spell that out. Stating both with complementary
+  conditions, `failsWhen = !returnsWhen`, gives the exact characterisation. Conditions that
+  overlap make the contract unsatisfiable, and it is refuted.
+- **The existing forms are special cases.** A partial contract has neither clause; a total
+  contract is `returnsWhen = true`, so `totalContract` becomes shorthand.
+
+The clauses add nothing to what the standalone statements say, except that they hold under
+`expects` and belong to the function's contract. The pair corresponds to JML's
+`normal_behavior` and `exceptional_behavior` specification cases. The harvested
+`checks(f, args)` is what the verifier can suggest as a first draft of `failsWhen`: its negation.
+
+### 8.4 Validators
+
+A `Spec.expects` on a validator's entry point is unsound (§6), so the verifier should reject it.
 The validator's specification is `ensures` clauses about success, and its robustness is the
 total claim that it never fails in an unexpected way on any `Data`.
 
-### 8.4 Function types
+### 8.5 Function types
 
 Higher-order functions need quantification over functions: `map`'s contract is about every
 `f`, and a precondition on a function parameter puts a quantifier inside the premise. `lean-direct`

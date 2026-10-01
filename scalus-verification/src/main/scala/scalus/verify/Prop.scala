@@ -165,31 +165,31 @@ object Props {
         inline body: R => Prop | Boolean
     ): Prop = ${ PropMacro.callDef('fn, 'arg, 'body, false) }
 
-    /** The contract of a function of one parameter: for every argument that satisfies `requires`, a
+    /** The contract of a function of one parameter: for every argument that satisfies `expects`, a
       * result the function returns satisfies `ensures` (partial correctness, design doc §3.7):
-      * `∀ x. requires(x) ==> whenReturns(fn, x)(r => ensures(x)(r))`. A failing call satisfies it;
+      * `∀ x. expects(x) ==> whenReturns(fn, x)(r => ensures(x)(r))`. A failing call satisfies it;
       * use [[totalContract]] to claim that the function returns.
       *
       * {{{
-      * contract(div10)(requires = x => x != BigInt(0), ensures = x => r => r * x <= BigInt(10))
+      * contract(div10)(expects = x => x != BigInt(0), ensures = x => r => r * x <= BigInt(10))
       * }}}
       */
     inline def contract[A: Quantifiable, R](fn: FunctionDef[A, R])(
-        inline requires: A => Prop | Boolean,
+        inline expects: A => Prop | Boolean,
         inline ensures: A => R => Prop | Boolean
-    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, false) }
+    ): Contract = ${ PropMacro.contract('fn, 'expects, 'ensures, false) }
 
     /** The contract of a function of two parameters; see [[contract]]. */
     inline def contract[A: Quantifiable, B: Quantifiable, R](fn: FunctionDef[(A, B), R])(
-        inline requires: (A, B) => Prop | Boolean,
+        inline expects: (A, B) => Prop | Boolean,
         inline ensures: (A, B) => R => Prop | Boolean
-    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, false) }
+    ): Contract = ${ PropMacro.contract('fn, 'expects, 'ensures, false) }
 
     /** The contract of a function of three parameters; see [[contract]].
       *
       * {{{
       * contract(clamp)(
-      *   requires = (x, lo, hi) => lo <= hi,
+      *   expects = (x, lo, hi) => lo <= hi,
       *   ensures = (x, lo, hi) => r => lo <= r && r <= hi
       * )
       * }}}
@@ -197,31 +197,81 @@ object Props {
     inline def contract[A: Quantifiable, B: Quantifiable, C: Quantifiable, R](
         fn: FunctionDef[(A, B, C), R]
     )(
-        inline requires: (A, B, C) => Prop | Boolean,
+        inline expects: (A, B, C) => Prop | Boolean,
         inline ensures: (A, B, C) => R => Prop | Boolean
-    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, false) }
+    ): Contract = ${ PropMacro.contract('fn, 'expects, 'ensures, false) }
 
     /** The contract of a function of one parameter, with totality: for every argument that
-      * satisfies `requires`, the function returns, and its result satisfies `ensures`.
+      * satisfies `expects`, the function returns, and its result satisfies `ensures`.
       */
     inline def totalContract[A: Quantifiable, R](fn: FunctionDef[A, R])(
-        inline requires: A => Prop | Boolean,
+        inline expects: A => Prop | Boolean,
         inline ensures: A => R => Prop | Boolean
-    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, true) }
+    ): Contract = ${ PropMacro.contract('fn, 'expects, 'ensures, true) }
 
     /** The total contract of a function of two parameters; see [[totalContract]]. */
     inline def totalContract[A: Quantifiable, B: Quantifiable, R](fn: FunctionDef[(A, B), R])(
-        inline requires: (A, B) => Prop | Boolean,
+        inline expects: (A, B) => Prop | Boolean,
         inline ensures: (A, B) => R => Prop | Boolean
-    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, true) }
+    ): Contract = ${ PropMacro.contract('fn, 'expects, 'ensures, true) }
 
     /** The total contract of a function of three parameters; see [[totalContract]]. */
     inline def totalContract[A: Quantifiable, B: Quantifiable, C: Quantifiable, R](
         fn: FunctionDef[(A, B, C), R]
     )(
-        inline requires: (A, B, C) => Prop | Boolean,
+        inline expects: (A, B, C) => Prop | Boolean,
         inline ensures: (A, B, C) => R => Prop | Boolean
-    ): Contract = ${ PropMacro.contract('fn, 'requires, 'ensures, true) }
+    ): Contract = ${ PropMacro.contract('fn, 'expects, 'ensures, true) }
+
+    /** `fn` applied to `arg` returns: the total call `call(fn, arg)(_ => true)`. */
+    inline def succeeds[A, R](fn: FunctionDef[A, R], inline arg: A): Prop =
+        call(fn, arg)(_ => true)
+
+    /** `fn` applied to `arg` does not return: `!succeeds(fn, arg)`. A bounded tactic proves it by
+      * showing that the call fails within its budget, which it tells apart from an exhausted one.
+      */
+    inline def fails[A, R](fn: FunctionDef[A, R], inline arg: A): Prop = !succeeds(fn, arg)
+
+    /** A function of one parameter returns on every argument that satisfies `when`:
+      * `∀ x. when(x) ==> succeeds(fn, x)`.
+      */
+    inline def returnsWhen[A: Quantifiable, R](fn: FunctionDef[A, R])(
+        inline when: A => Prop | Boolean
+    ): Prop = ${ PropMacro.returnsOrFailsWhen('fn, 'when, false) }
+
+    /** A function of two parameters returns on all arguments that satisfy `when`. */
+    inline def returnsWhen[A: Quantifiable, B: Quantifiable, R](fn: FunctionDef[(A, B), R])(
+        inline when: (A, B) => Prop | Boolean
+    ): Prop = ${ PropMacro.returnsOrFailsWhen('fn, 'when, false) }
+
+    /** A function of three parameters returns on all arguments that satisfy `when`. */
+    inline def returnsWhen[A: Quantifiable, B: Quantifiable, C: Quantifiable, R](
+        fn: FunctionDef[(A, B, C), R]
+    )(inline when: (A, B, C) => Prop | Boolean): Prop =
+        ${ PropMacro.returnsOrFailsWhen('fn, 'when, false) }
+
+    /** A function of one parameter fails on every argument that satisfies `when`:
+      * `∀ x. when(x) ==> fails(fn, x)`. It states what the function must reject, as its runtime
+      * `require`s do in its code.
+      *
+      * {{{
+      * failsWhen(div10)(x => x == BigInt(0))
+      * }}}
+      */
+    inline def failsWhen[A: Quantifiable, R](fn: FunctionDef[A, R])(
+        inline when: A => Prop | Boolean
+    ): Prop = ${ PropMacro.returnsOrFailsWhen('fn, 'when, true) }
+
+    /** A function of two parameters fails on all arguments that satisfy `when`. */
+    inline def failsWhen[A: Quantifiable, B: Quantifiable, R](fn: FunctionDef[(A, B), R])(
+        inline when: (A, B) => Prop | Boolean
+    ): Prop = ${ PropMacro.returnsOrFailsWhen('fn, 'when, true) }
+
+    /** A function of three parameters fails on all arguments that satisfy `when`. */
+    inline def failsWhen[A: Quantifiable, B: Quantifiable, C: Quantifiable, R](
+        fn: FunctionDef[(A, B, C), R]
+    )(inline when: (A, B, C) => Prop | Boolean): Prop =
+        ${ PropMacro.returnsOrFailsWhen('fn, 'when, true) }
 
     /** `prop` with the statement variables in `names` renamed, in its expressions and binders. */
     private[verify] def renameVariables(prop: Prop, names: Map[String, String]): Prop = {

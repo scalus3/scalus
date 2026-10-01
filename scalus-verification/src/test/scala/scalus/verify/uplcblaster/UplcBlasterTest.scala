@@ -392,11 +392,27 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         refuted(forAll[Data](d => denotes(d.to[BlasterPair])), budget = 160)
     }
 
+    test("states when a function returns and when it fails") {
+        proven(returnsWhen(div10)(x => x != BigInt(0)), 60, div10)
+        proven(failsWhen(div10)(x => x == BigInt(0)), 60, div10)
+        // negative controls: div10 fails at 0, and returns elsewhere
+        val everywhere = returnsWhen(div10)(x => true)
+        val x = everywhere match
+            case Prop.Forall(x, _) => x
+            case other             => fail(s"expected a universal proposition, got $other")
+        assert(integer(refuted(everywhere, 60, div10)(x.name)) == 0)
+        refuted(failsWhen(div10)(x => x >= BigInt(0)), 60, div10)
+        // Closed forms are decided by evaluation.
+        assert(proven(fails(div10, BigInt(0)), 60, div10) == ProofKind.LeanNative)
+        assert(proven(succeeds(div10, BigInt(2)), 60, div10) == ProofKind.LeanNative)
+        refuted(fails(div10, BigInt(2)), 60, div10)
+    }
+
     test("a contract is proved about its function's compiled program") {
         val clamp = FunctionDef(Math.clamp)
         proven(
           contract(clamp)(
-            requires = (x, lo, hi) => lo <= hi,
+            expects = (x, lo, hi) => lo <= hi,
             ensures = (x, lo, hi) => r => lo <= r && r <= hi
           ).prop,
           120,
@@ -404,7 +420,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         )
         proven(
           totalContract(clamp)(
-            requires = (x, lo, hi) => lo <= hi,
+            expects = (x, lo, hi) => lo <= hi,
             ensures = (x, lo, hi) => r => lo <= r && r <= hi
           ).prop,
           120,
@@ -413,7 +429,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         // negative control: without its precondition the range can be empty
         refuted(
           contract(clamp)(
-            requires = (x, lo, hi) => true,
+            expects = (x, lo, hi) => true,
             ensures = (x, lo, hi) => r => lo <= r && r <= hi
           ).prop,
           120,
@@ -421,12 +437,12 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         )
         // A partial contract holds where the function fails; a total one does not.
         proven(
-          contract(div10)(requires = x => true, ensures = x => r => x != BigInt(0)).prop,
+          contract(div10)(expects = x => true, ensures = x => r => x != BigInt(0)).prop,
           60,
           div10
         )
         refuted(
-          totalContract(div10)(requires = x => true, ensures = x => r => x != BigInt(0)).prop,
+          totalContract(div10)(expects = x => true, ensures = x => r => x != BigInt(0)).prop,
           60,
           div10
         )
