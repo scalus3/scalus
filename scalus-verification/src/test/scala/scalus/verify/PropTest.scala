@@ -198,6 +198,19 @@ class PropTest extends AnyFunSuite {
         assert(!errors.exists(_.message.contains("outside the scope")), errors)
     }
 
+    test("a statement cannot be built inside a @Compile object") {
+        val errors = scala.compiletime.testing.typeCheckErrors(
+          """import scalus.compiler.Compile
+             import scalus.verify.*
+             import scalus.verify.Props.*
+             @Compile
+             object WithStatement {
+                 def positive: Prop = forAll[BigInt](x => x > BigInt(0))
+             }"""
+        )
+        assert(errors.exists(_.message.contains("inside the @Compile WithStatement")), errors)
+    }
+
     test("a body that is a statement in one branch and a Boolean in another is a compile error") {
         val errors = scala.compiletime.testing.typeCheckErrors(
           """import scalus.verify.*

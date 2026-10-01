@@ -140,6 +140,12 @@ statement moves. Nothing stores them yet; a proof cache keyed on a statement's c
   binds those parameters as local values, and the lambda's body may use them. A statement cannot
   keep them, so this is a compile error, not a statement that is silently wrong.
 - **More than three parameters in one `forAll`.** Nest `forAll`s instead.
+- **A statement inside an `@Compile` object, class or trait.** The plugin compiles that code, and
+  would meet the Scala code the macros build `Prop` values with. Until statements are read from
+  SIR ([below](#statements-in-sir-boolean-pseudo-functions-proposed)), the macros reject them
+  there, and point to stating them outside compiled code. Only enclosing classes are checked:
+  `@Compile` sits on objects, classes and traits, and a statement inside a
+  `compile { … }` block is not detected.
 
 ## Contracts
 

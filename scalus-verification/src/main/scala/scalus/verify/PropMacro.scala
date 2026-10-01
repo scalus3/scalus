@@ -98,6 +98,7 @@ private[verify] object PropMacro {
         build: (List[Expr[PropExpr.Ident[?]]], Expr[Prop]) => Expr[Prop]
     )(using Quotes): Expr[Prop] = {
         import quotes.reflect.*
+        rejectCompiledCode()
         val (params, rhs) = lambdaOf(
           body.asTerm,
           Some(types.size),
@@ -263,6 +264,7 @@ private[verify] object PropMacro {
       */
     private def leaf[A: Type](e: Expr[A])(using Quotes): Expr[PropExpr[A]] = {
         import quotes.reflect.*
+        rejectCompiledCode()
         val variables = binderVariables(e.asTerm)
         if variables.isEmpty then
             val closed = e.asTerm.changeOwner(Symbol.spliceOwner).asExprOf[A]
@@ -294,6 +296,34 @@ private[verify] object PropMacro {
                   )
                 )
             }
+    }
+
+    /** Rejects a statement written inside an `@Compile` object, class or trait.
+      *
+      * Code there is compiled by the Scalus plugin, which would meet the Scala code this macro
+      * builds `Prop` values with, and fail on it. Statements in compiled code are to be read from
+      * its SIR, with pseudo-functions (prop-capture.md, "Statements in SIR"); until then they are
+      * written outside it.
+      */
+    private def rejectCompiledCode()(using Quotes): Unit = {
+        import quotes.reflect.*
+        val compile = TypeRepr.of[scalus.compiler.Compile]
+        def annotated(symbol: Symbol): Boolean =
+            !symbol.isNoSymbol && symbol.annotations.exists(_.tpe <:< compile)
+        // Only classes carry @Compile. Reading the annotations of an enclosing value whose type is
+        // still being inferred would be a cyclic reference.
+        val classes = Iterator
+            .iterate(Symbol.spliceOwner)(_.owner)
+            .takeWhile(symbol => !symbol.isNoSymbol && !symbol.isPackageDef)
+            .filter(_.isClassDef)
+        classes.find(owner => annotated(owner) || annotated(owner.companionModule)) match
+            case Some(owner) =>
+                report.errorAndAbort(
+                  s"a statement cannot be built inside the @Compile ${owner.name.stripSuffix("$")}, " +
+                      "whose code the Scalus plugin compiles. State it outside compiled code, as a " +
+                      "Props statement or an external contract(f)(requires, ensures)"
+                )
+            case None => ()
     }
 
     /** The variables of enclosing binders an expression uses, in order of first use: parameters of
