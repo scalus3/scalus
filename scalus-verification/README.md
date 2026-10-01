@@ -107,18 +107,29 @@ verifier.addFunction(clamp)
 val inRange = verifier.contract(
   "clamp_in_range",
   contract(clamp)(
-    requires = (x, lo, hi) => lo <= hi,
+    expects = (x, lo, hi) => lo <= hi,
     ensures = (x, lo, hi) => r => lo <= r && r <= hi
   )
 )
 verifier.verify(inRange, UplcBlaster(budget = 120)) // Proven
 ```
 
-`contract` is partial: `∀ args. requires(args) ==> whenReturns(f, args)(r => ensures(args)(r))`,
+`contract` is partial: `∀ args. expects(args) ==> whenReturns(f, args)(r => ensures(args)(r))`,
 so a call that fails satisfies it. `totalContract` also claims that the function returns where
-`requires` holds. `verifier.contract` registers the statement as the function's contract, and
+`expects` holds. `verifier.contract` registers the statement as the function's contract, and
 `verifier.contracts(clamp.ref)` lists them. The function's parameters must be quantifiable:
 `BigInt`, `Boolean` or `Data`.
+
+When a function returns, and when it fails, are statements too:
+
+```scala
+val div10 = FunctionDef.named("div10", (x: BigInt) => BigInt(10) / x)
+returnsWhen(div10)(x => x != BigInt(0))   // ∀ x. x ≠ 0 ==> succeeds(div10, x)
+failsWhen(div10)(x => x == BigInt(0))     // ∀ x. x = 0 ==> fails(div10, x)
+```
+
+`succeeds(f, a)` is the total call `call(f, a)(_ => true)`, and `fails(f, a)` is its negation.
+`failsWhen` states what a function must reject, which its runtime `require`s implement.
 
 ## Running
 

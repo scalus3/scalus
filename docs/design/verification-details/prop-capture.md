@@ -149,24 +149,24 @@ statement moves. Nothing stores them yet; a proof cache keyed on a statement's c
 
 ## Contracts
 
-`Props.contract(f)(requires, ensures)` and `Props.totalContract` (`PropMacro.contract`) take two
-lambda literals, `requires = (x, lo, hi) => …` and `ensures = (x, lo, hi) => r => …`, and build
+`Props.contract(f)(expects, ensures)` and `Props.totalContract` (`PropMacro.contract`) take two
+lambda literals, `expects = (x, lo, hi) => …` and `ensures = (x, lo, hi) => r => …`, and build
 
 ```
-∀ x lo hi. requires ==> whenReturns(f, (x, lo, hi))(r => ensures)
+∀ x lo hi. expects ==> whenReturns(f, (x, lo, hi))(r => ensures)
 ```
 
 with a total `call` for `totalContract`. The quantified variables are the parameters of
-`requires`, whose types the overload fixed. The call is built as `call` builds one, with the
+`expects`, whose types the overload fixed. The call is built as `call` builds one, with the
 argument `(x, lo, hi)` made from references to them and `ensures`' inner lambda `r => …` as its
 continuation. The bodies of both lambdas become statements as a binder's body does: a `Boolean` is
 one test, and a statement must use the parameters only in its leaves.
 
 The two lambdas declare their parameters separately, so `ensures`' `lo` is another symbol than
-`requires`' `lo`, with another name. `ensures`' leaves were compiled before the contract macro
+`expects`' `lo`, with another name. `ensures`' leaves were compiled before the contract macro
 expands, because expansion goes from the inside out, and they are already closed over its own
 names. So the macro cannot rename them in the tree. It emits `Props.renameVariables` instead, which
-renames `ensures`' variables after those of `requires` in the built statement at runtime, in its
+renames `ensures`' variables after those of `expects` in the built statement at runtime, in its
 SIR and its binders.
 
 The macro returns a `Contract`: the statement, with the function and totality it already knows.
@@ -211,7 +211,7 @@ object Logic {   // statements; each method throws if called
 
 @Compile
 object Spec {    // specifications in a function's body, prop-semantics.md §7
-    def requires(condition: Boolean): Unit
+    def expects(condition: Boolean): Unit
     extension [A](body: A) def ensuring(condition: A => Boolean): A
 }
 ```
@@ -256,7 +256,7 @@ the `Prop` the macros build:
   calls, so the lowering rejects `Logic` calls with a clear error. `Spec` clauses sit in code that
   is lowered, so the linker or the lowering drops them first, and the bytes do not change. This
   is the one core change, of the same kind as `UniversalDataConversion`'s special cases. The
-  earlier branch made `spec.requires` an `inline` no-op instead, and the inliner erased it before
+  earlier branch made its `spec.requires` an `inline` no-op instead, and the inliner erased it before
   the plugin ever saw it, so nothing could read it.
 
 **Why the overview's §4.3 found this route expensive.** It assumed that the combinators had to
@@ -303,7 +303,7 @@ one function with `PlutusV3.compile` where it is written.
    - its SIR, and an arity from its type;
    - its UPLC program and signature, compiled on first use: link `ExternalVar(binding)` against
      the module and its dependencies with `SIRLinker`, then lower with `UplcBlaster.options`;
-   - its specification, from the binding's SIR: the leading `Spec.requires` calls and the
+   - its specification, from the binding's SIR: the leading `Spec.expects` calls and the
      trailing `ensuring`, reified as above.
 
    It needs runtime access to `sirDeps`, by reflection or by an intrinsic like `compiledModules`
