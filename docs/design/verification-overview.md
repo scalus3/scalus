@@ -1,9 +1,10 @@
 # Verification in Scalus — overview
 
-Status: **draft design**. Date: 2026-09-30.
+Status: **draft design**. Date: 2026-10-01.
 
-This document fixes the design. How the parts that exist are built is described in
+This document fixes the design. The details are in
 [`verification-details/`](verification-details/):
+[statement semantics](verification-details/prop-semantics.md),
 [statement capture](verification-details/prop-capture.md) and
 [the `blaster-uplc` tactic](verification-details/uplc-blaster.md).
 
@@ -196,6 +197,8 @@ to UPLC on demand. So:
 - in-body contracts are to be stored with that SIR too (§3.7, §4.3).
 
 ### 3.3 Semantics
+
+In full, with examples: [statement semantics](verification-details/prop-semantics.md).
 
 - **`∀ (x : A)` ranges over values of `A` as a Scalus program sees them.** For `BigInt`,
   `ByteString`, `Boolean` and `Data` that means every value. For a case class it means every value
@@ -480,20 +483,22 @@ compiled as a closed lambda over the binder variables it uses; see
 The same route can serve the target binders of §3.6: in `f => forAll(x => f(x) >= 0)`, the leaf
 closes over `f` as well, and a backend substitutes the target for it.
 
-**Contracts in `@Compile` bodies: the plugin (planned).** A macro cannot capture `spec` clauses.
-They sit inside a `@Compile` function, must be erased from its code, and must travel with its SIR
-in `sirModule`, because verifying a caller in another module or jar needs the callee's contract
-(§3.7). A macro that expands inside the body cannot attach data to the enclosing definition. Today
-the clauses are `inline` no-ops that `inlining` erases first. Two ways to change that:
+**Specifications in `@Compile` bodies: SIR pseudo-functions (proposed).** A macro cannot capture
+a clause written inside a `@Compile` function: the clause must be erased from the function's code,
+yet travel with its SIR in `sirModule`, because verifying a caller in another module or jar needs
+the callee's contract (§3.7). The earlier branch made its `spec` clauses `inline` no-ops, which
+the inliner erased before the plugin saw them.
 
-- `ScalusPrepare`, which runs before `inlining`, rewrites each clause into a marker call that
-  survives it;
-- or the clauses stop being `inline`, and the plugin moves their arguments into the definition's
-  `AnnotationsDecl.data` and deletes the call.
-
-Either way the clause is erased from the code's SIR, so the on-chain bytes do not change. A clause
-holds a Boolean condition over the function's parameters and result, so the plugin stores only
-SIR. The logical form of a contract is fixed by §3.7.
+The proposed route keeps the clauses as calls to a marker object, `Spec.requires(c)` and
+`body.ensuring(r => c)`, the way `UniversalDataConversion` works today. The plugin compiles them
+like any call, so they stay in the function's SIR. A reifier reads them from `sirModule`, and the
+linker or the lowering drops them, so the on-chain bytes do not change. The same marker approach
+can capture whole statements, with `forAll` and the other combinators as Boolean pseudo-functions.
+It needs no plugin change and no SIR type for `Prop`: the two costs this section once attributed
+to taking statements from SIR. See
+[statements in SIR](verification-details/prop-capture.md#statements-in-sir-boolean-pseudo-functions-proposed).
+What the clauses mean, on chain and on the JVM, is in
+[statement semantics](verification-details/prop-semantics.md#7-specifications-in-the-functions-body-proposed).
 
 **What actually has to be SIR, and why.** Not the statement as a whole.
 
@@ -502,7 +507,7 @@ SIR. The logical form of a contract is fixed by §3.7.
 | Tests and witnesses | **yes** | They are executable code. `blaster-uplc` compiles them to UPLC, and `lean-direct` translates them from SIR. Only the Scalus compiler can produce either. |
 | SIR binder types | `SIRType`s | They decide the Lean binder type and how a value is lifted to a UPLC constant. The plugin computes them, from a compiled identity lambda. |
 | The skeleton (quantifiers, connectives) | **no** | The macros build it from explicit `Prop` constructors. |
-| Contracts | **stored with the function's SIR** | A contract is part of a function's interface. Verifying a caller, possibly in another module or another jar, needs the callee's contract (§3.7). Kept in the definition's `AnnotationsDecl.data`, it travels in `sirModule` with the code it describes. |
+| Contracts | **stored with the function's SIR** | A contract is part of a function's interface. Verifying a caller, possibly in another module or another jar, needs the callee's contract (§3.7). Kept as `Spec` calls in the definition's SIR, it travels in `sirModule` with the code it describes. |
 
 So cross-module use is the reason for exactly one case, contracts. Standalone statements in a proof
 suite are consumed only by the runner, and need SIR only for their tests.
@@ -1090,9 +1095,10 @@ same place.
 
 ## 10. Open questions
 
-1. **`spec` capture.** Statements are captured by macros (§4.3); in-body clauses need the plugin.
-   A marker call inserted by `ScalusPrepare` before inlining, or non-`inline` clauses that the
-   plugin intercepts and moves into `AnnotationsDecl.data`?
+1. **Specification capture.** The proposal is `Spec` and `Logic` pseudo-functions read from SIR
+   (§4.3). Open: how the runtime reaches an object's `sirDeps` to link a function; whether the
+   linker or the lowering erases `Spec` clauses; and when the reifier replaces the macros for
+   statements in test code.
 2. **Contract semantics.** Partial correctness by default, with totality opt-in (§3.7). Is
    `spec.total` the right spelling, and should validators default differently from helpers?
 3. **`Prop` versus `Boolean` connectives.** `a && b` on two Booleans stays one test. Should
