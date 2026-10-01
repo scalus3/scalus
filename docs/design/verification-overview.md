@@ -37,8 +37,8 @@ Two pieces of work exist.
   Scala (`PreludeProofsTest`, §8.1). See `scalus-verification/README.md`.
 - **`spec.requires` / `spec.ensures` / `spec.ensuresResult`** (local branch
   `feature/verification-blaster`, not pushed). These are in-body specification clauses. They are
-  `inline` no-ops, so they erase completely from the compiled script. Nothing gives them meaning
-  yet; capturing them needs the plugin (§4.3).
+  `inline` no-ops, so they erase completely from the compiled script, and nothing gives them
+  meaning. The proposed `Spec.expects` and `ensuring` clauses replace them (§4.3).
 
 So a statement written in Scala now reaches one backend. The other tactics, contracts, the runner
 and its cache (§5.4) are not built yet.
@@ -49,7 +49,7 @@ and its cache (§5.4) are not built yet.
 
 ```
  Scala source     verifier.statement("abs_nonneg", Math.abs) { f => forAll[BigInt](x => f(x) >= 0) }
-                  def clamp(...) = { spec.requires(lo <= hi); spec.ensuresResult(r => ...); ... }
+                  def clamp(...) = { Spec.expects(lo <= hi); (...).ensuring(r => ...) }
                   (Scala syntax for building a typed logical statement)
       │
       │  capture — at compile time: macros build the skeleton, the plugin compiles the leaves (§4.3)
@@ -321,9 +321,8 @@ equivalent forms.
 @Compile
 object Math {   // illustrative: the prelude's clamp carries no clauses today
     def clamp(x: BigInt, lo: BigInt, hi: BigInt): BigInt = {
-        spec.requires(lo <= hi)
-        spec.ensuresResult[BigInt](r => lo <= r && r <= hi)
-        if x < lo then lo else if x > hi then hi else x
+        Spec.expects(lo <= hi)
+        (if x < lo then lo else if x > hi then hi else x).ensuring(r => lo <= r && r <= hi)
     }
 }
 ```
@@ -336,7 +335,7 @@ val clamp = FunctionDef(Math.clamp)
 val clampInRange = verifier.contract(
   "clamp_in_range",
   contract(clamp)(
-    requires = (x, lo, hi) => lo <= hi,
+    expects = (x, lo, hi) => lo <= hi,
     ensures = (x, lo, hi) => r => lo <= r && r <= hi
   )
 )
@@ -353,13 +352,13 @@ be quantifiable. How the two lambdas come to speak of the same variables is in
 Both forms elaborate to the same statement, with `f` bound to the target:
 
 ```
-∀ args. requires(args) ⇒ ( denotes(f(args)) ⇒ ensures(args)(f(args)) )
+∀ args. expects(args) ⇒ ( denotes(f(args)) ⇒ ensures(args)(f(args)) )
 ```
 
 - **Partial correctness is the default.** The reading is "if `f` returns, the result is good".
   For a validator handler it is exactly "if the script succeeds, `P` holds", because rejection
   *is* an error. Totality is a separate, explicit clause (`spec.total`, or `totalContract`), which
-  adds `requires(args) ⇒ denotes(f(args))`.
+  adds `expects(args) ⇒ denotes(f(args))`.
 - **In-body clauses cost nothing on-chain.** They are erased before the code reaches UPLC. On
   `feature/verification-blaster`, `VestingValidator` compiled to the same 2046 bytes and the same
   script hash with and without them. That was measured on an older master and needs re-checking.
@@ -489,7 +488,7 @@ yet travel with its SIR in `sirModule`, because verifying a caller in another mo
 the callee's contract (§3.7). The earlier branch made its `spec` clauses `inline` no-ops, which
 the inliner erased before the plugin saw them.
 
-The proposed route keeps the clauses as calls to a marker object, `Spec.requires(c)` and
+The proposed route keeps the clauses as calls to a marker object, `Spec.expects(c)` and
 `body.ensuring(r => c)`, the way `UniversalDataConversion` works today. The plugin compiles them
 like any call, so they stay in the function's SIR. A reifier reads them from `sirModule`, and the
 linker or the lowering drops them, so the on-chain bytes do not change. The same marker approach
@@ -1113,7 +1112,7 @@ same place.
 7. **The default domain for validator inputs:** well-formed values or raw `Data` (§3.3).
 8. **Where mappings are declared.** `leanMapping(f, "…")` in the verification module, or an
    annotation on the function itself, which would tie core code to Lean names?
-9. **Naming:** `scalus.verify`, `statement` / `refute`, and `spec.requires` next to the prelude's
-   `require`.
+9. **Naming:** `scalus.verify` and `statement` / `refute`. The precondition is `expects`, not
+   `requires`, so that it does not read as the prelude's runtime `require`.
 10. **Default verifier discovery.** How should compiler-generated descriptors from multiple jars
     be indexed and assembled without loading every `@Compile` object eagerly?
