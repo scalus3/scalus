@@ -2,7 +2,22 @@
 
 How the statement syntax of [the verification overview](../verification-overview.md) (§3.2, §4)
 becomes a runtime `Prop`. Code: `scalus-verification/src/main/scala/scalus/verify/PropMacro.scala`,
-`Prop.scala` (`Props`) and `FunctionMacro.scala`. Tests: `PropTest.scala`.
+`Prop.scala` (`Props`) and `FunctionMacro.scala`. Tests: `PropTest.scala`. What a captured
+statement means is in [statement semantics](prop-semantics.md).
+
+## Two front ends
+
+- **Macros (implemented).** A statement written in test code is ordinary Scala, which the plugin
+  never compiles as a whole. The macros behind `Props` split it into its skeleton and its leaves,
+  and send each leaf to `compile`. The sections up to "Function references" describe them.
+- **SIR reification (proposed).** A statement or specification that the plugin compiles anyway,
+  inside a `@Compile` object or one `compile { … }` block, can be read from its SIR, with the
+  combinators as Boolean pseudo-functions of a marker object.
+  See [statements in SIR](#statements-in-sir-boolean-pseudo-functions-proposed). It is how
+  specifications written in a function's body reach the verifier, together with
+  [function tables](#function-tables-from-compile-objects-proposed) read from `@Compile` objects.
+
+Both produce the same `Prop`.
 
 ## Why a macro
 
@@ -168,3 +183,130 @@ There are overloads for one to three parameters. A call to a function of several
 passes them as a tuple written out in the call, as in `(x, lo, hi)`. `FunctionDef.apply` and
 `FunctionDef.named` compile the function with `UplcBlaster.options`, and keep its SIR and UPLC
 program as representations.
+
+## Statements in SIR: Boolean pseudo-functions (proposed)
+
+The macros are needed only because test code is never compiled by the plugin as a whole. Code
+the plugin does compile can carry a statement in its SIR, with the combinators as pseudo-functions
+of a marker object. `UniversalDataConversion` already works this way: an `@Compile` object whose
+methods throw if called; a call to one compiles to an `ExternalVar` application in SIR, and the
+linker and the lowering recognise it by name.
+
+```scala
+@Compile
+object Logic {   // statements; each method throws if called
+    def forAll[A](body: A => Boolean): Boolean
+    def exists[A](body: A => Boolean): Boolean
+    def implies(premise: Boolean, conclusion: Boolean): Boolean
+    def denotes[A](value: A): Boolean
+    def holds(test: Boolean): Boolean                     // a test kept separate, as Prop(t)
+    def whenReturns[R](value: R)(body: R => Boolean): Boolean
+}
+
+@Compile
+object Spec {    // specifications in a function's body, prop-semantics.md §7
+    def requires(condition: Boolean): Unit
+    extension [A](body: A) def ensuring(condition: A => Boolean): A
+}
+```
+
+`forAll[BigInt](x => Math.abs(x) >= 0)`, compiled by the plugin, is
+
+```
+Apply(ExternalVar(Logic$.forAll), LamAbs(x: Integer, ≥(Apply(ExternalVar(Math$.abs), x), 0)))
+```
+
+The skeleton is Boolean-typed SIR, so `Prop` needs no SIR type. A reifier walks the SIR and builds
+the `Prop` the macros build:
+
+- `Logic.forAll(λx. b)` is `Forall(x, reify(b))`, with the binder's `SIRType` from the lambda's
+  parameter; `exists` likewise. SIR keeps Scala's parameter names, which nested lambdas can
+  repeat, so the reifier renames binders apart.
+- `implies`, `denotes` and `holds` are `Implies`, `Denotes` and a separate `Bool` test.
+  `whenReturns` is a partial call.
+- `&&`, `||`, `!` and `if` are statement connectives when an operand contains a `Logic` call. An
+  `if` becomes `(c ∧ p) ∨ (¬c ∧ q)`, with `¬c` inside the test, so a failing condition makes both
+  branches false.
+- `let y = e in p` around a statement is `existsLet(e)(y => p)`. The macros reject this form
+  (overview §4.1).
+- Any other subterm is a test: a maximal subterm without `Logic` calls, whose free variables are
+  the enclosing binders. It is `PropExpr.SIRExpr` as it is, with no closed lambda to open and no
+  runtime renaming.
+- A call of a function in the function table is an application inside a test, which the tactic
+  links as it does now. Target syntax, `f(x)` for a known `f`, needs nothing more.
+
+**What changes, compared with the macros.**
+
+- **No tricks around inlining order.** Leaves are no longer compiled as closed lambdas, so
+  `openVariables` and the contract macro's `renameVariables` go away.
+- **Statements can live in `@Compile` objects.** That is where in-body specifications are.
+- **Types no longer separate tests from statements.** In SIR everything is `Boolean`, so the rule
+  above decides, as [prop-semantics.md §4](prop-semantics.md#4-connectives) requires. A `Logic`
+  call where a value is expected, as in a function's argument, is reported by the reifier or by
+  the lowering; scalac cannot catch it. `@compileTimeOnly` would catch a `Logic` call left in JVM
+  code, but the methods of an `@Compile` object are JVM code too. So it fits only statements
+  written inside `compile { … }`, which the plugin replaces.
+- **Lowering.** A statement is never lowered as a whole, only its tests, which contain no `Logic`
+  calls, so the lowering rejects `Logic` calls with a clear error. `Spec` clauses sit in code that
+  is lowered, so the linker or the lowering drops them first, and the bytes do not change. This
+  is the one core change, of the same kind as `UniversalDataConversion`'s special cases. The
+  earlier branch made `spec.requires` an `inline` no-op instead, and the inliner erased it before
+  the plugin ever saw it, so nothing could read it.
+
+**Why the overview's §4.3 found this route expensive.** It assumed that the combinators had to
+be plugin intrinsics and that `Prop` needed a SIR type. Pseudo-functions need neither: the plugin
+compiles calls to them as calls to any `@Compile` method, and the skeleton stays `Boolean`.
+
+**Rejected: a SIR type for `Prop`**, with its constructors in SIR. `Prop` holds SIR terms and
+Scala values, so it cannot be an `@Compile` type; it would need its own encoding and constructor
+intrinsics, for nothing that Boolean pseudo-functions do not give.
+
+**Recommendation.**
+
+1. Build the reifier for specifications in `@Compile` code, and for statements in `@Compile`
+   objects.
+2. Keep the macros for statements in test code until the reifier exists.
+3. Then let a `statement { … }` entry compile its block with `compileInline` and reify it. That
+   retires the closed-lambda and renaming machinery, and leaves one front end.
+
+## Function tables from `@Compile` objects (proposed)
+
+A verifier needs a `FunctionDef` per function, with its SIR, UPLC and signature, and the function's
+in-body specification. Today each is registered by hand, `FunctionDef(Math.clamp)`, which compiles
+one function with `PlutusV3.compile` where it is written.
+
+**What already exists.**
+
+- The plugin stores each `@Compile` object's SIR in the object: `sirModule: Module` and
+  `sirDeps: List[SIRModuleWithDeps]`.
+- A `Module` is a list of `Binding(name, tp, value)`. The names are the fully qualified names
+  calls use, and the types are `SIRType`s, so a binding's arity is the number of its `Fun`
+  layers. Bindings carry no annotations of their own.
+- `compiledModules("scalus.….Math")` is a plugin intrinsic that returns such modules at compile
+  time. `sirModule` is also reachable by reflection, as `SecondaryParamListCaseClassTest` does.
+- An `inline def` has no binding: it is expanded where it is called.
+- scalus-core cannot refer to `FunctionDef`, which lives in scalus-verification.
+
+**Options.**
+
+1. **The plugin generates a function table** next to `sirModule`. Being in scalus-core, it could
+   only emit core types: names, types, SIR, the specification's SIR. `sirModule` already holds
+   those, so this option reduces to the next one, plus redundant generated code.
+2. **Read `sirModule` at runtime**, with no plugin change. `FunctionTable.fromModule(module, deps)`
+   makes one `FunctionDef` per binding:
+   - its SIR, and an arity from its type;
+   - its UPLC program and signature, compiled on first use: link `ExternalVar(binding)` against
+     the module and its dependencies with `SIRLinker`, then lower with `UplcBlaster.options`;
+   - its specification, from the binding's SIR: the leading `Spec.requires` calls and the
+     trailing `ensuring`, reified as above.
+
+   It needs runtime access to `sirDeps`, by reflection or by an intrinsic like `compiledModules`
+   that also returns dependencies, and an entry point for linking at runtime.
+3. **A macro over the object's type** that lists its non-inline methods and expands to
+   `FunctionTable(FunctionDef(Math.clamp), FunctionDef(Math.gcd), …)`. It needs no plugin change
+   and no runtime linking, because each entry is compiled as today. It reads no specifications,
+   and keeps the limit of three parameters.
+
+**Recommendation: option 2.** It has one source of truth, the SIR the plugin already stores. It
+covers every binding, generic ones included, and the in-body specifications. Option 3 is a cheap
+interim step if function tables are needed before the reifier exists.
