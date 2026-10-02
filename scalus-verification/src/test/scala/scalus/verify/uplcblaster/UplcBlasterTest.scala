@@ -2,7 +2,7 @@ package scalus.verify.uplcblaster
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.cardano.onchain.plutus.prelude.Math
+import scalus.cardano.onchain.plutus.prelude.{require, Math}
 import scalus.compiler.Compile
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRBuiltins, SIRType, TargetLoweringBackend}
 import scalus.compiler.sir.lowering.{PrimitiveRepresentation, ProductCaseClassRepresentation, SumCaseClassRepresentation}
@@ -147,6 +147,32 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("spurious"), reason)
             case (_, _, other) => fail(s"expected an inconclusive result, got $other")
+    }
+
+    test("a runtime check in an expression is part of its program") {
+        // `require(...)` is a statement whose value nothing uses. It must not be dropped as an
+        // unused definition: the expression fails where the check does.
+        val checked = forAll[BigInt](x => denotes { require(x >= BigInt(0)); x * BigInt(2) })
+        val program = lowered(checked, FunctionTable.empty).leaves.head
+        assert((program $ BigInt(3).asTerm).term.evaluateDebug.isSuccess)
+        assert((program $ BigInt(-1).asTerm).term.evaluateDebug.isFailure)
+
+        val x = checked match
+            case Prop.Forall(x, _) => x
+            case other             => fail(s"expected a universal proposition, got $other")
+        assert(integer(refuted(checked, budget = 80)(x.name)) < 0)
+        proven(
+          forAll[BigInt](x =>
+              (x < BigInt(0)) ==> !denotes { require(x >= BigInt(0)); x * BigInt(2) }
+          ),
+          budget = 80
+        )
+        proven(
+          forAll[BigInt](x =>
+              (x >= BigInt(0)) ==> denotes { require(x >= BigInt(0)); x * BigInt(2) }
+          ),
+          budget = 80
+        )
     }
 
     test("a failing test does not hold, so its negation does") {

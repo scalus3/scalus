@@ -519,6 +519,10 @@ object UplcBlaster {
       * `Compiler.compile` put them there; their remaining `ExternalVar` occurrences become explicit
       * parameters, filled with the functions' own UPLC programs. Definitions of other functions
       * stay, if the expression uses them, and are compiled together with it.
+      *
+      * The expression's own `let`s sit in the same place as the module definitions, so a binding is
+      * dropped only when nothing uses it and its value cannot fail. A statement such as
+      * `require(c)` is an unused binding of a value that can.
       */
     private def unlinkModuleDefinitions(sir: SIR, functions: FunctionTable): SIR = sir match
         case SIR.Let(bindings, body, flags, anns) =>
@@ -531,11 +535,26 @@ object UplcBlaster {
                     .flatMap(binding => freeVariables(binding.value))
                 if next == names then names else live(next)
             }
-            val liveNames = live(freeVariables(unlinkedBody))
+            // A strict binding is evaluated where it stands. One whose value can fail, such as a
+            // `require(...)` statement, stays whether or not anything uses it: only a value can be
+            // dropped unused, as a module's function definitions are.
+            val evaluated =
+                if SIR.LetFlags.isLazy(flags) then Nil
+                else candidates.filterNot(binding => isValue(binding.value))
+            val roots = freeVariables(unlinkedBody) ++
+                evaluated.flatMap(binding => freeVariables(binding.value) + binding.name)
+            val liveNames = live(roots)
             val kept = candidates.filter(binding => liveNames.contains(binding.name))
             if kept.isEmpty then unlinkedBody else SIR.Let(kept, unlinkedBody, flags, anns)
         case SIR.Decl(data, term) => SIR.Decl(data, unlinkModuleDefinitions(term, functions))
         case other                => other
+
+    /** A term that evaluates to itself: it cannot fail, so an unused binding of it can be dropped.
+      */
+    private def isValue(sir: SIR): Boolean = sir match
+        case _: SIR.LamAbs | _: SIR.Const | _: SIR.Var | _: SIR.ExternalVar | _: SIR.Builtin => true
+        case SIR.Decl(_, term) => isValue(term)
+        case _                 => false
 
     private def externalVariables(sir: SIR): List[(String, SIRType)] = sir match
         case SIR.ExternalVar(_, name, tp, _) => List(name -> tp)
