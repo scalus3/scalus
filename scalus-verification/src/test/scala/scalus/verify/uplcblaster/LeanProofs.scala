@@ -10,7 +10,18 @@ import java.nio.file.{Files, Path}
 /** Runs [[UplcBlaster]] on statements through Lean, for test suites. */
 trait LeanProofs extends Assertions {
 
-    protected val leanDirectory: Path = Path.of("scalus-verification", "src", "main", "lean")
+    /** The Lean workspace, looked up from the working directory upwards: a forked test of another
+      * module runs in that module's directory, not in the build's root.
+      */
+    protected val leanDirectory: Path = {
+        val workspace = Path.of("scalus-verification", "src", "main", "lean")
+        Iterator
+            .iterate(Path.of("").toAbsolutePath)(_.getParent)
+            .takeWhile(_ != null)
+            .map(_.resolve(workspace))
+            .find(Files.isDirectory(_))
+            .getOrElse(workspace)
+    }
 
     /** Whether Lean can run here: `lake` on the `PATH` and a built workspace. The ci-jvm shell has
       * neither, so the tests that run Lean are canceled there. Build the workspace with

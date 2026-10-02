@@ -29,6 +29,9 @@ validator actually runs on chain.
   budgeted CEK runner and the `#prep_uplc_run` command its generated checks use.
 - `src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala` - properties of `Math` and
   of prelude data structures, each with a negative control and samples.
+- `scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala`, in
+  the examples module - properties of the vesting contract: its schedule, and its validator on
+  script contexts and withdrawals. The JVM tests of `scalus-examples` depend on this module.
 
 ## Statements
 
@@ -173,6 +176,7 @@ in `unsupported`, not checked.
 ```bash
 cd scalus-verification/src/main/lean && lake build && cd -   # once, and after a Lean change
 sbt scalusVerification/test
+sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 4 min
 ```
 
 The tests that run Lean need `lake` on the `PATH` (the default and `ci` nix shells have it) and

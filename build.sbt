@@ -874,7 +874,9 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .configurePlatform(JVMPlatform)(
       _.dependsOn(
         scalusDesignPatterns,
-        scalusEthereumKzgCeremony
+        scalusEthereumKzgCeremony,
+        // The verifier and its Lean test support (LeanProofs), for the proofs about the examples.
+        scalusVerification % "test->test"
       )
     )
     .jvmSettings(
