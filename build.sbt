@@ -212,6 +212,16 @@ ThisBuild / installNpmTestDeps := {
 // linker output and resolved from node_modules, not bundled in. For tests, Node resolves
 // those specifiers from the repo-root node_modules (it walks parent directories up from the
 // linked test module), so we install them there before running tests.
+/** Leaves the tests with a ScalaTest tag out of `test` and `testQuick`. `testOnly` still runs them:
+  * a whole suite, or only its tagged tests with `-- -n <tag>`. An exclusion in `Test / testOptions`
+  * would apply to `testOnly` too, where `-n` cannot undo it: sbt passes both, and ScalaTest's
+  * exclusion wins.
+  */
+def excludeFromTest(tag: String): Seq[Def.Setting[?]] = Seq(
+  Test / test / testOptions += Tests.Argument("-l", tag),
+  Test / testQuick / testOptions += Tests.Argument("-l", tag)
+)
+
 lazy val jsModuleSettings: Seq[Def.Setting[?]] = Seq(
   scalaJSUseMainModuleInitializer := false,
   // withMinify is the Scala.js-native replacement for the now-deprecated Closure
@@ -523,7 +533,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Test / baseDirectory := (LocalRootProject / baseDirectory).value,
       // Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-S", "-8077211454138081902"),
       Test / testOptions += Tests.Argument("-oF"),
-      Test / testOptions += Tests.Argument("-l", "scalus.testing.Benchmark"),
+      excludeFromTest("scalus.testing.Benchmark"),
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test,
       // Negative-compilation tests (ByNameParamErrorTest) drive dotc in-process with the
       // packaged Scalus plugin and the full scalus-core classpath, handed to the forked
@@ -615,7 +625,7 @@ lazy val scalusUplcJitCompiler = project
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value,
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
       // Exclude benchmark-tagged tests from default test runs
-      Test / testOptions += Tests.Argument("-l", "scalus.testing.Benchmark"),
+      excludeFromTest("scalus.testing.Benchmark"),
       // Full stack traces for test failures (helps debug deep lowering errors)
       Test / testOptions += Tests.Argument("-oF"),
       inConfig(Test)(PluginDependency),
@@ -787,8 +797,8 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       // Exclude integration tests and benchmarks from default test runs
-      Test / testOptions += Tests.Argument("-l", "scalus.testing.IntegrationTest"),
-      Test / testOptions += Tests.Argument("-l", "scalus.testing.Benchmark")
+      excludeFromTest("scalus.testing.IntegrationTest"),
+      excludeFromTest("scalus.testing.Benchmark")
     )
     .configurePlatform(JVMPlatform)(
       _.dependsOn(
@@ -1319,7 +1329,9 @@ addCommandAlias(
   // Plugin-only version: prove the plugin builds against the 3.3.7 compiler and still emits correct
   // contracts, via the scalus.compiler.* compile-and-evaluate suite. Cheaper than a full re-test –
   // 3.3.7 and 3.3.8 share the `pre38` desugaring generation (verified byte-identical).
-  "++3.3.7;clean;scalusPlugin/Test/compile;scalusJVM/testOnly scalus.compiler.*"
+  // `testOnly` runs benchmark-tagged tests, which `test` leaves out, so they are excluded here.
+  "++3.3.7;clean;scalusPlugin/Test/compile;" +
+      "scalusJVM/testOnly scalus.compiler.* -- -l scalus.testing.Benchmark"
 )
 addCommandAlias("ci-jvm-3_8_4", s"++3.8.4;$crossVersionCiTasks")
 addCommandAlias("ci-jvm-3_9_0", s"++3.9.0;$crossVersionCiTasks")
