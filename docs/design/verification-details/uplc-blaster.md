@@ -3,7 +3,8 @@
 How `blaster-uplc` from [the verification overview](../verification-overview.md) (§6.2) is built.
 Code: `scalus-verification/src/main/scala/scalus/verify/uplcblaster/UplcBlaster.scala` and
 `scalus-verification/src/main/lean/ScalusProofs/Run.lean`. Tests: `UplcBlasterTest` and
-`PreludeProofsTest`. For how to use it, see `scalus-verification/README.md`.
+`PreludeProofsTest`, and `VestingVerificationTest` in `scalus-examples`. For how to use it, see
+`scalus-verification/README.md`.
 
 ## Pipeline
 
@@ -302,8 +303,8 @@ The workspace is `scalus-verification/src/main/lean`: Lean 4.24.0 (`lean-toolcha
 - **The toolchain** is `elan` and `z3`, from the default and `ci` nix shells.
 
 CI: `.github/workflows/lean-proofs.yml` runs daily and on demand. It builds the workspace, then
-runs `sbt scalusVerification/test` with `SCALUS_REQUIRE_LEAN=1`, so a test that cannot run Lean
-fails instead of being canceled. In `ci-jvm` those tests are canceled.
+runs `sbt scalusVerification/test` and `VestingVerificationTest` with `SCALUS_REQUIRE_LEAN=1`, so
+a test that cannot run Lean fails instead of being canceled. In `ci-jvm` those tests are canceled.
 
 ## Limits
 
@@ -362,3 +363,52 @@ What is not stated, and why:
 
   For `gcd`, though, it hits the budget problem. The spike proved it at PV10 in 53 s; at PV11,
   attempts at budget 350 did not finish. Start with a function whose step count is constant.
+
+## What `VestingVerificationTest` covers
+
+`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala` states
+properties of the vesting example. The JVM tests of `scalus-examples` depend on this module and
+on its test support (`LeanProofs`), so a contract's proofs sit next to its other tests.
+
+| About | Statement | Quantified over | Budget | Time |
+|---|---|---|---|---|
+| `linearVesting` | nothing is vested before the start | the datum's numbers, the time | 400 | 6 s |
+| | everything is vested from the end on | | | 5 s |
+| | it returns: no division by a zero duration | | | 5 s |
+| | `0 <= vested <= amount`, for `amount >= 0` | | | 5 s |
+| | it does not decrease with time, for `amount >= 0` | and a second time | | 7 s |
+| the validator | an output without a datum cannot be spent | `txInfo`, redeemer, reference: any `Data` | 600 | 6 s |
+| | a non-positive amount is rejected | `txInfo`, reference, datum: any `Data` | | 7 s |
+| | nothing but spending is validated | `txInfo`, redeemer, script info: any `Data` | | 9 s |
+| a withdrawal | a sample is accepted, and rejected unsigned | closed, `native_decide` | 12000 | 7 s |
+| | unsigned, it is rejected | datum, locked and requested amounts, time, fee; outputs: any `Data` | | 13 s |
+| | it leaves at least what has not vested | the same, and the amount paid | | 43 s |
+| | after the end, everything locked can be withdrawn | datum, locked amount, time, fee | | 26 s |
+
+The two bounds of the schedule and the three statements about withdrawals each have a negative
+control. For two of the latter, a refutation is an accepted withdrawal: the solver finds one in
+about 45 s, and it is replayed on the Scalus CEK.
+
+**Withdrawals have one shape.** The context is written with the ledger types in the statement
+(`ScriptContext(TxInfo(inputs = …), …).toData`), over integer variables: one input, the vesting
+output; at most one output, to the beneficiary; a fixed beneficiary. A statement says nothing about
+another shape.
+
+What the suite shows about the tactic:
+
+- **The budget is not the limit for a program without a data-dependent loop.** The validator makes
+  thousands of steps on a withdrawal, and those statements prove at a budget of 12000. The cost
+  explosion measured on `gcd` ([Budgets](#budgets)) comes from a loop whose length depends on a
+  symbolic value, where every further step can branch.
+- **A loop over a list of unknown length does not terminate in Lean.** The outputs can be left as
+  any `Data` in the statement about an unsigned withdrawal, because every run fails before the
+  validator reads them. The same in the statement about the unvested amount ran for more than 7
+  minutes without a result: the runs that pass the check go on to fold over the outputs. The
+  premise does not help, because each leaf's program is reduced on its own. A statement about
+  paths that reach a list needs the list's shape written out.
+- **The tactic has no timeout.** Such a statement hangs the test until Lean is stopped.
+- **The proofs are not about the published script.** `VestingContract` compiles with
+  `Options.release`, which uses the `Value` builtins that Lean's model lacks
+  ([Limits](#limits)); the statements are about the validator compiled with `UplcBlaster.options`.
+- **Nested `inline def`s of a class cannot be used in a statement.** One that uses another leaves a
+  reference to the class's `this` in the leaf, which the plugin rejects. They are in an object.
