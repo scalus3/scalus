@@ -113,6 +113,49 @@ A contract of `f` (implemented as `Props.contract`, `Props.totalContract`) is
   checked at runtime with `require`. What the validator guarantees is then an `ensures` on its
   success: "if the script succeeds, the transaction is signed by the beneficiary".
 
+### Call-site obligations
+
+That a caller establishes a callee's precondition is checked per call (`Verifier.obligations`,
+`Obligations.scala`). For a call `f(a, b)` in the body of `g`, where `f` has a declared
+contract, the obligation is a statement over `g`'s parameters:
+
+```
+∀ g's parameters. [expects_g ⇒] ( denotes(reach) ⇒ check )
+```
+
+`reach` and `check` are two tests cut out of `g`'s SIR along the path to the call:
+
+- the bindings before the call stay, and are evaluated;
+- at an `if`, a `match`, `&&` or `||`, the branch that leads to the call is kept, and the others
+  return `true`;
+- the call itself becomes `let x = a; y = b in true` in `reach`, and
+  `let x = a; y = b in expects_f` in `check`, with the variables of `f`'s contract bound to the
+  arguments.
+
+So `reach` runs what `g` runs before the call and fails when `g` does, and the obligation holds
+where the call is not reached. `check` adds the precondition at the call.
+
+| Caller | Obligation | Verdict |
+|---|---|---|
+| `clamp(x, 10, 0)` | `10 <= 0` | refuted |
+| `clamp(x, lo, hi)` | `lo <= hi`, for all `lo`, `hi` | refuted |
+| the same, in a function that itself expects `lo <= hi` | `lo <= hi ⇒ lo <= hi` | proved |
+| `if lo <= hi then clamp(x, lo, hi) else lo` | `if lo <= hi then lo <= hi else true` | proved |
+| `require(lo <= hi); clamp(x, lo, hi)` | where the `require` passes, `lo <= hi` | proved |
+
+- **The caller's own contract is the premise.** `obligations(contractOfG)` assumes `g`'s
+  precondition: `g` may rely on what its own callers establish. `obligations(g)` assumes nothing.
+- **A runtime check counts.** The last row holds because the `require` is evaluated on the path:
+  where it fails, `reach` fails. The same goes for a callee's own `require`s in a binding before
+  the call. Runtime checks need no clause in a contract to be taken into account.
+- **Recursion needs no unrolling.** A recursive call is a call like any other, checked under the
+  function's own precondition.
+- **The cut is conservative.** Code evaluated beside the path, as `h(a)` in `h(a) + f(b)`, is left
+  out. If it would fail first, the call is never reached, yet the obligation is still asked.
+- **Not supported yet:** a call inside a function value, as in `xs.map(x => f(x))`, and a
+  precondition that is a statement, not a Boolean test. Such calls are returned in
+  `CallObligations.unsupported`, with the reason, so that they are not taken as checked.
+
 ## 7. Specifications in the function's body (proposed)
 
 A contract can be written next to the code it describes:
