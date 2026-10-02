@@ -367,7 +367,10 @@ Both forms elaborate to the same statement, with `f` bound to the target:
   modular use needs a verification-condition generator over `g`'s SIR, and a backend that can
   treat `f` abstractly. `lean-direct` can do that (and later `smt` and `kernel`). `blaster-uplc`
   cannot abstract a callee inside compiled code, so it checks each contract as a statement about
-  the function's whole compiled program.
+  the function's whole compiled program. The caller's side is implemented for it:
+  `verifier.obligations(g)` declares, for each call in `g` of a function with a contract, the
+  statement that the call's arguments satisfy the precondition
+  ([statement semantics](verification-details/prop-semantics.md#call-site-obligations)).
 
 ### 3.8 Calls and the function table
 
