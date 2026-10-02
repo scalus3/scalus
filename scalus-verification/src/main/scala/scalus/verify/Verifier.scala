@@ -130,7 +130,7 @@ final class Verifier private () {
     /** Declares the contract of a function, built by [[Props.contract]] or [[Props.totalContract]].
       * It is proved like any statement, and [[contracts]] finds it by its function.
       */
-    def contract(name: String, contract: Contract): Statement =
+    def contract(name: String, contract: Contract[?, ?]): Statement =
         declare(name, contract.prop, Origin.Contract(contract.function, contract.total))
 
     /** The contracts declared for `function`, by name. */

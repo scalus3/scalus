@@ -169,6 +169,11 @@ names. So the macro cannot rename them in the tree. It emits `Props.renameVariab
 renames `ensures`' variables after those of `expects` in the built statement at runtime, in its
 SIR and its binders.
 
+`contract.returnsWhen(args => c)` and `contract.failsWhen(args => c)` add a guarantee. The
+clause is built as the standalone statement `∀ args. c ==> succeeds(f, args)`, or `fails`, with
+its own variables. `Contract.withClause` then renames them after the contract's and puts the
+clause under the contract's precondition, at runtime, for the same reason as above.
+
 The macro returns a `Contract`: the statement, with the function and totality it already knows.
 `Verifier.contract(name, contract)` records `Origin.Contract(f, total)` from it, so a statement
 that is not a contract cannot be declared as one; `Verifier.contracts(f)` lists them.

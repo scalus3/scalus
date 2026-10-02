@@ -184,7 +184,7 @@ private[verify] object PropMacro {
         expects: Expr[Any],
         ensures: Expr[Any],
         total: Boolean
-    )(using Quotes): Expr[Contract] = {
+    )(using Quotes): Expr[Contract[Arg, R]] = {
         import quotes.reflect.*
         val (params, pre) = lambdaOf(expects.asTerm, None, "expects must be a lambda literal")
         val arity = params.size
@@ -219,7 +219,7 @@ private[verify] object PropMacro {
           idents,
           '{ Prop.Implies($precondition, Props.renameVariables($call, $renames)) }
         )
-        '{ Contract($fn.ref, ${ Expr(total) }, $prop) }
+        '{ Contract[Arg, R]($fn.ref, ${ Expr(total) }, $prop) }
     }
 
     /** A function's argument from the parameters of a lambda that stand for it: the parameter
@@ -244,7 +244,7 @@ private[verify] object PropMacro {
       * existing statements.
       */
     def returnsOrFailsWhen[Arg: Type, R: Type](
-        fn: Expr[FunctionDef[Arg, R]],
+        fn: Expr[FunctionRef[Arg, R]],
         when: Expr[Any],
         fails: Boolean
     )(using Quotes): Expr[Prop] = {
@@ -254,10 +254,25 @@ private[verify] object PropMacro {
         val premise = statementOf(condition, params.map(_.symbol).toSet, kind)
         val idents = params.map(param => ident(param.symbol, param.pos, param.tpt.tpe.asType))
         val returns =
-            call[Arg, R]('{ $fn.ref }, argumentOf[Arg](params), '{ (_: R) => true }, total = true)
+            call[Arg, R](fn, argumentOf[Arg](params), '{ (_: R) => true }, total = true)
         val conclusion = if fails then '{ Prop.Not($returns) } else returns
         universal(idents, '{ Prop.Implies($premise, $conclusion) })
     }
+
+    /** `contract` with the guarantee that its function returns, or fails, where `when` holds
+      * ([[returnsOrFailsWhen]]), added under the contract's precondition.
+      */
+    def contractClause[Arg: Type, R: Type](
+        contract: Expr[Contract[Arg, R]],
+        when: Expr[Any],
+        fails: Boolean
+    )(using Quotes): Expr[Contract[Arg, R]] =
+        '{
+            val declared = $contract
+            declared.withClause(${
+                returnsOrFailsWhen[Arg, R]('{ declared.function }, when, fails)
+            })
+        }
 
     private val choiceHint =
         "An if or match that chooses between statements is not supported: state each case with " +

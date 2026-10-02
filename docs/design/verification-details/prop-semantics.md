@@ -95,18 +95,56 @@ spurious and is replayed without the budget. See overview §6.2 and
 
 ## 6. Contracts
 
-A contract of `f` (implemented as `Props.contract`, `Props.totalContract`) is
+A contract of `f` (implemented as `Props.contract`, with the optional clauses `returnsWhen` and
+`failsWhen`) is
 
 ```
-∀ args. expects(args) ⇒ whenReturns(f, args)(r => ensures(args)(r))      partial
-∀ args. expects(args) ⇒ call(f, args)(r => ensures(args)(r))             total
+∀ args. expects(args) ⇒   (returnsWhen(args) ⇒ succeeds(f, args))
+                         ∧ (failsWhen(args) ⇒ fails(f, args))
+                         ∧ whenReturns(f, args)(r => ensures(args)(r))
+```
+
+```scala
+contract(div10)(expects = x => true, ensures = x => r => r <= BigInt(10))
+    .returnsWhen(x => x != BigInt(0))
+    .failsWhen(x => x == BigInt(0))
 ```
 
 - **`expects` is an obligation of every caller, and an assumption of `f`.** Proving the contract
   assumes it; using the contract at a call site requires showing it there.
-- **`ensures` is a guarantee of `f`**, under `expects`. A caller may assume it about the result.
-- **Partial correctness is the default**: a contract says nothing about arguments on which `f`
-  fails. The total form also claims that `f` returns where `expects` holds.
+- **`ensures` is a guarantee about the result**, under `expects`. A caller may assume it of a
+  call that returned.
+- **`returnsWhen` and `failsWhen` are guarantees about the outcome.** Each is a sufficient
+  condition: where it holds, the function returns, or fails. They are not obligations, so a
+  caller owes nothing for them.
+- **Partial correctness is the default**: without `returnsWhen`, a contract does not say that `f`
+  ever returns. `Props.totalContract` is `returnsWhen = true`.
+
+The two outcome clauses divide the arguments that satisfy `expects`:
+
+| Arguments | The contract says |
+|---|---|
+| `returnsWhen` holds | `f` returns, and `ensures` holds of the result |
+| `failsWhen` holds | `f` fails |
+| neither | `f` may do either; if it returns, `ensures` holds |
+| both | impossible, so the contract is refuted |
+
+The clauses need not be each other's negation. The region where neither holds is left open on
+purpose; for a validator it is typically malformed input, which few specifications want to spell
+out. That a specification leaves no gap, `∀ args. expects ⇒ returnsWhen ∨ failsWhen`, is a
+statement about the clauses alone, which can be proved separately when it is wanted.
+
+The two are symmetric, and each equals a postcondition on the other outcome, by contraposition:
+
+```
+failsWhen = c      ≡   returns ⇒ ¬c      a postcondition on a run that returns
+returnsWhen = c    ≡   fails ⇒ ¬c        a postcondition on a run that fails
+```
+
+`ensures` is the clause for the first kind, so `failsWhen = c` can also be written
+`ensures = args => r => !c(args)`. There is no clause for the second kind, which is why only
+`returnsWhen` adds something a partial contract cannot say. A runtime `require(c)` in the body
+shows up as the first kind: the function returns only when `c` held.
 - **An entry point has no trusted caller.** A validator receives whatever a transaction
   supplies, so no one establishes its `expects`: a precondition there is an unsound assumption.
   A validator's contract has `expects = true`, and a condition the validator relies on is
@@ -236,7 +274,7 @@ So there is no duplication: a condition that must hold against adversarial input
 (behaviour, paid on chain); a condition that trusted callers establish is a `Spec.expects`
 (free on chain, checked off chain and by the verifier).
 
-### 8.3 Runtime checks in contracts: found, not written; `returnsWhen` and `failsWhen`
+### 8.3 Runtime checks in contracts: found, not written
 
 Should a contract mention a function's runtime checks, its `require`s?
 
@@ -247,49 +285,18 @@ Finding them is part of verification:
   obligation runs the callee's own program, so a callee's `require` already constrains what its
   callers are held to;
 - a modular tactic, which treats a callee abstractly, harvests them from SIR (§8.1): each
-  `require(c)` on a path gives the derived fact `succeeds(f(args)) ⇒ c`, and the verifier can
+  `require(c)` on a path gives the derived fact `succeeds(f, args) ⇒ c`, and the verifier can
   report the harvested condition, `checks(f, args)`, to the user.
 
-**Failure is already a statement.** `!denotes(e)` says that `e` does not return, and for a
-function `fails(f, args)` says it of a call (§3). `returnsWhen(f)(c)` and `failsWhen(f)(c)` state,
-as statements of their own, when a function is meant to return and when to fail; they are
-implemented.
+**What a contract states is the intention**, with `failsWhen` and `returnsWhen` (§6): what the
+function must reject, and what it must accept. For a validator the first is safety, nothing is
+spent without authorisation, and the second is liveness, authorised spends are not locked.
+Proving the contract checks the runtime checks, and every other way the function can fail,
+against that intention. The harvested `checks(f, args)` is what the verifier can suggest as a
+first draft of `failsWhen`: its negation.
 
-**Proposed: the same two as clauses of a contract**, next to `expects` and `ensures`, each a
-sufficient condition:
-
-```scala
-contract(withdraw)(
-  expects = (owner, amount, ctx) => true,          // an entry point has no trusted caller
-  returnsWhen = (owner, amount, ctx) => ctx.signedBy(owner) && amount <= ctx.balance,
-  failsWhen = (owner, amount, ctx) => !ctx.signedBy(owner),
-  ensures = (owner, amount, ctx) => r => …
-)
-```
-
-```
-∀ args. expects(args) ⇒   (returnsWhen(args) ⇒ succeeds(f, args))
-                         ∧ (failsWhen(args) ⇒ fails(f, args))
-                         ∧ whenReturns(f, args)(r => ensures(args)(r))
-```
-
-- **`failsWhen`** is what the function must reject. For a validator this is safety: nothing is
-  spent without authorisation. It is the stated counterpart of the runtime checks, and proving
-  it checks them against the intention.
-- **`returnsWhen`** is what the function must accept. For a validator this is liveness:
-  authorised spends are not locked.
-- **The two need not cover every argument.** Between them the contract says nothing, which
-  matters in practice: a validator's exact success condition includes every way its input can
-  fail to decode, and few specifications want to spell that out. Stating both with complementary
-  conditions, `failsWhen = !returnsWhen`, gives the exact characterisation. Conditions that
-  overlap make the contract unsatisfiable, and it is refuted.
-- **The existing forms are special cases.** A partial contract has neither clause; a total
-  contract is `returnsWhen = true`, so `totalContract` becomes shorthand.
-
-The clauses add nothing to what the standalone statements say, except that they hold under
-`expects` and belong to the function's contract. The pair corresponds to JML's
-`normal_behavior` and `exceptional_behavior` specification cases. The harvested
-`checks(f, args)` is what the verifier can suggest as a first draft of `failsWhen`: its negation.
+The pair corresponds to JML's `normal_behavior` and `exceptional_behavior` specification cases,
+and the gap check to ACSL's `complete behaviors`.
 
 ### 8.4 Validators
 
