@@ -123,18 +123,18 @@ so a call that fails satisfies it. `totalContract` also claims that the function
 A contract can also state when its function returns and when it fails:
 
 ```scala
+val div10 = FunctionDef.named("div10", (x: BigInt) => BigInt(10) / x)
 contract(div10)(expects = x => true, ensures = x => r => r <= BigInt(10))
     .returnsWhen(x => x != BigInt(0))
     .failsWhen(x => x == BigInt(0))
 ```
 
-Each clause is a sufficient condition, and arguments that satisfy neither are left open.
-`totalContract` is `returnsWhen = true`.
+Each clause is a sufficient condition, under `expects`, and arguments that satisfy neither are
+left open. `totalContract` is the contract with `.returnsWhen(_ => true)`.
 
 The same two exist as statements of their own:
 
 ```scala
-val div10 = FunctionDef.named("div10", (x: BigInt) => BigInt(10) / x)
 returnsWhen(div10)(x => x != BigInt(0))   // ∀ x. x ≠ 0 ==> succeeds(div10, x)
 failsWhen(div10)(x => x == BigInt(0))     // ∀ x. x = 0 ==> fails(div10, x)
 ```

@@ -116,9 +116,16 @@ contract(div10)(expects = x => true, ensures = x => r => r <= BigInt(10))
   call that returned.
 - **`returnsWhen` and `failsWhen` are guarantees about the outcome.** Each is a sufficient
   condition: where it holds, the function returns, or fails. They are not obligations, so a
-  caller owes nothing for them.
+  caller owes nothing for them. Like `ensures`, they hold under `expects`: a clause about
+  arguments that do not satisfy the precondition says nothing.
 - **Partial correctness is the default**: without `returnsWhen`, a contract does not say that `f`
-  ever returns. `Props.totalContract` is `returnsWhen = true`.
+  ever returns. `Props.totalContract` is the contract with `.returnsWhen(_ => true)`.
+- **An entry point has no trusted caller.** A validator receives whatever a transaction
+  supplies, so no one establishes its `expects`: a precondition there is an unsound assumption.
+  A validator's contract has `expects = true`, and a condition the validator relies on is
+  checked at runtime with `require`. What the validator guarantees is then stated with
+  `failsWhen` and `ensures`: "the script fails unless the transaction is signed by the
+  beneficiary".
 
 The two outcome clauses divide the arguments that satisfy `expects`:
 
@@ -137,19 +144,16 @@ statement about the clauses alone, which can be proved separately when it is wan
 The two are symmetric, and each equals a postcondition on the other outcome, by contraposition:
 
 ```
-failsWhen = c      ≡   returns ⇒ ¬c      a postcondition on a run that returns
-returnsWhen = c    ≡   fails ⇒ ¬c        a postcondition on a run that fails
+.failsWhen(c)      ≡   returns ⇒ ¬c      a postcondition on a run that returns
+.returnsWhen(c)    ≡   fails ⇒ ¬c        a postcondition on a run that fails
 ```
 
-`ensures` is the clause for the first kind, so `failsWhen = c` can also be written
-`ensures = args => r => !c(args)`. There is no clause for the second kind, which is why only
-`returnsWhen` adds something a partial contract cannot say. A runtime `require(c)` in the body
-shows up as the first kind: the function returns only when `c` held.
-- **An entry point has no trusted caller.** A validator receives whatever a transaction
-  supplies, so no one establishes its `expects`: a precondition there is an unsound assumption.
-  A validator's contract has `expects = true`, and a condition the validator relies on is
-  checked at runtime with `require`. What the validator guarantees is then an `ensures` on its
-  success: "if the script succeeds, the transaction is signed by the beneficiary".
+`ensures` is the clause for the first kind, so `.failsWhen(c)` can also be written as the
+postcondition `ensures = args => r => !Prop(c(args))`. The negation is of the statement, not
+inside the test (§4): where `c` itself fails to evaluate, `failsWhen` claims nothing, while a
+test `!c(args)` would fail and the contract with it. There is no clause for the second kind,
+which is why only `returnsWhen` adds something a partial contract cannot say. A runtime
+`require(c)` in the body shows up as the first kind: the function returns only when `c` held.
 
 ### Call-site obligations
 
@@ -220,7 +224,7 @@ object Math {
 - **`Spec.total`** (open, overview §10 question 2) would make the contract total.
 
 It means exactly the external contract `contract(clamp)(expects, ensures)` of §6, and is
-registered with `Origin.Contract(clamp, total)` when the function table is built from the
+registered with `Origin.Contract` when the function table is built from the
 object (see [function tables](prop-capture.md#function-tables-from-compile-objects-proposed)).
 
 ## 8. Design questions

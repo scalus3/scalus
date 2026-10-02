@@ -133,7 +133,7 @@ class PropTest extends AnyFunSuite {
           expects = (x, lo, hi) => lo <= hi,
           ensures = (x, lo, hi) => r => lo <= r && r <= hi
         )
-        assert(inRange.function == clamp.ref && !inRange.total)
+        assert(inRange.function == clamp.ref)
         inRange.prop match
             case Prop.Forall(
                   x,
@@ -165,7 +165,7 @@ class PropTest extends AnyFunSuite {
           expects = x => x != BigInt(0),
           ensures = x => r => r * x <= BigInt(10)
         )
-        assert(total.function == div10.ref && total.total)
+        assert(total.function == div10.ref)
         total.prop match
             case Prop.Forall(_, Prop.Implies(_, Prop.Call(fn, _, _, true, _))) =>
                 assert(fn == div10.ref)
@@ -202,7 +202,7 @@ class PropTest extends AnyFunSuite {
         val specified = contract(div10)(expects = x => true, ensures = x => r => r <= BigInt(10))
             .returnsWhen(x => x != BigInt(0))
             .failsWhen(x => x == BigInt(0))
-        assert(specified.function == div10.ref && !specified.total)
+        assert(specified.function == div10.ref)
         specified.prop match
             case Prop.Forall(
                   x,
@@ -212,19 +212,24 @@ class PropTest extends AnyFunSuite {
                       // the function fails where the second clause's condition holds
                       Prop.Implies(
                         Prop.Bool(PropExpr.SIRExpr(failing)),
-                        Prop.Not(_: Prop.Call[?, ?])
+                        Prop.Not(Prop.Call(_, PropExpr.SIRExpr(failingArgument), _, true, _))
                       ),
                       Prop.And(
                         // and returns where the first one's does
-                        Prop.Implies(Prop.Bool(PropExpr.SIRExpr(returning)), _: Prop.Call[?, ?]),
+                        Prop.Implies(
+                          Prop.Bool(PropExpr.SIRExpr(returning)),
+                          Prop.Call(_, PropExpr.SIRExpr(returningArgument), _, true, _)
+                        ),
                         Prop.Call(_, _, _, false, _)
                       )
                     )
                   )
                 ) =>
                 // Each clause names its own variable; both are renamed after the contract's.
-                assert(failing.toString.contains(x.name), failing)
-                assert(returning.toString.contains(x.name), returning)
+                // in its condition and in the argument of its call.
+                List(failing, failingArgument, returning, returningArgument).foreach(sir =>
+                    assert(sir.toString.contains(x.name), sir)
+                )
             case other =>
                 fail(s"expected expects ==> fails-clause && returns-clause && ensures, got $other")
 
@@ -234,6 +239,15 @@ class PropTest extends AnyFunSuite {
         ).returnsWhen((x, lo, hi) => true).prop match
             case Prop.Forall(_, Prop.Forall(_, Prop.Forall(_, Prop.Implies(_, Prop.And(_, _))))) =>
             case other => fail(s"expected a clause over three variables, got $other")
+    }
+
+    test("a contract's clauses resolve without importing Props") {
+        val errors = scala.compiletime.testing.typeCheckErrors(
+          """import scalus.verify.Contract
+             def more(declared: Contract[BigInt, BigInt]): Contract[BigInt, BigInt] =
+                 declared.returnsWhen(x => x > BigInt(0)).failsWhen(x => x == BigInt(0))"""
+        )
+        assert(errors.isEmpty, errors)
     }
 
     test("succeeds and fails of an expression are denotes and its negation") {

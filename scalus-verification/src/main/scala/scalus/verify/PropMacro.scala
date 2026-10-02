@@ -172,7 +172,7 @@ private[verify] object PropMacro {
     }
 
     /** `∀ args. expects(args) ==> whenReturns(fn, args)(r => ensures(args)(r))`, or a total `call`
-      * in place of `whenReturns` (design doc §3.7), with the function and its totality.
+      * in place of `whenReturns` (design doc §3.7), as a [[Contract]].
       *
       * The arguments are the parameters of `expects`, whose types the overload of `Props.contract`
       * fixed. `ensures` names its own parameters, and its leaves were compiled before this macro,
@@ -215,11 +215,14 @@ private[verify] object PropMacro {
               .zip(params.map(param => variableName(param.symbol)))
               .toMap
         )
-        val prop = universal(
-          idents,
-          '{ Prop.Implies($precondition, Props.renameVariables($call, $renames)) }
-        )
-        '{ Contract[Arg, R]($fn.ref, ${ Expr(total) }, $prop) }
+        '{
+            Contract.of[Arg, R](
+              $fn.ref,
+              ${ Expr.ofList(idents) },
+              $precondition,
+              List(Props.renameVariables($call, $renames))
+            )
+        }
     }
 
     /** A function's argument from the parameters of a lambda that stand for it: the parameter
@@ -248,19 +251,15 @@ private[verify] object PropMacro {
         when: Expr[Any],
         fails: Boolean
     )(using Quotes): Expr[Prop] = {
-        import quotes.reflect.*
-        val kind = if fails then "failsWhen" else "returnsWhen"
-        val (params, condition) = lambdaOf(when.asTerm, None, s"$kind requires a lambda literal")
-        val premise = statementOf(condition, params.map(_.symbol).toSet, kind)
-        val idents = params.map(param => ident(param.symbol, param.pos, param.tpt.tpe.asType))
-        val returns =
-            call[Arg, R](fn, argumentOf[Arg](params), '{ (_: R) => true }, total = true)
-        val conclusion = if fails then '{ Prop.Not($returns) } else returns
-        universal(idents, '{ Prop.Implies($premise, $conclusion) })
+        val (params, outcome) = outcomeWhen[Arg, R](fn, when, fails)
+        universal(
+          params.map(param => ident(param.symbol, param.pos, param.tpt.tpe.asType)),
+          outcome
+        )
     }
 
-    /** `contract` with the guarantee that its function returns, or fails, where `when` holds
-      * ([[returnsOrFailsWhen]]), added under the contract's precondition.
+    /** `contract` with the guarantee that its function returns, or fails, where `when` holds. The
+      * guarantee names the arguments after the parameters of `when`; the contract renames them.
       */
     def contractClause[Arg: Type, R: Type](
         contract: Expr[Contract[Arg, R]],
@@ -269,10 +268,32 @@ private[verify] object PropMacro {
     )(using Quotes): Expr[Contract[Arg, R]] =
         '{
             val declared = $contract
-            declared.withClause(${
-                returnsOrFailsWhen[Arg, R]('{ declared.function }, when, fails)
-            })
+            ${
+                val (params, outcome) = outcomeWhen[Arg, R]('{ declared.function }, when, fails)
+                val names = Expr(params.map(param => variableName(param.symbol)))
+                '{ declared.withClause($names, $outcome) }
+            }
         }
+
+    /** The parameters of the lambda literal `when`, and `when ==> succeeds(fn, parameters)` or
+      * `when ==> fails(fn, parameters)` over them.
+      */
+    private def outcomeWhen[Arg: Type, R: Type](using
+        Quotes
+    )(
+        fn: Expr[FunctionRef[Arg, R]],
+        when: Expr[Any],
+        fails: Boolean
+    ): (List[quotes.reflect.ValDef], Expr[Prop]) = {
+        import quotes.reflect.*
+        val kind = if fails then "failsWhen" else "returnsWhen"
+        val (params, condition) = lambdaOf(when.asTerm, None, s"$kind requires a lambda literal")
+        val premise = statementOf(condition, params.map(_.symbol).toSet, kind)
+        val returns =
+            call[Arg, R](fn, argumentOf[Arg](params), '{ (_: R) => true }, total = true)
+        val conclusion = if fails then '{ Prop.Not($returns) } else returns
+        params -> '{ Prop.Implies($premise, $conclusion) }
+    }
 
     private val choiceHint =
         "An if or match that chooses between statements is not supported: state each case with " +

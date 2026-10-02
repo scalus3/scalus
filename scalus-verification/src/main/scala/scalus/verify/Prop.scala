@@ -73,49 +73,98 @@ enum Prop {
     infix def iff(q: Prop): Prop = Iff(this, q)
 }
 
-/** The contract of a function, built by [[Props.contract]] or [[Props.totalContract]]: the
-  * statement `prop`, and the function and totality it is about. [[Verifier.contract]] declares it.
+/** The contract of a function, built by [[Props.contract]] or [[Props.totalContract]], and declared
+  * with [[Verifier.contract]].
   *
-  * `prop` is `∀ args. expects(args) ==> guarantees(args)`. [[Props.returnsWhen]] and
-  * [[Props.failsWhen]] on a contract add a guarantee: where a condition holds, the function
-  * returns, or fails.
+  * It says `∀ variables. expects ==> guarantees`: `variables` stand for the function's arguments,
+  * `expects` is what every caller must establish, and `guarantees` is what the function then
+  * provides, the postcondition last. `returnsWhen` and `failsWhen` on a contract add a guarantee:
+  * where a condition holds, the function returns, or fails. A contract is built only by those
+  * forms, so it always has this shape.
   */
-final case class Contract[A, R](function: FunctionRef[A, R], total: Boolean, prop: Prop) {
+final class Contract[A, R] private[verify] (
+    val function: FunctionRef[A, R],
+    val variables: List[PropExpr.Ident[?]],
+    val expects: Prop,
+    val guarantees: List[Prop]
+) {
 
-    /** This contract with one more guarantee under its precondition. `clause` is a statement over
-      * as many quantified variables as the contract has, `∀ args. guarantee(args)`; its variables
-      * are renamed after the contract's.
+    /** The contract as one statement. */
+    def prop: Prop =
+        variables.foldRight(Prop.Implies(expects, guarantees.reduceRight(Prop.And(_, _)))) {
+            case (variable: PropExpr.Ident[t], inner) => Prop.Forall[t](variable, inner)
+        }
+
+    /** This contract with one more guarantee. `guarantee` speaks of the arguments under `names`, in
+      * order, which are renamed after the contract's variables.
       */
-    private[verify] def withClause(clause: Prop): Contract[A, R] = {
-        val (variables, body) = Contract.quantified(prop)
-        val (clauseVariables, guarantee) = Contract.quantified(clause)
-        require(
-          variables.size == clauseVariables.size,
-          s"a clause over ${clauseVariables.size} variables for a contract over ${variables.size}"
+    private[verify] def withClause(names: List[String], guarantee: Prop): Contract[A, R] =
+        new Contract(
+          function,
+          variables,
+          expects,
+          Props.renameVariables(guarantee, names.zip(variables.map(_.name)).toMap) :: guarantees
         )
-        val renamed = Props.renameVariables(
-          guarantee,
-          clauseVariables.map(_.name).zip(variables.map(_.name)).toMap
-        )
-        val combined = body match
-            case Prop.Implies(expects, guarantees) =>
-                Prop.Implies(expects, Prop.And(renamed, guarantees))
-            case other =>
-                throw new IllegalStateException(s"a contract is expects ==> guarantees: $other")
-        copy(prop = variables.foldRight(combined) { case (variable: PropExpr.Ident[t], inner) =>
-            Prop.Forall[t](variable, inner)
-        })
-    }
+
+    override def toString: String = s"Contract(${function.name})"
 }
 
+/** The clauses that state a contract's outcome. They are extensions here, in the contract's own
+  * scope, so `contract.returnsWhen(...)` needs no import.
+  */
 object Contract {
 
-    /** The leading universal quantifiers of a statement, and what they quantify. */
-    private def quantified(prop: Prop): (List[PropExpr.Ident[?]], Prop) = prop match
-        case Prop.Forall(variable, body) =>
-            val (rest, inner) = quantified(body)
-            (variable :: rest) -> inner
-        case other => Nil -> other
+    /** The constructor, for the code the contract macro generates. */
+    private[verify] def of[A, R](
+        function: FunctionRef[A, R],
+        variables: List[PropExpr.Ident[?]],
+        expects: Prop,
+        guarantees: List[Prop]
+    ): Contract[A, R] = new Contract(function, variables, expects, guarantees)
+
+    extension [A, R](contract: Contract[A, R]) {
+
+        /** The function returns on every argument that satisfies the precondition and `when`. With
+          * [[failsWhen]] it states which outcome the function has; arguments that satisfy neither
+          * condition are left open. `returnsWhen(_ => true)` makes the contract total.
+          *
+          * {{{
+          * contract(div10)(expects = x => true, ensures = x => r => r <= BigInt(10))
+          *     .returnsWhen(x => x != BigInt(0))
+          *     .failsWhen(x => x == BigInt(0))
+          * }}}
+          */
+        inline def returnsWhen(inline when: A => Prop | Boolean): Contract[A, R] =
+            ${ PropMacro.contractClause('contract, 'when, false) }
+
+        /** The function fails on every argument that satisfies the precondition and `when`. */
+        inline def failsWhen(inline when: A => Prop | Boolean): Contract[A, R] =
+            ${ PropMacro.contractClause('contract, 'when, true) }
+    }
+
+    extension [A, B, R](contract: Contract[(A, B), R]) {
+
+        /** [[returnsWhen]] for a function of two parameters. */
+        inline def returnsWhen(inline when: (A, B) => Prop | Boolean): Contract[(A, B), R] =
+            ${ PropMacro.contractClause('contract, 'when, false) }
+
+        /** [[failsWhen]] for a function of two parameters. */
+        inline def failsWhen(inline when: (A, B) => Prop | Boolean): Contract[(A, B), R] =
+            ${ PropMacro.contractClause('contract, 'when, true) }
+    }
+
+    extension [A, B, C, R](contract: Contract[(A, B, C), R]) {
+
+        /** [[returnsWhen]] for a function of three parameters. */
+        inline def returnsWhen(
+            inline when: (A, B, C) => Prop | Boolean
+        ): Contract[(A, B, C), R] = ${ PropMacro.contractClause('contract, 'when, false) }
+
+        /** [[failsWhen]] for a function of three parameters. */
+        inline def failsWhen(
+            inline when: (A, B, C) => Prop | Boolean
+        ): Contract[(A, B, C), R] = ${ PropMacro.contractClause('contract, 'when, true) }
+    }
 }
 
 object Props {
@@ -326,41 +375,6 @@ object Props {
         fn: FunctionDef[(A, B, C), R]
     )(inline when: (A, B, C) => Prop | Boolean): Prop =
         ${ PropMacro.returnsOrFailsWhen('{ fn.ref }, 'when, true) }
-
-    /** A contract of a function of one parameter, with one more guarantee: the function returns on
-      * every argument that satisfies the precondition and `when`. Together with [[failsWhen]] it
-      * states which outcome the function has; arguments that satisfy neither are left open.
-      *
-      * {{{
-      * contract(div10)(expects = x => true, ensures = x => r => r <= BigInt(10))
-      *     .returnsWhen(x => x != BigInt(0))
-      *     .failsWhen(x => x == BigInt(0))
-      * }}}
-      */
-    extension [A, R](contract: Contract[A, R]) {
-        inline def returnsWhen(inline when: A => Prop | Boolean): Contract[A, R] =
-            ${ PropMacro.contractClause('contract, 'when, false) }
-
-        /** The function fails on every argument that satisfies the precondition and `when`. */
-        inline def failsWhen(inline when: A => Prop | Boolean): Contract[A, R] =
-            ${ PropMacro.contractClause('contract, 'when, true) }
-    }
-
-    extension [A, B, R](contract: Contract[(A, B), R]) {
-        inline def returnsWhen(inline when: (A, B) => Prop | Boolean): Contract[(A, B), R] =
-            ${ PropMacro.contractClause('contract, 'when, false) }
-        inline def failsWhen(inline when: (A, B) => Prop | Boolean): Contract[(A, B), R] =
-            ${ PropMacro.contractClause('contract, 'when, true) }
-    }
-
-    extension [A, B, C, R](contract: Contract[(A, B, C), R]) {
-        inline def returnsWhen(
-            inline when: (A, B, C) => Prop | Boolean
-        ): Contract[(A, B, C), R] = ${ PropMacro.contractClause('contract, 'when, false) }
-        inline def failsWhen(
-            inline when: (A, B, C) => Prop | Boolean
-        ): Contract[(A, B, C), R] = ${ PropMacro.contractClause('contract, 'when, true) }
-    }
 
     /** `prop` with the statement variables in `names` renamed, in its expressions and binders. */
     private[verify] def renameVariables(prop: Prop, names: Map[String, String]): Prop = {

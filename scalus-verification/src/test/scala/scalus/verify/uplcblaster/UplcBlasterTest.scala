@@ -489,18 +489,22 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
 
     test("a contract states when its function returns and when it fails") {
         def base = contract(div10)(expects = x => true, ensures = x => r => r <= BigInt(10))
-        proven(
-          base.returnsWhen(x => x > BigInt(0)).failsWhen(x => x == BigInt(0)).prop,
+        val specified = base.returnsWhen(x => x != BigInt(0)).failsWhen(x => x == BigInt(0))
+        // The two clauses call div10 with the same program, which is one leaf: the precondition,
+        // each clause's condition, that call, and the two leaves of the partial postcondition.
+        assert(lowered(specified.prop, FunctionTable(div10)).leaves.size == 6)
+        proven(specified.prop, 80, div10)
+
+        // negative controls, one per clause, each next to a clause that holds: a contract keeps
+        // every clause it was given
+        refuted(
+          base.returnsWhen(x => x != BigInt(0)).failsWhen(x => x >= BigInt(0)).prop,
           80,
           div10
         )
-        // negative controls: div10 fails at 0, and returns on a positive x
-        refuted(base.returnsWhen(x => true).prop, 80, div10)
-        refuted(base.failsWhen(x => x >= BigInt(0)).prop, 80, div10)
-        // Clauses that overlap cannot both hold: at 0 the function would return and fail.
         refuted(base.returnsWhen(x => true).failsWhen(x => x == BigInt(0)).prop, 80, div10)
 
-        // returnsWhen = true is the total contract
+        // returnsWhen(_ => true) is the total contract
         val clamp = FunctionDef(Math.clamp)
         proven(
           contract(clamp)(
