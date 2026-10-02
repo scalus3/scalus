@@ -359,6 +359,10 @@ Both forms elaborate to the same statement, with `f` bound to the target:
   For a validator handler it is exactly "if the script succeeds, `P` holds", because rejection
   *is* an error. Totality is a separate, explicit clause (`spec.total`, or `totalContract`), which
   adds `expects(args) ⇒ denotes(f(args))`.
+- **The outcome can be stated by region.** `contract(…).returnsWhen(c)` says that `f` returns
+  where `c` holds, and `.failsWhen(c)` that it fails there; arguments that satisfy neither are
+  left open. Total is `returnsWhen = true`. See
+  [statement semantics](verification-details/prop-semantics.md#6-contracts).
 - **In-body clauses cost nothing on-chain.** They are erased before the code reaches UPLC. On
   `feature/verification-blaster`, `VestingValidator` compiled to the same 2046 bytes and the same
   script hash with and without them. That was measured on an older master and needs re-checking.
