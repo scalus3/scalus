@@ -133,6 +133,30 @@ failsWhen(div10)(x => x == BigInt(0))     // ∀ x. x = 0 ==> fails(div10, x)
 expression, `succeeds(e)` is `denotes(e)` and `fails(e)` is `!denotes(e)`: its evaluation ends in
 an error, as in `fails(BigInt(10) / x)` or `fails { require(x >= 0); x * 2 }`.
 
+### Call-site obligations
+
+A precondition is an obligation of every caller. `verifier.obligations` declares it for each call
+of a function with a contract, as a statement to prove:
+
+```scala
+@Compile
+object Vault {
+    def bounded(x: BigInt, lo: BigInt, hi: BigInt): BigInt =
+        if lo <= hi then Math.clamp(x, lo, hi) else lo
+}
+
+val bounded = FunctionDef(Vault.bounded)
+verifier.addFunction(bounded)
+val CallObligations(statements, unsupported) = verifier.obligations(bounded.ref)
+statements.foreach(owed => verifier.verify(owed, UplcBlaster(budget = 120))) // Proven
+```
+
+The statement says: where the call is reached, its arguments satisfy the callee's `expects`. It is
+proved here because the branch establishes `lo <= hi`; `Math.clamp(x, 10, 0)` would be refuted.
+A runtime `require(lo <= hi)` before the call establishes it as well, and so does the caller's own
+contract, with `verifier.obligations(contractOfBounded)`. Calls inside function values are listed
+in `unsupported`, not checked.
+
 ## Running
 
 ```bash
