@@ -418,6 +418,19 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         refuted(forAll[Data](d => denotes(d.to[BlasterPair])), budget = 160)
     }
 
+    test("states that an expression fails, whatever its type") {
+        // A builtin that fails: unBData of an I value, for every x.
+        proven(forAll[BigInt](x => fails(Builtins.unBData(Builtins.iData(x)))), budget = 60)
+        proven(forAll[BigInt](x => (x == BigInt(0)) ==> fails(BigInt(10) / x)), budget = 40)
+        proven(
+          forAll[BigInt](x => (x < BigInt(0)) ==> fails { require(x >= BigInt(0)); x * BigInt(2) }),
+          budget = 80
+        )
+        proven(forAll[BigInt](x => (x != BigInt(0)) ==> succeeds(BigInt(10) / x)), budget = 40)
+        // A comparison returns a Boolean on every input: it never fails.
+        refuted(forAll[BigInt](x => fails(x > BigInt(0))), budget = 40)
+    }
+
     test("states when a function returns and when it fails") {
         proven(returnsWhen(div10)(x => x != BigInt(0)), 60, div10)
         proven(failsWhen(div10)(x => x == BigInt(0)), 60, div10)

@@ -223,13 +223,27 @@ object Props {
         inline ensures: (A, B, C) => R => Prop | Boolean
     ): Contract = ${ PropMacro.contract('fn, 'expects, 'ensures, true) }
 
-    /** `fn` applied to `arg` returns: the total call `call(fn, arg)(_ => true)`. */
+    /** `e` returns a value: [[denotes]], under the name that pairs with [[fails]]. */
+    inline def succeeds[A](inline e: A): Prop = denotes(e)
+
+    /** `e` does not return a value: `!denotes(e)`. It is about how the evaluation of `e` ends, not
+      * about a Boolean it returns: `fails(x > 0)` holds for no `x`. A bounded tactic proves it by
+      * showing that `e` fails within its budget, which it tells apart from an exhausted one.
+      *
+      * {{{
+      * forAll[BigInt](x => (x == BigInt(0)) ==> fails(BigInt(10) / x))
+      * forAll[BigInt](x => (x < BigInt(0)) ==> fails { require(x >= BigInt(0)); x * BigInt(2) })
+      * }}}
+      */
+    inline def fails[A](inline e: A): Prop = !denotes(e)
+
+    /** `fn` applied to `arg` returns: the total call `call(fn, arg)(_ => true)`. It is [[succeeds]]
+      * of an expression for a function in the table, which runs its own program.
+      */
     inline def succeeds[A, R](fn: FunctionDef[A, R], inline arg: A): Prop =
         call(fn, arg)(_ => true)
 
-    /** `fn` applied to `arg` does not return: `!succeeds(fn, arg)`. A bounded tactic proves it by
-      * showing that the call fails within its budget, which it tells apart from an exhausted one.
-      */
+    /** `fn` applied to `arg` does not return: `!succeeds(fn, arg)`. */
     inline def fails[A, R](fn: FunctionDef[A, R], inline arg: A): Prop = !succeeds(fn, arg)
 
     /** A function of one parameter returns on every argument that satisfies `when`:

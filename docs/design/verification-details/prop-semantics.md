@@ -28,8 +28,10 @@ written explicitly: `forAll[Data](d => …)`, with `d.to[A]` where the program d
 
 - **A test holds iff its program returns `true`.** The program is the test compiled to UPLC and
   evaluated with on-chain semantics. A test that fails or does not terminate does not hold.
-- **`denotes(e)` holds iff `e` returns,** with any value. It is the only way to state that code
-  succeeds, or, negated, that it fails.
+- **`denotes(e)` holds iff `e` returns,** with any value. `succeeds(e)` is the same statement,
+  and `fails(e)` is its negation, `!denotes(e)`: the evaluation of `e` ends in an error. They are
+  about how the evaluation ends, whatever the type of `e`: `fails(x > 0)` holds for no `x`,
+  because a comparison always returns a Boolean.
 - **`equal(a, b)` holds iff both return and the values are equal**: `equalsInteger`,
   `equalsData`, or Boolean equality.
 
@@ -46,7 +48,8 @@ error anywhere makes the whole test fail.
 A call runs the function's own compiled program, not a copy compiled with the test; how values
 cross that boundary is in [the tactic's calling convention](uplc-blaster.md#linking).
 
-Four forms are syntax over the total call, with no node of their own:
+`succeeds` and `fails` (§2) also take a function of the table and its argument, and two more
+forms quantify over a function's arguments. All are syntax, with no node of their own:
 
 | Written | Means |
 |---|---|
@@ -55,7 +58,11 @@ Four forms are syntax over the total call, with no node of their own:
 | `returnsWhen(f)(args => c)` | `∀ args. c ==> succeeds(f, args)` |
 | `failsWhen(f)(args => c)` | `∀ args. c ==> fails(f, args)` |
 
-`fails` holds of a call that does not return, which by its meaning includes one that never
+The function forms exist because a function registered under a synthetic name has no Scala
+symbol to write in an expression; for an `@Compile` method, `fails(Math.sqrt(x))` and a call form
+say the same, and both run the registered program.
+
+`fails` holds of an evaluation that does not return, which by its meaning includes one that never
 terminates. A bounded tactic proves the stronger fact, that the call fails within the budget,
 and tells that apart from a budget that runs out (§5). `!Prop(t)` is a different statement: it
 also holds when the test `t` returns `false`.

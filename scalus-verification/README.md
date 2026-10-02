@@ -129,7 +129,9 @@ failsWhen(div10)(x => x == BigInt(0))     // ∀ x. x = 0 ==> fails(div10, x)
 ```
 
 `succeeds(f, a)` is the total call `call(f, a)(_ => true)`, and `fails(f, a)` is its negation.
-`failsWhen` states what a function must reject, which its runtime `require`s implement.
+`failsWhen` states what a function must reject, which its runtime `require`s implement. For any
+expression, `succeeds(e)` is `denotes(e)` and `fails(e)` is `!denotes(e)`: its evaluation ends in
+an error, as in `fails(BigInt(10) / x)` or `fails { require(x >= 0); x * 2 }`.
 
 ## Running
 

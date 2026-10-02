@@ -198,6 +198,16 @@ class PropTest extends AnyFunSuite {
         assert(!errors.exists(_.message.contains("outside the scope")), errors)
     }
 
+    test("succeeds and fails of an expression are denotes and its negation") {
+        succeeds(BigInt(7) / BigInt(2)) match
+            case Prop.Denotes(PropExpr.SIRExpr(_)) =>
+            case other                             => fail(s"expected denotes, got $other")
+        forAll[BigInt](x => fails(BigInt(10) / x)) match
+            case Prop.Forall(x, Prop.Not(Prop.Denotes(PropExpr.SIRExpr(body)))) =>
+                assert(body.toString.contains(x.name), body)
+            case other => fail(s"expected a negated denotes under a quantifier, got $other")
+    }
+
     test("succeeds, fails, returnsWhen and failsWhen are syntax over a total call") {
         succeeds(div10, BigInt(2)) match
             case Prop.Call(fn, _, _, true, Prop.Bool(_)) => assert(fn == div10.ref)
