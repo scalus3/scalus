@@ -343,7 +343,8 @@ verifier.verify(clampInRange, UplcBlaster(budget = 120)) // Proven
 ```
 
 `Props.contract` builds the statement below, with `whenReturns`; `Props.totalContract` builds it
-with `call`. Both return a `Contract`: the statement, and the function and totality it is about.
+with `call`. Both return a `Contract`: the function, its variables, the precondition and the
+guarantees, from which its statement is derived.
 `verifier.contract` registers it as the function's contract (`Origin.Contract`), and
 `verifier.contracts(clamp.ref)` finds it. The parameters must
 be quantifiable. How the two lambdas come to speak of the same variables is in
@@ -361,7 +362,7 @@ Both forms elaborate to the same statement, with `f` bound to the target:
   adds `expects(args) ⇒ denotes(f(args))`.
 - **The outcome can be stated by region.** `contract(…).returnsWhen(c)` says that `f` returns
   where `c` holds, and `.failsWhen(c)` that it fails there; arguments that satisfy neither are
-  left open. Total is `returnsWhen = true`. See
+  left open. A total contract is `.returnsWhen(_ => true)`. See
   [statement semantics](verification-details/prop-semantics.md#6-contracts).
 - **In-body clauses cost nothing on-chain.** They are erased before the code reaches UPLC. On
   `feature/verification-blaster`, `VestingValidator` compiled to the same 2046 bytes and the same
@@ -557,7 +558,7 @@ enum TargetRef:
 
 enum Origin:
     case Explicit                                // statement(...) / refute(...)
-    case Contract(function: FunctionRef[?, ?], total: Boolean) // contract(f)(...); later spec.*
+    case Contract(contract: Contract[?, ?])      // contract(f)(...); later Spec.* clauses
     case Harvested                               // from a `require` (§8.4)
 
 final case class Statement(

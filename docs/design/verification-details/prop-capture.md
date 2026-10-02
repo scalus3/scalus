@@ -169,14 +169,17 @@ names. So the macro cannot rename them in the tree. It emits `Props.renameVariab
 renames `ensures`' variables after those of `expects` in the built statement at runtime, in its
 SIR and its binders.
 
-`contract.returnsWhen(args => c)` and `contract.failsWhen(args => c)` add a guarantee. The
-clause is built as the standalone statement `∀ args. c ==> succeeds(f, args)`, or `fails`, with
-its own variables. `Contract.withClause` then renames them after the contract's and puts the
-clause under the contract's precondition, at runtime, for the same reason as above.
+The macro returns a `Contract`, which keeps its parts: the function, the variables, the
+precondition and the list of guarantees. Its statement, `prop`, is derived from them, so nothing
+has to take a contract's statement apart again.
 
-The macro returns a `Contract`: the statement, with the function and totality it already knows.
-`Verifier.contract(name, contract)` records `Origin.Contract(f, total)` from it, so a statement
-that is not a contract cannot be declared as one; `Verifier.contracts(f)` lists them.
+`contract.returnsWhen(args => c)` and `contract.failsWhen(args => c)` add a guarantee,
+`c ==> succeeds(f, args)` or `c ==> fails(f, args)`, written over the clause's own variables.
+`Contract.withClause` renames them after the contract's, at runtime, for the same reason as
+above. The two are extensions in `Contract`'s companion, so they need no import.
+
+`Verifier.contract(name, contract)` records `Origin.Contract(contract)`, so a statement that is
+not a contract cannot be declared as one; `Verifier.contracts(f)` lists them.
 
 ## Function references
 

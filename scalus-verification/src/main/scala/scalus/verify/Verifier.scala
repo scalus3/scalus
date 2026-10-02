@@ -13,10 +13,8 @@ enum Origin {
     /** Declared with [[Verifier.statement]]. */
     case Explicit
 
-    /** The contract of `function`, declared with [[Verifier.contract]]. A total one claims that the
-      * function returns where its precondition holds.
-      */
-    case Contract(function: FunctionRef[?, ?], total: Boolean)
+    /** A function's contract, declared with [[Verifier.contract]]. */
+    case Contract(contract: scalus.verify.Contract[?, ?])
 
     /** What a call of `callee` in the code of `caller`, at `line` of its source file, owes to the
       * callee's contract named `contract`: its arguments satisfy the precondition. Declared with
@@ -131,14 +129,14 @@ final class Verifier private () {
       * It is proved like any statement, and [[contracts]] finds it by its function.
       */
     def contract(name: String, contract: Contract[?, ?]): Statement =
-        declare(name, contract.prop, Origin.Contract(contract.function, contract.total))
+        declare(name, contract.prop, Origin.Contract(contract))
 
     /** The contracts declared for `function`, by name. */
     def contracts(function: FunctionRef[?, ?]): List[Statement] =
         declarations.values
             .filter(_.origin match
-                case Origin.Contract(of, _) => of == function
-                case _                      => false)
+                case Origin.Contract(contract) => contract.function == function
+                case _                         => false)
             .toList
             .sortBy(_.name)
 
@@ -153,13 +151,13 @@ final class Verifier private () {
       * precondition holds: the calling function may assume what its callers establish.
       */
     def obligations(callerContract: Statement): CallObligations = callerContract.origin match
-        case Origin.Contract(caller, _) => declareObligations(caller, Some(callerContract))
+        case Origin.Contract(contract) => declareObligations(contract.function, Some(contract))
         case _ =>
             throw new IllegalArgumentException(s"${callerContract.name} is not a contract")
 
     private def declareObligations(
         caller: FunctionRef[?, ?],
-        premise: Option[Statement]
+        premise: Option[Contract[?, ?]]
     ): CallObligations = {
         val definition = functionTable(caller)
         val body = Obligations.body(definition, definition(Representation.Sir))
@@ -167,30 +165,28 @@ final class Verifier private () {
             .sortBy(_.name)
             .flatMap(statement =>
                 statement.origin match
-                    case Origin.Contract(function, _) =>
-                        Verifier
-                            .contractParts(statement.prop)
-                            .map(parts => (function, statement, parts))
-                    case _ => None
+                    case Origin.Contract(contract) => Some(statement -> contract)
+                    case _                         => None
             )
-            .groupBy(_._1.name)
-        val arities = contracts.map((name, declared) => name -> declared.head._3._1.size)
+            .groupBy(_._2.function.name)
+        val arities = contracts.map((name, declared) => name -> declared.head._2.variables.size)
         val parameters = body.parameters.zipWithIndex.map((parameter, index) =>
             new PropExpr.Ident[Any](parameter.name, index.toLong, parameter.tp)
         )
-        val assumed = premise.flatMap(statement => Verifier.contractParts(statement.prop)).map {
-            (variables, precondition) =>
-                Props.renameVariables(
-                  precondition,
-                  variables.map(_.name).zip(body.parameters.map(_.name)).toMap
-                )
-        }
+        val assumed = premise.map(contract =>
+            Props.renameVariables(
+              contract.expects,
+              contract.variables.map(_.name).zip(body.parameters.map(_.name)).toMap
+            )
+        )
         val statements = List.newBuilder[Statement]
         val unsupported = List.newBuilder[String]
         for
             ((site, inLambda), index) <- Obligations.sites(body.term, arities).zipWithIndex
-            (callee, contract, (variables, precondition)) <- contracts(site.callee)
+            (declared, contract) <- contracts(site.callee)
         do
+            val callee = contract.function
+            val variables = contract.variables
             val line = Obligations.line(site)
             val where = s"${caller.displayName} calls ${callee.displayName} at line $line"
             def cut(atSite: SIR): Option[SIR] =
@@ -201,7 +197,7 @@ final class Verifier private () {
                       Obligations.bind(variables, site.arguments, atSite)
                     )
                     .map(sliced => body.wrappers.foldLeft(sliced)((inner, wrap) => wrap(inner)))
-            (precondition, inLambda) match
+            (contract.expects, inLambda) match
                 case (_, true) =>
                     unsupported += s"$where inside a function value, which is not supported"
                 case (Prop.Bool(PropExpr.SIRExpr(expects)), false) =>
@@ -216,13 +212,13 @@ final class Verifier private () {
                         case Some(owed) =>
                             val guarded = assumed.fold(owed)(Prop.Implies(_, owed))
                             statements += declare(
-                              s"${caller.displayName}/${contract.name}#${index + 1}",
+                              s"${caller.displayName}/${declared.name}#${index + 1}",
                               parameters.foldRight[Prop](guarded)(Prop.Forall(_, _)),
-                              Origin.Obligation(caller, callee, contract.name, line)
+                              Origin.Obligation(caller, callee, declared.name, line)
                             )
                         case None => unsupported += s"$where: the call was not found on a path"
                 case _ =>
-                    unsupported += s"$where: the precondition of ${contract.name} is a " +
+                    unsupported += s"$where: the precondition of ${declared.name} is a " +
                         "statement, not a Boolean test, which is not supported"
         CallObligations(statements.result(), unsupported.result())
     }
@@ -292,19 +288,4 @@ final class Verifier private () {
 
 object Verifier {
     def empty: Verifier = new Verifier()
-
-    /** The quantified variables of a contract's statement and its precondition:
-      * `∀ variables. precondition ==> …`.
-      */
-    private def contractParts(prop: Prop): Option[(List[PropExpr.Ident[?]], Prop)] = {
-        @annotation.tailrec
-        def loop(
-            current: Prop,
-            variables: List[PropExpr.Ident[?]]
-        ): Option[(List[PropExpr.Ident[?]], Prop)] = current match
-            case Prop.Forall(variable, body)   => loop(body, variable :: variables)
-            case Prop.Implies(precondition, _) => Some(variables.reverse -> precondition)
-            case _                             => None
-        loop(prop, Nil)
-    }
 }
