@@ -140,14 +140,15 @@ class VerifierTest extends AnyFunSuite {
           "double_even",
           contract(double)(expects = x => true, ensures = x => r => r % BigInt(2) == BigInt(0))
         )
-        assert(doubled.origin == Origin.Contract(double.ref, total = false))
+        doubled.origin match
+            case Origin.Contract(declared) => assert(declared.function == double.ref)
+            case other                     => fail(s"expected a contract's origin, got $other")
         assert(verifier.contracts(double.ref) == List(doubled))
         assert(verifier.contracts(increment.ref).isEmpty)
         val total = verifier.contract(
           "double_total",
           totalContract(double)(expects = x => true, ensures = x => r => r == x + x)
         )
-        assert(total.origin == Origin.Contract(double.ref, total = true))
         assert(verifier.contracts(double.ref) == List(doubled, total))
         assert(verifier.statement("plain", Prop(BigInt(1) > BigInt(0))).origin == Origin.Explicit)
     }

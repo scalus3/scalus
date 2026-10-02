@@ -130,9 +130,17 @@ object UplcBlaster {
         checkSignatures(prop, functions).flatMap(_ => universalPrefix(prop)).flatMap {
             case (binders, body) =>
                 val leaves = ArrayBuffer.empty[Program]
+                // Leaves that are one program share it, as the calls of two clauses of a contract
+                // do: the encoding has no variable names, so equal bytes are equal programs.
+                val indices = scala.collection.mutable.Map.empty[String, Int]
                 def leaf(term: Term): Int = {
-                    leaves += Program.plutusV3(term)
-                    leaves.size - 1
+                    val program = Program.plutusV3(term)
+                    indices.getOrElseUpdate(
+                      Hex.bytesToHex(program.cborEncoded), {
+                          leaves += program
+                          leaves.size - 1
+                      }
+                    )
                 }
                 def loop(current: Prop): Either[String, LeafFormula] = current match
                     case Prop.Call(fn, arg, result, false, body) =>
