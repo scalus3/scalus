@@ -198,6 +198,44 @@ class PropTest extends AnyFunSuite {
         assert(!errors.exists(_.message.contains("outside the scope")), errors)
     }
 
+    test("returnsWhen and failsWhen on a contract add guarantees under its precondition") {
+        val specified = contract(div10)(expects = x => true, ensures = x => r => r <= BigInt(10))
+            .returnsWhen(x => x != BigInt(0))
+            .failsWhen(x => x == BigInt(0))
+        assert(specified.function == div10.ref && !specified.total)
+        specified.prop match
+            case Prop.Forall(
+                  x,
+                  Prop.Implies(
+                    Prop.Bool(_),
+                    Prop.And(
+                      // the function fails where the second clause's condition holds
+                      Prop.Implies(
+                        Prop.Bool(PropExpr.SIRExpr(failing)),
+                        Prop.Not(_: Prop.Call[?, ?])
+                      ),
+                      Prop.And(
+                        // and returns where the first one's does
+                        Prop.Implies(Prop.Bool(PropExpr.SIRExpr(returning)), _: Prop.Call[?, ?]),
+                        Prop.Call(_, _, _, false, _)
+                      )
+                    )
+                  )
+                ) =>
+                // Each clause names its own variable; both are renamed after the contract's.
+                assert(failing.toString.contains(x.name), failing)
+                assert(returning.toString.contains(x.name), returning)
+            case other =>
+                fail(s"expected expects ==> fails-clause && returns-clause && ensures, got $other")
+
+        contract(clamp)(
+          expects = (x, lo, hi) => lo <= hi,
+          ensures = (x, lo, hi) => r => lo <= r && r <= hi
+        ).returnsWhen((x, lo, hi) => true).prop match
+            case Prop.Forall(_, Prop.Forall(_, Prop.Forall(_, Prop.Implies(_, Prop.And(_, _))))) =>
+            case other => fail(s"expected a clause over three variables, got $other")
+    }
+
     test("succeeds and fails of an expression are denotes and its negation") {
         succeeds(BigInt(7) / BigInt(2)) match
             case Prop.Denotes(PropExpr.SIRExpr(_)) =>
