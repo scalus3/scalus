@@ -27,6 +27,9 @@ validator actually runs on chain.
 - `src/main/scala/scalus/verify/uplcblaster/` - the `UplcBlaster` tactic and its compile options.
 - `src/main/lean/` - the Lean workspace the tactic runs in. `ScalusProofs/Run.lean` holds the
   budgeted CEK runner and the `#prep_uplc_run` command its generated checks use.
+- `src/main/scala/scalus/verify/lean/LeanServer.scala` - a running Lean language server for a
+  workspace: `LeanServer.start(directory)`, `check(source, timeout)` and `close()`. The tactic
+  does not use it yet; see `docs/design/verification-details/lean-server.md`.
 - `src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala` - properties of `Math` and
   of prelude data structures, each with a negative control and samples.
 - `src/test/scala/scalus/verify/uplcblaster/UplcBlasterLimitsTest.scala` - natural statements

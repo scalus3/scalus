@@ -225,6 +225,10 @@ end ScalusProofs.Runtime
 It runs `lake env lean Check.lean` with the workspace as the working directory, so the workspace
 must be built (`lake build`). The temporary directory is removed afterwards.
 
+Every check is a process of its own, which starts Lean and loads the workspace again. A Lean
+server that stays across checks is built, and the tactic's move onto it is proposed:
+[the Lean server](lean-server.md).
+
 - **Time limit.** `UplcBlaster(budget, leanDirectory, timeout)` stops Lean, and the solver it
   started, after `timeout`, and is then inconclusive. Without it the tactic waits for Lean,
   which on some statements does not return

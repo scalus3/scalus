@@ -9,11 +9,11 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.utils.{Hex, Utils}
 import scalus.verify.*
+import scalus.verify.lean.{Directories, Processes}
 
 import java.nio.file.{Files, Path}
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.FiniteDuration
-import scala.jdk.CollectionConverters.*
 
 /** Proves [[scalus.verify.Prop]] statements about their compiled UPLC with Lean Blaster.
   *
@@ -894,8 +894,7 @@ object UplcBlaster {
                     VerificationResult.Inconclusive(
                       s"Lean did not finish within ${timeout.get}"
                     )
-        finally
-            Files.walk(temporary).iterator().asScala.toList.reverse.foreach(Files.deleteIfExists)
+        finally Directories.remove(temporary)
     }
 
     /** Runs `command` in `directory`, with its output in `log`, and returns its exit code, or
@@ -921,20 +920,7 @@ object UplcBlaster {
                 case Some(limit) => process.waitFor(limit.length, limit.unit)
                 case None        => process.waitFor(); true
             Option.when(finished)(process.exitValue())
-        finally stop(process)
-    }
-
-    /** Stops `process` and the processes it started, where any still runs. `lake env` runs Lean as
-      * a child process, and Lean the solver, and a child outlives its parent. So the children are
-      * listed while their parent is there to name them. One started between the listing and its
-      * parent's end is not found.
-      */
-    private def stop(process: Process): Unit = {
-        val children = process.descendants().iterator().asScala.toList
-        process.destroyForcibly()
-        children.foreach(_.destroyForcibly())
-        children.foreach(_.onExit().join())
-        process.waitFor()
+        finally Processes.stop(process)
     }
 
     /** The result Lean's exit code and output stand for. */
