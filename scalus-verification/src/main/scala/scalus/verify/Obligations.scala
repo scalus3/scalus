@@ -88,7 +88,7 @@ private[verify] object Obligations {
       */
     def sites(term: SIR, arities: Map[String, Int]): List[(Site, Boolean)] = {
         val found = List.newBuilder[(Site, Boolean)]
-        def visit(sir: SIR, inLambda: Boolean): Unit = sir match
+        def visit(sir: SIR, inLambda: Boolean): Unit = sir match {
             case apply: SIR.Apply =>
                 // The applications of one call, outermost first, and its arguments in order.
                 def spine(
@@ -131,6 +131,7 @@ private[verify] object Obligations {
             case SIR.Cast(inner, _, _)    => visit(inner, inLambda)
             case SIR.Error(message, _, _) => visit(message, inLambda)
             case _: SIR.Var | _: SIR.ExternalVar | _: SIR.Const | _: SIR.Builtin => ()
+        }
         visit(term, inLambda = false)
         found.result()
     }
@@ -151,7 +152,7 @@ private[verify] object Obligations {
         def path(sir: AnnotatedSIR): Option[AnnotatedSIR] =
             if sir eq site then Some(atSite)
             else
-                sir match
+                sir match {
                     case SIR.Let(bindings, body, flags, anns) =>
                         // A binding's value is evaluated after the bindings before it.
                         val inBinding = bindings.iterator.zipWithIndex
@@ -189,6 +190,7 @@ private[verify] object Obligations {
                     case SIR.Cast(inner, _, _)    => path(inner)
                     case SIR.Error(message, _, _) => path(message)
                     case _                        => None
+                }
         any(term)
     }
 

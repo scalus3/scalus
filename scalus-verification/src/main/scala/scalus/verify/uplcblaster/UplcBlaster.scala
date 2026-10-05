@@ -369,7 +369,8 @@ object UplcBlaster {
       * declarations.
       */
     private def withBuilt(built: List[Binding], sir: SIR): SIR = {
-        val used = built.filter(binding => freeVariables(sir).contains(binding.name))
+        val free = freeVariables(sir)
+        val used = built.filter(binding => free.contains(binding.name))
         if used.isEmpty then sir
         else
             val (data, expression) = declarations(sir)
@@ -769,15 +770,24 @@ object UplcBlaster {
       * dropped only when nothing uses it and its value cannot fail. A statement such as
       * `require(c)` is an unused binding of a value that can.
       */
-    private def unlinkModuleDefinitions(sir: SIR, functions: FunctionTable): SIR = sir match
+    private def unlinkModuleDefinitions(sir: SIR, functions: FunctionTable): SIR =
+        unlinked(sir, functions)._1
+
+    /** [[unlinkModuleDefinitions]], with the free variables of what it returns. They are put
+      * together on the way out, so the expression under a long chain of definitions is walked once,
+      * and not once for every definition around it.
+      */
+    private def unlinked(sir: SIR, functions: FunctionTable): (SIR, Set[String]) = sir match {
         case SIR.Let(bindings, body, flags, anns) =>
-            val unlinkedBody = unlinkModuleDefinitions(body, functions)
+            val (unlinkedBody, bodyFree) = unlinked(body, functions)
             val candidates = bindings.filterNot(binding => functions.contains(binding.name))
+            val valueFree =
+                candidates.map(binding => binding.name -> freeVariables(binding.value)).toMap
             @annotation.tailrec
             def live(names: Set[String]): Set[String] = {
                 val next = names ++ candidates.iterator
                     .filter(binding => names.contains(binding.name))
-                    .flatMap(binding => freeVariables(binding.value))
+                    .flatMap(binding => valueFree(binding.name))
                 if next == names then names else live(next)
             }
             // A strict binding is evaluated where it stands. One whose value can fail, such as a
@@ -786,13 +796,24 @@ object UplcBlaster {
             val evaluated =
                 if SIR.LetFlags.isLazy(flags) then Nil
                 else candidates.filterNot(binding => isValue(binding.value))
-            val roots = freeVariables(unlinkedBody) ++
-                evaluated.flatMap(binding => freeVariables(binding.value) + binding.name)
+            val roots = bodyFree ++
+                evaluated.flatMap(binding => valueFree(binding.name) + binding.name)
             val liveNames = live(roots)
             val kept = candidates.filter(binding => liveNames.contains(binding.name))
-            if kept.isEmpty then unlinkedBody else SIR.Let(kept, unlinkedBody, flags, anns)
-        case SIR.Decl(data, term) => SIR.Decl(data, unlinkModuleDefinitions(term, functions))
-        case other                => other
+            if kept.isEmpty then (unlinkedBody, bodyFree)
+            else
+                // As `freeVariables` has it for a `let`.
+                val bound = kept.map(_.name).toSet
+                val inValues = kept.iterator.flatMap(binding => valueFree(binding.name)).toSet
+                val free =
+                    (if SIR.LetFlags.isRec(flags) then inValues -- bound else inValues) ++
+                        (bodyFree -- bound)
+                (SIR.Let(kept, unlinkedBody, flags, anns), free)
+        case SIR.Decl(data, term) =>
+            val (unlinkedTerm, free) = unlinked(term, functions)
+            (SIR.Decl(data, unlinkedTerm), free)
+        case other => (other, freeVariables(other))
+    }
 
     /** A term that evaluates to itself: it cannot fail, so an unused binding of it can be dropped.
       */
