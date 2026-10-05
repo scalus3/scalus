@@ -36,7 +36,7 @@ jobs:
         env:
           SCALUS_REQUIRE_LEAN: "1"
         run: |
-          nix develop .#ci --accept-flake-config --command bash -c "sbt --batch scalusVerification/test 'scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest'"
+          nix develop .#ci --accept-flake-config --command bash -c "sbt --batch scalusVerification/test 'scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest -- -l scalus.verify.uplcblaster.Unfinished'"
       - name: Report results
         uses: sarisia/actions-status-discord@v1
         if: always()
