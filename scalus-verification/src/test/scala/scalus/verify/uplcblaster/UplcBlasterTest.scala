@@ -870,6 +870,14 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
                 assert(reasons.exists(_.contains("BlasterShape binder")), report)
             case other => fail(s"expected an unsupported result, got $other")
 
+        // One constructor of `Data` is no type of Lean's: its variable would be any `Data`, and
+        // the statement would be about values the Scala type does not have.
+        val integers = UplcBlaster.lower(
+          forAll[Data.I](i => i.value >= BigInt(0) || i.value < BigInt(0)),
+          FunctionTable.empty
+        )
+        assert(integers.left.exists(_.contains("binder is not supported")), integers)
+
         // A partial call is split into two leaves, which a call's continuation cannot hold.
         val nested = UplcBlaster.lower(
           callRef(div10.ref, BigInt(1))(r => whenReturnsRef(div10.ref, r)(s => s == BigInt(1))),

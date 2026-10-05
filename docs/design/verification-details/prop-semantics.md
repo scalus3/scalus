@@ -197,6 +197,9 @@ where the call is not reached. `check` adds the precondition at the call.
 - **Not supported yet:** a call inside a function value, as in `xs.map(x => f(x))`, and a
   precondition that is a statement, not a Boolean test. Such calls are returned in
   `CallObligations.unsupported`, with the reason, so that they are not taken as checked.
+- **A function that calls itself** owes its own precondition at that call. Its contract's
+  variables are then the parameters the arguments are written in, so the arguments are bound
+  under names of their own: in `span(hi, lo)` the second argument is the caller's `lo`.
 - **Names.** An obligation is named `caller/contract#n`; under the caller's own contract it is
   `callerContract/contract#n`, so both can be declared in one verifier.
 - **An entry point is checked through a shape.** A validator takes any `Data`, and the code
