@@ -29,6 +29,9 @@ validator actually runs on chain.
   budgeted CEK runner and the `#prep_uplc_run` command its generated checks use.
 - `src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala` - properties of `Math` and
   of prelude data structures, each with a negative control and samples.
+- `src/test/scala/scalus/verify/uplcblaster/UplcBlasterLimitsTest.scala` - natural statements
+  that Lean does not finish, each with a time limit. They carry the tag `Unfinished`, which
+  `test` leaves out and `testOnly` runs.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala`, in
   the examples module - properties of the vesting contract: its schedule, and its validator on
   script contexts and withdrawals. The JVM tests of `scalus-examples` depend on this module.
@@ -52,10 +55,14 @@ val inRange = verifier.statement(
 verifier.verify(inRange, UplcBlaster(budget = 120)) // Proven
 ```
 
-`UplcBlaster` proves statements with a prefix of universal quantifiers over `BigInt`, `Boolean`
-and `Data`, and a body without quantifiers: Boolean tests, calls, `denotes` and `equal`,
-combined with `&&`, `||`, `!`, `==>` and `<=>`. Each test becomes its own closed UPLC predicate
-over the quantified values. The tactic writes a Lean file in a temporary directory that imports
+`UplcBlaster` proves statements with universal and existential quantifiers over `BigInt`,
+`Boolean`, `ByteString`, `Data` and case classes of them: Boolean tests, calls, `denotes` and
+`equal`, combined with `&&`, `||`, `!`, `==>` and `<=>`. `existsLet` supplies and eliminates an
+explicit witness, avoiding an SMT quantifier; ordinary `exists` is emitted to Blaster as the
+classically equivalent `¬∀¬`. A variable of a case class, as in
+`forAll[Config, BigInt]((config, time) => …)`, is one variable per field for Lean. Each test becomes
+its own closed UPLC predicate over the quantified values in its scope. The tactic writes a Lean
+file in a temporary directory that imports
 them, runs `lake env lean` in this workspace, and reads Blaster's verdict. The workspace must be
 built (`lake build`).
 
@@ -68,9 +75,21 @@ built (`lake build`).
 - **Falsified** is replayed on the Scalus CEK with a large budget. If the statement is false
   there too, the result is `Refuted` with the counterexample; otherwise it is `Inconclusive`, and
   the message says the counterexample is spurious. A spurious counterexample means the budget is
-  too small.
-- Anything else, including other binder types or a quantifier inside the body, is
-  `Inconclusive`.
+  too small. A falsified statement that asks for a witness, with an ordinary `exists` or with a
+  `forAll` under `!` or in a premise, is `Inconclusive`, because it has no finite counterexample
+  that the Scalus CEK can replay to establish that no witness exists; use `existsLet` when a
+  witness is known.
+- Anything else, including other binder types or an unsupported call continuation, fails
+  preparation with `Unsupported(CompatibilityReport(...))`.
+- Lean does not return on some statements, typically one whose program loops over a list of
+  unknown length. `UplcBlaster(budget, leanDirectory, timeout)` stops it after `timeout`, and is
+  then `Inconclusive`; see "Statements that do not finish" in the tactic's details.
+
+`verifier.prepare(statement, tactic)` returns an opaque `PreparedRun` only when the complete goal
+is in the tactic's language. Passing that evidence to `verifier.prove(prepared)` cannot return
+`Unsupported`. The one-step `verify` method remains as a convenience. `Inconclusive(reason)` then
+means a compatible execution could not decide the goal, while `Failed(reason)` reports a tool or
+backend execution failure.
 
 A closed statement, without quantified variables, such as a sample
 `callRef(clamp.ref, (BigInt(9), BigInt(1), BigInt(5)))(r => r == BigInt(5))`, has nothing for
@@ -147,6 +166,55 @@ failsWhen(div10)(x => x == BigInt(0))     // ∀ x. x = 0 ==> fails(div10, x)
 expression, `succeeds(e)` is `denotes(e)` and `fails(e)` is `!denotes(e)`: its evaluation ends in
 an error, as in `fails(BigInt(10) / x)` or `fails { require(x >= 0); x * 2 }`.
 
+### Contracts in the function's body
+
+A function can state its contract itself, with `Spec` from scalus-core's prelude:
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.Spec
+import scalus.cardano.onchain.plutus.prelude.Spec.ensuring
+
+@Compile
+object Vault {
+    def clamp(x: BigInt, lo: BigInt, hi: BigInt): BigInt = {
+        Spec.expects(lo <= hi)
+        (if x < lo then lo else if x > hi then hi else x).ensuring(r => lo <= r && r <= hi)
+    }
+}
+
+val clamp = FunctionDef(Vault.clamp)
+val stated = Contract.inSource(clamp).get              // None for a function that states none
+verifier.verify(verifier.contract("clamp_in_range", stated), UplcBlaster(budget = 120)) // Proven
+```
+
+The clauses are no part of the script: they are removed before lowering, so its bytes and hash
+are the same with and without them. They stay in the function's SIR, where `Contract.inSource`
+reads them, and on the JVM they are checked and throw `SpecificationError`. The contract is
+declared, proved and owed by callers like one built with `contract(f)(expects, ensures)`.
+
+A validator's handler returns nothing, and states what holds of its parameters where it returns,
+with `Spec.ensures(condition)` at its head. A handler is `inline`, so its clauses are in the code
+of whatever calls `validate`; `verifier.guarantees(function)` finds every clause on a path of a
+function's code and declares one statement for each:
+
+```scala
+val spends = FunctionDef.named("spends", (w: Withdrawal) => VestingValidator.validate(context(w)))
+verifier.addFunction(spends)
+val stated = verifier.guarantees(spends.ref)
+stated.statements.foreach(verifier.verify(_, UplcBlaster(budget = 12000)))   // clause by clause
+stated.together.foreach(verifier.verify(_, UplcBlaster(budget = 12000)))     // or as one statement
+```
+
+Each statement says that the function returns, so a tactic runs the function's body once per
+clause for the statements one by one, and once for `together`, their conjunction.
+
+A clause that relies on the function's own `Spec.expects` holds only where callers establish it:
+`verifier.guarantees(contract)`, with the function's declared contract, states the clauses under
+that contract's precondition.
+
+`VestingValidator` is specified this way: three guarantees on `spend`, and the postcondition of
+`linearVesting`.
+
 ### Call-site obligations
 
 A precondition is an obligation of every caller. `verifier.obligations` declares it for each call
@@ -169,14 +237,17 @@ The statement says: where the call is reached, its arguments satisfy the callee'
 proved here because the branch establishes `lo <= hi`; `Math.clamp(x, 10, 0)` would be refuted.
 A runtime `require(lo <= hi)` before the call establishes it as well, and so does the caller's own
 contract, with `verifier.obligations(contractOfBounded)`. Calls inside function values are listed
-in `unsupported`, not checked.
+in `unsupported`, not checked. A validator's call is checked through a function of a transaction
+shape that builds the context and calls it, as `VestingVerificationTest` does for the schedule's
+precondition.
 
 ## Running
 
 ```bash
 cd scalus-verification/src/main/lean && lake build && cd -   # once, and after a Lean change
 sbt scalusVerification/test
-sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 4 min
+sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 5 min
+sbt "scalusVerification/testOnly *UplcBlasterLimitsTest"   # the statements Lean does not finish
 ```
 
 The tests that run Lean need `lake` on the `PATH` (the default and `ci` nix shells have it) and

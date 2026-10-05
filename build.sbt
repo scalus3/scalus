@@ -869,7 +869,9 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       // Exclude integration tests and benchmarks from default test runs
       excludeFromTest("scalus.testing.IntegrationTest"),
-      excludeFromTest("scalus.testing.Benchmark")
+      excludeFromTest("scalus.testing.Benchmark"),
+      // As in scalusVerification: the statements Lean does not finish.
+      excludeFromTest("scalus.verify.uplcblaster.Unfinished")
     )
     .configurePlatform(JVMPlatform)(
       _.dependsOn(
@@ -1039,6 +1041,9 @@ lazy val scalusVerification = project
       publish / skip := true,
       run / fork := true,
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      // Statements Lean does not finish are left out of `test` and `testQuick`, and run by
+      // `testOnly`.
+      excludeFromTest("scalus.verify.uplcblaster.Unfinished"),
       PluginDependency
     )
 

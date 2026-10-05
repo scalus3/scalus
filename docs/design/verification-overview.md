@@ -38,7 +38,9 @@ Two pieces of work exist.
 - **`spec.requires` / `spec.ensures` / `spec.ensuresResult`** (local branch
   `feature/verification-blaster`, not pushed). These are in-body specification clauses. They are
   `inline` no-ops, so they erase completely from the compiled script, and nothing gives them
-  meaning. The proposed `Spec.expects` and `ensuring` clauses replace them (§4.3).
+  meaning. `Spec.expects` and `ensuring` replace them (§4.3): `Spec` is in scalus-core's
+  prelude, the clauses are erased before lowering, and `Contract.inSource` reads them
+  ([statement semantics §7](verification-details/prop-semantics.md#7-specifications-in-the-functions-body)).
 
 So a statement written in Scala now reaches one backend. The other tactics, contracts, the runner
 and its cache (§5.4) are not built yet.
@@ -78,7 +80,7 @@ and its cache (§5.4) are not built yet.
 | Theorem | A statement together with a proof, produced by successful verification. |
 | Tactic | A backend that turns a statement into a verdict. |
 | `Verifier` | The runtime context containing function representations, statement declarations, available proofs and tactics. |
-| `Verifier.verify` | Runs a tactic and returns a proof, a confirmed refutation, or an inconclusive result. |
+| `Verifier.verify` | Prepares and runs a tactic, returning a proof, refutation, unsupported report, inconclusive result, or backend failure. |
 | `Proof` | A backend-specific proof artifact and the proved lemmas it used. |
 
 ---
@@ -490,16 +492,17 @@ compiled as a closed lambda over the binder variables it uses; see
 The same route can serve the target binders of §3.6: in `f => forAll(x => f(x) >= 0)`, the leaf
 closes over `f` as well, and a backend substitutes the target for it.
 
-**Specifications in `@Compile` bodies: SIR pseudo-functions (proposed).** A macro cannot capture
+**Specifications in `@Compile` bodies: SIR pseudo-functions (built for `Spec`).** A macro cannot capture
 a clause written inside a `@Compile` function: the clause must be erased from the function's code,
 yet travel with its SIR in `sirModule`, because verifying a caller in another module or jar needs
 the callee's contract (§3.7). The earlier branch made its `spec` clauses `inline` no-ops, which
 the inliner erased before the plugin saw them.
 
-The proposed route keeps the clauses as calls to a marker object, `Spec.expects(c)` and
-`body.ensuring(r => c)`, the way `UniversalDataConversion` works today. The plugin compiles them
-like any call, so they stay in the function's SIR. A reifier reads them from `sirModule`, and the
-linker or the lowering drops them, so the on-chain bytes do not change. The same marker approach
+The clauses are calls to a marker object, `Spec.expects(c)` and `body.ensuring(r => c)`, the way
+`UniversalDataConversion` works. The plugin compiles them like any call, so they stay in the
+function's SIR. `Contract.inSource` reads them from the SIR a `FunctionDef` holds, and
+`EraseSpecifications` drops them at the head of the lowering pipeline, so the on-chain bytes do
+not change. Reading them from `sirModule`, for a whole object, is still proposed. The same marker approach
 can capture whole statements, with `forAll` and the other combinators as Boolean pseudo-functions.
 It needs no plugin change and no SIR type for `Prop`: the two costs this section once attributed
 to taking statements from SIR. See
@@ -596,7 +599,8 @@ final case class VerificationRequest(
 The implemented `Verifier.empty` owns a function table, named declarations and available theorems.
 `addFunction` and `addFunctions` populate its table; `statement(name, prop)` registers a runtime
 `Prop`; `prove(statement, tactic)` (also named `verify`) passes the context to a tactic and returns
-a theorem, a confirmed refutation, or an inconclusive result (§5.3). Successful theorems become
+a theorem, a confirmed refutation, an unsupported report, an inconclusive result, or a backend
+failure (§5.3). Successful theorems become
 available as lemmas. `statement(prop)` generates a local name when the caller does not supply one;
 these names depend on declaration order. `addTheorem` imports a theorem from another verifier. Source capture methods
 such as `statement(name, target)`, `refute` and `contract` remain planned.
@@ -630,8 +634,9 @@ val result: VerificationResult = verifier.prove(claim, tactic)
 Here `tactic` is a proof backend implementing `Tactic`. The following source syntax is planned;
 target capture is not implemented yet.
 
-`UplcBlaster`, in `scalus.verify.uplcblaster`, is the first `Tactic`. It accepts a universal
-prefix over `BigInt`, `Boolean` and `Data` followed by a quantifier-free body.
+`UplcBlaster`, in `scalus.verify.uplcblaster`, is the first `Tactic`. It accepts universal and
+existential quantifiers over `BigInt`, `Boolean`, `ByteString`, `Data` and case classes of them.
+`existsLet` is eliminated by applying the statement body to its supplied witness.
 
 - Each leaf of the body (a Boolean test, a total call, `denotes`, `equal`) is compiled to its own
   UPLC predicate over the quantified values. A partial call, `whenReturns`, is
@@ -734,7 +739,14 @@ enum Verdict:
 enum VerificationResult:
     case Proven(proof: Proof)
     case Refuted(proof: Proof)
+    case Unsupported(report: CompatibilityReport)
     case Inconclusive(reason: String)
+    case Failed(reason: String)
+
+trait Tactic:
+    type Prepared
+    def prepare(goal: Goal): Either[CompatibilityReport, Prepared]
+    def run(prepared: Prepared): ExecutionResult
 
 trait ProofArtifact:
     def kind: ProofKind
@@ -745,6 +757,8 @@ final class Verifier {
     def statement(name: String, prop: Prop): Statement
     def statement(prop: Prop): Statement                  // generated local name
     def addTheorem(theorem: Theorem): Unit
+    def prepare(statement: Statement, tactic: Tactic): Either[CompatibilityReport, PreparedRun]
+    def prove(prepared: PreparedRun): ExecutionResult
     def prove(statement: Statement, tactic: Tactic): VerificationResult
     def verify(statement: Statement, tactic: Tactic): VerificationResult // alias
 }
@@ -828,15 +842,25 @@ test("vesting authorisation is proved about the shipped script") {
 enum VerificationResult:
     case Proven(proof: Proof)
     case Refuted(proof: Proof)
+    case Unsupported(report: CompatibilityReport)
     case Inconclusive(reason: String)
+    case Failed(reason: String)
 
 trait Tactic {
+    type Prepared
     def name: String
-    def discharge(goal: Goal): VerificationResult // run at runtime, never by scalac
+    def prepare(goal: Goal): Either[CompatibilityReport, Prepared]
+    def run(prepared: Prepared): ExecutionResult
 }
 
 final case class Goal(statement: Statement, functions: FunctionTable, lemmas: List[Theorem])
 ```
+
+`PreparedRun` is opaque evidence tied to the verifier, statement, tactic, function-table snapshot
+and available lemmas that were checked. `prove(prepared)` returns `ExecutionResult`, a subtype of
+`VerificationResult` that excludes `Unsupported`. The one-step API maps a failed preparation to
+`VerificationResult.Unsupported`; a backend process that fails after preparation is `Failed`, not
+an incompatibility.
 
 ### 6.2 `blaster-uplc`: proofs about the compiled bytes
 
@@ -855,7 +879,8 @@ final case class Goal(statement: Statement, functions: FunctionTable, lemmas: Li
 3. Lift bound variables to UPLC constants in `#prep_uplc_run`'s inputs function, chosen by binder
    type: `Integer`, `ByteString`, `Bool` and `Data` constants, and the constructor encoding for
    case classes.
-4. Map quantifiers to Lean binders.
+4. Map quantifiers to Lean binders, writing `∃ x, p x` as the classically equivalent
+   `¬ ∀ x, ¬ p x`.
 
 **The polarity rule.** `#prep_uplc` evaluates with a step budget. An exhausted budget ends in the
 same `State.Error` as a genuine failure. With ∃ and → in the language, how a test is read under
@@ -904,16 +929,17 @@ while PlutusCoreBlaster counts machine steps.
 
 **Limits.**
 
-- Quantified variables are `BigInt`, `Boolean` or `Data` for now; values inside tests, such as
-  call arguments and results, can have any type. A case class cannot be quantified over yet;
-  quantify over its fields, or over `Data` with `FromData`.
+- Quantified variables are `BigInt`, `Boolean`, `ByteString`, `Data` or case classes of them for
+  now; values inside tests, such as call arguments and results, can have any type. An enum or a
+  list cannot be quantified over yet; quantify over `Data` with `FromData`.
 - Programs must be compiled without the CIP-153 `Value` and CIP-138 array builtins, which the
   Lean model lacks. A ledger `Value` represented as `Data` is unaffected.
 - Programs that read single bytes or reach the CIP-121/122 bitwise builtins cannot be proved over
   symbolic inputs.
 - PlutusCore is pinned to a fork until PR #40 merges.
-- Blaster passes ∃ to Z3 as an SMT quantifier, so goals with alternating quantifiers can come back
-  Undetermined. Prefer `existsLet`.
+- Ordinary `exists`, emitted as `¬∀¬`, still requires existential SMT reasoning after
+  normalization, so goals with alternating quantifiers can come back Undetermined. Prefer
+  `existsLet`.
 
 Details and upstream references are in
 [the tactic's limits](verification-details/uplc-blaster.md#limits).
@@ -1102,10 +1128,10 @@ same place.
 
 ## 10. Open questions
 
-1. **Specification capture.** The proposal is `Spec` and `Logic` pseudo-functions read from SIR
-   (§4.3). Open: how the runtime reaches an object's `sirDeps` to link a function; whether the
-   linker or the lowering erases `Spec` clauses; and when the reifier replaces the macros for
-   statements in test code.
+1. **Specification capture.** `Spec` clauses are read from SIR and erased by the lowering
+   pipeline (§4.3). Still proposed: `Logic` pseudo-functions for whole statements. Open: how the
+   runtime reaches an object's `sirDeps` to link a function, and when the reifier replaces the
+   macros for statements in test code.
 2. **Contract semantics.** Partial correctness by default, with totality opt-in (§3.7). Is
    `spec.total` the right spelling, and should validators default differently from helpers?
 3. **`Prop` versus `Boolean` connectives.** `a && b` on two Booleans stays one test. Should

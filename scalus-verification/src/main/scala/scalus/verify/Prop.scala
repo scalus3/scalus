@@ -122,6 +122,14 @@ object Contract {
         guarantees: List[Prop]
     ): Contract[A, R] = new Contract(function, variables, expects, guarantees)
 
+    /** The contract `function` states in its own body, with `Spec.expects` and `ensuring`
+      * ([[scalus.cardano.onchain.plutus.prelude.Spec]]), or `None` when it states none. It is the
+      * contract [[Props.contract]] builds from the same conditions, so it is declared, proved and
+      * owed by callers in the same way. Add `returnsWhen` or `failsWhen` to it as to any contract.
+      */
+    def inSource[A, R](function: FunctionDef[A, R]): Option[Contract[A, R]] =
+        Specifications.read(function)
+
     extension [A, R](contract: Contract[A, R]) {
 
         /** The function returns on every argument that satisfies the precondition and `when`. With

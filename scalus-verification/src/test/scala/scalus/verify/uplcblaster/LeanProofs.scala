@@ -1,11 +1,24 @@
 package scalus.verify.uplcblaster
 
-import org.scalatest.Assertions
+import org.scalatest.{Assertions, Tag}
 import scalus.uplc.Constant
 import scalus.verify.*
 
 import java.io.File
 import java.nio.file.{Files, Path}
+import scala.concurrent.duration.FiniteDuration
+
+/** Tag of a test about a statement that Lean does not finish: the working set of what the tactic
+  * cannot do yet. Such a test waits for its time limit, and the solver can take gigabytes
+  * meanwhile, so the build leaves the tag out of `test` and `testQuick`. `testOnly` runs them:
+  * {{{
+  * sbt "scalusVerification/testOnly *UplcBlasterLimitsTest"
+  * sbt "scalusExamplesJVM/testOnly *VestingVerificationTest -- -n scalus.verify.uplcblaster.Unfinished"
+  * }}}
+  * The second runs only the tagged tests of a suite; `-l` with the tag leaves them out. Unlike a
+  * test marked `ignore`, which no option runs.
+  */
+object Unfinished extends Tag("scalus.verify.uplcblaster.Unfinished")
 
 /** Runs [[UplcBlaster]] on statements through Lean, for test suites. */
 trait LeanProofs extends Assertions {
@@ -85,6 +98,24 @@ trait LeanProofs extends Assertions {
                 assert(verifier.theorems.isEmpty)
                 proof.artifact.asInstanceOf[UplcBlaster.Artifact].counterexample.toMap
             case (_, _, other) => fail(s"expected a refutation, got $other")
+
+    /** Why [[UplcBlaster]] is inconclusive about `prop`, with Lean stopped after `timeout`. */
+    protected def inconclusive(
+        prop: Prop,
+        budget: Int,
+        timeout: FiniteDuration,
+        functions: FunctionDef[?, ?]*
+    ): String = {
+        requireLean()
+        val verifier = Verifier.empty
+        functions.foreach(verifier.addFunction)
+        val statement = verifier.statement(prop)
+        verifier.verify(statement, UplcBlaster(budget, leanDirectory, timeout)) match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(verifier.theorems.isEmpty)
+                reason
+            case other => fail(s"expected an inconclusive result, got $other")
+    }
 
     protected def integer(value: Constant): BigInt = value match
         case Constant.Integer(integer) => integer

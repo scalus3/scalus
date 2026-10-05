@@ -3,43 +3,57 @@ package scalus.verify.uplcblaster
 import scalus.*
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.Options
-import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, DataDecl, SIR, SIRBuiltins, SIRType}
+import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, DataDecl, SIR, SIRBuiltins, SIRType}
 import scalus.uplc.{Constant, DeBruijn, Program, Term}
-import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.utils.{Hex, Utils}
 import scalus.verify.*
 
-import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters.*
 
 /** Proves [[scalus.verify.Prop]] statements about their compiled UPLC with Lean Blaster.
   *
-  * The supported fragment is a prefix of universal quantifiers over `BigInt`, `Boolean` and `Data`,
-  * followed by a quantifier-free body: tests, calls, `denotes`, `equal` and the connectives. Every
-  * test in the body is compiled to its own closed UPLC predicate over the quantified values (see
+  * The supported fragment has universal and existential quantifiers over `BigInt`, `Boolean`,
+  * `ByteString`, `Data` and case classes of them, with tests, calls, `denotes`, `equal` and the
+  * connectives. An `existsLet` is eliminated by applying its body to the supplied witness. Every
+  * test is compiled to its own closed UPLC predicate over the quantified values in its scope (see
   * [[UplcBlaster.lower]]). The Lean CEK model runs each predicate for at most `budget` steps,
   * keeping a failing program apart from an exhausted budget, and Blaster decides the resulting
   * proposition. Each test is read according to its polarity (design doc §6.2), so a proof at any
   * budget holds without the budget, and a statement that a program fails can be proved. A closed
   * statement, without quantified variables, has nothing to search for: Lean decides it by running
   * its predicates, with `native_decide` ([[ProofKind.LeanNative]]). A counterexample is replayed on
-  * the Scalus CEK before it is reported as a refutation. Other statement shapes are inconclusive.
+  * the Scalus CEK before it is reported as a refutation. Other statement shapes are rejected during
+  * preparation.
   */
-final class UplcBlaster private (val budget: Int, val leanDirectory: Path) extends Tactic {
+final class UplcBlaster private (
+    val budget: Int,
+    val leanDirectory: Path,
+    val timeout: Option[FiniteDuration]
+) extends Tactic {
+    override type Prepared = UplcBlaster.Lowered
+
     require(budget > 0, "the UPLC Blaster budget must be positive")
+    require(timeout.forall(_.length > 0), "the UPLC Blaster timeout must be positive")
 
     override val name: String = "uplc-blaster"
 
-    override def discharge(goal: Goal): VerificationResult =
-        UplcBlaster.lower(goal.statement.prop, goal.functions) match
-            case Left(reason) =>
-                VerificationResult.Inconclusive(
-                  s"$name cannot check ${goal.statement.name}: $reason"
+    override def prepare(goal: Goal): Either[CompatibilityReport, Prepared] =
+        UplcBlaster
+            .lower(goal.statement.prop, goal.functions)
+            .left
+            .map(reason =>
+                CompatibilityReport(
+                  List(CompatibilityIssue.UnsupportedFeature(List(goal.statement.name), reason))
                 )
-            case Right(lowered) => UplcBlaster.check(lowered, budget, leanDirectory)
+            )
+
+    override def run(prepared: Prepared): ExecutionResult =
+        UplcBlaster.check(prepared, budget, leanDirectory, timeout)
 }
 
 object UplcBlaster {
@@ -63,7 +77,7 @@ object UplcBlaster {
         kind: ProofKind
     ) extends ProofArtifact
 
-    /** The quantifier-free body of a lowered statement, over its leaves.
+    /** A lowered statement over its leaves, retaining its quantifiers and connectives.
       *
       * The leaves of a statement are the nodes of its [[Prop]] tree that are not connectives:
       * tests, calls, `denotes` and `equal`. [[lower]] compiles each leaf into a closed UPLC program
@@ -84,16 +98,41 @@ object UplcBlaster {
         case Or(left: LeafFormula, right: LeafFormula)
         case Not(inner: LeafFormula)
         case Implies(premise: LeafFormula, conclusion: LeafFormula)
+        case Forall(binders: List[Int], body: LeafFormula)
+        case Exists(binders: List[Int], body: LeafFormula)
     }
 
-    /** A statement lowered for Lean: its universal binders, its body, and one closed UPLC program
-      * per leaf of the body. Every program takes the binders' values in order.
+    /** A statement lowered for Lean: its primitive binders, its body, and one closed UPLC program
+      * per leaf of the body. Every program takes the values of its in-scope binders in order.
       */
     final case class Lowered(
         binders: List[PropExpr.Ident[?]],
         body: LeafFormula,
-        leaves: Vector[Program]
-    )
+        leaves: Vector[Program],
+        private[uplcblaster] val leafBinders: Vector[List[Int]]
+    ) {
+
+        /** Whether a quantifier of the statement asks for a witness: an `exists` in a positive
+          * position, or a `forAll` in a negative one, under `!` or in the premise of `==>`. Either
+          * side of `<=>` is in both.
+          *
+          * Without one, every variable ranges over all its values, and the statement is false where
+          * its body is false of one assignment. With one, an assignment shows nothing: the witness
+          * may be another value.
+          */
+        def hasExistential: Boolean = {
+            def loop(formula: LeafFormula, positive: Boolean): Boolean = formula match
+                case LeafFormula.Exists(_, body)  => positive || loop(body, positive)
+                case LeafFormula.Forall(_, body)  => !positive || loop(body, positive)
+                case LeafFormula.And(left, right) => loop(left, positive) || loop(right, positive)
+                case LeafFormula.Or(left, right)  => loop(left, positive) || loop(right, positive)
+                case LeafFormula.Not(inner)       => loop(inner, !positive)
+                case LeafFormula.Implies(premise, conclusion) =>
+                    loop(premise, !positive) || loop(conclusion, positive)
+                case _: LeafFormula.Test | _: LeafFormula.Denotes => false
+            loop(body, positive = true)
+        }
+    }
 
     /** The Scalus CEK budget for replaying a counterexample: a hundred times the mainnet
       * per-transaction limit. It only guards against a predicate that does not terminate.
@@ -106,20 +145,30 @@ object UplcBlaster {
     val options: Options = Options.releaseUntagged.copy(valueBuiltins = false)
 
     def apply(budget: Int): UplcBlaster =
-        new UplcBlaster(budget, Path.of("scalus-verification", "src", "main", "lean"))
+        new UplcBlaster(budget, Path.of("scalus-verification", "src", "main", "lean"), None)
 
     def apply(budget: Int, leanDirectory: Path): UplcBlaster =
-        new UplcBlaster(budget, leanDirectory)
+        new UplcBlaster(budget, leanDirectory, None)
+
+    /** A tactic that stops Lean after `timeout` and is then inconclusive. Without a timeout a
+      * statement Lean cannot finish, such as one whose program loops over a list of unknown length,
+      * runs until the process is stopped from outside.
+      */
+    def apply(budget: Int, leanDirectory: Path, timeout: FiniteDuration): UplcBlaster =
+        new UplcBlaster(budget, leanDirectory, Some(timeout))
 
     /** Lowers a statement in the supported fragment, or explains why it is outside it.
       *
-      * The fragment is a prefix of universal quantifiers over `BigInt`, `Boolean` and `Data`
-      * followed by a body without quantifiers. The body's leaves are Boolean tests, calls whose
-      * continuation is a test or another total call, `denotes`, and `equal` over those types. A
-      * call's arguments and result, and the operand of `denotes`, can have any type. Its
-      * connectives are `&&`, `||`, `!`, `==>` and `<=>`. `<=>` becomes two implications, because
-      * its operands occur in both polarities. A partial call, `whenReturns(f, a)(r => p)`, becomes
-      * `denotes(f(a)) ==> call(f, a)(r => p)`: its two leaves run the function's program each.
+      * The fragment has universal and existential quantifiers over `BigInt`, `Boolean`,
+      * `ByteString`, `Data` and case classes of them. A variable of a case class becomes one
+      * variable per field in [[Lowered.binders]], and each test builds it from them. `existsLet`
+      * applies its body to the supplied witness and introduces no Lean quantifier. Leaves are
+      * Boolean tests, calls whose continuation is a test or another total call, `denotes`, and
+      * `equal` over `BigInt`, `Boolean` and `Data`. A call's arguments and result, and the operand
+      * of `denotes`, can have any type. Its connectives are `&&`, `||`, `!`, `==>` and `<=>`. `<=>`
+      * becomes two implications, because its operands occur in both polarities. A partial call,
+      * `whenReturns(f, a)(r => p)`, becomes `denotes(f(a)) ==> call(f, a)(r => p)`: its two leaves
+      * run the function's program each.
       *
       * A call of a function in `functions` is linked to that function's compiled program, so the
       * function's bytes appear unchanged in the predicate. A function of several parameters is
@@ -127,68 +176,124 @@ object UplcBlaster {
       * in turn. Other `@Compile` definitions a test uses are compiled together with the test.
       */
     def lower(prop: Prop, functions: FunctionTable): Either[String, Lowered] =
-        checkSignatures(prop, functions).flatMap(_ => universalPrefix(prop)).flatMap {
-            case (binders, body) =>
-                val leaves = ArrayBuffer.empty[Program]
-                // Leaves that are one program share it, as the calls of two clauses of a contract
-                // do: the encoding has no variable names, so equal bytes are equal programs.
-                val indices = scala.collection.mutable.Map.empty[String, Int]
-                def leaf(term: Term): Int = {
-                    val program = Program.plutusV3(term)
-                    indices.getOrElseUpdate(
-                      Hex.bytesToHex(program.cborEncoded), {
-                          leaves += program
-                          leaves.size - 1
-                      }
-                    )
-                }
-                def loop(current: Prop): Either[String, LeafFormula] = current match
-                    case Prop.Call(fn, arg, result, false, body) =>
-                        for
-                            returns <- returnsSir(fn, arg, result.tp, functions)
-                            formula <- loop(
-                              Prop.Implies(
-                                Prop.Denotes(PropExpr.SIRExpr(returns)),
-                                Prop.Call(fn, arg, result, true, body)
-                              )
-                            )
-                        yield formula
-                    case _: Prop.Bool | _: Prop.Call[?, ?] =>
-                        predicate(current, binders, functions)
-                            .map(term => LeafFormula.Test(leaf(term)))
-                    case Prop.Equal(left, right) =>
-                        equality(expressionSir(left), expressionSir(right)).map(test =>
-                            LeafFormula.Test(leaf(compileSirFunction(binders, test, functions)))
-                        )
-                    case Prop.Denotes(expr) =>
-                        val value = expressionSir(expr)
-                        Right(
-                          LeafFormula.Denotes(leaf(compileSirFunction(binders, value, functions)))
-                        )
-                    case Prop.And(left, right) =>
-                        for l <- loop(left); r <- loop(right) yield LeafFormula.And(l, r)
-                    case Prop.Or(left, right) =>
-                        for l <- loop(left); r <- loop(right) yield LeafFormula.Or(l, r)
-                    case Prop.Not(inner) => loop(inner).map(LeafFormula.Not(_))
-                    case Prop.Implies(premise, conclusion) =>
-                        for p <- loop(premise); c <- loop(conclusion)
-                        yield LeafFormula.Implies(p, c)
-                    case Prop.Iff(left, right) =>
-                        for l <- loop(left); r <- loop(right)
-                        yield LeafFormula.And(LeafFormula.Implies(l, r), LeafFormula.Implies(r, l))
-                    case _: Prop.Forall[?] | _: Prop.Exists[?] =>
-                        Left("a quantifier after the universal prefix is not supported")
+        checkSignatures(prop, functions).flatMap { _ =>
+            val binders = ArrayBuffer.empty[PropExpr.Ident[?]]
+            val leaves = ArrayBuffer.empty[Program]
+            val leafBinders = ArrayBuffer.empty[List[Int]]
+            // Leaves that are one program over the same variables share it, as the calls of two
+            // clauses of a contract do. The variable indices matter: equal program bytes under two
+            // different quantifiers are two differently scoped leaves.
+            val indices = scala.collection.mutable.Map.empty[(String, List[Int]), Int]
 
-                loop(body).map(formula => Lowered(binders, formula, leaves.toVector))
+            def leaf(term: Term, scope: List[Int]): Int = {
+                val program = Program.plutusV3(term)
+                indices.getOrElseUpdate(
+                  Hex.bytesToHex(program.cborEncoded) -> scope, {
+                      leaves += program
+                      leafBinders += scope
+                      leaves.size - 1
+                  }
+                )
+            }
+
+            /** The primitive Lean binders for one statement binder, and a binding that rebuilds a
+              * case class from its fields in every leaf in its scope.
+              */
+            def quantified(
+                ident: PropExpr.Ident[?]
+            ): Either[String, (List[Int], List[Binding])] =
+                expand(ident.name, ident.tp).map { (variables, built) =>
+                    val from = binders.size
+                    binders ++= variables
+                    val positions = (from until binders.size).toList
+                    positions -> built.map(Binding(ident.name, ident.tp, _)).toList
+                }
+
+            // A test's program over the values in its quantifier scope, with each case-class
+            // variable it uses built from those values.
+            def compile(sir: SIR, scope: List[Int], built: List[Binding]): Term =
+                compileSirFunction(
+                  scope.map(index => binders(index)),
+                  withBuilt(built, sir),
+                  functions
+                )
+
+            def loop(
+                current: Prop,
+                scope: List[Int],
+                built: List[Binding]
+            ): Either[String, LeafFormula] = current match {
+                case Prop.Call(fn, arg, result, false, body) =>
+                    for
+                        returns <- returnsSir(fn, arg, result.tp, functions)
+                        formula <- loop(
+                          Prop.Implies(
+                            Prop.Denotes(PropExpr.SIRExpr(returns)),
+                            Prop.Call(fn, arg, result, true, body)
+                          ),
+                          scope,
+                          built
+                        )
+                    yield formula
+                case _: Prop.Bool | _: Prop.Call[?, ?] =>
+                    predicateSir(current, functions)
+                        .map(test => LeafFormula.Test(leaf(compile(test, scope, built), scope)))
+                case Prop.Equal(left, right) =>
+                    equality(expressionSir(left), expressionSir(right))
+                        .map(test => LeafFormula.Test(leaf(compile(test, scope, built), scope)))
+                case Prop.Denotes(expr) =>
+                    Right(
+                      LeafFormula.Denotes(
+                        leaf(compile(expressionSir(expr), scope, built), scope)
+                      )
+                    )
+                case Prop.And(left, right) =>
+                    for
+                        l <- loop(left, scope, built)
+                        r <- loop(right, scope, built)
+                    yield LeafFormula.And(l, r)
+                case Prop.Or(left, right) =>
+                    for
+                        l <- loop(left, scope, built)
+                        r <- loop(right, scope, built)
+                    yield LeafFormula.Or(l, r)
+                case Prop.Not(inner) =>
+                    loop(inner, scope, built).map(LeafFormula.Not(_))
+                case Prop.Implies(premise, conclusion) =>
+                    for
+                        p <- loop(premise, scope, built)
+                        c <- loop(conclusion, scope, built)
+                    yield LeafFormula.Implies(p, c)
+                case Prop.Iff(left, right) =>
+                    for
+                        l <- loop(left, scope, built)
+                        r <- loop(right, scope, built)
+                    yield LeafFormula.And(LeafFormula.Implies(l, r), LeafFormula.Implies(r, l))
+                case Prop.Forall(ident, body) =>
+                    quantified(ident).flatMap { (introduced, bindings) =>
+                        loop(body, scope ++ introduced, built ++ bindings)
+                            .map(LeafFormula.Forall(introduced, _))
+                    }
+                case Prop.Exists(ident, None, body) =>
+                    quantified(ident).flatMap { (introduced, bindings) =>
+                        loop(body, scope ++ introduced, built ++ bindings)
+                            .map(LeafFormula.Exists(introduced, _))
+                    }
+                case Prop.Exists(ident, Some(witness), body) =>
+                    loop(instantiate(body, ident, witness), scope, built)
+            }
+
+            loop(prop, Nil, Nil).map(formula =>
+                Lowered(binders.toList, formula, leaves.toVector, leafBinders.toVector)
+            )
         }
 
-    /** A type a quantified variable can have. Lean passes a quantified value to the tests'
-      * programs, so its UPLC form must be one Lean can build. Values inside a test, such as a
-      * call's arguments and result, can have any type: the compiler lowers them, and Lean never
-      * sees them.
+    /** A type Lean can build a value of, and pass to the tests' programs. A quantified variable of
+      * such a type is a variable of the Lean proposition. Values inside a test, such as a call's
+      * arguments and result, can have any type: the compiler lowers them, and Lean never sees them.
       */
     private def quantifiable(tp: SIRType): Boolean =
-        tp == SIRType.Integer || tp == SIRType.Boolean || isData(tp)
+        tp == SIRType.Integer || tp == SIRType.Boolean || tp == SIRType.ByteString || isData(tp)
 
     /** `Data`, or one of its constructors, such as the type of `Data.I(x)`. */
     private def isData(tp: SIRType): Boolean = tp match
@@ -196,31 +301,153 @@ object UplcBlaster {
         case SIRType.CaseClass(_, _, Some(parent)) => isData(parent)
         case _                                     => false
 
-    private def universalPrefix(prop: Prop): Either[String, (List[PropExpr.Ident[?]], Prop)] = {
-        @annotation.tailrec
-        def loop(
-            current: Prop,
-            binders: List[PropExpr.Ident[?]]
-        ): Either[String, (List[PropExpr.Ident[?]], Prop)] = current match
-            case Prop.Forall(ident, body) =>
-                if quantifiable(ident.tp) then loop(body, ident :: binders)
-                else
-                    Left(
-                      s"a ${ident.tp.show} binder is not supported, only BigInt, Boolean and Data"
+    /** The variables Lean quantifies over for a statement's variable `name` of type `tp`, and the
+      * variable's value built from them, when it is not one of them itself.
+      *
+      * A variable of a case class ranges over the values of its constructor (prop-semantics.md §1),
+      * so it stands for one variable per field, named `name.field`, and its value is the
+      * constructor applied to them. A field that is a case class is expanded in turn: a `Config`
+      * with a `PubKeyHash` ends in the hash's `ByteString`.
+      */
+    private def expand(
+        name: String,
+        tp: SIRType
+    ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] = unwrap(tp) match
+        case plain if quantifiable(plain) =>
+            Right(List(new PropExpr.Ident[Any](name, 0L, plain)) -> None)
+        case product @ SIRType.CaseClass(constructor, typeArguments, None) =>
+            val arguments = constructor.typeParams.zip(typeArguments).toMap
+            val fields = constructor.params.map { field =>
+                val fieldName = s"$name.${field.name}"
+                val fieldType = SIRType.substitute(field.tp, arguments, Map.empty)
+                expand(fieldName, fieldType).map { (binders, built) =>
+                    val value: AnnotatedSIR =
+                        built.getOrElse(SIR.Var(fieldName, binders.head.tp, AnnotationsDecl.empty))
+                    binders -> value
+                }
+            }
+            fields.collectFirst { case Left(reason) => reason } match
+                case Some(reason) => Left(reason)
+                case None =>
+                    val (binders, values) = fields.collect { case Right(field) => field }.unzip
+                    // The declaration of a class that is its own only constructor, as the
+                    // compiler makes it.
+                    val declaration = DataDecl(
+                      constructor.name,
+                      List(constructor),
+                      constructor.typeParams,
+                      constructor.annotations
                     )
-            case body => Right(binders.reverse -> body)
+                    Right(
+                      binders.flatten -> Some(
+                        SIR.Constr(
+                          constructor.name,
+                          declaration,
+                          values,
+                          product,
+                          AnnotationsDecl.empty
+                        )
+                      )
+                    )
+        case other =>
+            Left(
+              s"a ${other.show} binder is not supported, only BigInt, Boolean, ByteString, Data " +
+                  "and case classes of them"
+            )
 
-        loop(prop, Nil)
+    /** `sir` with the variables in `built` that it uses bound to their values, inside its data
+      * declarations.
+      */
+    private def withBuilt(built: List[Binding], sir: SIR): SIR = {
+        val used = built.filter(binding => freeVariables(sir).contains(binding.name))
+        if used.isEmpty then sir
+        else
+            val (data, expression) = declarations(sir)
+            val constructed = used.flatMap(binding => constructorDeclarations(binding.value))
+            withDeclarations(
+              constructed ++ data,
+              SIR.Let(used, expression, SIR.LetFlags.None, AnnotationsDecl.empty)
+            )
     }
 
-    /** A test, or a total call continuing with one, as a function of `binders` returning a Boolean.
+    /** Applies the body of an `existsLet` to its explicit witness.
+      *
+      * Each expression in the proposition becomes `let ident = witness in expression`, a strict
+      * binding. This preserves strict evaluation and failure: it is not a textual replacement that
+      * could discard a failing witness when the body does not use it. The proposition structure
+      * stays outside UPLC, so the binding is made independently in each leaf that the structure
+      * evaluates.
+      *
+      * The binding is one more `let` around the expression, with the witness's module definitions
+      * around it. So the expression keeps the shape the rest of the lowering reads: a call's
+      * arguments are still a tuple written out, under its `let`s ([[tupleComponents]]), and the
+      * definitions of registered functions are still where [[unlinkModuleDefinitions]] removes
+      * them, in the witness as in the expression.
       */
-    private def predicate(
+    private def instantiate[A](
         prop: Prop,
-        binders: List[PropExpr.Ident[?]],
-        functions: FunctionTable
-    ): Either[String, Term] =
-        predicateSir(prop, functions).map(body => compileSirFunction(binders, body, functions))
+        ident: PropExpr.Ident[A],
+        witness: PropExpr[A]
+    ): Prop = {
+        def expression[T](expr: PropExpr[T]): PropExpr[T] = expr match
+            case current: PropExpr.Ident[T]
+                if current.id == ident.id && current.name == ident.name =>
+                witness.asInstanceOf[PropExpr[T]]
+            case PropExpr.SIRExpr(sir) =>
+                val (witnessDeclarations, linkedWitness) = declarations(expressionSir(witness))
+                val (definitions, witnessValue) = moduleDefinitions(linkedWitness)
+                val (bodyDeclarations, body) = declarations(sir)
+                val bound: AnnotatedSIR = SIR.Let(
+                  List(Binding(ident.name, ident.tp, witnessValue)),
+                  body,
+                  SIR.LetFlags.None,
+                  AnnotationsDecl.empty
+                )
+                PropExpr.SIRExpr[T](
+                  withDeclarations(
+                    witnessDeclarations ++ bodyDeclarations,
+                    definitions.foldRight(bound)((definition, inner) => definition(inner))
+                  )
+                )
+            case current => current
+
+        def loop(current: Prop): Prop = current match
+            case Prop.Bool(expr)         => Prop.Bool(expression(expr))
+            case Prop.Denotes(expr)      => Prop.Denotes(expression(expr))
+            case Prop.Equal(left, right) => Prop.Equal(expression(left), expression(right))
+            case Prop.Call(fn, arg, result, total, body) =>
+                Prop.Call(fn, expression(arg), result, total, loop(body))
+            case Prop.Forall(bound, body) => Prop.Forall(bound, loop(body))
+            case Prop.Exists(bound, supplied, body) =>
+                Prop.Exists(bound, supplied.map(expression), loop(body))
+            case Prop.And(left, right)     => Prop.And(loop(left), loop(right))
+            case Prop.Or(left, right)      => Prop.Or(loop(left), loop(right))
+            case Prop.Implies(left, right) => Prop.Implies(loop(left), loop(right))
+            case Prop.Iff(left, right)     => Prop.Iff(loop(left), loop(right))
+            case Prop.Not(inner)           => Prop.Not(loop(inner))
+
+        loop(prop)
+    }
+
+    /** The module definitions `Compiler.compile` put around an expression, outermost first, each as
+      * the `let` it is around what it is given, and the expression. A module definition has a
+      * qualified name, which a value of the expression's own never has.
+      */
+    private def moduleDefinitions(
+        sir: AnnotatedSIR
+    ): (List[AnnotatedSIR => AnnotatedSIR], AnnotatedSIR) = sir match
+        case SIR.Let(bindings, body: AnnotatedSIR, flags, anns)
+            if bindings.forall(_.name.contains('.')) =>
+            val (inner, expression) = moduleDefinitions(body)
+            val definition = (rest: AnnotatedSIR) => SIR.Let(bindings, rest, flags, anns)
+            (definition :: inner) -> expression
+        case expression => Nil -> expression
+
+    /** The data declarations of the constructors a built value applies. */
+    private def constructorDeclarations(sir: SIR): List[DataDecl] = sir match
+        case SIR.Constr(_, data, arguments, _, _) =>
+            data :: arguments.flatMap(constructorDeclarations)
+        case _ => Nil
 
     /** A test, or a total call continuing with one, as one Boolean SIR expression over the
       * statement's variables. A call is `(result => continuation)(fn(arguments...))`, where `fn` is
@@ -617,51 +844,139 @@ object UplcBlaster {
         case SIR.Cast(inner, _, _) => freeVariables(inner)
         case SIR.Decl(_, term)     => freeVariables(term)
 
-    private def check(goal: Lowered, budget: Int, leanDirectory: Path): VerificationResult = {
-        require(
-          Files.isDirectory(leanDirectory),
-          s"Lean workspace does not exist: ${leanDirectory.toAbsolutePath}"
-        )
+    /** Writes the Lean check of a lowered statement into `directory`: each leaf's program as
+      * `Leaf<n>.flat`, and `Check.lean`, whose path it returns. The tactic runs
+      * `lake env lean Check.lean` in its workspace; a check written with this can be read, or run
+      * by hand with other options.
+      */
+    def writeCheck(goal: Lowered, budget: Int, directory: Path): Path = {
+        val flats = goal.leaves.zipWithIndex.map { (program, index) =>
+            val flat = directory.resolve(s"Leaf$index.flat")
+            Files.writeString(flat, Hex.bytesToHex(program.cborEncoded).toLowerCase)
+            flat
+        }
+        val source = directory.resolve("Check.lean")
+        Files.writeString(source, renderCheck(goal, flats, budget))
+        source
+    }
+
+    private def check(
+        goal: Lowered,
+        budget: Int,
+        leanDirectory: Path,
+        timeout: Option[FiniteDuration]
+    ): ExecutionResult = {
+        if !Files.isDirectory(leanDirectory) then
+            return VerificationResult.Failed(
+              s"Lean workspace does not exist: ${leanDirectory.toAbsolutePath}"
+            )
         val temporary = Files.createTempDirectory("scalus-uplc-blaster-")
         try
-            val flats = goal.leaves.zipWithIndex.map { (program, index) =>
-                val flat = temporary.resolve(s"Leaf$index.flat")
-                Files.writeString(flat, Hex.bytesToHex(program.cborEncoded).toLowerCase)
-                flat
-            }
-            val closed = goal.binders.isEmpty
-            val source = temporary.resolve("Check.lean")
-            Files.writeString(source, renderCheck(goal, flats, budget))
-            val process = new ProcessBuilder("lake", "env", "lean", source.toString)
-                .directory(leanDirectory.toAbsolutePath.toFile)
-                .redirectErrorStream(true)
-                .start()
-            val output = String(process.getInputStream.readAllBytes(), StandardCharsets.UTF_8)
-            val exit = process.waitFor()
-            val artifact = Artifact(
-              goal.leaves.toList.map(program =>
-                  Hex.bytesToHex(Utils.sha2_256(program.cborEncoded)).toLowerCase
-              ),
-              budget,
-              output.trim,
-              Nil,
-              if closed then ProofKind.LeanNative else ProofKind.Blaster
-            )
-            def failure = VerificationResult.Inconclusive(
-              s"Lean exited with code $exit: ${concise(output)}"
-            )
-            if closed then
-                if exit == 0 then VerificationResult.Proven(Proof(artifact))
-                else if output.contains("`native_decide` evaluated that the proposition") then
-                    replay(goal, artifact)
-                else failure
-            else if output.contains("✅ Valid") then VerificationResult.Proven(Proof(artifact))
-            else if output.contains("❌ Falsified") then replay(goal, artifact)
-            else if output.contains("⚠️ Undetermined") then
-                VerificationResult.Inconclusive("UPLC Blaster was undetermined")
-            else failure
+            val source = writeCheck(goal, budget, temporary)
+            // Lean's output goes to a file, so that waiting for the process can time out.
+            val log = temporary.resolve("Check.out")
+            val exit =
+                try
+                    execute(
+                      List("lake", "env", "lean", source.toString),
+                      leanDirectory.toAbsolutePath,
+                      log,
+                      timeout
+                    )
+                catch
+                    case error: java.io.IOException =>
+                        return VerificationResult.Failed(
+                          s"cannot start Lean: ${error.getMessage}"
+                        )
+            exit match
+                case Some(code) => verdict(goal, budget, code, Files.readString(log))
+                case None =>
+                    VerificationResult.Inconclusive(
+                      s"Lean did not finish within ${timeout.get}"
+                    )
         finally
             Files.walk(temporary).iterator().asScala.toList.reverse.foreach(Files.deleteIfExists)
+    }
+
+    /** Runs `command` in `directory`, with its output in `log`, and returns its exit code, or
+      * `None` when it did not finish within `timeout`.
+      *
+      * However the wait ends, with a result, at the time limit, or because this thread was
+      * interrupted, the process and the ones it started are stopped before this returns or throws:
+      * nothing is left running in a directory the caller removes.
+      */
+    private[uplcblaster] def execute(
+        command: List[String],
+        directory: Path,
+        log: Path,
+        timeout: Option[FiniteDuration]
+    ): Option[Int] = {
+        val process = new ProcessBuilder(command*)
+            .directory(directory.toFile)
+            .redirectErrorStream(true)
+            .redirectOutput(log.toFile)
+            .start()
+        try
+            val finished = timeout match
+                case Some(limit) => process.waitFor(limit.length, limit.unit)
+                case None        => process.waitFor(); true
+            Option.when(finished)(process.exitValue())
+        finally stop(process)
+    }
+
+    /** Stops `process` and the processes it started, where any still runs. `lake env` runs Lean as
+      * a child process, and Lean the solver, and a child outlives its parent. So the children are
+      * listed while their parent is there to name them. One started between the listing and its
+      * parent's end is not found.
+      */
+    private def stop(process: Process): Unit = {
+        val children = process.descendants().iterator().asScala.toList
+        process.destroyForcibly()
+        children.foreach(_.destroyForcibly())
+        children.foreach(_.onExit().join())
+        process.waitFor()
+    }
+
+    /** The result Lean's exit code and output stand for. */
+    private[uplcblaster] def verdict(
+        goal: Lowered,
+        budget: Int,
+        exit: Int,
+        output: String
+    ): ExecutionResult = {
+        val closed = goal.binders.isEmpty
+        val artifact = Artifact(
+          goal.leaves.toList.map(program =>
+              Hex.bytesToHex(Utils.sha2_256(program.cborEncoded)).toLowerCase
+          ),
+          budget,
+          output.trim,
+          Nil,
+          if closed then ProofKind.LeanNative else ProofKind.Blaster
+        )
+        def failure: ExecutionResult = VerificationResult.Failed(
+          s"Lean exited with code $exit: ${concise(output)}"
+        )
+        if closed then
+            if exit == 0 then VerificationResult.Proven(Proof(artifact))
+            else if output.contains("`native_decide` evaluated that the proposition") then
+                replay(goal, artifact)
+            else failure
+        else if output.contains("✅ Valid") then VerificationResult.Proven(Proof(artifact))
+        else if output.contains("❌ Falsified") then
+            if goal.hasExistential then
+                VerificationResult.Inconclusive(
+                  "UPLC Blaster falsified a statement that asks for a witness, with an exists, " +
+                      "or with a forAll under a negation or in a premise, but did not provide " +
+                      "a finite certificate that the Scalus CEK can replay to establish that no " +
+                      "witness exists"
+                )
+            else replay(goal, artifact)
+        else if output.contains("⚠️ Undetermined") then
+            VerificationResult.Inconclusive(
+              "UPLC Blaster was undetermined"
+            )
+        else failure
     }
 
     /** What a predicate did on concrete arguments, on the Scalus CEK. */
@@ -677,24 +992,31 @@ object UplcBlaster {
       * the predicate needs more steps. Only a counterexample under which the statement is false
       * without the budget is a refutation.
       */
-    private def replay(goal: Lowered, artifact: Artifact): VerificationResult =
+    private def replay(goal: Lowered, artifact: Artifact): ExecutionResult =
         counterexample(goal.binders, artifact.output) match
-            case Left(error) =>
-                VerificationResult.Inconclusive(s"cannot read Lean's counterexample: $error")
+            case Left(SmtValues.Unreadable.Malformed(error)) =>
+                VerificationResult.Failed(s"cannot read Lean's counterexample: $error")
+            // Lean's model has more values than the variable's type, so this one refutes nothing.
+            case Left(SmtValues.Unreadable.OutsideType(error)) =>
+                VerificationResult.Inconclusive(
+                  s"Lean's counterexample is no value of its variable's type: $error"
+                )
             case Right(values) => replayValues(goal, artifact, values)
 
     private def replayValues(
         goal: Lowered,
         artifact: Artifact,
         values: List[Constant]
-    ): VerificationResult = {
+    ): ExecutionResult = {
         val shown = goal.binders
             .zip(values)
             .map((binder, value) => s"${binder.name} = ${display(value)}")
             .mkString(", ")
         val falsification =
             if shown.isEmpty then "Lean's falsification" else s"Lean's counterexample ($shown)"
-        val outcomes = goal.leaves.map(evaluate(_, values))
+        val outcomes = goal.leaves.zip(goal.leafBinders).map { (program, scope) =>
+            evaluate(program, scope.map(values))
+        }
         holds(goal.body, outcomes) match
             case Some(false) =>
                 VerificationResult.Refuted(
@@ -718,35 +1040,51 @@ object UplcBlaster {
       * takes `0`, `false` or `I 0`; the replay checks the completed assignment.
       *
       * A value can span several lines: a `Data` value is printed as a term over the lines after
-      * `- xN:`, each indented.
+      * `- xN:`, up to the one that closes its parentheses. They are not all indented: Z3 starts a
+      * nested `let` of a large value on a new line.
       */
     private def counterexample(
         binders: List[PropExpr.Ident[?]],
         output: String
-    ): Either[String, List[Constant]] = {
-        // (values found so far, whether the last line belonged to a value)
-        val (found, _) = output.linesIterator.foldLeft((List.empty[(Int, String)], false)) {
-            case ((found, continuing), line) =>
-                line match
-                    case counterexampleLine(index, value) => ((index.toInt -> value) :: found, true)
-                    case _ if continuing && line.headOption.exists(_.isWhitespace) =>
-                        val (index, value) = found.head
-                        ((index -> s"$value ${line.trim}") :: found.tail, true)
-                    case _ => (found, false)
+    ): Either[SmtValues.Unreadable, List[Constant]] = {
+        // The values found so far; the last one goes on while its term is not whole.
+        val found = output.linesIterator.foldLeft(List.empty[(Int, String)]) { (found, line) =>
+            line match
+                case counterexampleLine(index, value) => (index.toInt -> value) :: found
+                case _ =>
+                    found match
+                        case (index, value) :: earlier if !SmtValues.complete(value) =>
+                            (index -> s"$value ${line.trim}") :: earlier
+                        case _ => found
         }
         val reported = found.toMap
-        binders.zipWithIndex.foldRight[Either[String, List[Constant]]](Right(Nil)) {
+        binders.zipWithIndex.foldRight[Either[SmtValues.Unreadable, List[Constant]]](Right(Nil)) {
             case ((binder, index), rest) =>
                 val text = reported.get(index)
-                val value: Either[String, Constant] = binder.tp match
+                val value: Either[SmtValues.Unreadable, Constant] = binder.tp match
                     case SIRType.Integer =>
                         text.fold(Right(BigInt(0)))(SmtValues.integer).map(Constant.Integer(_))
                     case SIRType.Boolean =>
                         text.fold(Right(false))(SmtValues.boolean).map(Constant.Bool(_))
+                    case SIRType.ByteString =>
+                        text.fold(Right(ByteString.empty))(SmtValues.bytes)
+                            .map(Constant.ByteString(_))
                     case tp if isData(tp) =>
                         text.fold(Right(Data.I(0)))(SmtValues.data).map(Constant.Data(_))
-                    case other => Left(s"a ${other.show} binder has no counterexample value")
-                for v <- value.left.map(error => s"${binder.name}: $error"); r <- rest yield v :: r
+                    case other =>
+                        Left(
+                          SmtValues.Unreadable.Malformed(
+                            s"a ${other.show} binder has no counterexample value"
+                          )
+                        )
+                // The variable the value is of, in the reason.
+                val named = value.left.map {
+                    case SmtValues.Unreadable.Malformed(reason) =>
+                        SmtValues.Unreadable.Malformed(s"${binder.name}: $reason")
+                    case SmtValues.Unreadable.OutsideType(reason) =>
+                        SmtValues.Unreadable.OutsideType(s"${binder.name}: $reason")
+                }
+                for v <- named; r <- rest yield v :: r
         }
     }
 
@@ -802,6 +1140,12 @@ object UplcBlaster {
             case LeafFormula.Not(inner) => holds(inner, outcomes).map(!_)
             case LeafFormula.Implies(premise, conclusion) =>
                 holds(LeafFormula.Or(LeafFormula.Not(premise), conclusion), outcomes)
+            // Replay supplies one concrete value for every binder, and evaluates the quantified
+            // body at that assignment. A statement that asks for a witness never reaches replay
+            // (`Lowered.hasExistential`), so every quantifier here ranges over all values: a
+            // `forAll` in a positive position, an `exists` in a negative one.
+            case LeafFormula.Forall(_, body) => holds(body, outcomes)
+            case LeafFormula.Exists(_, body) => holds(body, outcomes)
 
     /** Lean's output, without the lines that report each imported program, and shortened. */
     private def concise(output: String): String = {
@@ -820,10 +1164,11 @@ object UplcBlaster {
         }
 
     private def leanType(tp: SIRType): String = tp match
-        case SIRType.Integer  => "Integer"
-        case SIRType.Boolean  => "Bool"
-        case tp if isData(tp) => "Data"
-        case other            => throw new IllegalStateException(s"unexpected ${other.show} binder")
+        case SIRType.Integer    => "Integer"
+        case SIRType.Boolean    => "Bool"
+        case SIRType.ByteString => "ByteString"
+        case tp if isData(tp)   => "Data"
+        case other => throw new IllegalStateException(s"unexpected ${other.show} binder")
 
     /** Renders a formula with each leaf read by its polarity (design doc §6.2).
       *
@@ -841,9 +1186,14 @@ object UplcBlaster {
     private def renderFormula(
         formula: LeafFormula,
         state: Int => String,
+        binder: Int => String,
         positive: Boolean
     ): String =
-        def render(inner: LeafFormula, positive: Boolean) = renderFormula(inner, state, positive)
+        def render(inner: LeafFormula, positive: Boolean) =
+            renderFormula(inner, state, binder, positive)
+        def quantified(symbol: String, binders: List[Int], body: LeafFormula): String =
+            if binders.isEmpty then render(body, positive)
+            else s"($symbol ${binders.map(binder).mkString(" ")}, ${render(body, positive)})"
         formula match
             case LeafFormula.Test(leaf) =>
                 if positive then s"(fromFrameToBool ${state(leaf)} = some true)"
@@ -859,6 +1209,14 @@ object UplcBlaster {
             case LeafFormula.Not(inner) => s"(¬ ${render(inner, !positive)})"
             case LeafFormula.Implies(premise, conclusion) =>
                 s"(${render(premise, !positive)} → ${render(conclusion, positive)})"
+            case LeafFormula.Forall(binders, body) => quantified("∀", binders, body)
+            // Blaster accepts Exists directly, but the equivalent ¬∀¬ form keeps generated
+            // quantifiers uniform and lets the ordinary universal path handle their binders.
+            case LeafFormula.Exists(binders, body) =>
+                render(
+                  LeafFormula.Not(LeafFormula.Forall(binders, LeafFormula.Not(body))),
+                  positive
+                )
 
     /** The Lean check of a lowered statement. A statement with quantified variables is proved by
       * Blaster over `#prep_uplc_run`. A closed statement has nothing to search for: its predicates
@@ -872,33 +1230,42 @@ object UplcBlaster {
         val check =
             if goal.binders.isEmpty then
                 val state = (leaf: Int) => s"(runProgramFor leaf$leaf.script [] $budget)"
-                s"example : ${renderFormula(goal.body, state, positive = true)} := by native_decide"
+                s"example : ${renderFormula(goal.body, state, _ => "", positive = true)} := by native_decide"
             else
                 val names = goal.binders.indices.map(index => s"x$index").toList
                 val declarations = goal.binders.zip(names).map { (binder, name) =>
                     s"($name : ${leanType(binder.tp)})"
                 }
-                val terms = goal.binders.zip(names).map { (binder, name) =>
-                    s"Term.Const $$ Const.${leanType(binder.tp)} $name"
+                val arguments = goal.leafBinders.zipWithIndex.map { (scope, leaf) =>
+                    val parameters = scope.map(declarations)
+                    val terms = scope.map { index =>
+                        val binder = goal.binders(index)
+                        s"Term.Const $$ Const.${leanType(binder.tp)} ${names(index)}"
+                    }
+                    ((s"def arguments$leaf" +: parameters) :+
+                        s": List Term := [${terms.mkString(", ")}]").mkString(" ")
                 }
-                val arguments = (("def arguments" +: declarations) :+
-                    s": List Term := [${terms.mkString(", ")}]").mkString(" ")
                 val prepared = flats.indices.map(index =>
-                    s"#prep_uplc_run prepared$index leaf$index arguments $budget"
+                    s"#prep_uplc_run prepared$index leaf$index arguments$index $budget"
                 )
-                val state = (leaf: Int) => s"(prepared$leaf${names.map(" " + _).mkString})"
-                val formula = renderFormula(goal.body, state, positive = true)
-                s"""$arguments
+                val state = (leaf: Int) => {
+                    val arguments = goal.leafBinders(leaf).map(index => " " + names(index)).mkString
+                    s"(prepared$leaf$arguments)"
+                }
+                val declaration = (index: Int) => declarations(index)
+                val formula = renderFormula(goal.body, state, declaration, positive = true)
+                s"""${arguments.mkString("\n")}
                    |
                    |${prepared.mkString("\n")}
                    |
-                   |#blaster (gen-cex: 1) [∀ ${declarations.mkString(" ")}, $formula]""".stripMargin
+                   |#blaster (gen-cex: 1) [$formula]""".stripMargin
 
         s"""import ScalusProofs.Run
            |
            |namespace ScalusProofs.Runtime
            |
            |open PlutusCore.Integer (Integer)
+           |open PlutusCore.ByteString (ByteString)
            |open PlutusCore.UPLC
            |open PlutusCore.Data (Data)
            |open PlutusCore.UPLC.Term
