@@ -48,7 +48,9 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         fee: Lovelace = defaultFee
     )
 
-    def checkTestCase(testCase: TestCase): Result = {
+    def checkTestCase(testCase: TestCase): Result = compiled.runScript(scriptContext(testCase))
+
+    def scriptContext(testCase: TestCase): ScriptContext = {
         val vestingDatum = testCase.vestingDatum
         val signatories = testCase.signatories
         val interval = testCase.interval
@@ -89,7 +91,8 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
           fee = fee
         )
 
-        val scriptContext = ScriptContext(
+        // debugPrint(txInfo, vestingDatum, redeemer)
+        ScriptContext(
           txInfo = txInfo,
           redeemer = toData(redeemer),
           scriptInfo = ScriptInfo.SpendingScript(
@@ -97,9 +100,6 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
             datum = Some(vestingDatum.toData)
           )
         )
-
-        // debugPrint(txInfo, vestingDatum, redeemer)
-        compiled.runScript(scriptContext)
     }
 
     // Success cases
@@ -447,6 +447,42 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         assert(result.isFailure, "Withdrawal should fail when amount is zero")
+    }
+
+    test("the validator is called from compiled code, on a script context that the code computes") {
+        // `validate` is an inline method of the `Validator` trait, so the inliner binds the
+        // validator object as the trait's `this`. Here that binding is not the only one of a
+        // function's body: it comes next to the binding of the argument, or in a block.
+        val options = summon[Options]
+        val onComputed = compileWithOptions(
+          options,
+          (context: Data) => VestingValidator.validate(context.to[ScriptContext].toData)
+        )
+        val inBlock = compileWithOptions(
+          options,
+          (context: Data) => {
+              val same = context
+              VestingValidator.validate(same)
+          }
+        )
+        val vestingDatum = Config(
+          beneficiary = beneficiaryPKH,
+          startTimestamp = defaultStartTime,
+          duration = defaultDuration,
+          initialAmount = defaultInitialAmount
+        )
+        val withdrawal = TestCase(
+          signatories = List(beneficiaryPKH),
+          interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration),
+          vestingDatum = vestingDatum,
+          redeemer = Action(vestingDatum.initialAmount),
+          beneficiaryInputAmount = defaultFee
+        )
+        val accepted = scriptContext(withdrawal)
+        val rejected = scriptContext(withdrawal.copy(signatories = List(ownerPKH)))
+        for wrapper <- Seq(onComputed, inBlock) do
+            assert(wrapper.runScript(accepted).isSuccess)
+            assert(wrapper.runScript(rejected).isFailure)
     }
 
     test("2 ScriptContexts") {

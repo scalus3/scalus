@@ -3577,7 +3577,16 @@ final class SIRCompiler(
                                 case id: Ident =>
                                     removed.contains(id.symbol)
                                 case _ => false
-                            if shouldRemove then (kept, removed + vd.symbol)
+                            // `Trait_this = SomeObject`: the inliner's binding of the prefix of an
+                            // inline method inherited from a trait, as `Validator.validate` is.
+                            // `compileDefDef` skips it where it is the only binding of a
+                            // function's whole body. Here it comes next to other bindings, those
+                            // of a computed argument, or in a block. The module is no value to
+                            // bind: its members are resolved by their symbols.
+                            val isModuleThis =
+                                vd.name.show.endsWith("_this") &&
+                                    vd.rhs.tpe.termSymbol.is(Flags.Module)
+                            if shouldRemove || isModuleThis then (kept, removed + vd.symbol)
                             else (kept :+ vd, removed)
                         case other => (kept :+ other, removed)
                 }
