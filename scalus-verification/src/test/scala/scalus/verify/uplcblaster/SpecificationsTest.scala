@@ -29,6 +29,20 @@ object SpecifiedExamples {
     def guarded(x: BigInt, lo: BigInt, hi: BigInt): BigInt =
         if lo <= hi then clamp(x, lo, hi) else lo
 
+    /** The distance between two bounds given in order. Where it calls itself, it passes them the
+      * other way round, exactly where they are in order.
+      */
+    def span(lo: BigInt, hi: BigInt): BigInt = {
+        Spec.expects(lo <= hi)
+        if lo < hi then span(hi, lo) else hi - lo
+    }
+
+    /** The same, exchanging them only where they are not in order. */
+    def spanOrdered(lo: BigInt, hi: BigInt): BigInt = {
+        Spec.expects(lo <= hi)
+        if hi < lo then spanOrdered(hi, lo) else hi - lo
+    }
+
     /** A caller that hands the precondition on to its own callers. */
     def passes(x: BigInt, lo: BigInt, hi: BigInt): BigInt = {
         Spec.expects(lo <= hi)
@@ -107,6 +121,8 @@ class SpecificationsTest extends AnyFunSuite with LeanProofs {
     private val violates = FunctionDef(SpecifiedExamples.violates)
     private val guarded = FunctionDef(SpecifiedExamples.guarded)
     private val passes = FunctionDef(SpecifiedExamples.passes)
+    private val span = FunctionDef(SpecifiedExamples.span)
+    private val spanOrdered = FunctionDef(SpecifiedExamples.spanOrdered)
     private val clampAtHead = FunctionDef(SpecifiedExamples.clampAtHead)
     private val mentions = FunctionDef(SpecifiedExamples.mentions)
     private val checked = FunctionDef(SpecifiedExamples.checked)
@@ -273,6 +289,27 @@ class SpecificationsTest extends AnyFunSuite with LeanProofs {
         val branching = verifierWith(guarded)
         val List(established) = branching.obligations(guarded.ref).statements
         assert(prove(branching, established).isInstanceOf[VerificationResult.Proven])
+
+        // A function that calls itself owes its own precondition there. The contract's variables
+        // are then the parameters the call's arguments are written in: span(hi, lo) must be
+        // checked with the caller's `hi` and `lo`, not with `lo` as the call has just bound it.
+        def owedToItself(function: FunctionDef[?, ?]): VerificationResult = {
+            val verifier = Verifier.empty
+            verifier.addFunction(function)
+            verifier.contract(s"${function.name}_ordered", inSource(function))
+            val List(owed) = verifier.obligations(function.ref).statements
+            prove(verifier, owed)
+        }
+        owedToItself(span) match
+            case VerificationResult.Refuted(proof) =>
+                val values = proof.artifact
+                    .asInstanceOf[UplcBlaster.Artifact]
+                    .counterexample
+                    .map((name, value) => name.takeWhile(_ != '-') -> integer(value))
+                    .toMap
+                assert(values("lo") < values("hi"), values)
+            case other => fail(s"expected a refutation, got $other")
+        assert(owedToItself(spanOrdered).isInstanceOf[VerificationResult.Proven])
 
         // A call in a clause is not a call of the function: it owes nothing.
         val specifying = verifierWith(mentions)

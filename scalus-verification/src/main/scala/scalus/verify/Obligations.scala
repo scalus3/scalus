@@ -197,20 +197,29 @@ private[verify] object Obligations {
         case value: AnnotatedSIR => value
         case SIR.Decl(_, term)   => annotated(term)
 
-    /** The arguments of a call bound to the variables of the callee's contract, around `body`. */
+    /** `body`, which is about the variables of the callee's contract, with each variable standing
+      * for the argument the call passes for it.
+      *
+      * The arguments are bound under names of their own, and `body` is renamed to those. Binding
+      * the contract's variables themselves would be wrong where a function calls itself: they are
+      * then the parameters the arguments are written in, and in `span(hi, lo)` the second argument
+      * would be the `lo` the first one has just bound.
+      */
     def bind(
         variables: List[PropExpr.Ident[?]],
         arguments: List[AnnotatedSIR],
         body: SIR
-    ): AnnotatedSIR =
+    ): AnnotatedSIR = {
+        val passed = variables.map(variable => variable.name -> s"${variable.name}$$argument")
         SIR.Let(
-          variables
-              .zip(arguments)
-              .map((variable, argument) => Binding(variable.name, variable.tp, argument)),
-          body,
+          variables.zip(passed).zip(arguments).map { case ((variable, (_, name)), argument) =>
+              Binding(name, variable.tp, argument)
+          },
+          SIR.renameFreeVars(body, passed.toMap),
           SIR.LetFlags.None,
           annotations
         )
+    }
 
     val truth: SIR = isTrue
 

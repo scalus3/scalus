@@ -358,7 +358,8 @@ a test that cannot run Lean fails instead of being canceled. In `ci-jvm` those t
 
 - **Types.** A quantified variable is a `BigInt`, a `Boolean`, a `ByteString`, a `Data`, or a
   case class of them. An enum, a `List` or an `Option` cannot be quantified over yet; quantify
-  over `Data` with `denotes(d.to[A]) ==> …`. The operands of `equal` must be `BigInt`, `Boolean`
+  over `Data` with `denotes(d.to[A]) ==> …`. Nor can one constructor of `Data`, such as
+  `Data.I`: Lean's variable for it would be any `Data`. Quantify over its field. The operands of `equal` must be `BigInt`, `Boolean`
   or `Data`. Call arguments and results can have any type.
 - **Byte strings.** Lean's model stores a byte string as a `String`, so a `ByteString` variable
   ranges over more than byte strings. A proof holds of them all the same; a counterexample with

@@ -301,6 +301,16 @@ object UplcBlaster {
         case SIRType.CaseClass(_, _, Some(parent)) => isData(parent)
         case _                                     => false
 
+    /** A type a quantified variable can have as it is: Lean has a variable of it, and builds its
+      * values. `Data` is one, and a single constructor of `Data` is not. Lean's variable for
+      * `Data.I` would be any `Data`, so a statement would be refuted by a value that is no `I`, and
+      * an `exists` proved by one.
+      */
+    private def leanVariable(tp: SIRType): Boolean = tp match
+        case SIRType.Integer | SIRType.Boolean | SIRType.ByteString => true
+        case SIRType.SumCaseClass(decl, _) => decl.name == SIRType.Data.name
+        case _                             => false
+
     /** The variables Lean quantifies over for a statement's variable `name` of type `tp`, and the
       * variable's value built from them, when it is not one of them itself.
       *
@@ -313,7 +323,7 @@ object UplcBlaster {
         name: String,
         tp: SIRType
     ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] = unwrap(tp) match
-        case plain if quantifiable(plain) =>
+        case plain if leanVariable(plain) =>
             Right(List(new PropExpr.Ident[Any](name, 0L, plain)) -> None)
         case product @ SIRType.CaseClass(constructor, typeArguments, None) =>
             val arguments = constructor.typeParams.zip(typeArguments).toMap
