@@ -9,16 +9,30 @@ import scalus.compiler.sir.lowering.{PrimitiveRepresentation, ProductCaseClassRe
 import scalus.uplc.{Constant, PlutusV3, Term}
 import scalus.uplc.Term.asTerm
 import scalus.uplc.builtin.{Builtins, ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.Data.toData
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.verify.*
 import scalus.verify.Props.*
 
 import java.nio.file.Files
+import scala.concurrent.duration.*
+import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 
 case class BlasterPair(a: BigInt, b: BigInt) derives FromData, ToData
 
 @Compile
 object BlasterPair
+
+case class BlasterOwner(key: ByteString) derives FromData, ToData
+
+@Compile
+object BlasterOwner
+
+case class BlasterOwned(owner: BlasterOwner, amount: BigInt) derives FromData, ToData
+
+@Compile
+object BlasterOwned
 
 enum BlasterShape derives FromData, ToData:
     case Circle(r: BigInt)
@@ -83,6 +97,84 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
               else Math.min(x, BigInt(0)) <= BigInt(0)
           ),
           budget = 60
+        )
+    }
+
+    test("proves existential statements and explicit witnesses") {
+        val searched = forAll[BigInt](x => exists[BigInt](y => y == x + BigInt(1)))
+        val loweredSearch = lowered(searched, FunctionTable.empty)
+        loweredSearch.body match
+            case UplcBlaster.LeafFormula.Forall(
+                  List(0),
+                  UplcBlaster.LeafFormula.Exists(
+                    List(1),
+                    UplcBlaster.LeafFormula.Test(0)
+                  )
+                ) =>
+            case other => fail(s"expected ∀ x. ∃ y. test, got $other")
+        assert(loweredSearch.leafBinders == Vector(List(0, 1)))
+        val rendered = Files.createTempDirectory("scalus-exists-check-")
+        try
+            val source = Files.readString(UplcBlaster.writeCheck(loweredSearch, 60, rendered))
+            assert(source.contains("¬ (∀"), source)
+            assert(!source.contains("∃"), source)
+        finally
+            Files.deleteIfExists(rendered.resolve("Check.lean"))
+            Files.deleteIfExists(rendered.resolve("Leaf0.flat"))
+            Files.deleteIfExists(rendered)
+        proven(searched, budget = 60)
+
+        val supplied = forAll[BigInt](x => existsLet(x + BigInt(1))(y => y > x))
+        val loweredWitness = lowered(supplied, FunctionTable.empty)
+        assert(loweredWitness.binders.size == 1)
+        assert(loweredWitness.leafBinders == Vector(List(0)))
+        proven(supplied, budget = 60)
+
+        // A witness is applied strictly, even when the body does not use it.
+        refuted(existsLet(BigInt(1) / BigInt(0))(_ => true), budget = 20)
+
+        // A leaf outside an existential's scope takes no value for its binder.
+        val splitScope = Prop(true) || exists[BigInt](_ => false)
+        val loweredScope = lowered(splitScope, FunctionTable.empty)
+        assert(loweredScope.leafBinders == Vector(Nil, List(0)))
+        proven(splitScope, budget = 20)
+
+        // There is no finite counterexample that CEK replay can use to check every witness.
+        run(exists[BigInt](x => x != x), 20, Nil) match
+            case (_, _, VerificationResult.Inconclusive(reason)) =>
+                assert(reason.contains("establish that no witness exists"), reason)
+            case (_, _, other) =>
+                fail(s"expected an inconclusive existential refutation, got $other")
+    }
+
+    test("a statement that asks for a witness is not refuted by one assignment") {
+        def searches(prop: Prop): Boolean = lowered(prop, FunctionTable.empty).hasExistential
+        // A quantifier asks for a witness by its position: an `exists` where the statement is
+        // read as stated, a `forAll` under a negation or in a premise.
+        assert(!searches(forAll[BigInt](n => n == n)))
+        assert(searches(exists[BigInt](n => n == n)))
+        assert(searches(!forAll[BigInt](n => n != BigInt(2))))
+        assert(searches(forAll[BigInt](n => n != BigInt(2)) ==> Prop(false)))
+        assert(!searches(!exists[BigInt](n => n != n)))
+        assert(!searches(exists[BigInt](n => n != n) ==> Prop(false)))
+        assert(searches(forAll[BigInt](n => n == n) <=> Prop(true)))
+        assert(!searches(!(!forAll[BigInt](n => n == n))))
+
+        // True, with the witness 2, which Lean does not find at a budget no run finishes in.
+        // The value a replay would take for `n` shows nothing about the others.
+        val squareRoot = !forAll[BigInt](n => n * n != BigInt(4))
+        run(squareRoot, 3, Nil) match
+            case (_, _, VerificationResult.Inconclusive(reason)) =>
+                assert(reason.contains("establish that no witness exists"), reason)
+            case (_, _, other) => fail(s"expected an inconclusive result, got $other")
+        proven(squareRoot, budget = 60)
+
+        // A negated `exists` ranges over every value, so one of them refutes it.
+        val counterexample = refuted(!exists[BigInt](n => n * n == BigInt(4)), budget = 60)
+        assert(counterexample.size == 1, counterexample)
+        assert(
+          counterexample.values.map(integer).forall(n => n * n == BigInt(4)),
+          counterexample
         )
     }
 
@@ -216,7 +308,12 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         )
 
         val lower = lowered(prop, FunctionTable.empty)
-        assert(lower.body == UplcBlaster.LeafFormula.Test(0))
+        assert(
+          lower.body == UplcBlaster.LeafFormula.Forall(
+            List(0),
+            UplcBlaster.LeafFormula.Forall(List(1), UplcBlaster.LeafFormula.Test(0))
+          )
+        )
         val applied = lower.leaves.head $ BigInt(1).asTerm $ BigInt(2).asTerm
         applied.term.evaluateDebug match
             case success: Result.Success => assert(success.term == Term.Const(Constant.Bool(true)))
@@ -247,9 +344,12 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
     test("a partial call claims its continuation only when the function returns") {
         val partial = forAll[BigInt](x => whenReturns(div10, x)(r => x != BigInt(0)))
         lowered(partial, FunctionTable(div10)).body match
-            case UplcBlaster.LeafFormula.Implies(
-                  UplcBlaster.LeafFormula.Denotes(0),
-                  UplcBlaster.LeafFormula.Test(1)
+            case UplcBlaster.LeafFormula.Forall(
+                  List(0),
+                  UplcBlaster.LeafFormula.Implies(
+                    UplcBlaster.LeafFormula.Denotes(0),
+                    UplcBlaster.LeafFormula.Test(1)
+                  )
                 ) =>
             case other => fail(s"expected denotes(div10(x)) ==> call(div10, x), got $other")
         proven(partial, 60, div10)
@@ -418,6 +518,81 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         refuted(forAll[Data](d => denotes(d.to[BlasterPair])), budget = 160)
     }
 
+    test("quantifies over byte strings, and reads a byte string counterexample back") {
+        proven(
+          forAll[ByteString](b => Builtins.lengthOfByteString(b) >= BigInt(0)),
+          budget = 40
+        )
+        proven(
+          forAll[ByteString, ByteString]((a, b) =>
+              Builtins.lengthOfByteString(Builtins.appendByteString(a, b)) ==
+                  Builtins.lengthOfByteString(a) + Builtins.lengthOfByteString(b)
+          ),
+          budget = 60
+        )
+        // negative control: a byte string need not be empty
+        val empty = forAll[ByteString](b => Builtins.lengthOfByteString(b) == BigInt(0))
+        val b = empty match
+            case Prop.Forall(b, _) => b
+            case other             => fail(s"expected a universal proposition, got $other")
+        refuted(empty, budget = 40)(b.name) match
+            case Constant.ByteString(bytes) => assert(bytes.size > 0, bytes)
+            case other                      => fail(s"expected a byte string, got $other")
+    }
+
+    test("a counterexample that is no value of its variable's type is inconclusive") {
+        // No Lean here: what the tactic makes of Lean's output, on the Scalus CEK.
+        val goal = lowered(
+          forAll[ByteString](b => Builtins.lengthOfByteString(b) == BigInt(0)),
+          FunctionTable.empty
+        )
+        def falsified(value: String): VerificationResult =
+            UplcBlaster.verdict(goal, 40, 1, s"❌ Falsified\nCounterexample:\n - x0: $value")
+        val bytes = "PlutusCore.ByteString.ByteString.mk"
+        // a byte string, replayed
+        assert(falsified(s"""($bytes "A")""").isInstanceOf[VerificationResult.Refuted])
+        // Lean's model stores a byte string as a string: one with a character above 255 is a
+        // value of the model only, and shows nothing about byte strings
+        falsified(s"""($bytes "\\u{100}")""") match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(reason.contains("no value of its variable's type"), reason)
+                assert(reason.contains("U+100"), reason)
+            case other => fail(s"expected an inconclusive result, got $other")
+        // output that is not understood is a failure of the tool, not a result about the statement
+        falsified("42") match
+            case VerificationResult.Failed(reason) =>
+                assert(reason.contains("cannot read Lean's counterexample"), reason)
+            case other => fail(s"expected a failed result, got $other")
+    }
+
+    test("a variable of a case class is one variable per field, and built in each test") {
+        val sumOfPair = forAll[BlasterPair](p => callRef(sum.ref, p)(r => r == p.a + p.b))
+        // Lean quantifies over the two fields, in order, named after the variable.
+        val fields = lowered(sumOfPair, FunctionTable(sum)).binders
+        assert(fields.map(_.tp) == List(SIRType.Integer, SIRType.Integer))
+        assert(fields.head.name.endsWith(".a") && fields.last.name.endsWith(".b"), fields)
+        proven(sumOfPair, 240, sum)
+        // The built value is the compiler's: it agrees with one the test constructs.
+        proven(forAll[BlasterPair](p => equal(p.toData, BlasterPair(p.a, p.b).toData)), 240)
+        // negative control, with the counterexample's value per field
+        val wrong = forAll[BlasterPair](p => callRef(sum.ref, p)(r => r == p.a))
+        val counterexample = refuted(wrong, 240, sum)
+        val names = lowered(wrong, FunctionTable(sum)).binders.map(_.name)
+        assert(counterexample.keySet == names.toSet, counterexample)
+        assert(integer(counterexample(names.last)) != 0, counterexample)
+    }
+
+    test("a case class in a case class is expanded down to its fields") {
+        val keyLength = forAll[BlasterOwned](o =>
+            Builtins.lengthOfByteString(o.owner.key) >= BigInt(0) && o.amount == o.amount
+        )
+        val fields = lowered(keyLength, FunctionTable.empty).binders
+        assert(fields.map(_.tp) == List(SIRType.ByteString, SIRType.Integer), fields)
+        assert(fields.head.name.endsWith(".owner.key"), fields)
+        proven(keyLength, budget = 160)
+        refuted(forAll[BlasterOwned](o => o.amount >= BigInt(0)), budget = 160)
+    }
+
     test("states that an expression fails, whatever its type") {
         // A builtin that fails: unBData of an I value, for every x.
         proven(forAll[BigInt](x => fails(Builtins.unBData(Builtins.iData(x)))), budget = 60)
@@ -542,6 +717,52 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         assert(integer(counterexample(lo.name)) > integer(counterexample(hi.name)), counterexample)
     }
 
+    test("a call under an explicit witness passes its arguments written out") {
+        val clamp = FunctionDef(Math.clamp)
+        val bounded = forAll[BigInt](x =>
+            existsLet(x + BigInt(1))(y =>
+                callRef(clamp.ref, (y, BigInt(0), BigInt(9)))(r => r >= BigInt(0))
+            )
+        )
+        assert(lowered(bounded, FunctionTable(clamp)).leaves.size == 1)
+        proven(bounded, 80, clamp)
+        // a partial call, whose arguments are also those of the `denotes` that guards it
+        proven(
+          forAll[BigInt](x =>
+              existsLet(x + BigInt(1))(y =>
+                  whenReturns(clamp, (y, BigInt(0), BigInt(9)))(r => r <= BigInt(9))
+              )
+          ),
+          80,
+          clamp
+        )
+    }
+
+    test("a function under an explicit witness is called through its own compiled program") {
+        // A program that is not the one `Math.clamp` compiles to, registered under its name: a
+        // test that calls the function gets this program, and not a copy made from the source.
+        val standIn = FunctionDef(Math.clamp).withRepresentation(
+          Representation.Uplc,
+          PlutusV3
+              .compile((x: BigInt, lo: BigInt, hi: BigInt) => BigInt(-1))(using
+                UplcBlaster.options
+              )
+              .program
+        )
+        def holds(prop: Prop): Boolean =
+            lowered(prop, FunctionTable(standIn)).leaves.head.term.evaluateDebug match
+                case success: Result.Success => success.term == Term.Const(Constant.Bool(true))
+                case failure: Result.Failure => fail(failure.exception)
+        assert(holds(Prop(Math.clamp(BigInt(5), BigInt(0), BigInt(9)) == BigInt(-1))))
+        // in the body of an `existsLet`, and in its witness
+        assert(
+          holds(existsLet(BigInt(5))(y => Math.clamp(y, BigInt(0), BigInt(9)) == BigInt(-1)))
+        )
+        assert(
+          holds(existsLet(Math.clamp(BigInt(5), BigInt(0), BigInt(9)))(y => y == BigInt(-1)))
+        )
+    }
+
     test("a call's continuation can call another function") {
         val min = FunctionDef.named("min", (x: BigInt, y: BigInt) => Math.min(x, y))
         val max = FunctionDef.named("max", (x: BigInt, y: BigInt) => Math.max(x, y))
@@ -555,13 +776,13 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         )
     }
 
-    test("Blaster's error comes back in the inconclusive result") {
+    test("Blaster's error comes back in the failed result") {
         // For `e >= 0`, `exp2` reaches the bitwise builtins, whose `ByteString` is built on
         // `BitVec`, which Blaster cannot translate (README, Limitations). When it can, this test
         // needs another statement Blaster rejects.
         val exp2 = FunctionDef(Math.exp2)
         run(forAll[BigInt](e => callRef(exp2.ref, e)(r => r >= BigInt(0))), 120, Seq(exp2)) match
-            case (verifier, _, VerificationResult.Inconclusive(reason)) =>
+            case (verifier, _, VerificationResult.Failed(reason)) =>
                 assert(reason.startsWith("Lean exited with code 1: "), reason)
                 assert(
                   reason.contains("error: Inductive datatype with instance parameters"),
@@ -570,10 +791,10 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
                 assert(reason.contains("not supported: `BitVec"), reason)
                 assert(!reason.contains("Successfully decoded"), reason)
                 assert(verifier.theorems.isEmpty)
-            case (_, _, other) => fail(s"expected an inconclusive result, got $other")
+            case (_, _, other) => fail(s"expected a failed result, got $other")
     }
 
-    test("a workspace without the ScalusProofs library is reported with Lean's error") {
+    test("a workspace without the ScalusProofs library is reported as failed") {
         requireLean()
         // The workspace's own toolchain, so elan does not look for a default one.
         val empty = Files.createTempDirectory("scalus-empty-lean-workspace-")
@@ -583,31 +804,71 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
             val verifier = Verifier.empty
             val statement = verifier.statement(forAll[BigInt](x => x + BigInt(0) == x))
             verifier.verify(statement, UplcBlaster(40, empty)) match
-                case VerificationResult.Inconclusive(reason) =>
+                case VerificationResult.Failed(reason) =>
                     assert(reason.startsWith("Lean exited with code 1: "), reason)
                     assert(reason.contains("unknown module prefix 'ScalusProofs'"), reason)
-                case other => fail(s"expected an inconclusive result, got $other")
+                case other => fail(s"expected a failed result, got $other")
         finally
             Files.deleteIfExists(toolchain)
             Files.deleteIfExists(empty)
     }
 
-    test("statements outside the fragment are inconclusive") {
-        val quantified = forAll[BigInt](x => x > 0) match
-            case Prop.Forall(ident, body) =>
-                Prop.Forall(ident, body && Prop.Exists(ident, None, body))
-            case other => fail(s"expected a universal proposition, got $other")
-        assert(
-          UplcBlaster.lower(quantified, FunctionTable.empty).left.exists(_.contains("quantifier"))
-        )
+    test("the processes of a check are stopped at its time limit, and when it is interrupted") {
+        val directory = Files.createTempDirectory("scalus-execute-")
+        val log = directory.resolve("out")
+        // A shell that starts a child and waits for it, as `lake env` does for Lean. It writes
+        // the child's process id to `file`.
+        def parent(file: String): List[String] =
+            List("sh", "-c", s"sleep 600 & echo $$! > $file; wait")
+        // The child, once the shell has written its id, where it still runs.
+        def child(file: String): Option[ProcessHandle] = {
+            val written = Iterator
+                .continually {
+                    Thread.sleep(50)
+                    val path = directory.resolve(file)
+                    if Files.exists(path) then Files.readString(path).trim else ""
+                }
+                .take(200)
+                .find(_.nonEmpty)
+                .getOrElse(fail(s"the shell did not write $file"))
+            ProcessHandle.of(written.toLong).toScala.filter(_.isAlive)
+        }
+        try
+            assert(
+              UplcBlaster.execute(List("sh", "-c", "exit 3"), directory, log, None).contains(3)
+            )
 
-        // The tactic reports these without running Lean.
+            assert(UplcBlaster.execute(parent("limit"), directory, log, Some(2.seconds)).isEmpty)
+            assert(child("limit").isEmpty)
+
+            // A thread that waits without a limit, as a test under sbt does, and is canceled.
+            val waiting = new Thread(() =>
+                try UplcBlaster.execute(parent("interrupted"), directory, log, None): Unit
+                catch case _: InterruptedException => ()
+            )
+            waiting.start()
+            val running = child("interrupted").getOrElse(fail("the child does not run"))
+            waiting.interrupt()
+            waiting.join(10000)
+            assert(!waiting.isAlive)
+            assert(!running.isAlive)
+        finally
+            Files.walk(directory).iterator().asScala.toList.reverse.foreach(Files.deleteIfExists)
+    }
+
+    test("statements outside the fragment are unsupported") {
+        // The tactic reports these without running Lean. An enum has several constructors, so
+        // it is not built from one set of fields.
+        given Quantifiable[BlasterShape] = new Quantifiable[BlasterShape] {}
         val verifier = Verifier.empty
-        val bytes = verifier.statement(forAll[ByteString](_ => true))
-        verifier.verify(bytes, UplcBlaster(10, leanDirectory)) match
-            case VerificationResult.Inconclusive(reason) =>
-                assert(reason.contains("ByteString binder"), reason)
-            case other => fail(s"expected an inconclusive result, got $other")
+        val shapes = verifier.statement(forAll[BlasterShape](_ => true))
+        verifier.verify(shapes, UplcBlaster(10, leanDirectory)) match
+            case VerificationResult.Unsupported(report) =>
+                val reasons = report.issues.collect {
+                    case CompatibilityIssue.UnsupportedFeature(_, reason) => reason
+                }
+                assert(reasons.exists(_.contains("BlasterShape binder")), report)
+            case other => fail(s"expected an unsupported result, got $other")
 
         // A partial call is split into two leaves, which a call's continuation cannot hold.
         val nested = UplcBlaster.lower(

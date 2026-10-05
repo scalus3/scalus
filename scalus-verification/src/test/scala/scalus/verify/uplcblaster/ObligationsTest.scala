@@ -82,6 +82,12 @@ class ObligationsTest extends AnyFunSuite with LeanProofs {
         )
         verifier.obligations(assumes) match
             case CallObligations(List(owed), Nil) =>
+                // named after the contract, so the function's own obligations can stand beside it
+                assert(owed.name == "passes_in_range/clamp_in_range#1")
+                assert(
+                  verifier.obligations(passes.ref).statements.map(_.name) ==
+                      List("passes/clamp_in_range#1")
+                )
                 owed.prop match
                     case Prop.Forall(
                           _,

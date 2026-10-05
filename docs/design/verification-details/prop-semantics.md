@@ -6,8 +6,8 @@ states the rules briefly (§3.3, §3.7); this file gives them in full, and recor
 questions about specifications, with options and recommendations. How statements are captured is
 in [statement capture](prop-capture.md).
 
-Status: §1–§6 describe what is implemented. §7 proposes the meaning of specifications written
-in a function's body; §8 records the open design questions.
+Status: §1–§7 describe what is implemented, §7 the specifications written in a function's body;
+§8 records the design questions, and says of each what was built.
 
 ## 1. Values and quantifiers
 
@@ -197,10 +197,30 @@ where the call is not reached. `check` adds the precondition at the call.
 - **Not supported yet:** a call inside a function value, as in `xs.map(x => f(x))`, and a
   precondition that is a statement, not a Boolean test. Such calls are returned in
   `CallObligations.unsupported`, with the reason, so that they are not taken as checked.
+- **Names.** An obligation is named `caller/contract#n`; under the caller's own contract it is
+  `callerContract/contract#n`, so both can be declared in one verifier.
+- **An entry point is checked through a shape.** A validator takes any `Data`, and the code
+  before a call usually walks a list of the transaction, which a bounded tactic does not finish
+  ([uplc-blaster.md](uplc-blaster.md#statements-that-do-not-finish)). The caller is then a
+  function of a transaction shape, which builds the context and calls the validator:
+  `(w: Withdrawal) => Validator.validate(context(w))`. Its obligations are over the shape's
+  numbers.
 
-## 7. Specifications in the function's body (proposed)
+In the vesting example, a contract of `linearVesting` that expects `initialAmount >= 0` is not
+established by the validator: its call is **refuted**, with a negative amount. The validator
+reads the datum and does not check its numbers, and an entry point has no caller to rely on.
+Under a contract of the withdrawal that expects such an amount, the obligation is proved. Either
+the validator gets a `require`, or the bound moves from the precondition into `ensures` as a
+condition. The example takes the second: `linearVesting` ends in
+`.ensuring(vested => initialAmount < 0 || (vested >= 0 && vested <= initialAmount))`, and the
+published script stays as it was. What `spend` guarantees is stated at its head, with
+`Spec.ensures`: the beneficiary signed, something is withdrawn, and what stays locked is at least
+what has not vested.
 
-A contract can be written next to the code it describes:
+## 7. Specifications in the function's body
+
+A contract can be written next to the code it describes, with
+`scalus.cardano.onchain.plutus.prelude.Spec`:
 
 ```scala
 @Compile
@@ -210,22 +230,104 @@ object Math {
         (if x < lo then lo else if x > hi then hi else x).ensuring(r => lo <= r && r <= hi)
     }
 }
+
+@Compile
+object VestingValidator extends Validator {
+    inline override def spend(datum: Option[Data], redeemer: Data, txInfo: TxInfo, ref: TxOutRef): Unit = {
+        Spec.ensures(txInfo.isSignedBy(configOf(datum).beneficiary))
+        ...
+    }
+}
 ```
+
+The clauses are with the contract, next to the function they describe. What is stated about a
+contract from outside, in a proof suite, needs no clause: it is a statement of the verifier.
 
 - **`Spec.expects(c)`, at the top of the body,** is the contract's precondition. It is not
   called `requires`: the prelude's `require` is a runtime check, and the two words would read
   as one. Several
   clauses are conjoined. Placing them first makes the precondition read as part of the signature,
   as in Stainless and Dafny, and lets the reifier find them without analysing control flow.
+- **`Spec.ensures(c)`, also at the top,** is a postcondition over the parameters: where the
+  function returns, `c` holds. It is the clause of a validator's handler, which returns nothing:
+  where the script succeeds, `c` holds of the transaction. A clause sees the parameters, not
+  what the body computes from them, so it derives that again, usually through small functions
+  written for the specification (`configOf(datum)`). Those are removed from the script with the
+  clauses. It is not evaluated off-chain: at the top of a body it is not known yet whether the
+  function returns.
 - **`body.ensuring(r => c)`** is the postcondition, over the result `r` and the parameters. It
   is the `ensuring` idiom of Scala's `Predef`, provided by `Spec` as an extension the plugin can
-  compile. It keeps the result type inferred; the earlier `spec.ensuresResult[A](r => …)` needed
-  it written.
-- **`Spec.total`** (open, overview §10 question 2) would make the contract total.
+  compile (`import Spec.ensuring`). It is applied to the body's last expression, or to the whole
+  body, `{ … }.ensuring(r => c)`. What it is applied to is then typed without the function's
+  result type: a branch that is the literal `0` is written `BigInt(0)`.
+- **`Spec.total`** (open, overview §10 question 2) would make the contract total. Until then,
+  `.returnsWhen(_ => true)` on the contract says it.
 
-It means exactly the external contract `contract(clamp)(expects, ensures)` of §6, and is
-registered with `Origin.Contract` when the function table is built from the
-object (see [function tables](prop-capture.md#function-tables-from-compile-objects-proposed)).
+It means exactly the external contract `contract(clamp)(expects, ensures)` of §6.
+`Contract.inSource(function)` reads it from the function's SIR (`Specifications.scala`), and
+returns `None` for a function that states none. The contract is then declared with
+`verifier.contract`, proved, and owed by callers like any other. Registering it when a function
+table is built from an object (see
+[function tables](prop-capture.md#function-tables-from-compile-objects-proposed)) is not built.
+
+**Clauses inside a function's code.** A validator's handlers are `inline`, so once `validate` is
+compiled the clauses of `spend` sit in a branch of its code, not at the top of a function.
+`verifier.guarantees(function)` finds every `ensures` and `ensuring` clause on a path of the
+function's code, and declares for each the statement
+
+```
+∀ parameters. denotes(body) ⇒ check
+```
+
+where `check` is the body cut along the path to the clause, as for a call-site obligation, with
+the clause's condition in its place. It says: where the function returns through the clause, the
+condition holds. The statements are named `function/ensures#n` (`Origin.Guarantee`). A clause
+inside a function value is reported as unsupported. For a validator the function is one that
+builds the context of a transaction shape and validates it (see call-site obligations above).
+A call inside a clause is no call of the function, and owes nothing.
+
+Several clauses are also declared as one statement, `function/ensures`
+(`StatedGuarantees.together`, `Origin.Guarantees`):
+
+```
+∀ parameters. denotes(body) ⇒ check₁ ∧ … ∧ checkₙ
+```
+
+Every statement has the leaf `denotes(body)`, so a tactic that proves the clauses one by one runs
+the function's body once per clause, and once for them together. The three clauses of
+`VestingValidator.spend` take 67 s together, and 3 min one by one.
+
+The statement is about the function alone, on every argument. A function's own `Spec.expects` is
+no check, so a clause that relies on it is refuted this way: `clamp` returns for `lo > hi` too,
+with a result that is not between them. `verifier.guarantees(contract)`, with the function's
+declared contract, states the same clauses under that contract's precondition, named
+`contract/ensures#n`, as `verifier.obligations(callerContract)` does for the calls.
+
+**How it is kept and removed.** `Spec` is an `@Compile` object, so the plugin compiles a clause as
+a call of one of its functions, which stays in the function's SIR. `EraseSpecifications`, the
+first step of the SIR to UPLC pipeline, removes it:
+
+- an `expects` or `ensures` statement goes, with its condition;
+- `Spec.ensuring(body, condition)` becomes `body`;
+- the definitions of the `Spec` functions go, and so does a function that only clauses used;
+- the definitions that are left are nested again in the order the code alone meets them. Linking
+  orders definitions by first reference, and a clause at the head of a function names functions
+  before its code does; without this step the script's bytes depended on the clauses.
+
+What is left is the SIR of the same code without the clauses. A program without clauses is not
+touched.
+
+**How it is checked that this works** (`SpecTest`, `SpecificationsTest`,
+`VestingVerificationTest`):
+
+| Claim | Check |
+|---|---|
+| a clause does not change the script | the same function with and without clauses compiles to the same bytes, under four option sets, also when a clause names functions in another order than the code, or uses a function of its own; `VestingContract`'s published hash is the same before and after `spend` and `linearVesting` were annotated |
+| a clause is kept for the verifier | the function's SIR names `Spec$.expects` and `Spec$.ensuring`; `Contract.inSource` returns the contract, and `None` for an unspecified function |
+| the contract is the code's | it is proved about the compiled function; a function with a wrong postcondition is refuted |
+| a handler's guarantees hold | the clauses of an inlined handler are found in the entry point's code and proved; a wrong clause in a branch or at the head is refuted; the three clauses of `VestingValidator.spend` are proved for every withdrawal of the shape |
+| callers owe the precondition | a caller that violates it is refuted, one that guards the call is proved, and one that only states the same `Spec.expects` is refuted alone and proved under its own contract |
+| off-chain the clauses are checked | a violated `expects` or `ensuring` throws `SpecificationError` on the JVM, an `AssertionError` and no `OnchainError`, so a test that expects the script to fail does not pass on it; `ensures` is not evaluated |
 
 ## 8. Design questions
 
@@ -260,15 +362,14 @@ Three sources can describe when a function may be called.
 
 ### 8.2 Whether `Spec.expects` has runtime semantics
 
-- **On chain: none, by default.** The clause is erased before lowering, so the script's bytes and
-  hash do not change (measured for `VestingValidator` on the earlier branch). A precondition
-  exists to save the check, which callers have established; paying for it on chain would turn it
-  into a `require`.
-- **On the JVM: checked.** `@Compile` code also runs as Scala, in tests and the emulator. There
-  `Spec.expects(c)` throws when `c` is false, and `ensuring` checks the result, which catches a
-  violated contract in ordinary tests at no on-chain cost.
-- **On chain, optionally checked.** A compiler option, off by default, would lower the clauses
-  as `require`, like assertions in a debug build, to test a contract on the CEK.
+- **On chain: none, by default (built).** The clause is erased before lowering, so the script's
+  bytes and hash do not change. A precondition exists to save the check, which callers have
+  established; paying for it on chain would turn it into a `require`.
+- **On the JVM: checked (built).** `@Compile` code also runs as Scala, in tests and the emulator.
+  There `Spec.expects(c)` throws when `c` is false, and `ensuring` checks the result, which
+  catches a violated contract in ordinary tests at no on-chain cost.
+- **On chain, optionally checked (not built).** A compiler option, off by default, would lower
+  the clauses as `require`, like assertions in a debug build, to test a contract on the CEK.
 - **Callers are checked by the verifier, not by scalac.** That a call site establishes the
   callee's `expects` is a proof obligation over the caller's path condition, which needs a
   solver. `sbt verify` reports an unproved obligation, and can fail the build; scalac could

@@ -8,9 +8,11 @@ class VerifierTest extends AnyFunSuite {
     private val increment = FunctionDef.synthetic[BigInt, BigInt]("increment")
     private final case class TestArtifact(kind: ProofKind, content: String) extends ProofArtifact
 
-    private def tactic(run: Goal => VerificationResult): Tactic = new Tactic {
+    private def tactic(execute: Goal => ExecutionResult): Tactic = new Tactic {
+        type Prepared = Goal
         val name = "stub"
-        def discharge(goal: Goal): VerificationResult = run(goal)
+        def prepare(goal: Goal): Either[CompatibilityReport, Prepared] = Right(goal)
+        def run(prepared: Prepared): ExecutionResult = execute(prepared)
     }
 
     test("a proved statement becomes a lemma and carries its dependencies") {
@@ -20,7 +22,7 @@ class VerifierTest extends AnyFunSuite {
           "increment_positive",
           callRef(increment.ref, BigInt(1))(result => result > 0)
         )
-        val firstResult = verifier.prove(
+        val firstRun = verifier.prepare(
           first,
           tactic { goal =>
               assert(goal.statement eq first)
@@ -31,6 +33,10 @@ class VerifierTest extends AnyFunSuite {
               )
           }
         )
+        assert(firstRun.exists(_.statement eq first))
+        val prepared = firstRun.toOption.get
+        assertThrows[IllegalArgumentException](Verifier.empty.prove(prepared))
+        val firstResult: ExecutionResult = verifier.prove(prepared)
         val firstProof = firstResult match
             case VerificationResult.Proven(proof) => proof
             case other                            => fail(s"expected a proof, got $other")
@@ -63,13 +69,27 @@ class VerifierTest extends AnyFunSuite {
           "missing_function",
           callRef(increment.ref, BigInt(1))(result => result > 0)
         )
-        val unresolved = tactic { goal =>
-            assert(goal.functions.definitions.isEmpty)
-            VerificationResult.Inconclusive("function is not registered")
+        val report = CompatibilityReport(
+          List(
+            CompatibilityIssue.UnsupportedFeature(
+              List(callStatement.name),
+              "function is not registered"
+            )
+          )
+        )
+        val unresolved = new Tactic {
+            type Prepared = Nothing
+            val name = "unsupported-stub"
+            def prepare(goal: Goal): Either[CompatibilityReport, Prepared] = {
+                assert(goal.functions.definitions.isEmpty)
+                Left(report)
+            }
+            def run(prepared: Prepared): ExecutionResult = prepared
         }
+        assert(verifier.prepare(callStatement, unresolved) == Left(report))
         assert(
           verifier.prove(callStatement, unresolved) ==
-              VerificationResult.Inconclusive("function is not registered")
+              VerificationResult.Unsupported(report)
         )
 
         val never = tactic(_ => fail("tactic should not run"))
@@ -89,7 +109,10 @@ class VerifierTest extends AnyFunSuite {
         assert(verifier.theorems.isEmpty)
 
         val undecided =
-            verifier.prove(statement, tactic(_ => VerificationResult.Inconclusive("timeout")))
+            verifier.prove(
+              statement,
+              tactic(_ => VerificationResult.Inconclusive("timeout"))
+            )
         assert(undecided == VerificationResult.Inconclusive("timeout"))
         assert(verifier.theorems.isEmpty)
     }

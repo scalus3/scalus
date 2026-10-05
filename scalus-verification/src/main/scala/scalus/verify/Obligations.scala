@@ -1,6 +1,7 @@
 package scalus.verify
 
 import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, SIR, SIRPosition, SIRType}
+import scalus.compiler.sir.transform.EraseSpecifications
 import scalus.uplc.Constant
 
 /** The obligations a function's calls put on it: at every call of a function with a contract, the
@@ -32,7 +33,17 @@ private[verify] object Obligations {
         parameters: List[SIR.Var],
         term: SIR,
         wrappers: List[SIR => SIR]
-    )
+    ) {
+
+        /** The parameters, as the variables of a statement about the function. */
+        def variables: List[PropExpr.Ident[Any]] =
+            parameters.zipWithIndex.map((parameter, index) =>
+                new PropExpr.Ident[Any](parameter.name, index.toLong, parameter.tp)
+            )
+
+        /** `sir`, an expression of the body, inside the definitions around the function. */
+        def wrapped(sir: SIR): SIR = wrappers.foldLeft(sir)((inner, wrap) => wrap(inner))
+    }
 
     /** The body of `function` in the SIR its entry was compiled from. A method of an `@Compile`
       * object is compiled as a lambda that calls it, with its definition among the module
@@ -202,6 +213,27 @@ private[verify] object Obligations {
         )
 
     val truth: SIR = isTrue
+
+    /** The name of `Spec.ensuring` in SIR: a clause is a call of it with the clause's body and its
+      * condition.
+      */
+    val Ensuring: String = EraseSpecifications.Ensuring
+
+    /** The name in SIR of the function behind `Spec.ensures`: a clause is a call of it with
+      * `_ => condition`.
+      */
+    val Ensures: String = EraseSpecifications.Ensures
+
+    val unit: AnnotatedSIR = SIR.Const(Constant.Unit, SIRType.Unit, annotations)
+
+    /** `condition` about the value of `stated`, named `result`. */
+    def bind(result: SIR.Var, stated: AnnotatedSIR, condition: SIR): AnnotatedSIR =
+        SIR.Let(
+          List(Binding(result.name, result.tp, stated)),
+          condition,
+          SIR.LetFlags.None,
+          annotations
+        )
 
     /** The line of a call in its source file, counted from one, or zero when it has none. */
     def line(site: Site): Int = {
