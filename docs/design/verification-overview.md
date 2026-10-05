@@ -5,8 +5,9 @@ Status: **draft design**. Date: 2026-10-01.
 This document fixes the design. The details are in
 [`verification-details/`](verification-details/):
 [statement semantics](verification-details/prop-semantics.md),
-[statement capture](verification-details/prop-capture.md) and
-[the `blaster-uplc` tactic](verification-details/uplc-blaster.md).
+[statement capture](verification-details/prop-capture.md),
+[the `blaster-uplc` tactic](verification-details/uplc-blaster.md) and
+[the Lean server](verification-details/lean-server.md), which the tactic does not use yet.
 
 This document describes how logical statements about Scalus code are written in Scala and how they
 are proved. It fixes four layers and the contracts between them:
@@ -508,7 +509,7 @@ It needs no plugin change and no SIR type for `Prop`: the two costs this section
 to taking statements from SIR. See
 [statements in SIR](verification-details/prop-capture.md#statements-in-sir-boolean-pseudo-functions-proposed).
 What the clauses mean, on chain and on the JVM, is in
-[statement semantics](verification-details/prop-semantics.md#7-specifications-in-the-functions-body-proposed).
+[statement semantics](verification-details/prop-semantics.md#7-specifications-in-the-functions-body).
 
 **What actually has to be SIR, and why.** Not the statement as a whole.
 
