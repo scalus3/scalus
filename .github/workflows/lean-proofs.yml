@@ -30,6 +30,11 @@ jobs:
         working-directory: scalus-verification/src/main/lean
         run: |
           nix develop ../../../..#ci --accept-flake-config --command bash -c "lake build"
+      - name: Build the Lean workspace of the vesting example
+        # It has the packages of the workspace above, so only its own module is built.
+        working-directory: scalus-examples/jvm/src/test/lean/LinearVesting
+        run: |
+          nix develop ../../../../../..#ci --accept-flake-config --command bash -c "lake build"
       - name: Run the proofs
         # SCALUS_REQUIRE_LEAN makes a test that cannot run Lean fail instead of being canceled,
         # so the proofs cannot pass by not running.

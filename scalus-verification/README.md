@@ -280,7 +280,15 @@ it after its last test. Without them those tests are canceled, as in ci-jvm. Wit
 
 A suite's workspace is `leanWorkspace` of `LeanProofs`. Unless the suite overrides it, it is the
 workspace of the library, `src/main/lean` in these sources, or the directory
-`SCALUS_LEAN_WORKSPACE` names.
+`SCALUS_LEAN_WORKSPACE` names. `VestingVerificationTest` overrides it with a workspace of the
+example, `scalus-examples/jvm/src/test/lean/LinearVesting`, where proofs about the validator
+written by hand belong as well. Such a workspace is a Lake package that requires `ScalusProofs`
+by its path, and sets its `packagesDir` to that of the library's workspace, so Blaster and
+PlutusCore are cloned and built once for both. The suite's checks import the library only, so
+they need the library built, and not the example's own module; `lake build` in the example's
+workspace builds that module, in seconds. Its `lean-toolchain` and its manifest have to name
+the Lean and the revisions the library's name: after `lake update` in the library's workspace,
+run `lake update` in it too. The suite checks that they agree.
 
 ## Adding a property
 

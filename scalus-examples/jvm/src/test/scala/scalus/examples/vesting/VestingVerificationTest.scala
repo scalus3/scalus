@@ -17,6 +17,7 @@ import scalus.verify.*
 import scalus.verify.Props.*
 import scalus.verify.uplcblaster.{LeanProofs, Unfinished, UplcBlaster}
 
+import java.nio.file.Path
 import scala.concurrent.duration.*
 
 /** The numbers of a withdrawal of the shape of [[VestingVerificationTest.withdrawal]], as one value
@@ -60,6 +61,22 @@ object Withdrawal
   */
 class VestingVerificationTest extends AnyFunSuite with LeanProofs {
     import VestingVerificationTest.*
+
+    /** The example's own Lean workspace, `src/test/lean/LinearVesting`. It requires Scalus's Lean
+      * library, and has that library's packages where the library's workspace has them.
+      */
+    override protected def leanWorkspace: Path =
+        LeanProofs.inSources("scalus-examples", "jvm", "src", "test", "lean", "LinearVesting")
+
+    test("the example's Lean workspace has the Lean and the packages of Scalus's library") {
+        // The two workspaces share the clones of the packages and what is built of them. A
+        // manifest that names another revision would check it out for both, and another Lean
+        // would build them again, each time the other workspace is used.
+        val library = LeanProofs.librarySources
+        assert(LeanProofs.pinned(library).nonEmpty)
+        assert(LeanProofs.pinned(leanWorkspace) == LeanProofs.pinned(library))
+        assert(LeanProofs.toolchain(leanWorkspace) == LeanProofs.toolchain(library))
+    }
 
     // The schedule
 
