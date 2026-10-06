@@ -21,18 +21,18 @@ class LeanServerTest extends AnyFunSuite with LeanProofs {
     private val holds = header + "\nexample : 1 + 1 = 2 := by decide\n"
     private val fails = header + "\nexample : 1 + 1 = 3 := by decide\n"
 
+    /** An evaluation whose recursion is too deep for the stack of Lean's worker, which ends of it.
+      */
+    private val overflows =
+        header + "\ndef deep : Nat → Nat\n  | 0 => 0\n  | n + 1 => deep n + 1\n\n#eval deep 1000000000\n"
+
     /** An evaluation that does not return. */
     private val endless =
         header + "\npartial def spin (n : Nat) : Nat := spin (n + 1)\n\n#eval spin 0\n"
 
     private val limit = Some(2.minutes)
 
-    private def started(): LeanServer = {
-        requireLean()
-        LeanServer.start(leanDirectory) match
-            case Right(server) => server
-            case Left(reason)  => fail(reason)
-    }
+    private def started(): LeanServer = startLean(leanWorkspace)
 
     /** The server's process and those below it, as they are now. */
     private def processes(server: LeanServer): List[ProcessHandle] =
@@ -94,6 +94,62 @@ class LeanServerTest extends AnyFunSuite with LeanProofs {
         finally server.close()
     }
 
+    test("a check whose worker ends has failed, and the server takes the next") {
+        val server = started()
+        try
+            assert(server.check(holds, limit) == Result.Finished(Nil))
+            server.check(overflows, limit) match
+                case Result.Failed(reason) => assert(reason.contains("crashed"), reason)
+                case other                 => fail(s"expected a failed check, got $other")
+            // Lean's server has not ended, and it is not closed.
+            assert(server.handle.isAlive)
+            assert(!server.isClosed)
+            server.check(reports, limit) match
+                case Result.Finished(List(Message(2, Severity.Information, _))) =>
+                case other => fail(s"expected one message, got $other")
+        finally server.close()
+    }
+
+    test("a check waits for the one that runs, within its time limit and until interrupted") {
+        val server = started()
+        try
+            assert(server.check(holds, limit) == Result.Finished(Nil))
+            val first =
+                CompletableFuture.supplyAsync[Result](() => server.check(endless, Some(10.seconds)))
+            Thread.sleep(2000)
+            // The time limit counts the wait: this check is given up before it starts.
+            assert(server.check(holds, Some(1.second)) == Result.TimedOut)
+            val interrupted = new CompletableFuture[Boolean]()
+            val waiting = new Thread(() =>
+                try
+                    server.check(holds, None): Unit
+                    interrupted.complete(false): Unit
+                catch case _: InterruptedException => interrupted.complete(true): Unit
+            )
+            waiting.start()
+            Thread.sleep(1000)
+            waiting.interrupt()
+            assert(interrupted.get(5, TimeUnit.SECONDS))
+            // The first check went on meanwhile, to its own time limit.
+            assert(first.get(30, TimeUnit.SECONDS) == Result.TimedOut)
+            assert(server.check(holds, limit) == Result.Finished(Nil))
+        finally server.close()
+    }
+
+    test("the files of a check are in a directory of the server's while the check runs") {
+        val server = started()
+        try
+            var written = Option.empty[Path]
+            def source(directory: Path): String = {
+                written = Some(Files.writeString(directory.resolve("Leaf0.flat"), "00"))
+                holds
+            }
+            assert(server.check(source, limit) == Result.Finished(Nil))
+            assert(written.exists(_.startsWith(server.directory)), written)
+            assert(written.forall(file => !Files.exists(file.getParent)), written)
+        finally server.close()
+    }
+
     test("closing ends the server's processes, also while a check runs") {
         val server = started()
         try
@@ -112,8 +168,13 @@ class LeanServerTest extends AnyFunSuite with LeanProofs {
             assert(!Files.exists(server.directory))
             // and nothing of it is left for the JVM's exit
             assert(!LeanServer.isOpen(server))
-            // closed for good, and closing again does nothing
+            // closed for good, and closing again does nothing. The text of a check is not asked
+            // for, as there is no directory left for its files.
             assert(server.check(holds, limit) == Result.Failed("the Lean server is closed"))
+            assert(
+              server.check(_ => fail("a closed server asked for a check's text"), limit) ==
+                  Result.Failed("the Lean server is closed")
+            )
         finally server.close()
     }
 
@@ -135,5 +196,32 @@ class LeanServerTest extends AnyFunSuite with LeanProofs {
     test("a server does not start where there is no workspace directory") {
         val missing = Path.of("no-such-lean-workspace")
         assert(LeanServer.start(missing).left.exists(_.startsWith("Lean workspace does not exist")))
+    }
+
+    test("the servers of a workspace are one at a time, and another after one that has ended") {
+        requireLean()
+        val servers = LeanServers.in(leanWorkspace)
+        def taken(): LeanServer = servers.server() match
+            case Right(server) => server
+            case Left(reason)  => fail(reason)
+        try
+            val first = taken()
+            assert(taken() eq first)
+            assert(first.check(holds, limit) == Result.Finished(Nil))
+            // as a server that failed is
+            first.close()
+            val second = taken()
+            assert(second ne first)
+            assert(second.check(holds, limit) == Result.Finished(Nil))
+            servers.close()
+            assert(second.isClosed)
+            assert(servers.server() == Left("the Lean servers of the workspace are closed"))
+        finally servers.close()
+    }
+
+    test("the servers of a workspace that is not there give the reason") {
+        val servers = LeanServers.in(Path.of("no-such-lean-workspace"))
+        try assert(servers.server().left.exists(_.startsWith("Lean workspace does not exist")))
+        finally servers.close()
     }
 }

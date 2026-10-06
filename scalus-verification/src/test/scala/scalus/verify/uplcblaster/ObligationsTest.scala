@@ -57,7 +57,7 @@ class ObligationsTest extends AnyFunSuite with LeanProofs {
 
     private def prove(verifier: Verifier, statement: Statement): VerificationResult = {
         requireLean()
-        verifier.verify(statement, UplcBlaster(120, leanDirectory))
+        verifier.verify(statement, UplcBlaster(120, lean))
     }
 
     test("a call of a function with a contract gives one obligation, named after both") {

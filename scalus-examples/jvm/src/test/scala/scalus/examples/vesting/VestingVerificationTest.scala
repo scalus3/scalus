@@ -406,39 +406,42 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
         // reads the outputs, so they could be any Data, as for an unsigned withdrawal. But Lean
         // runs each test's program on its own, without the premise, and so also the runs that
         // pass the check. Those go on to search the outputs, a list of unknown length, with a
-        // choice at every element. With one output to an address that is any Data the statement
-        // is proved in 89 s; with one output that is any Data, Lean gives up after two minutes;
-        // with the list open it gave no result in seven.
-        val reason = inconclusive(
-          forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
-              forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
-                  forAll[BigInt, Data]((fee, outputs) =>
-                      (locked - requested < amount - VestingValidator.linearVesting(
-                        config(start, duration, amount),
-                        time
-                      )) ==> fails(
-                        validator,
-                        withdrawal(
-                          start,
-                          duration,
-                          amount,
-                          locked,
-                          requested,
-                          time,
-                          fee,
-                          signed,
-                          outputs.to[prelude.List[TxOut]]
+        // choice at every element.
+        val anyOutputs =
+            forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
+                forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
+                    forAll[BigInt, Data]((fee, outputs) =>
+                        (locked - requested < amount - VestingValidator.linearVesting(
+                          config(start, duration, amount),
+                          time
+                        )) ==> fails(
+                          validator,
+                          withdrawal(
+                            start,
+                            duration,
+                            amount,
+                            locked,
+                            requested,
+                            time,
+                            fee,
+                            signed,
+                            outputs.to[prelude.List[TxOut]]
+                          )
                         )
-                      )
-                  )
-              )
-          ),
-          withdrawalBudget,
-          30.seconds,
-          validator,
-          linearVesting
-        )
-        assert(reason.contains("did not finish"), reason)
+                    )
+                )
+            )
+        // Under Lean's own limit of work Lean gives the run of the second test up, after about
+        // 17 s on the machine this was written on, and after the same work on any other.
+        val leansLimit = UplcBlaster(withdrawalBudget, lean, 5.minutes)
+            .withMaxHeartbeats(UplcBlaster.leanMaxHeartbeats)
+        val givenUp = inconclusive(anyOutputs, leansLimit, validator, linearVesting)
+        assert(givenUp.contains("maximum number of heartbeats"), givenUp)
+        // Under the tactic's limit, twice that, the run gets past that point and goes on: it
+        // gave no result in 8 minutes. The time limit ends it.
+        val unfinished =
+            inconclusive(anyOutputs, withdrawalBudget, 30.seconds, validator, linearVesting)
+        assert(unfinished.contains("did not finish"), unfinished)
     }
 
     test("the guarantees stated on spend hold of every withdrawal the script accepts") {
@@ -483,7 +486,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
         // one the tactic would run the validator once for every clause.
         val together = stated.together.getOrElse(fail("no statement of the three clauses"))
         assert(together.name == "spends/ensures")
-        verifier.verify(together, UplcBlaster(withdrawalBudget, leanDirectory)) match
+        verifier.verify(together, UplcBlaster(withdrawalBudget, lean)) match
             case VerificationResult.Proven(_) =>
             case other => fail(s"expected a proof of ${together.name}, got $other")
     }
@@ -521,7 +524,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
                 (config, time) => vested => BigInt(0) <= vested && vested <= config.initialAmount
           )
         )
-        val tactic = UplcBlaster(withdrawalBudget, leanDirectory)
+        val tactic = UplcBlaster(withdrawalBudget, lean)
 
         // The verifier finds the call, in the validator's own source.
         val owed = verifier.obligations(withdraw.ref) match

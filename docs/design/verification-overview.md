@@ -7,7 +7,7 @@ This document fixes the design. The details are in
 [statement semantics](verification-details/prop-semantics.md),
 [statement capture](verification-details/prop-capture.md),
 [the `blaster-uplc` tactic](verification-details/uplc-blaster.md) and
-[the Lean server](verification-details/lean-server.md), which the tactic does not use yet.
+[the Lean server](verification-details/lean-server.md), which the tactic runs its checks in.
 
 This document describes how logical statements about Scalus code are written in Scala and how they
 are proved. It fixes four layers and the contracts between them:
@@ -342,7 +342,7 @@ val clampInRange = verifier.contract(
     ensures = (x, lo, hi) => r => lo <= r && r <= hi
   )
 )
-verifier.verify(clampInRange, UplcBlaster(budget = 120)) // Proven
+verifier.verify(clampInRange, UplcBlaster(120, lean)) // Proven, in a Lean server `lean` gives
 ```
 
 `Props.contract` builds the statement below, with `whenReturns`; `Props.totalContract` builds it

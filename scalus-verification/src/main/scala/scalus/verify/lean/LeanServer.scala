@@ -7,8 +7,9 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
-import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeoutException}
+import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeUnit, TimeoutException}
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 import scala.util.Try
@@ -20,8 +21,8 @@ import scala.util.Try
   * document, which is never written to disk: the first check opens it, and every later one is an
   * edit of it. So the workspace's libraries are loaded once, and Lean elaborates again only from
   * the first command that changed. The header of every check, its imports, should be the same text:
-  * a changed header loads the libraries anew. So does the check after one that was given up,
-  * because giving up closes the document.
+  * a changed header loads the libraries anew. So does the check after one that was given up or
+  * failed, because that closes the document.
   *
   * A server is created with [[LeanServer.start]], for a workspace directory, and ended with
   * [[close]]. One that is not closed is closed when the JVM exits.
@@ -38,8 +39,12 @@ final class LeanServer private (
     private val uri = workspace.resolve("ScalusCheck.lean").toUri.toString
     private val closed = new AtomicBoolean(false)
 
+    /** Held by the check that runs: checks do not overlap, in whatever threads they are asked for.
+      */
+    private val running = new ReentrantLock()
+
     /** The version of the document that the last check sent, and whether the document is open. Only
-      * [[check]] changes them.
+      * the check that runs changes them.
       */
     private var version = 0
     private var opened = false
@@ -55,38 +60,91 @@ final class LeanServer private (
     private val session =
         new JsonRpcSession(process.getInputStream, process.getOutputStream, notified)
 
-    /** A directory for the files a check refers to. It is removed by [[close]]. */
-    def directory: Path = files
+    /** The directory of the server's files, those of its checks among them. It is removed by
+      * [[close]].
+      */
+    private[lean] def directory: Path = files
+
+    /** Whether the server takes no further check: it was closed, or it failed and closed itself.
+      * Whoever needs one then starts another.
+      */
+    def isClosed: Boolean = closed.get
 
     /** The server's process. Lean's worker and the solver are below it. */
     private[verify] def handle: ProcessHandle = process.toHandle
 
-    /** Elaborates `source` as the server's document, and returns what Lean reported about it.
+    /** Elaborates `source` as the server's document, and returns what Lean reported about it. */
+    def check(source: String, timeout: Option[FiniteDuration]): Result =
+        check(_ => source, timeout)
+
+    /** Elaborates the text that `source` gives as the server's document, and returns what Lean
+      * reported about it. `source` is given a directory for the files its text refers to. They are
+      * there for as long as the check runs.
       *
-      * Checks do not overlap: a later version of the document ends the elaboration of the one
-      * before. When `timeout` passes, or the waiting thread is interrupted, the check is given up,
+      * Checks do not overlap: one waits for the one before it. `timeout` is the time from the call
+      * on, the wait included. When it passes, or the thread is interrupted, the check is given up,
       * and the server takes the next one.
       */
-    def check(source: String, timeout: Option[FiniteDuration]): Result = synchronized {
-        if closed.get then Result.Failed("the Lean server is closed")
+    def check(source: Path => String, timeout: Option[FiniteDuration]): Result = {
+        val deadline = timeout.map(_.fromNow)
+        if !entered(deadline) then Result.TimedOut
         else
-            val sent = edit(source)
-            val waited =
-                try await(elaborated(sent), timeout)
-                catch
-                    case interrupted: InterruptedException =>
-                        giveUp()
-                        throw interrupted
-            waited match
-                // The server answers a check that ends while it is being closed, and then
-                // publishes an empty list for the document it closes. What is read here could be
-                // that list.
-                case Some(Right(_)) if closed.get =>
-                    Result.Failed("the Lean server was closed during the check")
-                case Some(Right(diagnostics)) => Result.Finished(messages(diagnostics))
-                case Some(Left(reason))       => fail(reason)
-                case None                     => giveUp()
+            try
+                written(source) match
+                    case None => Result.Failed("the Lean server is closed")
+                    case Some((directory, text)) =>
+                        try elaborate(text, deadline)
+                        finally files.synchronized(Directories.remove(directory))
+            finally running.unlock()
     }
+
+    /** Waits for the check that runs, if one does. Whether this one may run now: it may not where
+      * `deadline` passed first.
+      */
+    private def entered(deadline: Option[Deadline]): Boolean = deadline match
+        case None =>
+            running.lockInterruptibly()
+            true
+        case Some(until) => running.tryLock(until.timeLeft.toNanos, TimeUnit.NANOSECONDS)
+
+    /** The text of a check, and the directory its files were written to. Nothing where the server
+      * is closed: [[close]] removes its files, and none is written after.
+      */
+    private def written(source: Path => String): Option[(Path, String)] = files.synchronized {
+        if closed.get then None
+        else
+            val directory = Files.createTempDirectory(files, "check-")
+            Some(directory -> source(directory))
+    }
+
+    private def elaborate(source: String, deadline: Option[Deadline]): Result = {
+        val sent = edit(source)
+        val waited =
+            try await(elaborated(sent), deadline)
+            catch
+                case interrupted: InterruptedException =>
+                    dropped(): Unit
+                    throw interrupted
+        waited match
+            // The server answers a check that ends while it is being closed, and then publishes
+            // an empty list for the document it closes. What is read here could be that list.
+            case Some(Right(_)) if closed.get =>
+                Result.Failed("the Lean server was closed during the check")
+            case Some(Right(diagnostics)) => Result.Finished(messages(diagnostics))
+            case Some(Left(reason))       => refused(reason)
+            case None                     => dropped().getOrElse(Result.TimedOut)
+    }
+
+    /** The result of a check that was answered with an error.
+      *
+      * Where the server still answers, the check failed and the server did not. Lean answers so
+      * when the worker of the document has ended: of a recursion too deep for its stack, or killed
+      * for the memory it took. The document is closed, and the next check opens it with a new
+      * worker. A server that has ended is closed.
+      */
+    private def refused(reason: String): Result =
+        if closed.get || session.ended.nonEmpty then fail(reason)
+        else dropped().getOrElse(Result.Failed(reason))
 
     /** Ends the server: it is asked to shut down, and whatever is left of its processes after a few
       * seconds is stopped. A check that runs in another thread fails. Closing again does nothing.
@@ -99,7 +157,7 @@ final class LeanServer private (
             try
                 // A session that has ended cannot ask, and nothing would answer.
                 if process.isAlive && session.ended.isEmpty then
-                    await(session.request("shutdown", None), Some(patience))
+                    await(session.request("shutdown", None), Some(patience.fromNow))
                     session.notify("exit", None)
                     process.waitFor(patience.length, patience.unit): Unit
             finally
@@ -113,7 +171,7 @@ final class LeanServer private (
           workspace.toUri.toString,
           ClientCapabilities()
         )
-        await(session.request("initialize", Some(RawJson.of(params))), Some(startup)) match
+        await(session.request("initialize", Some(RawJson.of(params))), Some(startup.fromNow)) match
             case Some(Right(_)) =>
                 session.notify("initialized", Some(RawJson.of(InitializedParams())))
                 standing = process.descendants().iterator().asScala.toSet
@@ -164,17 +222,18 @@ final class LeanServer private (
                 }
             }
 
-    /** The answer, or `None` when none came within `limit`. */
-    private def await[A](answer: CompletableFuture[A], limit: Option[FiniteDuration]): Option[A] =
-        limit match
+    /** The answer, or `None` when none came before `deadline`. */
+    private def await[A](answer: CompletableFuture[A], deadline: Option[Deadline]): Option[A] =
+        deadline match
             case None => Some(answer.get())
-            case Some(duration) =>
-                try Some(answer.get(duration.length, duration.unit))
+            case Some(until) =>
+                try Some(answer.get(until.timeLeft.toNanos, TimeUnit.NANOSECONDS))
                 catch case _: TimeoutException => None
 
-    /** Gives up the check that runs, by closing the document. Lean ends the worker of a closed
+    /** Ends the check that ran last, by closing the document. Lean ends the worker of a closed
       * document, and with it whatever the check started: Blaster's run, the solver, an evaluation.
-      * The check counts as given up only when those processes have ended.
+      * The check has ended only when those processes have. Where they do not end, the server is
+      * closed, and that failure is returned.
       *
       * An edit of the document would be answered sooner, and would end Blaster's run and the solver
       * as well. But an evaluation that does not look for its cancellation goes on after it, and
@@ -182,17 +241,17 @@ final class LeanServer private (
       *
       * The next check opens the document again, and loads the libraries again.
       */
-    private def giveUp(): Result = {
+    private def dropped(): Option[Result] = {
         val workers = process.descendants().iterator().asScala.filterNot(standing).toList
         val document = DidCloseParams(TextDocumentIdentifier(uri))
         session.notify("textDocument/didClose", Some(RawJson.of(document)))
         opened = false
-        if ended(workers) then Result.TimedOut
+        if ended(workers) then None
         else
             // Lean did not end them. They are none of the server's own processes.
             workers.foreach(_.destroyForcibly())
-            if ended(workers) then Result.TimedOut
-            else fail(s"the processes of a check that was given up did not end within $patience")
+            if ended(workers) then None
+            else Some(fail(s"the processes of a check did not end within $patience"))
     }
 
     /** Whether `processes` have all ended, at the latest after [[patience]]. */
@@ -269,13 +328,15 @@ object LeanServer {
         /** The document was elaborated: its messages, in the order of their lines. */
         case Finished(messages: List[Message])
 
-        /** The time limit passed. The check is given up, and what it started has ended. The server
-          * takes the next one, and loads the libraries again for it.
+        /** The time limit passed, in the check or in the wait for the one before it. The check is
+          * given up, and what it started has ended. The server takes the next one, and loads the
+          * libraries again for it.
           */
         case TimedOut
 
-        /** The server ended, or did not keep to the protocol. It is closed, and takes no further
-          * check.
+        /** The check was not made, for `reason`. The server takes the next one, unless it ended
+          * itself or could not end what the check started: then it is closed
+          * ([[LeanServer.isClosed]]), and takes no further check.
           */
         case Failed(reason: String)
     }

@@ -298,7 +298,8 @@ Several clauses are also declared as one statement, `function/ensures`
 
 Every statement has the leaf `denotes(body)`, so a tactic that proves the clauses one by one runs
 the function's body once per clause, and once for them together. The three clauses of
-`VestingValidator.spend` take 67 s together, and 3 min one by one.
+`VestingValidator.spend` take 17 s together. With a Lean process for every check they took 67 s
+together, and 3 min one by one.
 
 The statement is about the function alone, on every argument. A function's own `Spec.expects` is
 no check, so a clause that relies on it is refuted this way: `clamp` returns for `lo > hi` too,

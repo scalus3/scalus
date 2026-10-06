@@ -3,18 +3,20 @@
 How the `blaster-uplc` tactic runs its checks in one Lean process that stays, in place of one
 process per check ([the Lean check](uplc-blaster.md#the-lean-check)). It describes a Scala
 representative of a running Lean language server: start it, give it a check, cancel a check,
-and shut it down, on request or when the JVM exits. The server becomes the only way the tactic
-runs Lean.
+and shut it down, on request or when the JVM exits. The server is the only way the tactic runs
+Lean.
 
-Status: the server is built, `LeanServer` in `scalus.verify.lean`, with `JsonRpcSession` under it and
-the tests `LeanServerTest` and `JsonRpcSessionTest`. The tactic does not use it yet: "Using it from
-`UplcBlaster`" and everything after it is proposed. "What was measured" records an experiment
-made before, outside the code base, with checks written by `UplcBlaster.writeCheck`, on Lean
-4.24.0 (language server 0.3.0), the version in `lean-toolchain`.
+Status: built, up to and with the tactic. `LeanServer` is in `scalus.verify.lean`, with
+`JsonRpcSession` under it and `LeanServers`, which gives a tactic its server, over it.
+`UplcBlaster` and the tests' `LeanProofs` run on them. "Exporting
+to the workspace" and "Keeping prepared leaves" are proposed. "What was measured" records an
+experiment made before any of it, outside the code base, with checks written by
+`UplcBlaster.writeCheck`, on Lean 4.24.0 (language server 0.3.0), the version in
+`lean-toolchain`.
 
 ## Why
 
-A check today is one run of `lake env lean Check.lean`. Three things follow.
+A check was one run of `lake env lean Check.lean`. Three things followed.
 
 - **Most of a small check is start-up.** A check of `Math.clamp` takes 4.7 s on the command
   line. The same check in a running server takes 0.2 to 0.4 s. Lean starts, and loads the
@@ -96,6 +98,13 @@ Three generated checks about `Math.clamp` at a budget of 200, two leaves each, a
 - **A bad header does not end the server.** The failing import is an error on the first line,
   and the next check is answered. A changed header starts the worker anew, so the header of
   every check has to be the same text, as the tactic's is.
+- **A worker that ends does not end the server.** Two cases were tried: the worker killed from
+  outside in the middle of a check, as the system does for memory, and `#eval` of a recursion
+  too deep for the worker's stack. In both `waitForDiagnostics` is answered at once with the
+  error `Server process for … crashed, likely due to a stack overflow or a bug` (code -32902),
+  and an empty list is published for the version. The server lives on. The next check is
+  answered in 2.8 s, the time of loading the workspace, as an edit and after the document was
+  closed and opened again.
 
 Not tried: what a kept leaf saves on a heavy program; the memory of a worker after many checks.
 
@@ -117,8 +126,13 @@ final class LeanServer extends AutoCloseable {
     /** Elaborates `source` as the server's document, and returns what Lean reported. */
     def check(source: String, timeout: Option[FiniteDuration]): LeanServer.Result
 
-    /** A directory for the files a check refers to. It is removed by `close`. */
-    def directory: Path
+    /** The same, for a text that refers to files: `source` is given a directory for them, which
+      * is there for as long as the check runs.
+      */
+    def check(source: Path => String, timeout: Option[FiniteDuration]): LeanServer.Result
+
+    /** Whether the server takes no further check. */
+    def isClosed: Boolean
 
     /** Ends the server. It is ended at the latest when the JVM exits. */
     def close(): Unit
@@ -141,7 +155,7 @@ object LeanServer {
         /** The time limit passed. The check is given up, and what it started has ended. */
         case TimedOut
 
-        /** The server ended, or did not keep to the protocol. It takes no further check. */
+        /** The check was not made. The server takes the next one, unless it ended itself. */
         case Failed(reason: String)
     }
 }
@@ -188,11 +202,14 @@ that was given up it is opened again.
 
 - **Why one document.** A second document is a second worker, which loads the workspace again.
   One document pays the 3.5 s once.
-- **Checks do not overlap.** `check` is synchronized. A later version cancels the one before, so
-  two checks in one document would not both finish. Checks in parallel need several servers,
-  each with its own worker and solver.
-- **Leaf files.** `#import_uplc` reads a program from a file, by its path. The files of a check
-  are written under `directory`, and removed with it.
+- **Checks do not overlap.** A later version cancels the one before, so two checks in one
+  document would not both finish. A check that is asked for while another runs waits for it,
+  in whatever thread. Its time limit counts that wait, and the waiting thread can be
+  interrupted. Checks in parallel need several servers, each with its own worker and solver.
+- **Leaf files.** `#import_uplc` reads a program from a file, by its path. The server gives a
+  check a directory of its own for them, and removes it when the check ends. The files are
+  written when the check's turn has come and the server is known to be open, so a server that
+  closes meanwhile does not take the directory from under them.
 
 ### The workspace directory
 
@@ -201,14 +218,13 @@ A server is started in a workspace directory, and that is its one setting. The d
 a check can import.
 
 - **Today** it is the directory in Scalus's own sources, `scalus-verification/src/main/lean`.
-  The tactic takes it relative to the working directory, and `LeanProofs` looks it up from
-  there upwards. That serves the Scalus repository, and no project that uses Scalus as a
-  library.
+  `LeanProofs` looks it up from the working directory upwards. That serves the Scalus
+  repository, and no project that uses Scalus as a library.
 - **Given when the server is created.** `LeanServer.start(directory)` takes it, and the tactic
   takes the server. Neither has a default: a tactic without a server cannot be made.
-- **In the tests** `LeanProofs` is to find it, once it owns a server: the environment variable
-  `SCALUS_LEAN_WORKSPACE`, and then the directory in Scalus's sources, looked up from the
-  working directory as it is now. The variable is not read yet.
+- **In the tests** a suite names it, as `leanWorkspace` of `LeanProofs`. Unless the suite
+  overrides it, it is the library's: the environment variable `SCALUS_LEAN_WORKSPACE`, and then
+  the directory in Scalus's sources, looked up from the working directory.
 
 ### Several workspaces
 
@@ -223,8 +239,10 @@ is that case: its server runs the generated checks as well.
 
 ### Time limit and cancellation
 
-`check` waits for the answer of `waitForDiagnostics` for at most `timeout`. When the limit
-passes, the check is given up by closing the document:
+`check` waits for at most `timeout`: for the check that runs before it, if one does, and then
+for the answer of `waitForDiagnostics`. A check whose limit passes while it still waits for
+another is `TimedOut` without having started. When the limit passes in the check itself, the
+check is given up by closing the document:
 
 1. the processes below the server that were not there before a document was opened are listed:
    the worker, and what it started;
@@ -256,11 +274,20 @@ after 34 s.
   goes on after the tests.
 - **When the JVM is killed.** No hook runs. The server's input closes, and it ends by itself.
 
-### A server that ends by itself
+### A check that fails, and a server that ends
 
-When the server's output closes, every waiting request ends with `Failed`, with the end of the
-server's error output. The `LeanServer` is then closed, and every later `check` of it is
-`Failed`. It does not start itself again: whoever created it creates another.
+A check is `Failed` when it was not made: `waitForDiagnostics` was answered with an error, or
+not at all. What becomes of the server depends on which.
+
+- **The worker ended.** Lean answers with an error, and goes on ("What was measured"). The
+  check has failed and the server has not: the document is closed, as for a check that is given
+  up, and the next check opens it with a new worker. So a statement whose check runs out of
+  stack or of memory costs that statement, and not those after it. A process per check had
+  that by itself; a server has to see to it.
+- **The server ended.** When its output closes, every waiting request ends with `Failed`, with
+  the end of the server's error output. The `LeanServer` is then closed, `isClosed` says so,
+  and every later `check` of it is `Failed`. It does not start itself again: whoever created
+  it creates another.
 
 ### JSON-RPC without a library
 
@@ -280,30 +307,67 @@ the better choice if more of the protocol is used.
 
 ## Using it from `UplcBlaster`
 
-The tactic runs every check in a server. The run of `lake env lean` for each check goes away,
-with the code that starts and stops it: there is one way to run Lean, not two to keep alike.
+The tactic runs every check in a server. The run of `lake env lean` for each check is gone, with
+the code that started and stopped it: there is one way to run Lean, not two to keep alike.
 
-- **The tactic is given its server.** `UplcBlaster(budget, server)` and
-  `UplcBlaster(budget, server, timeout)`. The constructors that take a directory, or nothing,
-  go: they stood for a process started on the spot. Every place that makes a tactic changes,
-  most of them inside `LeanProofs`.
-- **`LeanProofs` owns a server for its suite.** It creates one on the suite's first check, for
-  the workspace it finds, and closes it after the suite. Where a statement ended the server,
-  the next check creates another. Without Lean no server starts, and the test is canceled, or
-  fails under `SCALUS_REQUIRE_LEAN`, as now.
-- **One reading of the result.** The text of a check is the one `writeCheck` writes. The
-  messages of `Finished` are joined into the output that `verdict` reads today, with an exit
-  code of 1 when one of them is an error. `Valid`, `Falsified` with its counterexample, a
-  closed statement that is false, and everything else as a failure are told apart as now.
-- **Results.** `TimedOut` is `Inconclusive`, and `Failed` is `Failed`, as now.
+- **The tactic is given a provider of its server.** `UplcBlaster(budget, servers)` and
+  `UplcBlaster(budget, servers, timeout)`, where `servers` is a `LeanServerProvider`: one method,
+  `server()`, which gives the server for the next check, or the reason there is none. There is
+  no constructor without one. The tactic asks before every check, and a reason is the check's
+  `Failed` result.
+  - A tactic is made, and prepares a statement, without Lean. Its arguments are checked, and a
+    statement outside its fragment is `Unsupported`, where no Lean runs.
+  - The provider decides how long a server lives. The tactic neither starts nor ends one, and a
+    tactic that is kept sees the server that runs now, not the one that ran when it was made.
+- **`LeanServers` is the provider for a workspace.** `LeanServers.in(directory)` starts nothing.
+  The first check that asks gets a server started for it. A later one gets the same server, or
+  another where that one has ended, so the statements after one that ended Lean's server are
+  still checked. Whoever made it closes it, which ends the server that runs. One server of the
+  caller's own is the provider `() => Right(server)`: once it is closed, its checks fail, and
+  say so.
+- **`LeanProofs` has the servers of its suite's workspace.** They are closed after the suite's
+  last test. Its provider also asks whether Lean can run here: without Lean no server starts,
+  and the test is canceled, or fails under `SCALUS_REQUIRE_LEAN`, when its first check runs. A
+  test that runs no check is not canceled.
+- **One reading of the result.** The text of a check is the one `writeCheck` writes. Its leaves
+  are files in a directory of the server's while it runs. The messages of `Finished` are joined
+  into the output that `verdict` reads, with a flag for whether one of them is an error.
+  `Valid`, `Falsified` with its counterexample, a closed statement that is false, and
+  everything else as a failure are told apart there, in one place.
+- **Results.** `TimedOut` is `Inconclusive`, and `Failed` is `Failed`. A check that Lean gives up
+  itself, at its limit of work, is `Inconclusive` too: the error `(deterministic) timeout`
+  means the statement is not decided, not that something broke. A check sets that limit,
+  `maxHeartbeats`, to twice Lean's default, and `withMaxHeartbeats` of the tactic sets another
+  ([the tactic](uplc-blaster.md#the-lean-check)).
+
+What it changed, measured on the same machine:
+
+| | a Lean process per check | in the server |
+|---|---|---|
+| the tests of `scalus-verification`, 136 of them | 8 min 49 s | 1 min 15 s |
+| `VestingVerificationTest` | about 5 min | 2 min |
+| the three guarantees of `VestingValidator.spend`, together | 67 s | 17 s |
+| the vesting statement with any outputs, until Lean's default limit of work | 159 s | 17 s |
+
+There were two costs, and the server removes both.
+
+- **The start of Lean for every check,** about 4.3 s of a small check's 4.7 s. That is the
+  first row.
+- **Blaster ran interpreted.** Blaster is built as a native library, which Lean loads as a
+  plugin. The tactic ran `lake env lean`, which sets the search path and loads no plugin, so
+  Lean interpreted Blaster's code. The server gets the workspace's setup from Lake, plugins
+  included, and runs Blaster compiled. That is the last two rows: the same check takes 159 s
+  with `lake env lean`, and 22 s with `lake lean`, which uses the setup as the server does.
 
 ### A check outside the server
 
 For looking into one check, not as a second way of the tactic. With the environment variable
 `SCALUS_LEAN_KEEP_CHECKS` set to a directory, the tactic also writes every check it runs there,
 each in a directory of its own: `Check.lean` and its leaf files, as `UplcBlaster.writeCheck`
-writes them. Such a check runs by hand, `lake env lean Check.lean` in the workspace: in a
-process of its own, with nothing of the server, and with any option, such as the profiler.
+writes them. Such a check runs by hand, `lake lean Check.lean` in the workspace: in a process
+of its own, with nothing of the server, and with any option, such as the profiler. `lake lean`
+loads Blaster as the server does. `lake env lean` runs the check too, with Blaster interpreted,
+and several times slower.
 
 A variable that switched the tactic itself to a process per check would do the same for a
 whole run, and would keep the second runner in the code to maintain. It is left out until the
@@ -356,8 +420,11 @@ cost together. The document is opened anew when it has grown beyond a number of 
 - **With Lean,** `LeanServerTest`, canceled without it like the other tests that run Lean: a
   check and the next; a message, an error, and a header that cannot be loaded; a time limit on
   an evaluation that does not return, the end of its worker, and a check after it; an
-  interrupted thread; `close` during a check, and no process of the server left after it; a
-  server whose processes were ended from outside.
+  interrupted thread; a check whose worker ends of a recursion too deep, and the next check
+  of the same server; a check that waits for another, to its time limit and to an
+  interruption; the files of a check; `close` during a check, and no process of the server
+  left after it; a server whose processes were ended from outside; the servers of a
+  workspace, one at a time, another after one that ended, and none once they are closed.
 - **Without Lean,** `JsonRpcSessionTest`, in every build: the framing and the matching of
   answers, against a stand-in on piped streams in the same JVM; a request of the other end's
   that is answered; a sender that does not wait for the other end to read; an output that
@@ -367,19 +434,24 @@ cost together. The document is opened anew when it has grown beyond a number of 
   hour to a full run of the build's tests: sbt runs the test JVMs of different modules one
   after another, and almost all of these tests' time is the start of a Lean process for every
   check, which then no longer overlaps with anything.
-- **The tactic's own suites** are to be the test of its move: their statements run as they are,
-  on the server of their suite.
+- **The tactic's own suites** are the test of its move: their statements run as they were, on
+  the server of their suite. `UplcBlasterTest` adds a workspace without the library, a closed
+  server, a provider without a server, and a kept check.
 
 ## Design questions
 
-1. **Steps.** Recommended: the server alone, with its tests; then the tactic moved onto it, and
-   the run of a process per check removed. After those, in either order, the export of a
-   workspace and kept leaves. The first is useful to review before anything depends on it.
-2. **Who owns a server.** Decided: the code that creates it. A server is for one workspace
-   directory, there can be several, and one may first have to be exported, so no place is left
-   to choose a server silently.
-   - *Created explicitly, and passed to the tactic* (decided): `LeanProofs` does it for a test
-     suite, and a runner for its run. The JVM's shutdown hook closes what was not closed.
+1. **Steps.** The server alone, with its tests, and then the tactic moved onto it, with the run
+   of a process per check removed: both done. After those, in either order, the export of a
+   workspace and kept leaves.
+2. **Who owns a server.** Decided: the code that creates its provider. A server is for one
+   workspace directory, there can be several, and one may first have to be exported, so no
+   place is left to choose a server silently.
+   - *A provider, created explicitly and passed to the tactic* (decided): `LeanServers` for a
+     workspace, which `LeanProofs` has for a test suite, and a runner for its run. The JVM's
+     shutdown hook closes what was not closed.
+   - *A server, created explicitly and passed to the tactic:* the first form. A tactic then
+     needed a running Lean to be made at all, also for what needs none, and a tactic that was
+     kept failed every check after one that ended its server.
    - *One per JVM and workspace, found by the directory:* no caller changes, and the workspace
      becomes a hidden setting of the tactic.
 3. **Library or not.** Written out is recommended; see "JSON-RPC without a library".
