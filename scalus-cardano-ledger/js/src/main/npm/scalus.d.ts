@@ -939,6 +939,57 @@ export class TxBalancingError extends Error {
 }
 
 /**
+ * Evaluates the Plutus scripts of transactions under one set of protocol parameters.
+ *
+ * It does what `evaluator.evaluateTx` does, but prepares the cost models once, when it is created,
+ * instead of on every call. Keep one for as long as the parameters stay the same, and create a new
+ * one when they change.
+ *
+ * ```ts
+ * const ev = new TxEvaluator({ slotConfig, costModels, protocolMajorVersion: 11 })
+ * ev.evaluate(tx1, utxos1)
+ * ev.evaluate(tx2, utxos2)
+ * ```
+ *
+ * @throws TypeError if an option cannot be read
+ */
+export class TxEvaluator {
+  constructor(options: TxEvaluatorOptions);
+  /**
+   * Evaluates every Plutus script of a transaction and reports what each redeemer cost, as
+   * `evaluator.evaluateTx` does.
+   *
+   * @param tx the transaction, as hex or bytes
+   * @param utxos the resolved inputs and reference inputs, each a `Utxo` or an `[input, output]` pair as hex or bytes
+   * @returns one entry per redeemer, carrying the units that redeemer's script spent
+   * @throws PlutusScriptEvaluationError if a script fails
+   * @throws TypeError if an input cannot be read
+   */
+  evaluate(tx: string | Uint8Array, utxos: readonly (string | Uint8Array | Utxo)[]): RedeemerBudget[];
+}
+
+/**
+ * What a `TxEvaluator` evaluates under: the arguments `evaluator.evaluateTx` takes besides the
+ * transaction and its inputs.
+ */
+export interface TxEvaluatorOptions {
+  /** The chain's slot arithmetic: a `SlotConfig`, or any object with the same three fields. */
+  readonly slotConfig: SlotConfigLike;
+  /**
+   * Cost parameters per language, keyed by name: a `CostModels`, or any object with some of its
+   * fields.
+   */
+  readonly costModels: CostModelsLike;
+  /** Picks the builtin semantics and the costing rules. */
+  readonly protocolMajorVersion: number;
+  /**
+   * The execution units all of a transaction's scripts may spend together, usually the
+   * protocol's maximum transaction execution units. Without it, execution is not bounded.
+   */
+  readonly maxBudget?: ExUnitsLike;
+}
+
+/**
  * One unspent output: where it is, whose it is, and what it holds.
  *
  * Holds the ledger's own input and output, so a `Utxo` a query hands you can be handed straight

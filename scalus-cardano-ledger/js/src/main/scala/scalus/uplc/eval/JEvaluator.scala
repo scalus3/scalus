@@ -126,6 +126,22 @@ object JEvaluator {
     ): js.Array[JRedeemerBudget] = surfacingErrors {
         val transaction = decodeOf(tx, "tx")(Transaction.fromCbor(_))
         val resolved = utxoMapOf(utxos)
+        run(
+          evaluatorOf(slotConfig, costModels, protocolMajorVersion, maxBudget),
+          transaction,
+          resolved
+        ).toJSArray
+    }
+
+    /** The transaction evaluator the JavaScript arguments describe. Throws a `TypeError` for an
+      * argument it cannot read.
+      */
+    private[eval] def evaluatorOf(
+        slotConfig: js.Any,
+        costModels: js.Any,
+        protocolMajorVersion: js.Any,
+        maxBudget: js.Any
+    ): PlutusScriptEvaluator = {
         val slots = slotConfig.asInstanceOf[js.Dynamic]
         val slotsConfig = SlotConfig(
           zeroTime = longOf(slots.zeroTime, "slotConfig.zeroTime"),
@@ -138,15 +154,12 @@ object JEvaluator {
             model = models.selectDynamic(language.toString)
             if !js.isUndefined(model) && model != null
         yield language.ordinal -> arrayOf(model, language.toString).map(longOf)
-        val protocol = intOf(protocolMajorVersion, "protocolMajorVersion")
-        evaluate(
-          transaction,
-          resolved,
+        evaluatorFor(
           slotsConfig,
           CostModels(byLanguage.toMap),
-          protocol,
+          intOf(protocolMajorVersion, "protocolMajorVersion"),
           JExUnits.exUnitsOf(maxBudget, "maxBudget")
-        ).toJSArray
+        )
     }
 
     /** The UTxO map the evaluator wants, from `Utxo`s and `[input, output]` pairs. A later entry
@@ -175,14 +188,28 @@ object JEvaluator {
         costModels: CostModels,
         protocolMajorVersion: Int,
         maxBudget: Option[ExUnits] = None
-    ): Seq[JRedeemerBudget] = surfacingErrors {
-        val evaluator = PlutusScriptEvaluator(
+    ): Seq[JRedeemerBudget] =
+        run(evaluatorFor(slotConfig, costModels, protocolMajorVersion, maxBudget), tx, utxo)
+
+    private def evaluatorFor(
+        slotConfig: SlotConfig,
+        costModels: CostModels,
+        protocolMajorVersion: Int,
+        maxBudget: Option[ExUnits]
+    ): PlutusScriptEvaluator =
+        PlutusScriptEvaluator(
           slotConfig = slotConfig,
           initialBudget = maxBudget.getOrElse(ExUnits.enormous),
           protocolMajorVersion = MajorProtocolVersion(protocolMajorVersion),
           costModels = costModels,
           mode = EvaluatorMode.EvaluateAndComputeCost
         )
+
+    private[eval] def run(
+        evaluator: PlutusScriptEvaluator,
+        tx: Transaction,
+        utxo: Map[TransactionInput, TransactionOutput]
+    ): Seq[JRedeemerBudget] = surfacingErrors {
         try
             for r <- evaluator.evalPlutusScripts(tx, utxo)
             yield new JRedeemerBudget(r.tag.toString, r.index, JExUnits(r.exUnits))

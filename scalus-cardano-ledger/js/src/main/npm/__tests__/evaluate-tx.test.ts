@@ -10,6 +10,7 @@ import {
   evalPlutusScripts,
   PlutusScriptEvaluationError,
   SlotConfig,
+  TxEvaluator,
   Utxo,
 } from "../scalus";
 import {
@@ -103,6 +104,46 @@ describe("evaluator.evaluateTx", () => {
     expect(caught).not.toBeInstanceOf(TypeError);
     expect(caught).not.toBeInstanceOf(PlutusScriptEvaluationError);
     expect((caught as Error).message.length).toBeGreaterThan(0);
+  });
+});
+
+describe("TxEvaluator", () => {
+  const expected = () => evaluator.evaluateTx(scriptTxCborHex, [scriptUtxoPairHex], slotConfig, byName, 11);
+
+  test("evaluates as evaluateTx does, call after call", () => {
+    const ev = new TxEvaluator({ slotConfig, costModels: byName, protocolMajorVersion: 11 });
+    const utxo = Utxo.fromCbor(hexToBytes(scriptUtxoCborHex));
+    expect(ev.evaluate(scriptTxCborHex, [scriptUtxoPairHex])).toEqual(expected());
+    expect(ev.evaluate(hexToBytes(scriptTxCborHex), [utxo])).toEqual(expected());
+    expect(() => ev.evaluate(scriptTxCborHex, [])).toThrow(Error);
+    expect(ev.evaluate(scriptTxCborHex, [scriptUtxoPairHex])).toEqual(expected());
+  });
+
+  test("maxBudget limits every transaction, and a failure leaves the next call unaffected", () => {
+    const [r] = expected();
+    const at = new TxEvaluator({ slotConfig, costModels: byName, protocolMajorVersion: 11, maxBudget: r.budget });
+    expect(at.evaluate(scriptTxCborHex, [scriptUtxoPairHex])).toEqual([r]);
+    expect(at.evaluate(scriptTxCborHex, [scriptUtxoPairHex])).toEqual([r]);
+    const below = new TxEvaluator({
+      slotConfig, costModels: byName, protocolMajorVersion: 11,
+      maxBudget: { memory: r.budget.memory, steps: r.budget.steps - 1n },
+    });
+    for (let i = 0; i < 2; i++) {
+      try {
+        below.evaluate(scriptTxCborHex, [scriptUtxoPairHex]);
+        expect.unreachable();
+      } catch (e) {
+        expect((e as PlutusScriptEvaluationError).code).toBe("OUT_OF_BUDGET");
+      }
+    }
+  });
+
+  test("unreadable options throw TypeError when it is created", () => {
+    const bad = (options: unknown) => expect(() => new TxEvaluator(options as never)).toThrow(TypeError);
+    bad({ slotConfig: { zeroTime: "0", zeroSlot: 0, slotLength: 1000 }, costModels: byName, protocolMajorVersion: 11 });
+    bad({ slotConfig, costModels: { PlutusV3: "x" }, protocolMajorVersion: 11 });
+    bad({ slotConfig, costModels: byName, protocolMajorVersion: 1.5 });
+    bad({ slotConfig, costModels: byName, protocolMajorVersion: 11, maxBudget: { memory: "x", steps: 1 } });
   });
 });
 
