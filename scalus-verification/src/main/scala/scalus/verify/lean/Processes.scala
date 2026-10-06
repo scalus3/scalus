@@ -16,9 +16,12 @@ private[verify] object Processes {
       */
     def stop(process: Process, known: List[ProcessHandle]): Unit = {
         val children = (known ++ process.descendants().iterator().asScala).distinct
-        process.destroyForcibly()
+        // The children first. Ending the process also closes this side of its input, and that
+        // waits for a thread that writes to it. A write the other side has stopped reading ends
+        // only when no process is left that could read it, and a child could.
         children.foreach(_.destroyForcibly())
         children.foreach(_.onExit().join())
+        process.destroyForcibly()
         process.waitFor()
     }
 }

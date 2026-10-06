@@ -102,7 +102,7 @@ class LeanServerTest extends AnyFunSuite with LeanProofs {
             assert(running.sizeIs >= 2, running)
             assert(Files.isDirectory(server.directory))
             // while it is open, the JVM's exit would close it
-            assert(LeanServer.closesAtExit)
+            assert(LeanServer.isOpen(server))
             val unfinished =
                 CompletableFuture.supplyAsync[Result](() => server.check(endless, None))
             Thread.sleep(2000)
@@ -110,8 +110,8 @@ class LeanServerTest extends AnyFunSuite with LeanProofs {
             assert(unfinished.get(30, TimeUnit.SECONDS).isInstanceOf[Result.Failed])
             assert(running.forall(!_.isAlive), running.filter(_.isAlive))
             assert(!Files.exists(server.directory))
-            // nothing is left for the JVM's exit to do, and nothing of this run is held for it
-            assert(!LeanServer.closesAtExit)
+            // and nothing of it is left for the JVM's exit
+            assert(!LeanServer.isOpen(server))
             // closed for good, and closing again does nothing
             assert(server.check(holds, limit) == Result.Failed("the Lean server is closed"))
         finally server.close()

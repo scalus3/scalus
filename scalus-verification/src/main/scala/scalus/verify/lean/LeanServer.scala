@@ -11,6 +11,7 @@ import java.util.concurrent.{CompletableFuture, ConcurrentHashMap, TimeoutExcept
 import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
+import scala.util.Try
 
 /** A running Lean language server for one workspace: `lake serve`, spoken to over its standard
   * input and output (docs/design/verification-details/lean-server.md).
@@ -77,9 +78,14 @@ final class LeanServer private (
                         giveUp()
                         throw interrupted
             waited match
-                case Some(Right(_))     => Result.Finished(messages(sent))
-                case Some(Left(reason)) => fail(reason)
-                case None               => giveUp()
+                // The server answers a check that ends while it is being closed, and then
+                // publishes an empty list for the document it closes. What is read here could be
+                // that list.
+                case Some(Right(_)) if closed.get =>
+                    Result.Failed("the Lean server was closed during the check")
+                case Some(Right(diagnostics)) => Result.Finished(messages(diagnostics))
+                case Some(Left(reason))       => fail(reason)
+                case None                     => giveUp()
     }
 
     /** Ends the server: it is asked to shut down, and whatever is left of its processes after a few
@@ -121,7 +127,11 @@ final class LeanServer private (
         version += 1
         if !opened then
             val document = TextDocumentItem(uri, "lean4", version, source)
-            session.notify("textDocument/didOpen", Some(RawJson.of(DidOpenParams(document))))
+            // Lean's own field. By default the server builds what the document imports, inside
+            // the check's time and again after every check that is given up. A workspace that is
+            // not built is reported as an error of the header, as `lake env lean` reports it.
+            val params = DidOpenParams(document, dependencyBuildMode = "never")
+            session.notify("textDocument/didOpen", Some(RawJson.of(params)))
             opened = true
         else
             val params = DidChangeParams(
@@ -132,22 +142,35 @@ final class LeanServer private (
         version
     }
 
-    /** Lean's own request: it is answered when `sent` is elaborated, after its diagnostics. */
-    private def elaborated(sent: Int): CompletableFuture[JsonRpcSession.Answer] =
-        session.request(
-          "textDocument/waitForDiagnostics",
-          Some(RawJson.of(WaitForDiagnosticsParams(uri, sent)))
-        )
+    /** The diagnostics of version `sent` of the document, once it is elaborated.
+      *
+      * Lean's own request `waitForDiagnostics` is answered then, after the diagnostics are
+      * published. They are taken as the answer arrives, on the thread that reads the server, so
+      * nothing the server publishes later is taken for them. Lean publishes for every version, an
+      * empty list where a version has none. A version without one was not elaborated as far as this
+      * can tell, and is no check that found nothing.
+      */
+    private def elaborated(sent: Int): CompletableFuture[Either[String, List[Diagnostic]]] =
+        session
+            .request(
+              "textDocument/waitForDiagnostics",
+              Some(RawJson.of(WaitForDiagnosticsParams(uri, sent)))
+            )
+            .thenApply { answer =>
+                val (publishedFor, diagnostics) = published
+                answer.flatMap { _ =>
+                    if publishedFor == sent then Right(diagnostics)
+                    else Left(s"the Lean server published no diagnostics for version $sent")
+                }
+            }
 
     /** The answer, or `None` when none came within `limit`. */
-    private def await(
-        answer: CompletableFuture[JsonRpcSession.Answer],
-        limit: Option[FiniteDuration]
-    ): Option[JsonRpcSession.Answer] = limit match
-        case None => Some(answer.get())
-        case Some(duration) =>
-            try Some(answer.get(duration.length, duration.unit))
-            catch case _: TimeoutException => None
+    private def await[A](answer: CompletableFuture[A], limit: Option[FiniteDuration]): Option[A] =
+        limit match
+            case None => Some(answer.get())
+            case Some(duration) =>
+                try Some(answer.get(duration.length, duration.unit))
+                catch case _: TimeoutException => None
 
     /** Gives up the check that runs, by closing the document. Lean ends the worker of a closed
       * document, and with it whatever the check started: Blaster's run, the solver, an evaluation.
@@ -206,22 +229,18 @@ final class LeanServer private (
             if written.isEmpty then "" else s": ${written.takeRight(500)}"
     }
 
-    private def messages(sent: Int): List[Message] = {
-        val (publishedFor, diagnostics) = published
-        if publishedFor != sent then Nil
-        else
-            diagnostics
-                .map { diagnostic =>
-                    Message(
-                      diagnostic.range.start.line,
-                      // The protocol leaves a missing severity to the client. An error is not
-                      // overlooked.
-                      diagnostic.severity.fold(Severity.Error)(severity),
-                      diagnostic.message
-                    )
-                }
-                .sortBy(_.line)
-    }
+    private def messages(diagnostics: List[Diagnostic]): List[Message] =
+        diagnostics
+            .map { diagnostic =>
+                Message(
+                  diagnostic.range.start.line,
+                  // The protocol leaves a missing severity to the client. An error is not
+                  // overlooked.
+                  diagnostic.severity.fold(Severity.Error)(severity),
+                  diagnostic.message
+                )
+            }
+            .sortBy(_.line)
 
     /** What the server says unasked. The diagnostics of the document are kept. */
     private def notified(method: String, params: Option[RawJson]): Unit =
@@ -285,12 +304,14 @@ object LeanServer {
                 Left(reason)
             case Right(process) =>
                 val server = new LeanServer(process, workspace, files, errors)
-                remember(server)
-                server.initialize() match
-                    case None => Right(server)
-                    case Some(reason) =>
-                        server.close()
-                        Left(reason)
+                // Closed where it does not come up, also where the wait for it is interrupted.
+                var up = false
+                try
+                    remember(server)
+                    val refused = server.initialize()
+                    up = refused.isEmpty
+                    refused.toLeft(server)
+                finally if !up then server.close()
     }
 
     /** The time the server gets to start the conversation. */
@@ -313,34 +334,44 @@ object LeanServer {
         open.add(server)
         if atExit.isEmpty && !exiting then
             val hook = new Thread(() => closeAll(), "scalus-lean-server-shutdown")
-            Runtime.getRuntime.addShutdownHook(hook)
-            atExit = Some(hook)
+            // The JVM tells that it is exiting only by refusing the hook. The server then ends
+            // with the JVM, because its input closes.
+            try
+                Runtime.getRuntime.addShutdownHook(hook)
+                atExit = Some(hook)
+            catch case _: IllegalStateException => exiting = true
     }
 
     private def forget(server: LeanServer): Unit = open.synchronized {
         open.remove(server)
-        // A hook cannot be taken back while the JVM exits, and need not be.
         if open.isEmpty && !exiting then
-            atExit.foreach(Runtime.getRuntime.removeShutdownHook)
+            // Refused likewise while the JVM exits, where the hook need not be taken back.
+            try atExit.foreach(Runtime.getRuntime.removeShutdownHook)
+            catch case _: IllegalStateException => exiting = true
             atExit = None
     }
 
+    /** Closes every open server. One that fails to close does not keep the others open: its failure
+      * is thrown when all have been tried.
+      */
     private def closeAll(): Unit = {
         val servers = open.synchronized {
             exiting = true
             open.asScala.toList
         }
-        servers.foreach(_.close())
+        val failures = servers.flatMap(server => Try(server.close()).failed.toOption)
+        failures.headOption.foreach(failure => throw failure)
     }
 
-    /** Whether a server is open, and will be closed when the JVM exits. */
-    private[lean] def closesAtExit: Boolean = open.synchronized(atExit.nonEmpty)
+    /** Whether `server` is open, and so closed when the JVM exits. */
+    private[lean] def isOpen(server: LeanServer): Boolean = open.contains(server)
 
+    /** A severity the protocol does not know is an error, as a missing one is. */
     private def severity(code: Int): Severity = code match
-        case 1 => Severity.Error
         case 2 => Severity.Warning
         case 3 => Severity.Information
-        case _ => Severity.Hint
+        case 4 => Severity.Hint
+        case _ => Severity.Error
 
     /** The messages of the Language Server Protocol that are used, with the fields that are. */
     private object Lsp {
@@ -357,7 +388,7 @@ object LeanServer {
             version: Int,
             text: String
         )
-        final case class DidOpenParams(textDocument: TextDocumentItem)
+        final case class DidOpenParams(textDocument: TextDocumentItem, dependencyBuildMode: String)
         final case class VersionedTextDocumentIdentifier(uri: String, version: Int)
         final case class ContentChange(text: String)
         final case class DidChangeParams(

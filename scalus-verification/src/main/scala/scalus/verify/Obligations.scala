@@ -212,12 +212,15 @@ private[verify] object Obligations {
         arguments: List[AnnotatedSIR],
         body: SIR
     ): AnnotatedSIR = {
-        val passed = variables.map(variable => variable.name -> s"${variable.name}$$argument")
+        def passedAs(name: String): String = s"$name$$argument"
         SIR.Let(
-          variables.zip(passed).zip(arguments).map { case ((variable, (_, name)), argument) =>
-              Binding(name, variable.tp, argument)
+          variables.zip(arguments).map { (variable, argument) =>
+              Binding(passedAs(variable.name), variable.tp, argument)
           },
-          SIR.renameFreeVars(body, passed.toMap),
+          SIR.renameFreeVars(
+            body,
+            variables.map(variable => variable.name -> passedAs(variable.name)).toMap
+          ),
           SIR.LetFlags.None,
           annotations
         )
