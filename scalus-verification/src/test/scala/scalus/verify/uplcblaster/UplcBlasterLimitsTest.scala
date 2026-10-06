@@ -27,8 +27,8 @@ class UplcBlasterLimitsTest extends AnyFunSuite with LeanProofs {
     /** The time a statement that Lean can finish gets. They take seconds. */
     private val finishes = 2.minutes
 
-    /** The time before a statement that Lean cannot finish is given up. The first of them takes 100
-      * s where this was written; the others gave no result in minutes.
+    /** The time before a statement that Lean cannot finish is given up. They gave no result in
+      * minutes where this was written.
       */
     private val givenUp = 15.seconds
 
@@ -62,8 +62,9 @@ class UplcBlasterLimitsTest extends AnyFunSuite with LeanProofs {
         // loop is cut after a few elements.
         val small = inconclusive(filterDoesNotLengthen, 100, finishes, positives)
         assert(small.contains("spurious"), small)
-        // The time goes to Blaster's symbolic run of each leaf, before the solver is asked.
-        val large = inconclusive(filterDoesNotLengthen, 400, givenUp, positives)
+        // At budget 400 Lean still finishes, in 20 s. At 800 it does not: the time goes to
+        // Blaster's symbolic run of each leaf, before the solver is asked.
+        val large = inconclusive(filterDoesNotLengthen, 800, givenUp, positives)
         assert(large.contains("did not finish"), large)
     }
 

@@ -9,7 +9,7 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.utils.{Hex, Utils}
 import scalus.verify.*
-import scalus.verify.lean.{Directories, Processes}
+import scalus.verify.lean.{LeanServer, LeanServerProvider}
 
 import java.nio.file.{Files, Path}
 import scala.collection.mutable.ArrayBuffer
@@ -29,16 +29,30 @@ import scala.concurrent.duration.FiniteDuration
   * its predicates, with `native_decide` ([[ProofKind.LeanNative]]). A counterexample is replayed on
   * the Scalus CEK before it is reported as a refutation. Other statement shapes are rejected during
   * preparation.
+  *
+  * The checks run in a Lean server, one after another: the server loads the workspace once, and a
+  * check is an edit of its document (docs/design/verification-details/lean-server.md). The tactic
+  * asks its provider for the server before every check, and so needs no Lean to be made, or to
+  * prepare a statement.
   */
 final class UplcBlaster private (
     val budget: Int,
-    val leanDirectory: Path,
-    val timeout: Option[FiniteDuration]
+    val servers: LeanServerProvider,
+    val timeout: Option[FiniteDuration],
+    val maxHeartbeats: Int
 ) extends Tactic {
     override type Prepared = UplcBlaster.Lowered
 
     require(budget > 0, "the UPLC Blaster budget must be positive")
     require(timeout.forall(_.length > 0), "the UPLC Blaster timeout must be positive")
+    require(maxHeartbeats >= 0, "Lean's limit of work must not be negative")
+
+    /** The same tactic with another limit on the work Lean does for one command of a check, in
+      * place of [[UplcBlaster.defaultMaxHeartbeats]]. `0` is no limit: a check then runs until it
+      * ends, or until the tactic's time limit.
+      */
+    def withMaxHeartbeats(limit: Int): UplcBlaster =
+        new UplcBlaster(budget, servers, timeout, limit)
 
     override val name: String = "uplc-blaster"
 
@@ -52,8 +66,17 @@ final class UplcBlaster private (
                 )
             )
 
-    override def run(prepared: Prepared): ExecutionResult =
-        UplcBlaster.check(prepared, budget, leanDirectory, timeout)
+    override def run(prepared: Prepared): ExecutionResult = servers.server() match
+        case Left(reason) => VerificationResult.Failed(reason)
+        case Right(server) =>
+            UplcBlaster.check(
+              prepared,
+              budget,
+              maxHeartbeats,
+              server,
+              timeout,
+              UplcBlaster.keptChecks
+            )
 }
 
 object UplcBlaster {
@@ -144,18 +167,38 @@ object UplcBlaster {
     /** Compile configuration supported by the current PlutusCoreBlaster model. */
     val options: Options = Options.releaseUntagged.copy(valueBuiltins = false)
 
-    def apply(budget: Int): UplcBlaster =
-        new UplcBlaster(budget, Path.of("scalus-verification", "src", "main", "lean"), None)
-
-    def apply(budget: Int, leanDirectory: Path): UplcBlaster =
-        new UplcBlaster(budget, leanDirectory, None)
-
-    /** A tactic that stops Lean after `timeout` and is then inconclusive. Without a timeout a
-      * statement Lean cannot finish, such as one whose program loops over a list of unknown length,
-      * runs until the process is stopped from outside.
+    /** A tactic that runs its checks in the Lean server `servers` gives it: one for a workspace
+      * that has this module's Lean library. Whoever made the provider ends its servers.
       */
-    def apply(budget: Int, leanDirectory: Path, timeout: FiniteDuration): UplcBlaster =
-        new UplcBlaster(budget, leanDirectory, Some(timeout))
+    def apply(budget: Int, servers: LeanServerProvider): UplcBlaster =
+        new UplcBlaster(budget, servers, None, defaultMaxHeartbeats)
+
+    /** A tactic that gives a check up after `timeout`, and is then inconclusive. Without a timeout
+      * a statement Lean cannot finish, such as one whose program loops over a list of unknown
+      * length, runs until its thread is interrupted or the server closed.
+      */
+    def apply(budget: Int, servers: LeanServerProvider, timeout: FiniteDuration): UplcBlaster =
+        new UplcBlaster(budget, servers, Some(timeout), defaultMaxHeartbeats)
+
+    /** Lean's own default for `maxHeartbeats`, its limit on the work of one command. A heartbeat is
+      * a unit of that work, a thousand small allocations, counted the same on every machine.
+      */
+    val leanMaxHeartbeats: Int = 200000
+
+    /** The limit a tactic sets unless told otherwise ([[UplcBlaster.withMaxHeartbeats]]): twice
+      * Lean's own.
+      *
+      * Lean gives a command of a check up when it has done this much work, and the check is then
+      * inconclusive. A command is the symbolic run of one leaf, or Blaster's translation of the
+      * statement. The time the solver takes is none of Lean's work, and is not counted.
+      */
+    val defaultMaxHeartbeats: Int = 2 * leanMaxHeartbeats
+
+    /** Where the checks that run are also written, for looking into one: the directory the
+      * environment variable `SCALUS_LEAN_KEEP_CHECKS` names, where it is set.
+      */
+    private def keptChecks: Option[Path] =
+        sys.env.get("SCALUS_LEAN_KEEP_CHECKS").filter(_.nonEmpty).map(Path.of(_))
 
     /** Lowers a statement in the supported fragment, or explains why it is outside it.
       *
@@ -896,89 +939,76 @@ object UplcBlaster {
         case SIR.Decl(_, term)     => freeVariables(term)
 
     /** Writes the Lean check of a lowered statement into `directory`: each leaf's program as
-      * `Leaf<n>.flat`, and `Check.lean`, whose path it returns. The tactic runs
-      * `lake env lean Check.lean` in its workspace; a check written with this can be read, or run
-      * by hand with other options.
+      * `Leaf<n>.flat`, and `Check.lean`, whose path it returns. The tactic runs the same text in
+      * its server. A check written with this can be read, or run by hand in a process of its own
+      * and with other options: `lake lean Check.lean` in the workspace, which loads Blaster as the
+      * server does. `lake env lean` loads no plugin, and runs Blaster interpreted.
       */
-    def writeCheck(goal: Lowered, budget: Int, directory: Path): Path = {
+    def writeCheck(goal: Lowered, budget: Int, directory: Path): Path =
+        writeCheck(goal, budget, defaultMaxHeartbeats, directory)
+
+    /** [[writeCheck]], with the limit on Lean's own work the check sets. */
+    def writeCheck(goal: Lowered, budget: Int, maxHeartbeats: Int, directory: Path): Path = {
+        val source = directory.resolve("Check.lean")
+        Files.writeString(source, checkSource(goal, budget, maxHeartbeats, directory))
+        source
+    }
+
+    /** The text of the check of a lowered statement. Its leaves are written into `directory`, where
+      * the text refers to them.
+      */
+    private def checkSource(
+        goal: Lowered,
+        budget: Int,
+        maxHeartbeats: Int,
+        directory: Path
+    ): String = {
         val flats = goal.leaves.zipWithIndex.map { (program, index) =>
             val flat = directory.resolve(s"Leaf$index.flat")
             Files.writeString(flat, Hex.bytesToHex(program.cborEncoded).toLowerCase)
             flat
         }
-        val source = directory.resolve("Check.lean")
-        Files.writeString(source, renderCheck(goal, flats, budget))
-        source
+        renderCheck(goal, flats, budget, maxHeartbeats)
     }
 
-    private def check(
+    /** Runs the check of a lowered statement in `server`, and reads what Lean reported.
+      *
+      * The leaves are in a directory of the server's for as long as the check runs. With `keep`,
+      * the check is also written there, in a directory of its own, as [[writeCheck]] writes it.
+      */
+    private[uplcblaster] def check(
         goal: Lowered,
         budget: Int,
-        leanDirectory: Path,
-        timeout: Option[FiniteDuration]
+        maxHeartbeats: Int,
+        server: LeanServer,
+        timeout: Option[FiniteDuration],
+        keep: Option[Path]
     ): ExecutionResult = {
-        if !Files.isDirectory(leanDirectory) then
-            return VerificationResult.Failed(
-              s"Lean workspace does not exist: ${leanDirectory.toAbsolutePath}"
-            )
-        val temporary = Files.createTempDirectory("scalus-uplc-blaster-")
-        try
-            val source = writeCheck(goal, budget, temporary)
-            // Lean's output goes to a file, so that waiting for the process can time out.
-            val log = temporary.resolve("Check.out")
-            val exit =
-                try
-                    execute(
-                      List("lake", "env", "lean", source.toString),
-                      leanDirectory.toAbsolutePath,
-                      log,
-                      timeout
-                    )
-                catch
-                    case error: java.io.IOException =>
-                        return VerificationResult.Failed(
-                          s"cannot start Lean: ${error.getMessage}"
-                        )
-            exit match
-                case Some(code) => verdict(goal, budget, code, Files.readString(log))
-                case None =>
-                    VerificationResult.Inconclusive(
-                      s"Lean did not finish within ${timeout.get}"
-                    )
-        finally Directories.remove(temporary)
+        keep.foreach { kept =>
+            val directory = Files.createTempDirectory(Files.createDirectories(kept), "check-")
+            writeCheck(goal, budget, maxHeartbeats, directory)
+        }
+        server.check(checkSource(goal, budget, maxHeartbeats, _), timeout) match
+            case LeanServer.Result.Finished(messages) =>
+                verdict(
+                  goal,
+                  budget,
+                  messages.exists(_.severity == LeanServer.Severity.Error),
+                  messages.map(_.text).mkString("\n")
+                )
+            // Only a check with a time limit is given up for it.
+            case LeanServer.Result.TimedOut =>
+                VerificationResult.Inconclusive(s"Lean did not finish within ${timeout.mkString}")
+            case LeanServer.Result.Failed(reason) => VerificationResult.Failed(reason)
     }
 
-    /** Runs `command` in `directory`, with its output in `log`, and returns its exit code, or
-      * `None` when it did not finish within `timeout`.
-      *
-      * However the wait ends, with a result, at the time limit, or because this thread was
-      * interrupted, the process and the ones it started are stopped before this returns or throws:
-      * nothing is left running in a directory the caller removes.
+    /** The result that what Lean reported stands for: `output` is its messages, in the order of
+      * their commands, and `errors` says whether one of them is an error.
       */
-    private[uplcblaster] def execute(
-        command: List[String],
-        directory: Path,
-        log: Path,
-        timeout: Option[FiniteDuration]
-    ): Option[Int] = {
-        val process = new ProcessBuilder(command*)
-            .directory(directory.toFile)
-            .redirectErrorStream(true)
-            .redirectOutput(log.toFile)
-            .start()
-        try
-            val finished = timeout match
-                case Some(limit) => process.waitFor(limit.length, limit.unit)
-                case None        => process.waitFor(); true
-            Option.when(finished)(process.exitValue())
-        finally Processes.stop(process)
-    }
-
-    /** The result Lean's exit code and output stand for. */
     private[uplcblaster] def verdict(
         goal: Lowered,
         budget: Int,
-        exit: Int,
+        errors: Boolean,
         output: String
     ): ExecutionResult = {
         val closed = goal.binders.isEmpty
@@ -991,11 +1021,18 @@ object UplcBlaster {
           Nil,
           if closed then ProofKind.LeanNative else ProofKind.Blaster
         )
-        def failure: ExecutionResult = VerificationResult.Failed(
-          s"Lean exited with code $exit: ${concise(output)}"
-        )
+        // Lean gives a command up at its own limit of work, `maxHeartbeats`, and says so. The
+        // statement is then not decided, as when the time limit passes: nothing went wrong.
+        def failure: ExecutionResult =
+            if errors && output.contains("(deterministic) timeout") then
+                VerificationResult.Inconclusive(
+                  s"Lean gave up at its own limit: ${concise(output)}"
+                )
+            else if errors then
+                VerificationResult.Failed(s"Lean reported an error: ${concise(output)}")
+            else VerificationResult.Failed(s"Lean reported no verdict: ${concise(output)}")
         if closed then
-            if exit == 0 then VerificationResult.Proven(Proof(artifact))
+            if !errors then VerificationResult.Proven(Proof(artifact))
             else if output.contains("`native_decide` evaluated that the proposition") then
                 replay(goal, artifact)
             else failure
@@ -1259,7 +1296,12 @@ object UplcBlaster {
       * Blaster over `#prep_uplc_run`. A closed statement has nothing to search for: its predicates
       * run on the computable `runProgramFor`, and `native_decide` evaluates the proposition.
       */
-    private def renderCheck(goal: Lowered, flats: Vector[Path], budget: Int): String = {
+    private def renderCheck(
+        goal: Lowered,
+        flats: Vector[Path],
+        budget: Int,
+        maxHeartbeats: Int
+    ): String = {
         val imports = flats.zipWithIndex.map { (flat, index) =>
             val path = leanString(flat.toAbsolutePath.toString)
             s"""#import_uplc leaf$index PlutusV3 single_cbor_hex "$path""""
@@ -1298,6 +1340,8 @@ object UplcBlaster {
                    |#blaster (gen-cex: 1) [$formula]""".stripMargin
 
         s"""import ScalusProofs.Run
+           |
+           |set_option maxHeartbeats $maxHeartbeats
            |
            |namespace ScalusProofs.Runtime
            |

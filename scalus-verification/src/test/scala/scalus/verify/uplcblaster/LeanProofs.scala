@@ -1,8 +1,11 @@
 package scalus.verify.uplcblaster
 
-import org.scalatest.{Assertions, Tag}
+import com.github.plokhotnyuk.jsoniter_scala.core.*
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+import org.scalatest.{Assertions, BeforeAndAfterAll, Suite, Tag}
 import scalus.uplc.Constant
 import scalus.verify.*
+import scalus.verify.lean.{LeanServer, LeanServerProvider, LeanServers}
 
 import java.io.File
 import java.nio.file.{Files, Path}
@@ -20,41 +23,64 @@ import scala.concurrent.duration.FiniteDuration
   */
 object Unfinished extends Tag("scalus.verify.uplcblaster.Unfinished")
 
-/** Runs [[UplcBlaster]] on statements through Lean, for test suites. */
-trait LeanProofs extends Assertions {
+/** Runs [[UplcBlaster]] on statements through Lean, for test suites. A suite has one Lean server at
+  * a time, started for its first check and closed after its last test.
+  */
+trait LeanProofs extends Assertions with BeforeAndAfterAll { this: Suite =>
 
-    /** The Lean workspace, looked up from the working directory upwards: a forked test of another
-      * module runs in that module's directory, not in the build's root.
+    /** The Lean workspace the suite's checks run in: that of Scalus's Lean library, unless the
+      * suite overrides it. A workspace of its own requires that library, as a check imports it.
       */
-    protected val leanDirectory: Path = {
-        val workspace = Path.of("scalus-verification", "src", "main", "lean")
-        Iterator
-            .iterate(Path.of("").toAbsolutePath)(_.getParent)
-            .takeWhile(_ != null)
-            .map(_.resolve(workspace))
-            .find(Files.isDirectory(_))
-            .getOrElse(workspace)
+    protected def leanWorkspace: Path = LeanProofs.libraryWorkspace
+
+    /** The Lean servers of the suite's workspace: none is started before a check asks for one. */
+    private lazy val servers = LeanServers.in(leanWorkspace)
+
+    /** Gives a tactic the suite's Lean server: the one that runs, or another where that one has
+      * ended. A tactic asks when it runs a check. The test is then canceled, or fails, where Lean
+      * cannot run here ([[requireLean]]). One that runs no check needs no Lean.
+      */
+    protected def lean: LeanServerProvider = () => {
+        requireLean()
+        servers.server()
     }
 
-    /** Whether Lean can run here: `lake` on the `PATH` and a built workspace. The ci-jvm shell has
-      * neither, so the tests that run Lean are canceled there. Build the workspace with
-      * `lake build` (see the module README) to run them.
+    /** The suite's Lean server itself, for a test that speaks to it. */
+    protected def leanServer: LeanServer = lean.server() match
+        case Right(server) => server
+        case Left(reason)  => fail(reason)
+
+    /** Starts a Lean server in `workspace`, for whoever closes it. The test is canceled, or fails,
+      * where Lean cannot run here ([[requireLean]]), and fails where the server does not start.
+      */
+    protected def startLean(workspace: Path): LeanServer = {
+        requireLean()
+        LeanServer.start(workspace) match
+            case Right(started) => started
+            case Left(reason)   => fail(reason)
+    }
+
+    override protected def afterAll(): Unit =
+        try super.afterAll()
+        finally servers.close()
+
+    /** Whether Lean can run here: `lake` on the `PATH`, and Scalus's Lean library built where the
+      * suite's workspace has it. The ci-jvm shell has neither, so the tests that run Lean are
+      * canceled there. Build the library with `lake build` (see the module README) to run them.
       */
     protected lazy val leanAvailable: Boolean =
         sys.env
             .getOrElse("PATH", "")
             .split(File.pathSeparator)
             .exists(directory => Files.isExecutable(Path.of(directory, "lake"))) &&
-            Files.isRegularFile(
-              leanDirectory.resolve(".lake/build/lib/lean/ScalusProofs/Run.olean")
-            )
+            LeanProofs.isBuilt(leanWorkspace)
 
     /** Cancels the test when Lean cannot run here, unless the `SCALUS_REQUIRE_LEAN` environment
       * variable is set, as in the Lean-Proofs workflow: there a missing Lean fails the test, so the
       * proofs cannot pass by not running.
       */
     protected def requireLean(): Unit = {
-        val missing = s"requires lake and a built Lean workspace in $leanDirectory"
+        val missing = s"requires lake and a built Lean workspace in $leanWorkspace"
         if sys.env.contains("SCALUS_REQUIRE_LEAN") then assert(leanAvailable, missing)
         else assume(leanAvailable, missing)
     }
@@ -69,7 +95,7 @@ trait LeanProofs extends Assertions {
         val verifier = Verifier.empty
         functions.foreach(verifier.addFunction)
         val statement = verifier.statement(prop)
-        (verifier, statement, verifier.verify(statement, UplcBlaster(budget, leanDirectory)))
+        (verifier, statement, verifier.verify(statement, UplcBlaster(budget, lean)))
     }
 
     /** Proves `prop`, and returns how the proof was checked. */
@@ -99,18 +125,25 @@ trait LeanProofs extends Assertions {
                 proof.artifact.asInstanceOf[UplcBlaster.Artifact].counterexample.toMap
             case (_, _, other) => fail(s"expected a refutation, got $other")
 
-    /** Why [[UplcBlaster]] is inconclusive about `prop`, with Lean stopped after `timeout`. */
+    /** Why [[UplcBlaster]] is inconclusive about `prop`, with its check given up after `timeout`.
+      */
     protected def inconclusive(
         prop: Prop,
         budget: Int,
         timeout: FiniteDuration,
         functions: FunctionDef[?, ?]*
+    ): String = inconclusive(prop, UplcBlaster(budget, lean, timeout), functions*)
+
+    /** Why `tactic` is inconclusive about `prop`. */
+    protected def inconclusive(
+        prop: Prop,
+        tactic: UplcBlaster,
+        functions: FunctionDef[?, ?]*
     ): String = {
-        requireLean()
         val verifier = Verifier.empty
         functions.foreach(verifier.addFunction)
         val statement = verifier.statement(prop)
-        verifier.verify(statement, UplcBlaster(budget, leanDirectory, timeout)) match
+        verifier.verify(statement, tactic) match
             case VerificationResult.Inconclusive(reason) =>
                 assert(verifier.theorems.isEmpty)
                 reason
@@ -120,4 +153,74 @@ trait LeanProofs extends Assertions {
     protected def integer(value: Constant): BigInt = value match
         case Constant.Integer(integer) => integer
         case other                     => fail(s"expected an integer, got $other")
+}
+
+object LeanProofs {
+
+    /** The workspace of Scalus's Lean library: the directory the environment variable
+      * `SCALUS_LEAN_WORKSPACE` names, or the one in Scalus's sources.
+      */
+    lazy val libraryWorkspace: Path =
+        sys.env
+            .get("SCALUS_LEAN_WORKSPACE")
+            .filter(_.nonEmpty)
+            .map(Path.of(_))
+            .getOrElse(librarySources)
+
+    /** The workspace of Scalus's Lean library in Scalus's sources. */
+    def librarySources: Path = inSources("scalus-verification", "src", "main", "lean")
+
+    /** A directory of Scalus's sources, named from the build's root, and looked up from the working
+      * directory upwards. A forked test of another module runs in that module's directory, not in
+      * the build's root.
+      */
+    def inSources(first: String, more: String*): Path = {
+        val directory = Path.of(first, more*)
+        Iterator
+            .iterate(Path.of("").toAbsolutePath)(_.getParent)
+            .takeWhile(_ != null)
+            .map(_.resolve(directory))
+            .find(Files.isDirectory(_))
+            .getOrElse(directory)
+    }
+
+    /** Whether a check can run in `workspace`: Scalus's Lean library, which every check imports, is
+      * compiled. It lies in the workspace itself, or in one that the workspace requires by its
+      * path.
+      */
+    def isBuilt(workspace: Path): Boolean =
+        (workspace :: required(workspace)).exists { directory =>
+            Files.isRegularFile(directory.resolve(".lake/build/lib/lean/ScalusProofs/Run.olean"))
+        }
+
+    /** A package of a workspace's manifest: one that is cloned has a revision, and one that is
+      * required by its path has a directory.
+      */
+    private final case class Package(name: String, rev: Option[String], dir: Option[String])
+    private final case class Manifest(packages: List[Package])
+    private given JsonValueCodec[Manifest] = JsonCodecMaker.make
+
+    /** The packages of the manifest of `workspace`: none where it has no manifest. */
+    private def packages(workspace: Path): List[Package] = {
+        val manifest = workspace.resolve("lake-manifest.json")
+        if Files.isRegularFile(manifest) then
+            readFromArray[Manifest](Files.readAllBytes(manifest)).packages
+        else Nil
+    }
+
+    /** The workspaces that `workspace` requires by their paths. */
+    private def required(workspace: Path): List[Path] =
+        packages(workspace).flatMap(_.dir).map(workspace.resolve(_).normalize)
+
+    /** The revisions at which the manifest of `workspace` pins the packages it clones, by their
+      * names.
+      */
+    def pinned(workspace: Path): Map[String, String] =
+        packages(workspace).collect { case Package(name, Some(revision), _) =>
+            name -> revision
+        }.toMap
+
+    /** The Lean that `workspace` pins. */
+    def toolchain(workspace: Path): String =
+        Files.readString(workspace.resolve("lean-toolchain")).trim
 }

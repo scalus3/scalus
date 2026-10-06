@@ -16,8 +16,7 @@ import scalus.verify.Props.*
 import scalus.verify.lean.Directories
 
 import java.nio.file.Files
-import scala.concurrent.duration.*
-import scala.jdk.OptionConverters.*
+import scala.jdk.CollectionConverters.*
 
 case class BlasterPair(a: BigInt, b: BigInt) derives FromData, ToData
 
@@ -283,7 +282,8 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
     }
 
     test("requires a positive symbolic execution budget") {
-        assertThrows[IllegalArgumentException](UplcBlaster(0))
+        // No Lean is asked for: a tactic takes its server when it runs a check.
+        assertThrows[IllegalArgumentException](UplcBlaster(0, lean))
     }
 
     test("lowers a universal prefix and a Boolean body to one n-argument UPLC predicate") {
@@ -547,7 +547,12 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
           FunctionTable.empty
         )
         def falsified(value: String): VerificationResult =
-            UplcBlaster.verdict(goal, 40, 1, s"❌ Falsified\nCounterexample:\n - x0: $value")
+            UplcBlaster.verdict(
+              goal,
+              40,
+              errors = true,
+              s"❌ Falsified\nCounterexample:\n - x0: $value"
+            )
         val bytes = "PlutusCore.ByteString.ByteString.mk"
         // a byte string, replayed
         assert(falsified(s"""($bytes "A")""").isInstanceOf[VerificationResult.Refuted])
@@ -783,11 +788,8 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         val exp2 = FunctionDef(Math.exp2)
         run(forAll[BigInt](e => callRef(exp2.ref, e)(r => r >= BigInt(0))), 120, Seq(exp2)) match
             case (verifier, _, VerificationResult.Failed(reason)) =>
-                assert(reason.startsWith("Lean exited with code 1: "), reason)
-                assert(
-                  reason.contains("error: Inductive datatype with instance parameters"),
-                  reason
-                )
+                assert(reason.startsWith("Lean reported an error: "), reason)
+                assert(reason.contains("Inductive datatype with instance parameters"), reason)
                 assert(reason.contains("not supported: `BitVec"), reason)
                 assert(!reason.contains("Successfully decoded"), reason)
                 assert(verifier.theorems.isEmpty)
@@ -798,76 +800,93 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         requireLean()
         // The workspace's own toolchain, so elan does not look for a default one.
         val empty = Files.createTempDirectory("scalus-empty-lean-workspace-")
-        val toolchain = empty.resolve("lean-toolchain")
-        Files.copy(leanDirectory.resolve("lean-toolchain"), toolchain)
+        Files.copy(leanWorkspace.resolve("lean-toolchain"), empty.resolve("lean-toolchain"))
         try
+            val server = startLean(empty)
             val verifier = Verifier.empty
             val statement = verifier.statement(forAll[BigInt](x => x + BigInt(0) == x))
-            verifier.verify(statement, UplcBlaster(40, empty)) match
-                case VerificationResult.Failed(reason) =>
-                    assert(reason.startsWith("Lean exited with code 1: "), reason)
-                    assert(reason.contains("unknown module prefix 'ScalusProofs'"), reason)
-                case other => fail(s"expected a failed result, got $other")
-        finally
-            Files.deleteIfExists(toolchain)
-            Files.deleteIfExists(empty)
+            try
+                verifier.verify(statement, UplcBlaster(40, () => Right(server))) match
+                    case VerificationResult.Failed(reason) =>
+                        assert(reason.startsWith("Lean reported an error: "), reason)
+                        assert(reason.contains("ScalusProofs"), reason)
+                    case other => fail(s"expected a failed result, got $other")
+            finally server.close()
+            // A server that is closed takes no check, and the tactic says so.
+            assert(
+              verifier.verify(statement, UplcBlaster(40, () => Right(server))) ==
+                  VerificationResult.Failed("the Lean server is closed")
+            )
+            // So it does where its provider has no server to give.
+            assert(
+              verifier.verify(statement, UplcBlaster(40, () => Left("no Lean here"))) ==
+                  VerificationResult.Failed("no Lean here")
+            )
+        finally Directories.remove(empty)
     }
 
-    test("the processes of a check are stopped at its time limit, and when it is interrupted") {
-        val directory = Files.createTempDirectory("scalus-execute-")
-        val log = directory.resolve("out")
-        // A shell that starts a child and waits for it, as `lake env` does for Lean. It writes
-        // the child's process id to `file`.
-        def parent(file: String): List[String] =
-            List("sh", "-c", s"sleep 600 & echo $$! > $file; wait")
-        // The child, once the shell has written its id, where it still runs.
-        def child(file: String): Option[ProcessHandle] = {
-            val written = Iterator
-                .continually {
-                    Thread.sleep(50)
-                    val path = directory.resolve(file)
-                    if Files.exists(path) then Files.readString(path).trim else ""
-                }
-                .take(200)
-                .find(_.nonEmpty)
-                .getOrElse(fail(s"the shell did not write $file"))
-            ProcessHandle.of(written.toLong).toScala.filter(_.isAlive)
-        }
+    test("a check sets Lean's limit of work, twice Lean's own unless told otherwise") {
+        assert(UplcBlaster.defaultMaxHeartbeats == 400000)
+        val goal = lowered(forAll[BigInt](x => x + BigInt(0) == x), FunctionTable.empty)
+        val directory = Files.createTempDirectory("scalus-heartbeats-")
         try
+            def written(check: java.nio.file.Path): String = Files.readString(check)
             assert(
-              UplcBlaster.execute(List("sh", "-c", "exit 3"), directory, log, None).contains(3)
+              written(UplcBlaster.writeCheck(goal, 40, directory))
+                  .contains("\nset_option maxHeartbeats 400000\n")
             )
-
-            assert(UplcBlaster.execute(parent("limit"), directory, log, Some(2.seconds)).isEmpty)
-            assert(child("limit").isEmpty)
-
-            // A thread that waits without a limit, as a test under sbt does, and is canceled.
-            val waiting = new Thread(() =>
-                try UplcBlaster.execute(parent("interrupted"), directory, log, None): Unit
-                catch case _: InterruptedException => ()
+            // none at all
+            assert(
+              written(UplcBlaster.writeCheck(goal, 40, 0, directory))
+                  .contains("\nset_option maxHeartbeats 0\n")
             )
-            waiting.start()
-            val running = child("interrupted").getOrElse(fail("the child does not run"))
-            waiting.interrupt()
-            waiting.join(10000)
-            assert(!waiting.isAlive)
-            assert(!running.isAlive)
         finally Directories.remove(directory)
+
+        // A limit no check keeps to. Lean gives the check up, and nothing is decided about the
+        // statement, which the same tactic proves at its own limit.
+        val verifier = Verifier.empty
+        val statement = verifier.statement(forAll[BigInt](x => x + BigInt(0) == x))
+        verifier.verify(statement, UplcBlaster(40, lean).withMaxHeartbeats(1)) match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(reason.startsWith("Lean gave up at its own limit"), reason)
+                assert(reason.contains("maximum number of heartbeats"), reason)
+            case other => fail(s"expected an inconclusive result, got $other")
+        assert(verifier.theorems.isEmpty)
+        assert(
+          verifier.verify(statement, UplcBlaster(40, lean)).isInstanceOf[VerificationResult.Proven]
+        )
+        assertThrows[IllegalArgumentException](UplcBlaster(40, lean).withMaxHeartbeats(-1))
+    }
+
+    test("a check is also written where it is asked to be kept") {
+        val kept = Files.createTempDirectory("scalus-kept-checks-")
+        try
+            val goal = lowered(forAll[BigInt](x => x + BigInt(0) == x), FunctionTable.empty)
+            val result =
+                UplcBlaster.check(
+                  goal,
+                  40,
+                  UplcBlaster.defaultMaxHeartbeats,
+                  leanServer,
+                  None,
+                  Some(kept)
+                )
+            assert(result.isInstanceOf[VerificationResult.Proven], result)
+            // one directory for the check, with the text and the program it refers to
+            val List(directory) = Files.list(kept).iterator().asScala.toList
+            val leaf = directory.resolve("Leaf0.flat")
+            assert(Files.isRegularFile(leaf))
+            assert(Files.readString(directory.resolve("Check.lean")).contains(leaf.toString))
+        finally Directories.remove(kept)
     }
 
     test("statements outside the fragment are unsupported") {
         // The tactic reports these without running Lean. An enum has several constructors, so
         // it is not built from one set of fields.
         given Quantifiable[BlasterShape] = new Quantifiable[BlasterShape] {}
-        val verifier = Verifier.empty
-        val shapes = verifier.statement(forAll[BlasterShape](_ => true))
-        verifier.verify(shapes, UplcBlaster(10, leanDirectory)) match
-            case VerificationResult.Unsupported(report) =>
-                val reasons = report.issues.collect {
-                    case CompatibilityIssue.UnsupportedFeature(_, reason) => reason
-                }
-                assert(reasons.exists(_.contains("BlasterShape binder")), report)
-            case other => fail(s"expected an unsupported result, got $other")
+        val shape = forAll[BlasterShape](_ => true)
+        val shapes = UplcBlaster.lower(shape, FunctionTable.empty)
+        assert(shapes.left.exists(_.contains("BlasterShape binder")), shapes)
 
         // One constructor of `Data` is no type of Lean's: its variable would be any `Data`, and
         // the statement would be about values the Scala type does not have.
@@ -883,5 +902,15 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
           FunctionTable(div10)
         )
         assert(nested.left.exists(_.contains("whenReturns inside a call's continuation")), nested)
+
+        // The verifier gives the reason as an unsupported result, and Lean is not asked.
+        val verifier = Verifier.empty
+        verifier.verify(verifier.statement(shape), UplcBlaster(10, lean)) match
+            case VerificationResult.Unsupported(report) =>
+                val reasons = report.issues.collect {
+                    case CompatibilityIssue.UnsupportedFeature(_, reason) => reason
+                }
+                assert(reasons.exists(_.contains("BlasterShape binder")), report)
+            case other => fail(s"expected an unsupported result, got $other")
     }
 }

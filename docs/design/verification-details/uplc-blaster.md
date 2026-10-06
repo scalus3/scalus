@@ -12,7 +12,7 @@ Code: `scalus-verification/src/main/scala/scalus/verify/uplcblaster/UplcBlaster.
 Prop ──lower──► Lowered(binders, body: LeafFormula, leaves: Vector[Program])
                   │
                   ▼
-     Check.lean in a temporary directory ──► lake env lean, run in src/main/lean
+     the check's text, its leaves in files ──► the Lean server of the workspace
                   │
    with binders:  ├─ ✅ Valid ─────────────► Proven (ProofKind.Blaster)
                   ├─ ❌ Falsified ─────────► replay on the Scalus CEK ──► Refuted, or Inconclusive
@@ -20,6 +20,7 @@ Prop ──lower──► Lowered(binders, body: LeafFormula, leaves: Vector[Pro
                   ├─ ⚠️ Undetermined ──────► Inconclusive
    closed:        ├─ native_decide holds ──► Proven (ProofKind.LeanNative)
                   ├─ native_decide false ──► replay on the Scalus CEK ──► Refuted, or Inconclusive
+                  ├─ Lean's own limit of work ► Inconclusive(reason)
                   ├─ backend/tool error ─────► Failed(reason)
                   └─ no result in time ────► Inconclusive(reason)
 ```
@@ -207,6 +208,8 @@ below. A `Data` binder is declared as `(x2 : Data)` and passed as `Const.Data x2
 ```lean
 import ScalusProofs.Run
 
+set_option maxHeartbeats 400000
+
 namespace ScalusProofs.Runtime
 open …
 
@@ -222,23 +225,42 @@ def arguments (x0 : Integer) (x1 : Bool) : List Term :=
 end ScalusProofs.Runtime
 ```
 
-It runs `lake env lean Check.lean` with the workspace as the working directory, so the workspace
-must be built (`lake build`). The temporary directory is removed afterwards.
+The tactic gives this text to its Lean server, as the next version of the server's one document
+([the Lean server](lean-server.md)). The leaves are files in a directory of the server's, which
+the text names, and are removed after the check. The server loads the workspace once and does
+not build it, so the workspace must be built (`lake build`). What Lean reports about the
+document, its diagnostics, is the output of the check.
 
-Every check is a process of its own, which starts Lean and loads the workspace again. A Lean
-server that stays across checks is built, and the tactic's move onto it is proposed:
-[the Lean server](lean-server.md).
-
-- **Time limit.** `UplcBlaster(budget, leanDirectory, timeout)` stops Lean, and the solver it
-  started, after `timeout`, and is then inconclusive. Without it the tactic waits for Lean,
-  which on some statements does not return
-  ([Statements that do not finish](#statements-that-do-not-finish)). Blaster's own `timeout`
-  option limits only the solver.
+- **Time limit.** `UplcBlaster(budget, servers, timeout)` gives a check up after `timeout`: the
+  server closes its document, which ends Lean's worker and the solver it started, and the
+  tactic is inconclusive. Without it the tactic waits for Lean, which on some statements does
+  not return ([Statements that do not finish](#statements-that-do-not-finish)). Blaster's own
+  `timeout` option limits only the solver.
+- **Lean's own limit.** Lean gives a command up when it has done `maxHeartbeats` of work, with
+  the error `(deterministic) timeout`. A heartbeat is a unit of Lean's own work, counted the
+  same on every machine; it has nothing to do with the connection. The statement is then not
+  decided, and the result is `Inconclusive` as well.
+  - A command is the symbolic run of one leaf, `#prep_uplc_run`, or Blaster's translation of
+    the statement. The solver's time is none of Lean's work and is not counted: a statement the
+    solver takes minutes over is not given up for it.
+  - A check sets the limit itself, to 400000, twice Lean's default
+    (`UplcBlaster.defaultMaxHeartbeats`). In the server Lean's default is about 17 s of the
+    symbolic run of a validator.
+  - The limit ends a command only where Lean's code looks at it, and more of it is not
+    proportionally more time. The vesting statement with open outputs
+    ([Statements that do not finish](#statements-that-do-not-finish)) is given up at Lean's
+    default after 17 s. At twice that the same run gets past that point, and gave no result in
+    8 minutes: a statement like it needs the tactic's time limit.
+  - `tactic.withMaxHeartbeats(n)` sets another, for a statement known to be large. `0` is no
+    limit, and leaves the check to the tactic's time limit.
 - **Keeping a check.** `UplcBlaster.writeCheck(lowered, budget, directory)` writes the leaves and
-  `Check.lean` into a directory of the caller's, to read or to run by hand, for instance with
-  `set_option profiler true`, which reports the time of each `#prep_uplc_run`.
+  `Check.lean` into a directory of the caller's, to read or to run by hand with
+  `lake lean Check.lean`, for instance with `set_option profiler true`, which reports the time
+  of each `#prep_uplc_run`. (`lake env lean` runs it as well, with Blaster interpreted and not
+  loaded as the native library it is built as, and several times slower.) With the environment variable `SCALUS_LEAN_KEEP_CHECKS` set to
+  a directory, the tactic writes every check it runs there, each in a directory of its own.
 
-The verdict is read from Blaster's output:
+The verdict is read from the messages Lean reports, which are Blaster's:
 
 - `✅ Valid`;
 - `❌ Falsified`, followed by lines `- xN: value` for the counterexample;
@@ -256,8 +278,8 @@ returns a structured `Result` (`Valid`, `Falsified` with the `name: value` strin
 `Undetermined`). If the log format changes, a command in `Run.lean` can call it and print JSON
 instead; the values would still be SMT-LIB terms.
 
-Any other output, such as a translation error or a missing workspace, is returned in the
-`Inconclusive` message. The message drops the `Successfully decoded` lines and is cut to 500
+Any other error, such as a translation error or a workspace without the library, is returned in
+the `Failed` message. The message drops the `Successfully decoded` lines and is cut to 500
 characters.
 
 The artifact records the SHA-256 of each leaf's CBOR, the budget, Lean's output, the
@@ -424,20 +446,24 @@ on its test support (`LeanProofs`), so a contract's proofs sit next to its other
 
 | About | Statement | Quantified over | Budget | Time |
 |---|---|---|---|---|
-| `linearVesting` | nothing is vested before the start | the datum, a `Config`, and the time | 400 | 6 s |
-| | everything is vested from the end on | | | 5 s |
-| | it returns: no division by a zero duration | | | 5 s |
-| | its contract, read from its body: it returns, and for `initialAmount >= 0`, `0 <= vested <= initialAmount` | | | 6 s |
-| | it does not decrease with time, for `initialAmount >= 0` | and a second time | | 6 s |
-| the validator | an output without a datum cannot be spent | `txInfo`, redeemer, reference: any `Data` | 600 | 6 s |
-| | a non-positive amount is rejected | `txInfo`, reference, datum: any `Data` | | 7 s |
-| | nothing but spending is validated | `txInfo`, redeemer, script info: any `Data` | | 9 s |
-| a withdrawal | a sample is accepted, and rejected unsigned | closed, `native_decide` | 12000 | 7 s |
-| | unsigned, it is rejected | datum, locked and requested amounts, time, fee; outputs: any `Data` | | 13 s |
-| | it leaves at least what has not vested | the same, and the amount paid | | 43 s |
-| | after the end, everything locked can be withdrawn | datum, locked amount, time, fee | | 26 s |
-| | the three guarantees `spend` states with `Spec.ensures`: the beneficiary signed, something is withdrawn, at least the unvested amount stays locked | a `Withdrawal`: the shape's numbers, and one signer of any key | | 67 s together; 3 min one by one |
-| | had `linearVesting` expected `initialAmount >= 0`, its call would owe it: refuted; proved under the withdrawal's own contract | a `Withdrawal` | | 40 s |
+| `linearVesting` | nothing is vested before the start | the datum, a `Config`, and the time | 400 | 7 s |
+| | everything is vested from the end on | | | 1 s |
+| | it returns: no division by a zero duration | | | 1 s |
+| | its contract, read from its body: it returns, and for `initialAmount >= 0`, `0 <= vested <= initialAmount` | | | 4 s |
+| | it does not decrease with time, for `initialAmount >= 0` | and a second time | | 2 s |
+| the validator | an output without a datum cannot be spent | `txInfo`, redeemer, reference: any `Data` | 600 | 2 s |
+| | a non-positive amount is rejected | `txInfo`, reference, datum: any `Data` | | 1 s |
+| | nothing but spending is validated | `txInfo`, redeemer, script info: any `Data` | | 2 s |
+| a withdrawal | a sample is accepted, and rejected unsigned | closed, `native_decide` | 12000 | 1 s |
+| | unsigned, it is rejected | datum, locked and requested amounts, time, fee; outputs: any `Data` | | 14 s |
+| | it leaves at least what has not vested | the same, and the amount paid | | 24 s |
+| | after the end, everything locked can be withdrawn | datum, locked amount, time, fee | | 15 s |
+| | the three guarantees `spend` states with `Spec.ensures`: the beneficiary signed, something is withdrawn, at least the unvested amount stays locked | a `Withdrawal`: the shape's numbers, and one signer of any key | | 17 s, together |
+| | had `linearVesting` expected `initialAmount >= 0`, its call would owe it: refuted; proved under the withdrawal's own contract | a `Withdrawal` | | 11 s |
+
+The times are of the tests, each with its negative controls, in the suite's Lean server; the
+first includes loading the workspace. The suite takes about 2 min. With a Lean process for every
+check it took about 5, and the three guarantees alone 67 s together and 3 min one by one.
 
 The validator's specification is written in `VestingValidator` itself. `spend` states its three
 guarantees at its head; `Verifier.guarantees` finds them in the code of the function that builds
@@ -502,6 +528,22 @@ These tests carry the ScalaTest tag `Unfinished`. The build leaves it out of `te
 | vesting: at least the unvested amount stays locked, for any outputs | 1000 | spurious counterexample | 10 s |
 | | 1500 | spurious counterexample | 18 s |
 | | 2000 to 12000 | none | over 150 s; at 4000, over 7 min |
+
+The times are of `lake env lean` for every check, as the tactic ran when they were measured.
+That command loads no plugin, so Lean interpreted Blaster's code. The server runs Blaster as the
+native library it is built as, and gets through the same work several times faster. Three of the
+rows, measured again with Blaster compiled:
+
+| Statement | Budget | Result | Time |
+|---|---|---|---|
+| `filter` does not lengthen a list | 400 | spurious counterexample | 20 s |
+| | 800 | none | over 2 min |
+| vesting: at least the unvested amount stays locked, for any outputs | 12000 | Lean's limit of work, at Lean's default of 200000 heartbeats | 17 s (159 s interpreted) |
+| | 12000 | none, at the tactic's default of 400000 | over 8 min |
+
+So a budget that was beyond reach is now within it, and the next one is not: the doubling of
+the paths is the same. A check that ends at Lean's limit is inconclusive like one that reaches
+its time limit.
 
 **None of them can be proved at any budget.** Some input needs more steps than the budget, and
 there a conclusion, read strongly, is false. Lean's counterexample is that input, a long list for

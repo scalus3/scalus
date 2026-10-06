@@ -29,7 +29,10 @@ validator actually runs on chain.
   budgeted CEK runner and the `#prep_uplc_run` command its generated checks use.
 - `src/main/scala/scalus/verify/lean/LeanServer.scala` - a running Lean language server for a
   workspace: `LeanServer.start(directory)`, `check(source, timeout)` and `close()`. The tactic
-  does not use it yet; see `docs/design/verification-details/lean-server.md`.
+  runs its checks in one; see `docs/design/verification-details/lean-server.md`.
+- `src/main/scala/scalus/verify/lean/LeanServerProvider.scala` - what gives a tactic its server,
+  and `LeanServers`, the provider for a workspace: one server at a time, started when a check
+  needs it.
 - `src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala` - properties of `Math` and
   of prelude data structures, each with a negative control and samples.
 - `src/test/scala/scalus/verify/uplcblaster/UplcBlasterLimitsTest.scala` - natural statements
@@ -44,6 +47,7 @@ validator actually runs on chain.
 ```scala
 import scalus.verify.*
 import scalus.verify.Props.*
+import scalus.verify.lean.LeanServer
 import scalus.verify.uplcblaster.UplcBlaster
 
 val clamp = FunctionDef(Math.clamp)
@@ -55,8 +59,15 @@ val inRange = verifier.statement(
       (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
   )
 )
-verifier.verify(inRange, UplcBlaster(budget = 120)) // Proven
+
+// The Lean servers of the workspace, which the caller ends. A tactic is given them, and takes
+// a server when it runs a check: the first check starts one.
+val lean = LeanServers.in(Path.of("scalus-verification/src/main/lean"))
+try verifier.verify(inRange, UplcBlaster(120, lean)) // Proven
+finally lean.close()
 ```
+
+The later examples use this `lean`.
 
 `UplcBlaster` proves statements with universal and existential quantifiers over `BigInt`,
 `Boolean`, `ByteString`, `Data` and case classes of them: Boolean tests, calls, `denotes` and
@@ -64,10 +75,14 @@ verifier.verify(inRange, UplcBlaster(budget = 120)) // Proven
 explicit witness, avoiding an SMT quantifier; ordinary `exists` is emitted to Blaster as the
 classically equivalent `¬∀¬`. A variable of a case class, as in
 `forAll[Config, BigInt]((config, time) => …)`, is one variable per field for Lean. Each test becomes
-its own closed UPLC predicate over the quantified values in its scope. The tactic writes a Lean
-file in a temporary directory that imports
-them, runs `lake env lean` in this workspace, and reads Blaster's verdict. The workspace must be
-built (`lake build`).
+its own closed UPLC predicate over the quantified values in its scope. The tactic writes them
+to files, gives its Lean server a check that imports them, and reads Blaster's verdict from
+what Lean reports. The server loads the workspace once, so a small check takes a fraction of a
+second after the first. The workspace must be built (`lake build`): the server does not build
+it. A check that Lean's process does not survive, for want of stack or of memory, is a failed
+result for its statement, and the server takes the next one. Where the server itself has ended,
+`LeanServers` starts another for the next check. A tactic is given a `LeanServerProvider`, which
+`LeanServers` is; one server of the caller's own is `() => Right(server)`.
 
 - **Valid** means the statement holds without the budget. A test in a positive position must halt
   within the budget with `true`; one in a negative position (a premise, or under `!`) must only
@@ -85,8 +100,13 @@ built (`lake build`).
 - Anything else, including other binder types or an unsupported call continuation, fails
   preparation with `Unsupported(CompatibilityReport(...))`.
 - Lean does not return on some statements, typically one whose program loops over a list of
-  unknown length. `UplcBlaster(budget, leanDirectory, timeout)` stops it after `timeout`, and is
-  then `Inconclusive`; see "Statements that do not finish" in the tactic's details.
+  unknown length. `UplcBlaster(budget, lean, timeout)` gives the check up after `timeout`, and
+  is then `Inconclusive`; see "Statements that do not finish" in the tactic's details. So is a
+  check that Lean gives up itself, at its limit of work for one command (`maxHeartbeats`). A
+  check sets that limit to twice Lean's default; `UplcBlaster(budget, lean).withMaxHeartbeats(n)`
+  sets another, and `0` none. The solver's time does not count towards it.
+- With the environment variable `SCALUS_LEAN_KEEP_CHECKS` set to a directory, every check that
+  runs is also written there, to read or to run by hand with `lake lean Check.lean`.
 
 `verifier.prepare(statement, tactic)` returns an opaque `PreparedRun` only when the complete goal
 is in the tactic's language. Passing that evidence to `verifier.prove(prepared)` cannot return
@@ -136,7 +156,7 @@ val inRange = verifier.contract(
     ensures = (x, lo, hi) => r => lo <= r && r <= hi
   )
 )
-verifier.verify(inRange, UplcBlaster(budget = 120)) // Proven
+verifier.verify(inRange, UplcBlaster(120, lean)) // Proven
 ```
 
 `contract` is partial: `∀ args. expects(args) ==> whenReturns(f, args)(r => ensures(args)(r))`,
@@ -187,7 +207,7 @@ object Vault {
 
 val clamp = FunctionDef(Vault.clamp)
 val stated = Contract.inSource(clamp).get              // None for a function that states none
-verifier.verify(verifier.contract("clamp_in_range", stated), UplcBlaster(budget = 120)) // Proven
+verifier.verify(verifier.contract("clamp_in_range", stated), UplcBlaster(120, lean)) // Proven
 ```
 
 The clauses are no part of the script: they are removed before lowering, so its bytes and hash
@@ -204,8 +224,8 @@ function's code and declares one statement for each:
 val spends = FunctionDef.named("spends", (w: Withdrawal) => VestingValidator.validate(context(w)))
 verifier.addFunction(spends)
 val stated = verifier.guarantees(spends.ref)
-stated.statements.foreach(verifier.verify(_, UplcBlaster(budget = 12000)))   // clause by clause
-stated.together.foreach(verifier.verify(_, UplcBlaster(budget = 12000)))     // or as one statement
+stated.statements.foreach(verifier.verify(_, UplcBlaster(12000, lean)))   // clause by clause
+stated.together.foreach(verifier.verify(_, UplcBlaster(12000, lean)))     // or as one statement
 ```
 
 Each statement says that the function returns, so a tactic runs the function's body once per
@@ -233,7 +253,7 @@ object Vault {
 val bounded = FunctionDef(Vault.bounded)
 verifier.addFunction(bounded)
 val CallObligations(statements, unsupported) = verifier.obligations(bounded.ref)
-statements.foreach(owed => verifier.verify(owed, UplcBlaster(budget = 120))) // Proven
+statements.foreach(owed => verifier.verify(owed, UplcBlaster(120, lean))) // Proven
 ```
 
 The statement says: where the call is reached, its arguments satisfy the callee's `expects`. It is
@@ -248,14 +268,19 @@ precondition.
 
 ```bash
 cd scalus-verification/src/main/lean && lake build && cd -   # once, and after a Lean change
-sbt scalusVerification/test
-sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 5 min
+sbt scalusVerification/test                                                        # about 1 min of tests
+sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 2 min
 sbt "scalusVerification/testOnly *UplcBlasterLimitsTest"   # the statements Lean does not finish
 ```
 
 The tests that run Lean need `lake` on the `PATH` (the default and `ci` nix shells have it) and
-the built workspace. Without them those tests are canceled, as in ci-jvm. With the
+the built library. A suite starts one Lean server for its checks, in its workspace, and closes
+it after its last test. Without them those tests are canceled, as in ci-jvm. With the
 `SCALUS_REQUIRE_LEAN` environment variable set, as in the Lean-Proofs workflow, they fail instead.
+
+A suite's workspace is `leanWorkspace` of `LeanProofs`. Unless the suite overrides it, it is the
+workspace of the library, `src/main/lean` in these sources, or the directory
+`SCALUS_LEAN_WORKSPACE` names.
 
 ## Adding a property
 
