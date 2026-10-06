@@ -288,9 +288,9 @@ object UplcBlaster {
             )
         }
 
-    /** A type Lean can build a value of, and pass to the tests' programs. A quantified variable of
-      * such a type is a variable of the Lean proposition. Values inside a test, such as a call's
-      * arguments and result, can have any type: the compiler lowers them, and Lean never sees them.
+    /** A type a call can pass to a function that has no SIR, and take back from it: one whose
+      * values have one form whatever their static type. It says nothing of quantified variables:
+      * [[leanVariable]] does, and differs for one constructor of `Data`.
       */
     private def quantifiable(tp: SIRType): Boolean =
         tp == SIRType.Integer || tp == SIRType.Boolean || tp == SIRType.ByteString || isData(tp)
@@ -308,6 +308,10 @@ object UplcBlaster {
       */
     private def leanVariable(tp: SIRType): Boolean = tp match
         case SIRType.Integer | SIRType.Boolean | SIRType.ByteString => true
+        case other                                                  => isWholeData(other)
+
+    /** `Data` itself, and not one of its constructors. */
+    private def isWholeData(tp: SIRType): Boolean = tp match
         case SIRType.SumCaseClass(decl, _) => decl.name == SIRType.Data.name
         case _                             => false
 
@@ -679,12 +683,12 @@ object UplcBlaster {
         body: SIR,
         functions: FunctionTable
     ): Term = {
-        val unlinkedBody = unlinkModuleDefinitions(body, functions)
+        val (unlinkedBody, free) = unlinkModuleDefinitions(body, functions)
         val external = externalVariables(unlinkedBody).distinctBy(_._1)
         val linked = external.filter((name, _) => functions.contains(name))
         // Other external references, such as the compiler's own support functions behind
         // `d.to[A]`, are resolved by the lowering, which reports one it does not know.
-        val unbound = freeVariables(unlinkedBody) -- binders.map(_.name) -- external.map(_._1)
+        val unbound = free -- binders.map(_.name) -- external.map(_._1)
         require(
           unbound.isEmpty,
           s"UPLC proposition body has free variables: ${unbound.toList.sorted.mkString(", ")}"
@@ -769,25 +773,30 @@ object UplcBlaster {
       * The expression's own `let`s sit in the same place as the module definitions, so a binding is
       * dropped only when nothing uses it and its value cannot fail. A statement such as
       * `require(c)` is an unused binding of a value that can.
+      *
+      * It returns the free variables of the result as well. They are put together on the way out,
+      * so the expression under a long chain of definitions is walked once, and not once for every
+      * definition around it.
       */
-    private def unlinkModuleDefinitions(sir: SIR, functions: FunctionTable): SIR =
-        unlinked(sir, functions)._1
-
-    /** [[unlinkModuleDefinitions]], with the free variables of what it returns. They are put
-      * together on the way out, so the expression under a long chain of definitions is walked once,
-      * and not once for every definition around it.
-      */
-    private def unlinked(sir: SIR, functions: FunctionTable): (SIR, Set[String]) = sir match {
+    private def unlinkModuleDefinitions(
+        sir: SIR,
+        functions: FunctionTable
+    ): (SIR, Set[String]) = sir match {
         case SIR.Let(bindings, body, flags, anns) =>
-            val (unlinkedBody, bodyFree) = unlinked(body, functions)
-            val candidates = bindings.filterNot(binding => functions.contains(binding.name))
-            val valueFree =
-                candidates.map(binding => binding.name -> freeVariables(binding.value)).toMap
+            val (unlinkedBody, bodyFree) = unlinkModuleDefinitions(body, functions)
+            // Each binding with the free variables of its own value, found when they are asked
+            // for: a definition that turns out dead is not walked.
+            final class Candidate(val binding: Binding) {
+                lazy val free: Set[String] = freeVariables(binding.value)
+            }
+            val candidates = bindings
+                .filterNot(binding => functions.contains(binding.name))
+                .map(new Candidate(_))
             @annotation.tailrec
             def live(names: Set[String]): Set[String] = {
                 val next = names ++ candidates.iterator
-                    .filter(binding => names.contains(binding.name))
-                    .flatMap(binding => valueFree(binding.name))
+                    .filter(candidate => names.contains(candidate.binding.name))
+                    .flatMap(_.free)
                 if next == names then names else live(next)
             }
             // A strict binding is evaluated where it stands. One whose value can fail, such as a
@@ -795,25 +804,35 @@ object UplcBlaster {
             // dropped unused, as a module's function definitions are.
             val evaluated =
                 if SIR.LetFlags.isLazy(flags) then Nil
-                else candidates.filterNot(binding => isValue(binding.value))
+                else candidates.filterNot(candidate => isValue(candidate.binding.value))
             val roots = bodyFree ++
-                evaluated.flatMap(binding => valueFree(binding.name) + binding.name)
+                evaluated.flatMap(candidate => candidate.free + candidate.binding.name)
             val liveNames = live(roots)
-            val kept = candidates.filter(binding => liveNames.contains(binding.name))
+            val kept = candidates.filter(candidate => liveNames.contains(candidate.binding.name))
             if kept.isEmpty then (unlinkedBody, bodyFree)
             else
-                // As `freeVariables` has it for a `let`.
-                val bound = kept.map(_.name).toSet
-                val inValues = kept.iterator.flatMap(binding => valueFree(binding.name)).toSet
-                val free =
-                    (if SIR.LetFlags.isRec(flags) then inValues -- bound else inValues) ++
-                        (bodyFree -- bound)
-                (SIR.Let(kept, unlinkedBody, flags, anns), free)
+                val free = freeOfLet(
+                  kept.map(_.binding.name).toSet,
+                  kept.iterator.flatMap(_.free).toSet,
+                  bodyFree,
+                  SIR.LetFlags.isRec(flags)
+                )
+                (SIR.Let(kept.map(_.binding), unlinkedBody, flags, anns), free)
         case SIR.Decl(data, term) =>
-            val (unlinkedTerm, free) = unlinked(term, functions)
+            val (unlinkedTerm, free) = unlinkModuleDefinitions(term, functions)
             (SIR.Decl(data, unlinkedTerm), free)
         case other => (other, freeVariables(other))
     }
+
+    /** The free variables of a `let` that binds `bound`: those of its values, without its own names
+      * where it is recursive, and those of its body that it does not bind.
+      */
+    private def freeOfLet(
+        bound: Set[String],
+        inValues: Set[String],
+        inBody: Set[String],
+        recursive: Boolean
+    ): Set[String] = (if recursive then inValues -- bound else inValues) ++ (inBody -- bound)
 
     /** A term that evaluates to itself: it cannot fail, so an unused binding of it can be dropped.
       */
@@ -847,11 +866,12 @@ object UplcBlaster {
         case SIR.Var(name, _, _)            => Set(name)
         case SIR.ExternalVar(_, name, _, _) => Set(name)
         case SIR.Let(bindings, body, flags, _) =>
-            val bound = bindings.map(_.name).toSet
-            val valueFree = bindings.iterator.flatMap(binding => freeVariables(binding.value)).toSet
-            val effectiveValueFree =
-                if SIR.LetFlags.isRec(flags) then valueFree -- bound else valueFree
-            effectiveValueFree ++ (freeVariables(body) -- bound)
+            freeOfLet(
+              bindings.map(_.name).toSet,
+              bindings.iterator.flatMap(binding => freeVariables(binding.value)).toSet,
+              freeVariables(body),
+              SIR.LetFlags.isRec(flags)
+            )
         case SIR.LamAbs(parameter, body, _, _) => freeVariables(body) - parameter.name
         case SIR.Apply(function, argument, _, _) =>
             freeVariables(function) ++ freeVariables(argument)
@@ -1086,7 +1106,7 @@ object UplcBlaster {
                     case SIRType.ByteString =>
                         text.fold(Right(ByteString.empty))(SmtValues.bytes)
                             .map(Constant.ByteString(_))
-                    case tp if isData(tp) =>
+                    case tp if isWholeData(tp) =>
                         text.fold(Right(Data.I(0)))(SmtValues.data).map(Constant.Data(_))
                     case other =>
                         Left(
@@ -1181,10 +1201,10 @@ object UplcBlaster {
         }
 
     private def leanType(tp: SIRType): String = tp match
-        case SIRType.Integer    => "Integer"
-        case SIRType.Boolean    => "Bool"
-        case SIRType.ByteString => "ByteString"
-        case tp if isData(tp)   => "Data"
+        case SIRType.Integer       => "Integer"
+        case SIRType.Boolean       => "Bool"
+        case SIRType.ByteString    => "ByteString"
+        case tp if isWholeData(tp) => "Data"
         case other => throw new IllegalStateException(s"unexpected ${other.show} binder")
 
     /** Renders a formula with each leaf read by its polarity (design doc §6.2).

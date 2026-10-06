@@ -153,14 +153,27 @@ object LeanServer {
 |---|---|---|
 | request | `initialize` | once: the workspace as `rootUri`, no capabilities |
 | notification | `initialized` | once |
-| notification | `textDocument/didOpen` | the first check: the document's text, version 1 |
+| notification | `textDocument/didOpen` | the first check: the document's text, with Lean's `dependencyBuildMode` set to `never` |
 | notification | `textDocument/didChange` | every later check: the whole new text, the next version |
 | notification | `textDocument/didClose` | to give a check up: Lean ends the document's worker |
 | request | `textDocument/waitForDiagnostics` | answered when that version is elaborated |
-| received | `textDocument/publishDiagnostics` | the messages of a version so far; the last before the answer is the result |
+| received | `textDocument/publishDiagnostics` | the messages of a version so far; those at the moment of the answer are the result |
 | received | `$/lean/fileProgress` | ignored |
 | received request | `client/registerCapability`, `workspace/*/refresh` | answered with a null result |
 | request, notification | `shutdown`, `exit` | to end the server |
+
+- **The result is taken with the answer.** The diagnostics of a check are those published when
+  `waitForDiagnostics` is answered, read on the thread that reads the server. What the server
+  publishes later is not the check's: when it ends a worker, on `didClose` and on `shutdown`,
+  it publishes an empty list for the document, which would read as a check that found nothing.
+  A check that is answered while the server is being closed is `Failed` for the same reason.
+- **A version without diagnostics is a failure.** Lean publishes for every version, an empty
+  list where there is nothing to report. A version it answers for without having published is
+  not read as one that elaborated cleanly.
+- **No build inside a check.** By default the server builds what a document imports. With a
+  workspace that is not built, that build would run inside a check's time limit, be ended with
+  the check, and start again with the next. `never` leaves it out: the header is then reported
+  as an error, as `lake env lean` reports it.
 
 A thread reads the server's output and hands each answer to the request that waits for it.
 Another writes to its input, so that no sender waits for the server to read: not a check with a
@@ -234,7 +247,7 @@ after 34 s.
 
 - **On request.** `close` lists the server's processes, sends `shutdown`, then `exit`, and waits
   a few seconds for the process to end. Whatever the outcome, it then ends those that are left
-  of the listed ones, and removes `directory`. They are listed first because `lake` no longer
+  of the listed ones, the children before `lake`, and removes `directory`. They are listed first because `lake` no longer
   names them once it has ended. A session that has ended is not asked. `close` can be called
   more than once.
 - **When the JVM exits.** Every started server is in a registry, and one JVM shutdown hook

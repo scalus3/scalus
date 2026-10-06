@@ -13,10 +13,10 @@ import scalus.uplc.builtin.Data.toData
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.verify.*
 import scalus.verify.Props.*
+import scalus.verify.lean.Directories
 
 import java.nio.file.Files
 import scala.concurrent.duration.*
-import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
 case class BlasterPair(a: BigInt, b: BigInt) derives FromData, ToData
@@ -852,8 +852,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
             waiting.join(10000)
             assert(!waiting.isAlive)
             assert(!running.isAlive)
-        finally
-            Files.walk(directory).iterator().asScala.toList.reverse.foreach(Files.deleteIfExists)
+        finally Directories.remove(directory)
     }
 
     test("statements outside the fragment are unsupported") {
