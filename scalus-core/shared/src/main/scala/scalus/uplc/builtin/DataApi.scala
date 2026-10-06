@@ -20,7 +20,7 @@ import java.io.InputStream
 import java.math.BigInteger
 import scala.annotation.tailrec
 import scala.collection.immutable
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.collection.mutable.{ArrayBuffer, ArrayBuilder, ListBuffer}
 import scala.util.Try
 
 private trait DataApi {
@@ -196,9 +196,10 @@ private trait DataApi {
 
             // read chunks of 64 bytes
             def readBoundedBytesIndef(): Array[Byte] =
-                val acc = new ArrayBuffer[Byte](64)
-                while !r.tryReadBreak() do acc ++= readBoundedSizedBytes()
-                acc.toArray
+                // Copies each chunk as one block; a generic ArrayBuffer[Byte] copies byte by byte.
+                val acc = new ArrayBuilder.ofByte
+                while !r.tryReadBreak() do acc.addAll(readBoundedSizedBytes())
+                acc.result()
 
             // read bytes (sized or indefinite) where chunks are bounded by 64 bytes
             def readBoundedBytes(): Array[Byte] =
