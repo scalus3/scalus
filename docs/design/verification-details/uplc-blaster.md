@@ -372,9 +372,10 @@ The workspace is `scalus-verification/src/main/lean`: Lean 4.24.0 (`lean-toolcha
   `lake update` again, and commit the new manifest.
 - **The toolchain** is `elan` and `z3`, from the default and `ci` nix shells.
 
-CI: `.github/workflows/lean-proofs.yml` runs daily and on demand. It builds the workspace, then
-runs `sbt scalusVerification/test` and `VestingVerificationTest` with `SCALUS_REQUIRE_LEAN=1`, so
-a test that cannot run Lean fails instead of being canceled. In `ci-jvm` those tests are canceled.
+CI: `.github/workflows/lean-proofs.yml` runs daily and on demand. It builds the workspace of the
+library and that of the vesting example, then runs `sbt scalusVerification/test` and
+`VestingVerificationTest` with `SCALUS_REQUIRE_LEAN=1`, so a test that cannot run Lean fails
+instead of being canceled. In `ci-jvm` those tests are canceled.
 
 ## Limits
 

@@ -217,8 +217,9 @@ A server is started in a workspace directory, and that is its one setting. The d
 `lakefile`, the `lean-toolchain` and the built libraries, so it decides which Lean runs and what
 a check can import.
 
-- **Today** it is the directory in Scalus's own sources, `scalus-verification/src/main/lean`.
-  `LeanProofs` looks it up from the working directory upwards. That serves the Scalus
+- **Today** the workspaces are directories in Scalus's own sources: the library's,
+  `scalus-verification/src/main/lean`, and the vesting example's ("Several workspaces").
+  `LeanProofs` looks them up from the working directory upwards. That serves the Scalus
   repository, and no project that uses Scalus as a library.
 - **Given when the server is created.** `LeanServer.start(directory)` takes it, and the tactic
   takes the server. Neither has a default: a tactic without a server cannot be made.
@@ -236,6 +237,15 @@ One server does serve several Lean projects where one workspace requires the oth
 path then has the libraries of them all. They need one toolchain among them, and one version of
 every dependency they share. A workspace of proofs written by hand that requires `ScalusProofs`
 is that case: its server runs the generated checks as well.
+
+The vesting example has such a workspace, `scalus-examples/jvm/src/test/lean/LinearVesting`, and
+`VestingVerificationTest` runs its checks there. It requires `ScalusProofs` by its path, so the
+library is built where it lies, once. Lake would still clone Blaster and PlutusCore a second
+time, into the requiring workspace, and build them there. So the example sets its `packagesDir`
+to that of the library's workspace, and the clones and what is built of them are shared.
+`lake build` in the example then builds its own module, in seconds. The price is that the two
+manifests have to name the same revisions: Lake checks out what the manifest of the workspace
+it runs in names, for both. The example's suite compares them.
 
 ### Time limit and cancellation
 
@@ -465,6 +475,9 @@ cost together. The document is opened anew when it has grown beyond a number of 
    - *One per Scalus version, in a cache directory of the user* (recommended): the build of the
      dependencies is done once. Checks of different projects then lie in one workspace, each
      under its project's name.
+   - *One per project, with the packages of one per Scalus version:* as the vesting example has
+     those of the library ("Several workspaces"). The dependencies are still built once, and a
+     project's checks and proofs lie in a workspace of its own.
 
 ## Limits
 
