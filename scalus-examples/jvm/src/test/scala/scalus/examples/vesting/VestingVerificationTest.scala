@@ -15,7 +15,7 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.{LeanProofs, Unfinished, UplcBlaster}
+import scalus.verify.uplcblaster.{Budget, LeanProofs, Unfinished, UplcBlaster}
 
 import java.nio.file.Path
 import scala.concurrent.duration.*
@@ -269,11 +269,6 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
     /** The steps for a withdrawal: the validator runs to its end on one that it accepts. */
     private val withdrawalBudget = 12000
 
-    /** The steps for a withdrawal that the validator rejects at its check of the amount, the last
-      * one before it reads the outputs. The rejection takes just over 1600 steps.
-      */
-    private val earlyReleaseBudget = 1700
-
     test("a sample withdrawal is accepted on the Lean machine, and rejected unsigned") {
         // Closed statements: Lean decides them by running the validator.
         val accepted = succeeds(
@@ -464,10 +459,11 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
         // 27 s at 1800, 62 s at 1900 and 3 minutes at 2000. At 1600 the rejection itself is cut,
         // and Lean's counterexample is spurious.
         //
-        // So the budget follows the validator's code. Where a change of the compiler or of the
-        // validator makes the rejection longer, the result here is a spurious counterexample,
-        // and the budget wants raising; where it makes it shorter, the proof gets slower.
-        proven(lockedForAnyOutputs, earlyReleaseBudget, validator, linearVesting)
+        // The tactic finds that budget, from the counterexamples that smaller ones give: about
+        // 1610 steps where this was written. So the proof does not hang on a number that
+        // follows the validator's code.
+        val found = provenAt(lockedForAnyOutputs, validator, linearVesting)
+        assert(found < withdrawalBudget / 4, found)
     }
 
     test("at the budget of a whole withdrawal, the same is not finished by Lean", Unfinished) {
@@ -475,7 +471,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
         // the outputs. Under Lean's own limit of work Lean gives the run of the second test up,
         // after about 17 s on the machine this was written on, and after the same work on any
         // other.
-        val leansLimit = UplcBlaster(withdrawalBudget, lean, 5.minutes)
+        val leansLimit = UplcBlaster(Budget.LeanSteps(withdrawalBudget), lean, 5.minutes)
             .withMaxHeartbeats(UplcBlaster.leanMaxHeartbeats)
         val givenUp = inconclusive(lockedForAnyOutputs, leansLimit, validator, linearVesting)
         assert(givenUp.contains("maximum number of heartbeats"), givenUp)
@@ -535,7 +531,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
         // one the tactic would run the validator once for every clause.
         val together = stated.together.getOrElse(fail("no statement of the three clauses"))
         assert(together.name == "spends/ensures")
-        verifier.verify(together, UplcBlaster(withdrawalBudget, lean)) match
+        verifier.verify(together, UplcBlaster(Budget.LeanSteps(withdrawalBudget), lean)) match
             case VerificationResult.Proven(_) =>
             case other => fail(s"expected a proof of ${together.name}, got $other")
     }
@@ -573,7 +569,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
                 (config, time) => vested => BigInt(0) <= vested && vested <= config.initialAmount
           )
         )
-        val tactic = UplcBlaster(withdrawalBudget, lean)
+        val tactic = UplcBlaster(Budget.LeanSteps(withdrawalBudget), lean)
 
         // The verifier finds the call, in the validator's own source.
         val owed = verifier.obligations(withdraw.ref) match

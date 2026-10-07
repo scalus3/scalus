@@ -189,7 +189,7 @@ class SpecificationsTest extends AnyFunSuite with LeanProofs {
         }
         def prove(function: FunctionDef[?, ?]): VerificationResult = {
             val (verifier, statement) = stated(function)
-            verifier.verify(statement, UplcBlaster(120, lean))
+            verifier.verify(statement, UplcBlaster(Budget.LeanSteps(120), lean))
         }
         // in a branch
         val (_, inBranch) = stated(branch)
@@ -236,14 +236,14 @@ class SpecificationsTest extends AnyFunSuite with LeanProofs {
         assert(programs(together) == 3)
         assert(
           verifier
-              .verify(together, UplcBlaster(120, lean))
+              .verify(together, UplcBlaster(Budget.LeanSteps(120), lean))
               .isInstanceOf[VerificationResult.Proven]
         )
         // negative control: one clause that does not hold refutes them together
         val (wrong, _, both) = stated(boundedWrongly)
         assert(
           wrong
-              .verify(both, UplcBlaster(120, lean))
+              .verify(both, UplcBlaster(Budget.LeanSteps(120), lean))
               .isInstanceOf[VerificationResult.Refuted]
         )
     }
@@ -253,7 +253,7 @@ class SpecificationsTest extends AnyFunSuite with LeanProofs {
         val verifier = Verifier.empty
         verifier.addFunction(clampAtHead)
         def prove(statement: Statement): VerificationResult =
-            verifier.verify(statement, UplcBlaster(120, lean))
+            verifier.verify(statement, UplcBlaster(Budget.LeanSteps(120), lean))
         // The function returns for lo > hi as well, with a result that is not between them: its
         // `Spec.expects` is no check.
         val List(alone) = verifier.guarantees(clampAtHead.ref).statements
@@ -278,7 +278,7 @@ class SpecificationsTest extends AnyFunSuite with LeanProofs {
             verifier
         }
         def prove(verifier: Verifier, owed: Statement): VerificationResult =
-            verifier.verify(owed, UplcBlaster(120, lean))
+            verifier.verify(owed, UplcBlaster(Budget.LeanSteps(120), lean))
 
         // clamp(x, 10, 0)
         val violating = verifierWith(violates)

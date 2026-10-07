@@ -98,11 +98,16 @@ final class LeanServer private (
         if !entered(deadline) then Result.TimedOut(Progress(Reached.NotStarted, Duration.Zero, Nil))
         else
             try
-                written(source) match
-                    case None => Result.Failed("the Lean server is closed")
-                    case Some((directory, text)) =>
-                        try elaborate(text, deadline)
-                        finally files.synchronized(Directories.remove(directory))
+                // Its time may have passed in the wait, to the moment. Lean is then not given a
+                // document it would only be made to drop again.
+                if deadline.exists(_.isOverdue()) then
+                    Result.TimedOut(Progress(Reached.NotStarted, Duration.Zero, Nil))
+                else
+                    written(source) match
+                        case None => Result.Failed("the Lean server is closed")
+                        case Some((directory, text)) =>
+                            try elaborate(text, deadline)
+                            finally files.synchronized(Directories.remove(directory))
             finally running.unlock()
     }
 

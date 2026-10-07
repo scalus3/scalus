@@ -47,8 +47,8 @@ validator actually runs on chain.
 ```scala
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.lean.LeanServer
-import scalus.verify.uplcblaster.UplcBlaster
+import scalus.verify.lean.LeanServers
+import scalus.verify.uplcblaster.{Budget, UplcBlaster}
 
 val clamp = FunctionDef(Math.clamp)
 val verifier = Verifier.empty
@@ -63,11 +63,13 @@ val inRange = verifier.statement(
 // The Lean servers of the workspace, which the caller ends. A tactic is given them, and takes
 // a server when it runs a check: the first check starts one.
 val lean = LeanServers.in(Path.of("scalus-verification/src/main/lean"))
-try verifier.verify(inRange, UplcBlaster(120, lean)) // Proven
+try verifier.verify(inRange, UplcBlaster(Budget.LeanSteps(120), lean)) // Proven
 finally lean.close()
 ```
 
-The later examples use this `lean`.
+The later examples use this `lean`. The first argument is the budget: `Budget.LeanSteps(n)`,
+the steps of Lean's machine a check lets each test's program run, or `Budget.Auto`, with which
+the tactic finds them ("The budget rule").
 
 `UplcBlaster` proves statements with universal and existential quantifiers over `BigInt`,
 `Boolean`, `ByteString`, `Data` and case classes of them: Boolean tests, calls, `denotes` and
@@ -105,7 +107,8 @@ result for its statement, and the server takes the next one. Where the server it
   check that reaches it is given up, and is `Inconclusive`; see "Statements that do not finish"
   in the tactic's details. `withoutTimeout` lifts the limit. The reason says where the check
   was: still running a test's program symbolically, which a smaller budget may cure, or with
-  Blaster and the solver.
+  Blaster and the solver. With `Budget.Auto` the limit is that of the whole search, and
+  `withAttemptTimeout(t)` adds one for each of its checks.
 - So is a check that Lean gives up itself, at its limit of work for one command
   (`maxHeartbeats`). A check sets that limit to twice Lean's default;
   `UplcBlaster(budget, lean).withMaxHeartbeats(n)` sets another, and `0` none. It is the quick
@@ -162,7 +165,7 @@ val inRange = verifier.contract(
     ensures = (x, lo, hi) => r => lo <= r && r <= hi
   )
 )
-verifier.verify(inRange, UplcBlaster(120, lean)) // Proven
+verifier.verify(inRange, UplcBlaster(Budget.LeanSteps(120), lean)) // Proven
 ```
 
 `contract` is partial: `∀ args. expects(args) ==> whenReturns(f, args)(r => ensures(args)(r))`,
@@ -213,7 +216,7 @@ object Vault {
 
 val clamp = FunctionDef(Vault.clamp)
 val stated = Contract.inSource(clamp).get              // None for a function that states none
-verifier.verify(verifier.contract("clamp_in_range", stated), UplcBlaster(120, lean)) // Proven
+verifier.verify(verifier.contract("clamp_in_range", stated), UplcBlaster(Budget.LeanSteps(120), lean)) // Proven
 ```
 
 The clauses are no part of the script: they are removed before lowering, so its bytes and hash
@@ -230,8 +233,8 @@ function's code and declares one statement for each:
 val spends = FunctionDef.named("spends", (w: Withdrawal) => VestingValidator.validate(context(w)))
 verifier.addFunction(spends)
 val stated = verifier.guarantees(spends.ref)
-stated.statements.foreach(verifier.verify(_, UplcBlaster(12000, lean)))   // clause by clause
-stated.together.foreach(verifier.verify(_, UplcBlaster(12000, lean)))     // or as one statement
+stated.statements.foreach(verifier.verify(_, UplcBlaster(Budget.LeanSteps(12000), lean)))   // clause by clause
+stated.together.foreach(verifier.verify(_, UplcBlaster(Budget.LeanSteps(12000), lean)))     // or as one statement
 ```
 
 Each statement says that the function returns, so a tactic runs the function's body once per
@@ -259,7 +262,7 @@ object Vault {
 val bounded = FunctionDef(Vault.bounded)
 verifier.addFunction(bounded)
 val CallObligations(statements, unsupported) = verifier.obligations(bounded.ref)
-statements.foreach(owed => verifier.verify(owed, UplcBlaster(120, lean))) // Proven
+statements.foreach(owed => verifier.verify(owed, UplcBlaster(Budget.LeanSteps(120), lean))) // Proven
 ```
 
 The statement says: where the call is reached, its arguments satisfy the callee's `expects`. It is
@@ -328,6 +331,16 @@ through a list of unknown length.
 
 Do **not** derive budgets from Scalus's own step count. Plutus charges per `Eval` transition
 while this machine counts `Eval` and `Return`, so the Lean figure is about 1.85x larger.
+
+**`Budget.Auto` finds the budget.** The tactic starts at 100 steps. Where Lean's counterexample
+is spurious, it has Lean's machine count what each test's program does on that counterexample,
+and goes on at the least budget at which the statement holds there. That is the budget of the
+runs the statement is about: a premise that is false need only be seen to be false, however
+long the program of the conclusion runs. For the vesting statement above the search goes
+100, 262, 649, 694, 1315, 1573, 1584, 1608, and proves it there, in 45 seconds for the eight
+checks. The proof's `Artifact.budget` is the budget found, to give as `Budget.LeanSteps` where
+the search is to be saved. A statement no budget proves, such as one about a loop over a whole
+list, gets a longer counterexample from every check, and ends at the time limit.
 
 ## Pinned dependencies
 

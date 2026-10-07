@@ -342,7 +342,8 @@ val clampInRange = verifier.contract(
     ensures = (x, lo, hi) => r => lo <= r && r <= hi
   )
 )
-verifier.verify(clampInRange, UplcBlaster(120, lean)) // Proven, in a Lean server `lean` gives
+// Proven, in a Lean server that `lean` gives
+verifier.verify(clampInRange, UplcBlaster(Budget.LeanSteps(120), lean))
 ```
 
 `Props.contract` builds the statement below, with `whenReturns`; `Props.totalContract` builds it

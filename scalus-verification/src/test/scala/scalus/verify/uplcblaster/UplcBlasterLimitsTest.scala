@@ -57,6 +57,14 @@ class UplcBlasterLimitsTest extends AnyFunSuite with LeanProofs {
             assert(reason.contains("spurious"), reason)
     }
 
+    test("no budget is found for a loop over a whole list", Unfinished) {
+        // Every counterexample is a list too long for the budget, and asks for the steps of
+        // that list. The next budget gives a longer one, and so on to a time limit.
+        val sought =
+            inconclusive(lengthIsNotNegative, UplcBlaster(Budget.Auto, lean, 40.seconds), length)
+        assert(sought.contains("The tactic sought the budget, and tried 100"), sought)
+    }
+
     test("a loop that makes a choice per element is not finished by Lean", Unfinished) {
         // Each element is kept or dropped, so the paths double with it. At a small budget the
         // loop is cut after a few elements.
