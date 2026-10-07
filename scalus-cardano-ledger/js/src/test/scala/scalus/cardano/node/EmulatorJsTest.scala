@@ -142,6 +142,19 @@ class EmulatorJsTest extends AnyFunSuite {
         assert(result.logs.length == 0, "logs is always an array, empty when there are none")
     }
 
+    test("Emulator.create takes the treasury, and getTreasury and snapshot report it") {
+        // spec [SC-7b], [SC-7c]
+        val options =
+            js.Dynamic.literal(treasury = js.BigInt("1000")).asInstanceOf[JsEmulatorOptions]
+        val emulator = JEmulator.create(JsCardanoInfo.mainnet(), options)
+        assert(emulator.getTreasury().toString == "1000")
+        assert(emulator.snapshot().getTreasury().toString == "1000")
+    }
+
+    test("getTreasury is 0 when the options give no treasury") {
+        assert(JEmulator.create(JsCardanoInfo.mainnet()).getTreasury().toString == "0")
+    }
+
     test("submitTx answers with a result, not an exception, for bytes that are not a transaction") {
         val emulator = JEmulator.create(JsCardanoInfo.mainnet())
         val result = emulator.submitTx(Array[Byte](0).toUint8Array)

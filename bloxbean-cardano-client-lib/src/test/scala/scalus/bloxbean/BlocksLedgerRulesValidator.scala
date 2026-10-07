@@ -65,6 +65,8 @@ object BlocksLedgerRulesValidator {
         val params = ProtocolParams.fromBlockfrostJson(
           getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
         )
-        Context(env = UtxoEnv(0, params, CertState.empty, scalus.cardano.address.Network.Mainnet))
+        Context(env =
+            UtxoEnv(0, params, CertState.empty, scalus.cardano.address.Network.Mainnet, Coin.zero)
+        )
     }
 }

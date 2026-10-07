@@ -28,6 +28,7 @@ object DefaultValidators {
       ScriptsWellFormedValidator,
       TooManyCollateralInputsValidator,
       TransactionSizeValidator,
+      TreasuryValueMismatchValidator,
       ValueNotConservedUTxOValidator,
       VerifiedSignaturesInWitnessesValidator,
       StakeCertificatesValidator,

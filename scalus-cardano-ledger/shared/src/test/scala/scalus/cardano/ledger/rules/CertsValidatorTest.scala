@@ -28,7 +28,8 @@ class CertsValidatorTest extends AnyFunSuite with Matchers with EitherValues {
             slot = 0,
             params = protocolParams,
             certState = certState,
-            network = Network.Testnet
+            network = Network.Testnet,
+            treasury = Coin.zero
           ),
           slotConfig = cardanoInfo.slotConfig
         )

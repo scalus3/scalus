@@ -184,4 +184,58 @@ class ImmutableEmulatorTest extends AnyFunSuite {
         assert(cleared.appliedTxLog.isEmpty)
         assert(cleared.getDatum(dh).contains(d), "datums survive clearAppliedTxs")
     }
+
+    // spec 13.3: the treasury, as of the last epoch boundary, sits in the env
+    private val slotConfig = CardanoInfo.mainnet.slotConfig
+    private val epochStart = slotConfig.firstSlotOfEpoch(500)
+
+    /** An emulator with a treasury of 1000 lovelace and one accepted 5-lovelace donation. */
+    private def emulatorWithDonation: (Emulator, Transaction) = {
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        val context = Context.testMainnet(epochStart + 10)
+        val emulator = Emulator(
+          initialUtxos = Map(Input(genesisHash, 0) -> Output(Alice.address, Value.ada(100))),
+          initialContext = context.copy(env = context.env.copy(treasury = Coin(1000)))
+        )
+        val tx = TxBuilder(CardanoInfo.mainnet)
+            .donateToTreasury(Coin(5))
+            .setCurrentTreasuryValue(Coin(1000))
+            .complete(emulator.utxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+        assert(emulator.submitSync(tx) == Right(tx.id))
+        (emulator, tx)
+    }
+
+    test("fromEmulator and toEmulator keep the fees, the donations and the treasury") {
+        // spec [SC-7c]
+        val (emulator, tx) = emulatorWithDonation
+
+        val immutable = ImmutableEmulator.fromEmulator(emulator)
+        assert(immutable.state.fees == tx.body.value.fee)
+        assert(immutable.state.donation == Coin(5))
+        assert(immutable.env.treasury == Coin(1000))
+
+        val roundTripped = immutable.toEmulator
+        assert(roundTripped.fees == tx.body.value.fee)
+        assert(roundTripped.donation == Coin(5))
+        assert(roundTripped.treasury == Coin(1000))
+    }
+
+    test("setSlot and advanceSlot across an epoch boundary move the donations") {
+        // spec [SC-7a], [SC-7f]
+        val immutable = ImmutableEmulator.fromEmulator(emulatorWithDonation._1)
+
+        val sameEpoch = immutable.advanceSlot(1)
+        assert(sameEpoch.env.treasury == Coin(1000))
+        assert(sameEpoch.state.donation == Coin(5))
+
+        for next <- Seq(
+              immutable.setSlot(epochStart + slotConfig.epochLength),
+              immutable.advanceSlot(slotConfig.epochLength)
+            )
+        do
+            assert(next.env.treasury == Coin(1005))
+            assert(next.state.donation == Coin.zero)
+    }
 }

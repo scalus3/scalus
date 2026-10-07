@@ -1276,6 +1276,23 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         }
     }
 
+    test("validate checks currentTreasuryValue against the given treasury") {
+        val treasury = Coin.ada(1000)
+        val ctx =
+            fromRight(TransactionBuilder.build(Mainnet, Seq(SetCurrentTreasuryValue(treasury))))
+        val validators = Seq(scalus.cardano.ledger.rules.TreasuryValueMismatchValidator)
+        val params = CardanoInfo.mainnet.protocolParams
+
+        assert(ctx.validate(validators, params, 1L, CertState.empty, treasury).isRight)
+        assert(ctx.validateContext(validators, params, 1L, CertState.empty, treasury).isRight)
+        assert(
+          ctx.validate(validators, params, 1L, CertState.empty) match
+              case Left(e: TransactionException.TreasuryValueMismatchException) =>
+                  e.supplied == treasury && e.expected == Coin.zero
+              case _ => false
+        )
+    }
+
 }
 
 // ===========================================================================

@@ -88,11 +88,16 @@ case class ImmutableEmulator(
     def clearAppliedTxs: ImmutableEmulator =
         copy(appliedTxLog = Vector.empty, appliedTxIndex = Map.empty)
 
-    /** Advance the slot by the given number of slots. */
-    def advanceSlot(n: Long): ImmutableEmulator = copy(env = env.copy(slot = env.slot + n))
+    /** Advance the slot by the given number of slots. See [[setSlot]] for an epoch boundary. */
+    def advanceSlot(n: Long): ImmutableEmulator = setSlot(env.slot + n)
 
-    /** Set the slot to a specific value. */
-    def setSlot(slot: SlotNo): ImmutableEmulator = copy(env = env.copy(slot = slot))
+    /** Set the slot to a specific value. Crossing an epoch boundary forwards moves the donations
+      * into the treasury, as the mutable emulator does.
+      */
+    def setSlot(slot: SlotNo): ImmutableEmulator = {
+        val (newState, newEnv) = EmulatorBase.atSlot(state, env, slotConfig, slot)
+        copy(state = newState, env = newEnv)
+    }
 
     /** Find UTxOs matching the given query. */
     def findUtxos(query: UtxoQuery): Either[UtxoQueryError, Utxos] =
@@ -117,17 +122,25 @@ case class ImmutableEmulator(
             Future.successful(ImmutableEmulator.this.datums.get(datumHash))
     }
 
-    /** Convert to a mutable [[scalus.cardano.node.Emulator]]. */
+    /** Convert to a mutable [[scalus.cardano.node.Emulator]], keeping the fees, the donations and
+      * the treasury.
+      */
     def toEmulator: Emulator = {
         val context = Context(env = env, slotConfig = slotConfig, evaluatorMode = evaluatorMode)
-        new Emulator(
-          initialUtxos = utxos,
-          initialContext = context,
-          validators = validators,
-          mutators = mutators,
-          initialCertState = state.certState,
-          initialDatums = datums,
-          initialAppliedTxLog = appliedTxLog
+        Emulator.fromState(
+          EmulatorState.initial(
+            State(
+              utxos = utxos,
+              certState = state.certState,
+              fees = state.fees,
+              donation = state.donation
+            ),
+            context,
+            datums,
+            appliedTxLog
+          ),
+          validators,
+          mutators
         )
     }
 }
@@ -136,7 +149,7 @@ object ImmutableEmulator {
 
     /** Create an ImmutableEmulator from a mutable [[scalus.cardano.node.EmulatorBase]].
       *
-      * Captures a snapshot of the emulator's current state.
+      * Captures a snapshot of the emulator's current state, with its fees, donations and treasury.
       */
     def fromEmulator(emulator: EmulatorBase): ImmutableEmulator = {
         val info = emulator.cardanoInfo
@@ -148,11 +161,17 @@ object ImmutableEmulator {
           // ledger rules read cert state from `state.certState`, not `env.certState`; mirror the
           // mutable Emulator and keep this empty (the real cert state lives in `state` below)
           certState = CertState.empty,
-          network = info.network
+          network = info.network,
+          treasury = emulator.treasury
         )
         val log = emulator.appliedTxLog.toVector
         ImmutableEmulator(
-          state = State(utxos = emulator.utxos, certState = emulator.certState),
+          state = State(
+            utxos = emulator.utxos,
+            certState = emulator.certState,
+            fees = emulator.fees,
+            donation = emulator.donation
+          ),
           env = env,
           slotConfig = info.slotConfig,
           evaluatorMode = emulator.evaluatorMode,

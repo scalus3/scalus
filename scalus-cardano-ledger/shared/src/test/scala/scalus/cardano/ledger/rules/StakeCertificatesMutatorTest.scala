@@ -50,7 +50,8 @@ class StakeCertificatesMutatorTest extends AnyFunSuite with Matchers with Either
             slot = 0,
             params = protocolParams,
             certState = certState,
-            network = Network.Testnet
+            network = Network.Testnet,
+            treasury = Coin.zero
           ),
           slotConfig = cardanoInfo.slotConfig
         )

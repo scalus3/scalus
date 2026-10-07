@@ -90,7 +90,9 @@ object CardanoLedgerVectors {
                 impSlot,
                 params.getOrElse(UtxoEnv.default.params),
                 state.certState,
-                scalus.cardano.address.Network.Testnet
+                scalus.cardano.address.Network.Testnet,
+                // the vectors carry no ChainAccountState, so the treasury is unknown
+                scalus.cardano.ledger.Coin.zero
               ),
               slotConfig = impSlotConfig,
               evaluatorMode = evaluatorMode

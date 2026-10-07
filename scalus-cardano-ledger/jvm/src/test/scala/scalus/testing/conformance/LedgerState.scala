@@ -37,7 +37,8 @@ object LedgerState {
           slot,
           params,
           scalus.cardano.ledger.CertState.empty,
-          scalus.cardano.address.Network.Testnet
+          scalus.cardano.address.Network.Testnet,
+          scalus.cardano.ledger.Coin.zero
         )
 
     extension (ledgerState: LedgerState)

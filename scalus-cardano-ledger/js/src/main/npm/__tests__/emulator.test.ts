@@ -1,5 +1,5 @@
 import {describe, it, expect} from "vitest";
-import {Emulator, SlotConfig} from "../scalus.js";
+import {CardanoInfo, Emulator, SlotConfig} from "../scalus.js";
 import {Decoder} from "cbor-x";
 
 // need to decode utxos to then check them for correctness
@@ -200,5 +200,18 @@ describe("Emulator", () => {
         // epochOf(slot) lets clients derive the current epoch for e.g. pool retirement
         const epoch = Number(SlotConfig.preprod.epochOf(emulator.getSlot()));
         expect(epoch).toBe(4 + Math.floor((1_000_005 - 86_400) / 432_000));
+    });
+});
+
+describe("Emulator treasury", () => {
+    // spec [SC-7b]: the treasury option and its getter
+    it("starts from EmulatorOptions.treasury and reports it with getTreasury", () => {
+        const emulator = Emulator.create(CardanoInfo.preview(), {treasury: 1000n});
+        expect(emulator.getTreasury()).toBe(1000n);
+        expect(emulator.snapshot().getTreasury()).toBe(1000n);
+    });
+
+    it("defaults the treasury to 0", () => {
+        expect(Emulator.create(CardanoInfo.preview()).getTreasury()).toBe(0n);
     });
 });

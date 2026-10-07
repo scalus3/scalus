@@ -62,7 +62,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         )
 
     private def context(state: State): Context = Context(
-      env = UtxoEnv(0, params, state.certState, Network.Testnet),
+      env = UtxoEnv(0, params, state.certState, Network.Testnet, Coin.zero),
       slotConfig = cardanoInfo.slotConfig
     )
 

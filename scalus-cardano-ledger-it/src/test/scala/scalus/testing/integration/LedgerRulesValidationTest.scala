@@ -26,7 +26,7 @@ class LedgerRulesValidationTest extends AnyFunSuite {
 
     private def blocksEraContext(slot: SlotNo): Context =
         Context(env =
-            UtxoEnv(slot, blocksEraParams, CertState.empty, scalus.cardano.address.Network.Mainnet)
+            UtxoEnv(slot, blocksEraParams, CertState.empty, scalus.cardano.address.Network.Mainnet, Coin.zero)
         )
 
     test("validate transactions") {

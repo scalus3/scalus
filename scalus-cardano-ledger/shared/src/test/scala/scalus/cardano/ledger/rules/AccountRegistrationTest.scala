@@ -36,7 +36,7 @@ class AccountRegistrationTest extends AnyFunSuite with EitherValues {
         )
 
     private def context(certState: CertState) = Context(
-      env = UtxoEnv(0, cardanoInfo.protocolParams, certState, Network.Testnet),
+      env = UtxoEnv(0, cardanoInfo.protocolParams, certState, Network.Testnet, Coin.zero),
       slotConfig = cardanoInfo.slotConfig
     )
 

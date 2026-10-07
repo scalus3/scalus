@@ -3,7 +3,7 @@ package scalus.cardano.node
 import scalus.uplc.DebugScript
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.rules.{Context, STS, State}
+import scalus.cardano.ledger.rules.{Context, STS, State, UtxoEnv}
 import scalus.cardano.ledger.*
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -64,6 +64,18 @@ trait EmulatorBase extends BlockchainProvider {
     protected def currentContext: Context = readState.context
     def datums: Map[DataHash, Data] = readState.datums
 
+    /** The fees collected by the applied transactions. */
+    def fees: Coin = readState.ledger.fees
+
+    /** The donations of this epoch. The next epoch boundary moves them into [[treasury]]. */
+    def donation: Coin = readState.ledger.donation
+
+    /** The treasury as of the last epoch boundary, the value a tx must state as its
+      * `currentTreasuryValue`. It lives in the env, spec [SC-6], so it starts as
+      * `initialContext.env.treasury`.
+      */
+    def treasury: Coin = readState.context.env.treasury
+
     /** Index of applied transactions by hash, for O(1) lookup. */
     def appliedTxIndex: Map[TransactionHash, AppliedTx] = readState.appliedTxIndex
 
@@ -92,20 +104,10 @@ trait EmulatorBase extends BlockchainProvider {
     def setSlot(slot: SlotNo): Unit = updateState(_.withSlot(slot))
 
     /** An independent emulator starting from this one's state, taken as a single read — the copy
-      * and the original share no mutable cell and evolve separately from here on.
+      * and the original share no mutable cell and evolve separately from here on. The copy starts
+      * from the whole state, so it keeps the fees, the donations and the treasury, spec [SC-7c].
       */
-    def snapshot(): Emulator = {
-        val state = readState
-        Emulator(
-          initialUtxos = state.ledger.utxos,
-          initialContext = state.context,
-          validators = validators,
-          mutators = mutators,
-          initialCertState = state.ledger.certState,
-          initialDatums = state.datums,
-          initialAppliedTxLog = state.appliedTxLog
-        )
-    }
+    def snapshot(): Emulator = Emulator.fromState(readState, validators, mutators)
 
     /** Clear the applied-transaction bookkeeping ([[appliedTxLog]] and [[appliedTxIndex]]), leaving
       * the ledger state (`utxos`, `certState`, `datums`) untouched.
@@ -370,10 +372,13 @@ case class EmulatorState private (
     )
 
     /** The state at a different slot. A `copy` rather than a fresh `Context`, which would drop the
-      * evaluator mode and any debug scripts.
+      * evaluator mode and any debug scripts. Crossing an epoch boundary moves the donations into
+      * the treasury, see [[EmulatorBase.atSlot]].
       */
-    def withSlot(slot: SlotNo): EmulatorState =
-        copy(context = context.copy(env = context.env.copy(slot = slot)))
+    def withSlot(slot: SlotNo): EmulatorState = {
+        val (newLedger, newEnv) = EmulatorBase.atSlot(ledger, context.env, context.slotConfig, slot)
+        copy(ledger = newLedger, context = context.copy(env = newEnv))
+    }
 
     /** The state with one UTxO added, or replaced if one already sits at `input`, for the direct
       * ledger edits that bypass validation.
@@ -415,11 +420,22 @@ object EmulatorState {
         context: Context,
         datums: Map[DataHash, Data],
         appliedTxLog: Vector[AppliedTx]
+    ): EmulatorState =
+        initial(State(utxos, certState = certState), context, datums, appliedTxLog)
+
+    /** The state an emulator starts from, with the whole ledger state given: its fees and donations
+      * too, not only the UTxOs and the certificate state.
+      */
+    def initial(
+        ledger: State,
+        context: Context,
+        datums: Map[DataHash, Data],
+        appliedTxLog: Vector[AppliedTx]
     ): EmulatorState = new EmulatorState(
-      ledger = State(utxos, certState = certState),
+      ledger = ledger,
       context = context,
-      datums = appliedTxLog.foldLeft(datums ++ EmulatorBase.extractInlineDatums(utxos))((acc, a) =>
-          acc ++ EmulatorBase.extractDatums(a.tx)
+      datums = appliedTxLog.foldLeft(datums ++ EmulatorBase.extractInlineDatums(ledger.utxos))(
+        (acc, a) => acc ++ EmulatorBase.extractDatums(a.tx)
       ),
       appliedTxLog = appliedTxLog,
       appliedTxIndex = EmulatorBase.indexAppliedTxs(appliedTxLog),
@@ -538,6 +554,28 @@ object EmulatorInitialState {
 }
 
 object EmulatorBase {
+
+    /** The ledger state and the env at `slot`.
+      *
+      * Crossing one or more epoch boundaries forwards moves the donations into the treasury and
+      * resets them to zero, as the Conway EPOCH rule does at each boundary, spec [SC-7a], [SC-7f].
+      * Several boundaries at once move them once: the later boundaries see no donations. Moving
+      * backwards moves nothing.
+      */
+    private[scalus] def atSlot(
+        ledger: State,
+        env: UtxoEnv,
+        slotConfig: SlotConfig,
+        slot: SlotNo
+    ): (State, UtxoEnv) = {
+        val crossesBoundary = slotConfig.epochOf(slot) > slotConfig.epochOf(env.slot)
+        if crossesBoundary then
+            (
+              ledger.copy(donation = Coin.zero),
+              env.copy(slot = slot, treasury = env.treasury + ledger.donation)
+            )
+        else (ledger, env.copy(slot = slot))
+    }
 
     /** Evaluate a UTxO query against a UTxO set.
       *

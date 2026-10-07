@@ -33,8 +33,37 @@ case class State(
     donation: Coin = Coin.zero // Donation amount
 )
 
-case class UtxoEnv(slot: SlotNo, params: ProtocolParams, certState: CertState, network: Network)
+/** The environment a transaction is validated in.
+  *
+  * @param treasury
+  *   the treasury as of the last epoch boundary, the `casTreasury` Haskell passes to LEDGER. A tx
+  *   that states a `currentTreasuryValue` must state this value, spec [SC-6].
+  */
+case class UtxoEnv(
+    slot: SlotNo,
+    params: ProtocolParams,
+    certState: CertState,
+    network: Network,
+    treasury: Coin
+) {
+
+    /** An environment with an empty treasury, as the deprecated 4-argument `apply`. */
+    @deprecated("use the constructor that takes the treasury", "1.3.0")
+    def this(slot: SlotNo, params: ProtocolParams, certState: CertState, network: Network) =
+        this(slot, params, certState, network, Coin.zero)
+}
 object UtxoEnv {
+
+    /** An environment with an empty treasury. */
+    @deprecated("use the overload that takes the treasury", "1.3.0")
+    def apply(
+        slot: SlotNo,
+        params: ProtocolParams,
+        certState: CertState,
+        network: Network
+    ): UtxoEnv =
+        UtxoEnv(slot, params, certState, network, Coin.zero)
+
     // Uses CardanoInfo.mainnet.protocolParams (inlined at compile time via macro)
     // TODO: remove
     lazy val default: UtxoEnv = UtxoEnvDefaults.default

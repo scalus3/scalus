@@ -411,13 +411,19 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
             .orUndefined
     }
 
-    /** Moves the clock to an absolute slot, forwards or backwards. Only validity intervals and
+    /** Moves the clock to an absolute slot, forwards or backwards. Validity intervals and
       * time-aware scripts see the difference; no blocks are produced in between and no rewards are
-      * paid out. A fractional value is truncated.
+      * paid out. Crossing an epoch boundary forwards adds the donations of the epoch to the
+      * treasury. A fractional value is truncated.
       */
     def setSlot(slot: Double): Unit = {
         emulator.setSlot(slot.toLong)
     }
+
+    /** The treasury in lovelace at the start of the current epoch: the value a transaction must
+      * state as its `currentTreasuryValue`. An epoch boundary adds the donations of the epoch.
+      */
+    def getTreasury(): js.BigInt = emulator.treasury.value.toJsBigInt
 
     /** The current slot number of the emulator. */
     def getSlot(): Double = emulator.currentContext.env.slot.toDouble
@@ -810,6 +816,12 @@ trait JsEmulatorOptions extends js.Object {
       * and validation still requires a transaction to carry the datums it needs.
       */
     val datums: js.UndefOr[js.Array[JDatumEntry]] = js.undefined
+
+    /** The treasury in lovelace at the start of the current epoch. Defaults to 0. A transaction
+      * that states a `currentTreasuryValue` must state this value until the next epoch boundary,
+      * which adds the donations of the epoch to it.
+      */
+    val treasury: js.UndefOr[js.BigInt] = js.undefined
 }
 
 /** Identifies one transaction output: the pair a `TransactionInput` is made of. */
@@ -971,8 +983,15 @@ object JEmulator {
           drepRegistrations = parseDrepRegistrations(options.drepRegistrations),
           datums = parseDatums(options.datums)
         )
+        val treasury = Coin(options.treasury.toOption.fold(0L)(longOf(_, "treasury")))
         val context = Context(
-          env = UtxoEnv(slot, cardanoInfo.protocolParams, CertState.empty, cardanoInfo.network),
+          env = UtxoEnv(
+            slot,
+            cardanoInfo.protocolParams,
+            CertState.empty,
+            cardanoInfo.network,
+            treasury
+          ),
           slotConfig = cardanoInfo.slotConfig
         )
         wrapScalaEmulator(

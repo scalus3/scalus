@@ -336,6 +336,15 @@ object TransactionException {
              |withdrawals that do not drain accounts (expected -> provided): $nonDrainingWithdrawals.""".stripMargin
         )
 
+    // It's Conway.ConwayTreasuryValueMismatch in cardano-ledger
+    final case class TreasuryValueMismatchException(
+        transactionId: TransactionHash,
+        supplied: Coin,
+        expected: Coin
+    ) extends TransactionException(
+          s"Treasury value mismatch for transactionId $transactionId: supplied $supplied, expected $expected"
+        )
+
     // It's Alonzo.ExUnitsTooBigUTxO in cardano-ledger
     final case class ExUnitsExceedMaxException(
         transactionId: TransactionHash,
@@ -514,6 +523,7 @@ object TransactionException {
         case _: StakePoolException                         => "StakePool"
         case _: DRepException                              => "DRep"
         case _: WithdrawalsNotInRewardsException           => "WithdrawalsNotInRewards"
+        case _: TreasuryValueMismatchException             => "TreasuryValueMismatch"
         case _: ExUnitsExceedMaxException                  => "ExUnitsExceedMax"
         case _: TooManyCollateralInputsException           => "TooManyCollateralInputs"
         case _: InvalidScriptDataHashException             => "InvalidScriptDataHash"

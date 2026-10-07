@@ -40,7 +40,8 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
             slot = cardanoInfo.slotConfig.firstSlotOfEpoch(epoch),
             params = protocolParams,
             certState = certState,
-            network = Network.Testnet
+            network = Network.Testnet,
+            treasury = Coin.zero
           ),
           slotConfig = cardanoInfo.slotConfig
         )

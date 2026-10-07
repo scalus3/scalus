@@ -323,9 +323,10 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
           StakePayload.Stake(StakeKeyHash.fromByteString(Alice.addrKeyHash))
         )
         val alice = Alice.address(Network.Mainnet)
+        // A non-zero reward, withdrawn whole: a mutator that applied it would empty the account
         val emulator = Emulator.withRegisteredStakeCredentials(
           initialUtxos = Map(Input(genesisHash, 0) -> Output(alice, Value.ada(5000))),
-          initialStakeRewards = Map(failingCredential -> Coin.zero)
+          initialStakeRewards = Map(failingCredential -> Coin.ada(7))
         )
         val certStateBefore = emulator.certState
         // The constant evaluator does not run the failing script, so the builder completes
@@ -333,7 +334,7 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             .withConstMaxBudgetEvaluator(testEnv)
             .withdrawRewards(
               failingStake,
-              Coin.zero,
+              Coin.ada(7),
               TwoArgumentPlutusScriptWitness(
                 ScriptSource.PlutusScriptValue(failingScript),
                 Data.unit

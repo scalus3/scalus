@@ -1,7 +1,7 @@
 package scalus.cardano.ledger.rules
 
 import scalus.cardano.address.Network
-import scalus.cardano.ledger.{CardanoInfo, CertState, SlotNo}
+import scalus.cardano.ledger.{CardanoInfo, CertState, Coin, SlotNo}
 
 /** Provides default UtxoEnv instances using pre-inlined protocol parameters from CardanoInfo.
   *
@@ -11,8 +11,14 @@ import scalus.cardano.ledger.{CardanoInfo, CertState, SlotNo}
 private[rules] object UtxoEnvDefaults {
 
     lazy val default: UtxoEnv =
-        UtxoEnv(0, CardanoInfo.mainnet.protocolParams, CertState.empty, Network.Testnet)
+        UtxoEnv(0, CardanoInfo.mainnet.protocolParams, CertState.empty, Network.Testnet, Coin.zero)
 
     def testMainnet(slot: SlotNo = 0): UtxoEnv =
-        UtxoEnv(slot, CardanoInfo.mainnet.protocolParams, CertState.empty, Network.Mainnet)
+        UtxoEnv(
+          slot,
+          CardanoInfo.mainnet.protocolParams,
+          CertState.empty,
+          Network.Mainnet,
+          Coin.zero
+        )
 }

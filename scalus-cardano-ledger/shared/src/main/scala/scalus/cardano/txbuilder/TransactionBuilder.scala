@@ -556,6 +556,10 @@ object TransactionBuilder {
 
         /** Validate a context according to a set of ledger rules.
           *
+          * Validates against a treasury of zero, so `TreasuryValueMismatchValidator` rejects a tx
+          * that states a non-zero `currentTreasuryValue`. To validate against the real treasury,
+          * call `validate(validators, protocolParams, slot, certState, treasury)`.
+          *
           * @param validators
           *   the ledger rule validators to run
           * @param protocolParams
@@ -572,10 +576,22 @@ object TransactionBuilder {
             protocolParams: ProtocolParams,
             slot: Long = 1L,
             certState: CertState = CertState.empty
+        ): Either[TransactionException, Context] =
+            validate(validators, protocolParams, slot, certState, Coin.zero)
+
+        /** [[validate]] against `treasury`, the value a tx must state as its
+          * `currentTreasuryValue`.
+          */
+        def validate(
+            validators: Seq[Validator],
+            protocolParams: ProtocolParams,
+            slot: Long,
+            certState: CertState,
+            treasury: Coin
         ): Either[TransactionException, Context] = {
             val context = SContext(
               this.transaction.body.value.fee,
-              UtxoEnv(slot, protocolParams, certState, network)
+              UtxoEnv(slot, protocolParams, certState, network, treasury)
             )
             val state = SState(this.getUtxos, certState)
             validators
@@ -637,7 +653,8 @@ object TransactionBuilder {
         /** Validate the transaction against ledger rules.
           *
           * Adds dummy signatures during validation to ensure accurate signature count validation,
-          * then removes them before returning.
+          * then removes them before returning. Validates against a treasury of zero, like the
+          * 4-argument [[validate]].
           *
           * @param validators
           *   the ledger rule validators to run
@@ -655,6 +672,18 @@ object TransactionBuilder {
             protocolParams: ProtocolParams,
             slot: Long = 1L,
             certState: CertState = CertState.empty
+        ): Either[SomeBuildError, Context] =
+            validateContext(validators, protocolParams, slot, certState, Coin.zero)
+
+        /** [[validateContext]] against `treasury`, the value a tx must state as its
+          * `currentTreasuryValue`.
+          */
+        def validateContext(
+            validators: Seq[Validator],
+            protocolParams: ProtocolParams,
+            slot: Long,
+            certState: CertState,
+            treasury: Coin
         ): Either[SomeBuildError, Context] = {
             val txWithDummySignatures: Transaction =
                 addDummySignatures(this.expectedSigners.size, this.transaction)
@@ -662,7 +691,7 @@ object TransactionBuilder {
 
             for {
                 validatedCtx <- contextWithSignatures
-                    .validate(validators, protocolParams, slot, certState)
+                    .validate(validators, protocolParams, slot, certState, treasury)
                     .left
                     .map(ValidationError(_, this))
 
@@ -673,7 +702,8 @@ object TransactionBuilder {
             } yield validatedCtxWithoutSignatures
         }
 
-        /** Set min ada, balance, and validate a context.
+        /** Set min ada, balance, and validate a context. Validates against a treasury of zero, like
+          * the 4-argument [[validate]].
           *
           * @param protocolParams
           *   the protocol parameters
@@ -698,6 +728,30 @@ object TransactionBuilder {
             slot: Long = 1L,
             certState: CertState = CertState.empty,
             debugScripts: Map[ScriptHash, DebugScript] = Map.empty
+        ): Either[SomeBuildError, Context] =
+            finalizeContext(
+              protocolParams,
+              diffHandler,
+              evaluator,
+              validators,
+              slot,
+              certState,
+              Coin.zero,
+              debugScripts
+            )
+
+        /** [[finalizeContext]] against `treasury`, the value a tx must state as its
+          * `currentTreasuryValue`.
+          */
+        def finalizeContext(
+            protocolParams: ProtocolParams,
+            diffHandler: DiffHandler,
+            evaluator: PlutusScriptEvaluator,
+            validators: Seq[Validator],
+            slot: Long,
+            certState: CertState,
+            treasury: Coin,
+            debugScripts: Map[ScriptHash, DebugScript]
         ): Either[SomeBuildError, Context] = {
             for {
                 balancedCtx <- balanceContext(protocolParams, diffHandler, evaluator, debugScripts)
@@ -705,7 +759,8 @@ object TransactionBuilder {
                   validators,
                   protocolParams,
                   slot,
-                  certState
+                  certState,
+                  treasury
                 )
             } yield validatedCtx
         }

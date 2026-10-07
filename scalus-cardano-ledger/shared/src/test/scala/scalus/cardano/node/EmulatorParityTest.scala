@@ -322,4 +322,106 @@ class EmulatorParityTest extends AnyFunSuite {
         assert(restored.datums == emulator.datums)
         assert(restored.getAppliedTx(tx.id).map(_.slot).contains(0L))
     }
+
+    // spec 13.3: the treasury sits in the env, as of the last epoch boundary
+    private val epoch: Long = 500
+    private val slotInEpoch: SlotNo = testEnv.slotConfig.firstSlotOfEpoch(epoch) + 10
+
+    private def emulatorWithTreasury(treasury: Coin): Emulator = {
+        val context = Context.testMainnet(slotInEpoch)
+        Emulator(
+          initialUtxos = genesisUtxos(Value.ada(100), Value.ada(100), Value.ada(100)),
+          initialContext = context.copy(env = context.env.copy(treasury = treasury))
+        )
+    }
+
+    private def donate(emulator: Emulator, amount: Coin, statedTreasury: Coin): Transaction =
+        TxBuilder(testEnv)
+            .donateToTreasury(amount)
+            .setCurrentTreasuryValue(statedTreasury)
+            .complete(emulator.utxos, alice)
+            .sign(Alice.signer)
+            .transaction
+
+    test("donations within an epoch see the treasury of its start, and the boundary adds them") {
+        // spec 13.3 example table, [SC-7], [SC-7a], [SC-7d], [SC-7f]
+        val emulator = emulatorWithTreasury(Coin(1000))
+
+        val first = donate(emulator, Coin(5), Coin(1000))
+        assert(emulator.submitSync(first) == Right(first.id))
+        assert(emulator.treasury == Coin(1000))
+
+        val second = donate(emulator, Coin(7), Coin(1000))
+        assert(emulator.submitSync(second) == Right(second.id))
+        assert(emulator.treasury == Coin(1000))
+
+        val stale = donate(emulator, Coin(3), Coin(1005))
+        assert(emulator.submitSync(stale).left.map(_.rule) == Left("TreasuryValueMismatch"))
+        assert(emulator.treasury == Coin(1000))
+        assert(emulator.donation == Coin(12))
+
+        emulator.setSlot(testEnv.slotConfig.firstSlotOfEpoch(epoch + 1))
+        assert(emulator.treasury == Coin(1012))
+        assert(emulator.donation == Coin.zero)
+    }
+
+    test("a slot change within an epoch leaves the donations pending") {
+        // spec [SC-7a]: only an epoch boundary moves the donations
+        val emulator = emulatorWithTreasury(Coin(1000))
+        val tx = donate(emulator, Coin(5), Coin(1000))
+        assert(emulator.submitSync(tx) == Right(tx.id))
+
+        emulator.tick(100)
+        assert(emulator.treasury == Coin(1000))
+        assert(emulator.donation == Coin(5))
+    }
+
+    test("tick across an epoch boundary moves the donations into the treasury") {
+        // spec [SC-7a], [SC-7f]: every slot advance, not only setSlot
+        val emulator = emulatorWithTreasury(Coin(1000))
+        val tx = donate(emulator, Coin(5), Coin(1000))
+        assert(emulator.submitSync(tx) == Right(tx.id))
+
+        emulator.tick(testEnv.slotConfig.epochLength * 3)
+        assert(emulator.treasury == Coin(1005))
+        assert(emulator.donation == Coin.zero)
+    }
+
+    test("a move to an earlier epoch leaves the treasury and the donations as they are") {
+        // spec [SC-7a]: only a boundary crossed forwards moves the donations
+        val emulator = emulatorWithTreasury(Coin(1000))
+        val tx = donate(emulator, Coin(5), Coin(1000))
+        assert(emulator.submitSync(tx) == Right(tx.id))
+
+        emulator.setSlot(testEnv.slotConfig.firstSlotOfEpoch(epoch - 1))
+        assert(emulator.treasury == Coin(1000))
+        assert(emulator.donation == Coin(5))
+    }
+
+    test("a donation made after a move back moves into the treasury once, going forward again") {
+        // spec [SC-7a], [SC-7f]: each boundary crossed forwards moves the donations, then resets them
+        val emulator = emulatorWithTreasury(Coin(1000))
+        emulator.setSlot(testEnv.slotConfig.firstSlotOfEpoch(epoch - 1))
+        val tx = donate(emulator, Coin(5), Coin(1000))
+        assert(emulator.submitSync(tx) == Right(tx.id))
+
+        emulator.setSlot(testEnv.slotConfig.firstSlotOfEpoch(epoch))
+        assert(emulator.treasury == Coin(1005))
+        assert(emulator.donation == Coin.zero)
+
+        emulator.setSlot(testEnv.slotConfig.firstSlotOfEpoch(epoch + 1))
+        assert(emulator.treasury == Coin(1005))
+    }
+
+    test("a snapshot keeps the fees, the donations and the treasury") {
+        // spec [SC-7c]: snapshot() used to drop fees and donation
+        val emulator = emulatorWithTreasury(Coin(1000))
+        val tx = donate(emulator, Coin(5), Coin(1000))
+        assert(emulator.submitSync(tx) == Right(tx.id))
+
+        val copy = emulator.snapshot()
+        assert(copy.fees == tx.body.value.fee)
+        assert(copy.donation == Coin(5))
+        assert(copy.treasury == Coin(1000))
+    }
 }
