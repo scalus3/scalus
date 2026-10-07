@@ -46,9 +46,7 @@ object LedgerStateComparison {
       // Not modeled: no mutator updates the delegators of a DRep.
       Exclusion("dreps.delegates", NoStep, ""),
       // Not modeled: no mutator bumps DRep expiry on governance activity.
-      Exclusion("dreps.expiry", NoStep, ""),
-      // Known bug, not a missing field: a phase-2-invalid tx still applies its certificates.
-      Exclusion("accounts", "13.1 [SC-3e]", "Not validating CERT script")
+      Exclusion("dreps.expiry", NoStep, "")
     )
 
     def withoutExcluded(

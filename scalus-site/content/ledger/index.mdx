@@ -64,7 +64,7 @@ STS.Mutator.transit(validators, mutators, context, state, transaction)
 All built-in rules are collected in two registries:
 
 - **`DefaultValidators.all`** — 26 validators in a `SortedSet` (ordered by name)
-- **`DefaultMutators.all`** — 2 mutators: `PlutusScriptsTransactionMutator`, `StakeCertificatesMutator`
+- **`DefaultMutators.all`** — 5 mutators in the order of the Conway LEDGER rule: `CertsMutator` (withdrawals), `StakeCertificatesMutator`, `StakePoolCertificatesMutator`, `VotingCertificatesMutator`, then `PlutusScriptsTransactionMutator`. A transaction with `isValid = false` applies no withdrawals and no certificates.
 
 **`CardanoMutator`** is the top-level entry point that runs all default rules:
 

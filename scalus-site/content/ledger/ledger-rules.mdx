@@ -141,8 +141,13 @@ EUC[EraRule UTXOW Conway]
 ### Script Execution
 - **PlutusScriptsTransactionMutator** — Evaluates Plutus scripts (V1/V2/V3), processes collateral on script failure, and updates the UTxO set (adds outputs, removes consumed inputs)
 
-### Stake Delegation
+### Withdrawals and Certificates
+These mutators run before `PlutusScriptsTransactionMutator`, withdrawals first, as in the Conway LEDGER rule. A transaction with `isValid = false` applies none of them.
+
+- **CertsMutator** — Subtracts the withdrawals from the reward balances. The accounts stay registered
 - **StakeCertificatesMutator** — Processes stake delegation certificates (registration, deregistration, delegation) and updates the delegation state
+- **StakePoolCertificatesMutator** — Processes stake pool registration and retirement certificates
+- **VotingCertificatesMutator** — Processes DRep registration, update and deregistration certificates
 
 ### Composition
 - **CardanoMutator** — Top-level orchestrator that runs all `DefaultValidators.all` then `DefaultMutators.all` in sequence
@@ -154,7 +159,7 @@ The following table maps Cardano ledger rules (from [cardano-ledger](https://git
 | Cardano Ledger Rule | Scalus Implementation |
 |---|---|
 | Conway UTXOW | `CardanoMutator` (orchestrator) |
-| Conway CERTS | `CertsValidator` |
+| Conway CERTS | `CertsValidator` + `CertsMutator` |
 | Conway DELEG | `StakeCertificatesValidator` + `StakeCertificatesMutator` |
 | Conway POOL | `StakePoolCertificatesValidator` |
 | Conway UTXOS (isValid=true) | `PlutusScriptsTransactionMutator` |

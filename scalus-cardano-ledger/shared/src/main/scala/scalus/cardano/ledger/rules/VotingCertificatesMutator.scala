@@ -7,9 +7,10 @@ package rules
 object VotingCertificatesMutator extends STS.Mutator {
     override final type Error = TransactionException.DRepException
 
+    /** A phase-2-failed tx applies no certificates, spec [SC-3e]. */
     override def transit(context: Context, state: State, event: Event): Result = {
         val certificates = event.body.value.certificates.toSeq
-        if certificates.isEmpty then success(state)
+        if certificates.isEmpty || !event.isValid then success(state)
         else {
             val params = context.env.params
             val expectedDeposit = Coin(params.dRepDeposit)

@@ -240,6 +240,69 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         )
     }
 
+    /** An always-succeeding PlutusV3 stake script, its stake address and its witness. */
+    private object alwaysOkStake {
+        val script: Script.PlutusV3 = PlutusV3.alwaysOk.script
+        val credential: Credential = Credential.ScriptHash(script.scriptHash)
+        val address: StakeAddress =
+            StakeAddress(Network.Mainnet, StakePayload.Script(script.scriptHash))
+        val witness: TwoArgumentPlutusScriptWitness =
+            TwoArgumentPlutusScriptWitness(ScriptSource.PlutusScriptValue(script), Data.unit)
+    }
+
+    private def withdrawTx(emulator: Emulator, amount: Coin): Transaction =
+        TxBuilder(testEnv)
+            .withdrawRewards(alwaysOkStake.address, amount, alwaysOkStake.witness)
+            .complete(emulator.utxos, Alice.address(Network.Mainnet))
+            .sign(Alice.signer)
+            .transaction
+
+    private def emulatorWithReward(reward: Coin): Emulator =
+        Emulator.withRegisteredStakeCredentials(
+          initialUtxos =
+              Map(Input(genesisHash, 0) -> Output(Alice.address(Network.Mainnet), Value.ada(5000))),
+          initialStakeRewards = Map(alwaysOkStake.credential -> reward)
+        )
+
+    test("the same reward withdrawn twice is rejected the second time") {
+        // spec [SC-3c] row 4: probe 5 withdrew the same 7 ADA twice, and both were accepted
+        val emulator = emulatorWithReward(Coin.ada(7))
+        assert(emulator.submitSync(withdrawTx(emulator, Coin.ada(7))).isRight)
+
+        val second = emulator.submitSync(withdrawTx(emulator, Coin.ada(7)))
+        assert(second.left.map(_.rule) == Left("WithdrawalsNotInRewards"), second)
+    }
+
+    test("withdrawing zero twice from a registered account succeeds both times") {
+        // spec [SC-3c] row 1, [SC-3]: the withdraw-zero trick must keep working
+        val emulator = emulatorWithReward(Coin.zero)
+        assert(emulator.submitSync(withdrawTx(emulator, Coin.zero)).isRight)
+        assert(emulator.submitSync(withdrawTx(emulator, Coin.zero)).isRight)
+        assert(
+          emulator.certState.dstate.accounts.get(alwaysOkStake.credential).map(_.balance) ==
+              Some(Coin.zero)
+        )
+    }
+
+    test("withdrawing the full reward and deregistering in one tx refunds the deposit") {
+        // spec [SC-3c] row 2, [SC-3a]: the withdrawal drains the account before deregistration
+        val emulator = emulatorWithReward(Coin.ada(7))
+        val deposit = Coin(testEnv.protocolParams.stakeAddressDeposit)
+        val alice = Alice.address(Network.Mainnet)
+        val tx = TxBuilder(testEnv)
+            .withdrawRewards(alwaysOkStake.address, Coin.ada(7), alwaysOkStake.witness)
+            .deregisterStake(alwaysOkStake.address, Some(deposit), alwaysOkStake.witness)
+            .complete(emulator.utxos, alice)
+            .sign(Alice.signer)
+            .transaction
+
+        val result = emulator.submitSync(tx)
+        assert(result.isRight, result)
+        assert(!emulator.certState.dstate.accounts.contains(alwaysOkStake.credential))
+        val aliceAda = emulator.utxos.values.filter(_.address == alice).map(_.value.coin)
+        assert(aliceAda.foldLeft(Coin.zero)(_ + _) == Coin.ada(5007) + deposit - tx.body.value.fee)
+    }
+
     test("stakeDistribution sums UTxO value and rewards per stake credential") {
         val stakeKeyHash = StakeKeyHash.fromHex("c" * 56)
         val stakeCredential = Credential.KeyHash(AddrKeyHash.fromByteString(stakeKeyHash))

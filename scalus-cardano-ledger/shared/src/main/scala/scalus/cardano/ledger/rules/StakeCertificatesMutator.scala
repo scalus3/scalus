@@ -5,11 +5,12 @@ package rules
 object StakeCertificatesMutator extends STS.Mutator {
     override final type Error = TransactionException.StakeCertificatesException
 
+    /** A phase-2-failed tx applies no certificates, spec [SC-3e]. */
     override def transit(context: Context, state: State, event: Event): Result = {
         val certificates = event.body.value.certificates.toSeq
-        if certificates.isEmpty then success(state)
+        if certificates.isEmpty || !event.isValid then success(state)
         else
-            StakeCertificatesValidator.validate(context, state, event) match
+            StakeCertificatesValidator.validateAfterWithdrawals(context, state, event) match
                 case Left(err) => failure(err)
                 case Right(_) =>
                     val defaultDeposit = Coin(context.env.params.stakeAddressDeposit)

@@ -49,7 +49,10 @@ object CertsValidator extends STS.Validator {
         else success
     }
 
-    /** Removes each account whose whole balance is withdrawn. */
+    /** Subtracts each withdrawal from its account balance. The account stays registered, spec
+      * [SC-2], [SC-3]. A withdrawal that names no account, or exceeds the balance, changes nothing:
+      * [[validate]] rejects it.
+      */
     private[rules] def applyWithdrawals(
         accounts: Map[Credential, ConwayAccountState],
         withdrawals: SortedMap[RewardAccount, Coin]
@@ -57,7 +60,8 @@ object CertsValidator extends STS.Validator {
         withdrawals.foldLeft(accounts) { case (acc, (rewardAccount, amount)) =>
             val credential = rewardAccount.address.credential
             acc.get(credential) match
-                case Some(account) if account.balance == amount => acc - credential
-                case _                                          => acc
+                case Some(account) if amount <= account.balance =>
+                    acc.updated(credential, account.copy(balance = account.balance - amount))
+                case _ => acc
         }
 }

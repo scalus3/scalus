@@ -1,6 +1,6 @@
 package scalus.cardano.ledger.rules
 
-import scala.collection.immutable.SortedSet
+import scala.collection.immutable.{ListSet, SortedSet}
 
 /** Explicit list of all default validators for ledger rules validation.
   */
@@ -42,11 +42,15 @@ object DefaultValidators {
 /** Explicit list of all default mutators for ledger rules validation. */
 object DefaultMutators {
 
-    /** All built-in mutators for Cardano ledger rules. */
-    val all: Set[STS.Mutator] = SortedSet[STS.Mutator](
-      PlutusScriptsTransactionMutator,
+    /** All built-in mutators for Cardano ledger rules, in the order of the Conway LEDGER rule:
+      * withdrawals, then certificates, then scripts and UTxO. A `ListSet` iterates in this order,
+      * spec [SC-3a].
+      */
+    val all: Set[STS.Mutator] = ListSet[STS.Mutator](
+      CertsMutator,
       StakeCertificatesMutator,
       StakePoolCertificatesMutator,
-      VotingCertificatesMutator
-    )(using Ordering.by(_.name))
+      VotingCertificatesMutator,
+      PlutusScriptsTransactionMutator
+    )
 }

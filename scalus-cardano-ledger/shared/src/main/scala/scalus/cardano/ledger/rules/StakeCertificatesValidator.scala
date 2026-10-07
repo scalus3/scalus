@@ -107,12 +107,35 @@ object StakeCertificatesValidator extends STS.Validator {
             case _ => this
     }
 
+    /** Checks the certificates against the accounts after the withdrawals of the same tx, as the
+      * Conway LEDGER rule drains withdrawals before CERTS, spec [SC-3a]. So a tx can withdraw the
+      * full balance and deregister the account.
+      */
     override def validate(context: Context, state: State, event: Event): Result = {
+        val withdrawals = event.body.value.withdrawals.getOrElse(Withdrawals.empty).withdrawals
+        val accounts =
+            CertsValidator.applyWithdrawals(state.certState.dstate.accounts, withdrawals)
+        validateAccounts(context, accounts, event)
+    }
+
+    /** Checks the certificates against `state`, whose withdrawals [[CertsMutator]] has applied. */
+    private[rules] def validateAfterWithdrawals(
+        context: Context,
+        state: State,
+        event: Event
+    ): Result =
+        validateAccounts(context, state.certState.dstate.accounts, event)
+
+    private def validateAccounts(
+        context: Context,
+        accounts: Map[Credential, ConwayAccountState],
+        event: Event
+    ): Result = {
         val certificates = event.body.value.certificates.toSeq
         if certificates.isEmpty then success
         else {
             val initialState = ValidationState(
-              accounts = state.certState.dstate.accounts,
+              accounts = accounts,
               expectedDeposit = Coin(context.env.params.stakeAddressDeposit)
             )
 
