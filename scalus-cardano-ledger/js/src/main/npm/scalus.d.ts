@@ -805,6 +805,27 @@ export const Scalus: {
 };
 
 /**
+ * Plutus scripts kept across evaluations, so a script that many transactions carry or reference is
+ * hashed and decoded once. Give one cache to several `TxEvaluator`s through their `scriptCache`
+ * option, for example one evaluator per slot configuration.
+ *
+ * When the cache is full, the least recently used script is dropped.
+ *
+ * ```ts
+ * const scripts = new ScriptCache(64)
+ * const ev = new TxEvaluator({ slotConfig, costModels, protocolMajorVersion: 11, scriptCache: scripts })
+ * ```
+ *
+ * @param maxEntries how many scripts to keep, a positive integer
+ * @throws TypeError if `maxEntries` is not a positive integer
+ */
+export class ScriptCache {
+  constructor(maxEntries: number);
+  /** How many scripts the cache holds. */
+  readonly size: number;
+}
+
+/**
  * Slot and epoch configuration for a Cardano network.
  *
  * Encodes the linear (post-Byron) era as an anchor point: slot `zeroSlot` starts at `zeroTime`
@@ -987,6 +1008,11 @@ export interface TxEvaluatorOptions {
    * protocol's maximum transaction execution units. Without it, execution is not bounded.
    */
   readonly maxBudget?: ExUnitsLike;
+  /**
+   * Scripts to keep across evaluations, so each is hashed and decoded once. One cache can be
+   * given to several evaluators. Without it, every evaluation hashes and decodes its scripts.
+   */
+  readonly scriptCache?: ScriptCache;
 }
 
 /**

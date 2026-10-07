@@ -387,6 +387,45 @@ object PlutusScriptEvaluator {
           logBudgetDifferences
         )
 
+    /** As the factory above, keeping scripts in `scriptCache` across the transactions it evaluates,
+      * so each script is hashed and decoded once. The cache can be shared between evaluators.
+      */
+    def apply(
+        slotConfig: SlotConfig,
+        initialBudget: ExUnits,
+        protocolMajorVersion: MajorProtocolVersion,
+        costModels: CostModels,
+        mode: EvaluatorMode,
+        scriptCache: ScriptCache
+    ): PlutusScriptEvaluator =
+        withScriptCache(
+          slotConfig,
+          initialBudget,
+          protocolMajorVersion,
+          costModels,
+          mode,
+          scriptCache
+        )
+
+    /** The factory above for callers whose cache is optional: `null` for none. */
+    private[scalus] def withScriptCache(
+        slotConfig: SlotConfig,
+        initialBudget: ExUnits,
+        protocolMajorVersion: MajorProtocolVersion,
+        costModels: CostModels,
+        mode: EvaluatorMode,
+        scriptCache: ScriptCache | Null
+    ): PlutusScriptEvaluator =
+        new DefaultImpl(
+          slotConfig,
+          initialBudget,
+          protocolMajorVersion,
+          costModels,
+          mode,
+          EvaluatorReportConfig.fromEnv(EvaluatorReportConfig.disabled),
+          scriptCache = scriptCache
+        )
+
     /** Creates a PlutusScriptEvaluator from [[CardanoInfo]].
       * @param cardanoInfo
       *   The CardanoInfo containing protocol parameters and slot configuration
@@ -421,7 +460,9 @@ object PlutusScriptEvaluator {
         // Execution-unit prices used to derive the fee columns of profile reports. Factories
         // without protocol params fall back to mainnet prices — all public Cardano networks
         // currently share the same ExUnitPrices, so the derived lovelace figures stay meaningful.
-        val prices: ExUnitPrices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
+        val prices: ExUnitPrices = CardanoInfo.mainnet.protocolParams.executionUnitPrices,
+        // Shares scripts, with their hashes and decoded programs, across transactions; null: none.
+        val scriptCache: ScriptCache | Null = null
     ) extends PlutusScriptEvaluator {
 
         /** Path under [[report]]'s output directory, or the bare name when the dir is the CWD. */
@@ -1008,9 +1049,13 @@ object PlutusScriptEvaluator {
             tx: Transaction,
             utxos: Utxos
         ): Map[ScriptHash, Script] =
-            AllResolvedScripts.allResolvedScriptsMap(tx, utxos) match
-                case Right(allResolvedScriptsMap) => allResolvedScriptsMap
-                case Left(error)                  => throw error
+            AllResolvedScripts.allResolvedScriptsView(tx, utxos) match
+                case Right(scripts) =>
+                    // interned before hashing, so a cached script's hash is not computed again
+                    val cache = scriptCache
+                    val resolved = if cache == null then scripts else scripts.map(cache.intern)
+                    resolved.map(script => script.scriptHash -> script).toMap
+                case Left(error) => throw error
 
     }
 }

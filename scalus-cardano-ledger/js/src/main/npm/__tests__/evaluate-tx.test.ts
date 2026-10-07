@@ -9,6 +9,7 @@ import {
   evaluator,
   evalPlutusScripts,
   PlutusScriptEvaluationError,
+  ScriptCache,
   SlotConfig,
   TxEvaluator,
   Utxo,
@@ -136,6 +137,25 @@ describe("TxEvaluator", () => {
         expect((e as PlutusScriptEvaluationError).code).toBe("OUT_OF_BUDGET");
       }
     }
+  });
+
+  test("a ScriptCache keeps the scripts, and one cache serves several evaluators", () => {
+    const scripts = new ScriptCache(8);
+    const a = new TxEvaluator({ slotConfig, costModels: byName, protocolMajorVersion: 11, scriptCache: scripts });
+    expect(a.evaluate(scriptTxCborHex, [scriptUtxoPairHex])).toEqual(expected());
+    const kept = scripts.size;
+    expect(kept).toBeGreaterThan(0);
+    expect(a.evaluate(scriptTxCborHex, [scriptUtxoPairHex])).toEqual(expected());
+    const b = new TxEvaluator({ slotConfig, costModels: byName, protocolMajorVersion: 11, scriptCache: scripts });
+    expect(b.evaluate(hexToBytes(scriptTxCborHex), [scriptUtxoPairHex])).toEqual(expected());
+    expect(scripts.size).toBe(kept);
+  });
+
+  test("a ScriptCache needs a positive size, and the option takes only a ScriptCache", () => {
+    expect(() => new ScriptCache(0)).toThrow(TypeError);
+    expect(() => new ScriptCache(1.5)).toThrow(TypeError);
+    expect(() => new TxEvaluator({ slotConfig, costModels: byName, protocolMajorVersion: 11, scriptCache: {} as never }))
+      .toThrow(TypeError);
   });
 
   test("unreadable options throw TypeError when it is created", () => {

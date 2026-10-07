@@ -127,7 +127,7 @@ object JEvaluator {
         val transaction = decodeOf(tx, "tx")(Transaction.fromCbor(_))
         val resolved = utxoMapOf(utxos)
         run(
-          evaluatorOf(slotConfig, costModels, protocolMajorVersion, maxBudget),
+          evaluatorOf(slotConfig, costModels, protocolMajorVersion, maxBudget, null),
           transaction,
           resolved
         ).toJSArray
@@ -140,7 +140,8 @@ object JEvaluator {
         slotConfig: js.Any,
         costModels: js.Any,
         protocolMajorVersion: js.Any,
-        maxBudget: js.Any
+        maxBudget: js.Any,
+        scriptCache: ScriptCache | Null
     ): PlutusScriptEvaluator = {
         val slots = slotConfig.asInstanceOf[js.Dynamic]
         val slotsConfig = SlotConfig(
@@ -158,7 +159,8 @@ object JEvaluator {
           slotsConfig,
           CostModels(byLanguage.toMap),
           intOf(protocolMajorVersion, "protocolMajorVersion"),
-          JExUnits.exUnitsOf(maxBudget, "maxBudget")
+          JExUnits.exUnitsOf(maxBudget, "maxBudget"),
+          scriptCache
         )
     }
 
@@ -189,20 +191,22 @@ object JEvaluator {
         protocolMajorVersion: Int,
         maxBudget: Option[ExUnits] = None
     ): Seq[JRedeemerBudget] =
-        run(evaluatorFor(slotConfig, costModels, protocolMajorVersion, maxBudget), tx, utxo)
+        run(evaluatorFor(slotConfig, costModels, protocolMajorVersion, maxBudget, null), tx, utxo)
 
     private def evaluatorFor(
         slotConfig: SlotConfig,
         costModels: CostModels,
         protocolMajorVersion: Int,
-        maxBudget: Option[ExUnits]
+        maxBudget: Option[ExUnits],
+        scriptCache: ScriptCache | Null
     ): PlutusScriptEvaluator =
-        PlutusScriptEvaluator(
-          slotConfig = slotConfig,
-          initialBudget = maxBudget.getOrElse(ExUnits.enormous),
-          protocolMajorVersion = MajorProtocolVersion(protocolMajorVersion),
-          costModels = costModels,
-          mode = EvaluatorMode.EvaluateAndComputeCost
+        PlutusScriptEvaluator.withScriptCache(
+          slotConfig,
+          maxBudget.getOrElse(ExUnits.enormous),
+          MajorProtocolVersion(protocolMajorVersion),
+          costModels,
+          EvaluatorMode.EvaluateAndComputeCost,
+          scriptCache
         )
 
     private[eval] def run(

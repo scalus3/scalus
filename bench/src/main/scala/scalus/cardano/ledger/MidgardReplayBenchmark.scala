@@ -50,6 +50,11 @@ class MidgardReplayBenchmark {
     @nowarn("msg=unset private variable")
     private var limit: Int = 0
 
+    /** Size of the [[ScriptCache]] all evaluators share; 0 for none. */
+    @Param(Array("0"))
+    @nowarn("msg=unset private variable")
+    private var scriptCache: Int = 0
+
     private case class Request(
         name: String,
         evaluator: PlutusScriptEvaluator,
@@ -66,6 +71,7 @@ class MidgardReplayBenchmark {
         val files = requestFiles()
         // One evaluator per distinct (cost models, slot configuration, budget), as an SDK keeps them.
         val evaluators = collection.mutable.Map.empty[String, PlutusScriptEvaluator]
+        val cache = if scriptCache > 0 then ScriptCache(scriptCache) else null
         requests = files.map { file =>
             val d = ujson.read(read(file))
             val slotConfig = SlotConfig(
@@ -76,18 +82,21 @@ class MidgardReplayBenchmark {
             val budget = ExUnits(d("maxMemory").str.toLong, d("maxSteps").str.toLong)
             val key = s"${d("costModels").str}|$slotConfig|$budget"
             val evaluator = evaluators.getOrElseUpdate(
-              key,
-              PlutusScriptEvaluator(
-                slotConfig = slotConfig,
-                initialBudget = budget,
-                protocolMajorVersion = MajorProtocolVersion(11),
-                costModels = CostModels(
-                  Cbor.decode(d("costModels").str.hexToBytes)
-                      .to[Map[Int, IndexedSeq[Long]]]
-                      .value
-                ),
-                mode = EvaluatorMode.EvaluateAndComputeCost
-              )
+              key, {
+                  val costModels = CostModels(
+                    Cbor.decode(d("costModels").str.hexToBytes).to[Map[Int, IndexedSeq[Long]]].value
+                  )
+                  val pv = MajorProtocolVersion(11)
+                  val mode = EvaluatorMode.EvaluateAndComputeCost
+                  PlutusScriptEvaluator.withScriptCache(
+                    slotConfig,
+                    budget,
+                    pv,
+                    costModels,
+                    mode,
+                    cache
+                  )
+              }
             )
             val txBytes = d("tx").str.hexToBytes
             val utxoBytes = d("inputs").arr

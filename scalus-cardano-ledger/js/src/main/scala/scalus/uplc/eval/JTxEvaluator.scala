@@ -29,6 +29,11 @@ trait JTxEvaluatorOptions extends js.Object {
       * protocol's maximum transaction execution units. Without it, execution is not bounded.
       */
     val maxBudget: js.UndefOr[JExUnitsLike] = js.undefined
+
+    /** Scripts to keep across evaluations, so each is hashed and decoded once. One cache can be
+      * given to several evaluators. Without it, every evaluation hashes and decodes its scripts.
+      */
+    val scriptCache: js.UndefOr[JScriptCache] = js.undefined
 }
 
 /** Evaluates the Plutus scripts of transactions under one set of protocol parameters.
@@ -56,7 +61,8 @@ class JTxEvaluator(options: JTxEvaluatorOptions) extends js.Object {
           record.slotConfig,
           record.costModels,
           record.protocolMajorVersion,
-          record.maxBudget
+          record.maxBudget,
+          JScriptCache.of(record.scriptCache)
         )
     }
 

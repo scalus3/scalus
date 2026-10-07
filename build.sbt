@@ -1004,6 +1004,10 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.evalScript"
         ),
+        // Its constructor also takes the optional ScriptCache now; only the factories call it.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.this"
+        ),
         // The streaming hub's internals churn while the provider implementations are built –
         // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: CLAUDE.md
         // reserves wildcards for wholly-internal packages, and a wildcard over the whole
