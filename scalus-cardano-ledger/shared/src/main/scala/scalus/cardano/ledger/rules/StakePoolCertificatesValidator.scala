@@ -81,9 +81,12 @@ object StakePoolCertificatesValidator extends STS.Validator {
             case _ => this
     }
 
+    /** A phase-2-invalid tx skips this check: Conway LEDGER runs CERTS only when `isValid` is true,
+      * spec [SC-3f].
+      */
     override def validate(context: Context, state: State, event: Event): Result = {
         val certificates = event.body.value.certificates.toSeq
-        if certificates.isEmpty then success
+        if certificates.isEmpty || !event.isValid then success
         else {
             val protocolParams = context.env.params
             val currentEpoch: Long = context.slotConfig.epochOf(context.env.slot)

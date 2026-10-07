@@ -145,12 +145,18 @@ object StakeCertificatesValidator extends STS.Validator {
     /** Checks the certificates against the accounts after the withdrawals of the same tx, as the
       * Conway LEDGER rule drains withdrawals before CERTS, spec [SC-3a]. So a tx can withdraw the
       * full balance and deregister the account.
+      *
+      * A phase-2-invalid tx skips this check: Conway LEDGER runs CERTS only when `isValid` is true,
+      * spec [SC-3f].
       */
     override def validate(context: Context, state: State, event: Event): Result = {
-        val withdrawals = event.body.value.withdrawals.getOrElse(Withdrawals.empty).withdrawals
-        val accounts =
-            CertsValidator.applyWithdrawals(state.certState.dstate.accounts, withdrawals)
-        validateAccounts(context, state, accounts, event)
+        if !event.isValid then success
+        else
+            val withdrawals =
+                event.body.value.withdrawals.getOrElse(Withdrawals.empty).withdrawals
+            val accounts =
+                CertsValidator.applyWithdrawals(state.certState.dstate.accounts, withdrawals)
+            validateAccounts(context, state, accounts, event)
     }
 
     /** Checks the certificates against `state`, whose withdrawals [[CertsMutator]] has applied. */

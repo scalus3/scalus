@@ -31,22 +31,27 @@ object CertsValidator extends STS.Validator {
         }
     }
 
+    /** A phase-2-invalid tx skips this check: Conway LEDGER checks withdrawals only when `isValid`
+      * is true, spec [SC-3f].
+      */
     override def validate(context: Context, state: State, event: Event): Result = {
-        val withdrawals: SortedMap[RewardAccount, Coin] =
-            event.body.value.withdrawals.getOrElse(Withdrawals.empty).withdrawals
+        if !event.isValid then success
+        else
+            val withdrawals: SortedMap[RewardAccount, Coin] =
+                event.body.value.withdrawals.getOrElse(Withdrawals.empty).withdrawals
 
-        val initialState = ValidationState(state.certState.dstate.accounts)
-        val finalState = withdrawals.foldLeft(initialState)(_ validateWithdrawal _)
+            val initialState = ValidationState(state.certState.dstate.accounts)
+            val finalState = withdrawals.foldLeft(initialState)(_ validateWithdrawal _)
 
-        if finalState.hasErrors then
-            failure(
-              TransactionException.WithdrawalsNotInRewardsException(
-                event.id,
-                finalState.missingRewardAccounts,
-                finalState.nonDrainingWithdrawals
-              )
-            )
-        else success
+            if finalState.hasErrors then
+                failure(
+                  TransactionException.WithdrawalsNotInRewardsException(
+                    event.id,
+                    finalState.missingRewardAccounts,
+                    finalState.nonDrainingWithdrawals
+                  )
+                )
+            else success
     }
 
     /** Subtracts each withdrawal from its account balance. The account stays registered, spec

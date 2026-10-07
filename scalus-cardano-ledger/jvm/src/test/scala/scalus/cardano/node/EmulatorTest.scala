@@ -303,6 +303,59 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(aliceAda.foldLeft(Coin.zero)(_ + _) == Coin.ada(5007) + deposit - tx.body.value.fee)
     }
 
+    test("a phase-2-invalid tx with an invalid certificate is accepted and takes only collateral") {
+        // spec [SC-3f], [SC-3c] row 5: Conway LEDGER skips CERTS and the withdrawal checks when
+        // isValid is false, so only phase-1 UTXOW checks and the collateral apply
+        val failingScript: Script.PlutusV3 = {
+            import scalus.compiler.compile
+            import scalus.toUplc
+            val program = compile((_: Data) => scalus.cardano.onchain.plutus.prelude.fail())
+                .toUplc(true)
+                .plutusV3
+            Script.PlutusV3(program.cborByteString)
+        }
+        val failingCredential = Credential.ScriptHash(failingScript.scriptHash)
+        val failingStake =
+            StakeAddress(Network.Mainnet, StakePayload.Script(failingScript.scriptHash))
+        // Alice's payment key as a stake key: never registered, so delegating from it is invalid
+        val unregisteredStake = StakeAddress(
+          Network.Mainnet,
+          StakePayload.Stake(StakeKeyHash.fromByteString(Alice.addrKeyHash))
+        )
+        val alice = Alice.address(Network.Mainnet)
+        val emulator = Emulator.withRegisteredStakeCredentials(
+          initialUtxos = Map(Input(genesisHash, 0) -> Output(alice, Value.ada(5000))),
+          initialStakeRewards = Map(failingCredential -> Coin.zero)
+        )
+        val certStateBefore = emulator.certState
+        // The constant evaluator does not run the failing script, so the builder completes
+        val built = TxBuilder
+            .withConstMaxBudgetEvaluator(testEnv)
+            .withdrawRewards(
+              failingStake,
+              Coin.zero,
+              TwoArgumentPlutusScriptWitness(
+                ScriptSource.PlutusScriptValue(failingScript),
+                Data.unit
+              )
+            )
+            .delegateTo(unregisteredStake, PoolKeyHash.fromHex("e" * 56))
+            .complete(emulator.utxos, alice)
+            .sign(Alice.signer)
+            .transaction
+        val tx = built.copy(isValid = false)
+
+        val result = emulator.submitSync(tx)
+        assert(result.isRight, result)
+        assert(emulator.certState == certStateBefore)
+        // The only UTxO paid the collateral; no regular output exists, only the collateral return
+        val body = tx.body.value
+        assert(body.collateralInputs.toSeq == Seq(Input(genesisHash, 0)))
+        val collateralReturn =
+            body.collateralReturnOutput.map(out => Input(tx.id, body.outputs.size) -> out.value)
+        assert(emulator.utxos == collateralReturn.toMap)
+    }
+
     test("stakeDistribution sums UTxO value and rewards per stake credential") {
         val stakeKeyHash = StakeKeyHash.fromHex("c" * 56)
         val stakeCredential = Credential.KeyHash(AddrKeyHash.fromByteString(stakeKeyHash))

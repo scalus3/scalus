@@ -161,6 +161,31 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         VotingCertificatesMutator.transit(context(state), state, unreg).value shouldBe state
     }
 
+    test("a phase-2-failed tx skips the withdrawal check") {
+        // spec [SC-3f]: Conway LEDGER checks withdrawals only when isValid is true
+        val state = stateWith(Coin.ada(7))
+        val overdrawn = phase2Failed(tx(Some(Coin.ada(8))))
+        CertsValidator.validate(context(state), state, overdrawn) shouldBe Right(())
+    }
+
+    test("a phase-2-failed tx skips the stake certificate checks") {
+        // spec [SC-3f]: CERTS runs only when isValid is true
+        val state = stateWith(Coin.zero)
+        val unregistered = Credential.KeyHash(AddrKeyHash.fromHex("d" * 56))
+        val delegation =
+            phase2Failed(tx(None, Certificate.StakeDelegation(unregistered, poolId)))
+        StakeCertificatesValidator.validate(context(state), state, delegation) shouldBe Right(())
+    }
+
+    test("a phase-2-failed tx skips the pool certificate checks") {
+        // spec [SC-3f]: CERTS runs only when isValid is true
+        val state = stateWith(Coin.zero)
+        val unknownPool = PoolKeyHash.fromHex("e" * 56)
+        val nextEpoch = cardanoInfo.slotConfig.epochOf(0) + 1
+        val retire = phase2Failed(tx(None, Certificate.PoolRetirement(unknownPool, nextEpoch)))
+        StakePoolCertificatesValidator.validate(context(state), state, retire) shouldBe Right(())
+    }
+
     test("applyWithdrawals subtracts the amount and keeps the account") {
         // spec [SC-2], [SC-3]: a partial amount, so subtraction differs from draining to zero
         val accounts = Map(credential -> ConwayAccountState(Coin.ada(10), keyDeposit, None, None))
