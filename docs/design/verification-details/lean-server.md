@@ -320,8 +320,9 @@ the better choice if more of the protocol is used.
 The tactic runs every check in a server. The run of `lake env lean` for each check is gone, with
 the code that started and stopped it: there is one way to run Lean, not two to keep alike.
 
-- **The tactic is given a provider of its server.** `UplcBlaster(budget, servers)` and
-  `UplcBlaster(budget, servers, timeout)`, where `servers` is a `LeanServerProvider`: one method,
+- **The tactic is given a provider of its server.** `UplcBlaster(budget, servers)`, whose
+  checks have ten minutes each, and `UplcBlaster(budget, servers, timeout)`, where `servers` is
+  a `LeanServerProvider`: one method,
   `server()`, which gives the server for the next check, or the reason there is none. There is
   no constructor without one. The tactic asks before every check, and a reason is the check's
   `Failed` result.

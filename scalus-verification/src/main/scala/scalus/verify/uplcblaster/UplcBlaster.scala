@@ -13,7 +13,7 @@ import scalus.verify.lean.{LeanServer, LeanServerProvider}
 
 import java.nio.file.{Files, Path}
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 /** Proves [[scalus.verify.Prop]] statements about their compiled UPLC with Lean Blaster.
   *
@@ -53,6 +53,13 @@ final class UplcBlaster private (
       */
     def withMaxHeartbeats(limit: Int): UplcBlaster =
         new UplcBlaster(budget, servers, timeout, limit)
+
+    /** The same tactic with no time limit. A check then runs until it ends or Lean gives it up at
+      * its limit of work, and one that does neither until its thread is interrupted or the server
+      * closed.
+      */
+    def withoutTimeout: UplcBlaster =
+        new UplcBlaster(budget, servers, None, maxHeartbeats)
 
     override val name: String = "uplc-blaster"
 
@@ -168,17 +175,25 @@ object UplcBlaster {
     val options: Options = Options.releaseUntagged.copy(valueBuiltins = false)
 
     /** A tactic that runs its checks in the Lean server `servers` gives it: one for a workspace
-      * that has this module's Lean library. Whoever made the provider ends its servers.
+      * that has this module's Lean library. Whoever made the provider ends its servers. A check is
+      * given up after [[defaultTimeout]].
       */
     def apply(budget: Int, servers: LeanServerProvider): UplcBlaster =
-        new UplcBlaster(budget, servers, None, defaultMaxHeartbeats)
+        new UplcBlaster(budget, servers, Some(defaultTimeout), defaultMaxHeartbeats)
 
-    /** A tactic that gives a check up after `timeout`, and is then inconclusive. Without a timeout
-      * a statement Lean cannot finish, such as one whose program loops over a list of unknown
-      * length, runs until its thread is interrupted or the server closed.
-      */
+    /** A tactic that gives a check up after `timeout`, in place of [[defaultTimeout]]. */
     def apply(budget: Int, servers: LeanServerProvider, timeout: FiniteDuration): UplcBlaster =
         new UplcBlaster(budget, servers, Some(timeout), defaultMaxHeartbeats)
+
+    /** The time a check gets unless told otherwise: ten minutes by the clock, from the moment the
+      * tactic runs it. A check that takes longer is given up, and the tactic is inconclusive.
+      *
+      * Some statements Lean does not finish, such as one whose program loops over a list of unknown
+      * length. Lean's own limit is one of work ([[defaultMaxHeartbeats]]), and it does not end
+      * every such check: it is looked at only at some points of Lean's code, and the solver's time
+      * is not counted. This limit ends them all. [[UplcBlaster.withoutTimeout]] lifts it.
+      */
+    val defaultTimeout: FiniteDuration = 10.minutes
 
     /** Lean's own default for `maxHeartbeats`, its limit on the work of one command. A heartbeat is
       * a unit of that work, a thousand small allocations, counted the same on every machine.

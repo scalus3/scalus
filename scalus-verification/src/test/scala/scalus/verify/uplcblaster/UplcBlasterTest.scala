@@ -16,6 +16,7 @@ import scalus.verify.Props.*
 import scalus.verify.lean.Directories
 
 import java.nio.file.Files
+import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
 
 case class BlasterPair(a: BigInt, b: BigInt) derives FromData, ToData
@@ -856,6 +857,18 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
           verifier.verify(statement, UplcBlaster(40, lean)).isInstanceOf[VerificationResult.Proven]
         )
         assertThrows[IllegalArgumentException](UplcBlaster(40, lean).withMaxHeartbeats(-1))
+    }
+
+    test("a check has a time limit, of ten minutes unless told otherwise") {
+        // No Lean is asked for: these are the tactic's own settings.
+        assert(UplcBlaster.defaultTimeout == 10.minutes)
+        assert(UplcBlaster(40, lean).timeout.contains(10.minutes))
+        assert(UplcBlaster(40, lean, 30.seconds).timeout.contains(30.seconds))
+        assert(UplcBlaster(40, lean).withoutTimeout.timeout.isEmpty)
+        // One limit is set without the other being lost.
+        assert(UplcBlaster(40, lean).withMaxHeartbeats(7).withoutTimeout.maxHeartbeats == 7)
+        assert(UplcBlaster(40, lean, 30.seconds).withMaxHeartbeats(7).timeout.contains(30.seconds))
+        assertThrows[IllegalArgumentException](UplcBlaster(40, lean, 0.seconds))
     }
 
     test("a check is also written where it is asked to be kept") {
