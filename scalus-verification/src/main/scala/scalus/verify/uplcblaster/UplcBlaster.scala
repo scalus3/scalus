@@ -9,11 +9,32 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.utils.{Hex, Utils}
 import scalus.verify.*
-import scalus.verify.lean.{LeanServer, LeanServerProvider}
+import scalus.verify.lean.{Directories, LeanServer, LeanServerProvider}
 
 import java.nio.file.{Files, Path}
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
+
+/** How far a check lets the program of each test run.
+  *
+  * The steps are those of Lean's CEK machine, which counts a term it evaluates and a value it
+  * returns alike: about 1.85 times the steps Plutus counts. A proof at any budget holds without the
+  * budget. A budget that is too small gives a counterexample that is spurious, and one that is
+  * larger than the runs the statement is about only costs: the programs are followed further,
+  * through a loop for instance.
+  */
+enum Budget {
+
+    /** The tactic finds the budget. It starts small, and where Lean's counterexample is spurious it
+      * has Lean's machine count the steps the statement needs on that counterexample, and goes on
+      * from there. The result names the budget it came to ([[UplcBlaster.Artifact]]). The tactic's
+      * time limit is that of the whole search.
+      */
+    case Auto
+
+    /** `steps` steps of Lean's machine. */
+    case LeanSteps(steps: Int)
+}
 
 /** Proves [[scalus.verify.Prop]] statements about their compiled UPLC with Lean Blaster.
   *
@@ -36,15 +57,23 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
   * prepare a statement.
   */
 final class UplcBlaster private (
-    val budget: Int,
+    val budget: Budget,
     val servers: LeanServerProvider,
     val timeout: Option[FiniteDuration],
+    val attemptTimeout: Option[FiniteDuration],
     val maxHeartbeats: Int
 ) extends Tactic {
     override type Prepared = UplcBlaster.Lowered
 
-    require(budget > 0, "the UPLC Blaster budget must be positive")
+    budget match
+        case Budget.LeanSteps(steps) =>
+            require(steps > 0, "the UPLC Blaster budget must be positive")
+        case Budget.Auto =>
     require(timeout.forall(_.length > 0), "the UPLC Blaster timeout must be positive")
+    require(
+      attemptTimeout.forall(_.length > 0),
+      "the UPLC Blaster timeout of an attempt must be positive"
+    )
     require(maxHeartbeats >= 0, "Lean's limit of work must not be negative")
 
     /** The same tactic with another limit on the work Lean does for one command of a check, in
@@ -52,14 +81,24 @@ final class UplcBlaster private (
       * ends, or until the tactic's time limit.
       */
     def withMaxHeartbeats(limit: Int): UplcBlaster =
-        new UplcBlaster(budget, servers, timeout, limit)
+        new UplcBlaster(budget, servers, timeout, attemptTimeout, limit)
 
-    /** The same tactic with no time limit. A check then runs until it ends or Lean gives it up at
-      * its limit of work, and one that does neither until its thread is interrupted or the server
-      * closed.
+    /** The same tactic with no time limit, of the whole run or of one attempt. A check then runs
+      * until it ends or Lean gives it up at its limit of work, and one that does neither until its
+      * thread is interrupted or the server closed.
       */
     def withoutTimeout: UplcBlaster =
-        new UplcBlaster(budget, servers, None, maxHeartbeats)
+        new UplcBlaster(budget, servers, None, None, maxHeartbeats)
+
+    /** The same tactic with a time limit for one attempt, beside that of the whole run. A tactic
+      * that finds its budget ([[Budget.Auto]]) makes one check after the other, and its time limit
+      * is for them all: without this, one check that follows a program through a loop takes all the
+      * time that is left. A search can also go on from one quick check to the next without an end,
+      * which only the limit of the whole run ends. A tactic whose budget is given makes one check,
+      * which gets the shorter of the two.
+      */
+    def withAttemptTimeout(limit: FiniteDuration): UplcBlaster =
+        new UplcBlaster(budget, servers, timeout, Some(limit), maxHeartbeats)
 
     override val name: String = "uplc-blaster"
 
@@ -73,17 +112,19 @@ final class UplcBlaster private (
                 )
             )
 
-    override def run(prepared: Prepared): ExecutionResult = servers.server() match
-        case Left(reason) => VerificationResult.Failed(reason)
-        case Right(server) =>
-            UplcBlaster.check(
-              prepared,
-              budget,
-              maxHeartbeats,
-              server,
-              timeout,
-              UplcBlaster.keptChecks
-            )
+    override def run(prepared: Prepared): ExecutionResult = {
+        val kept = UplcBlaster.keptChecks
+        budget match
+            case Budget.LeanSteps(steps) =>
+                servers.server() match
+                    case Left(reason) => VerificationResult.Failed(reason)
+                    case Right(server) =>
+                        val shorter = (timeout ++ attemptTimeout).minOption
+                        UplcBlaster.check(prepared, steps, maxHeartbeats, server, shorter, kept)
+            // A search makes several checks, and asks for the server before each.
+            case Budget.Auto =>
+                UplcBlaster.search(prepared, maxHeartbeats, servers, timeout, attemptTimeout, kept)
+    }
 }
 
 object UplcBlaster {
@@ -92,6 +133,9 @@ object UplcBlaster {
       *
       * @param programHashes
       *   the SHA-256 of each leaf's program CBOR, in the order of [[Lowered.leaves]]
+      * @param budget
+      *   the steps of Lean's machine the check ran with: those the tactic was given, or those it
+      *   found ([[Budget.Auto]])
       * @param counterexample
       *   for a refutation, the value of each quantified variable, by name, as replayed on the
       *   Scalus CEK; empty otherwise
@@ -178,12 +222,12 @@ object UplcBlaster {
       * that has this module's Lean library. Whoever made the provider ends its servers. A check is
       * given up after [[defaultTimeout]].
       */
-    def apply(budget: Int, servers: LeanServerProvider): UplcBlaster =
-        new UplcBlaster(budget, servers, Some(defaultTimeout), defaultMaxHeartbeats)
+    def apply(budget: Budget, servers: LeanServerProvider): UplcBlaster =
+        new UplcBlaster(budget, servers, Some(defaultTimeout), None, defaultMaxHeartbeats)
 
     /** A tactic that gives a check up after `timeout`, in place of [[defaultTimeout]]. */
-    def apply(budget: Int, servers: LeanServerProvider, timeout: FiniteDuration): UplcBlaster =
-        new UplcBlaster(budget, servers, Some(timeout), defaultMaxHeartbeats)
+    def apply(budget: Budget, servers: LeanServerProvider, timeout: FiniteDuration): UplcBlaster =
+        new UplcBlaster(budget, servers, Some(timeout), None, defaultMaxHeartbeats)
 
     /** The time a check gets unless told otherwise: ten minutes by the clock, from the moment the
       * tactic runs it. A check that takes longer is given up, and the tactic is inconclusive.
@@ -977,13 +1021,40 @@ object UplcBlaster {
         budget: Int,
         maxHeartbeats: Int,
         directory: Path
-    ): String = {
-        val flats = goal.leaves.zipWithIndex.map { (program, index) =>
+    ): String = renderCheck(goal, written(goal.leaves, directory), budget, maxHeartbeats)
+
+    /** Writes each program into `directory`, as `Leaf<n>.flat`. */
+    private def written(programs: Vector[Program], directory: Path): Vector[Path] =
+        programs.zipWithIndex.map { (program, index) =>
             val flat = directory.resolve(s"Leaf$index.flat")
             Files.writeString(flat, Hex.bytesToHex(program.cborEncoded).toLowerCase)
             flat
         }
-        renderCheck(goal, flats, budget, maxHeartbeats)
+
+    /** What one check of a statement came to, at one budget. */
+    private enum Probe {
+
+        /** The statement's result, which another budget would not change, or would not help. */
+        case Decided(result: ExecutionResult)
+
+        /** Lean falsified the statement under the budget with `values`, on which it holds without
+          * the budget: the program of a test needs more steps.
+          */
+        case Spurious(values: List[Constant], reason: String)
+
+        /** Lean falsified the statement under the budget, and gave no values to replay: the
+          * statement asks for a witness, or the values are outside a variable's type. Nothing shows
+          * whether the statement or the budget is at fault.
+          */
+        case Unreplayed(reason: String)
+
+        /** The result where the budget was given: a falsification that the budget may be at fault
+          * for decides nothing.
+          */
+        def toResult: ExecutionResult = this match
+            case Decided(result)     => result
+            case Spurious(_, reason) => VerificationResult.Inconclusive(reason)
+            case Unreplayed(reason)  => VerificationResult.Inconclusive(reason)
     }
 
     /** Runs the check of a lowered statement in `server`, and reads what Lean reported.
@@ -999,25 +1070,358 @@ object UplcBlaster {
         timeout: Option[FiniteDuration],
         keep: Option[Path]
     ): ExecutionResult = {
-        keep.foreach { kept =>
-            val directory = Files.createTempDirectory(Files.createDirectories(kept), "check-")
-            writeCheck(goal, budget, maxHeartbeats, directory)
+        keep.foreach(kept => writeCheck(goal, budget, maxHeartbeats, keptDirectory(kept)))
+        val checked = server.check(checkSource(goal, budget, maxHeartbeats, _), timeout)
+        probed(goal, budget, checked, timeout.mkString).toResult
+    }
+
+    /** A directory of its own under `kept`, for one check that is kept. */
+    private def keptDirectory(kept: Path): Path =
+        Files.createTempDirectory(Files.createDirectories(kept), "check-")
+
+    /** What a check at `budget` came to, from what the server returned. The reason of a check that
+      * was given up names its time limit as `limit`.
+      */
+    private def probed(
+        goal: Lowered,
+        budget: Int,
+        checked: LeanServer.Result,
+        limit: String
+    ): Probe = checked match
+        case LeanServer.Result.Finished(messages) =>
+            probed(
+              goal,
+              budget,
+              messages.exists(_.severity == LeanServer.Severity.Error),
+              messages.map(_.text).mkString("\n")
+            )
+        // Only a check with a time limit is given up for it.
+        case LeanServer.Result.TimedOut(progress) =>
+            Probe.Decided(
+              VerificationResult.Inconclusive(
+                s"Lean did not finish within $limit: " +
+                    unfinished(goal.leaves.size, budget, progress)
+              )
+            )
+        case LeanServer.Result.Failed(reason) => Probe.Decided(VerificationResult.Failed(reason))
+
+    /** The budget a search starts at: a check at a small budget is cheap. */
+    private val searchStart = 100
+
+    /** The most steps of Lean's machine that a search counts on a counterexample, and so the
+      * largest budget it comes to ([[Budget.Auto]]).
+      */
+    val maxSearchedBudget: Int = 100000
+
+    /** The largest budget a search comes to by doubling, where a falsification gives it no values
+      * to count on. A statement of that kind that is false is falsified at every budget.
+      */
+    val maxDoubledBudget: Int = 6400
+
+    /** Finds a budget for a lowered statement, and returns its result at that budget
+      * ([[Budget.Auto]], docs/design/verification-details/blaster-budget-search.md).
+      *
+      * A check at a budget that is too small gives a counterexample that is spurious: the statement
+      * holds on it, and under the budget the program of a test had not ended. Lean's machine then
+      * counts what each program does on that counterexample, and the next budget is the least at
+      * which the statement, as Lean reads it under a budget, holds there. That is not the most
+      * steps a program makes on it. A premise that is false need only be seen to be false, however
+      * long the program of the conclusion runs: the budget of that run is the oversized one, at
+      * which Lean follows the programs through every loop.
+      *
+      * A falsification without values to count on has the budget doubled, up to
+      * [[maxDoubledBudget]]. `timeout` is the time of the whole search, and `attempt` that of one
+      * check of it. The server is asked for before every check, as for any other.
+      */
+    private[uplcblaster] def search(
+        goal: Lowered,
+        maxHeartbeats: Int,
+        servers: LeanServerProvider,
+        timeout: Option[FiniteDuration],
+        attempt: Option[FiniteDuration],
+        keep: Option[Path]
+    ): ExecutionResult = {
+        val deadline = timeout.map(_.fromNow)
+        // The time the next check gets, with the name of that limit for the reason of a check
+        // that is given up. Nothing where the time of the search has passed.
+        def time(): Option[(Option[FiniteDuration], String)] = {
+            val left = deadline.map(_.timeLeft)
+            if left.exists(_ <= Duration.Zero) then None
+            else
+                attempt match
+                    case Some(one) if left.forall(_ > one) =>
+                        Some(Some(one) -> s"$one, the time of one attempt")
+                    case _ => Some(left -> timeout.mkString)
         }
-        server.check(checkSource(goal, budget, maxHeartbeats, _), timeout) match
-            case LeanServer.Result.Finished(messages) =>
-                verdict(
-                  goal,
-                  budget,
-                  messages.exists(_.severity == LeanServer.Severity.Error),
-                  messages.map(_.text).mkString("\n")
+        // The programs are written once, where every check of the search imports them from: the
+        // lines that import them are then the same in each, and the server elaborates them once.
+        val directory = Files.createTempDirectory("scalus-search-")
+        val flats = written(goal.leaves, directory)
+
+        // A result that is no proof says which budgets were tried, and what the last gave.
+        def inconclusive(
+            reason: String,
+            tried: List[Int],
+            last: Option[String]
+        ): ExecutionResult =
+            VerificationResult.Inconclusive(
+              s"$reason. The tactic sought the budget, and tried ${tried.reverse.mkString(", ")} " +
+                  "steps" + last.fold("")(gave => s". The last counterexample: $gave")
+            )
+        def outOfTime(tried: List[Int], last: Option[String]): ExecutionResult =
+            inconclusive(s"Lean did not finish within ${timeout.mkString}", tried, last)
+
+        // One check of the statement at `steps`.
+        def probe(steps: Int, wait: Option[FiniteDuration], limit: String): Probe =
+            servers.server() match
+                case Left(reason) => Probe.Decided(VerificationResult.Failed(reason))
+                case Right(server) =>
+                    val text = renderCheck(goal, flats, steps, maxHeartbeats)
+                    keep.foreach(kept =>
+                        writeCheck(goal, steps, maxHeartbeats, keptDirectory(kept))
+                    )
+                    probed(goal, steps, server.check(text, wait), limit)
+
+        // The budget after `steps`, whose check gave the spurious counterexample `values`.
+        def counted(
+            values: List[Constant],
+            steps: Int,
+            tried: List[Int],
+            reason: String
+        ): Either[ExecutionResult, Int] =
+            time() match
+                case None => Left(outOfTime(tried, Some(reason)))
+                case Some((wait, _)) =>
+                    raised(goal, flats, values, steps, maxHeartbeats, servers, wait, keep).left
+                        .map {
+                            case VerificationResult.Inconclusive(why) =>
+                                inconclusive(why, tried, Some(reason))
+                            case other => other
+                        }
+
+        @annotation.tailrec
+        def at(steps: Int, tried: List[Int], last: Option[String]): ExecutionResult =
+            time() match
+                case None => outOfTime(tried, last)
+                case Some((wait, limit)) =>
+                    probe(steps, wait, limit) match
+                        case Probe.Decided(VerificationResult.Inconclusive(reason)) =>
+                            inconclusive(reason, steps :: tried, last)
+                        case Probe.Decided(result) => result
+                        case Probe.Unreplayed(reason) =>
+                            if steps * 2 <= maxDoubledBudget then
+                                at(steps * 2, steps :: tried, last)
+                            else inconclusive(reason, steps :: tried, last)
+                        case Probe.Spurious(values, reason) =>
+                            counted(values, steps, steps :: tried, reason) match
+                                case Right(more)  => at(more, steps :: tried, Some(reason))
+                                case Left(result) => result
+
+        try at(searchStart, Nil, None)
+        finally Directories.remove(directory)
+    }
+
+    /** The budget to go on with after `steps` gave the spurious counterexample `values`, or the
+      * result where there is none. With `keep`, the count is also written there.
+      */
+    private def raised(
+        goal: Lowered,
+        flats: Vector[Path],
+        values: List[Constant],
+        steps: Int,
+        maxHeartbeats: Int,
+        servers: LeanServerProvider,
+        wait: Option[FiniteDuration],
+        keep: Option[Path]
+    ): Either[ExecutionResult, Int] = {
+        def none(reason: String): Either[ExecutionResult, Int] =
+            Left(VerificationResult.Inconclusive(reason))
+        measured(goal, flats, values, maxHeartbeats, servers, wait, keep).flatMap { runs =>
+            // Lean falsified the statement at `steps`. Where the runs do not, the values read
+            // from its model are not those it falsified the statement with.
+            if holdsWithin(goal.body, runs, steps, positive = true) then
+                none(
+                  s"on the values read from Lean's counterexample the statement holds within " +
+                      s"$steps steps of Lean's machine, so they do not show what Lean found"
                 )
-            // Only a check with a time limit is given up for it.
-            case LeanServer.Result.TimedOut(progress) =>
-                VerificationResult.Inconclusive(
-                  s"Lean did not finish within ${timeout.mkString}: " +
-                      unfinished(goal.leaves.size, budget, progress)
+            else
+                needed(goal.body, runs, steps) match
+                    case Some(more) => Right(more)
+                    case None if runs.exists(_.end == End.Running) =>
+                        none(
+                          s"on Lean's counterexample the statement takes more than " +
+                              s"$maxSearchedBudget steps of Lean's machine, the most the tactic " +
+                              "counts"
+                        )
+                    case None =>
+                        none(
+                          s"on Lean's counterexample the statement holds at no budget on Lean's " +
+                              "machine, though it holds on the Scalus CEK"
+                        )
+        }
+    }
+
+    /** How the program of a test ended on Lean's machine. */
+    private[uplcblaster] enum End {
+
+        /** It returned: `true` or `false`, or a value that is neither. */
+        case Returned(value: Option[Boolean])
+        case Failed
+
+        /** It had done neither within the steps that were counted. */
+        case Running
+    }
+
+    /** What the program of a test did on concrete arguments on Lean's machine: the steps it made,
+      * which is the least budget at which Lean sees how it ended.
+      */
+    private[uplcblaster] final case class Run(steps: Int, end: End)
+
+    private val measurement = """"?(\d+) (true|false|returned|failed|running)"?""".r
+
+    /** What the program of each test does on `values`, on Lean's machine (`measureRun`). */
+    private def measured(
+        goal: Lowered,
+        flats: Vector[Path],
+        values: List[Constant],
+        maxHeartbeats: Int,
+        servers: LeanServerProvider,
+        wait: Option[FiniteDuration],
+        keep: Option[Path]
+    ): Either[ExecutionResult, Vector[Run]] = {
+        def failed(reason: String): Either[ExecutionResult, Vector[Run]] =
+            Left(VerificationResult.Failed(reason))
+        // A count that is kept has the programs beside it, to be run by hand.
+        keep.foreach { kept =>
+            val directory = keptDirectory(kept)
+            val text = measureSource(goal, written(goal.leaves, directory), values, maxHeartbeats)
+            Files.writeString(directory.resolve("Count.lean"), text)
+        }
+        servers.server() match {
+            case Left(reason) => failed(reason)
+            case Right(server) =>
+                server.check(measureSource(goal, flats, values, maxHeartbeats), wait) match {
+                    case LeanServer.Result.Finished(messages) =>
+                        val runs = messages
+                            .map(_.text.trim)
+                            .collect { case measurement(steps, end) =>
+                                Run(steps.toInt, ended(end))
+                            }
+                            .toVector
+                        val errors = messages.exists(_.severity == LeanServer.Severity.Error)
+                        if !errors && runs.size == goal.leaves.size then Right(runs)
+                        else
+                            val output = concise(messages.map(_.text).mkString("\n"))
+                            failed(s"Lean did not count the steps of its counterexample: $output")
+                    case LeanServer.Result.TimedOut(_) =>
+                        Left(
+                          VerificationResult.Inconclusive(
+                            "Lean did not count the steps of its counterexample in the time it had"
+                          )
+                        )
+                    case LeanServer.Result.Failed(reason) => failed(reason)
+                }
+        }
+    }
+
+    /** How a run ended, from the word `measureRun` says it with. */
+    private def ended(word: String): End = word match
+        case "true"     => End.Returned(Some(true))
+        case "false"    => End.Returned(Some(false))
+        case "returned" => End.Returned(None)
+        case "failed"   => End.Failed
+        case _          => End.Running
+
+    /** The text of a check that has Lean's machine say what the program of each test does on
+      * `values`, within the most steps a search counts. The programs are those in `flats`.
+      */
+    private[uplcblaster] def measureSource(
+        goal: Lowered,
+        flats: Vector[Path],
+        values: List[Constant],
+        maxHeartbeats: Int
+    ): String = {
+        val counts = goal.leafBinders.zipWithIndex.map { (scope, leaf) =>
+            val arguments = scope.map(index => s"Term.Const (${leanValue(values(index))})")
+            s"#eval measureRun leaf$leaf.script [${arguments.mkString(", ")}] $maxSearchedBudget"
+        }
+        document(flats, counts.mkString("\n"), maxHeartbeats)
+    }
+
+    /** A value of a variable as a Lean constant, to give a counterexample back to Lean as the terms
+      * it is made of. An encoded program would not carry every value of Lean's model: a `Data`
+      * constructor with a tag of more than 64 bits is written by Scalus in a form that Lean's
+      * library does not read.
+      */
+    private[uplcblaster] def leanValue(value: Constant): String = {
+        def integer(value: BigInt): String = if value < 0 then s"($value)" else value.toString
+        // One character for a byte, as Lean's library holds a byte string. Lean reads `\xHH`
+        // as the character of that code; what it prints, `\u{HH}`, it does not read.
+        def bytes(value: ByteString): String =
+            value.bytes
+                .map(byte => f"\\x${byte & 0xff}%02x")
+                .mkString("(ByteString.mk \"", "", "\")")
+        def data(value: Data): String = value match
+            case Data.Constr(tag, fields) =>
+                s"(Data.Constr ${integer(tag)} [${fields.toScalaList.map(data).mkString(", ")}])"
+            case Data.Map(entries) =>
+                val pairs = entries.toScalaList.map((key, item) => s"(${data(key)}, ${data(item)})")
+                s"(Data.Map [${pairs.mkString(", ")}])"
+            case Data.List(items) => s"(Data.List [${items.toScalaList.map(data).mkString(", ")}])"
+            case Data.I(number)   => s"(Data.I ${integer(number)})"
+            case Data.B(string)   => s"(Data.B ${bytes(string)})"
+        value match
+            case Constant.Integer(number)    => s"Const.Integer ${integer(number)}"
+            case Constant.Bool(truth)        => s"Const.Bool $truth"
+            case Constant.ByteString(string) => s"Const.ByteString ${bytes(string)}"
+            case Constant.Data(tree)         => s"Const.Data ${data(tree)}"
+            case other =>
+                throw new IllegalArgumentException(
+                  s"no variable of a statement has the value $other"
                 )
-            case LeanServer.Result.Failed(reason) => VerificationResult.Failed(reason)
+    }
+
+    /** The truth of a formula as Lean reads it under a budget (`renderFormula`), on the runs of its
+      * leaves on one assignment. A program that has not ended within the budget counts against what
+      * the formula claims of it, and for what the formula assumes.
+      */
+    private[uplcblaster] def holdsWithin(
+        formula: LeafFormula,
+        runs: Vector[Run],
+        budget: Int,
+        positive: Boolean
+    ): Boolean = {
+        def end(leaf: Int): End = if runs(leaf).steps <= budget then runs(leaf).end else End.Running
+        def within(inner: LeafFormula, positive: Boolean): Boolean =
+            holdsWithin(inner, runs, budget, positive)
+        formula match
+            case LeafFormula.Test(leaf) =>
+                if positive then end(leaf) == End.Returned(Some(true))
+                else end(leaf) != End.Returned(Some(false)) && end(leaf) != End.Failed
+            case LeafFormula.Denotes(leaf) =>
+                if positive then end(leaf).isInstanceOf[End.Returned] else end(leaf) != End.Failed
+            case LeafFormula.And(left, right) => within(left, positive) && within(right, positive)
+            case LeafFormula.Or(left, right)  => within(left, positive) || within(right, positive)
+            case LeafFormula.Not(inner)       => !within(inner, !positive)
+            case LeafFormula.Implies(premise, conclusion) =>
+                !within(premise, !positive) || within(conclusion, positive)
+            // One assignment, as in `holds`: a quantifier here ranges over all values.
+            case LeafFormula.Forall(_, body) => within(body, positive)
+            case LeafFormula.Exists(_, body) => within(body, positive)
+    }
+
+    /** The least budget above `above` at which the formula holds on `runs`, read as Lean reads it
+      * under a budget. Its truth changes only where a program ends.
+      */
+    private[uplcblaster] def needed(
+        formula: LeafFormula,
+        runs: Vector[Run],
+        above: Int
+    ): Option[Int] = {
+        val ends = runs.collect {
+            case Run(steps, end) if end != End.Running && steps > above => steps
+        }
+        ends.distinct.sorted.find(holdsWithin(formula, runs, _, positive = true))
     }
 
     private val symbolicRun = """#prep_uplc_run prepared(\d+) .*""".r
@@ -1078,7 +1482,15 @@ object UplcBlaster {
         budget: Int,
         errors: Boolean,
         output: String
-    ): ExecutionResult = {
+    ): ExecutionResult = probed(goal, budget, errors, output).toResult
+
+    /** [[verdict]], with what the check came to. */
+    private def probed(
+        goal: Lowered,
+        budget: Int,
+        errors: Boolean,
+        output: String
+    ): Probe = {
         val closed = goal.binders.isEmpty
         val artifact = Artifact(
           goal.leaves.toList.map(program =>
@@ -1100,14 +1512,15 @@ object UplcBlaster {
                 VerificationResult.Failed(s"Lean reported an error: ${concise(output)}")
             else VerificationResult.Failed(s"Lean reported no verdict: ${concise(output)}")
         if closed then
-            if !errors then VerificationResult.Proven(Proof(artifact))
+            if !errors then Probe.Decided(VerificationResult.Proven(Proof(artifact)))
             else if output.contains("`native_decide` evaluated that the proposition") then
                 replay(goal, artifact)
-            else failure
-        else if output.contains("✅ Valid") then VerificationResult.Proven(Proof(artifact))
+            else Probe.Decided(failure)
+        else if output.contains("✅ Valid") then
+            Probe.Decided(VerificationResult.Proven(Proof(artifact)))
         else if output.contains("❌ Falsified") then
             if goal.hasExistential then
-                VerificationResult.Inconclusive(
+                Probe.Unreplayed(
                   "UPLC Blaster falsified a statement that asks for a witness, with an exists, " +
                       "or with a forAll under a negation or in a premise, but did not provide " +
                       "a finite certificate that the Scalus CEK can replay to establish that no " +
@@ -1115,10 +1528,8 @@ object UplcBlaster {
                 )
             else replay(goal, artifact)
         else if output.contains("⚠️ Undetermined") then
-            VerificationResult.Inconclusive(
-              "UPLC Blaster was undetermined"
-            )
-        else failure
+            Probe.Decided(VerificationResult.Inconclusive("UPLC Blaster was undetermined"))
+        else Probe.Decided(failure)
     }
 
     /** What a predicate did on concrete arguments, on the Scalus CEK. */
@@ -1134,13 +1545,16 @@ object UplcBlaster {
       * the predicate needs more steps. Only a counterexample under which the statement is false
       * without the budget is a refutation.
       */
-    private def replay(goal: Lowered, artifact: Artifact): ExecutionResult =
+    private def replay(goal: Lowered, artifact: Artifact): Probe =
         counterexample(goal.binders, artifact.output) match
             case Left(SmtValues.Unreadable.Malformed(error)) =>
-                VerificationResult.Failed(s"cannot read Lean's counterexample: $error")
-            // Lean's model has more values than the variable's type, so this one refutes nothing.
+                Probe.Decided(
+                  VerificationResult.Failed(s"cannot read Lean's counterexample: $error")
+                )
+            // Lean's model has more values than the variable's type, so this one refutes nothing,
+            // and is nothing to count on either.
             case Left(SmtValues.Unreadable.OutsideType(error)) =>
-                VerificationResult.Inconclusive(
+                Probe.Unreplayed(
                   s"Lean's counterexample is no value of its variable's type: $error"
                 )
             case Right(values) => replayValues(goal, artifact, values)
@@ -1149,7 +1563,7 @@ object UplcBlaster {
         goal: Lowered,
         artifact: Artifact,
         values: List[Constant]
-    ): ExecutionResult = {
+    ): Probe = {
         val shown = goal.binders
             .zip(values)
             .map((binder, value) => s"${binder.name} = ${display(value)}")
@@ -1161,17 +1575,22 @@ object UplcBlaster {
         }
         holds(goal.body, outcomes) match
             case Some(false) =>
-                VerificationResult.Refuted(
-                  Proof(artifact.copy(counterexample = goal.binders.map(_.name).zip(values)))
+                Probe.Decided(
+                  VerificationResult.Refuted(
+                    Proof(artifact.copy(counterexample = goal.binders.map(_.name).zip(values)))
+                  )
                 )
             case Some(true) =>
-                VerificationResult.Inconclusive(
+                Probe.Spurious(
+                  values,
                   s"$falsification is spurious: the statement holds there on the Scalus CEK, so a " +
                       s"test needs more than ${artifact.budget} steps"
                 )
             case None =>
-                VerificationResult.Inconclusive(
-                  s"replaying $falsification exhausted the replay budget"
+                Probe.Decided(
+                  VerificationResult.Inconclusive(
+                    s"replaying $falsification exhausted the replay budget"
+                  )
                 )
     }
 
@@ -1237,13 +1656,12 @@ object UplcBlaster {
         case other                     => other.toString
 
     private def evaluate(program: Program, values: List[Constant]): Outcome = {
-        val applied =
-            values.foldLeft(program.term)((term, value) => Term.Apply(term, Term.Const(value)))
+        val applied = values.foldLeft(program)((applied, value) => applied $ Term.Const(value))
         // A machine error is the predicate's result here: the test failed.
         try
             Outcome.Returned(
               replayVm.evaluateDeBruijnedTerm(
-                DeBruijn.deBruijnTerm(applied),
+                DeBruijn.deBruijnTerm(applied.term),
                 RestrictingBudgetSpender(replayBudget),
                 NoLogger
               )
@@ -1370,10 +1788,6 @@ object UplcBlaster {
         budget: Int,
         maxHeartbeats: Int
     ): String = {
-        val imports = flats.zipWithIndex.map { (flat, index) =>
-            val path = leanString(flat.toAbsolutePath.toString)
-            s"""#import_uplc leaf$index PlutusV3 single_cbor_hex "$path""""
-        }
         val check =
             if goal.binders.isEmpty then
                 val state = (leaf: Int) => s"(runProgramFor leaf$leaf.script [] $budget)"
@@ -1407,6 +1821,18 @@ object UplcBlaster {
                    |
                    |#blaster (gen-cex: 1) [$formula]""".stripMargin
 
+        document(flats, check, maxHeartbeats)
+    }
+
+    /** The text of a check: the library, the limit of Lean's work, the programs in `flats` as
+      * `leaf<n>`, and the commands of `body`. The lines up to the programs are the same in every
+      * check, so the server elaborates them once.
+      */
+    private def document(flats: Vector[Path], body: String, maxHeartbeats: Int): String = {
+        val imports = flats.zipWithIndex.map { (flat, index) =>
+            val path = leanString(flat.toAbsolutePath.toString)
+            s"""#import_uplc leaf$index PlutusV3 single_cbor_hex "$path""""
+        }
         s"""import ScalusProofs.Run
            |
            |set_option maxHeartbeats $maxHeartbeats
@@ -1423,7 +1849,7 @@ object UplcBlaster {
            |
            |${imports.mkString("\n")}
            |
-           |$check
+           |$body
            |
            |end ScalusProofs.Runtime
            |""".stripMargin

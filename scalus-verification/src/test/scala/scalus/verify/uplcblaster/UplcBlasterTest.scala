@@ -13,7 +13,7 @@ import scalus.uplc.builtin.Data.toData
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.lean.Directories
+import scalus.verify.lean.{Directories, LeanServer}
 import scalus.verify.lean.LeanServer.{Progress, Reached, Started}
 
 import java.nio.file.Files
@@ -285,7 +285,8 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
 
     test("requires a positive symbolic execution budget") {
         // No Lean is asked for: a tactic takes its server when it runs a check.
-        assertThrows[IllegalArgumentException](UplcBlaster(0, lean))
+        assertThrows[IllegalArgumentException](UplcBlaster(Budget.LeanSteps(0), lean))
+        assert(UplcBlaster(Budget.Auto, lean).budget == Budget.Auto)
     }
 
     test("lowers a universal prefix and a Boolean body to one n-argument UPLC predicate") {
@@ -808,7 +809,10 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
             val verifier = Verifier.empty
             val statement = verifier.statement(forAll[BigInt](x => x + BigInt(0) == x))
             try
-                verifier.verify(statement, UplcBlaster(40, () => Right(server))) match
+                verifier.verify(
+                  statement,
+                  UplcBlaster(Budget.LeanSteps(40), () => Right(server))
+                ) match
                     case VerificationResult.Failed(reason) =>
                         assert(reason.startsWith("Lean reported an error: "), reason)
                         assert(reason.contains("ScalusProofs"), reason)
@@ -816,12 +820,15 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
             finally server.close()
             // A server that is closed takes no check, and the tactic says so.
             assert(
-              verifier.verify(statement, UplcBlaster(40, () => Right(server))) ==
+              verifier.verify(statement, UplcBlaster(Budget.LeanSteps(40), () => Right(server))) ==
                   VerificationResult.Failed("the Lean server is closed")
             )
             // So it does where its provider has no server to give.
             assert(
-              verifier.verify(statement, UplcBlaster(40, () => Left("no Lean here"))) ==
+              verifier.verify(
+                statement,
+                UplcBlaster(Budget.LeanSteps(40), () => Left("no Lean here"))
+              ) ==
                   VerificationResult.Failed("no Lean here")
             )
         finally Directories.remove(empty)
@@ -848,28 +855,204 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         // statement, which the same tactic proves at its own limit.
         val verifier = Verifier.empty
         val statement = verifier.statement(forAll[BigInt](x => x + BigInt(0) == x))
-        verifier.verify(statement, UplcBlaster(40, lean).withMaxHeartbeats(1)) match
+        verifier.verify(
+          statement,
+          UplcBlaster(Budget.LeanSteps(40), lean).withMaxHeartbeats(1)
+        ) match
             case VerificationResult.Inconclusive(reason) =>
                 assert(reason.startsWith("Lean gave up at its own limit"), reason)
                 assert(reason.contains("maximum number of heartbeats"), reason)
             case other => fail(s"expected an inconclusive result, got $other")
         assert(verifier.theorems.isEmpty)
         assert(
-          verifier.verify(statement, UplcBlaster(40, lean)).isInstanceOf[VerificationResult.Proven]
+          verifier
+              .verify(statement, UplcBlaster(Budget.LeanSteps(40), lean))
+              .isInstanceOf[VerificationResult.Proven]
         )
-        assertThrows[IllegalArgumentException](UplcBlaster(40, lean).withMaxHeartbeats(-1))
+        assertThrows[IllegalArgumentException](
+          UplcBlaster(Budget.LeanSteps(40), lean).withMaxHeartbeats(-1)
+        )
     }
 
     test("a check has a time limit, of ten minutes unless told otherwise") {
         // No Lean is asked for: these are the tactic's own settings.
         assert(UplcBlaster.defaultTimeout == 10.minutes)
-        assert(UplcBlaster(40, lean).timeout.contains(10.minutes))
-        assert(UplcBlaster(40, lean, 30.seconds).timeout.contains(30.seconds))
-        assert(UplcBlaster(40, lean).withoutTimeout.timeout.isEmpty)
+        assert(UplcBlaster(Budget.LeanSteps(40), lean).timeout.contains(10.minutes))
+        assert(UplcBlaster(Budget.LeanSteps(40), lean, 30.seconds).timeout.contains(30.seconds))
+        assert(UplcBlaster(Budget.LeanSteps(40), lean).withoutTimeout.timeout.isEmpty)
         // One limit is set without the other being lost.
-        assert(UplcBlaster(40, lean).withMaxHeartbeats(7).withoutTimeout.maxHeartbeats == 7)
-        assert(UplcBlaster(40, lean, 30.seconds).withMaxHeartbeats(7).timeout.contains(30.seconds))
-        assertThrows[IllegalArgumentException](UplcBlaster(40, lean, 0.seconds))
+        assert(
+          UplcBlaster(Budget.LeanSteps(40), lean)
+              .withMaxHeartbeats(7)
+              .withoutTimeout
+              .maxHeartbeats == 7
+        )
+        assert(
+          UplcBlaster(Budget.LeanSteps(40), lean, 30.seconds)
+              .withMaxHeartbeats(7)
+              .timeout
+              .contains(30.seconds)
+        )
+        assertThrows[IllegalArgumentException](UplcBlaster(Budget.LeanSteps(40), lean, 0.seconds))
+
+        // The time of one attempt is none unless it is set, and is kept by the other settings.
+        val search = UplcBlaster(Budget.Auto, lean, 5.minutes)
+        assert(search.attemptTimeout.isEmpty)
+        val bounded = search.withAttemptTimeout(20.seconds)
+        assert(bounded.attemptTimeout.contains(20.seconds) && bounded.timeout.contains(5.minutes))
+        assert(bounded.withMaxHeartbeats(7).attemptTimeout.contains(20.seconds))
+        // No time limit is neither of the two.
+        assert(
+          bounded.withoutTimeout.attemptTimeout.isEmpty && bounded.withoutTimeout.timeout.isEmpty
+        )
+        assertThrows[IllegalArgumentException](search.withAttemptTimeout(0.seconds))
+    }
+
+    test(
+      "the budget a spurious counterexample asks for is the statement's, not the longest run's"
+    ) {
+        import UplcBlaster.{End, LeafFormula, Run}
+        // No Lean is asked for. A statement that a program fails where a premise holds, as
+        // "an early withdrawal is rejected": test 0 is the premise, test 1 the program.
+        val rejects =
+            LeafFormula.Implies(LeafFormula.Test(0), LeafFormula.Not(LeafFormula.Test(1)))
+
+        // Values the premise is false of. It is seen to be false after 300 steps, and that is
+        // enough, though the program runs for 12000: its budget is the oversized one.
+        val accepted = Vector(Run(300, End.Returned(Some(false))), Run(12000, End.Returned(None)))
+        assert(UplcBlaster.needed(rejects, accepted, above = 100).contains(300))
+
+        // Values the premise is true of: the statement holds once the program has failed.
+        val rejected = Vector(Run(300, End.Returned(Some(true))), Run(1610, End.Failed))
+        assert(UplcBlaster.needed(rejects, rejected, above = 300).contains(1610))
+        assert(!UplcBlaster.holdsWithin(rejects, rejected, 1609, positive = true))
+        assert(UplcBlaster.holdsWithin(rejects, rejected, 1610, positive = true))
+        // Under a smaller budget the premise, not ended, counts as holding, and the program, not
+        // ended, as not having failed.
+        assert(!UplcBlaster.holdsWithin(rejects, rejected, 100, positive = true))
+
+        // A program that has not ended within what is counted gives no budget.
+        val endless = Vector(Run(300, End.Returned(Some(true))), Run(100000, End.Running))
+        assert(UplcBlaster.needed(rejects, endless, above = 300).isEmpty)
+
+        // A test that is claimed has to return `true` within the budget.
+        val returns = LeafFormula.Test(0)
+        def one(end: End): Vector[Run] = Vector(Run(57, end))
+        assert(UplcBlaster.needed(returns, one(End.Returned(Some(true))), above = 10).contains(57))
+        assert(UplcBlaster.needed(returns, one(End.Returned(Some(false))), above = 10).isEmpty)
+        assert(UplcBlaster.needed(returns, one(End.Returned(Some(true))), above = 57).isEmpty)
+        // `denotes` asks only that the program returns.
+        val denoted = LeafFormula.Denotes(0)
+        assert(UplcBlaster.needed(denoted, one(End.Returned(None)), above = 10).contains(57))
+        assert(UplcBlaster.needed(denoted, one(End.Failed), above = 10).isEmpty)
+    }
+
+    test("a counterexample goes back to Lean as the terms it is made of") {
+        // No Lean is asked for. A value of Lean's model need not be one that an encoded program
+        // carries to Lean: a constructor of `Data` with a tag of more than 64 bits is not.
+        assert(UplcBlaster.leanValue(Constant.Integer(BigInt(-5))) == "Const.Integer (-5)")
+        assert(UplcBlaster.leanValue(Constant.Integer(BigInt(7))) == "Const.Integer 7")
+        assert(UplcBlaster.leanValue(Constant.Bool(true)) == "Const.Bool true")
+        assert(
+          UplcBlaster.leanValue(Constant.ByteString(ByteString.fromArray(Array[Byte](0x11, -1)))) ==
+              """Const.ByteString (ByteString.mk "\x11\xff")"""
+        )
+        val tree = Data.Constr(
+          BigInt(2).pow(70),
+          scalus.cardano.onchain.plutus.prelude.List(
+            Data.I(BigInt(-2)),
+            Data.B(ByteString.empty),
+            Data.List(scalus.cardano.onchain.plutus.prelude.List(Data.I(BigInt(3)))),
+            Data.Map(
+              scalus.cardano.onchain.plutus.prelude.List((Data.I(BigInt(1)), Data.I(BigInt(2))))
+            )
+          )
+        )
+        assert(
+          UplcBlaster.leanValue(Constant.Data(tree)) ==
+              "Const.Data (Data.Constr 1180591620717411303424 [(Data.I (-2)), " +
+              "(Data.B (ByteString.mk \"\")), " +
+              "(Data.List [(Data.I 3)]), (Data.Map [((Data.I 1), (Data.I 2))])])"
+        )
+
+        // The count of a test's program takes the values of the variables in its scope.
+        val goal = lowered(forAll[BigInt, Data]((x, d) => x == x), FunctionTable.empty)
+        val values = List[Constant](Constant.Integer(BigInt(-5)), Constant.Data(Data.I(BigInt(0))))
+        val text = UplcBlaster.measureSource(goal, Vector.empty, values, 400000)
+        val count = "#eval measureRun leaf0.script " +
+            "[Term.Const (Const.Integer (-5)), Term.Const (Const.Data (Data.I 0))] 100000"
+        assert(text.linesIterator.contains(count), text)
+    }
+
+    test("Lean reads the values of a counterexample as the tactic writes them") {
+        // The program says whether its byte string has four bytes, so Lean's answer shows that
+        // the bytes came through: a quote, a backslash and a byte above 127 are among them.
+        val sized = forAll[ByteString, Data]((b, d) => Builtins.lengthOfByteString(b) == BigInt(4))
+        val goal = lowered(sized, FunctionTable.empty)
+        val bytes = ByteString.fromArray(Array[Byte]('"', '\\', 0x11, -1))
+        val tree = Data.Constr(
+          BigInt(2).pow(70),
+          scalus.cardano.onchain.plutus.prelude.List(
+            Data.I(BigInt(-2)),
+            Data.B(bytes),
+            Data.List(scalus.cardano.onchain.plutus.prelude.List(Data.I(BigInt(3)))),
+            Data.Map(scalus.cardano.onchain.plutus.prelude.List((Data.I(BigInt(1)), Data.B(bytes))))
+          )
+        )
+        val server = leanServer
+        val directory = Files.createTempDirectory("scalus-count-")
+        try
+            UplcBlaster.writeCheck(goal, 40, directory)
+            val flats = goal.leaves.indices.map(index => directory.resolve(s"Leaf$index.flat"))
+            val text = UplcBlaster.measureSource(
+              goal,
+              flats.toVector,
+              List(Constant.ByteString(bytes), Constant.Data(tree)),
+              UplcBlaster.defaultMaxHeartbeats
+            )
+            server.check(text, Some(2.minutes)) match
+                case LeanServer.Result.Finished(messages) =>
+                    assert(!messages.exists(_.severity == LeanServer.Severity.Error), messages)
+                    assert(messages.exists(_.text.trim.matches("\"?\\d+ true\"?")), messages)
+                case other => fail(s"expected Lean's count, got $other")
+        finally Directories.remove(directory)
+    }
+
+    test("an attempt of a search is given up at its own time limit") {
+        // No check is answered within a millisecond, so the first attempt is given up, and the
+        // search with it: a larger budget would only take longer.
+        val statement = forAll[BigInt](x => x + BigInt(0) == x)
+        val hurried = UplcBlaster(Budget.Auto, lean, 5.minutes).withAttemptTimeout(1.milli)
+        val sought = inconclusive(statement, hurried)
+        assert(
+          sought.startsWith("Lean did not finish within 1 millisecond, the time of one attempt")
+        )
+        assert(sought.contains("The tactic sought the budget, and tried 100 steps"), sought)
+        // The suite's server takes the next statement.
+        assert(provenAt(statement) == 100)
+    }
+
+    test("the tactic finds a budget, from the counterexamples that smaller ones give") {
+        // A closed statement, whose program needs more steps than the search starts with: a few
+        // rounds of `gcd`.
+        val gcd = FunctionDef(Math.gcd)
+        val coprime = callRef(gcd.ref, (BigInt(-19), BigInt(14)))(r => r == BigInt(1))
+        val closed = provenAt(coprime, gcd)
+        assert(closed > 100, closed)
+        // It is the least: one step fewer leaves the program unfinished.
+        assert(inconclusive(coprime, closed - 1, 2.minutes, gcd).contains("spurious"))
+        assert(proof(coprime, Budget.LeanSteps(closed), gcd).budget == closed)
+
+        // A statement with quantified variables.
+        val keyLength = forAll[BlasterOwned](o =>
+            Builtins.lengthOfByteString(o.owner.key) >= BigInt(0) && o.amount == o.amount
+        )
+        val quantified = provenAt(keyLength)
+        assert(proof(keyLength, Budget.LeanSteps(quantified)).budget == quantified)
+
+        // A false statement is refuted, at whatever budget shows it.
+        val negative = refuted(forAll[BlasterOwned](o => o.amount >= BigInt(0)), Budget.Auto)
+        assert(negative.exists((name, value) => name.endsWith(".amount") && integer(value) < 0))
     }
 
     test("a check that is given up says how far it had come") {
@@ -983,7 +1166,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
 
         // The verifier gives the reason as an unsupported result, and Lean is not asked.
         val verifier = Verifier.empty
-        verifier.verify(verifier.statement(shape), UplcBlaster(10, lean)) match
+        verifier.verify(verifier.statement(shape), UplcBlaster(Budget.LeanSteps(10), lean)) match
             case VerificationResult.Unsupported(report) =>
                 val reasons = report.issues.collect {
                     case CompatibilityIssue.UnsupportedFeature(_, reason) => reason

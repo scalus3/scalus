@@ -88,7 +88,7 @@ trait LeanProofs extends Assertions with BeforeAndAfterAll { this: Suite =>
     /** Declares `prop` in a fresh verifier and runs [[UplcBlaster]] on it through Lean. */
     protected def run(
         prop: Prop,
-        budget: Int,
+        budget: Budget,
         functions: Seq[FunctionDef[?, ?]]
     ): (Verifier, Statement, VerificationResult) = {
         requireLean()
@@ -98,8 +98,27 @@ trait LeanProofs extends Assertions with BeforeAndAfterAll { this: Suite =>
         (verifier, statement, verifier.verify(statement, UplcBlaster(budget, lean)))
     }
 
-    /** Proves `prop`, and returns how the proof was checked. */
+    /** [[run]], at a budget of `budget` steps of Lean's machine. */
+    protected def run(
+        prop: Prop,
+        budget: Int,
+        functions: Seq[FunctionDef[?, ?]]
+    ): (Verifier, Statement, VerificationResult) = run(prop, Budget.LeanSteps(budget), functions)
+
+    /** Proves `prop` at a budget of `budget` steps, and returns how the proof was checked. */
     protected def proven(prop: Prop, budget: Int, functions: FunctionDef[?, ?]*): ProofKind =
+        proof(prop, Budget.LeanSteps(budget), functions*).kind
+
+    /** Proves `prop` at a budget the tactic finds, and returns that budget. */
+    protected def provenAt(prop: Prop, functions: FunctionDef[?, ?]*): Int =
+        proof(prop, Budget.Auto, functions*).budget
+
+    /** Proves `prop`, and returns what the tactic keeps of the proof. */
+    protected def proof(
+        prop: Prop,
+        budget: Budget,
+        functions: FunctionDef[?, ?]*
+    ): UplcBlaster.Artifact =
         run(prop, budget, functions) match
             case (verifier, statement, VerificationResult.Proven(proof)) =>
                 val artifact = proof.artifact.asInstanceOf[UplcBlaster.Artifact]
@@ -110,13 +129,21 @@ trait LeanProofs extends Assertions with BeforeAndAfterAll { this: Suite =>
                     case ProofKind.LeanNative => assert(!artifact.output.contains("error"))
                     case other                => fail(s"unexpected proof kind $other")
                 assert(verifier.theorems.exists(_.statement eq statement))
-                artifact.kind
+                artifact
             case (_, _, other) => fail(s"expected a proof, got $other")
+
+    /** The replayed counterexample of a statement that is refuted at a budget of `budget` steps.
+      */
+    protected def refuted(
+        prop: Prop,
+        budget: Int,
+        functions: FunctionDef[?, ?]*
+    ): Map[String, Constant] = refuted(prop, Budget.LeanSteps(budget), functions*)
 
     /** The replayed counterexample of a refuted statement. */
     protected def refuted(
         prop: Prop,
-        budget: Int,
+        budget: Budget,
         functions: FunctionDef[?, ?]*
     ): Map[String, Constant] =
         run(prop, budget, functions) match
@@ -132,7 +159,8 @@ trait LeanProofs extends Assertions with BeforeAndAfterAll { this: Suite =>
         budget: Int,
         timeout: FiniteDuration,
         functions: FunctionDef[?, ?]*
-    ): String = inconclusive(prop, UplcBlaster(budget, lean, timeout), functions*)
+    ): String =
+        inconclusive(prop, UplcBlaster(Budget.LeanSteps(budget), lean, timeout), functions*)
 
     /** Why `tactic` is inconclusive about `prop`. */
     protected def inconclusive(

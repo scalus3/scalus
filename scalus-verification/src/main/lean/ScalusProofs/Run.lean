@@ -53,6 +53,35 @@ def halted (s : State) : Bool :=
   | .Halt _ => true
   | _ => false
 
+/-- The steps `Sigma` takes until it halts or fails, at most `n` of them, with the state it is in
+    then. `made` counts the steps before `Sigma`. The count is the least budget at which
+    `runFor` ends in that state. -/
+def stepsFor (semanticsVariant : BuiltinSemanticsVariant) (Sigma : State) (n : Nat)
+    (made : Nat := 0) : Nat × State :=
+  match n, Sigma with
+  | _, State.Halt _ => (made, Sigma)
+  | _, State.Error => (made, Sigma)
+  | 0, _ => (made, Sigma)
+  | Nat.succ n, _ => stepsFor semanticsVariant (step semanticsVariant Sigma) n (made + 1)
+
+/-- What a program does on `params` within `n` steps, for the `UplcBlaster` tactic to read: the
+    steps it made, and `true` or `false` where it returned that, `returned` where it returned
+    another value, `failed`, or `running` where it has done neither after `n` steps. The tactic
+    finds a budget with it: on a counterexample that is spurious, this is how many steps each
+    test needs. -/
+def measureRun (p : Program) (params : List Term) (n : Nat) : String :=
+  match p with
+  | Program.Program _ body =>
+    let (made, state) := stepsFor default (initialState (applyParams body params)) n
+    let outcome :=
+      match state with
+      | .Halt (.VCon (Const.Bool true)) => "true"
+      | .Halt (.VCon (Const.Bool false)) => "false"
+      | .Halt _ => "returned"
+      | .Error => "failed"
+      | _ => "running"
+    s!"{made} {outcome}"
+
 section
 open Lean Elab Command Meta Blaster.Optimize
 
