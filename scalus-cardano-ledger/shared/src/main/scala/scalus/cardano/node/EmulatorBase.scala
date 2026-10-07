@@ -260,6 +260,15 @@ trait EmulatorBase extends BlockchainProvider {
     def addUtxo(input: TransactionInput, output: TransactionOutput): Unit =
         updateState(_.withUtxo(input, output))
 
+    /** Pays `amount` into the reward balance of a registered account, as the epoch boundary pays
+      * rewards in the Haskell ledger. Nothing else changes: no deposit, no pot, no slot.
+      *
+      * @throws IllegalArgumentException
+      *   if `credential` is not registered, or `amount` is negative
+      */
+    def addRewards(credential: Credential, amount: Coin): Unit =
+        updateState(_.withRewards(credential, amount))
+
     /** Removes a UTxO from the ledger directly, bypassing transaction validation. A no-op if no
       * UTxO sits at that input.
       *
@@ -415,6 +424,23 @@ case class EmulatorState private (
       */
     private[scalus] def withSeededDatums(seeded: Map[DataHash, KeepRaw[Data]]): EmulatorState =
         copy(binaryDatums = seeded ++ binaryDatums)
+
+    /** The state with `amount` added to the reward balance of the account of `credential`. */
+    def withRewards(credential: Credential, amount: Coin): EmulatorState = {
+        require(amount.value >= 0, s"rewards must not be negative, got ${amount.value}")
+        val dstate = ledger.certState.dstate
+        val account = dstate.accounts.getOrElse(
+          credential,
+          throw new IllegalArgumentException(s"no registered account for $credential")
+        )
+        val accounts =
+            dstate.accounts.updated(credential, account.copy(balance = account.balance + amount))
+        copy(ledger =
+            ledger.copy(certState =
+                ledger.certState.copy(dstate = dstate.copy(accounts = accounts))
+            )
+        )
+    }
 
     /** The state with the UTxO at `input` dropped, for the direct ledger edits that bypass
       * validation. A no-op if none sits there.

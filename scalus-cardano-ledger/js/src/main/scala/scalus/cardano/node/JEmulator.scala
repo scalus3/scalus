@@ -3,9 +3,9 @@ package scalus.cardano.node
 import scalus.interop.{TsName, TsType}
 import scalus.uplc.DebugScript
 import scalus.uplc.builtin.{ByteString, Data}
-import scalus.uplc.eval.{JEvaluator, JRedeemerBudget}
+import scalus.uplc.eval.{JBalancer, JEvaluator, JRedeemerBudget}
 import scalus.utils.scalajs.internal.*
-import scalus.cardano.address.{Address, StakeAddress}
+import scalus.cardano.address.{Address, StakeAddress, StakePayload}
 import scalus.cardano.ledger.rules.{Context, UtxoEnv}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
@@ -77,6 +77,16 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
             )
     }
 
+    /** The wall clock's time source in POSIX milliseconds; `None` for a manual clock. */
+    private var wallClock: Option[() => Double] = None
+
+    /** On a wall clock, moves to the slot that contains now, never backwards. */
+    private def syncClock(): Unit =
+        wallClock.foreach { now =>
+            val slot = emulator.currentContext.slotConfig.timeToSlot(now().toLong)
+            if slot > emulator.currentContext.env.slot then emulator.setSlot(slot)
+        }
+
     /** Network, slot configuration and protocol parameters this emulator validates transactions
       * against, as one coherent triple. For an emulator built with `Emulator.create`, this is
       * exactly the `CardanoInfo` it was created from; for the deprecated constructors, protocol
@@ -125,6 +135,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         extra: => Utxos
     ): js.Array[JRedeemerBudget] =
         surfacingErrors {
+            syncClock()
             val tx = Transaction.fromCbor(txCborBytes.toByteArray)
             val info = emulator.cardanoInfo
             JEvaluator
@@ -153,6 +164,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       *   produced any). A rejected transaction leaves the ledger unchanged.
       */
     def submitTx(txCborBytes: Uint8Array): JSubmitResult =
+        syncClock()
         decodeTx(txCborBytes) match
             case Right(tx)      => formatSubmitResult(emulator.submitSync(tx))
             case Left(rejected) => rejected
@@ -171,6 +183,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       *   The same shape as the one-argument `submitTx`.
       */
     def submitTx(txCborBytes: Uint8Array, debugScripts: js.Dictionary[String]): JSubmitResult = {
+        syncClock()
         val tx = decodeTx(txCborBytes) match
             case Right(tx)      => tx
             case Left(rejected) => return rejected
@@ -425,14 +438,17 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       */
     def getTreasury(): js.BigInt = emulator.treasury.value.toJsBigInt
 
-    /** The current slot number of the emulator. */
+    /** The current slot number of the emulator. With clock `"wall"`, reading it does not move the
+      * clock: only `submitTx` and `evaluateTx` do.
+      */
     def getSlot(): Double = emulator.currentContext.env.slot.toDouble
 
     /** Advance the current slot by `n` slots. */
     def tick(n: Double): Unit = emulator.tick(n.toLong)
 
     /** POSIX time in milliseconds at which the emulator's current slot starts. Equivalent to
-      * `getCardanoInfo().slotConfig.slotToTime(getSlot())`.
+      * `getCardanoInfo().slotConfig.slotToTime(getSlot())`. With clock `"wall"`, reading it does
+      * not move the clock: only `submitTx` and `evaluateTx` do.
       */
     def getTime(): Double =
         emulator.currentContext.slotConfig.slotToTime(emulator.currentContext.env.slot).toDouble
@@ -507,6 +523,42 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
             .asInstanceOf[JDelegationInfo]
     }
 
+    /** Pays `lovelace` into a registered reward account, as an epoch boundary pays rewards. A later
+      * withdrawal of the balance needs no registration first.
+      *
+      * @param rewardAddressBech32
+      *   The reward (stake) address in bech32 form, for example `stake1...` or `stake_test1...`.
+      * @throws Error
+      *   if the account is not registered, or `lovelace` is negative.
+      */
+    def addRewards(rewardAddressBech32: String, lovelace: js.BigInt): Unit =
+        emulator.addRewards(
+          rewardAddressCredential(rewardAddressBech32),
+          Coin(longOf(lovelace, "lovelace"))
+        )
+
+    /** The reward account of a reward address.
+      *
+      * @param rewardAddressBech32
+      *   The reward (stake) address in bech32 form, for example `stake1...` or `stake_test1...`.
+      * @return
+      *   The account, or `undefined` if it is not registered.
+      */
+    def getAccount(rewardAddressBech32: String): js.UndefOr[JAccountInfo] =
+        emulator.certState.dstate.accounts
+            .get(rewardAddressCredential(rewardAddressBech32))
+            .map { account =>
+                js.Dynamic
+                    .literal(
+                      balance = account.balance.value.toJsBigInt,
+                      deposit = account.deposit.value.toJsBigInt,
+                      poolId = account.stakePoolDelegation.map(_.toHex).orUndefined,
+                      drep = account.dRepDelegation.map(JEmulator.drepOf).orUndefined
+                    )
+                    .asInstanceOf[JAccountInfo]
+            }
+            .orUndefined
+
     /** Parses a bech32 reward (stake) address into its credential - the shared parsing
       * `getDelegation` and `getStakeReward` need.
       *
@@ -545,6 +597,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
               js.Dynamic
                   .literal(
                     credential = credentialHex(entry.credential),
+                    rewardAddress = rewardAddressOf(entry.credential),
                     pool = entry.pool.map(_.toHex).orUndefined,
                     stake = entry.stake.value.toJsBigInt,
                     rewards = entry.rewards.value.toJsBigInt
@@ -553,6 +606,19 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
             )
         }
         out
+    }
+
+    /** The bech32 reward address of `credential` on this emulator's network. */
+    private def rewardAddressOf(credential: Credential): String = {
+        val payload = credential match
+            case Credential.KeyHash(hash) => StakePayload.Stake(StakeKeyHash.fromByteString(hash))
+            case Credential.ScriptHash(hash) => StakePayload.Script(hash)
+        val address = StakeAddress(emulator.currentContext.env.network, payload)
+        address.toBech32.getOrElse(
+          throw new IllegalStateException(
+            s"Reward address ${address.toHex} cannot be encoded to bech32: no human-readable prefix is defined for its network"
+          )
+        )
     }
 
     private def credentialHex(credential: Credential): String = credential match
@@ -613,6 +679,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
           initialStakeRewards
         )
         JEmulator.replaceEmulator(wrapper, snapshotEmulator)
+        wrapper.wallClock = wallClock
         wrapper
     }
 }
@@ -664,6 +731,28 @@ trait JDelegationInfo extends js.Object {
     val rewards: js.BigInt
 }
 
+/** A registered reward account, returned by `Emulator.getAccount`. */
+@TsName("AccountInfo")
+trait JAccountInfo extends js.Object {
+
+    /** Reward balance in lovelace. */
+    val balance: js.BigInt
+
+    /** The deposit paid to register the account, in lovelace. */
+    val deposit: js.BigInt
+
+    /** Hex-encoded 28-byte key hash of the pool the account delegates to, or `undefined`. */
+    val poolId: js.UndefOr[String]
+
+    /** The DRep the account delegates its vote to, or `undefined`: a key or script credential with
+      * its hex-encoded 28-byte hash, or one of the two predefined DReps by name.
+      */
+    @TsType(
+      "{ readonly type: \"key\" | \"script\"; readonly hash: string } | \"AlwaysAbstain\" | \"AlwaysNoConfidence\""
+    )
+    val drep: js.UndefOr[js.Any]
+}
+
 /** One row of `Emulator.getAppliedTxs`. */
 @TsName("AppliedTxInfo")
 trait JAppliedTxInfo extends js.Object {
@@ -683,6 +772,9 @@ trait JsStakeDistributionEntry extends js.Object {
       * the same convention `UtxoFilter.paymentCredential` uses.
       */
     val credential: String
+
+    /** The reward (stake) address of this credential in bech32, on the emulator's network. */
+    val rewardAddress: String
 
     /** Hex-encoded 28-byte pool key hash, or `undefined` if this credential delegates to no pool.
       */
@@ -718,7 +810,8 @@ trait JEmulatorInitialState extends js.Object {
 
     /** Datums to put in the emulator's datum store, where `getDatum` looks them up by hash. The
       * store is only a lookup table: every accepted transaction adds the datums it witnesses to it,
-      * and validation still requires a transaction to carry the datums it needs.
+      * and validation still requires a transaction to carry the datums it needs. Each `hash` must
+      * be the blake2b-256 hash of its `datum` bytes.
       */
     val datums: js.UndefOr[js.Array[JDatumEntry]] = js.undefined
 }
@@ -743,7 +836,8 @@ trait JStakeRegistration extends js.Object {
     val delegatedTo: js.UndefOr[String] = js.undefined
 }
 
-/** Pool registration entry for `EmulatorInitialState`. */
+/** Pool registration entry for `EmulatorInitialState`. Give exactly one of `params` and `poolId`.
+  */
 @TsName("PoolRegistration")
 trait JPoolRegistration extends js.Object {
 
@@ -752,7 +846,13 @@ trait JPoolRegistration extends js.Object {
       * cost, margin, reward account, owners, relays and metadata. The bare parameter list without
       * the certificate tag is rejected.
       */
-    val params: Uint8Array
+    val params: js.UndefOr[Uint8Array] = js.undefined
+
+    /** Hex-encoded 28-byte pool key hash, for a pool whose parameters do not matter: its operator
+      * is its only owner and takes its rewards, with no pledge, the minimum cost, no margin and no
+      * relays.
+      */
+    val poolId: js.UndefOr[String] = js.undefined
 }
 
 /** DRep registration entry for `EmulatorInitialState`. */
@@ -803,7 +903,12 @@ trait JsEmulatorOptions extends js.Object {
       */
     val stakeRegistrations: js.UndefOr[js.Array[JStakeRegistration]] = js.undefined
 
-    /** Stake pools that count as already registered, so transactions may delegate to them. */
+    /** Stake pools that count as already registered, so transactions may delegate to them. Each
+      * gives exactly one of `params` and `poolId`.
+      */
+    @TsType(
+      "readonly (PoolRegistration & ({ params: Uint8Array; poolId?: undefined } | { poolId: string; params?: undefined }))[]"
+    )
     val poolRegistrations: js.UndefOr[js.Array[JPoolRegistration]] = js.undefined
 
     /** DReps that count as already registered, so transactions may delegate votes to them. */
@@ -811,15 +916,31 @@ trait JsEmulatorOptions extends js.Object {
 
     /** Datums to put in the emulator's datum store, where `getDatum` looks them up by hash. The
       * store is only a lookup table: every accepted transaction adds the datums it witnesses to it,
-      * and validation still requires a transaction to carry the datums it needs.
+      * and validation still requires a transaction to carry the datums it needs. Each `hash` must
+      * be the blake2b-256 hash of its `datum` bytes.
       */
     val datums: js.UndefOr[js.Array[JDatumEntry]] = js.undefined
 
     /** The treasury in lovelace at the start of the current epoch. Defaults to 0. A transaction
       * that states a `currentTreasuryValue` must state this value until the next epoch boundary,
-      * which adds the donations of the epoch to it.
+      * which adds the donations of the epoch to it. A negative value throws a `TypeError`.
       */
     val treasury: js.UndefOr[js.BigInt] = js.undefined
+
+    /** Protocol parameters that replace those of the `CardanoInfo`. Only the fields given change,
+      * and in `costModels` only the languages given: every other value stays as the `CardanoInfo`
+      * has it. `getProtocolParameters` returns the result.
+      */
+    @TsType("Partial<ProtocolParamsLike>")
+    val protocolParams: js.UndefOr[js.Any] = js.undefined
+
+    /** `"manual"`, the default: the slot moves only when you move it. `"wall"`: before it validates
+      * or evaluates a transaction, the emulator moves to the slot that contains `Date.now()`, never
+      * backwards, so a validity interval built from the wall clock holds. `getSlot` and `getTime`
+      * do not move the clock: only `submitTx` and `evaluateTx` do.
+      */
+    @TsType("\"manual\" | \"wall\"")
+    val clock: js.UndefOr[String] = js.undefined
 }
 
 /** Identifies one transaction output: the pair a `TransactionInput` is made of. */
@@ -877,6 +998,13 @@ object JEmulator {
           "limit"
         )
 
+    /** A DRep as `getAccount` reports it. */
+    private def drepOf(drep: DRep): js.Any = drep match
+        case DRep.KeyHash(hash)      => js.Dynamic.literal(`type` = "key", hash = hash.toHex)
+        case DRep.ScriptHash(hash)   => js.Dynamic.literal(`type` = "script", hash = hash.toHex)
+        case DRep.AlwaysAbstain      => "AlwaysAbstain"
+        case DRep.AlwaysNoConfidence => "AlwaysNoConfidence"
+
     private def replaceEmulator(wrapper: JEmulator, e: Emulator): Unit =
         wrapper.emulator = e
 
@@ -903,17 +1031,40 @@ object JEmulator {
         }
 
     private def parsePoolRegistrations(
-        regs: js.UndefOr[js.Array[JPoolRegistration]]
+        regs: js.UndefOr[js.Array[JPoolRegistration]],
+        env: UtxoEnv
     ): Seq[EmulatorPoolRegistration] =
         regs.toOption.toSeq.flatten.map { p =>
-            val params = JsCbor.decode[Certificate](p.params) match
-                case pr: Certificate.PoolRegistration => pr
-                case other =>
-                    throw new IllegalArgumentException(
-                      s"Expected PoolRegistration certificate, got: $other"
-                    )
+            val params = (p.params.toOption, p.poolId.toOption) match
+                case (Some(cbor), None) =>
+                    JsCbor.decode[Certificate](cbor) match
+                        case pr: Certificate.PoolRegistration => pr
+                        case other =>
+                            typeError(s"Expected PoolRegistration certificate, got: $other")
+                case (None, Some(hex)) => minimalPool(PoolKeyHash.fromHex(hex), env)
+                case _ => typeError("a pool registration needs exactly one of params and poolId")
             EmulatorPoolRegistration(params)
         }
+
+    /** A pool `poolId` operates alone: owner and reward account are its own key, with no pledge,
+      * the minimum cost, no margin and no relays.
+      */
+    private def minimalPool(poolId: PoolKeyHash, env: UtxoEnv): Certificate.PoolRegistration = {
+        val operator = AddrKeyHash.fromByteString(poolId)
+        Certificate.PoolRegistration(
+          operator = operator,
+          vrfKeyHash = VrfKeyHash.fromByteString(ByteString.fromArray(new Array[Byte](32))),
+          pledge = Coin.zero,
+          cost = Coin(env.params.minPoolCost),
+          margin = UnitInterval.zero,
+          rewardAccount = RewardAccount(
+            StakeAddress(env.network, StakePayload.Stake(StakeKeyHash.fromByteString(poolId)))
+          ),
+          poolOwners = Set(operator),
+          relays = IndexedSeq.empty,
+          poolMetadata = None
+        )
+    }
 
     private def parseDrepRegistrations(
         regs: js.UndefOr[js.Array[JDRepRegistration]]
@@ -926,13 +1077,21 @@ object JEmulator {
             )
         }
 
-    /** The datums of `entries`, keeping the bytes each was given in, spec [SC-13k]. */
+    /** The datums of `entries`, keeping the bytes each was given in, spec [SC-13k]. An entry whose
+      * `hash` is not the hash of its `datum` bytes throws a `TypeError`.
+      */
     private def parseDatums(
         entries: js.UndefOr[js.Array[JDatumEntry]]
     ): Map[DataHash, KeepRaw[Data]] =
         entries.toOption.toSeq.flatten.map { e =>
             val bytes = ByteString.fromHex(e.datum).bytes
-            DataHash.fromHex(e.hash) -> KeepRaw.unsafe(Data.fromCbor(bytes), bytes)
+            val datum = KeepRaw.unsafe(Data.fromCbor(bytes), bytes)
+            val hash = DataHash.fromHex(e.hash)
+            if datum.dataHash != hash then
+                typeError(
+                  s"datum hash ${e.hash} is not the hash of its bytes, ${datum.dataHash.toHex}"
+                )
+            hash -> datum
         }.toMap
 
     // The deprecated constructor is still the only way to obtain a `JEmulator` instance to write
@@ -968,37 +1127,69 @@ object JEmulator {
       *   Network, slot configuration and protocol parameters, as one coherent triple.
       * @param options
       *   UTxOs and registrations to start from. Every field is optional.
+      * @throws TypeError
+      *   if an option is invalid.
       */
     @JSExportStatic
-    def create(info: JsCardanoInfo, options: JsEmulatorOptions): JEmulator = {
-        val cardanoInfo = info.underlying
+    def create(info: JsCardanoInfo, options: JsEmulatorOptions): JEmulator =
+        create(info, options, () => js.Date.now())
+
+    /** `create`, with `now` as the time source of the wall clock and of the default slot. Every
+      * invalid option throws a `TypeError`, as the other input checks of the facade do.
+      */
+    private[node] def create(
+        info: JsCardanoInfo,
+        options: JsEmulatorOptions,
+        now: () => Double
+    ): JEmulator =
+        try createUnchecked(info, options, now)
+        catch
+            case e: js.JavaScriptException => throw e
+            case NonFatal(e)               => typeError(Option(e.getMessage).getOrElse(e.toString))
+
+    private def createUnchecked(
+        info: JsCardanoInfo,
+        options: JsEmulatorOptions,
+        now: () => Double
+    ): JEmulator = {
+        val wall = options.clock.toOption match
+            case None | Some("manual") => false
+            case Some("wall")          => true
+            case Some(other) => typeError(s"clock must be \"manual\" or \"wall\", got: \"$other\"")
+        val cardanoInfo = options.protocolParams.toOption.fold(info.underlying) { params =>
+            val base = info.underlying
+            base.copy(protocolParams =
+                JBalancer.paramsOf(params, "protocolParams", base.protocolParams)
+            )
+        }
         val utxos: Utxos = options.utxos.toOption.toSeq.flatten.map { u =>
             JsUtxo.input(u) -> JsUtxo.output(u)
         }.toMap
         val slot: SlotNo = options.slot.toOption
             .map(_.toLong)
-            .getOrElse(cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()))
+            .getOrElse(cardanoInfo.slotConfig.timeToSlot(now().toLong))
+        val treasury = Coin(options.treasury.toOption.fold(0L)(longOf(_, "treasury")))
+        if treasury.value < 0 then typeError("treasury must not be negative")
+        val env = UtxoEnv(
+          slot,
+          cardanoInfo.protocolParams,
+          CertState.empty,
+          cardanoInfo.network,
+          treasury
+        )
         val initState = EmulatorInitialState(
           utxos = utxos,
           stakeRegistrations = parseStakeRegistrations(options.stakeRegistrations),
-          poolRegistrations = parsePoolRegistrations(options.poolRegistrations),
+          poolRegistrations = parsePoolRegistrations(options.poolRegistrations, env),
           drepRegistrations = parseDrepRegistrations(options.drepRegistrations),
           datums = Map.empty
         )
-        val treasury = Coin(options.treasury.toOption.fold(0L)(longOf(_, "treasury")))
-        val context = Context(
-          env = UtxoEnv(
-            slot,
-            cardanoInfo.protocolParams,
-            CertState.empty,
-            cardanoInfo.network,
-            treasury
-          ),
-          slotConfig = cardanoInfo.slotConfig
-        )
+        val context = Context(env = env, slotConfig = cardanoInfo.slotConfig)
         val scalaEmulator = Emulator.withState(initState, context)
         scalaEmulator.seedDatums(parseDatums(options.datums))
-        wrapScalaEmulator(scalaEmulator, JsSlotConfig.wrap(cardanoInfo.slotConfig))
+        val wrapper = wrapScalaEmulator(scalaEmulator, JsSlotConfig.wrap(cardanoInfo.slotConfig))
+        if wall then wrapper.wallClock = Some(now)
+        wrapper
     }
 
     /** Creates an emulator seeded with a full starting ledger state: UTxOs, and optionally stake
@@ -1014,16 +1205,16 @@ object JEmulator {
     @JSExportStatic
     def withState(state: JEmulatorInitialState, slotConfig: JsSlotConfig): JEmulator = {
         val utxos = JsCbor.decode(state.utxos)(using Utxos.mapOrPairsDecoder)
-        val initState = EmulatorInitialState(
-          utxos = utxos,
-          stakeRegistrations = parseStakeRegistrations(state.stakeRegistrations),
-          poolRegistrations = parsePoolRegistrations(state.poolRegistrations),
-          drepRegistrations = parseDrepRegistrations(state.drepRegistrations),
-          datums = Map.empty
-        )
         val env =
             if slotConfig.underlying == SlotConfig.mainnet then UtxoEnv.testMainnet()
             else UtxoEnv.default
+        val initState = EmulatorInitialState(
+          utxos = utxos,
+          stakeRegistrations = parseStakeRegistrations(state.stakeRegistrations),
+          poolRegistrations = parsePoolRegistrations(state.poolRegistrations, env),
+          drepRegistrations = parseDrepRegistrations(state.drepRegistrations),
+          datums = Map.empty
+        )
         val context = new Context(env = env, slotConfig = slotConfig.underlying)
         val scalaEmulator = Emulator.withState(initState, context)
         scalaEmulator.seedDatums(parseDatums(state.datums))

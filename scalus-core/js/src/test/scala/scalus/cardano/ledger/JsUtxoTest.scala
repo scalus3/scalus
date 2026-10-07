@@ -4,6 +4,7 @@ import io.bullet.borer.Cbor
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{Address, Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.Program
 import scalus.utils.Hex
 
 import scalus.utils.scalajs.internal.*
@@ -141,13 +142,55 @@ class JsUtxoTest extends AnyFunSuite {
         )
 
         for bad <- Seq[js.Any](
-              js.Dynamic.literal(`type` = "PlutusV4", script = "00"),
+              js.Dynamic.literal(`type` = "PlutusV9", script = "00"),
               js.Dynamic.literal(`type` = "Native", script = "zz"),
               "00"
             )
         do
             val e = intercept[js.JavaScriptException](utxo.withScriptRef(bad)).exception
             assert(e.isInstanceOf[js.TypeError], e)
+    }
+
+    test("script returns { type, script }, the inverse of withScriptRef") {
+        // spec [SC-11], [SC-11a]: double-CBOR hex for Plutus, CBOR hex for Native
+        val utxo = JsUtxo.wrap(TransactionInput(hash, 0), TransactionOutput(address, Value.ada(1)))
+        def roundTrip(tpe: String, script: js.Any): (String, String) = {
+            val back = utxo
+                .withScriptRef(js.Dynamic.literal(`type` = tpe, script = script))
+                .script
+                .toOption
+                .getOrElse(fail("no script"))
+            (back.`type`, back.script)
+        }
+        val v1 = Program.parseUplc("(program 1.0.0 (lam x x))").toOption.get
+        val v3 = Program.parseUplc("(program 1.1.0 (lam x (lam y x)))").toOption.get
+        for (tpe, program) <- Seq(
+              "PlutusV1" -> v1,
+              "PlutusV2" -> v1,
+              "PlutusV3" -> v3,
+              "PlutusV4" -> v3
+            )
+        do
+            assert(roundTrip(tpe, program.doubleCborHex) == (tpe, program.doubleCborHex))
+            // flat and single CBOR come back as double CBOR
+            assert(roundTrip(tpe, program.flatEncoded.toUint8Array) == (tpe, program.doubleCborHex))
+            assert(
+              roundTrip(tpe, Hex.bytesToHex(program.cborEncoded)) == (tpe, program.doubleCborHex)
+            )
+
+        val native = Hex.bytesToHex(Timelock.Signature(AddrKeyHash.fromHex("ab" * 28)).toCbor)
+        assert(roundTrip("Native", native) == ("Native", native))
+        assert(utxo.script.toOption.isEmpty)
+    }
+
+    test("toObject carries script") {
+        // spec [SC-11b]
+        val native = Hex.bytesToHex(Timelock.TimeStart(5).toCbor)
+        val utxo = JsUtxo
+            .wrap(TransactionInput(hash, 0), TransactionOutput(address, Value.ada(1)))
+            .withScriptRef(js.Dynamic.literal(`type` = "Native", script = native))
+        val plain = utxo.toObject().script.toOption.getOrElse(fail("no script"))
+        assert((plain.`type`, plain.script) == ("Native", native))
     }
 
     test("scriptHash ignores the wrapping; dataHash hashes the CBOR as given") {
@@ -250,7 +293,8 @@ class JsUtxoTest extends AnyFunSuite {
             "datumHash",
             "inlineDatum",
             "scriptRef",
-            "scriptLanguage"
+            "scriptLanguage",
+            "script"
           )
         )
         assert(plain.txHash == utxo.txHash)

@@ -24,7 +24,7 @@ object JsHashes {
     @JSExportTopLevel("scriptHash")
     def scriptHash(
         @TsType(
-          "Uint8Array | { readonly type: \"Native\" | \"PlutusV1\" | \"PlutusV2\" | \"PlutusV3\"; readonly script: string | Uint8Array }"
+          "Uint8Array | { readonly type: \"Native\" | \"PlutusV1\" | \"PlutusV2\" | \"PlutusV3\" | \"PlutusV4\"; readonly script: string | Uint8Array }"
         ) script: js.Any
     ): String = JsUtxo.scriptOf(script).scriptHash.toHex
 

@@ -5,6 +5,7 @@ import scalus.cardano.address.Address
 import scalus.interop.{TsName, TsType}
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
+import scalus.utils.Hex
 import scalus.utils.scalajs.internal.*
 
 import scala.scalajs.js
@@ -24,6 +25,18 @@ trait JsPlainUtxo extends js.Object {
     val inlineDatum: js.UndefOr[Uint8Array]
     val scriptRef: js.UndefOr[Uint8Array]
     val scriptLanguage: js.UndefOr[String]
+    val script: js.UndefOr[JsPlainScript]
+}
+
+/** A script as `{ type, script }`, the shape `withScriptRef` takes and Lucid's `Script` has.
+  * `script` is hex: the native-script CBOR for `"Native"`, and for Plutus the program in double
+  * CBOR.
+  */
+@TsName("PlainScript")
+trait JsPlainScript extends js.Object {
+    @TsType("\"Native\" | \"PlutusV1\" | \"PlutusV2\" | \"PlutusV3\" | \"PlutusV4\"")
+    val `type`: String
+    val script: String
 }
 
 /** One unspent output: where it is, whose it is, and what it holds.
@@ -134,6 +147,13 @@ class JsUtxo(txHash0: String, outputIndex0: Double, address0: String, value0: Js
         }
         .orUndefined
 
+    /** The reference script as `{ type, script }`, when the output carries one: what
+      * `withScriptRef` takes. A Plutus script comes back in double CBOR, whatever wrapping it was
+      * given in.
+      */
+    def script: js.UndefOr[JsPlainScript] =
+        out.scriptRef.map(ref => JsUtxo.plainScriptOf(ref.script)).orUndefined
+
     /** This UTxO as CBOR `[input, output]`, CIP-30's `transaction_unspent_output`: the shape
       * `evaluator.evaluateTx` reads, and what CML, CST and a wallet's `getUtxos()` produce.
       */
@@ -166,7 +186,7 @@ class JsUtxo(txHash0: String, outputIndex0: Double, address0: String, value0: Js
       */
     def withScriptRef(
         @TsType(
-          "Uint8Array | { readonly type: \"Native\" | \"PlutusV1\" | \"PlutusV2\" | \"PlutusV3\"; readonly script: string | Uint8Array }"
+          "Uint8Array | { readonly type: \"Native\" | \"PlutusV1\" | \"PlutusV2\" | \"PlutusV3\" | \"PlutusV4\"; readonly script: string | Uint8Array }"
         ) script: js.Any
     ): JsUtxo = {
         JsUtxo.wrap(in, withOutput(scriptRefOpt = Some(ScriptRef(JsUtxo.scriptOf(script)))))
@@ -196,7 +216,8 @@ class JsUtxo(txHash0: String, outputIndex0: Double, address0: String, value0: Js
           datumHash = datumHash,
           inlineDatum = inlineDatum,
           scriptRef = scriptRef,
-          scriptLanguage = scriptLanguage
+          scriptLanguage = scriptLanguage,
+          script = script
         )
         .asInstanceOf[JsPlainUtxo]
 
@@ -269,6 +290,17 @@ object JsUtxo {
             decodeOf(script, "script")(Cbor.decode(_).to[ScriptRef].value).script
         else scriptOfRecord(script)
 
+    private def plainScriptOf(script: Script): JsPlainScript = {
+        def plutus(single: ByteString) = Hex.bytesToHex(Cbor.encode(single.bytes).toByteArray)
+        val (tpe, hex) = script match
+            case Script.Native(timelock) => ("Native", Hex.bytesToHex(timelock.toCbor))
+            case Script.PlutusV1(single) => ("PlutusV1", plutus(single))
+            case Script.PlutusV2(single) => ("PlutusV2", plutus(single))
+            case Script.PlutusV3(single) => ("PlutusV3", plutus(single))
+            case Script.PlutusV4(single) => ("PlutusV4", plutus(single))
+        js.Dynamic.literal(`type` = tpe, script = hex).asInstanceOf[JsPlainScript]
+    }
+
     private def scriptOfRecord(record: js.Any): Script = {
         if js.typeOf(record) != "object" || record == null then
             typeError("script must be a Uint8Array or a { type, script } object")
@@ -280,7 +312,10 @@ object JsUtxo {
             case "PlutusV1" => Script.PlutusV1(plutus)
             case "PlutusV2" => Script.PlutusV2(plutus)
             case "PlutusV3" => Script.PlutusV3(plutus)
+            case "PlutusV4" => Script.PlutusV4(plutus)
             case other =>
-                typeError(s"script.type must be Native, PlutusV1, PlutusV2 or PlutusV3, got $other")
+                typeError(
+                  s"script.type must be Native, PlutusV1, PlutusV2, PlutusV3 or PlutusV4, got $other"
+                )
     }
 }

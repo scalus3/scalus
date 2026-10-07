@@ -200,56 +200,100 @@ object JBalancer {
             case _ => js.JavaScriptException(js.Error(s"balanceTx failed: $error"))
     }
 
-    /** A `ProtocolParams` from the handle, or from any record carrying the fields balancing reads.
+    /** A `ProtocolParams` from the handle, or from a record carrying every field balancing reads.
       *
-      * The handle satisfies the record structurally, so both work. Fields the record does not carry
-      * stay at their zero: balancing reads fees, min-ada, collateral, the cost models and the
-      * protocol version, never a governance, block or pool parameter.
+      * The handle satisfies the record structurally, so both work. Fields the record does not
+      * declare stay at their zero: balancing reads fees, min-ada, collateral, the cost models and
+      * the protocol version, never a governance, block or pool parameter.
       */
-    private def paramsOf(value: js.Any, name: String): ProtocolParams =
+    private def paramsOf(value: js.Any, name: String): ProtocolParams = {
+        if !value.isInstanceOf[JsProtocolParams] && !js.isUndefined(value) && value != null then
+            val record = value.asInstanceOf[js.Dynamic]
+            for field <- paramsFields if js.isUndefined(record.selectDynamic(field)) do
+                typeError(s"$name.$field is missing")
+        paramsOf(value, name, JsProtocolParams.zero)
+    }
+
+    /** The fields of [[JProtocolParamsLike]]. */
+    private val paramsFields: Seq[String] = Seq(
+      "txFeePerByte",
+      "txFeeFixed",
+      "maxTxSize",
+      "maxValueSize",
+      "stakeAddressDeposit",
+      "stakePoolDeposit",
+      "dRepDeposit",
+      "govActionDeposit",
+      "utxoCostPerByte",
+      "priceMemory",
+      "priceSteps",
+      "maxTxExecutionMemory",
+      "maxTxExecutionSteps",
+      "collateralPercentage",
+      "maxCollateralInputs",
+      "minFeeRefScriptCostPerByte",
+      "protocolMajorVersion",
+      "costModels"
+    )
+
+    /** `base` with the fields of a `ProtocolParams` handle or a [[JProtocolParamsLike]] record.
+      *
+      * A handle replaces `base` whole. A record replaces only the fields it carries, and in
+      * `costModels` only the languages it carries: the rest keep their value in `base`.
+      */
+    private[scalus] def paramsOf(
+        value: js.Any,
+        name: String,
+        base: ProtocolParams
+    ): ProtocolParams =
         if value.isInstanceOf[JsProtocolParams] then value.asInstanceOf[JsProtocolParams].underlying
         else {
             if js.isUndefined(value) || value == null then
                 typeError(s"$name must be a ProtocolParams or a plain record")
             val p = value.asInstanceOf[js.Dynamic]
-            def long(field: String): Long = longOf(p.selectDynamic(field), s"$name.$field")
-            def double(field: String): Double =
-                safeInteger(p.selectDynamic(field), s"$name.$field")
-            val models = p.selectDynamic("costModels")
-            val byLanguage = for
-                language <- Seq(Language.PlutusV1, Language.PlutusV2, Language.PlutusV3)
-                model = models.selectDynamic(language.toString)
-                if !js.isUndefined(model) && model != null
-            yield language.ordinal -> arrayOf(model, s"$name.costModels.$language").map(longOf)
-            JsProtocolParams.zero.copy(
-              collateralPercentage = long("collateralPercentage"),
-              costModels = CostModels(byLanguage.toMap),
-              dRepDeposit = long("dRepDeposit"),
-              executionUnitPrices = ExUnitPrices(
-                priceMemory = NonNegativeInterval(
-                  priceOf(p, s"$name.priceMemory", "priceMemory"),
-                  precision = 15
-                ),
-                priceSteps = NonNegativeInterval(
-                  priceOf(p, s"$name.priceSteps", "priceSteps"),
-                  precision = 15
+            def present(field: String): Option[js.Any] =
+                val v = p.selectDynamic(field)
+                if js.isUndefined(v) then None else Some(v)
+            def long(field: String, current: Long): Long =
+                present(field).fold(current)(longOf(_, s"$name.$field"))
+            def price(field: String, current: NonNegativeInterval): NonNegativeInterval =
+                present(field).fold(current)(_ =>
+                    NonNegativeInterval(priceOf(p, s"$name.$field", field), precision = 15)
                 )
+            val costModels = present("costModels").fold(base.costModels) { models =>
+                val byLanguage = for
+                    language <- Seq(Language.PlutusV1, Language.PlutusV2, Language.PlutusV3)
+                    model = models.asInstanceOf[js.Dynamic].selectDynamic(language.toString)
+                    if !js.isUndefined(model) && model != null
+                yield language.ordinal -> arrayOf(model, s"$name.costModels.$language").map(longOf)
+                CostModels(base.costModels.models ++ byLanguage)
+            }
+            base.copy(
+              collateralPercentage = long("collateralPercentage", base.collateralPercentage),
+              costModels = costModels,
+              dRepDeposit = long("dRepDeposit", base.dRepDeposit),
+              executionUnitPrices = ExUnitPrices(
+                priceMemory = price("priceMemory", base.executionUnitPrices.priceMemory),
+                priceSteps = price("priceSteps", base.executionUnitPrices.priceSteps)
               ),
-              govActionDeposit = long("govActionDeposit"),
-              maxCollateralInputs = long("maxCollateralInputs"),
+              govActionDeposit = long("govActionDeposit", base.govActionDeposit),
+              maxCollateralInputs = long("maxCollateralInputs", base.maxCollateralInputs),
               maxTxExecutionUnits = ExUnits(
-                memory = long("maxTxExecutionMemory"),
-                steps = long("maxTxExecutionSteps")
+                memory = long("maxTxExecutionMemory", base.maxTxExecutionUnits.memory),
+                steps = long("maxTxExecutionSteps", base.maxTxExecutionUnits.steps)
               ),
-              maxTxSize = long("maxTxSize"),
-              maxValueSize = long("maxValueSize"),
-              minFeeRefScriptCostPerByte = long("minFeeRefScriptCostPerByte"),
-              protocolVersion = ProtocolVersion(long("protocolMajorVersion").toInt, 0),
-              stakeAddressDeposit = long("stakeAddressDeposit"),
-              stakePoolDeposit = long("stakePoolDeposit"),
-              txFeeFixed = long("txFeeFixed"),
-              txFeePerByte = long("txFeePerByte"),
-              utxoCostPerByte = long("utxoCostPerByte")
+              maxTxSize = long("maxTxSize", base.maxTxSize),
+              maxValueSize = long("maxValueSize", base.maxValueSize),
+              minFeeRefScriptCostPerByte =
+                  long("minFeeRefScriptCostPerByte", base.minFeeRefScriptCostPerByte),
+              protocolVersion = present("protocolMajorVersion").fold(base.protocolVersion)(v =>
+                  base.protocolVersion.copy(major = longOf(v, s"$name.protocolMajorVersion").toInt)
+              ),
+              stakeAddressDeposit = long("stakeAddressDeposit", base.stakeAddressDeposit),
+              stakePoolDeposit = long("stakePoolDeposit", base.stakePoolDeposit),
+              txFeeFixed = long("txFeeFixed", base.txFeeFixed),
+              txFeePerByte = long("txFeePerByte", base.txFeePerByte),
+              utxoCostPerByte = long("utxoCostPerByte", base.utxoCostPerByte)
             )
         }
 

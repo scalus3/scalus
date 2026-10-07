@@ -266,3 +266,12 @@ const invalidCredential: import("../scalus.js").UtxoFilter = { paymentCredential
   void models;
   void bigSlotLength;
 }
+
+// A pool registration takes exactly one of params and poolId.
+const byPoolId: import("../scalus.js").EmulatorOptions = { poolRegistrations: [{ poolId: "33".repeat(28) }] };
+const byParams: import("../scalus.js").EmulatorOptions = { poolRegistrations: [{ params: new Uint8Array() }] };
+// @ts-expect-error a pool registration needs params or poolId
+const noPool: import("../scalus.js").EmulatorOptions = { poolRegistrations: [{}] };
+// @ts-expect-error a pool registration takes only one of params and poolId
+const bothPool: import("../scalus.js").EmulatorOptions = { poolRegistrations: [{ params: new Uint8Array(), poolId: "33".repeat(28) }] };
+void [byPoolId, byParams, noPool, bothPool];

@@ -215,3 +215,27 @@ describe("Emulator treasury", () => {
         expect(Emulator.create(CardanoInfo.preview()).getTreasury()).toBe(0n);
     });
 });
+
+describe("Emulator.create input errors", () => {
+    // Every invalid option throws a TypeError, as the other input checks of the facade do.
+    const create = (options: object) => () =>
+        Emulator.create(CardanoInfo.preview(), options as never);
+
+    it("rejects a datum whose hash is not the hash of its bytes", () => {
+        const datum = "d879811a0000000a";
+        expect(create({datums: [{hash: "00".repeat(32), datum}]})).toThrow(TypeError);
+    });
+
+    it("rejects a pool registration with both params and poolId, or neither", () => {
+        const poolId = "33".repeat(28);
+        expect(create({poolRegistrations: [{poolId, params: new Uint8Array([0])}]})).toThrow(TypeError);
+        expect(create({poolRegistrations: [{}]})).toThrow(TypeError);
+    });
+
+    it("rejects a negative treasury, an unknown clock and an unknown credential type", () => {
+        expect(create({treasury: -1n})).toThrow(TypeError);
+        expect(create({clock: "sundial"})).toThrow(TypeError);
+        const registration = {credentialType: "pubkey", credentialHash: "00".repeat(28), rewards: 0n};
+        expect(create({stakeRegistrations: [registration]})).toThrow(TypeError);
+    });
+});

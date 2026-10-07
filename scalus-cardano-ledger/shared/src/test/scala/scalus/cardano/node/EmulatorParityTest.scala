@@ -240,6 +240,26 @@ class EmulatorParityTest extends AnyFunSuite {
         )
     }
 
+    test("addRewards adds to a registered account's balance and nothing else") {
+        // spec [SC-10]: an epoch reward payout
+        val stakeCredential = Credential.KeyHash(Bob.addrKeyHash)
+        val emulator = Emulator.withRegisteredStakeCredentials(
+          genesisUtxos(Value.ada(500)),
+          Map(stakeCredential -> Coin(1_000_000L))
+        )
+        val before = emulator.certState.dstate.accounts(stakeCredential)
+        emulator.addRewards(stakeCredential, Coin(250L))
+        assert(
+          emulator.certState.dstate.accounts(stakeCredential) ==
+              before.copy(balance = Coin(1_000_250L))
+        )
+
+        val unregistered = Credential.KeyHash(Alice.addrKeyHash)
+        intercept[IllegalArgumentException](emulator.addRewards(unregistered, Coin(1L)))
+        assert(!emulator.certState.dstate.accounts.contains(unregistered))
+        intercept[IllegalArgumentException](emulator.addRewards(stakeCredential, Coin(-1L)))
+    }
+
     test("withAddresses funds each address with the same value") {
         val emulator = Emulator.withAddresses(Seq(alice, bob), Value.ada(250))
         assert(emulator.utxos.size == 2)

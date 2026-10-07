@@ -11,6 +11,7 @@ import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
 import scalus.uplc.eval.{JPlutusScriptEvaluationError, JScalus}
 
+import scalus.cardano.ledger.JsProtocolParams.underlying
 import scalus.utils.scalajs.internal.*
 
 import scala.scalajs.js
@@ -142,6 +143,53 @@ class EmulatorJsTest extends AnyFunSuite {
         assert(result.logs.length == 0, "logs is always an array, empty when there are none")
     }
 
+    test("protocolParams overrides the given fields and keeps the rest of the preset") {
+        // spec [SC-9]
+        val preset = CardanoInfo.mainnet.protocolParams
+        val v1 = preset.costModels.models(Language.PlutusV1.ordinal).map(_ + 1)
+        val options = js.Dynamic
+            .literal(
+              protocolParams = js.Dynamic.literal(
+                txFeePerByte = 99,
+                costModels = js.Dynamic.literal(PlutusV1 = js.Array(v1.map(_.toDouble)*))
+              )
+            )
+            .asInstanceOf[JsEmulatorOptions]
+        val emulator = JEmulator.create(JsCardanoInfo.mainnet(), options)
+        val expected = preset.copy(
+          txFeePerByte = 99,
+          costModels = CostModels(preset.costModels.models.updated(Language.PlutusV1.ordinal, v1))
+        )
+        assert(emulator.getProtocolParameters().underlying == expected)
+    }
+
+    test("a protocolParams override changes validation") {
+        // spec [SC-9]: a higher min fee rejects a transaction the preset accepts
+        val alice = Alice.address(Network.Mainnet)
+        val utxos = Seq(Input(genesisHash, 0) -> Output(alice, Value.ada(5000)))
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address(Network.Mainnet), Value.ada(10))
+            .complete(utxos.toMap, alice)
+            .sign(Alice.signer)
+            .transaction
+        def submitWith(options: js.Dynamic): JSubmitResult = {
+            options.updateDynamic("utxos")(
+              js.Array(utxos.map { case (i, o) => JsUtxo.wrap(i, o) }*)
+            )
+            JEmulator
+                .create(JsCardanoInfo.mainnet(), options.asInstanceOf[JsEmulatorOptions])
+                .submitTx(tx.toCbor.toUint8Array)
+        }
+        assert(submitWith(js.Dynamic.literal()).isSuccess)
+        val higherFee = js.Dynamic.literal(
+          protocolParams = js.Dynamic.literal(
+            txFeePerByte = (testEnv.protocolParams.txFeePerByte * 2).toDouble
+          )
+        )
+        val rejected = submitWith(higherFee)
+        assert(rejected.errorRule.toOption.contains("FeesOk"), rejected.error.toOption)
+    }
+
     test("Emulator.create takes the treasury, and getTreasury and snapshot report it") {
         // spec [SC-7b], [SC-7c]
         val options =
@@ -165,6 +213,68 @@ class EmulatorJsTest extends AnyFunSuite {
         val stored = emulator.getUtxos().toSeq.flatMap(_.inlineDatum.toOption)
         assert(
           stored.map(b => ByteString.unsafeFromArray(b.toByteArray).toHex) == Seq(probeDatumHex)
+        )
+    }
+
+    /** `Emulator.create` with `options` throws a JavaScript `TypeError`, as every input error of it
+      * does.
+      */
+    private def assertCreateTypeError(options: js.Dynamic): Unit = {
+        val thrown = intercept[js.JavaScriptException](
+          JEmulator.create(JsCardanoInfo.mainnet(), options.asInstanceOf[JsEmulatorOptions])
+        )
+        assert(thrown.exception.isInstanceOf[js.TypeError], thrown)
+    }
+
+    test("Emulator.create rejects a negative treasury with a TypeError") {
+        assertCreateTypeError(js.Dynamic.literal(treasury = js.BigInt("-1")))
+    }
+
+    test("Emulator.create rejects a datum whose hash is not the hash of its bytes") {
+        // spec [SC-13k]: getDatum(h) must return bytes whose hash is h
+        val datumHex = "d879811a0000000a"
+        val reencodedHash = KeepRaw(Data.fromCbor(ByteString.fromHex(datumHex).bytes)).dataHash
+        val entry = js.Dynamic.literal(hash = reencodedHash.toHex, datum = datumHex)
+        assertCreateTypeError(js.Dynamic.literal(datums = js.Array(entry)))
+    }
+
+    test("Emulator.create rejects a pool registration with both params and poolId") {
+        val pool = PoolKeyHash.fromHex("33" * 28)
+        val cert: Certificate = Certificate.PoolRetirement(pool, 1)
+        val both = js.Dynamic.literal(
+          params = ByteString.fromArray(Cbor.encode(cert).toByteArray).toUint8Array,
+          poolId = pool.toHex
+        )
+        assertCreateTypeError(js.Dynamic.literal(poolRegistrations = js.Array(both)))
+    }
+
+    test("Emulator.create rejects a pool registration with neither params nor poolId") {
+        assertCreateTypeError(
+          js.Dynamic.literal(poolRegistrations = js.Array(js.Dynamic.literal()))
+        )
+    }
+
+    test("Emulator.create rejects a credential type other than key and script") {
+        val registration = js.Dynamic.literal(
+          credentialType = "pubkey",
+          credentialHash = Alice.addrKeyHash.toHex,
+          rewards = js.BigInt(0)
+        )
+        assertCreateTypeError(js.Dynamic.literal(stakeRegistrations = js.Array(registration)))
+    }
+
+    test("a protocolMajorVersion override keeps the minor version of the CardanoInfo") {
+        // spec [SC-9]: only the fields given change
+        val preset = CardanoInfo.mainnet
+        val info = preset.copy(protocolParams =
+            preset.protocolParams.copy(protocolVersion = ProtocolVersion(10, 3))
+        )
+        val options = js.Dynamic
+            .literal(protocolParams = js.Dynamic.literal(protocolMajorVersion = 11))
+            .asInstanceOf[JsEmulatorOptions]
+        val emulator = JEmulator.create(JsCardanoInfo.wrap(info), options)
+        assert(
+          emulator.getProtocolParameters().underlying.protocolVersion == ProtocolVersion(11, 3)
         )
     }
 
@@ -533,11 +643,11 @@ class EmulatorJsTest extends AnyFunSuite {
     }
 
     test("getDatum looks datums up by hex hash, seeded or absent") {
-        val datumHashHex = "ab" * 32
         // Encoded via the real Data CBOR encoder, not a hand-written literal - the assertion below
         // checks the returned bytes against this same value, so it must come from an independent
         // encoding of the datum, not be copied from what getDatum happens to return.
         val datumCborHex = ByteString.fromArray(Cbor.encode(Data.I(42): Data).toByteArray).toHex
+        val datumHashHex = KeepRaw(Data.I(42): Data).dataHash.toHex
         val datumEntry = js.Dynamic
             .literal(hash = datumHashHex, datum = datumCborHex)
             .asInstanceOf[JDatumEntry]
@@ -679,6 +789,261 @@ class EmulatorJsTest extends AnyFunSuite {
         assert(emulator.getDelegation(neverRegisteredBech32).rewards.toString == "0")
         assert(emulator.getDelegation(neverRegisteredBech32).poolId.toOption.isEmpty)
         assert(emulator.getStakeReward(neverRegisteredBech32).toOption.isEmpty)
+    }
+
+    test("poolRegistrations takes a bare pool id, and a delegation to it passes") {
+        // spec [SC-8]
+        val alice = Alice.address(Network.Mainnet)
+        val stakeAddress = StakeAddress(
+          Network.Mainnet,
+          StakePayload.Stake(StakeKeyHash.fromByteString(Alice.addrKeyHash))
+        )
+        val utxos = Map(Input(genesisHash, 0) -> Output(alice, Value.ada(5000)))
+        val registered = PoolKeyHash.fromHex("33" * 28)
+        val options = js.Dynamic
+            .literal(
+              utxos = js.Array(utxos.toSeq.map { case (i, o) => JsUtxo.wrap(i, o) }*),
+              slot = 0.0,
+              stakeRegistrations = js.Array(
+                js.Dynamic.literal(
+                  credentialType = "key",
+                  credentialHash = Alice.addrKeyHash.toHex,
+                  rewards = js.BigInt(0)
+                )
+              ),
+              poolRegistrations = js.Array(js.Dynamic.literal(poolId = registered.toHex))
+            )
+            .asInstanceOf[JsEmulatorOptions]
+        def delegation(pool: PoolKeyHash): Transaction =
+            TxBuilder(testEnv)
+                .delegateTo(stakeAddress, pool)
+                .complete(utxos, alice)
+                .sign(Alice.signer)
+                .transaction
+
+        val unregistered = PoolKeyHash.fromHex("44" * 28)
+        val rejected = JEmulator
+            .create(JsCardanoInfo.mainnet(), options)
+            .submitTx(delegation(unregistered).toCbor.toUint8Array)
+        assert(!rejected.isSuccess)
+        assert(rejected.error.toOption.exists(_.contains(unregistered.toHex)), rejected.error)
+
+        val emulator = JEmulator.create(JsCardanoInfo.mainnet(), options)
+        val accepted = emulator.submitTx(delegation(registered).toCbor.toUint8Array)
+        assert(accepted.isSuccess, accepted.error.toOption)
+        val bech32 = stakeAddress.toBech32.getOrElse(fail("no bech32"))
+        assert(emulator.getDelegation(bech32).poolId.toOption.contains(registered.toHex))
+    }
+
+    private val aliceStake = StakeAddress(
+      Network.Mainnet,
+      StakePayload.Stake(StakeKeyHash.fromByteString(Alice.addrKeyHash))
+    )
+    private val aliceStakeBech32 = aliceStake.toBech32.get
+    private val aliceUtxos =
+        Map(Input(genesisHash, 0) -> Output(Alice.address(Network.Mainnet), Value.ada(5000)))
+
+    /** An emulator at slot 0 where Alice holds 5000 ada and her stake key is registered with no
+      * rewards; `options` adds or replaces fields.
+      */
+    private def aliceStakeEmulator(options: js.Dynamic): JEmulator = {
+        val base = js.Dynamic.literal(
+          utxos = js.Array(aliceUtxos.toSeq.map { case (i, o) => JsUtxo.wrap(i, o) }*),
+          slot = 0.0,
+          stakeRegistrations = js.Array(
+            js.Dynamic.literal(
+              credentialType = "key",
+              credentialHash = Alice.addrKeyHash.toHex,
+              rewards = js.BigInt(0)
+            )
+          )
+        )
+        JEmulator.create(
+          JsCardanoInfo.mainnet(),
+          js.Object
+              .assign(base.asInstanceOf[js.Object], options.asInstanceOf[js.Object])
+              .asInstanceOf[JsEmulatorOptions]
+        )
+    }
+
+    private def aliceSubmits(emulator: JEmulator, builder: TxBuilder): JSubmitResult = {
+        val tx = builder.complete(aliceUtxos, Alice.address(Network.Mainnet)).sign(Alice.signer)
+        emulator.submitTx(tx.transaction.toCbor.toUint8Array)
+    }
+
+    test("addRewards, then a withdrawal of exactly that amount empties the account") {
+        // spec [SC-10], [SC-10a], with the withdrawal fix [SC-3]
+        val emulator = aliceStakeEmulator(js.Dynamic.literal())
+        emulator.addRewards(aliceStakeBech32, js.BigInt(7_000_000))
+        val account = emulator.getAccount(aliceStakeBech32).toOption.getOrElse(fail("no account"))
+        assert(account.balance.toString == "7000000")
+        assert(account.deposit.toString == testEnv.protocolParams.stakeAddressDeposit.toString)
+        assert(account.poolId.toOption.isEmpty)
+        assert(account.drep.toOption.isEmpty)
+
+        val withdrawal = TxBuilder(testEnv).withdrawRewards(aliceStake, Coin(7_000_000))
+        val result = aliceSubmits(emulator, withdrawal)
+        assert(result.isSuccess, result.error.toOption)
+        val after = emulator.getAccount(aliceStakeBech32).toOption.getOrElse(fail("deregistered"))
+        assert(after.balance.toString == "0")
+    }
+
+    test("addRewards throws and getAccount is undefined for an unregistered account") {
+        // spec [SC-10], [SC-10a]
+        val emulator = JEmulator.create(JsCardanoInfo.mainnet())
+        intercept[IllegalArgumentException](
+          emulator.addRewards(aliceStakeBech32, js.BigInt(1))
+        )
+        assert(emulator.getAccount(aliceStakeBech32).toOption.isEmpty)
+    }
+
+    test("addRewards throws for a negative amount and leaves the balance") {
+        val emulator = aliceStakeEmulator(js.Dynamic.literal())
+        intercept[IllegalArgumentException](emulator.addRewards(aliceStakeBech32, js.BigInt(-1)))
+        val account = emulator.getAccount(aliceStakeBech32).toOption.getOrElse(fail("no account"))
+        assert(account.balance.toString == "0")
+    }
+
+    test("getAccount reports the pool as hex and an AlwaysAbstain DRep as its name") {
+        // spec [SC-10a]
+        val pool = PoolKeyHash.fromHex("33" * 28)
+        val emulator = aliceStakeEmulator(
+          js.Dynamic.literal(poolRegistrations = js.Array(js.Dynamic.literal(poolId = pool.toHex)))
+        )
+        val delegation =
+            TxBuilder(testEnv).delegateToPoolAndDRep(aliceStake, pool, DRep.AlwaysAbstain)
+        val result = aliceSubmits(emulator, delegation)
+        assert(result.isSuccess, result.error.toOption)
+        val account = emulator.getAccount(aliceStakeBech32).toOption.getOrElse(fail("no account"))
+        assert(account.poolId.toOption.contains(pool.toHex))
+        assert(account.drep.toOption.contains("AlwaysAbstain"))
+    }
+
+    test("getAccount reports a key DRep as { type, hash }") {
+        // spec [SC-10a]
+        val drepKey = AddrKeyHash.fromHex("66" * 28)
+        val emulator = aliceStakeEmulator(
+          js.Dynamic.literal(drepRegistrations =
+              js.Array(
+                js.Dynamic.literal(
+                  credentialType = "key",
+                  credentialHash = drepKey.toHex,
+                  deposit = js.BigInt(testEnv.protocolParams.dRepDeposit.toString)
+                )
+              )
+          )
+        )
+        val result =
+            aliceSubmits(
+              emulator,
+              TxBuilder(testEnv).delegateVoteToDRep(aliceStake, DRep.KeyHash(drepKey))
+            )
+        assert(result.isSuccess, result.error.toOption)
+        val drep = emulator
+            .getAccount(aliceStakeBech32)
+            .toOption
+            .flatMap(_.drep.toOption)
+            .getOrElse(fail("no drep"))
+            .asInstanceOf[js.Dynamic]
+        assert(drep.`type`.asInstanceOf[String] == "key")
+        assert(drep.hash.asInstanceOf[String] == drepKey.toHex)
+    }
+
+    test("getStakeDistribution gives each credential's reward address, which addRewards takes") {
+        // spec [SC-10b]
+        val scriptHash = PlutusV3.alwaysOk.script.scriptHash
+        val emulator = aliceStakeEmulator(
+          js.Dynamic.literal(stakeRegistrations =
+              js.Array(
+                js.Dynamic.literal(
+                  credentialType = "key",
+                  credentialHash = Alice.addrKeyHash.toHex,
+                  rewards = js.BigInt(0)
+                ),
+                js.Dynamic.literal(
+                  credentialType = "script",
+                  credentialHash = scriptHash.toHex,
+                  rewards = js.BigInt(0)
+                )
+              )
+          )
+        )
+        val scriptStakeBech32 =
+            StakeAddress(Network.Mainnet, StakePayload.Script(scriptHash)).toBech32.get
+        val byCredential =
+            emulator.getStakeDistribution().toSeq.map(e => e.credential -> e.rewardAddress).toMap
+        assert(
+          byCredential == Map(
+            Alice.addrKeyHash.toHex -> aliceStakeBech32,
+            scriptHash.toHex -> scriptStakeBech32
+          )
+        )
+        byCredential.values.foreach(emulator.addRewards(_, js.BigInt(5)))
+        assert(emulator.getStakeReward(scriptStakeBech32).toOption.contains(js.BigInt(5)))
+    }
+
+    /** Alice's payment, valid from slot 50. */
+    private def paymentFromSlot50(): Transaction =
+        TxBuilder(testEnv)
+            .payTo(Bob.address(Network.Mainnet), Value.ada(10))
+            .validFrom(java.time.Instant.ofEpochMilli(testEnv.slotConfig.slotToTime(50)))
+            .complete(aliceUtxos, Alice.address(Network.Mainnet))
+            .sign(Alice.signer)
+            .transaction
+
+    /** An emulator at slot 0 over Alice's UTxO, with `clock` and a time source the test sets. */
+    private def clockedEmulator(clock: js.UndefOr[String], now: () => Double): JEmulator = {
+        val options = js.Dynamic
+            .literal(
+              utxos = js.Array(aliceUtxos.toSeq.map { case (i, o) => JsUtxo.wrap(i, o) }*),
+              slot = 0.0,
+              clock = clock
+            )
+            .asInstanceOf[JsEmulatorOptions]
+        JEmulator.create(JsCardanoInfo.mainnet(), options, now)
+    }
+
+    private def timeOfSlot(slot: Long): Double = testEnv.slotConfig.slotToTime(slot).toDouble
+
+    test("a wall clock moves to the slot of now before a submission, never backwards") {
+        // spec [SC-12a], [SC-12b]
+        var now = timeOfSlot(100)
+        val emulator = clockedEmulator("wall", () => now)
+        val tx = paymentFromSlot50()
+        val result = emulator.submitTx(tx.toCbor.toUint8Array)
+        assert(result.isSuccess, result.error.toOption)
+        assert(emulator.getSlot() == 100)
+
+        now = timeOfSlot(10)
+        emulator.submitTx(tx.toCbor.toUint8Array)
+        assert(emulator.getSlot() == 100)
+        assert(emulator.snapshot().getSlot() == 100)
+    }
+
+    test("a wall clock moves before an evaluation, and a snapshot keeps the wall clock") {
+        // spec [SC-12a]
+        var now = timeOfSlot(100)
+        val emulator = clockedEmulator("wall", () => now)
+        emulator.evaluateTx(paymentFromSlot50().toCbor.toUint8Array)
+        assert(emulator.getSlot() == 100)
+
+        val copy = emulator.snapshot()
+        now = timeOfSlot(200)
+        copy.evaluateTx(paymentFromSlot50().toCbor.toUint8Array)
+        assert(copy.getSlot() == 200)
+    }
+
+    test("a manual clock, the default, stays where it is") {
+        // spec [SC-12]
+        val emulator = clockedEmulator(js.undefined, () => timeOfSlot(100))
+        val result = emulator.submitTx(paymentFromSlot50().toCbor.toUint8Array)
+        assert(!result.isSuccess)
+        assert(emulator.getSlot() == 0)
+        assert(clockedEmulator("manual", () => timeOfSlot(100)).getSlot() == 0)
+    }
+
+    test("clock rejects a value other than manual and wall with a TypeError") {
+        assertCreateTypeError(js.Dynamic.literal(clock = "sundial"))
     }
 
     test("getDelegation and getStakeReward reject a string that is not a reward address") {
