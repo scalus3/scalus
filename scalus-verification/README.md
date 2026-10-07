@@ -317,6 +317,13 @@ steps, budget 250 proved in 2 seconds, 350 took 52 seconds, and 500 did not fini
 budgets are cheap, so a budget well above a small program's worst path costs nothing; for a
 large program, stay close above its worst path, and lower the budget if a proof is slow.
 
+The path that counts is that of the runs the statement is about. A statement that a validator
+rejects a transaction wants the budget of the rejection, not of an accepted transaction: the
+vesting validator rejects an early withdrawal after about 1600 steps, before it reads the
+outputs. With the outputs left open the statement is proved in 12 seconds at budget 1700, and
+not at all at 12000, the budget of a whole withdrawal, where Lean follows the accepting runs
+through a list of unknown length.
+
 Do **not** derive budgets from Scalus's own step count. Plutus charges per `Eval` transition
 while this machine counts `Eval` and `Return`, so the Lean figure is about 1.85x larger.
 

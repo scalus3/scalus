@@ -269,6 +269,11 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
     /** The steps for a withdrawal: the validator runs to its end on one that it accepts. */
     private val withdrawalBudget = 12000
 
+    /** The steps for a withdrawal that the validator rejects at its check of the amount, the last
+      * one before it reads the outputs. The rejection takes just over 1600 steps.
+      */
+    private val earlyReleaseBudget = 1700
+
     test("a sample withdrawal is accepted on the Lean machine, and rejected unsigned") {
         // Closed statements: Lean decides them by running the validator.
         val accepted = succeeds(
@@ -418,46 +423,71 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
         )
     }
 
-    test("the same, with the outputs left open, is not finished by Lean", Unfinished) {
-        // The statement is true, and natural: the validator rejects such a withdrawal before it
-        // reads the outputs, so they could be any Data, as for an unsigned withdrawal. But Lean
-        // runs each test's program on its own, without the premise, and so also the runs that
-        // pass the check. Those go on to search the outputs, a list of unknown length, with a
-        // choice at every element.
-        val anyOutputs =
-            forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
-                forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
-                    forAll[BigInt, Data]((fee, outputs) =>
-                        (locked - requested < amount - VestingValidator.linearVesting(
-                          config(start, duration, amount),
-                          time
-                        )) ==> fails(
-                          validator,
-                          withdrawal(
-                            start,
-                            duration,
-                            amount,
-                            locked,
-                            requested,
-                            time,
-                            fee,
-                            signed,
-                            outputs.to[prelude.List[TxOut]]
-                          )
-                        )
+    /** What stays locked is at least what has not vested yet, whatever the outputs are: the
+      * statement of the test before, with the outputs any `Data`.
+      */
+    private def lockedForAnyOutputs: Prop =
+        forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
+            forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
+                forAll[BigInt, Data]((fee, outputs) =>
+                    (locked - requested < amount - VestingValidator.linearVesting(
+                      config(start, duration, amount),
+                      time
+                    )) ==> fails(
+                      validator,
+                      withdrawal(
+                        start,
+                        duration,
+                        amount,
+                        locked,
+                        requested,
+                        time,
+                        fee,
+                        signed,
+                        outputs.to[prelude.List[TxOut]]
+                      )
                     )
                 )
             )
-        // Under Lean's own limit of work Lean gives the run of the second test up, after about
-        // 17 s on the machine this was written on, and after the same work on any other.
+        )
+
+    test("the same holds whatever the outputs are, at a budget that ends before they are read") {
+        // The validator rejects such a withdrawal at its check of the amount, before it reads the
+        // outputs, so they can be any Data, as for an unsigned withdrawal. But Lean runs each
+        // test's program on its own, without the premise, and so also the runs that pass the
+        // check. Those go on to search the outputs, a list of unknown length, with a choice at
+        // every element.
+        //
+        // The budget keeps those runs short: it is just beyond the steps of the rejection, which
+        // is all the statement is about, and a proof at any budget holds without the budget.
+        // Every 100 steps more let them read another output, and double the time: 12 s at 1700,
+        // 27 s at 1800, 62 s at 1900 and 3 minutes at 2000. At 1600 the rejection itself is cut,
+        // and Lean's counterexample is spurious.
+        //
+        // So the budget follows the validator's code. Where a change of the compiler or of the
+        // validator makes the rejection longer, the result here is a spurious counterexample,
+        // and the budget wants raising; where it makes it shorter, the proof gets slower.
+        proven(lockedForAnyOutputs, earlyReleaseBudget, validator, linearVesting)
+    }
+
+    test("at the budget of a whole withdrawal, the same is not finished by Lean", Unfinished) {
+        // The budget of the tests around this one lets the runs that pass the check go far into
+        // the outputs. Under Lean's own limit of work Lean gives the run of the second test up,
+        // after about 17 s on the machine this was written on, and after the same work on any
+        // other.
         val leansLimit = UplcBlaster(withdrawalBudget, lean, 5.minutes)
             .withMaxHeartbeats(UplcBlaster.leanMaxHeartbeats)
-        val givenUp = inconclusive(anyOutputs, leansLimit, validator, linearVesting)
+        val givenUp = inconclusive(lockedForAnyOutputs, leansLimit, validator, linearVesting)
         assert(givenUp.contains("maximum number of heartbeats"), givenUp)
         // Under the tactic's limit, twice that, the run gets past that point and goes on: it
         // gave no result in 8 minutes. The time limit ends it.
-        val unfinished =
-            inconclusive(anyOutputs, withdrawalBudget, 30.seconds, validator, linearVesting)
+        val unfinished = inconclusive(
+          lockedForAnyOutputs,
+          withdrawalBudget,
+          30.seconds,
+          validator,
+          linearVesting
+        )
         assert(unfinished.contains("did not finish"), unfinished)
     }
 
