@@ -45,6 +45,7 @@ object LedgerState {
           utxos = ledgerState.utxos.utxo,
           deposited = ledgerState.utxos.deposited,
           fees = ledgerState.utxos.fees,
+          govState = ledgerState.utxos.govState,
           stakeDistribution = ledgerState.utxos.stakeDistribution,
           donation = ledgerState.utxos.donation,
           certState = ledgerState.certs.toCertState
@@ -327,7 +328,7 @@ object LedgerState {
                     expiry = drepState.expiry,
                     anchor = drepState.anchor,
                     deposit = drepState.deposit,
-                    delegates = Set.empty // Skip delegates for now
+                    delegates = drepState.delegates
                   )
               }
             )
@@ -340,7 +341,7 @@ object LedgerState {
         expiry: Long,
         anchor: Option[Anchor],
         deposit: Coin,
-        delegates: Array[Element] // Skip parsing delegates for now
+        delegates: Set[Credential]
     )
 
     object ConwayDRepState {
@@ -355,7 +356,7 @@ object LedgerState {
                     val tag = r.readTag()
                     if tag.code != 258 then
                         r.validationFailure(s"Expected tag 258 for Set, got $tag")
-                val delegates = r.read[Array[Element]]()
+                val delegates = r.read[Set[Credential]]()
                 ConwayDRepState(expiry, anchor, deposit, delegates)
 
         given Encoder[ConwayDRepState] with

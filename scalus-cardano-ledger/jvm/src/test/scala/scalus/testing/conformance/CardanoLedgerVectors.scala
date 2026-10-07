@@ -49,6 +49,23 @@ object CardanoLedgerVectors {
         evaluatorMode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost,
         useParams: Boolean = true
     ): List[(String, Boolean, Try[CardanoMutator.Result])] =
+        runVector(vectorName, evaluatorMode, useParams).map(r => (r.file, r.success, r.result))
+
+    /** One test case of a vector: the expected outcome, the Scalus result, and the expected new
+      * ledger state (present when `success` is true).
+      */
+    case class VectorRun(
+        file: String,
+        success: Boolean,
+        result: Try[CardanoMutator.Result],
+        newLedgerState: Option[LedgerState]
+    )
+
+    def runVector(
+        vectorName: String,
+        evaluatorMode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost,
+        useParams: Boolean = true
+    ): List[VectorRun] =
         for case (path, vector) <- loadVector(vectorName) yield
             val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
             // Extract protocol parameters from test vector
@@ -79,13 +96,14 @@ object CardanoLedgerVectors {
               evaluatorMode = evaluatorMode
             )
 
-            (
+            VectorRun(
               path.getFileName.toFile.getName,
               vector.success,
               for
                   transaction <- Try(Transaction.fromCbor(Hex.hexToBytes(vector.cbor)))
                   result <- Try(CardanoMutator.transit(context, state, transaction))
-              yield result
+              yield result,
+              vector.newLedgerState.map(hex => LedgerState.fromCbor(Hex.hexToBytes(hex)))
             )
 
     // Extract vectors.tar.gz to a temporary directory

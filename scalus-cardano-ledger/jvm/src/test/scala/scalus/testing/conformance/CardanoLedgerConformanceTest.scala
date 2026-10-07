@@ -29,11 +29,28 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
             .filterNot(_.contains("Bootstrap Witness"))
     do {
         test("Conformance test vector: " + vector):
+            val runs = runVector(vector)
             val failures = for
-                case (x, success, result) <- testVector(vector)
-                if success != (result.isSuccess && result.get.isRight)
-            yield s"  [$x] expected=${if success then "pass" else "fail"}, got=${summarizeResult(result)}"
-            if failures.nonEmpty then
-                fail(s"${failures.size} case(s) failed:\n${failures.mkString("\n")}")
+                run <- runs
+                if run.success != (run.result.isSuccess && run.result.get.isRight)
+            yield s"  [${run.file}] expected=${if run.success then "pass" else "fail"}, got=${summarizeResult(run.result)}"
+            // spec [SC-14]: a vector that expects success must also reach its newLedgerState
+            val stateMismatches = runs.flatMap { run =>
+                (run.success, run.result, run.newLedgerState) match
+                    case (true, scala.util.Success(Right(actual)), Some(expected)) =>
+                        LedgerStateComparison
+                            .withoutExcluded(
+                              vector,
+                              LedgerStateComparison.compare(expected, actual),
+                              LedgerStateComparison.exclusions
+                            )
+                            .map(m =>
+                                s"  [${run.file}] state field ${m.field} differs: ${m.detail}"
+                            )
+                    case (true, _, None) => List(s"  [${run.file}] has no newLedgerState")
+                    case _               => Nil
+            }
+            val all = failures ++ stateMismatches
+            if all.nonEmpty then fail(s"${all.size} case(s) failed:\n${all.mkString("\n")}")
     }
 }

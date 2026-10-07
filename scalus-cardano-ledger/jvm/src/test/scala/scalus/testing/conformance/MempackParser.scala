@@ -1,7 +1,7 @@
 package scalus.testing.conformance
 
 import io.bullet.borer.Cbor
-import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 
@@ -203,8 +203,10 @@ object MempackParser {
     /** Parse a Credential (staking or payment)
       *
       * Format: 1 byte discriminator + 28 bytes hash
-      *   - 0x00 = KeyHash
-      *   - 0x01 = ScriptHash
+      *   - 0x00 = ScriptHash
+      *   - 0x01 = KeyHash
+      *
+      * Based on the `MemPack (Credential kr)` instance in Cardano.Ledger.Credential.
       */
     private def parseCredential(bytes: Array[Byte], offset: Int): Credential = {
         val discriminator = bytes(offset) & 0xff
@@ -212,9 +214,9 @@ object MempackParser {
 
         discriminator match {
             case 0x00 =>
-                Credential.KeyHash(AddrKeyHash.fromArray(hashBytes))
-            case 0x01 =>
                 Credential.ScriptHash(ScriptHash.fromArray(hashBytes))
+            case 0x01 =>
+                Credential.KeyHash(AddrKeyHash.fromArray(hashBytes))
             case _ =>
                 throw new IllegalArgumentException(
                   s"Invalid credential discriminator: 0x${"%02x".format(discriminator)}"
@@ -503,17 +505,10 @@ object MempackParser {
                 // Coin only
                 MultiAsset.empty
             case 1 =>
-                // Coin + MultiAsset - use CBOR decoding as fallback
-                val maBytes = bytes.slice(offset, bytes.length)
-                try {
-                    val (ma, consumed) = parseMultiAssetCbor(maBytes)
-                    offset += consumed
-                    ma
-                } catch {
-                    case _: Exception =>
-                        // MultiAsset parsing not yet implemented, return empty
-                        MultiAsset.empty
-                }
+                // Coin + VarLen numAssets + ShortByteString rep
+                val (ma, consumed) = parseMultiAsset(bytes, offset)
+                offset += consumed
+                ma
             case _ =>
                 throw new IllegalArgumentException(s"Unsupported CompactValue tag: $coinTag")
         }
@@ -521,17 +516,43 @@ object MempackParser {
         ParsedValue(Value(Coin(coin), multiAsset), offset - startOffset)
     }
 
-    /** Try to parse MultiAsset from mempack format
+    /** Parse the multi-asset part of a `CompactValueMultiAsset`: `VarLen numAssets`, then the
+      * representation as a `ShortByteString` (`VarLen` length + bytes).
       *
-      * Note: The mempack format for MultiAsset in cardano-ledger test vectors uses a complex
-      * encoding that differs from the standard MemPack instance. For now, we return an empty
-      * MultiAsset to allow the tests to pass. The conformance tests primarily validate transaction
-      * execution logic rather than exact output value parsing.
+      * The representation has five regions (Cardano.Ledger.Mary.Value, `from`): A) numAssets Word64
+      * quantities, B) numAssets Word16 policy id offsets, C) numAssets Word16 asset name offsets,
+      * D) policy ids, E) asset names. Words use native (little-endian) byte order and offsets are
+      * relative to the start of the representation. An asset name ends at the next greater name
+      * offset, or at the end of the representation.
       *
-      * TODO: Implement full MultiAsset parsing when the exact format is understood.
+      * @return
+      *   the multi-asset and the number of bytes consumed
       */
-    private def parseMultiAssetCbor(bytes: Array[Byte]): (MultiAsset, Int) = {
-        // Skip MultiAsset bytes and return empty
-        (MultiAsset.empty, bytes.length)
+    private def parseMultiAsset(bytes: Array[Byte], startOffset: Int): (MultiAsset, Int) = {
+        var offset = startOffset
+        val numAssets = parseVarLenWord64(bytes.drop(offset)).toInt
+        offset += varLenEncodedLength(bytes.drop(offset))
+        val repLength = parseVarLenWord64(bytes.drop(offset)).toInt
+        offset += varLenEncodedLength(bytes.drop(offset))
+        val rep = bytes.slice(offset, offset + repLength)
+        offset += repLength
+
+        val buf = ByteBuffer.wrap(rep).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        val raw = (0 until numAssets).map { i =>
+            val quantity = buf.getLong(8 * i)
+            val policyOffset = buf.getShort(8 * numAssets + 2 * i) & 0xffff
+            val nameOffset = buf.getShort(10 * numAssets + 2 * i) & 0xffff
+            (policyOffset, nameOffset, quantity)
+        }
+        val nameOffsets = raw.map(_._2).distinct.sorted
+        val nameEnd = nameOffsets.zip(nameOffsets.drop(1) :+ repLength).toMap
+        val assets = raw.map { (policyOffset, nameOffset, quantity) =>
+            (
+              ScriptHash.fromArray(rep.slice(policyOffset, policyOffset + 28)),
+              AssetName(ByteString.fromArray(rep.slice(nameOffset, nameEnd(nameOffset)))),
+              quantity
+            )
+        }
+        (MultiAsset.from(assets), offset - startOffset)
     }
 }
