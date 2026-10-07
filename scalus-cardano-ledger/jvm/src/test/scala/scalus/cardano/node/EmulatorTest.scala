@@ -659,6 +659,42 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(!emulator.certState.vstate.dreps.contains(drepCred))
     }
 
+    test("DRep deregistration clears the vote delegation of every account delegating to it") {
+        // spec [SC-21]: Conway GOVCERT, ConwayUnRegDRep
+        val deposit = Coin(CardanoInfo.mainnet.protocolParams.dRepDeposit)
+        val drepHash = AddrKeyHash.fromHex("d" * 56)
+        val otherDRep = DRep.KeyHash(AddrKeyHash.fromHex("e" * 56))
+        def account(drep: DRep) = ConwayAccountState(Coin.zero, deposit, None, Some(drep))
+        val credentials = (1 to 4).map(i =>
+            Credential.KeyHash(
+              AddrKeyHash.fromByteString(ByteString.fromArray(Array.fill(28)(i.toByte)))
+            )
+        )
+        val accounts = Map(
+          credentials(0) -> account(DRep.KeyHash(drepHash)),
+          credentials(1) -> account(DRep.KeyHash(drepHash)),
+          credentials(2) -> account(otherDRep),
+          credentials(3) -> account(DRep.AlwaysAbstain)
+        )
+        val drepCred = Credential.KeyHash(drepHash)
+        val emulator = Emulator(
+          validators = Set.empty,
+          mutators = Emulator.defaultMutators,
+          initialCertState = CertState(
+            dstate = DelegationState(accounts),
+            vstate = VotingState(Map(drepCred -> DRepState(0L, None, deposit, Set.empty)))
+          )
+        )
+
+        val result = emulator.submitSync(certTx(Certificate.UnregDRepCert(drepCred, deposit)))
+        assert(result.isRight, result)
+        assert(
+          emulator.certState.dstate.accounts == accounts
+              .updated(credentials(0), accounts(credentials(0)).copy(dRepDelegation = None))
+              .updated(credentials(1), accounts(credentials(1)).copy(dRepDelegation = None))
+        )
+    }
+
     test("Emulator.setSlot preserves evaluatorMode and debugScripts (issue #314)") {
         val emulator = Emulator(
           initialContext =

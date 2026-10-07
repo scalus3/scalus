@@ -70,7 +70,7 @@ class StakeCertificatesMutatorTest extends AnyFunSuite with Matchers with Either
         certs: Seq[Certificate],
         certState: CertState = CertState.empty
     ) =
-        StakeCertificatesMutator.transit(
+        CertsMutator.transit(
           mkContext(certState),
           State(certState = certState),
           toTx(certs)
@@ -127,6 +127,9 @@ class StakeCertificatesMutatorTest extends AnyFunSuite with Matchers with Either
               Seq(Certificate.StakeRegDelegCert(credential, poolId, wrongDeposit))
             ).left.value
 
-        error.invalidDeposits should contain(credential -> (keyDeposit -> wrongDeposit))
+        error match
+            case e: TransactionException.StakeCertificatesException =>
+                e.invalidDeposits should contain(credential -> (keyDeposit -> wrongDeposit))
+            case other => fail(s"expected StakeCertificatesException, got $other")
     }
 }

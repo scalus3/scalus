@@ -4,6 +4,8 @@ package rules
 import scalus.cardano.address.Network
 import scalus.uplc.DebugScript
 
+import scala.annotation.nowarn
+
 // It's mutable state for transient calculation
 case class Context(
     var fee: Coin = Coin.zero,
@@ -190,13 +192,19 @@ object STS {
         ): Mutator { type Error = ErrorT } =
             Mutator[ErrorT](validators, mutators, Mutator.defaultName)
 
+        /** Applies the mutators in order. A set with [[CertsMutator]] skips the deprecated per-kind
+          * certificate mutators, which would apply the certificates a second time, spec [SC-22].
+          */
         def transit[ErrorT <: TransactionException](
             mutators: Iterable[Mutator { type Error <: ErrorT }],
             context: Mutator#Context,
             state: Mutator#State,
             event: Mutator#Event
         ): (Mutator { type Error = ErrorT })#Result = {
-            mutators.foldLeft(success(state): (Mutator { type Error = ErrorT })#Result) {
+            val effective =
+                if mutators.exists(_ == CertsMutator) then mutators.filterNot(perKindCertMutators)
+                else mutators
+            effective.foldLeft(success(state): (Mutator { type Error = ErrorT })#Result) {
                 (acc, mutator) =>
                     acc.flatMap(currentState => mutator.transit(context, currentState, event))
             }
@@ -217,5 +225,10 @@ object STS {
         def success(state: STS#State): (Mutator { type Error = Nothing })#Result = Right(state)
 
         private val defaultName: String = "AnonymousMutator"
+
+        /** The 1.3 mutators that [[CertsMutator]] replaces. */
+        @nowarn("cat=deprecation")
+        private val perKindCertMutators: Set[Mutator] =
+            Set(StakeCertificatesMutator, StakePoolCertificatesMutator, VotingCertificatesMutator)
     }
 }

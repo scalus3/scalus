@@ -30,13 +30,16 @@ object StakePoolCertificatesValidator extends STS.Validator {
             rewardAccount: RewardAccount
         ): ValidationState = {
             val poolId = PoolKeyHash.fromByteString(operator)
+            // A new pool is registered at once, so a later certificate of the tx can retire it,
+            // as Haskell POOL checks against the pools after the earlier certificates.
+            val registered = copy(existingPools = existingPools + poolId)
 
             val withNetworkCheck =
                 if rewardAccount.address.network != network then
-                    copy(rewardAccountMismatches =
+                    registered.copy(rewardAccountMismatches =
                         rewardAccountMismatches + ((poolId, rewardAccount.address.network, network))
                     )
-                else this
+                else registered
 
             if cost < minPoolCost then
                 withNetworkCheck.copy(costTooLow =

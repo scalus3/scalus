@@ -6,7 +6,8 @@ import org.scalatest.matchers.should.Matchers
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 
-import scala.collection.immutable.SortedMap
+import scala.annotation.nowarn
+import scala.collection.immutable.{ListSet, SortedMap}
 
 /** Withdrawals and certificates through the default mutator pipeline, spec 13.1. */
 class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
@@ -69,7 +70,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
     /** The certificate and withdrawal validators, then every default mutator. */
     private def step(state: State, transaction: Transaction) =
         STS.Mutator.transit[TransactionException](
-          Seq(CertsValidator, StakeCertificatesValidator),
+          Seq(CertsValidator, StakeCertificatesValidator, StakePoolCertificatesValidator),
           DefaultMutators.all,
           context(state),
           state,
@@ -114,13 +115,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
 
     test("the default mutators apply withdrawals, then certificates, then scripts and UTxO") {
         // spec [SC-3a]: ledger order, by an explicit list rather than by name
-        DefaultMutators.all.toList shouldBe List(
-          CertsMutator,
-          StakeCertificatesMutator,
-          StakePoolCertificatesMutator,
-          VotingCertificatesMutator,
-          PlutusScriptsTransactionMutator
-        )
+        DefaultMutators.all.toList shouldBe List(CertsMutator, PlutusScriptsTransactionMutator)
     }
 
     // spec [SC-3c] row 5. The whole pipeline needs a failing script; the "Not validating CERT
@@ -141,7 +136,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         // spec [SC-3e]
         val state = stateWith(Coin.zero)
         val unreg = phase2Failed(tx(None, Certificate.UnregCert(credential, Some(keyDeposit))))
-        StakeCertificatesMutator.transit(context(state), state, unreg).value shouldBe state
+        CertsMutator.transit(context(state), state, unreg).value shouldBe state
     }
 
     test("a phase-2-failed tx does not apply its pool certificates") {
@@ -149,7 +144,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         val state = stateWith(Coin.zero)
         val nextEpoch = cardanoInfo.slotConfig.epochOf(0) + 1
         val retire = phase2Failed(tx(None, Certificate.PoolRetirement(poolId, nextEpoch)))
-        StakePoolCertificatesMutator.transit(context(state), state, retire).value shouldBe state
+        CertsMutator.transit(context(state), state, retire).value shouldBe state
     }
 
     test("a phase-2-failed tx does not apply its DRep certificates") {
@@ -158,7 +153,7 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         val unreg = phase2Failed(
           tx(None, Certificate.UnregDRepCert(drepCredential, Coin(params.dRepDeposit)))
         )
-        VotingCertificatesMutator.transit(context(state), state, unreg).value shouldBe state
+        CertsMutator.transit(context(state), state, unreg).value shouldBe state
     }
 
     test("a phase-2-failed tx skips the withdrawal check") {
@@ -191,5 +186,167 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         val accounts = Map(credential -> ConwayAccountState(Coin.ada(10), keyDeposit, None, None))
         CertsValidator.applyWithdrawals(accounts, SortedMap(rewardAccount -> Coin.ada(3))) shouldBe
             Map(credential -> ConwayAccountState(Coin.ada(7), keyDeposit, None, None))
+    }
+
+    // spec [SC-22]: one ordered pass over the certificates, as Haskell CERTS folds them
+
+    private val drepDeposit = Coin(params.dRepDeposit)
+    private val drep = DRep.KeyHash(AddrKeyHash.fromHex("c" * 56))
+    private val nextEpoch = cardanoInfo.slotConfig.epochOf(0) + 1
+
+    private val newPoolOperator = AddrKeyHash.fromHex("e" * 56)
+    private val newPoolId = PoolKeyHash.fromByteString(newPoolOperator)
+    private val newPool = pool.copy(operator = newPoolOperator, poolOwners = Set(newPoolOperator))
+
+    private def certs(certificates: Certificate*): Transaction = tx(None, certificates*)
+
+    test("a vote delegation after its DRep re-registers in the same tx is kept") {
+        val result = step(
+          stateWith(Coin.zero),
+          certs(
+            Certificate.UnregDRepCert(drepCredential, drepDeposit),
+            Certificate.RegDRepCert(drepCredential, drepDeposit, None),
+            Certificate.VoteDelegCert(credential, drep)
+          )
+        ).value
+        account(result).flatMap(_.dRepDelegation) shouldBe Some(drep)
+    }
+
+    test("a vote delegation before its DRep unregisters and re-registers is cleared") {
+        val result = step(
+          stateWith(Coin.zero),
+          certs(
+            Certificate.VoteDelegCert(credential, drep),
+            Certificate.UnregDRepCert(drepCredential, drepDeposit),
+            Certificate.RegDRepCert(drepCredential, drepDeposit, None)
+          )
+        ).value
+        account(result).flatMap(_.dRepDelegation) shouldBe None
+        result.certState.vstate.dreps.keySet shouldBe Set(drepCredential)
+    }
+
+    test("a vote delegation to a DRep that unregisters later in the same tx is cleared") {
+        // spec [SC-21]
+        val result = step(
+          stateWith(Coin.zero),
+          certs(
+            Certificate.VoteDelegCert(credential, drep),
+            Certificate.UnregDRepCert(drepCredential, drepDeposit)
+          )
+        ).value
+        account(result).flatMap(_.dRepDelegation) shouldBe None
+    }
+
+    test("a DRep script deregistration clears the vote delegations to that script") {
+        // spec [SC-21], the Credential.ScriptHash branch
+        val scriptHash = ScriptHash.fromHex("d" * 56)
+        val scriptDRep = Credential.ScriptHash(scriptHash)
+        val base = stateWith(Coin.zero)
+        val state = base.copy(certState =
+            base.certState.copy(
+              vstate = VotingState(Map(scriptDRep -> DRepState(100, None, drepDeposit, Set.empty))),
+              dstate = DelegationState(
+                Map(
+                  credential -> ConwayAccountState(
+                    Coin.zero,
+                    keyDeposit,
+                    None,
+                    Some(DRep.ScriptHash(scriptHash))
+                  )
+                )
+              )
+            )
+        )
+        // without the script mutator: the tx carries no script for the DRep's witness
+        val result = STS.Mutator
+            .transit[TransactionException](
+              DefaultMutators.all.filterNot(_ == PlutusScriptsTransactionMutator),
+              context(state),
+              state,
+              certs(Certificate.UnregDRepCert(scriptDRep, drepDeposit))
+            )
+            .value
+        account(result).flatMap(_.dRepDelegation) shouldBe None
+    }
+
+    test("a pool registered earlier in the tx can be retired, at a later epoch") {
+        // Haskell POOL checks the retirement against the pools after the earlier certificates
+        val result = step(
+          stateWith(Coin.zero),
+          certs(newPool, Certificate.PoolRetirement(newPoolId, nextEpoch))
+        ).value
+        result.certState.pstate.stakePools.keySet should contain(newPoolId)
+        result.certState.pstate.retiring.get(newPoolId) shouldBe Some(nextEpoch)
+    }
+
+    test("a pool retirement before its registration in the tx is rejected") {
+        val error = step(
+          stateWith(Coin.zero),
+          certs(Certificate.PoolRetirement(newPoolId, nextEpoch), newPool)
+        ).left.value
+        error shouldBe a[TransactionException.StakePoolException]
+    }
+
+    test("a delegation after a pool retirement in the same tx keeps the pool until the epoch") {
+        // Haskell POOL only schedules the retirement; POOLREAP removes the pool at the boundary
+        val result = step(
+          stateWith(Coin.zero),
+          certs(
+            Certificate.PoolRetirement(poolId, nextEpoch),
+            Certificate.StakeDelegation(credential, poolId)
+          )
+        ).value
+        account(result).flatMap(_.stakePoolDelegation) shouldBe Some(poolId)
+        result.certState.pstate.retiring.get(poolId) shouldBe Some(nextEpoch)
+    }
+
+    test("a delegation to a pool registered later in the same tx is rejected") {
+        val error = step(
+          stateWith(Coin.zero),
+          certs(Certificate.StakeDelegation(credential, newPoolId), newPool)
+        ).left.value
+        error match
+            case e: TransactionException.StakeCertificatesException =>
+                e.delegateeStakePoolsNotRegistered shouldBe Set(newPoolId)
+            case other => fail(s"expected StakeCertificatesException, got $other")
+    }
+
+    // 1.3 mutator sets may still list the deprecated per-kind mutators next to CertsMutator
+
+    private val newCredential = Credential.KeyHash(AddrKeyHash.fromHex("9" * 56))
+
+    private def withMutators(
+        mutators: Iterable[STS.Mutator],
+        state: State,
+        transaction: Transaction
+    ) =
+        STS.Mutator.transit[TransactionException](
+          Seq(CertsValidator, StakeCertificatesValidator, StakePoolCertificatesValidator),
+          mutators,
+          context(state),
+          state,
+          transaction
+        )
+
+    @nowarn("cat=deprecation")
+    private val withDeprecatedStakeMutator: Iterable[STS.Mutator] =
+        ListSet(CertsMutator, StakeCertificatesMutator, PlutusScriptsTransactionMutator)
+
+    test("a deprecated stake mutator next to CertsMutator does not register twice") {
+        val state = stateWith(Coin.zero)
+        val registration = certs(Certificate.RegCert(newCredential, Some(keyDeposit)))
+        withMutators(withDeprecatedStakeMutator, state, registration).value shouldBe
+            step(state, registration).value
+    }
+
+    @nowarn("cat=deprecation")
+    private val onlyDeprecatedStakeMutator: Iterable[STS.Mutator] = Seq(StakeCertificatesMutator)
+
+    test("a deprecated stake mutator without CertsMutator still registers") {
+        val state = stateWith(Coin.zero)
+        val registration = certs(Certificate.RegCert(newCredential, Some(keyDeposit)))
+        val result = withMutators(onlyDeprecatedStakeMutator, state, registration).value
+        result.certState.dstate.accounts.get(newCredential) shouldBe
+            Some(ConwayAccountState(Coin.zero, keyDeposit, None, None))
     }
 }
