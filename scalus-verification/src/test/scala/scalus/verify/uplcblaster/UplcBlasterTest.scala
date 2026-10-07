@@ -14,6 +14,7 @@ import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.verify.*
 import scalus.verify.Props.*
 import scalus.verify.lean.Directories
+import scalus.verify.lean.LeanServer.{Progress, Reached, Started}
 
 import java.nio.file.Files
 import scala.concurrent.duration.*
@@ -869,6 +870,70 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         assert(UplcBlaster(40, lean).withMaxHeartbeats(7).withoutTimeout.maxHeartbeats == 7)
         assert(UplcBlaster(40, lean, 30.seconds).withMaxHeartbeats(7).timeout.contains(30.seconds))
         assertThrows[IllegalArgumentException](UplcBlaster(40, lean, 0.seconds))
+    }
+
+    test("a check that is given up says how far it had come") {
+        // No Lean is asked for: these are the tactic's readings of what the server reports. The
+        // commands are those of checks the tactic writes, so a change of their text shows here.
+        val directory = Files.createTempDirectory("scalus-progress-")
+        def commands(goal: UplcBlaster.Lowered): List[String] =
+            Files.readAllLines(UplcBlaster.writeCheck(goal, 40, directory)).asScala.toList
+        def command(of: List[String], start: String): String =
+            of.find(_.startsWith(start)).getOrElse(fail(s"no command $start in $of"))
+        val (quantified, closed) =
+            try
+                (
+                  commands(lowered(forAll[BigInt](x => x + BigInt(0) == x), FunctionTable.empty)),
+                  commands(lowered(Prop(BigInt(1) + BigInt(1) == BigInt(2)), FunctionTable.empty))
+                )
+            finally Directories.remove(directory)
+
+        val worker = Started("lean", 40.seconds, Some(38.seconds))
+        def at(command: String, started: Started*): Progress =
+            Progress(Reached.Command(command), 27.seconds, worker :: started.toList)
+
+        // A symbolic run that goes on: the budget lets the program run through a loop.
+        val running = UplcBlaster.unfinished(2, 12000, at(command(quantified, "#prep_uplc_run")))
+        assert(running.startsWith("after 27 s it was still running the program of test 1 of 2"))
+        assert(running.contains("symbolically, for 12000 steps"), running)
+        assert(running.contains("had not come to the solver"), running)
+
+        // The statement had come to Blaster, which simplifies it, and then starts the solver,
+        // translates the statement for it and asks it.
+        val statement = command(quantified, "#blaster")
+        assert(
+          UplcBlaster.unfinished(2, 400, at(statement)) ==
+              "Blaster had been simplifying the statement for 27 s, and had not started the solver"
+        )
+        assert(
+          UplcBlaster.unfinished(
+            2,
+            400,
+            at(statement, Started("z3", 9.seconds, Some(8.seconds)))
+          ) ==
+              "Blaster had started the solver 9 s before, and the solver had worked for 8 s of them"
+        )
+        assert(
+          UplcBlaster.unfinished(2, 400, at(statement, Started("z3", 9.seconds, None))) ==
+              "Blaster had started the solver 9 s before"
+        )
+
+        // A closed statement is evaluated.
+        assert(
+          UplcBlaster.unfinished(1, 400, at(command(closed, "example"))) ==
+              "Lean had been evaluating the statement for 27 s"
+        )
+        assert(
+          UplcBlaster.unfinished(2, 400, at(command(quantified, "import"))) ==
+              "it was still loading the libraries and the programs"
+        )
+
+        // What is no command of the check.
+        def reached(where: Reached): String =
+            UplcBlaster.unfinished(2, 400, Progress(where, Duration.Zero, Nil))
+        assert(reached(Reached.NotStarted).startsWith("the check had not started"))
+        assert(reached(Reached.Unreported) == "Lean had not said how far the check had come")
+        assert(reached(Reached.End).startsWith("Lean had run every command of the check"))
     }
 
     test("a check is also written where it is asked to be kept") {

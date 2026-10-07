@@ -1,7 +1,7 @@
 package scalus.verify.lean
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.verify.lean.LeanServer.{Message, Result, Severity}
+import scalus.verify.lean.LeanServer.{Message, Progress, Reached, Result, Severity}
 import scalus.verify.uplcblaster.LeanProofs
 
 import java.nio.file.{Files, Path}
@@ -63,7 +63,16 @@ class LeanServerTest extends AnyFunSuite with LeanProofs {
         try
             assert(server.check(holds, limit) == Result.Finished(Nil))
             val before = processes(server)
-            assert(server.check(endless, Some(3.seconds)) == Result.TimedOut)
+            server.check(endless, Some(3.seconds)) match
+                case Result.TimedOut(progress) =>
+                    // How far it had come: Lean was at the evaluation, in its worker. How long
+                    // the worker had worked is not told on every system.
+                    assert(progress.reached == Reached.Command("#eval spin 0"), progress)
+                    assert(progress.spent > Duration.Zero, progress)
+                    val worker = progress.started.find(_.name.startsWith("lean"))
+                    assert(worker.exists(_.running > Duration.Zero), progress)
+                    assert(worker.flatMap(_.working).forall(_ > Duration.Zero), progress)
+                case other => fail(s"expected a check that is given up, got $other")
             // The worker that ran the evaluation has ended, so nothing of it goes on. The server
             // itself stays, and takes the next check.
             assert(server.handle.isAlive)
@@ -118,7 +127,10 @@ class LeanServerTest extends AnyFunSuite with LeanProofs {
                 CompletableFuture.supplyAsync[Result](() => server.check(endless, Some(10.seconds)))
             Thread.sleep(2000)
             // The time limit counts the wait: this check is given up before it starts.
-            assert(server.check(holds, Some(1.second)) == Result.TimedOut)
+            assert(
+              server.check(holds, Some(1.second)) ==
+                  Result.TimedOut(Progress(Reached.NotStarted, Duration.Zero, Nil))
+            )
             val interrupted = new CompletableFuture[Boolean]()
             val waiting = new Thread(() =>
                 try
@@ -131,7 +143,7 @@ class LeanServerTest extends AnyFunSuite with LeanProofs {
             waiting.interrupt()
             assert(interrupted.get(5, TimeUnit.SECONDS))
             // The first check went on meanwhile, to its own time limit.
-            assert(first.get(30, TimeUnit.SECONDS) == Result.TimedOut)
+            assert(first.get(30, TimeUnit.SECONDS).isInstanceOf[Result.TimedOut])
             assert(server.check(holds, limit) == Result.Finished(Nil))
         finally server.close()
     }

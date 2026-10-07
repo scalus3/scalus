@@ -12,6 +12,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
+import scala.jdk.DurationConverters.*
+import scala.jdk.OptionConverters.*
 import scala.util.Try
 
 /** A running Lean language server for one workspace: `lake serve`, spoken to over its standard
@@ -57,6 +59,12 @@ final class LeanServer private (
     /** The diagnostics the server sent last, and the version of the document they are of. */
     @volatile private var published: (Int, List[Diagnostic]) = (0, Nil)
 
+    /** Where Lean is in the document, as it said last: the version of the document, the line at
+      * which the first command starts that it has not finished, or none where it has finished them
+      * all, and the moment it came there. Only the thread that reads the server sets it.
+      */
+    @volatile private var position: Option[(Int, Option[Int], Long)] = None
+
     private val session =
         new JsonRpcSession(process.getInputStream, process.getOutputStream, notified)
 
@@ -87,7 +95,7 @@ final class LeanServer private (
       */
     def check(source: Path => String, timeout: Option[FiniteDuration]): Result = {
         val deadline = timeout.map(_.fromNow)
-        if !entered(deadline) then Result.TimedOut
+        if !entered(deadline) then Result.TimedOut(Progress(Reached.NotStarted, Duration.Zero, Nil))
         else
             try
                 written(source) match
@@ -123,7 +131,7 @@ final class LeanServer private (
             try await(elaborated(sent), deadline)
             catch
                 case interrupted: InterruptedException =>
-                    dropped(): Unit
+                    dropped(startedByCheck()): Unit
                     throw interrupted
         waited match
             // The server answers a check that ends while it is being closed, and then publishes
@@ -132,7 +140,31 @@ final class LeanServer private (
                 Result.Failed("the Lean server was closed during the check")
             case Some(Right(diagnostics)) => Result.Finished(messages(diagnostics))
             case Some(Left(reason))       => refused(reason)
-            case None                     => dropped().getOrElse(Result.TimedOut)
+            case None                     =>
+                // What the check started is listed once, for its progress and for its end. The
+                // progress is read first, as closing the document ends those processes, and
+                // the document is closed whatever comes of reading it.
+                val workers = startedByCheck()
+                val progress = Try(progressOf(sent, source, workers))
+                dropped(workers).getOrElse(Result.TimedOut(progress.get))
+    }
+
+    /** The processes below the server that were not there before a document was opened: Lean's
+      * worker, and what the worker started.
+      */
+    private def startedByCheck(): List[ProcessHandle] =
+        process.descendants().iterator().asScala.filterNot(standing).toList
+
+    /** How far version `sent` of the document, whose text is `source`, has come. */
+    private def progressOf(sent: Int, source: String, workers: List[ProcessHandle]): Progress = {
+        val now = System.nanoTime()
+        val (reached, since) = position match
+            case Some((version, line, since)) if version == sent =>
+                // A range that starts after the last line is the end of the document as well.
+                val command = line.flatMap(index => source.linesIterator.drop(index).nextOption())
+                command.fold[Reached](Reached.End)(Reached.Command(_)) -> since
+            case _ => Reached.Unreported -> now
+        Progress(reached, (now - since).nanos, workers.flatMap(Started.of))
     }
 
     /** The result of a check that was answered with an error.
@@ -144,7 +176,7 @@ final class LeanServer private (
       */
     private def refused(reason: String): Result =
         if closed.get || session.ended.nonEmpty then fail(reason)
-        else dropped().getOrElse(Result.Failed(reason))
+        else dropped(startedByCheck()).getOrElse(Result.Failed(reason))
 
     /** Ends the server: it is asked to shut down, and whatever is left of its processes after a few
       * seconds is stopped. A check that runs in another thread fails. Closing again does nothing.
@@ -232,8 +264,8 @@ final class LeanServer private (
 
     /** Ends the check that ran last, by closing the document. Lean ends the worker of a closed
       * document, and with it whatever the check started: Blaster's run, the solver, an evaluation.
-      * The check has ended only when those processes have. Where they do not end, the server is
-      * closed, and that failure is returned.
+      * `workers` are those processes ([[startedByCheck]]), and the check has ended only when they
+      * have. Where they do not end, the server is closed, and that failure is returned.
       *
       * An edit of the document would be answered sooner, and would end Blaster's run and the solver
       * as well. But an evaluation that does not look for its cancellation goes on after it, and
@@ -241,8 +273,7 @@ final class LeanServer private (
       *
       * The next check opens the document again, and loads the libraries again.
       */
-    private def dropped(): Option[Result] = {
-        val workers = process.descendants().iterator().asScala.filterNot(standing).toList
+    private def dropped(workers: List[ProcessHandle]): Option[Result] = {
         val document = DidCloseParams(TextDocumentIdentifier(uri))
         session.notify("textDocument/didClose", Some(RawJson.of(document)))
         opened = false
@@ -301,12 +332,24 @@ final class LeanServer private (
             }
             .sortBy(_.line)
 
-    /** What the server says unasked. The diagnostics of the document are kept. */
+    /** What the server says unasked. The diagnostics of the document are kept, and where Lean says
+      * it is: `$/lean/fileProgress` lists the ranges of the document it has not finished, and none
+      * when it has finished every command.
+      */
     private def notified(method: String, params: Option[RawJson]): Unit =
         if method == "textDocument/publishDiagnostics" then
             params.map(_.as[PublishDiagnosticsParams]).foreach { sent =>
                 if sent.uri == uri then
                     sent.version.foreach(current => published = (current, sent.diagnostics))
+            }
+        else if method == "$/lean/fileProgress" then
+            params.map(_.as[FileProgressParams]).foreach { sent =>
+                if sent.textDocument.uri == uri then
+                    sent.textDocument.version.foreach { version =>
+                        val line = sent.processing.map(_.range.start.line).minOption
+                        val known = position.exists((at, last, _) => at == version && last == line)
+                        if !known then position = Some((version, line, System.nanoTime()))
+                    }
             }
 }
 
@@ -322,6 +365,65 @@ object LeanServer {
       */
     final case class Message(line: Int, severity: Severity, text: String)
 
+    /** How far a check had come when it was given up.
+      *
+      * @param reached
+      *   where in its document the check was
+      * @param spent
+      *   the time it had been there
+      * @param started
+      *   the processes the check had started and that still ran: Lean's worker, and what the worker
+      *   started, a solver for instance
+      */
+    final case class Progress(reached: Reached, spent: FiniteDuration, started: List[Started])
+
+    /** Where in its document a check was. */
+    enum Reached {
+
+        /** The check waited for the one before it, and was not given to Lean. */
+        case NotStarted
+
+        /** Lean had the check, and had not said where it was in it. */
+        case Unreported
+
+        /** The first command Lean had not finished starts with `line`. Lean elaborates one command
+          * after the other, so that is the command it was at, unless an earlier one left work
+          * behind that goes on beside the later ones, as the proof of a theorem does.
+          */
+        case Command(line: String)
+
+        /** Lean had elaborated every command, and was not done: what a command leaves to be
+          * checked, a definition for instance, has no place in the document.
+          */
+        case End
+    }
+
+    /** A process of a check: the name of its program, how long it had run, and how much of that it
+      * had worked, where the system tells the JVM, as Linux does and macOS does not. A process that
+      * waits for its input runs without working.
+      */
+    final case class Started(
+        name: String,
+        running: FiniteDuration,
+        working: Option[FiniteDuration]
+    )
+
+    object Started {
+
+        /** What the system tells of `process`: nothing of one that has ended meanwhile. */
+        private[lean] def of(process: ProcessHandle): Option[Started] = {
+            val info = process.info()
+            for
+                command <- info.command().toScala
+                start <- info.startInstant().toScala
+            yield Started(
+              command.substring(math.max(command.lastIndexOf('/'), command.lastIndexOf('\\')) + 1),
+              java.time.Duration.between(start, java.time.Instant.now()).toScala,
+              info.totalCpuDuration().toScala.map(_.toScala)
+            )
+        }
+    }
+
     /** The outcome of a [[LeanServer.check]]. */
     enum Result {
 
@@ -330,9 +432,9 @@ object LeanServer {
 
         /** The time limit passed, in the check or in the wait for the one before it. The check is
           * given up, and what it started has ended. The server takes the next one, and loads the
-          * libraries again for it.
+          * libraries again for it. `progress` is how far the check had come.
           */
-        case TimedOut
+        case TimedOut(progress: Progress)
 
         /** The check was not made, for `reason`. The server takes the next one, unless it ended
           * itself or could not end what the check started: then it is closed
@@ -467,6 +569,12 @@ object LeanServer {
             version: Option[Int],
             diagnostics: List[Diagnostic]
         )
+        final case class ProgressDocument(uri: String, version: Option[Int])
+        final case class Processing(range: Range)
+        final case class FileProgressParams(
+            textDocument: ProgressDocument,
+            processing: List[Processing]
+        )
 
         given JsonValueCodec[InitializeParams] = JsonCodecMaker.make
         given JsonValueCodec[InitializedParams] = JsonCodecMaker.make
@@ -475,5 +583,6 @@ object LeanServer {
         given JsonValueCodec[DidCloseParams] = JsonCodecMaker.make
         given JsonValueCodec[WaitForDiagnosticsParams] = JsonCodecMaker.make
         given JsonValueCodec[PublishDiagnosticsParams] = JsonCodecMaker.make
+        given JsonValueCodec[FileProgressParams] = JsonCodecMaker.make
     }
 }

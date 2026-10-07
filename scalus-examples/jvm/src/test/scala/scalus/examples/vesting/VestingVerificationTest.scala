@@ -489,6 +489,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
           linearVesting
         )
         assert(unfinished.contains("did not finish"), unfinished)
+        // It is the symbolic run of the validator that does not end, before the solver is asked.
+        assert(unfinished.contains("symbolically"), unfinished)
     }
 
     test("the guarantees stated on spend hold of every withdrawal the script accepts") {

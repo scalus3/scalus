@@ -234,7 +234,9 @@ document, its diagnostics, is the output of the check.
 - **Time limit.** A check is given up after a time by the clock: ten minutes
   (`UplcBlaster.defaultTimeout`), or the `timeout` of `UplcBlaster(budget, servers, timeout)`.
   The server then closes its document, which ends Lean's worker and the solver it started, and
-  the tactic is inconclusive. On some statements Lean does not return
+  the tactic is inconclusive. Its reason says where the check was: still running one of the
+  programs symbolically, in Blaster's simplification of the statement, or after Blaster had
+  started the solver, with the time the solver had worked. On some statements Lean does not return
   ([Statements that do not finish](#statements-that-do-not-finish)), and no other limit ends
   them all: Lean's own, below, is one of work, and Blaster's `timeout` option limits only the
   solver. `withoutTimeout` lifts the limit, and the tactic then waits for Lean.
@@ -571,8 +573,9 @@ steps than the budget, and there a conclusion, read strongly, is false. Lean's c
 that input, a long list for instance, and the replay finds the statement true on it:
 inconclusive. Proving them takes induction, which this tactic does not do.
 
-**Where the time goes.** There are two mechanisms, told apart with `set_option profiler true` in
-a check written by `writeCheck`, and by which process is busy.
+**Where the time goes.** There are two mechanisms. The reason of a check that is given up names
+the one it was in. They are also told apart with `set_option profiler true` in a check written
+by `writeCheck`, and by which process is busy.
 
 - **Paths in Lean.** `#prep_uplc_run` has Blaster run the CEK machine symbolically for the whole
   budget, and every test of a symbolic value splits the run. `length` asks one question per

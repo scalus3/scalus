@@ -1012,9 +1012,62 @@ object UplcBlaster {
                   messages.map(_.text).mkString("\n")
                 )
             // Only a check with a time limit is given up for it.
-            case LeanServer.Result.TimedOut =>
-                VerificationResult.Inconclusive(s"Lean did not finish within ${timeout.mkString}")
+            case LeanServer.Result.TimedOut(progress) =>
+                VerificationResult.Inconclusive(
+                  s"Lean did not finish within ${timeout.mkString}: " +
+                      unfinished(goal.leaves.size, budget, progress)
+                )
             case LeanServer.Result.Failed(reason) => VerificationResult.Failed(reason)
+    }
+
+    private val symbolicRun = """#prep_uplc_run prepared(\d+) .*""".r
+
+    /** Where a check of `tests` programs was when its time passed, for the reason of an
+      * inconclusive result.
+      *
+      * A check runs each test's program symbolically for the budget. Then Blaster simplifies the
+      * statement, starts the solver, translates the statement for it and asks it. So what a check
+      * was at tells what to do about it: a symbolic run that goes on follows a program through a
+      * loop, and wants a smaller budget or a fixed shape of what is looped over.
+      */
+    private[uplcblaster] def unfinished(
+        tests: Int,
+        budget: Int,
+        progress: LeanServer.Progress
+    ): String = {
+        import LeanServer.{Reached, Started}
+        def seconds(time: FiniteDuration): String = s"${time.toSeconds} s"
+        // What a check starts besides Lean's own processes, its worker and `lake`, is the solver.
+        def solver: Option[Started] = progress.started.find { started =>
+            !started.name.startsWith("lean") && !started.name.startsWith("lake")
+        }
+        progress.reached match
+            case Reached.NotStarted => "the check had not started: its server was at another check"
+            case Reached.Unreported => "Lean had not said how far the check had come"
+            case Reached.End =>
+                "Lean had run every command of the check, and had not finished checking what " +
+                    "they define"
+            case Reached.Command(line) =>
+                line.trim match
+                    case symbolicRun(test) =>
+                        s"after ${seconds(progress.spent)} it was still running the program of " +
+                            s"test ${test.toInt + 1} of $tests symbolically, for $budget steps, " +
+                            "and had not come to the solver. A budget closer to the steps of " +
+                            "the runs the statement is about may do"
+                    case command if command.startsWith("#blaster") =>
+                        solver match
+                            case None =>
+                                "Blaster had been simplifying the statement for " +
+                                    s"${seconds(progress.spent)}, and had not started the solver"
+                            // The solver waits while Blaster translates the statement for it.
+                            case Some(Started(_, running, Some(working))) =>
+                                s"Blaster had started the solver ${seconds(running)} before, " +
+                                    s"and the solver had worked for ${seconds(working)} of them"
+                            case Some(Started(_, running, None)) =>
+                                s"Blaster had started the solver ${seconds(running)} before"
+                    case command if command.startsWith("example") =>
+                        s"Lean had been evaluating the statement for ${seconds(progress.spent)}"
+                    case _ => "it was still loading the libraries and the programs"
     }
 
     /** The result that what Lean reported stands for: `output` is its messages, in the order of
