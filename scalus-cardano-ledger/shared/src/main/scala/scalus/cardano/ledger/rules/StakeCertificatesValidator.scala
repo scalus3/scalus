@@ -5,23 +5,34 @@ package rules
 object StakeCertificatesValidator extends STS.Validator {
     override final type Error = TransactionException.StakeCertificatesException
 
+    /** @param pools
+      *   the registered pools, with those registered by earlier certificates of the tx
+      * @param dreps
+      *   the registered DReps, after the DRep certificates earlier in the tx
+      */
     private case class ValidationState(
         accounts: Map[Credential, ConwayAccountState],
         expectedDeposit: Coin,
+        pools: Set[PoolKeyHash],
+        dreps: Set[Credential],
         newlyRegistered: Map[Credential, Coin] = Map.empty,
         deregisteredInTx: Set[Credential] = Set.empty,
         alreadyRegistered: Set[Credential] = Set.empty,
         missingRegistrations: Set[Credential] = Set.empty,
         nonZeroRewards: Map[Credential, Coin] = Map.empty,
         invalidDeposits: Map[Credential, (Coin, Coin)] = Map.empty,
-        invalidRefunds: Map[Credential, (Coin, Coin)] = Map.empty
+        invalidRefunds: Map[Credential, (Coin, Coin)] = Map.empty,
+        unregisteredPools: Set[PoolKeyHash] = Set.empty,
+        unregisteredDReps: Set[Credential] = Set.empty
     ) {
         def hasErrors: Boolean =
             alreadyRegistered.nonEmpty ||
                 missingRegistrations.nonEmpty ||
                 nonZeroRewards.nonEmpty ||
                 invalidDeposits.nonEmpty ||
-                invalidRefunds.nonEmpty
+                invalidRefunds.nonEmpty ||
+                unregisteredPools.nonEmpty ||
+                unregisteredDReps.nonEmpty
 
         def isCurrentlyRegistered(credential: Credential): Boolean =
             newlyRegistered.contains(credential) ||
@@ -87,24 +98,48 @@ object StakeCertificatesValidator extends STS.Validator {
                       deregisteredInTx = withRefundCheck.deregisteredInTx + credential
                     )
 
+        /** spec [SC-4]: Haskell DelegateeStakePoolNotRegisteredDELEG */
+        def ensurePoolRegistered(pool: PoolKeyHash): ValidationState =
+            if pools.contains(pool) then this
+            else copy(unregisteredPools = unregisteredPools + pool)
+
+        /** spec [SC-5]: Haskell DelegateeDRepNotRegisteredDELEG. Abstain and no confidence need no
+          * registration.
+          */
+        def ensureDRepRegistered(drep: DRep): ValidationState = drep match
+            case DRep.KeyHash(hash)    => ensureDRepCredential(Credential.KeyHash(hash))
+            case DRep.ScriptHash(hash) => ensureDRepCredential(Credential.ScriptHash(hash))
+            case DRep.AlwaysAbstain | DRep.AlwaysNoConfidence => this
+
+        private def ensureDRepCredential(credential: Credential): ValidationState =
+            if dreps.contains(credential) then this
+            else copy(unregisteredDReps = unregisteredDReps + credential)
+
         infix def processCertificate(cert: Certificate): ValidationState = cert match
             case Certificate.RegCert(credential, suppliedDeposit) =>
                 handleRegistration(credential, suppliedDeposit)
-            case Certificate.StakeRegDelegCert(credential, _, deposit) =>
+            case Certificate.StakeRegDelegCert(credential, pool, deposit) =>
+                handleRegistration(credential, Some(deposit)).ensurePoolRegistered(pool)
+            case Certificate.VoteRegDelegCert(credential, drep, deposit) =>
+                handleRegistration(credential, Some(deposit)).ensureDRepRegistered(drep)
+            case Certificate.StakeVoteRegDelegCert(credential, pool, drep, deposit) =>
                 handleRegistration(credential, Some(deposit))
-            case Certificate.VoteRegDelegCert(credential, _, deposit) =>
-                handleRegistration(credential, Some(deposit))
-            case Certificate.StakeVoteRegDelegCert(credential, _, _, deposit) =>
-                handleRegistration(credential, Some(deposit))
+                    .ensurePoolRegistered(pool)
+                    .ensureDRepRegistered(drep)
             case Certificate.UnregCert(credential, suppliedRefund) =>
                 handleDeregistration(credential, suppliedRefund)
-            case Certificate.StakeDelegation(credential, _) =>
-                ensureRegistered(credential)
-            case Certificate.StakeVoteDelegCert(credential, _, _) =>
-                ensureRegistered(credential)
-            case Certificate.VoteDelegCert(credential, _) =>
-                ensureRegistered(credential)
-            case _ => this
+            case Certificate.StakeDelegation(credential, pool) =>
+                ensureRegistered(credential).ensurePoolRegistered(pool)
+            case Certificate.StakeVoteDelegCert(credential, pool, drep) =>
+                ensureRegistered(credential).ensurePoolRegistered(pool).ensureDRepRegistered(drep)
+            case Certificate.VoteDelegCert(credential, drep) =>
+                ensureRegistered(credential).ensureDRepRegistered(drep)
+            // A new pool is registered at once, so a later certificate of the tx can delegate to it.
+            case registration: Certificate.PoolRegistration =>
+                copy(pools = pools + PoolKeyHash.fromByteString(registration.operator))
+            case Certificate.RegDRepCert(credential, _, _) => copy(dreps = dreps + credential)
+            case Certificate.UnregDRepCert(credential, _)  => copy(dreps = dreps - credential)
+            case _                                         => this
     }
 
     /** Checks the certificates against the accounts after the withdrawals of the same tx, as the
@@ -115,7 +150,7 @@ object StakeCertificatesValidator extends STS.Validator {
         val withdrawals = event.body.value.withdrawals.getOrElse(Withdrawals.empty).withdrawals
         val accounts =
             CertsValidator.applyWithdrawals(state.certState.dstate.accounts, withdrawals)
-        validateAccounts(context, accounts, event)
+        validateAccounts(context, state, accounts, event)
     }
 
     /** Checks the certificates against `state`, whose withdrawals [[CertsMutator]] has applied. */
@@ -124,10 +159,11 @@ object StakeCertificatesValidator extends STS.Validator {
         state: State,
         event: Event
     ): Result =
-        validateAccounts(context, state.certState.dstate.accounts, event)
+        validateAccounts(context, state, state.certState.dstate.accounts, event)
 
     private def validateAccounts(
         context: Context,
+        state: State,
         accounts: Map[Credential, ConwayAccountState],
         event: Event
     ): Result = {
@@ -136,7 +172,9 @@ object StakeCertificatesValidator extends STS.Validator {
         else {
             val initialState = ValidationState(
               accounts = accounts,
-              expectedDeposit = Coin(context.env.params.stakeAddressDeposit)
+              expectedDeposit = Coin(context.env.params.stakeAddressDeposit),
+              pools = state.certState.pstate.stakePools.keySet,
+              dreps = state.certState.vstate.dreps.keySet
             )
 
             val finalState = certificates.foldLeft(initialState)(_ processCertificate _)
@@ -149,7 +187,9 @@ object StakeCertificatesValidator extends STS.Validator {
                     finalState.missingRegistrations,
                     finalState.nonZeroRewards,
                     finalState.invalidDeposits,
-                    finalState.invalidRefunds
+                    finalState.invalidRefunds,
+                    finalState.unregisteredPools,
+                    finalState.unregisteredDReps
                   )
                 )
             else success

@@ -223,22 +223,77 @@ object TransactionException {
         def areCollateralInputsMissing: Boolean = !areTotalExUnitsZero && !hasCollateralInputs
     }
 
-    // It's Conway StakeKeyRegistered/StakeKeyNotRegistered/etc. DELEG failures in cardano-ledger
+    // It's Conway StakeKeyRegistered/StakeKeyNotRegistered/etc. DELEG failures in cardano-ledger.
+    // `delegateeStakePoolsNotRegistered` and `delegateeDRepsNotRegistered` are
+    // DelegateeStakePoolNotRegisteredDELEG and DelegateeDRepNotRegisteredDELEG.
     final case class StakeCertificatesException(
         transactionId: TransactionHash,
         alreadyRegistered: Set[Credential],
         missingRegistrations: Set[Credential],
         nonZeroRewardAccounts: Map[Credential, Coin],
         invalidDeposits: Map[Credential, (Coin, Coin)],
-        invalidRefunds: Map[Credential, (Coin, Coin)]
+        invalidRefunds: Map[Credential, (Coin, Coin)],
+        delegateeStakePoolsNotRegistered: Set[PoolKeyHash],
+        delegateeDRepsNotRegistered: Set[Credential]
     ) extends TransactionException(
           s"""Stake certificates validation failed for transactionId $transactionId.
              |already registered credentials: $alreadyRegistered,
              |missing registrations: $missingRegistrations,
              |non-zero reward accounts: $nonZeroRewardAccounts,
              |invalid deposits (expected -> provided): $invalidDeposits,
-             |invalid refunds (expected -> provided): $invalidRefunds.""".stripMargin
+             |invalid refunds (expected -> provided): $invalidRefunds,
+             |delegatee stake pools not registered: $delegateeStakePoolsNotRegistered,
+             |delegatee DReps not registered: $delegateeDRepsNotRegistered.""".stripMargin
+        ) {
+
+        /** No unregistered delegatees, as the deprecated 6-argument `apply`. */
+        @deprecated(
+          "Pass delegateeStakePoolsNotRegistered and delegateeDRepsNotRegistered",
+          "1.3.0"
         )
+        def this(
+            transactionId: TransactionHash,
+            alreadyRegistered: Set[Credential],
+            missingRegistrations: Set[Credential],
+            nonZeroRewardAccounts: Map[Credential, Coin],
+            invalidDeposits: Map[Credential, (Coin, Coin)],
+            invalidRefunds: Map[Credential, (Coin, Coin)]
+        ) = this(
+          transactionId,
+          alreadyRegistered,
+          missingRegistrations,
+          nonZeroRewardAccounts,
+          invalidDeposits,
+          invalidRefunds,
+          Set.empty,
+          Set.empty
+        )
+    }
+
+    object StakeCertificatesException {
+        @deprecated(
+          "Pass delegateeStakePoolsNotRegistered and delegateeDRepsNotRegistered",
+          "1.3.0"
+        )
+        def apply(
+            transactionId: TransactionHash,
+            alreadyRegistered: Set[Credential],
+            missingRegistrations: Set[Credential],
+            nonZeroRewardAccounts: Map[Credential, Coin],
+            invalidDeposits: Map[Credential, (Coin, Coin)],
+            invalidRefunds: Map[Credential, (Coin, Coin)]
+        ): StakeCertificatesException =
+            StakeCertificatesException(
+              transactionId,
+              alreadyRegistered,
+              missingRegistrations,
+              nonZeroRewardAccounts,
+              invalidDeposits,
+              invalidRefunds,
+              Set.empty,
+              Set.empty
+            )
+    }
 
     // It's Shelley/Conway poolRule failures (PoolDisallowed operation) in cardano-ledger
     final case class StakePoolException(

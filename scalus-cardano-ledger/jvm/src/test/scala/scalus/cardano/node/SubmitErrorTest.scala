@@ -265,7 +265,9 @@ class SubmitErrorTest extends AnyFunSuite {
             Set.empty,
             Map.empty,
             Map.empty,
-            Map.empty
+            Map.empty,
+            Set.empty,
+            Set.empty
           ) -> "StakeCertificates",
           TransactionException.TooManyCollateralInputsException(sampleTxHash, 5, 3)
               -> "TooManyCollateralInputs",
