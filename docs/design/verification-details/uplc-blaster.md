@@ -231,11 +231,13 @@ the text names, and are removed after the check. The server loads the workspace 
 not build it, so the workspace must be built (`lake build`). What Lean reports about the
 document, its diagnostics, is the output of the check.
 
-- **Time limit.** `UplcBlaster(budget, servers, timeout)` gives a check up after `timeout`: the
-  server closes its document, which ends Lean's worker and the solver it started, and the
-  tactic is inconclusive. Without it the tactic waits for Lean, which on some statements does
-  not return ([Statements that do not finish](#statements-that-do-not-finish)). Blaster's own
-  `timeout` option limits only the solver.
+- **Time limit.** A check is given up after a time by the clock: ten minutes
+  (`UplcBlaster.defaultTimeout`), or the `timeout` of `UplcBlaster(budget, servers, timeout)`.
+  The server then closes its document, which ends Lean's worker and the solver it started, and
+  the tactic is inconclusive. On some statements Lean does not return
+  ([Statements that do not finish](#statements-that-do-not-finish)), and no other limit ends
+  them all: Lean's own, below, is one of work, and Blaster's `timeout` option limits only the
+  solver. `withoutTimeout` lifts the limit, and the tactic then waits for Lean.
 - **Lean's own limit.** Lean gives a command up when it has done `maxHeartbeats` of work, with
   the error `(deterministic) timeout`. A heartbeat is a unit of Lean's own work, counted the
   same on every machine; it has nothing to do with the connection. The statement is then not
@@ -250,7 +252,7 @@ document, its diagnostics, is the output of the check.
     proportionally more time. The vesting statement with open outputs
     ([Statements that do not finish](#statements-that-do-not-finish)) is given up at Lean's
     default after 17 s. At twice that the same run gets past that point, and gave no result in
-    8 minutes: a statement like it needs the tactic's time limit.
+    8 minutes: a statement like it is ended by the tactic's time limit.
   - `tactic.withMaxHeartbeats(n)` sets another, for a statement known to be large. `0` is no
     limit, and leaves the check to the tactic's time limit.
 - **Keeping a check.** `UplcBlaster.writeCheck(lowered, budget, directory)` writes the leaves and

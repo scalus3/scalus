@@ -100,11 +100,15 @@ result for its statement, and the server takes the next one. Where the server it
 - Anything else, including other binder types or an unsupported call continuation, fails
   preparation with `Unsupported(CompatibilityReport(...))`.
 - Lean does not return on some statements, typically one whose program loops over a list of
-  unknown length. `UplcBlaster(budget, lean, timeout)` gives the check up after `timeout`, and
-  is then `Inconclusive`; see "Statements that do not finish" in the tactic's details. So is a
-  check that Lean gives up itself, at its limit of work for one command (`maxHeartbeats`). A
-  check sets that limit to twice Lean's default; `UplcBlaster(budget, lean).withMaxHeartbeats(n)`
-  sets another, and `0` none. The solver's time does not count towards it.
+  unknown length. So a check has a time limit, by the clock: ten minutes
+  (`UplcBlaster.defaultTimeout`), or the `timeout` of `UplcBlaster(budget, lean, timeout)`. A
+  check that reaches it is given up, and is `Inconclusive`; see "Statements that do not finish"
+  in the tactic's details. `withoutTimeout` lifts the limit.
+- So is a check that Lean gives up itself, at its limit of work for one command
+  (`maxHeartbeats`). A check sets that limit to twice Lean's default;
+  `UplcBlaster(budget, lean).withMaxHeartbeats(n)` sets another, and `0` none. It is the quick
+  end of a command that grows without bound, the same on every machine, and it does not end
+  every check that does not finish: the solver's time does not count towards it.
 - With the environment variable `SCALUS_LEAN_KEEP_CHECKS` set to a directory, every check that
   runs is also written there, to read or to run by hand with `lake lean Check.lean`.
 
