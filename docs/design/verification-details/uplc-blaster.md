@@ -501,8 +501,9 @@ What the suite shows about the tactic:
   symbolic value, where every further step can branch.
 - **A loop over a list of unknown length is not finished by Lean.** The outputs can be left as
   any `Data` in the statement about an unsigned withdrawal, because every run fails before the
-  validator reads them. The same in the statement about the unvested amount gives no result; the
-  test states it with a time limit. See
+  validator reads them. In the statement about the unvested amount only the runs it is about
+  fail before that, and the others go on into the list. It is proved at a budget just beyond
+  the rejection, 1700, and gives no result at the budget of a whole withdrawal. See
   [Statements that do not finish](#statements-that-do-not-finish).
 - **The proofs are not about the published script.** `VestingContract` compiles with
   `Options.release`, which uses the `Value` builtins that Lean's model lacks
@@ -543,18 +544,32 @@ rows, measured again with Blaster compiled:
 |---|---|---|---|
 | `filter` does not lengthen a list | 400 | spurious counterexample | 20 s |
 | | 800 | none | over 2 min |
-| vesting: at least the unvested amount stays locked, for any outputs | 12000 | Lean's limit of work, at Lean's default of 200000 heartbeats | 17 s (159 s interpreted) |
+| vesting: at least the unvested amount stays locked, for any outputs | 1600 | spurious counterexample | 8 s |
+| | 1610 to 1700 | proved | 8 to 12 s |
+| | 1800 | proved | 27 s |
+| | 1900 | proved | 62 s |
+| | 2000 | proved | 3 min |
+| | 2300 | none | over 3 min |
+| | 12000 | Lean's limit of work, at Lean's default of 200000 heartbeats | 17 s (159 s interpreted) |
 | | 12000 | none, at the tactic's default of 400000 | over 8 min |
 
 So a budget that was beyond reach is now within it, and the next one is not: the doubling of
 the paths is the same. A check that ends at Lean's limit is inconclusive like one that reaches
 its time limit.
 
-**None of them can be proved at any budget.** Some input needs more steps than the budget, and
-there a conclusion, read strongly, is false. Lean's counterexample is that input, a long list for
-instance, and the replay finds the statement true on it: inconclusive. Proving them takes
-induction, which this tactic does not do. The vesting statement is different: it is true within
-the budget, as shown below.
+**The vesting statement is proved at the right budget.** It says that a withdrawal is rejected,
+and the rejection takes just over 1600 steps: the validator's check of the amount is its last
+before it reads the outputs. From there every 100 steps let the runs that pass the check read
+another output, and double the time. The budget of a whole accepted withdrawal, 12000, was the
+wrong one for it. A statement that a program fails wants the budget of the failing run, not of
+the program's longest. `VestingVerificationTest` proves it at 1700, and keeps the run at 12000
+as a statement Lean does not finish.
+
+**The others cannot be proved at any budget.** Those of `UplcBlasterLimitsTest` are about runs
+that go through the whole list, or through every round of the recursion. Some input needs more
+steps than the budget, and there a conclusion, read strongly, is false. Lean's counterexample is
+that input, a long list for instance, and the replay finds the statement true on it:
+inconclusive. Proving them takes induction, which this tactic does not do.
 
 **Where the time goes.** There are two mechanisms, told apart with `set_option profiler true` in
 a check written by `writeCheck`, and by which process is busy.
@@ -574,7 +589,8 @@ would leave too little, and under it the validator fails before it reads the out
 leaf's program is prepared on its own, for all values of the variables, so Lean also follows the
 runs that pass the check. Those search the outputs for the beneficiary's: a list of unknown
 length, with a choice at every element. The cliff between budgets 1500 and 2000 is where the runs
-reach it.
+reach it. The budget does prune, where the premise does not: one that ends just after the
+rejection cuts those runs before they are far into the list (above).
 
 What that statement costs, by how much of the outputs is left open, at budget 12000:
 
@@ -591,6 +607,9 @@ shape written out where the program loops over it.
 
 What could change this:
 
+- **A budget for the runs the statement is about.** Done for the vesting statement, above. It
+  needs a program whose runs of interest end before its loop starts, and a budget found by
+  trying: there is no step count to read it from yet.
 - **Prepare a conclusion under its premise.** For `p ==> fails(f(a))`, one program that tests
   `p` first and runs `f(a)` only then. The runs that `p` excludes disappear only if the symbolic
   run asks the solver whether a path is feasible, which Blaster's does not.
