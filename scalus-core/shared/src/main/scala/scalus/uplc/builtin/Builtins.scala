@@ -8,6 +8,7 @@ import java.nio.CharBuffer
 import java.nio.charset.CharsetDecoder
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
+import java.util.Arrays
 import scalus.uplc.eval.BuiltinException
 
 /** Class contains all Cardano Plutus built-in functions according to Plutus Specification.
@@ -223,9 +224,25 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       *   sliceByteString(9, 4, hex"1234567890abcdef") // returns hex""
       *   sliceByteString(0, 0, hex"1234567890abcdef") // returns hex""
       *   }}}
+      *
+      * @throws scalus.uplc.eval.BuiltinException
+      *   if `from` or `len` is outside the Int64 range
       */
-    def sliceByteString(from: BigInt, len: BigInt, bs: ByteString): ByteString =
-        ByteString.unsafeFromArray(bs.bytes.drop(from.toInt).take(len.toInt))
+    def sliceByteString(from: BigInt, len: BigInt, bs: ByteString): ByteString = {
+        // Plutus unlifts both integers as a machine Int: out of the Int64 range evaluation fails,
+        // within it the result is `take len (drop from bs)`, clamped to the bytestring.
+        if !from.isValidLong || !len.isValidLong then
+            throw new BuiltinException(
+              s"sliceByteString: arguments out of Int64 range: from=$from, len=$len"
+            )
+        val size = bs.bytes.length
+        val start = math.min(math.max(from.toLong, 0L), size.toLong).toInt
+        // Clamp the length to what remains after `start`: `start + len` could overflow a Long.
+        val n = math.min(math.max(len.toLong, 0L), (size - start).toLong).toInt
+        if n == 0 then ByteString.empty
+        else if n == size then bs
+        else ByteString.unsafeFromArray(Arrays.copyOfRange(bs.bytes, start, start + n))
+    }
 
     /** Returns the length of the ByteString */
     def lengthOfByteString(bs: ByteString): BigInt = bs.size
