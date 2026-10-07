@@ -469,6 +469,27 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.this"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.copy"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.apply"),
+        // The machine's partly applied builtin value keeps its arguments instead of a copied
+        // BuiltinRuntime and a closure that rebuilds its term. Only the CEK machine builds or
+        // takes apart a VBuiltin.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.uplc.eval.CekValue#VBuiltin.this"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.uplc.eval.CekValue#VBuiltin.copy"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.uplc.eval.CekValue#VBuiltin.apply"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.uplc.eval.CekValue#VBuiltin.term"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.uplc.eval.CekValue#VBuiltin._2"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.uplc.eval.CekValue#VBuiltin.copy$default$2"
+        ),
         // `PlutusScript` caches the program it decodes straight from CBOR in a new private field;
         // Scala emits its accessors as abstract trait methods. The trait is sealed, so no class
         // outside this artifact implements it and none can miss the accessors.

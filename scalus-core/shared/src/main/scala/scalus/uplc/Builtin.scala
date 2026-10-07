@@ -11,6 +11,7 @@ import scalus.uplc.eval.CekValue.*
 import scalus.uplc.eval.*
 import scalus.utils.Macros
 
+import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.ListBuffer
 import scala.language.implicitConversions
@@ -24,6 +25,19 @@ case class BuiltinRuntime(
     def apply(logger: Logger): CekValue = f(logger, args)
 
     def calculateCost: ExUnits = costFunction.calculateCost(args*)
+
+    /** What the builtin takes, in order: `true` for a term argument, `false` for a type argument (a
+      * `force`). The CEK machine counts its way through this instead of the type scheme.
+      */
+    private[uplc] val argKinds: Array[Boolean] = {
+        val kinds = Array.newBuilder[Boolean]
+        @tailrec def go(t: TypeScheme): Unit = t match
+            case TypeScheme.Arrow(_, rest) => kinds += true; go(rest)
+            case TypeScheme.All(_, rest)   => kinds += false; go(rest)
+            case _                         => ()
+        go(typeScheme)
+        kinds.result()
+    }
 }
 
 class CardanoBuiltins(

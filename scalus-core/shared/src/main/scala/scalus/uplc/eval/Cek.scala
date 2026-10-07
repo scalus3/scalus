@@ -489,7 +489,17 @@ enum CekValue {
     case VCon(const: Constant)
     case VDelay(term: Term, env: CekValEnv)
     case VLamAbs(name: String, term: Term, env: CekValEnv)
-    case VBuiltin(bn: DefaultFun, term: () => Term, runtime: BuiltinRuntime)
+
+    /** A builtin applied to `applied` of the arguments `runtime.argKinds` lists. `args` holds the
+      * term arguments so far, newest first; `term` is the `Builtin` term it came from.
+      */
+    case VBuiltin(
+        bn: DefaultFun,
+        term: Term,
+        runtime: BuiltinRuntime,
+        args: scala.List[CekValue],
+        applied: Int
+    )
     case VConstr(tag: Word64, args: Seq[CekValue])
 
     /** A list of arbitrary CekValues. Analogous to VConstr for constructors. Used for lists with
@@ -499,12 +509,12 @@ enum CekValue {
     case VList(elems: scala.List[CekValue])
 
     override def toString: String = this match
-        case VCon(const)            => s"VCon($const)"
-        case VDelay(term, _)        => s"VDelay($term)"
-        case VLamAbs(name, term, _) => s"VLamAbs($name, $term)"
-        case VBuiltin(bn, _, _)     => s"VBuiltin($bn)"
-        case VConstr(tag, args)     => s"VConstr($tag, ${args.mkString(", ")})"
-        case VList(elems)           => s"VList(${elems.mkString(", ")})"
+        case VCon(const)              => s"VCon($const)"
+        case VDelay(term, _)          => s"VDelay($term)"
+        case VLamAbs(name, term, _)   => s"VLamAbs($name, $term)"
+        case VBuiltin(bn, _, _, _, _) => s"VBuiltin($bn)"
+        case VConstr(tag, args)       => s"VConstr($tag, ${args.mkString(", ")})"
+        case VList(elems)             => s"VList(${elems.mkString(", ")})"
 
     def asUnit: Unit = this match {
         case VCon(Constant.Unit) => ()
@@ -993,11 +1003,11 @@ class CekMachine(
             .takeRight(24)
             .map { case (name, v) =>
                 val vStr = (v match
-                    case VCon(c)           => s"VCon(${c.toString.take(80)})"
-                    case VConstr(t, a)     => s"VConstr(tag=$t, args.size=${a.size})"
-                    case VLamAbs(n, _, _)  => s"VLamAbs($n, ...)"
-                    case VBuiltin(b, _, _) => s"VBuiltin($b)"
-                    case other             => other.getClass.getSimpleName
+                    case VCon(c)                 => s"VCon(${c.toString.take(80)})"
+                    case VConstr(t, a)           => s"VConstr(tag=$t, args.size=${a.size})"
+                    case VLamAbs(n, _, _)        => s"VLamAbs($n, ...)"
+                    case VBuiltin(b, _, _, _, _) => s"VBuiltin($b)"
+                    case other                   => other.getClass.getSimpleName
                 ).take(120)
                 s"  $name → $vStr"
             }
@@ -1240,7 +1250,7 @@ class CekMachine(
                 // The @term@ is a 'Builtin', so it's fully discharged.
                 try
                     val meaning = getBuiltinRuntime(bn)
-                    Return(ctx, env, VBuiltin(bn, () => term, meaning))
+                    Return(ctx, env, VBuiltin(bn, term, meaning, Nil, 0))
                 catch case _: Exception => throw new UnknownBuiltin(bn, env, term.sourcePos)
             case Error(_) => throw new EvaluationFailure(env, term.sourcePos, getSourceTrace)
             case Constr(tag, args, _) =>
@@ -1558,19 +1568,20 @@ class CekMachine(
                 val ps = profilingSpenderOrNull
                 if ps != null then ps.onCall(callPos)
                 Compute(ctx, env :+ (name, arg), term)
-            case VBuiltin(fun, term, runtime) =>
-                val term1 = () => Apply(term(), dischargeCekValue(arg))
-                runtime.typeScheme match
-                    case TypeScheme.Arrow(_, rest) =>
-                        val runtime1 = runtime.copy(args = runtime.args :+ arg, typeScheme = rest)
-                        val res = evalBuiltinApp(env, fun, term1, runtime1)
-                        Return(ctx, env, res)
-                    case _ =>
-                        throw new UnexpectedBuiltinTermArgumentMachineError(
-                          term1(),
-                          env,
-                          lastSourcePos
-                        )
+            case b @ VBuiltin(bn, term, runtime, args, applied) =>
+                val kinds = runtime.argKinds
+                if applied < kinds.length && kinds(applied) then
+                    Return(
+                      ctx,
+                      env,
+                      evalBuiltinApp(env, new VBuiltin(bn, term, runtime, arg :: args, applied + 1))
+                    )
+                else
+                    throw new UnexpectedBuiltinTermArgumentMachineError(
+                      Apply(dischargeCekValue(b), dischargeCekValue(arg)),
+                      env,
+                      lastSourcePos
+                    )
             case _ =>
                 throw new NonFunctionalApplicationMachineError(
                   fun,
@@ -1624,53 +1635,61 @@ class CekMachine(
       */
     private def forceEvaluate(ctx: Context, env: CekValEnv, value: CekValue): CekState = {
         value match
-            case VDelay(term, env) => Compute(ctx, env, term)
-            case VBuiltin(bn, term, rt) =>
-                val term1 = () => Force(term())
-                rt.typeScheme match
-                    // It's only possible to force a builtin application if the builtin expects a type
-                    // argument next.
-                    case TypeScheme.All(_, t) =>
-                        val runtime1 = rt.copy(typeScheme = t)
-                        // We allow a type argument to appear last in the type of a built-in function,
-                        // otherwise we could just assemble a 'VBuiltin' without trying to evaluate the
-                        // application.
-                        val res = evalBuiltinApp(env, bn, term1, runtime1)
-                        Return(ctx, env, res)
-                    case _ =>
-                        throw new BuiltinTermArgumentExpectedMachineError(
-                          term1(),
-                          env,
-                          lastSourcePos
-                        )
+            case VDelay(term, env)                         => Compute(ctx, env, term)
+            case b @ VBuiltin(bn, term, rt, args, applied) =>
+                // It's only possible to force a builtin application if the builtin expects a type
+                // argument next. A type argument may come last, so the application can saturate here.
+                val kinds = rt.argKinds
+                if applied < kinds.length && !kinds(applied) then
+                    Return(
+                      ctx,
+                      env,
+                      evalBuiltinApp(env, new VBuiltin(bn, term, rt, args, applied + 1))
+                    )
+                else
+                    throw new BuiltinTermArgumentExpectedMachineError(
+                      Force(dischargeCekValue(b)),
+                      env,
+                      lastSourcePos
+                    )
             case _ =>
                 throw new NonPolymorphicInstantiationMachineError(value, env, lastSourcePos)
     }
 
-    private def evalBuiltinApp(
-        env: CekValEnv,
-        builtinName: DefaultFun,
-        term: () => Term, // lazily discharge the term as it might not be needed
-        runtime: BuiltinRuntime
-    ): CekValue = {
-        runtime.typeScheme match
-            case TypeScheme.Type(_) | TypeScheme.TVar(_) | TypeScheme.App(_, _) =>
-                spendBudget(ExBudgetCategory.BuiltinApp(builtinName), runtime.calculateCost, env)
-                // eval the builtin and return result
-                try {
-                    // eval builtin when it's fully saturated, i.e. when all arguments were applied
-                    runtime.apply(logger)
-                } catch
-                    case NonFatal(e) =>
-                        throw new BuiltinError(
-                          builtinName,
-                          term(),
-                          e,
-                          env,
-                          lastSourcePos,
-                          getSourceTrace
-                        )
-            case _ => VBuiltin(builtinName, term, runtime)
+    /** Runs the builtin if `b` has all its arguments, otherwise returns `b` as it is. */
+    private def evalBuiltinApp(env: CekValEnv, b: VBuiltin): CekValue = {
+        val runtime = b.runtime
+        if b.applied < runtime.argKinds.length then b
+        else
+            val args = b.args.reverse // `b.args` holds the term arguments newest first
+            spendBudget(
+              ExBudgetCategory.BuiltinApp(b.bn),
+              runtime.costFunction.calculateCost(args*),
+              env
+            )
+            try runtime.f(logger, args)
+            catch
+                case NonFatal(e) =>
+                    throw new BuiltinError(
+                      b.bn,
+                      dischargeCekValue(b),
+                      e,
+                      env,
+                      lastSourcePos,
+                      getSourceTrace
+                    )
+    }
+
+    /** The term a partly applied builtin stands for: its `Builtin` term with every `force` and
+      * argument so far applied in order.
+      */
+    private def builtinTerm(b: VBuiltin): Term = {
+        val steps = b.runtime.argKinds.iterator.take(b.applied)
+        val (term, _) = steps.foldLeft((b.term, b.args.reverse)) {
+            case ((term, args), true)  => (Apply(term, dischargeCekValue(args.head)), args.tail)
+            case ((term, args), false) => (Force(term), args)
+        }
+        term
     }
 
     /** Converts a 'CekValue' into a 'Term' by replacing all bound variables with the terms they're
@@ -1720,7 +1739,7 @@ class CekMachine(
             // argument of 'computeCek' and hence we need to start discharging outside of the reassembled
             // lambda, otherwise @name@ could clash with the names that we have in @env@.
             case VLamAbs(name, term, env) => dischargeCekValEnv(env, LamAbs(name, term))
-            case VBuiltin(_, term, _)     => term()
+            case b: VBuiltin              => builtinTerm(b)
             case VConstr(tag, args)       => Constr(tag, args.map(dischargeCekValue).toList)
             case VList(elems)             =>
                 // Best-effort discharge: when every element discharges to a Constant, emit a
