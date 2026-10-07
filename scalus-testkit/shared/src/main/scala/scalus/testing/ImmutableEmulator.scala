@@ -127,23 +127,13 @@ case class ImmutableEmulator(
             Future.successful(ImmutableEmulator.this.getDatum(datumHash))
     }
 
-    /** Convert to a mutable [[scalus.cardano.node.Emulator]], keeping the fees, the donations and
+    /** Convert to a mutable [[scalus.cardano.node.Emulator]], keeping the whole ledger state and
       * the treasury.
       */
     def toEmulator: Emulator = {
         val context = Context(env = env, slotConfig = slotConfig, evaluatorMode = evaluatorMode)
-        Emulator.fromState(
-          EmulatorState.initial(
-            State(
-              utxos = utxos,
-              certState = state.certState,
-              fees = state.fees,
-              donation = state.donation
-            ),
-            context,
-            binaryDatums,
-            appliedTxLog
-          ),
+        EmulatorBase.fromState(
+          EmulatorState.initial(state, context, binaryDatums, appliedTxLog),
           validators,
           mutators
         )
@@ -181,37 +171,25 @@ object ImmutableEmulator {
 
     /** Create an ImmutableEmulator from a mutable [[scalus.cardano.node.EmulatorBase]].
       *
-      * Captures a snapshot of the emulator's current state, with its fees, donations and treasury.
+      * Captures a snapshot of the emulator's current state, the whole ledger state and the treasury
+      * included. The state is read once, so a concurrent epoch crossing cannot split the donations
+      * between two states.
       */
     def fromEmulator(emulator: EmulatorBase): ImmutableEmulator = {
-        val info = emulator.cardanoInfo
-        val slot =
-            emulator.currentSlot.value.get.get // EmulatorBase always returns completed Future
-        val env = UtxoEnv(
-          slot = slot,
-          params = info.protocolParams,
-          // ledger rules read cert state from `state.certState`, not `env.certState`; mirror the
-          // mutable Emulator and keep this empty (the real cert state lives in `state` below)
-          certState = CertState.empty,
-          network = info.network,
-          treasury = emulator.treasury
-        )
-        val log = emulator.appliedTxLog.toVector
+        val snapshot = EmulatorBase.stateOf(emulator)
+        val context = snapshot.context
         ImmutableEmulator(
-          state = State(
-            utxos = emulator.utxos,
-            certState = emulator.certState,
-            fees = emulator.fees,
-            donation = emulator.donation
-          ),
-          env = env,
-          slotConfig = info.slotConfig,
-          evaluatorMode = emulator.evaluatorMode,
+          state = snapshot.ledger,
+          // ledger rules read cert state from `state.certState`, not `env.certState`; mirror the
+          // mutable Emulator and keep this empty (the real cert state lives in `state`)
+          env = context.env.copy(certState = CertState.empty),
+          slotConfig = context.slotConfig,
+          evaluatorMode = context.evaluatorMode,
           validators = emulator.validators,
           mutators = emulator.mutators,
-          appliedTxLog = log,
-          appliedTxIndex = EmulatorBase.indexAppliedTxs(log),
-          binaryDatums = emulator.binaryDatums
+          appliedTxLog = snapshot.appliedTxLog,
+          appliedTxIndex = snapshot.appliedTxIndex,
+          binaryDatums = snapshot.binaryDatums
         )
     }
 

@@ -69,20 +69,6 @@ object Emulator {
     val defaultValidators: Set[STS.Validator] = DefaultValidators.all
     val defaultMutators: Set[STS.Mutator] = DefaultMutators.all
 
-    /** An emulator that starts from exactly `state`: its fees, donations and env included, which
-      * the constructor cannot take. Used by [[EmulatorBase.snapshot]] and the testkit's
-      * `ImmutableEmulator`.
-      */
-    private[scalus] def fromState(
-        state: EmulatorState,
-        validators: Iterable[STS.Validator],
-        mutators: Iterable[STS.Mutator]
-    ): Emulator = {
-        val emulator = new Emulator(validators = validators, mutators = mutators)
-        emulator.stateRef.set(state)
-        emulator
-    }
-
     /** Creates an Emulator with the specified addresses, each funded with 10,000 ADA (like Yaci
       * Devkit).
       */

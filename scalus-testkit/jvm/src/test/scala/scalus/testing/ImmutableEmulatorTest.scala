@@ -3,7 +3,7 @@ package scalus.testing
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, State, UtxoEnv}
-import scalus.cardano.node.Emulator
+import scalus.cardano.node.{Emulator, EmulatorBase, EmulatorState}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
@@ -260,6 +260,84 @@ class ImmutableEmulatorTest extends AnyFunSuite {
         do
             assert(next.env.treasury == Coin(1005))
             assert(next.state.donation == Coin.zero)
+    }
+
+    /** An emulator whose state moves one epoch on, so its donations land in the treasury, after the
+      * first read that follows [[arm]]. It stands for another thread crossing the boundary while
+      * `fromEmulator` reads.
+      */
+    private final class EpochCrossingEmulator(utxos: Utxos, context: Context)
+        extends Emulator(initialUtxos = utxos, initialContext = context) {
+        private var readsSinceArmed = -1
+        def arm(): Unit = readsSinceArmed = 0
+        override protected def readState: EmulatorState = {
+            val state = super.readState
+            if readsSinceArmed < 0 then state
+            else
+                readsSinceArmed += 1
+                if readsSinceArmed == 1 then state
+                else state.withSlot(epochStart + slotConfig.epochLength)
+        }
+    }
+
+    test("fromEmulator builds from one read of the state") {
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        val context = Context.testMainnet(epochStart + 10)
+        val emulator = EpochCrossingEmulator(
+          Map(Input(genesisHash, 0) -> Output(Alice.address, Value.ada(100))),
+          context.copy(env = context.env.copy(treasury = Coin(1000)))
+        )
+        val tx = TxBuilder(CardanoInfo.mainnet)
+            .donateToTreasury(Coin(5))
+            .setCurrentTreasuryValue(Coin(1000))
+            .complete(emulator.utxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+        assert(emulator.submitSync(tx) == Right(tx.id))
+        emulator.arm()
+
+        val immutable = ImmutableEmulator.fromEmulator(emulator)
+        assert(immutable.currentSlot == epochStart + 10)
+        assert(immutable.state.donation == Coin(5))
+        assert(immutable.env.treasury == Coin(1000))
+    }
+
+    test("fromEmulator and toEmulator keep every field of the ledger state") {
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        val stakeCred = Credential.ScriptHash(PlutusV3.alwaysOk.script.scriptHash)
+        val ledger = State(
+          utxos = Map(Input(genesisHash, 0) -> Output(Alice.address, Value.ada(100))),
+          certState = CertState.empty.copy(dstate =
+              DelegationState(Map(stakeCred -> ConwayAccountState(Coin(1), Coin(2), None, None)))
+          ),
+          deposited = Coin(7),
+          fees = Coin(11),
+          govState = Array(io.bullet.borer.Dom.IntElem(3)),
+          stakeDistribution = Map(stakeCred -> Coin(13)),
+          donation = Coin(17)
+        )
+        val emulator = EmulatorBase.fromState(
+          EmulatorState.initial(ledger, Context.testMainnet(), Map.empty, Vector.empty),
+          Emulator.defaultValidators,
+          Emulator.defaultMutators
+        )
+
+        val immutable = ImmutableEmulator.fromEmulator(emulator)
+        val roundTripped = ImmutableEmulator.fromEmulator(immutable.toEmulator)
+        for (name, state) <- Seq(
+              "fromEmulator" -> immutable.state,
+              "toEmulator" -> roundTripped.state
+            )
+        do
+            withClue(name) {
+                assert(state.utxos == ledger.utxos)
+                assert(state.certState == ledger.certState)
+                assert(state.deposited == ledger.deposited)
+                assert(state.fees == ledger.fees)
+                assert(state.govState.sameElements(ledger.govState))
+                assert(state.stakeDistribution == ledger.stakeDistribution)
+                assert(state.donation == ledger.donation)
+            }
     }
 
     // 1.3 call sites pass the datums positionally, decoded, as the last argument

@@ -114,7 +114,7 @@ trait EmulatorBase extends BlockchainProvider {
       * and the original share no mutable cell and evolve separately from here on. The copy starts
       * from the whole state, so it keeps the fees, the donations and the treasury, spec [SC-7c].
       */
-    def snapshot(): Emulator = Emulator.fromState(readState, validators, mutators)
+    def snapshot(): Emulator = EmulatorBase.fromState(readState, validators, mutators)
 
     /** Clear the applied-transaction bookkeeping ([[appliedTxLog]] and [[appliedTxIndex]]), leaving
       * the ledger state (`utxos`, `certState`, `datums`) untouched.
@@ -581,6 +581,25 @@ object EmulatorInitialState {
 }
 
 object EmulatorBase {
+
+    /** The state of `emulator`, read once, so its fields cannot come from two different states.
+      * Used by the testkit's `ImmutableEmulator`.
+      */
+    private[scalus] def stateOf(emulator: EmulatorBase): EmulatorState = emulator.readState
+
+    /** An emulator that starts from exactly `state`: its fees, donations and env included, which
+      * the constructor cannot take. Used by [[EmulatorBase.snapshot]] and the testkit's
+      * `ImmutableEmulator`.
+      */
+    private[scalus] def fromState(
+        state: EmulatorState,
+        validators: Iterable[STS.Validator],
+        mutators: Iterable[STS.Mutator]
+    ): Emulator = {
+        val emulator = new Emulator(validators = validators, mutators = mutators)
+        emulator.updateState(_ => state)
+        emulator
+    }
 
     /** The ledger state and the env at `slot`.
       *
