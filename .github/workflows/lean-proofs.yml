@@ -1,6 +1,14 @@
 name: Lean-Proofs
 on:
   workflow_dispatch:
+  # A push that changes what the proofs are made of. A change elsewhere, in the compiler for
+  # instance, changes the programs they are about as well: the daily run is for those.
+  push:
+    paths:
+      - 'scalus-verification/**'
+      - 'scalus-examples/jvm/src/test/lean/**'
+      - 'scalus-examples/**/vesting/**'
+      - '.github/workflows/lean-proofs.yml'
   schedule:
     # 03:17 UTC daily. Off the hour to avoid the GitHub Actions rush.
     - cron: '17 3 * * *'
@@ -47,7 +55,7 @@ jobs:
         if: always()
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          title: "[${{ github.event.repository.name }}] Lean-Proofs ${{ job.status == 'success' && '✅' || '❌' }}"
+          title: "[${{ github.event.repository.name }}] Lean-Proofs ${{ job.status == 'success' && '✅' || '❌' }} - ${{ github.actor }} on ${{ github.ref_name }}"
           url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           username: "GitHub Actions"
           nodetail: true
