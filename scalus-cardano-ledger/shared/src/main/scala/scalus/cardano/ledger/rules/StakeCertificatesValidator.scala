@@ -6,8 +6,7 @@ object StakeCertificatesValidator extends STS.Validator {
     override final type Error = TransactionException.StakeCertificatesException
 
     private case class ValidationState(
-        onChainDeposits: Map[Credential, Coin],
-        rewardAccounts: Map[Credential, Coin],
+        accounts: Map[Credential, ConwayAccountState],
         expectedDeposit: Coin,
         newlyRegistered: Map[Credential, Coin] = Map.empty,
         deregisteredInTx: Set[Credential] = Set.empty,
@@ -26,12 +25,12 @@ object StakeCertificatesValidator extends STS.Validator {
 
         def isCurrentlyRegistered(credential: Credential): Boolean =
             newlyRegistered.contains(credential) ||
-                (onChainDeposits.contains(credential) && !deregisteredInTx.contains(credential))
+                (accounts.contains(credential) && !deregisteredInTx.contains(credential))
 
         def depositFor(credential: Credential): Option[Coin] =
             newlyRegistered.get(credential).orElse {
                 if deregisteredInTx.contains(credential) then None
-                else onChainDeposits.get(credential)
+                else accounts.get(credential).map(_.deposit)
             }
 
         def handleRegistration(
@@ -69,7 +68,7 @@ object StakeCertificatesValidator extends STS.Validator {
                 case None =>
                     copy(missingRegistrations = missingRegistrations + credential)
                 case Some(expectedRefund) =>
-                    val rewards = rewardAccounts.getOrElse(credential, Coin.zero)
+                    val rewards = accounts.get(credential).fold(Coin.zero)(_.balance)
                     val withRewardsCheck =
                         if rewards.value > 0 then
                             copy(nonZeroRewards = nonZeroRewards.updated(credential, rewards))
@@ -113,8 +112,7 @@ object StakeCertificatesValidator extends STS.Validator {
         if certificates.isEmpty then success
         else {
             val initialState = ValidationState(
-              onChainDeposits = state.certState.dstate.deposits,
-              rewardAccounts = state.certState.dstate.rewards,
+              accounts = state.certState.dstate.accounts,
               expectedDeposit = Coin(context.env.params.stakeAddressDeposit)
             )
 

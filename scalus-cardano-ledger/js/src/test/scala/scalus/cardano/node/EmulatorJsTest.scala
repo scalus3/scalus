@@ -322,14 +322,14 @@ class EmulatorJsTest extends AnyFunSuite {
           initialStakeRewards = Map(stakeCred -> initialReward)
         )
         val cs = emulator.certState
-        assert(
-          cs.dstate.rewards.get(stakeCred).contains(initialReward),
-          s"rewards should contain stake credential with expected amount: ${cs.dstate.rewards}"
-        )
         val expectedDeposit = Coin(testEnv.protocolParams.stakeAddressDeposit)
         assert(
-          cs.dstate.deposits.get(stakeCred).contains(expectedDeposit),
-          s"deposits should contain stake credential with protocol deposit: ${cs.dstate.deposits}"
+          cs.dstate.accounts
+              .get(stakeCred)
+              .contains(
+                ConwayAccountState(initialReward, expectedDeposit, None, None)
+              ),
+          s"accounts should hold the reward and the protocol deposit: ${cs.dstate.accounts}"
         )
     }
 

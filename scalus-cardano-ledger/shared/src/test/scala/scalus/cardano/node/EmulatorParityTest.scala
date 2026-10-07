@@ -230,7 +230,10 @@ class EmulatorParityTest extends AnyFunSuite {
         assert(emulator.getDelegation(stakeCredential).rewards == Coin(1_000_000L))
         assert(emulator.getDelegation(stakeCredential).poolId.isEmpty)
         assert(
-          emulator.certState.dstate.rewards.get(stakeCredential).contains(Coin(1_000_000L)),
+          emulator.certState.dstate.accounts
+              .get(stakeCredential)
+              .map(_.balance)
+              .contains(Coin(1_000_000L)),
           "the reward balance lives in the cert state, not beside it"
         )
     }

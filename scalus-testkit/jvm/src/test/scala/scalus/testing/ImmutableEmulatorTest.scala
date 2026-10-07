@@ -83,17 +83,17 @@ class ImmutableEmulatorTest extends AnyFunSuite {
           initialUtxos = Map.empty,
           initialStakeRewards = Map(stakeCred -> reward)
         )
-        assert(emulator.certState.dstate.rewards.get(stakeCred).contains(reward))
+        assert(emulator.certState.dstate.accounts.get(stakeCred).map(_.balance).contains(reward))
 
         val immutable = ImmutableEmulator.fromEmulator(emulator)
         assert(
-          immutable.state.certState.dstate.rewards.get(stakeCred).contains(reward),
+          immutable.state.certState.dstate.accounts.get(stakeCred).map(_.balance).contains(reward),
           "fromEmulator must carry over certState"
         )
 
         val roundTripped = immutable.toEmulator
         assert(
-          roundTripped.certState.dstate.rewards.get(stakeCred).contains(reward),
+          roundTripped.certState.dstate.accounts.get(stakeCred).map(_.balance).contains(reward),
           "toEmulator must carry over certState"
         )
     }

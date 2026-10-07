@@ -50,57 +50,47 @@ class StakeCertificatesMutatorTest extends AnyFunSuite with Matchers with Either
           toTx(certs)
         )
 
-    test("register certificate updates deposits and zeroes rewards") {
+    test("register certificate adds an account with the deposit and a zero balance") {
         val result =
             runMutator(Seq(Certificate.RegCert(credential, None))).value
 
-        val updatedDState = result.certState.dstate
-        updatedDState.deposits(credential) shouldBe keyDeposit
-        updatedDState.rewards(credential) shouldBe Coin.zero
+        result.certState.dstate.accounts(credential) shouldBe
+            ConwayAccountState(Coin.zero, keyDeposit, None, None)
     }
 
-    test("combined registration and delegation updates maps") {
+    test("combined registration and delegation sets both delegations") {
         val result = runMutator(
           Seq(Certificate.StakeVoteRegDelegCert(credential, poolId, drep, keyDeposit))
         ).value
 
-        val dstate = result.certState.dstate
-        dstate.deposits(credential) shouldBe keyDeposit
-        dstate.stakePools(credential) shouldBe poolId
-        dstate.dreps(credential) shouldBe drep
+        result.certState.dstate.accounts(credential) shouldBe
+            ConwayAccountState(Coin.zero, keyDeposit, Some(poolId), Some(drep))
     }
 
-    test("delegation updates without changing deposits") {
+    test("delegation updates without changing the deposit or the balance") {
         val initialState = CertState.empty.copy(
-          dstate = CertState.empty.dstate.copy(
-            deposits = Map(credential -> keyDeposit)
+          dstate = DelegationState(
+            Map(credential -> ConwayAccountState(Coin(5), keyDeposit, None, None))
           )
         )
         val result =
             runMutator(Seq(Certificate.StakeDelegation(credential, poolId)), initialState).value
 
-        result.certState.dstate.stakePools(credential) shouldBe poolId
-        result.certState.dstate.deposits(credential) shouldBe keyDeposit
+        result.certState.dstate.accounts(credential) shouldBe
+            ConwayAccountState(Coin(5), keyDeposit, Some(poolId), None)
     }
 
-    test("deregistration removes deposits and delegations") {
+    test("deregistration removes the account") {
         val initialState = CertState.empty.copy(
-          dstate = CertState.empty.dstate.copy(
-            deposits = Map(credential -> keyDeposit),
-            stakePools = Map(credential -> poolId),
-            dreps = Map(credential -> drep),
-            rewards = Map(credential -> Coin.zero)
+          dstate = DelegationState(
+            Map(credential -> ConwayAccountState(Coin.zero, keyDeposit, Some(poolId), Some(drep)))
           )
         )
 
         val result =
             runMutator(Seq(Certificate.UnregCert(credential, Some(keyDeposit))), initialState).value
 
-        val dstate = result.certState.dstate
-        dstate.deposits.contains(credential) shouldBe false
-        dstate.stakePools.contains(credential) shouldBe false
-        dstate.dreps.contains(credential) shouldBe false
-        dstate.rewards.contains(credential) shouldBe false
+        result.certState.dstate.accounts.contains(credential) shouldBe false
     }
 
     test("invalid certificate reuses validator failures") {

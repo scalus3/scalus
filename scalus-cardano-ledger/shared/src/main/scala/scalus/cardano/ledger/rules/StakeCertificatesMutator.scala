@@ -51,30 +51,30 @@ object StakeCertificatesMutator extends STS.Mutator {
         credential: Credential,
         deposit: Coin
     ): DelegationState =
-        state.copy(
-          deposits = state.deposits.updated(credential, deposit),
-          rewards = state.rewards.updated(credential, Coin.zero)
+        DelegationState(
+          state.accounts.updated(credential, ConwayAccountState(Coin.zero, deposit, None, None))
         )
 
     private def deregister(state: DelegationState, credential: Credential): DelegationState =
-        state.copy(
-          deposits = state.deposits - credential,
-          rewards = state.rewards - credential,
-          stakePools = state.stakePools - credential,
-          dreps = state.dreps - credential
-        )
+        DelegationState(state.accounts - credential)
 
     private def delegateStake(
         state: DelegationState,
         credential: Credential,
         pool: PoolKeyHash
     ): DelegationState =
-        state.copy(stakePools = state.stakePools.updated(credential, pool))
+        updateAccount(state, credential)(_.copy(stakePoolDelegation = Some(pool)))
 
     private def delegateVote(
         state: DelegationState,
         credential: Credential,
         drep: DRep
     ): DelegationState =
-        state.copy(dreps = state.dreps.updated(credential, drep))
+        updateAccount(state, credential)(_.copy(dRepDelegation = Some(drep)))
+
+    /** The validator has checked that the account is registered. */
+    private def updateAccount(state: DelegationState, credential: Credential)(
+        f: ConwayAccountState => ConwayAccountState
+    ): DelegationState =
+        DelegationState(state.accounts.updatedWith(credential)(_.map(f)))
 }

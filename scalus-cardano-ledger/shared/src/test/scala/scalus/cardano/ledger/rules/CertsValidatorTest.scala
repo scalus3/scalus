@@ -55,9 +55,10 @@ class CertsValidatorTest extends AnyFunSuite with Matchers with EitherValues {
     }
 
     test("withdrawal succeeds when reward account is registered and drained") {
-        val rewards = Map(credential -> Coin.ada(3))
         val certState = CertState.empty.copy(
-          dstate = CertState.empty.dstate.copy(rewards = rewards)
+          dstate = DelegationState(
+            Map(credential -> ConwayAccountState(Coin.ada(3), keyDeposit, None, None))
+          )
         )
 
         val result = runValidator(SortedMap(rewardAccount -> Coin.ada(3)), certState = certState)
@@ -70,9 +71,10 @@ class CertsValidatorTest extends AnyFunSuite with Matchers with EitherValues {
     }
 
     test("withdrawal fails when it does not drain the reward account") {
-        val rewards = Map(credential -> Coin.ada(5))
         val certState = CertState.empty.copy(
-          dstate = CertState.empty.dstate.copy(rewards = rewards)
+          dstate = DelegationState(
+            Map(credential -> ConwayAccountState(Coin.ada(5), keyDeposit, None, None))
+          )
         )
 
         val error =
@@ -81,10 +83,10 @@ class CertsValidatorTest extends AnyFunSuite with Matchers with EitherValues {
     }
 
     test("withdrawal ignores certificates") {
-        val rewards = Map(credential -> Coin.ada(2))
-        val deposits = Map(credential -> keyDeposit)
         val certState = CertState.empty.copy(
-          dstate = CertState.empty.dstate.copy(rewards = rewards, deposits = deposits)
+          dstate = DelegationState(
+            Map(credential -> ConwayAccountState(Coin.ada(2), keyDeposit, None, None))
+          )
         )
 
         val result = runValidator(

@@ -55,7 +55,9 @@ class LedgerStateComparisonTest extends AnyFunSuite {
         val dstate = state.certState.dstate
         val actual = state.copy(certState =
             state.certState.copy(dstate =
-                dstate.copy(rewards = dstate.rewards.updated(credential, Coin(0)))
+                DelegationState(
+                  dstate.accounts.updated(credential, account.copy(balance = Coin(0)))
+                )
             )
         )
         assert(fields(actual) == List("accounts.balance"))

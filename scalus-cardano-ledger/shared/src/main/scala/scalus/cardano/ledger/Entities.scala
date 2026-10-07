@@ -595,13 +595,80 @@ data DState era = DState
 
 case class FutureGenDeleg(slot: Slot, genesisKeyHash: AddrKeyHash)
 
-/** Delegation State */
+/** Delegation state: the `dsAccounts` part of the Haskell `DState`.
+  *
+  * @param accounts
+  *   one record per registered stake account. An account is registered if and only if this map
+  *   contains its credential.
+  */
 case class DelegationState(
-    rewards: Map[Credential, Coin] = Map.empty, // Rewards map
-    deposits: Map[Credential, Coin] = Map.empty, // Deposits map
-    stakePools: Map[Credential, PoolKeyHash] = Map.empty, // Delegation map
-    dreps: Map[Credential, DRep] = Map.empty,
+    accounts: Map[Credential, ConwayAccountState]
 //    futureGenDelegs: Map[FutureGenDeleg, GenDelegPair],
 //    genDelegs: GenDelegs,
 //    instantaneousRewards: InstantaneousRewards
-)
+) {
+
+    /** Builds the accounts from the 4 maps of the old shape, as the deprecated 4-map `apply`. */
+    @deprecated("use DelegationState(accounts) instead", "1.3.0")
+    def this(
+        rewards: Map[Credential, Coin],
+        deposits: Map[Credential, Coin],
+        stakePools: Map[Credential, PoolKeyHash],
+        dreps: Map[Credential, DRep]
+    ) = this(DelegationState.accountsOf(rewards, deposits, stakePools, dreps))
+
+    /** The reward balance of each registered account. */
+    @deprecated("use accounts instead", "1.3.0")
+    def rewards: Map[Credential, Coin] = accounts.view.mapValues(_.balance).toMap
+
+    /** The deposit of each registered account. */
+    @deprecated("use accounts instead", "1.3.0")
+    def deposits: Map[Credential, Coin] = accounts.view.mapValues(_.deposit).toMap
+
+    /** The pool each account delegates its stake to, for the accounts that delegate. */
+    @deprecated("use accounts instead", "1.3.0")
+    def stakePools: Map[Credential, PoolKeyHash] =
+        accounts.flatMap((cred, account) => account.stakePoolDelegation.map(cred -> _))
+
+    /** The DRep each account delegates its vote to, for the accounts that delegate. */
+    @deprecated("use accounts instead", "1.3.0")
+    def dreps: Map[Credential, DRep] =
+        accounts.flatMap((cred, account) => account.dRepDelegation.map(cred -> _))
+}
+
+object DelegationState {
+
+    /** No registered accounts. */
+    val empty: DelegationState = DelegationState(Map.empty[Credential, ConwayAccountState])
+
+    /** No registered accounts. */
+    def apply(): DelegationState = empty
+
+    /** Builds the accounts from the 4 maps of the old shape. A credential in `rewards` or in
+      * `deposits` becomes an account; a missing balance or deposit is zero. A delegation of a
+      * credential in neither map is dropped.
+      */
+    // Defaults only to keep 1.3 Scala call sites compiling; Java and JS callers never had them.
+    @deprecated("use DelegationState(accounts) instead", "1.3.0")
+    def apply(
+        rewards: Map[Credential, Coin] = Map.empty,
+        deposits: Map[Credential, Coin] = Map.empty,
+        stakePools: Map[Credential, PoolKeyHash] = Map.empty,
+        dreps: Map[Credential, DRep] = Map.empty
+    ): DelegationState = DelegationState(accountsOf(rewards, deposits, stakePools, dreps))
+
+    private def accountsOf(
+        rewards: Map[Credential, Coin],
+        deposits: Map[Credential, Coin],
+        stakePools: Map[Credential, PoolKeyHash],
+        dreps: Map[Credential, DRep]
+    ): Map[Credential, ConwayAccountState] =
+        (rewards.keySet ++ deposits.keySet).iterator.map { cred =>
+            cred -> ConwayAccountState(
+              balance = rewards.getOrElse(cred, Coin.zero),
+              deposit = deposits.getOrElse(cred, Coin.zero),
+              stakePoolDelegation = stakePools.get(cred),
+              dRepDelegation = dreps.get(cred)
+            )
+        }.toMap
+}

@@ -56,8 +56,8 @@ class StakeCertificatesValidatorTest extends AnyFunSuite with Matchers with Eith
 
     test("registering an already registered credential fails") {
         val existingState = CertState.empty.copy(
-          dstate = CertState.empty.dstate.copy(
-            deposits = Map(credential -> keyDeposit)
+          dstate = DelegationState(
+            Map(credential -> ConwayAccountState(Coin.zero, keyDeposit, None, None))
           )
         )
 
@@ -69,9 +69,8 @@ class StakeCertificatesValidatorTest extends AnyFunSuite with Matchers with Eith
 
     test("deregistration requires zero rewards") {
         val state = CertState.empty.copy(
-          dstate = CertState.empty.dstate.copy(
-            deposits = Map(credential -> keyDeposit),
-            rewards = Map(credential -> Coin.ada(5))
+          dstate = DelegationState(
+            Map(credential -> ConwayAccountState(Coin.ada(5), keyDeposit, None, None))
           )
         )
 
@@ -83,8 +82,8 @@ class StakeCertificatesValidatorTest extends AnyFunSuite with Matchers with Eith
 
     test("deregistration with incorrect refund is rejected") {
         val state = CertState.empty.copy(
-          dstate = CertState.empty.dstate.copy(
-            deposits = Map(credential -> keyDeposit)
+          dstate = DelegationState(
+            Map(credential -> ConwayAccountState(Coin.zero, keyDeposit, None, None))
           )
         )
 

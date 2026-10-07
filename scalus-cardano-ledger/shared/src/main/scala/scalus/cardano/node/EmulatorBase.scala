@@ -153,10 +153,10 @@ trait EmulatorBase extends BlockchainProvider {
         appliedTxIndex.get(txHash)
 
     def getDelegation(credential: Credential): DelegationInfo = {
-        val st = certState.dstate
+        val account = certState.dstate.accounts.get(credential)
         DelegationInfo(
-          poolId = st.stakePools.get(credential),
-          rewards = st.rewards.getOrElse(credential, Coin.zero)
+          poolId = account.flatMap(_.stakePoolDelegation),
+          rewards = account.fold(Coin.zero)(_.balance)
         )
     }
 
@@ -174,15 +174,16 @@ trait EmulatorBase extends BlockchainProvider {
       */
     def stakeDistribution: Seq[StakeDistributionEntry] = {
         val state = readState
-        val dstate = state.ledger.certState.dstate
+        val accounts = state.ledger.certState.dstate.accounts
         val stakeByCredential = StakeDistribution.aggregateUtxoStake(state.ledger.utxos)
-        val credentials = dstate.rewards.keySet ++ stakeByCredential.keySet
+        val credentials = accounts.keySet ++ stakeByCredential.keySet
         credentials.toSeq.map { credential =>
+            val account = accounts.get(credential)
             StakeDistributionEntry(
               credential = credential,
-              pool = dstate.stakePools.get(credential),
+              pool = account.flatMap(_.stakePoolDelegation),
               stake = stakeByCredential.getOrElse(credential, Coin.zero),
-              rewards = dstate.rewards.getOrElse(credential, Coin.zero)
+              rewards = account.fold(Coin.zero)(_.balance)
             )
         }
     }
@@ -672,10 +673,9 @@ object EmulatorBase {
         val poolDeposit = Coin(context.env.params.stakePoolDeposit)
 
         val dstate = DelegationState(
-          deposits = initState.stakeRegistrations.map(s => s.credential -> deposit).toMap,
-          rewards = initState.stakeRegistrations.map(s => s.credential -> s.rewards).toMap,
-          stakePools =
-              initState.stakeRegistrations.flatMap(s => s.delegatedTo.map(s.credential -> _)).toMap
+          initState.stakeRegistrations.map { s =>
+              s.credential -> ConwayAccountState(s.rewards, deposit, s.delegatedTo, None)
+          }.toMap
         )
 
         val pstate = PoolsState(
@@ -705,9 +705,9 @@ object EmulatorBase {
     /** Builds a [[scalus.cardano.ledger.CertState]] with the given stake credentials
       * pre-registered.
       *
-      * Each credential is inserted into `deposits` (using the protocol parameter deposit amount)
-      * and `rewards` with the provided balance, so the ledger treats them as registered stake
-      * addresses without requiring an explicit registration transaction.
+      * Each credential gets an account with the provided balance and the protocol parameter
+      * deposit, so the ledger treats them as registered stake addresses without requiring an
+      * explicit registration transaction.
       *
       * @param initialStakeRewards
       *   map from stake credential to its initial reward balance
@@ -720,8 +720,9 @@ object EmulatorBase {
     ): CertState = {
         val deposit = Coin(context.env.params.stakeAddressDeposit)
         val dstate = DelegationState(
-          deposits = initialStakeRewards.map { case (cred, _) => cred -> deposit },
-          rewards = initialStakeRewards
+          initialStakeRewards.map { (cred, rewards) =>
+              cred -> ConwayAccountState(rewards, deposit, None, None)
+          }
         )
         CertState(dstate = dstate)
     }

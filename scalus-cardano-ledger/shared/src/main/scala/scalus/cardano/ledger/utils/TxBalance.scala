@@ -107,7 +107,7 @@ object TxBalance {
         val certificates = tx.body.value.certificates.toSeq
 
         def lookupStakingDeposit(cred: Credential): Option[Coin] = {
-            certState.dstate.deposits.get(cred)
+            certState.dstate.accounts.get(cred).map(_.deposit)
         }
 
         def lookupDRepDeposit(cred: Credential): Option[Coin] = {

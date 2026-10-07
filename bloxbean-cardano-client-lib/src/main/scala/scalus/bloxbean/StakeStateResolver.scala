@@ -29,24 +29,13 @@ final class StakeStateResolver(
                 resolveCredential(cred, epoch, defaultDeposit)
             }
 
-            val rewards = resolved.collect { case Resolved(cred, rewards, _) =>
-                cred -> Coin(rewards)
+            // A cached state without a deposit gets a zero deposit; it still counts as
+            // registered.
+            val accounts = resolved.map { case Resolved(cred, rewards, deposit) =>
+                cred -> ConwayAccountState(Coin(rewards), Coin(deposit.getOrElse(0L)), None, None)
             }.toMap
 
-            val deposits = resolved.collect { case Resolved(cred, _, Some(deposit)) =>
-                cred -> Coin(deposit)
-            }.toMap
-
-            CertState(
-              VotingState(Map.empty),
-              PoolsState(),
-              DelegationState(
-                rewards = rewards,
-                deposits = deposits,
-                stakePools = Map.empty,
-                dreps = Map.empty
-              )
-            )
+            CertState(VotingState(Map.empty), PoolsState(), DelegationState(accounts))
         }
     }
 

@@ -8,7 +8,7 @@ object CertsValidator extends STS.Validator {
     override final type Error = TransactionException
 
     private case class ValidationState(
-        rewards: Map[Credential, Coin],
+        accounts: Map[Credential, ConwayAccountState],
         missingRewardAccounts: Map[RewardAccount, Coin] = Map.empty,
         nonDrainingWithdrawals: Map[RewardAccount, (Coin, Coin)] = Map.empty
     ) {
@@ -18,7 +18,7 @@ object CertsValidator extends STS.Validator {
         infix def validateWithdrawal(withdrawal: (RewardAccount, Coin)): ValidationState = {
             val (rewardAccount, amount) = withdrawal
             val credential = rewardAccount.address.credential
-            rewards.get(credential) match
+            accounts.get(credential).map(_.balance) match
                 case None =>
                     copy(missingRewardAccounts =
                         missingRewardAccounts.updated(rewardAccount, amount)
@@ -35,7 +35,7 @@ object CertsValidator extends STS.Validator {
         val withdrawals: SortedMap[RewardAccount, Coin] =
             event.body.value.withdrawals.getOrElse(Withdrawals.empty).withdrawals
 
-        val initialState = ValidationState(state.certState.dstate.rewards)
+        val initialState = ValidationState(state.certState.dstate.accounts)
         val finalState = withdrawals.foldLeft(initialState)(_ validateWithdrawal _)
 
         if finalState.hasErrors then
@@ -49,14 +49,15 @@ object CertsValidator extends STS.Validator {
         else success
     }
 
+    /** Removes each account whose whole balance is withdrawn. */
     private[rules] def applyWithdrawals(
-        rewards: Map[Credential, Coin],
+        accounts: Map[Credential, ConwayAccountState],
         withdrawals: SortedMap[RewardAccount, Coin]
-    ): Map[Credential, Coin] =
-        withdrawals.foldLeft(rewards) { case (acc, (rewardAccount, amount)) =>
+    ): Map[Credential, ConwayAccountState] =
+        withdrawals.foldLeft(accounts) { case (acc, (rewardAccount, amount)) =>
             val credential = rewardAccount.address.credential
             acc.get(credential) match
-                case Some(expected) if expected == amount => acc - credential
-                case _                                    => acc
+                case Some(account) if account.balance == amount => acc - credential
+                case _                                          => acc
         }
 }

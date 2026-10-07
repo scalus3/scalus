@@ -113,6 +113,10 @@ object StakeDistribution:
     def fromCertState(utxos: Utxos, certState: CertState): StakeDistributionSnapshot =
         computeSnapshot(
           utxos = utxos,
-          delegations = certState.dstate.stakePools,
-          drepDelegations = certState.dstate.dreps
+          delegations = certState.dstate.accounts.flatMap((cred, account) =>
+              account.stakePoolDelegation.map(cred -> _)
+          ),
+          drepDelegations = certState.dstate.accounts.flatMap((cred, account) =>
+              account.dRepDelegation.map(cred -> _)
+          )
         )

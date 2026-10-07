@@ -54,11 +54,12 @@ class CertsMutatorTest extends AnyFunSuite with Matchers with EitherValues {
         )
     }
 
+    // Old maps: the drained credential left `rewards` and stayed in `deposits`, a state the
+    // accounts map cannot hold. It now drops the whole account; spec 13.1 [SC-3] replaces this.
     test("withdrawals drain rewards") {
         val certState = CertState.empty.copy(
-          dstate = CertState.empty.dstate.copy(
-            rewards = Map(credential -> Coin.ada(4)),
-            deposits = Map(credential -> keyDeposit)
+          dstate = DelegationState(
+            Map(credential -> ConwayAccountState(Coin.ada(4), keyDeposit, None, None))
           )
         )
 
@@ -68,8 +69,6 @@ class CertsMutatorTest extends AnyFunSuite with Matchers with EitherValues {
           certState = certState
         ).value
 
-        val dstate = result.certState.dstate
-        dstate.rewards.contains(credential) shouldBe false
-        dstate.deposits.contains(credential) shouldBe true
+        result.certState.dstate.accounts.contains(credential) shouldBe false
     }
 }

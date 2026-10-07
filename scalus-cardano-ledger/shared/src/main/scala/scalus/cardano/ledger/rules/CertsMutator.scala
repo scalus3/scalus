@@ -13,13 +13,9 @@ object CertsMutator extends STS.Mutator {
             case Right(_) =>
                 val withdrawals: SortedMap[RewardAccount, Coin] =
                     event.body.value.withdrawals.getOrElse(Withdrawals.empty).withdrawals
-                val rewardsAfterWithdrawals =
-                    CertsValidator.applyWithdrawals(
-                      state.certState.dstate.rewards,
-                      withdrawals
-                    )
-                val updatedDState =
-                    state.certState.dstate.copy(rewards = rewardsAfterWithdrawals)
+                val updatedDState = DelegationState(
+                  CertsValidator.applyWithdrawals(state.certState.dstate.accounts, withdrawals)
+                )
                 val updatedCertState = state.certState.copy(dstate = updatedDState)
                 val updatedState = state.copy(certState = updatedCertState)
                 success(updatedState)

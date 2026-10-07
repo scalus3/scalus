@@ -1058,8 +1058,9 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
                   .copy(
                     certState = CertState(
                       dstate = scalus.cardano.ledger.DelegationState(
-                        deposits = Map(
-                          stakeAddress.credential -> keyDeposit
+                        Map(
+                          stakeAddress.credential ->
+                              ConwayAccountState(Coin.zero, keyDeposit, None, None)
                         )
                       )
                     )

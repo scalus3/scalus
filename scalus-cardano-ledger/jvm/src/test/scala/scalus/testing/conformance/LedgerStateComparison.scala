@@ -77,7 +77,7 @@ object LedgerStateComparison {
           compareMap(
             "accounts",
             expCerts.dstate.accounts,
-            accountsOf(actCerts.dstate),
+            actCerts.dstate.accounts,
             List(
               "balance" -> (_.balance),
               "deposit" -> (_.deposit),
@@ -112,19 +112,6 @@ object LedgerStateComparison {
           )
         )
     }
-
-    /** The accounts of a Scalus `DelegationState`, in the shape of the Haskell `DState`. An account
-      * is registered iff `rewards` contains its credential.
-      */
-    private def accountsOf(dstate: DelegationState): Map[Credential, ConwayAccountState] =
-        dstate.rewards.map { (cred, balance) =>
-            cred -> ConwayAccountState(
-              balance = balance,
-              deposit = dstate.deposits.getOrElse(cred, Coin.zero),
-              stakePoolDelegation = dstate.stakePools.get(cred),
-              dRepDelegation = dstate.dreps.get(cred)
-            )
-        }
 
     private def encodeGovState(govState: GovState): String =
         govState.map(e => scalus.utils.Hex.bytesToHex(Cbor.encode(e).toByteArray)).mkString(",")

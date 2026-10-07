@@ -508,65 +508,7 @@ object LedgerState {
     }
 
     extension (dstate: DState)
-        def toDelegationState: DelegationState =
-            val deposits = dstate.accounts.collect {
-                case (cred, accountState) if accountState.deposit.value > 0 =>
-                    cred -> accountState.deposit
-            }
-
-            val rewards = dstate.accounts.map { case (cred, accountState) =>
-                cred -> accountState.balance
-            }
-            val stakePools = dstate.accounts.collect {
-                case (cred, accountState) if accountState.stakePoolDelegation.isDefined =>
-                    cred -> accountState.stakePoolDelegation.get
-            }
-            val dreps = dstate.accounts.collect {
-                case (cred, accountState) if accountState.dRepDelegation.isDefined =>
-                    cred -> accountState.dRepDelegation.get
-            }
-            DelegationState(rewards, deposits, stakePools, dreps)
-
-    /** Conway AccountState from cardano-ledger.
-      *
-      * ConwayAccountState is encoded as: [balance, deposit, stakePoolDelegation, dRepDelegation] (4
-      * elements)
-      *   - balance: CompactForm Coin
-      *   - deposit: CompactForm Coin
-      *   - stakePoolDelegation: StrictMaybe (KeyHash 'StakePool) (null or value)
-      *   - dRepDelegation: StrictMaybe DRep (null or value)
-      */
-    case class ConwayAccountState(
-        balance: Coin,
-        deposit: Coin,
-        stakePoolDelegation: Option[PoolKeyHash],
-        dRepDelegation: Option[DRep]
-    )
-
-    object ConwayAccountState {
-        given Decoder[ConwayAccountState] with
-            def read(r: Reader): ConwayAccountState =
-                r.readArrayHeader(4)
-                val balance = r.read[Coin]()
-                val deposit = r.read[Coin]()
-                // StrictMaybe is encoded as null (for SNothing) or the value (for SJust)
-                val stakePoolDelegation =
-                    if r.tryReadNull() then None else Some(r.read[PoolKeyHash]())
-                val dRepDelegation = if r.tryReadNull() then None else Some(r.read[DRep]())
-                ConwayAccountState(balance, deposit, stakePoolDelegation, dRepDelegation)
-
-        given Encoder[ConwayAccountState] with
-            def write(w: Writer, value: ConwayAccountState): Writer =
-                w.writeArrayHeader(4)
-                w.write(value.balance)
-                w.write(value.deposit)
-                value.stakePoolDelegation match
-                    case None    => w.writeNull()
-                    case Some(v) => w.write(v)
-                value.dRepDelegation match
-                    case None    => w.writeNull()
-                    case Some(v) => w.write(v)
-    }
+        def toDelegationState: DelegationState = DelegationState(dstate.accounts)
 
     given Decoder[TransactionInput] with
         def read(r: Reader): TransactionInput =

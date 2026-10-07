@@ -405,9 +405,9 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       */
     def getStakeReward(rewardAddressBech32: String): js.UndefOr[js.BigInt] = {
         val cred = rewardAddressCredential(rewardAddressBech32)
-        emulator.certState.dstate.rewards
+        emulator.certState.dstate.accounts
             .get(cred)
-            .map(_.value.toJsBigInt)
+            .map(_.balance.value.toJsBigInt)
             .orUndefined
     }
 
