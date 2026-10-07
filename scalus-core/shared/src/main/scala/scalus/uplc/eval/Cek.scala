@@ -890,7 +890,7 @@ class CekMachine(
     )
 
     private var ctx: Context = NoFrame
-    private var env: CekValEnv = ArraySeq.empty
+    private var env: CekValEnv = CekEnvPlatform.empty
     private var value: CekValue | Null = null
     private var term: Term | Null = null
 
@@ -1200,8 +1200,8 @@ class CekMachine(
                 case 2 => this.term
         }
 
-        spendBudget(ExBudgetCategory.Startup, params.machineCosts.startupCost, ArraySeq.empty)
-        loop(Compute(NoFrame, ArraySeq.empty, term))
+        spendBudget(ExBudgetCategory.Startup, params.machineCosts.startupCost, CekEnvPlatform.empty)
+        loop(Compute(NoFrame, CekEnvPlatform.empty, term))
     }
 
     private inline def Compute(ctx: Context, env: CekValEnv, term: Term): Int = {
