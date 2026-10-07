@@ -912,11 +912,26 @@ class CekMachine(
     private val diagCaseOnBuiltin: Boolean =
         System.getProperty("scalus.diag.case.on.builtin") != null
 
-    private inline def recordSourcePos(pos: ScalusSourcePos): Unit =
-        if (profiling || tracing) && !pos.isEmpty then
-            traceBuffer(traceIndex) = pos
-            traceIndex = (traceIndex + 1) % traceBufferSize
-            traceCount += 1
+    // A term's position is `term.annotation.pos`, and `annotation` has one implementation per
+    // `Term` case. At the machine's call sites, which see every case, the JIT cannot inline it
+    // ("no static binding" in -XX:+PrintInlining) and V8's inline cache goes megamorphic, so each
+    // read is a real virtual call that the JIT cannot drop even when its result is unused. On
+    // every step that cost the JVM 13-15% and JS 3-8% of the Midgard replays. The hot path
+    // therefore reads positions only when profiling or tracing uses them; errors read them from
+    // the failing term.
+    private val trackPositions = profiling || tracing
+
+    // `pos` must be an `inline` parameter. An `inline def` still evaluates an ordinary argument
+    // once, before its body, so `recordSourcePos(term.sourcePos)` would make the virtual call on
+    // every step and only then test `trackPositions`. An `inline` parameter is substituted into
+    // the body, so `term.sourcePos` runs only inside the `if`.
+    private inline def recordSourcePos(inline pos: ScalusSourcePos): Unit =
+        if trackPositions then
+            val p = pos
+            if !p.isEmpty then
+                traceBuffer(traceIndex) = p
+                traceIndex = (traceIndex + 1) % traceBufferSize
+                traceCount += 1
 
     /** Returns the last N source positions leading to the current point, oldest first. */
     def getSourceTrace: Seq[ScalusSourcePos] = {
@@ -1202,13 +1217,15 @@ class CekMachine(
         term match
             case Var(name, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Var), costs.varCost, env)
-                Return(ctx, env, lookupVarName(env, name, term.sourcePos))
+                Return(ctx, env, lookupVarName(env, name, term))
             case LamAbs(name, term, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.LamAbs), costs.lamCost, env)
                 Return(ctx, env, VLamAbs(name, term, env))
             case Apply(fun, arg, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Apply), costs.applyCost, env)
-                Compute(FrameAwaitFunTerm(env, arg, ctx, term.sourcePos), env, fun)
+                // only the profiler reads `callPos`; see `trackPositions`
+                val callPos = if trackPositions then term.sourcePos else ScalusSourcePos.empty
+                Compute(FrameAwaitFunTerm(env, arg, ctx, callPos), env, fun)
             case Force(term, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Force), costs.forceCost, env)
                 Compute(FrameForce(ctx), env, term)
@@ -1462,17 +1479,13 @@ class CekMachine(
         args.foldRight(ctx) { (arg, c) => FrameAwaitFunValue(arg, c) }
     }
 
-    private def lookupVarName(
-        env: CekValEnv,
-        name: NamedDeBruijn,
-        sourcePos: ScalusSourcePos = ScalusSourcePos.empty
-    ): CekValue = {
+    private def lookupVarName(env: CekValEnv, name: NamedDeBruijn, term: Term): CekValue = {
         if name.index == 0 then
             throw MachineError(
               s"Got a de Bruijn index 0: $name, it should be > 0. Run `DeBruijn.deBruijnTerm(term)` first."
             )
         if name.index <= 0 || env.size < name.index then
-            throw new OpenTermEvaluatedMachineError(name, env, sourcePos)
+            throw new OpenTermEvaluatedMachineError(name, env, term.sourcePos)
         else env(env.size - name.index)._2
     }
 
