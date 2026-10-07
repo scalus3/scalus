@@ -1086,10 +1086,10 @@ object BlockfrostProvider {
         (dataHash, inlineDatum, inlineDatumCbor) match {
             // Prefer inline_datum_cbor if present (hex CBOR, available in MiniBF/recent Blockfrost)
             case (_, _, Some(cborJson)) if !cborJson.isNull =>
-                Some(DatumOption.Inline(Data.fromCbor(hexToBytes(cborJson.str))))
+                Some(DatumOption.Inline.fromCbor(hexToBytes(cborJson.str)))
             // inline_datum as hex CBOR string (Yaci format)
             case (_, Some(s: ujson.Str), _) =>
-                Some(DatumOption.Inline(Data.fromCbor(hexToBytes(s.str))))
+                Some(DatumOption.Inline.fromCbor(hexToBytes(s.str)))
             // inline_datum as JSON object (Blockfrost format) — fall back to data_hash
             case (_, Some(_: ujson.Obj), _) =>
                 dataHash match

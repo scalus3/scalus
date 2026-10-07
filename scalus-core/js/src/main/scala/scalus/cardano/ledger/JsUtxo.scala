@@ -113,10 +113,10 @@ class JsUtxo(txHash0: String, outputIndex0: Double, address0: String, value0: Js
         case Some(DatumOption.Hash(h)) => h.toHex
         case _                         => js.undefined
 
-    /** The datum itself as CBOR, when the output carries it inline. */
+    /** The datum itself as CBOR, when the output carries it inline: the bytes it arrived in. */
     def inlineDatum: js.UndefOr[Uint8Array] = out.datumOption match
-        case Some(DatumOption.Inline(d)) => JsCbor.encode(d)
-        case _                           => js.undefined
+        case Some(inline: DatumOption.Inline) => inline.binaryData.raw.toUint8Array
+        case _                                => js.undefined
 
     /** The reference script as CBOR, when the output carries one. */
     def scriptRef: js.UndefOr[Uint8Array] =
@@ -143,10 +143,14 @@ class JsUtxo(txHash0: String, outputIndex0: Double, address0: String, value0: Js
     def withDatumHash(hash: String): JsUtxo =
         JsUtxo.wrap(in, withOutput(datumOption = Some(DatumOption.Hash(DataHash.fromHex(hash)))))
 
-    /** A copy carrying the CBOR-decoded value of `cbor` as its inline datum. */
+    /** A copy carrying `cbor` as its inline datum. The output keeps these bytes as given, a
+      * non-minimal encoding included.
+      */
     def withInlineDatum(cbor: Uint8Array): JsUtxo = {
         val data = JsCbor.decode[Data](cbor)
-        JsUtxo.wrap(in, withOutput(datumOption = Some(DatumOption.Inline(data))))
+        val bytes = cbor.toByteArray
+        val datum = DatumOption.Inline.fromBinaryData(KeepRaw.unsafe(data, bytes))
+        JsUtxo.wrap(in, withOutput(datumOption = Some(datum)))
     }
 
     /** A copy carrying `script` as its reference script.

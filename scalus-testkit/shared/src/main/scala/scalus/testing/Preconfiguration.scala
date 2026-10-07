@@ -96,7 +96,7 @@ object Preconfiguration {
         entry.datum
             .map(DatumOption.Inline(_))
             .orElse(entry.datum_cbor.map { hex =>
-                DatumOption.Inline(Data.fromCbor(ByteString.fromHex(hex)))
+                DatumOption.Inline.fromCbor(ByteString.fromHex(hex).bytes)
             })
             .orElse(entry.datum_hash.map { hex =>
                 DatumOption.Hash(DataHash.fromHex(hex))

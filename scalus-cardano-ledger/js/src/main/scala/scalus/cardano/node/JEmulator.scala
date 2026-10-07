@@ -569,10 +569,8 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       */
     def getDatum(datumHashHex: String): js.UndefOr[Uint8Array] = {
         val hash = DataHash.fromHex(datumHashHex)
-        emulator.datums
-            .get(hash)
-            .map(JsCbor.encode(_))
-            .orUndefined
+        // the bytes the datum arrived in, so their hash is `datumHashHex`, spec [SC-13k]
+        emulator.binaryDatums.get(hash).map(_.raw.toUint8Array).orUndefined
     }
 
     /** Adds a UTxO to the ledger directly, bypassing transaction validation. Useful for seeding a
@@ -928,9 +926,13 @@ object JEmulator {
             )
         }
 
-    private def parseDatums(entries: js.UndefOr[js.Array[JDatumEntry]]): Map[DataHash, Data] =
+    /** The datums of `entries`, keeping the bytes each was given in, spec [SC-13k]. */
+    private def parseDatums(
+        entries: js.UndefOr[js.Array[JDatumEntry]]
+    ): Map[DataHash, KeepRaw[Data]] =
         entries.toOption.toSeq.flatten.map { e =>
-            DataHash.fromHex(e.hash) -> Data.fromCbor(ByteString.fromHex(e.datum).bytes)
+            val bytes = ByteString.fromHex(e.datum).bytes
+            DataHash.fromHex(e.hash) -> KeepRaw.unsafe(Data.fromCbor(bytes), bytes)
         }.toMap
 
     // The deprecated constructor is still the only way to obtain a `JEmulator` instance to write
@@ -981,7 +983,7 @@ object JEmulator {
           stakeRegistrations = parseStakeRegistrations(options.stakeRegistrations),
           poolRegistrations = parsePoolRegistrations(options.poolRegistrations),
           drepRegistrations = parseDrepRegistrations(options.drepRegistrations),
-          datums = parseDatums(options.datums)
+          datums = Map.empty
         )
         val treasury = Coin(options.treasury.toOption.fold(0L)(longOf(_, "treasury")))
         val context = Context(
@@ -994,10 +996,9 @@ object JEmulator {
           ),
           slotConfig = cardanoInfo.slotConfig
         )
-        wrapScalaEmulator(
-          Emulator.withState(initState, context),
-          JsSlotConfig.wrap(cardanoInfo.slotConfig)
-        )
+        val scalaEmulator = Emulator.withState(initState, context)
+        scalaEmulator.seedDatums(parseDatums(options.datums))
+        wrapScalaEmulator(scalaEmulator, JsSlotConfig.wrap(cardanoInfo.slotConfig))
     }
 
     /** Creates an emulator seeded with a full starting ledger state: UTxOs, and optionally stake
@@ -1018,13 +1019,15 @@ object JEmulator {
           stakeRegistrations = parseStakeRegistrations(state.stakeRegistrations),
           poolRegistrations = parsePoolRegistrations(state.poolRegistrations),
           drepRegistrations = parseDrepRegistrations(state.drepRegistrations),
-          datums = parseDatums(state.datums)
+          datums = Map.empty
         )
         val env =
             if slotConfig.underlying == SlotConfig.mainnet then UtxoEnv.testMainnet()
             else UtxoEnv.default
         val context = new Context(env = env, slotConfig = slotConfig.underlying)
-        wrapScalaEmulator(Emulator.withState(initState, context), slotConfig)
+        val scalaEmulator = Emulator.withState(initState, context)
+        scalaEmulator.seedDatums(parseDatums(state.datums))
+        wrapScalaEmulator(scalaEmulator, slotConfig)
     }
 
     /** Creates an emulator whose ledger holds one output per address, each carrying only ada. This

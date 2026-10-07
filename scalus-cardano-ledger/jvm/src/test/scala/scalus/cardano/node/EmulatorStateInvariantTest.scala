@@ -35,7 +35,7 @@ class EmulatorStateInvariantTest extends AnyFunSuite {
 
     test("a state cannot be assembled field by field, bypassing the derivations in initial") {
         assertDoesNotCompile(
-          "EmulatorState(state.ledger, state.context, state.datums, state.appliedTxLog, state.appliedTxIndex, state.appliedTxs)"
+          "EmulatorState(state.ledger, state.context, state.binaryDatums, state.appliedTxLog, state.appliedTxIndex, state.appliedTxs)"
         )
     }
 

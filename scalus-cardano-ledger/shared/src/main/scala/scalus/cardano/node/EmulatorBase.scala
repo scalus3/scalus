@@ -62,7 +62,14 @@ trait EmulatorBase extends BlockchainProvider {
     def utxos: Utxos = readState.ledger.utxos
     def certState: CertState = readState.ledger.certState
     protected def currentContext: Context = readState.context
-    def datums: Map[DataHash, Data] = readState.datums
+
+    /** Every datum this emulator has seen, by hash, decoded. [[binaryDatums]] keeps the bytes. */
+    def datums: Map[DataHash, Data] = readState.binaryDatums.view.mapValues(_.value).toMap
+
+    /** Every datum this emulator has seen, by hash, with the bytes it arrived in, spec [SC-13k]. A
+      * datum seeded as `Data` carries its canonical encoding.
+      */
+    private[scalus] def binaryDatums: Map[DataHash, KeepRaw[Data]] = readState.binaryDatums
 
     /** The fees collected by the applied transactions. */
     def fees: Coin = readState.ledger.fees
@@ -113,6 +120,10 @@ trait EmulatorBase extends BlockchainProvider {
       * the ledger state (`utxos`, `certState`, `datums`) untouched.
       */
     def clearAppliedTxs(): Unit = updateState(_.withClearedAppliedTxs)
+
+    /** Add `datums` to the datum store with their bytes, for a caller that has them. */
+    private[scalus] def seedDatums(datums: Map[DataHash, KeepRaw[Data]]): Unit =
+        updateState(_.withSeededDatums(datums))
 
     /** Validate `transaction` against the current state under a context derived by
       * `validationContext`, and apply it if it passes.
@@ -191,7 +202,7 @@ trait EmulatorBase extends BlockchainProvider {
     }
 
     def getDatum(datumHash: DataHash): Future[Option[Data]] =
-        Future.successful(datums.get(datumHash))
+        Future.successful(binaryDatums.get(datumHash).map(_.value))
 
     override def cardanoInfo: CardanoInfo = {
         val ctx = currentContext
@@ -328,8 +339,8 @@ case class AppliedTx(tx: Transaction, slot: SlotNo, spent: Utxos) {
   *   the ledger state proper — the UTxO set and the certificate state
   * @param context
   *   the validation context, carrying the current slot, protocol parameters and evaluator mode
-  * @param datums
-  *   every datum this emulator has seen, by hash
+  * @param binaryDatums
+  *   every datum this emulator has seen, by hash, with its original bytes, spec [SC-13k]
   * @param appliedTxLog
   *   applied transactions in application order, oldest first — one entry per application
   * @param appliedTxIndex
@@ -340,11 +351,15 @@ case class AppliedTx(tx: Transaction, slot: SlotNo, spent: Utxos) {
 case class EmulatorState private (
     ledger: State,
     context: Context,
-    datums: Map[DataHash, Data],
+    binaryDatums: Map[DataHash, KeepRaw[Data]],
     appliedTxLog: Vector[AppliedTx],
     appliedTxIndex: Map[TransactionHash, AppliedTx],
     appliedTxs: Set[TransactionHash]
 ) {
+
+    /** Every datum this state has seen, decoded. */
+    @deprecated("use binaryDatums, which keeps the datum bytes", "1.3.0")
+    def datums: Map[DataHash, Data] = binaryDatums.view.mapValues(_.value).toMap
 
     /** The state after `applied` moved the ledger to `newLedger`: the log gains an entry, both
       * derived views follow it, and the transaction's datums join the store.
@@ -356,7 +371,7 @@ case class EmulatorState private (
       */
     def withApplied(newLedger: State, applied: AppliedTx): EmulatorState = copy(
       ledger = newLedger,
-      datums = datums ++ EmulatorBase.extractDatums(applied.tx),
+      binaryDatums = binaryDatums ++ EmulatorBase.binaryDatumsOf(applied.tx),
       appliedTxLog = appliedTxLog :+ applied,
       appliedTxIndex = appliedTxIndex + (applied.txHash -> applied),
       appliedTxs = appliedTxs + applied.txHash
@@ -392,8 +407,14 @@ case class EmulatorState private (
       */
     def withUtxo(input: TransactionInput, output: TransactionOutput): EmulatorState = copy(
       ledger = ledger.copy(utxos = ledger.utxos + (input -> output)),
-      datums = EmulatorBase.inlineDatumOf(output).fold(datums)(datums + _)
+      binaryDatums = EmulatorBase.inlineBinaryDatumOf(output).fold(binaryDatums)(binaryDatums + _)
     )
+
+    /** The state with `seeded` added to the datum store, for a caller that has the datum bytes. A
+      * datum already in the store wins, as in [[EmulatorState.initial]].
+      */
+    private[scalus] def withSeededDatums(seeded: Map[DataHash, KeepRaw[Data]]): EmulatorState =
+        copy(binaryDatums = seeded ++ binaryDatums)
 
     /** The state with the UTxO at `input` dropped, for the direct ledger edits that bypass
       * validation. A no-op if none sits there.
@@ -421,22 +442,28 @@ object EmulatorState {
         datums: Map[DataHash, Data],
         appliedTxLog: Vector[AppliedTx]
     ): EmulatorState =
-        initial(State(utxos, certState = certState), context, datums, appliedTxLog)
+        initial(
+          State(utxos, certState = certState),
+          context,
+          datums.view.mapValues(KeepRaw(_)).toMap,
+          appliedTxLog
+        )
 
     /** The state an emulator starts from, with the whole ledger state given: its fees and donations
-      * too, not only the UTxOs and the certificate state.
+      * too, not only the UTxOs and the certificate state. `datums` keep their bytes.
       */
     def initial(
         ledger: State,
         context: Context,
-        datums: Map[DataHash, Data],
+        datums: Map[DataHash, KeepRaw[Data]],
         appliedTxLog: Vector[AppliedTx]
     ): EmulatorState = new EmulatorState(
       ledger = ledger,
       context = context,
-      datums = appliedTxLog.foldLeft(datums ++ EmulatorBase.extractInlineDatums(ledger.utxos))(
-        (acc, a) => acc ++ EmulatorBase.extractDatums(a.tx)
-      ),
+      binaryDatums = appliedTxLog.foldLeft(
+        datums ++
+            ledger.utxos.valuesIterator.flatMap(EmulatorBase.inlineBinaryDatumOf)
+      )((acc, a) => acc ++ EmulatorBase.binaryDatumsOf(a.tx)),
       appliedTxLog = appliedTxLog,
       appliedTxIndex = EmulatorBase.indexAppliedTxs(appliedTxLog),
       appliedTxs = appliedTxLog.map(_.txHash).toSet
@@ -674,32 +701,37 @@ object EmulatorBase {
     def indexAppliedTxs(log: Iterable[AppliedTx]): Map[TransactionHash, AppliedTx] =
         log.iterator.map(a => a.txHash -> a).toMap
 
+    /** The inline datum `output` carries, keyed by its hash; `None` when it carries none. */
+    def inlineDatumOf(output: TransactionOutput): Option[(DataHash, Data)] =
+        inlineBinaryDatumOf(output).map((hash, datum) => hash -> datum.value)
+
+    /** [[inlineDatumOf]] with the datum bytes, spec [SC-13k]. */
+    private[scalus] def inlineBinaryDatumOf(
+        output: TransactionOutput
+    ): Option[(DataHash, KeepRaw[Data])] =
+        output.datumOption match
+            // keyed by the hash of the original bytes, spec [SC-13j]
+            case Some(inline: DatumOption.Inline) => Some(inline.dataHash -> inline.binaryData)
+            case _                                => None
+
     /** The inline datums held by a UTxO set, by hash.
       *
       * The datums a node can answer for are not only the ones transactions carried in their witness
       * sets: an output with a datum inline puts that datum on the chain, and both a node and
-      * Blockfrost index it. Seeded and directly-added UTxOs go through here so the emulator does
-      * the same.
+      * Blockfrost index it.
       */
-    /** The inline datum `output` carries, keyed by its hash; `None` when it carries none. */
-    def inlineDatumOf(output: TransactionOutput): Option[(DataHash, Data)] =
-        output.datumOption match
-            case Some(DatumOption.Inline(d)) => Some(DataHash.fromByteString(d.dataHash) -> d)
-            case _                           => None
-
     def extractInlineDatums(utxos: Utxos): Map[DataHash, Data] =
         utxos.valuesIterator.flatMap(inlineDatumOf).toMap
 
-    def extractDatums(transaction: Transaction): Map[DataHash, Data] = {
-        val fromWitness = transaction.witnessSet.plutusData.value.toMap.map {
-            case (hash, keptData) => hash -> keptData.value
-        }
-        val fromInline = transaction.body.value.outputs.iterator.flatMap { out =>
-            out.value.datumOption match
-                case Some(DatumOption.Inline(d)) =>
-                    Some(DataHash.fromByteString(d.dataHash) -> d)
-                case _ => None
-        }.toMap
+    def extractDatums(transaction: Transaction): Map[DataHash, Data] =
+        binaryDatumsOf(transaction).view.mapValues(_.value).toMap
+
+    /** The witness and inline datums of `transaction`, with their bytes, spec [SC-13k]. */
+    private[scalus] def binaryDatumsOf(transaction: Transaction): Map[DataHash, KeepRaw[Data]] = {
+        val fromWitness = transaction.witnessSet.plutusData.value.toMap
+        val fromInline = transaction.body.value.outputs.iterator
+            .flatMap(out => inlineBinaryDatumOf(out.value))
+            .toMap
         fromWitness ++ fromInline
     }
 

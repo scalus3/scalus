@@ -285,7 +285,7 @@ object Interop {
         val datumOption: Option[DatumOption] =
             Option(utxo.getDataHash) -> Option(utxo.getInlineDatum) match
                 case (_, Some(inlineDatum)) =>
-                    Some(DatumOption.Inline(Data.fromCbor(inlineDatum.hexToBytes)))
+                    Some(DatumOption.Inline.fromCbor(inlineDatum.hexToBytes))
                 case (Some(dataHash), None) =>
                     Some(DatumOption.Hash(Hash(ByteString.fromHex(dataHash))))
                 case (None, None) => None

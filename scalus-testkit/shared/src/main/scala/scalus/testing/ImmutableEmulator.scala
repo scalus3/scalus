@@ -6,6 +6,7 @@ import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator, ST
 import scalus.cardano.node.*
 import scalus.uplc.builtin.Data
 
+import scala.annotation.targetName
 import scala.concurrent.{ExecutionContext, Future}
 
 /** An immutable emulator for Cardano transactions.
@@ -31,11 +32,15 @@ case class ImmutableEmulator(
       * `EmulatorBase.indexAppliedTxs` rather than setting it independently.
       */
     appliedTxIndex: Map[TransactionHash, AppliedTx] = Map.empty,
-    /** Datum resolution cache (inline + witness datums of applied transactions). Maintained by
-      * [[submit]] so [[getDatum]] and [[asReader]] can resolve datum-hash references.
+    /** Datum resolution cache (inline + witness datums of applied transactions), with the bytes
+      * each datum arrived in. Maintained by [[submit]] so [[getDatum]] and [[asReader]] can resolve
+      * datum-hash references.
       */
-    datums: Map[DataHash, Data] = Map.empty
+    binaryDatums: Map[DataHash, KeepRaw[Data]] = Map.empty
 ) {
+
+    /** [[binaryDatums]], decoded. */
+    def datums: Map[DataHash, Data] = binaryDatums.view.mapValues(_.value).toMap
 
     /** Current UTxO set. */
     def utxos: Utxos = state.utxos
@@ -62,7 +67,7 @@ case class ImmutableEmulator(
                   state = newState,
                   appliedTxLog = appliedTxLog :+ applied,
                   appliedTxIndex = appliedTxIndex + (applied.txHash -> applied),
-                  datums = datums ++ EmulatorBase.extractDatums(tx)
+                  binaryDatums = binaryDatums ++ EmulatorBase.binaryDatumsOf(tx)
                 )
                 Right((tx.id, next))
             case Left(e: TransactionException) =>
@@ -82,7 +87,7 @@ case class ImmutableEmulator(
         appliedTxIndex.get(txHash)
 
     /** Resolve a datum by its hash, or `None` if unknown. */
-    def getDatum(datumHash: DataHash): Option[Data] = datums.get(datumHash)
+    def getDatum(datumHash: DataHash): Option[Data] = binaryDatums.get(datumHash).map(_.value)
 
     /** Clear the applied-transaction bookkeeping (log + index), keeping ledger state. */
     def clearAppliedTxs: ImmutableEmulator =
@@ -119,7 +124,7 @@ case class ImmutableEmulator(
         override def currentSlot: Future[SlotNo] =
             Future.successful(env.slot)
         def getDatum(datumHash: DataHash): Future[Option[Data]] =
-            Future.successful(ImmutableEmulator.this.datums.get(datumHash))
+            Future.successful(ImmutableEmulator.this.getDatum(datumHash))
     }
 
     /** Convert to a mutable [[scalus.cardano.node.Emulator]], keeping the fees, the donations and
@@ -136,7 +141,7 @@ case class ImmutableEmulator(
               donation = state.donation
             ),
             context,
-            datums,
+            binaryDatums,
             appliedTxLog
           ),
           validators,
@@ -146,6 +151,33 @@ case class ImmutableEmulator(
 }
 
 object ImmutableEmulator {
+
+    /** The 1.3 parameter list: the datums decoded, without their original bytes. Each datum keeps
+      * the bytes of its canonical encoding.
+      */
+    @deprecated("pass binaryDatums: Map[DataHash, KeepRaw[Data]] instead", "1.3.0")
+    @targetName("applyWithDecodedDatums")
+    def apply(
+        state: State,
+        env: UtxoEnv,
+        slotConfig: SlotConfig,
+        evaluatorMode: EvaluatorMode,
+        validators: Iterable[STS.Validator],
+        mutators: Iterable[STS.Mutator],
+        appliedTxLog: Vector[AppliedTx],
+        appliedTxIndex: Map[TransactionHash, AppliedTx],
+        datums: Map[DataHash, Data]
+    ): ImmutableEmulator = ImmutableEmulator(
+      state,
+      env,
+      slotConfig,
+      evaluatorMode,
+      validators,
+      mutators,
+      appliedTxLog,
+      appliedTxIndex,
+      datums.view.mapValues(KeepRaw(_)).toMap
+    )
 
     /** Create an ImmutableEmulator from a mutable [[scalus.cardano.node.EmulatorBase]].
       *
@@ -179,7 +211,7 @@ object ImmutableEmulator {
           mutators = emulator.mutators,
           appliedTxLog = log,
           appliedTxIndex = EmulatorBase.indexAppliedTxs(log),
-          datums = emulator.datums
+          binaryDatums = emulator.binaryDatums
         )
     }
 

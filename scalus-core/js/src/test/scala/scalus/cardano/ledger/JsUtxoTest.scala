@@ -194,6 +194,39 @@ class JsUtxoTest extends AnyFunSuite {
         assert(updated.datumHash.toOption.isEmpty)
     }
 
+    // spec [SC-13a], probe 3: a non-minimal inline datum, d879811a0000000a, came back as d8799f0aff
+    private val probeDatumHex = "d879811a0000000a"
+
+    /** `[input, output]` with the probe datum inline, as CBOR hex. */
+    private val probeUtxoHex: String = {
+        val data = Data.fromCbor(Hex.hexToBytes(probeDatumHex))
+        val output: TransactionOutput =
+            TransactionOutput.Babbage(address, Value.ada(1), Some(DatumOption.Inline(data)))
+        val canonical = Hex.bytesToHex(Cbor.encode((TransactionInput(hash, 0), output)).toByteArray)
+        canonical.replace("d81845d8799f0aff", "d81848" + probeDatumHex)
+    }
+
+    test("fromCbor keeps the bytes of an inline datum, for inlineDatum and toCbor") {
+        // spec [SC-13a]
+        val utxo = JsUtxo.fromCbor(Hex.hexToBytes(probeUtxoHex).toUint8Array)
+        assert(
+          utxo.inlineDatum.toOption.map(b => Hex.bytesToHex(b.toByteArray)).contains(probeDatumHex)
+        )
+        assert(Hex.bytesToHex(utxo.toCbor().toByteArray) == probeUtxoHex)
+    }
+
+    test("withInlineDatum keeps the bytes it was given") {
+        // spec [SC-13a]
+        val utxo = JsUtxo.wrap(TransactionInput(hash, 0), TransactionOutput(address, Value.ada(1)))
+        val updated = utxo.withInlineDatum(Hex.hexToBytes(probeDatumHex).toUint8Array)
+        assert(Hex.bytesToHex(updated.toCbor().toByteArray) == probeUtxoHex)
+        assert(
+          updated.inlineDatum.toOption
+              .map(b => Hex.bytesToHex(b.toByteArray))
+              .contains(probeDatumHex)
+        )
+    }
+
     test("withScriptRef returns a new handle carrying the decoded reference script") {
         val script = Script.PlutusV3(ByteString.fromHex("00"))
         val scriptRefCbor =

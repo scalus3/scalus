@@ -151,6 +151,23 @@ class EmulatorJsTest extends AnyFunSuite {
         assert(emulator.snapshot().getTreasury().toString == "1000")
     }
 
+    test("addUtxo keeps the bytes of an inline datum") {
+        // spec [SC-13a]: d879811a0000000a is valid CBOR for Constr 0 [10], but not minimal
+        val probeDatumHex = "d879811a0000000a"
+        val emulator = JEmulator.create(JsCardanoInfo.mainnet())
+        val utxo = JsUtxo
+            .wrap(
+              TransactionInput(genesisHash, 0),
+              TransactionOutput(Alice.address(Network.Mainnet), Value.ada(5))
+            )
+            .withInlineDatum(ByteString.fromHex(probeDatumHex).bytes.toUint8Array)
+        emulator.addUtxo(utxo)
+        val stored = emulator.getUtxos().toSeq.flatMap(_.inlineDatum.toOption)
+        assert(
+          stored.map(b => ByteString.unsafeFromArray(b.toByteArray).toHex) == Seq(probeDatumHex)
+        )
+    }
+
     test("getTreasury is 0 when the options give no treasury") {
         assert(JEmulator.create(JsCardanoInfo.mainnet()).getTreasury().toString == "0")
     }
@@ -535,6 +552,38 @@ class EmulatorJsTest extends AnyFunSuite {
             .getOrElse(fail("seeded datum must be found by hash"))
         assert(ByteString.fromArray(found.toByteArray).toHex == datumCborHex)
         assert(emulator.getDatum("00" * 32).toOption.isEmpty)
+    }
+
+    test("getDatum returns the original bytes of a seeded and of an inline datum") {
+        // spec [SC-13k]: d879811a0000000a re-encodes as d8799f0aff, which hashes differently
+        val probeHex = "d879811a0000000a"
+        val probe = KeepRaw.unsafe(
+          Data.fromCbor(ByteString.fromHex(probeHex).bytes),
+          ByteString.fromHex(probeHex).bytes
+        )
+        val hashHex = probe.dataHash.toHex
+        def bytesOf(emulator: JEmulator): Option[String] =
+            emulator.getDatum(hashHex).toOption.map(b => ByteString.fromArray(b.toByteArray).toHex)
+
+        val datumEntry =
+            js.Dynamic.literal(hash = hashHex, datum = probeHex).asInstanceOf[JDatumEntry]
+        val seeded = JEmulator.create(
+          JsCardanoInfo.mainnet(),
+          js.Dynamic.literal(datums = js.Array(datumEntry)).asInstanceOf[JsEmulatorOptions]
+        )
+        assert(bytesOf(seeded).contains(probeHex), "a seeded datum")
+
+        val inline = JEmulator.create(
+          JsCardanoInfo.mainnet(),
+          js.Dynamic.literal().asInstanceOf[JsEmulatorOptions]
+        )
+        val output = Output(
+          Bob.address(Network.Mainnet),
+          Value.ada(5),
+          DatumOption.Inline.fromBinaryData(probe)
+        )
+        inline.addUtxo(JsUtxo.wrap(Input(TransactionHash.fromHex("0" * 64), 0), output))
+        assert(bytesOf(inline).contains(probeHex), "an inline datum")
     }
 
     test("time and slot move together") {

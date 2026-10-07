@@ -1,12 +1,14 @@
 package scalus.cardano.node
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{Builtins, ByteString, Data}
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
+
+import scala.collection.immutable.SortedMap
 
 /** The JVM and the JavaScript `Emulator` are two source files claiming to run the same ledger rules
   * over the same state machine. This suite is what makes that claim mechanical: it lives in the
@@ -423,5 +425,87 @@ class EmulatorParityTest extends AnyFunSuite {
         assert(copy.fees == tx.body.value.fee)
         assert(copy.donation == Coin(5))
         assert(copy.treasury == Coin(1000))
+    }
+
+    test("an inline datum keeps its original bytes through submit and query") {
+        // spec [SC-13], probe 6: d879811a0000000a came back as d8799f0aff
+        val probeBytes = ByteString.fromHex("d879811a0000000a").bytes
+        val datum = DatumOption.Inline.fromCbor(probeBytes)
+        val utxos = genesisUtxos(Value.ada(100))
+        val emulator = emulatorOver(utxos)
+        val tx = TxBuilder(testEnv)
+            .output(TransactionOutput.Babbage(bob, Value.ada(10), Some(datum)))
+            .complete(utxos, alice)
+            .sign(Alice.signer)
+            .transaction
+        assert(ByteString.unsafeFromArray(tx.toCbor).toHex.contains("d81848d879811a0000000a"))
+        assert(emulator.submitSync(tx) == Right(tx.id))
+
+        val stored = emulator
+            .findUtxosSync(UtxoQuery(UtxoSource.FromTransaction(tx.id)))
+            .values
+            .flatMap(_.datumOption)
+        assert(stored.toSeq == Seq(datum), "Inline compares the bytes, spec [SC-13g]")
+    }
+
+    test("getDatum finds a submitted inline datum by the hash of its original bytes") {
+        // spec [SC-13j]
+        val probeBytes = ByteString.fromHex("d879811a0000000a").bytes
+        val datum = DatumOption.Inline.fromCbor(probeBytes)
+        val utxos = genesisUtxos(Value.ada(100))
+        val emulator = emulatorOver(utxos)
+        val tx = TxBuilder(testEnv)
+            .output(TransactionOutput.Babbage(bob, Value.ada(10), Some(datum)))
+            .complete(utxos, alice)
+            .sign(Alice.signer)
+            .transaction
+        assert(emulator.submitSync(tx) == Right(tx.id))
+
+        val hash = DataHash.fromByteString(
+          Builtins.blake2b_256(ByteString.unsafeFromArray(probeBytes))
+        )
+        assert(datumOf(emulator, hash) == Some(Data.fromCbor(probeBytes)))
+        assert(storedBytes(emulator, hash).contains("d879811a0000000a"), "spec [SC-13k]")
+    }
+
+    private val probeDatumBytes: Array[Byte] = ByteString.fromHex("d879811a0000000a").bytes
+
+    /** The probe datum with its non-minimal bytes, which re-encode as d8799f0aff. */
+    private def probeDatum: KeepRaw[Data] =
+        KeepRaw.unsafe(Data.fromCbor(probeDatumBytes), probeDatumBytes)
+
+    private def storedBytes(emulator: Emulator, hash: DataHash): Option[String] =
+        emulator.binaryDatums.get(hash).map(d => ByteString.unsafeFromArray(d.raw).toHex)
+
+    test("the datum store keeps the original bytes of a witness datum") {
+        // spec [SC-13k]
+        val hash = probeDatum.dataHash
+        val locked = Input(genesisHash, 1) -> Output(bob, Value.ada(5), DatumOption.Hash(hash))
+        val utxos = genesisUtxos(Value.ada(100)) + locked
+        // No rules: TxBuilder attaches a datum by its canonical bytes, and the store is under test
+        val emulator = Emulator(initialUtxos = utxos, validators = Set.empty)
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(locked))
+            .payTo(alice, Value.ada(5))
+            .complete(utxos, alice)
+            .transaction
+            .withWitness(
+              _.copy(plutusData = KeepRaw(TaggedSortedMap(SortedMap(hash -> probeDatum))))
+            )
+        assert(emulator.submitSync(tx) == Right(tx.id))
+
+        assert(storedBytes(emulator, hash).contains("d879811a0000000a"))
+    }
+
+    test("the datum store keeps the original bytes of an inline datum") {
+        // spec [SC-13k]
+        val hash = probeDatum.dataHash
+        val emulator = emulatorOver(genesisUtxos(Value.ada(100)))
+        emulator.addUtxo(
+          Input(genesisHash, 9),
+          Output(bob, Value.ada(5), DatumOption.Inline.fromBinaryData(probeDatum))
+        )
+
+        assert(storedBytes(emulator, hash).contains("d879811a0000000a"))
     }
 }

@@ -1,7 +1,7 @@
 package scalus.testing.conformance
 
 import io.bullet.borer.Cbor
-import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 
@@ -320,12 +320,11 @@ object MempackParser {
         offset += 1
 
         val datumBytes = bytes.slice(offset, offset + datumLen)
-        val data = Cbor.decode(datumBytes).to[Data].value
 
         TransactionOutput.Babbage(
           address,
           value,
-          Some(DatumOption.Inline(data)),
+          Some(DatumOption.Inline.fromCbor(datumBytes)),
           None
         )
     }
@@ -378,8 +377,7 @@ object MempackParser {
                 offset += 1
                 val datumBytes = bytes.slice(offset, offset + datumLen)
                 offset += datumLen
-                val data = Cbor.decode(datumBytes).to[Data].value
-                Some(DatumOption.Inline(data))
+                Some(DatumOption.Inline.fromCbor(datumBytes))
             case _ => throw new IllegalArgumentException(s"Unsupported Datum tag: $datumTag")
         }
 

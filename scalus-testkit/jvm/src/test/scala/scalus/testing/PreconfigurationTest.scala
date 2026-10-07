@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 import scalus.testing.kit.Party
-import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{Builtins, ByteString, Data}
 
 class PreconfigurationTest extends AnyFunSuite {
 
@@ -132,6 +132,15 @@ class PreconfigurationTest extends AnyFunSuite {
         val utxos = Preconfiguration.resolveUtxos(Preconfiguration.fromJson(json), network)
         val output = utxos.values.head
         assert(output.datumOption.contains(DatumOption.Inline(Data.I(42))))
+    }
+
+    test("inline datum via CBOR hex keeps its original bytes") {
+        // A non-minimal encoding of Constr 0 [10]: re-encoding it gives d8799f0aff
+        val cborHex = "d879811a0000000a"
+        val json = s"""{ "utxo": { "alice": [{ "ada": 5, "datum_cbor": "$cborHex" }] } }"""
+        val utxos = Preconfiguration.resolveUtxos(Preconfiguration.fromJson(json), network)
+        val expected = DataHash.fromByteString(Builtins.blake2b_256(ByteString.fromHex(cborHex)))
+        assert(utxos.values.head.datumOption.map(_.dataHash).contains(expected))
     }
 
     test("datum hash") {

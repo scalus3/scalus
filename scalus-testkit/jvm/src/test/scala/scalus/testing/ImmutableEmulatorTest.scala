@@ -7,8 +7,10 @@ import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
-import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{Builtins, ByteString, Data}
 import scalus.utils.await
+
+import scala.annotation.nowarn
 
 class ImmutableEmulatorTest extends AnyFunSuite {
 
@@ -185,6 +187,27 @@ class ImmutableEmulatorTest extends AnyFunSuite {
         assert(cleared.getDatum(dh).contains(d), "datums survive clearAppliedTxs")
     }
 
+    test("fromEmulator and toEmulator keep the bytes of a datum no UTxO or tx holds") {
+        // spec [SC-13k]: d879811a0000000a is valid CBOR for Constr 0 [10], but not minimal
+        val probe = ByteString.fromHex("d879811a0000000a")
+        val input = Input(TransactionHash.fromByteString(ByteString.fromHex("0" * 64)), 0)
+        val output = TransactionOutput.Babbage(
+          Alice.address,
+          Value.ada(5),
+          Some(DatumOption.Inline.fromCbor(probe.bytes)),
+          None
+        )
+        val emulator = Emulator()
+        emulator.addUtxo(input, output)
+        emulator.removeUtxo(input)
+
+        val hash = DataHash.fromByteString(Builtins.blake2b_256(probe))
+        val roundTripped = ImmutableEmulator.fromEmulator(emulator).toEmulator
+        assert(
+          roundTripped.binaryDatums.get(hash).map(d => ByteString.fromArray(d.raw)) == Some(probe)
+        )
+    }
+
     // spec 13.3: the treasury, as of the last epoch boundary, sits in the env
     private val slotConfig = CardanoInfo.mainnet.slotConfig
     private val epochStart = slotConfig.firstSlotOfEpoch(500)
@@ -237,5 +260,31 @@ class ImmutableEmulatorTest extends AnyFunSuite {
         do
             assert(next.env.treasury == Coin(1005))
             assert(next.state.donation == Coin.zero)
+    }
+
+    // 1.3 call sites pass the datums positionally, decoded, as the last argument
+    @nowarn("cat=deprecation")
+    private def withOldDatums(state: State, env: UtxoEnv, datums: Map[DataHash, Data]) =
+        ImmutableEmulator(
+          state,
+          env,
+          SlotConfig.mainnet,
+          EvaluatorMode.Validate,
+          Emulator.defaultValidators,
+          Emulator.defaultMutators,
+          Vector.empty,
+          Map.empty,
+          datums
+        )
+
+    test("the deprecated apply takes the decoded datums of 1.3") {
+        val hash = DataHash.fromByteString(ByteString.fromHex("1" * 64))
+        val datum = Data.I(10)
+        // one state instance: `State()` holds arrays, so two of them are not equal
+        val state = State()
+        val env = UtxoEnv.testMainnet()
+        val expected =
+            ImmutableEmulator(state = state, env = env, binaryDatums = Map(hash -> KeepRaw(datum)))
+        assert(withOldDatums(state, env, Map(hash -> datum)) == expected)
     }
 }
