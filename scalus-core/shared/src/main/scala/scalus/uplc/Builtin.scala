@@ -12,6 +12,7 @@ import scalus.uplc.eval.*
 import scalus.utils.Macros
 
 import scala.collection.immutable.ArraySeq
+import scala.collection.mutable.ListBuffer
 import scala.language.implicitConversions
 
 case class BuiltinRuntime(
@@ -620,6 +621,22 @@ class CardanoBuiltins(
           builtinCostModel.bData
         )
 
+    /** A `Data` list as a list constant, in one pass: builtins that take a `Data` apart call this
+      * for every constructor's fields, so it is on the hot path of most scripts.
+      */
+    private def dataListConstant(values: PList[Data]): Constant.List = {
+        val elems = ListBuffer.empty[Constant]
+        values.foreach(d => elems += Constant.Data(d))
+        Constant.List(DefaultUni.Data, elems.toList)
+    }
+
+    /** A `Data` map as a list constant of pairs, in one pass, as [[dataListConstant]]. */
+    private def dataPairListConstant(values: PList[(Data, Data)]): Constant.List = {
+        val pairs = ListBuffer.empty[Constant]
+        values.foreach((k, v) => pairs += Constant.Pair(Constant.Data(k), Constant.Data(v)))
+        Constant.List(DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data), pairs.toList)
+    }
+
     /*
     unConstrData : [ data ] -> pair(integer, list(data))
      */
@@ -629,7 +646,7 @@ class CardanoBuiltins(
           (_: Logger, args: Seq[CekValue]) =>
               args(0) match
                   case VCon(Constant.Data(Data.Constr(i, ls))) =>
-                      VCon(Constant.Pair(asConstant(i), asConstant(ls.toScalaList)))
+                      VCon(Constant.Pair(asConstant(i), dataListConstant(ls)))
                   case _ => throw new DeserializationError(DefaultFun.UnConstrData, args(0))
           ,
           builtinCostModel.unConstrData
@@ -640,15 +657,7 @@ class CardanoBuiltins(
           DefaultUni.Data ->: DefaultUni.List(DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data)),
           (_: Logger, args: Seq[CekValue]) =>
               args(0) match
-                  case VCon(Constant.Data(Data.Map(values))) =>
-                      VCon(
-                        Constant.List(
-                          DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data),
-                          values.toScalaList.map { case (k, v) =>
-                              Constant.Pair(asConstant(k), asConstant(v))
-                          }
-                        )
-                      )
+                  case VCon(Constant.Data(Data.Map(values))) => VCon(dataPairListConstant(values))
                   case _ => throw new DeserializationError(DefaultFun.UnMapData, args(0))
           ,
           builtinCostModel.unMapData
@@ -660,7 +669,7 @@ class CardanoBuiltins(
           (_: Logger, args: Seq[CekValue]) =>
               args(0) match
                   case VCon(Constant.Data(Data.List(values))) =>
-                      VCon(Constant.List(DefaultUni.Data, values.toScalaList.map(asConstant)))
+                      VCon(dataListConstant(values))
                   case _ => throw new DeserializationError(DefaultFun.UnListData, args(0))
           ,
           builtinCostModel.unListData
