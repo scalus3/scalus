@@ -226,6 +226,12 @@ private[uplcblaster] object SmtValues {
                 case (Some("Constr"), List(tag, fields)) =>
                     for
                         index <- toInteger(tag)
+                        // Lean's `Data` takes any integer for the tag of a constructor.
+                        _ <- Either.cond(
+                          index >= 0,
+                          (),
+                          Unreadable.OutsideType(s"a Data constructor has the tag $index, below 0")
+                        )
                         values <- toList(fields, toData)
                     yield Data.Constr(index, PList.from(values))
                 case _ => malformed(s"expected a Data value, got $node")

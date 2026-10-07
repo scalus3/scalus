@@ -60,6 +60,18 @@ class SmtValuesTest extends AnyFunSuite {
         assert(SmtValues.bytes("42").left.exists(_.isInstanceOf[SmtValues.Unreadable.Malformed]))
     }
 
+    test("a constructor of Data with a tag below 0 is a value of Lean's model only") {
+        // Lean's `Data` takes any integer for the tag, and Scalus's none below 0.
+        SmtValues.data(s"($data.Constr (- 1) $dataList)") match
+            case Left(SmtValues.Unreadable.OutsideType(reason)) =>
+                assert(reason.contains("-1"), reason)
+            case other => fail(s"expected a value outside the type, got $other")
+        // Inside another value as well.
+        SmtValues.data(s"($data.List (List.cons ($data.Constr (- 7) $dataList) $dataList))") match
+            case Left(SmtValues.Unreadable.OutsideType(_)) =>
+            case other => fail(s"expected a value outside the type, got $other")
+    }
+
     test("a value the model leaves unconstrained reads as a default, alone or nested") {
         assert(SmtValues.integer("$0") == Right(BigInt(0)))
         assert(SmtValues.boolean("$1") == Right(false))
