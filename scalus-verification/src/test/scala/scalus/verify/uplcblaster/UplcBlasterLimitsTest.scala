@@ -66,6 +66,8 @@ class UplcBlasterLimitsTest extends AnyFunSuite with LeanProofs {
         // Blaster's symbolic run of each leaf, before the solver is asked.
         val large = inconclusive(filterDoesNotLengthen, 800, givenUp, positives)
         assert(large.contains("did not finish"), large)
+        assert(large.contains("symbolically"), large)
+        assert(large.contains("had not come to the solver"), large)
     }
 
     test("a recursion over integers is not finished by the solver", Unfinished) {
@@ -74,5 +76,6 @@ class UplcBlasterLimitsTest extends AnyFunSuite with LeanProofs {
         // Lean is done in seconds; Z3 is then left with nested remainders, and takes gigabytes.
         val large = inconclusive(gcdIsNotNegative, 400, givenUp, gcd)
         assert(large.contains("did not finish"), large)
+        assert(large.contains("Blaster had started the solver"), large)
     }
 }

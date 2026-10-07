@@ -103,7 +103,9 @@ result for its statement, and the server takes the next one. Where the server it
   unknown length. So a check has a time limit, by the clock: ten minutes
   (`UplcBlaster.defaultTimeout`), or the `timeout` of `UplcBlaster(budget, lean, timeout)`. A
   check that reaches it is given up, and is `Inconclusive`; see "Statements that do not finish"
-  in the tactic's details. `withoutTimeout` lifts the limit.
+  in the tactic's details. `withoutTimeout` lifts the limit. The reason says where the check
+  was: still running a test's program symbolically, which a smaller budget may cure, or with
+  Blaster and the solver.
 - So is a check that Lean gives up itself, at its limit of work for one command
   (`maxHeartbeats`). A check sets that limit to twice Lean's default;
   `UplcBlaster(budget, lean).withMaxHeartbeats(n)` sets another, and `0` none. It is the quick

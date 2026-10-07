@@ -98,6 +98,19 @@ Three generated checks about `Math.clamp` at a budget of 200, two leaves each, a
 - **A bad header does not end the server.** The failing import is an error on the first line,
   and the next check is answered. A changed header starts the worker anew, so the header of
   every check has to be the same text, as the tactic's is.
+- **The server says which command it is at.** `$/lean/fileProgress` lists the ranges of the
+  document that Lean has not finished, and the first of them starts with the command it
+  elaborates: Lean takes one command after the other. Only an earlier command that leaves
+  work behind, as the proof of a theorem does, stays first while Lean goes on. On the `filter`
+  check at budget 400: the imports until 2.9 s, the symbolic run of the first program until
+  10.8 s, that of the second until 17.9 s, then `#blaster`. The solver's process was there from
+  19.0 s, and the check was answered at 19.2 s.
+- **Blaster starts the solver before it translates.** In `#blaster`, Blaster first simplifies
+  the statement, then starts the solver's process, translates the statement for it, and asks
+  it (`Translate.main`). So no solver process means the simplification, and a solver process
+  that has run without working means the translation. The time a process has worked is what
+  the system tells of it, beside the time it has run. The JVM gets it of another process on
+  Linux, and not on macOS, where only the time since Blaster started the solver is known.
 - **A worker that ends does not end the server.** Two cases were tried: the worker killed from
   outside in the middle of a check, as the system does for memory, and `#eval` of a recursion
   too deep for the worker's stack. In both `waitForDiagnostics` is answered at once with the
@@ -148,12 +161,19 @@ object LeanServer {
     /** What a command of the document reported: a diagnostic, by the line of its command. */
     final case class Message(line: Int, severity: Severity, text: String)
 
+    /** How far a check had come: where in the document, for how long, and the processes the
+      * check had started, with the time each had run and had worked.
+      */
+    final case class Progress(reached: Reached, spent: FiniteDuration, started: List[Started])
+    enum Reached { case NotStarted, Unreported, Command(line: String), End }
+    final case class Started(name: String, running: FiniteDuration, working: Option[FiniteDuration])
+
     enum Result {
         /** The document was elaborated: its messages, in the order of their commands. */
         case Finished(messages: List[Message])
 
         /** The time limit passed. The check is given up, and what it started has ended. */
-        case TimedOut
+        case TimedOut(progress: Progress)
 
         /** The check was not made. The server takes the next one, unless it ended itself. */
         case Failed(reason: String)
@@ -172,7 +192,7 @@ object LeanServer {
 | notification | `textDocument/didClose` | to give a check up: Lean ends the document's worker |
 | request | `textDocument/waitForDiagnostics` | answered when that version is elaborated |
 | received | `textDocument/publishDiagnostics` | the messages of a version so far; those at the moment of the answer are the result |
-| received | `$/lean/fileProgress` | ignored |
+| received | `$/lean/fileProgress` | the first command Lean has not finished, or that it has finished them all: where a check was when it was given up |
 | received request | `client/registerCapability`, `workspace/*/refresh` | answered with a null result |
 | request, notification | `shutdown`, `exit` | to end the server |
 
@@ -255,7 +275,8 @@ another is `TimedOut` without having started. When the limit passes in the check
 check is given up by closing the document:
 
 1. the processes below the server that were not there before a document was opened are listed:
-   the worker, and what it started;
+   the worker, and what it started. They and the command Lean is at are the check's progress,
+   which `TimedOut` carries;
 2. `textDocument/didClose` is sent, on which Lean ends the worker;
 3. when those processes have ended, the result is `TimedOut`;
 4. if they have not ended after a few seconds, they are ended by their handles; if that fails
@@ -345,6 +366,13 @@ the code that started and stopped it: there is one way to run Lean, not two to k
   into the output that `verdict` reads, with a flag for whether one of them is an error.
   `Valid`, `Falsified` with its counterexample, a closed statement that is false, and
   everything else as a failure are told apart there, in one place.
+- **Where a check stopped.** The reason of a check that was given up says how far it had come,
+  from the progress of `TimedOut`: still in the symbolic run of one of its programs, in
+  Blaster's simplification of the statement, or after Blaster had started the solver, with the
+  time the solver had worked. The solver is the process of the check that is not Lean's own.
+  The first means that the budget lets a program run through a loop, and is the case a smaller
+  budget or a fixed shape helps. A solver that worked all its time is a statement the solver
+  finds hard.
 - **Results.** `TimedOut` is `Inconclusive`, and `Failed` is `Failed`. A check that Lean gives up
   itself, at its limit of work, is `Inconclusive` too: the error `(deterministic) timeout`
   means the statement is not decided, not that something broke. A check sets that limit,
