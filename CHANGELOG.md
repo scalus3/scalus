@@ -2,8 +2,133 @@
 
 ## Unreleased
 
+Scalus 1.4 brings the Emulator closer to the Cardano ledger: withdrawals, delegation targets, the
+treasury and datum bytes now behave as on chain. The JavaScript Emulator gains what a Lucid
+Evolution provider needs.
+
+### Added
+
+- JavaScript `Emulator.create` takes `protocolParams` to override fields of the preset, `treasury`,
+  `clock: "wall"` to follow `Date.now()`, and pool registrations by `{ poolId }` alone.
+- `Emulator.addRewards` pays lovelace into a registered reward account. In JavaScript,
+  `getAccount` reads its balance, deposit, pool and DRep back, and `stakeDistribution` entries
+  carry `rewardAddress`.
+- `Emulator.getTreasury()` in JavaScript, and `treasury` on the Scala Emulator. Donations move into
+  the treasury at the next epoch boundary.
+- `Utxo.script` and `PlainUtxo.script` return the reference script as `{ type, script }`, the shape
+  `withScriptRef` takes. `withScriptRef` and `scriptHash` also take `"PlutusV4"`.
+- `DatumOption.Inline.fromCbor` and `fromBinaryData` build an inline datum that keeps its bytes.
+- `Script.Native.fromCbor` builds a native script that keeps its bytes. `Script.fromCbor` decodes
+  a `[language, script]` script.
+- The bloxbean `StakeStateResolver.resolveForTx(tx, slot)` gives the cert state a mainnet
+  transaction saw: each account's reward balance, deposit, pool and DRep, and the pools and DReps
+  it delegates to, as of its slot. The balance is the rewards Koios lists as spendable, less the
+  withdrawals before the slot. `treasuryAt(epoch)` gives the treasury at the start of an epoch.
+  Both cache the Blockfrost and Koios responses. The old `resolveForTx(tx, epoch, defaultDeposit)`
+  is deprecated.
+- `TxBalance.produced(tx, certState, params)` and `Certificate.shelleyTotalDeposits(params,
+  isRegisteredPool, certificates)` take the registered pools, so a pool re-registration pays no
+  deposit. The old forms count no pool as registered.
+- `TransactionBuilder.Context.validate`, `validateContext` and `finalizeContext` have overloads
+  that take the treasury. The old forms validate against a treasury of 0, so they reject a
+  transaction that states a non-zero `currentTreasuryValue`.
+
+### Changed
+
+- **Breaking:** `DatumOption` is a sealed trait instead of an enum, and `Inline` holds a
+  `KeepRaw[Data]` with the original CBOR. `Inline(data)`, `Hash(hash)` and `case Inline(d)` with
+  `d: Data` still compile. `ordinal`, `fromOrdinal` and `Inline.copy` are gone; match on
+  the case instead. **Two inline datums with the same `Data` and different bytes are no longer
+  equal**; use `contentEquals` to compare by `Data`.
+- **Breaking:** `Script.Native` holds a `KeepRaw[Timelock]` with the original CBOR, its
+  constructor is private, and `copy` is gone. `Native(timelock)`, `case Native(t)` with
+  `t: Timelock` and `native.script` still compile. **Two native scripts with the same timelock and
+  different bytes are no longer equal.** `Codec[Script]` is now an `Encoder[Script]` and a
+  `Decoder[Script]` that needs an `OriginalCborByteArray`; replace
+  `Cbor.decode(bytes).to[Script].value` with `Script.fromCbor(bytes)`. Encode a native script in a
+  non-canonical encoding, or a value holding one, with `scalus.serialization.cbor.Cbor`, as for
+  other `KeepRaw` values: borer's validating `Cbor.encode` rejects its bytes.
+- **Breaking:** `DelegationState` stores one `ConwayAccountState` per account in `accounts`. The
+  `rewards`, `deposits`, `stakePools` and `dreps` maps remain as deprecated read-only views. A
+  deprecated `apply` and a deprecated constructor take the 4 maps, so `DelegationState(r, d, p, v)`
+  and `new DelegationState(r, d, p, v)` still compile and link, and `DelegationState(rewards = r)`
+  still compiles. **A 1.3 binary that left out one of the 4 maps does not link, and `copy` with the
+  old field names and a pattern match on 4 fields no longer compile**; update `accounts` instead.
+- **Breaking:** `UtxoEnv` has a fifth field, `treasury`. A deprecated 4-argument `apply` and
+  constructor use `Coin.zero`, **so under them a transaction that states a non-zero
+  `currentTreasuryValue` now fails with `TreasuryValueMismatch`**. A positional pattern match on
+  `UtxoEnv` needs the fifth field, and a binary 1.3 call of `copy` no longer links.
+- **Breaking:** `StakeCertificatesException` has 2 new fields, the unregistered pools and DReps a
+  transaction delegates to. A deprecated 6-argument `apply` and constructor build it with none. A
+  positional pattern match needs the 2 new fields, and a binary 1.3 call of `copy` no longer links.
+- **Breaking:** the `EmulatorState` field `datums` is now `binaryDatums`, a
+  `Map[DataHash, KeepRaw[Data]]`. `EmulatorState.datums` remains as a deprecated decoded view.
+  `EmulatorBase.datums` is unchanged.
+- **Breaking:** the testkit `ImmutableEmulator` field `datums` is now `binaryDatums`, a
+  `Map[DataHash, KeepRaw[Data]]`. `datums` remains as a decoded view. A deprecated `apply` takes
+  the 1.3 parameter list, with all 9 arguments, and keeps each datum in its canonical encoding.
+  `copy(datums = ...)` and a named `datums` argument with defaults no longer compile.
+- JavaScript `Emulator.create` throws a `TypeError` for every invalid option. A bad `clock`,
+  pool registration or credential type threw an `IllegalArgumentException` before. It also
+  rejects a `datums` entry whose `hash` is not the blake2b-256 hash of its `datum` bytes.
+- The deprecated bloxbean `StakeStateResolver.resolveForTx(tx, epoch, defaultDeposit)` registers
+  an account whose cached state has no deposit with a deposit of 0.
+- `DefaultMutators.all` applies withdrawals before certificates, as the Conway LEDGER rule does.
+- `CertsMutator` applies the withdrawals, then every certificate in one pass, in the order of the
+  transaction, as the Conway CERTS rule does. `DefaultMutators.all` is `CertsMutator` and
+  `PlutusScriptsTransactionMutator`. `StakeCertificatesMutator`, `StakePoolCertificatesMutator` and
+  `VotingCertificatesMutator` are deprecated. A mutator set that lists `CertsMutator` skips them,
+  so they do not apply the certificates a second time.
+- **Breaking:** on the JVM, Ed25519, secp256k1 and BLS12-381 need `scalus-crypto-jni`'s native
+  library: Linux with glibc 2.34+, macOS 11+ (arm64) or 10.15+ (x64), or Windows x64. Elsewhere
+  these operations throw `IllegalStateException`. Alpine/musl is not supported.
+- **Breaking:** `G1Element.apply(P1)`, `G2Element.apply(P2)` and `MLResult.apply(PT)` are removed,
+  and blst-java is no longer a dependency. Build points with `G1Element(ByteString)` or the
+  builtins.
+- Ed25519 verification on the JVM takes about 30 µs instead of 52 µs.
+
 ### Fixed
 
+- The Emulator accepted the same reward withdrawn twice. Withdrawals now subtract from the balance
+  and keep the account registered. **A test that expected a drained account to be deregistered
+  now finds it registered with balance 0.**
+- The Emulator accepted a delegation to an unregistered pool or DRep. **Such a transaction is now
+  rejected**, as on chain; register the pool first, or use `poolRegistrations`.
+- The Emulator accepted any `currentTreasuryValue`. **A transaction that states a value other than
+  the treasury is now rejected** with `TreasuryValueMismatch`.
+- The Emulator accepted a withdrawal from a key-hash reward account with no DRep delegation. **Such a
+  transaction is now rejected** with `WithdrawalsNotDelegatedToDRep`, as on chain from protocol
+  version 10. Delegate the account's votes first, for example to `AlwaysAbstain`. Script-hash
+  accounts are exempt.
+- The Emulator accepted a transaction whose reference scripts total more than 200 KiB. **Such a
+  transaction is now rejected** with `TxRefScriptsSizeTooBig`, as on chain.
+- The min fee counted the reference script of a UTxO that a transaction both spends and references
+  twice, so from protocol version 11 the Emulator rejected such a transaction at its on-chain min
+  fee, and `TxBuilder` overpaid. It now counts it once, as on chain.
+- A native script in a non-minimal encoding, such as `82041a0000000a`, was re-encoded as `82040a`:
+  its script hash, its size for the reference-script fee and limit, and the bytes of an output or
+  witness set that held it differed from the chain. They now match, in the Emulator, the bloxbean
+  `Interop` and the JavaScript `Utxo` API.
+- A phase-2-invalid transaction with an invalid certificate or withdrawal was rejected. It is now
+  accepted, and only its collateral is taken.
+- A re-registration of a registered pool, which updates its parameters, was rejected with
+  `ValueNotConserved`: it was charged a second pool deposit. It now pays none, as on chain. Two
+  registrations of one new pool in a transaction pay one deposit.
+- `snapshot()`, `ImmutableEmulator.fromEmulator` and `toEmulator` dropped the fees and donations.
+- An inline datum in a non-minimal encoding, such as `d879811a0000000a`, came back as
+  `d8799f0aff` from the decoder, the Emulator, `BlockfrostProvider`, the bloxbean `Interop`, the
+  testkit `Preconfiguration` and the JavaScript `Utxo` API. Its bytes and hash now match the
+  chain, and `getDatum(h)` returns bytes whose hash is `h`.
+- `contentEquals` of a datum hash and an inline datum compared the hash of the re-encoded `Data`.
+- A DRep deregistration left the vote delegations to that DRep in place. It now clears them, as
+  on chain.
+- The Emulator applied the certificates of a transaction by kind, not in their order: after
+  `[UnregDRepCert(X), RegDRepCert(X), VoteDelegCert(c, X)]`, `c` had no DRep. A pool registered
+  earlier in a transaction could not be retired by a later certificate of it.
+- `TxBuilder.deregisterStake(stakeAddress)` and `deregisterStake(stakeAddress, witness)` emitted a
+  certificate without its refund, so the balancer missed the refunded deposit and the ledger
+  rejected the transaction with `ValueNotConserved`. They now state the `stakeAddressDeposit` of
+  the protocol parameters as the refund, as a Conway `UnregCert`.
 - Ed25519, secp256k1 and BLS12-381 give the Cardano node's verdicts on every platform. On the JVM
   they run the C libraries cardano-node 11.1.3 links (libsodium IOG fork, libsecp256k1 v0.3.2,
   blst v0.3.15) through the new `scalus-crypto-jni` 0.1.0, called as cardano-crypto-class calls
@@ -18,15 +143,6 @@
 - Scala Native adds a BLS12-381 point to itself correctly and signs with extended (BIP32-Ed25519)
   keys; JavaScript pairs the point at infinity as blst does.
 
-### Changed
-
-- **Breaking:** on the JVM, Ed25519, secp256k1 and BLS12-381 need `scalus-crypto-jni`'s native
-  library: Linux with glibc 2.34+, macOS 11+ (arm64) or 10.15+ (x64), or Windows x64. Elsewhere
-  these operations throw `IllegalStateException`. Alpine/musl is not supported.
-- **Breaking:** `G1Element.apply(P1)`, `G2Element.apply(P2)` and `MLResult.apply(PT)` are removed,
-  and blst-java is no longer a dependency. Build points with `G1Element(ByteString)` or the
-  builtins.
-- Ed25519 verification on the JVM takes about 30 µs instead of 52 µs.
 
 ### Deprecated
 
