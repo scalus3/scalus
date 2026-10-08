@@ -6,6 +6,12 @@ ThisBuild / developers := List(
   Developer("nau", "Alexander Nemish", "anemish@gmail.com", url("https://github.com/nau"))
 )
 ThisBuild / dynverTagPrefix := "crypto-jni-v"
+// Untagged builds (pushes to master) publish a fixed snapshot that the main build depends on;
+// tagged builds keep dynver's release version. Bump it after each release.
+ThisBuild / version := {
+  val v = (ThisBuild / version).value
+  if (v.endsWith("-SNAPSHOT")) "0.1.0-SNAPSHOT" else v
+}
 
 lazy val root = (project in file("."))
   .settings(

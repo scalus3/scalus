@@ -102,6 +102,9 @@ ThisBuild / run / javaOptions ++= (if (javaVersion >= 23)
 // through scalus-bloxbean-cardano-client-lib target JDK 11. Only the Java sources need this; Scala
 // already defaults to -Xtarget:8. Without it, building on JDK 21 emitted v65 Java classes.
 ThisBuild / javacOptions ++= Seq("--release", "11")
+// scalus-crypto-jni 0.1.0-SNAPSHOT is published by the crypto-jni workflow from master. Drop this
+// resolver once build.sbt depends on the released 0.1.0.
+ThisBuild / resolvers += Resolver.sonatypeCentralSnapshots
 
 // Improve incremental compilation
 ThisBuild / incOptions := {
