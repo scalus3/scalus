@@ -1,4 +1,4 @@
-# Scalus 1.2.0 public API cheatsheet
+# Scalus 1.3.0 public API cheatsheet
 # Generated - do not edit. Signatures are Scala 3.
 
 object scalus.cardano.ledger.BloxbeanToLedgerTranslation
@@ -76,6 +76,12 @@ class scalus.cardano.ledger.PlutusScriptEvaluationException
   val failedScriptHash: ScriptHash
   val spentBudget: ExUnits
   val failedSourcePosition: Option[ScalusSourcePos]
+  val redeemer: Option[Redeemer]
+  val script: Option[PlutusScript]
+  val args: Seq[Data]
+
+object scalus.cardano.ledger.PlutusScriptEvaluationException
+  def render(message: String, failedScriptHash: ScriptHash, spentBudget: ExUnits, failedSourcePosition: Option[ScalusSourcePos], logs: Array[String], redeemer: Option[Redeemer]): String
 
 trait scalus.cardano.ledger.PlutusScriptEvaluator
   def evalPlutusScripts(tx: Transaction, utxos: Utxos, debugScripts: Map[ScriptHash, DebugScript]): Seq[Redeemer]
@@ -2109,6 +2115,7 @@ object scalus.cardano.ledger.MajorProtocolVersion
   val changPV: MajorProtocolVersion
   val plominPV: MajorProtocolVersion
   val vanRossemPV: MajorProtocolVersion
+  val dijkstraPV: MajorProtocolVersion
   val futurePV: MajorProtocolVersion
   val knownPVs: SortedSet[MajorProtocolVersion]
 
@@ -2406,6 +2413,7 @@ object scalus.cardano.ledger.ProtocolVersion
   val conwayPV: ProtocolVersion
   val plominPV: ProtocolVersion
   val vanRossemPV: ProtocolVersion
+  val dijkstraPV: ProtocolVersion
   val futurePV: ProtocolVersion
   val knownPVs: SortedSet[ProtocolVersion]
 
@@ -2867,6 +2875,8 @@ case class scalus.cardano.ledger.Utxo
 
 object scalus.cardano.ledger.Utxo
   def apply(utxo: Tuple2[TransactionInput, TransactionOutput]): Utxo
+  given given_Encoder_Utxo: Encoder[Utxo]
+  given given_Decoder_Utxo: Decoder[Utxo]
 
 case class scalus.cardano.ledger.VKeyWitness
   val vkey: ByteString
@@ -2993,6 +3003,7 @@ case class scalus.cardano.ledger.Word64
   def toLong: Long
   def toBigInteger: BigInteger
   def toUnsignedString: String
+  def toString: String
   def toHexString: String
   def compareUnsigned(other: Word64): Int
   def isLargeUnsigned: Boolean
