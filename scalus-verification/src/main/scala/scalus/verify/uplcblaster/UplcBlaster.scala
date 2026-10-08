@@ -4,6 +4,7 @@ import scalus.*
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.Options
 import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, DataDecl, SIR, SIRBuiltins, SIRType}
+import scalus.compiler.sir.linking.Wrappers
 import scalus.uplc.{Constant, DeBruijn, Program, Term}
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
@@ -542,7 +543,8 @@ object UplcBlaster {
       * around it. So the expression keeps the shape the rest of the lowering reads: a call's
       * arguments are still a tuple written out, under its `let`s ([[tupleComponents]]), and the
       * definitions of registered functions are still where [[unlinkModuleDefinitions]] removes
-      * them, in the witness as in the expression.
+      * them, in the witness as in the expression. The witness's own `let`s stay in the value that
+      * is bound: only its module definitions, which have qualified names, are around the binding.
       */
     private def instantiate[A](
         prop: Prop,
@@ -555,19 +557,16 @@ object UplcBlaster {
                 witness.asInstanceOf[PropExpr[T]]
             case PropExpr.SIRExpr(sir) =>
                 val (witnessDeclarations, linkedWitness) = declarations(expressionSir(witness))
-                val (definitions, witnessValue) = moduleDefinitions(linkedWitness)
+                val (definitions, witnessValue) = Wrappers.definitions(linkedWitness)
                 val (bodyDeclarations, body) = declarations(sir)
-                val bound: AnnotatedSIR = SIR.Let(
+                val bound = SIR.Let(
                   List(Binding(ident.name, ident.tp, witnessValue)),
                   body,
                   SIR.LetFlags.None,
                   AnnotationsDecl.empty
                 )
                 PropExpr.SIRExpr[T](
-                  withDeclarations(
-                    witnessDeclarations ++ bodyDeclarations,
-                    definitions.foldRight(bound)((definition, inner) => definition(inner))
-                  )
+                  withDeclarations(witnessDeclarations ++ bodyDeclarations, definitions(bound))
                 )
             case current => current
 
@@ -588,20 +587,6 @@ object UplcBlaster {
 
         loop(prop)
     }
-
-    /** The module definitions `Compiler.compile` put around an expression, outermost first, each as
-      * the `let` it is around what it is given, and the expression. A module definition has a
-      * qualified name, which a value of the expression's own never has.
-      */
-    private def moduleDefinitions(
-        sir: AnnotatedSIR
-    ): (List[AnnotatedSIR => AnnotatedSIR], AnnotatedSIR) = sir match
-        case SIR.Let(bindings, body: AnnotatedSIR, flags, anns)
-            if bindings.forall(_.name.contains('.')) =>
-            val (inner, expression) = moduleDefinitions(body)
-            val definition = (rest: AnnotatedSIR) => SIR.Let(bindings, rest, flags, anns)
-            (definition :: inner) -> expression
-        case expression => Nil -> expression
 
     /** The data declarations of the constructors a built value applies. */
     private def constructorDeclarations(sir: SIR): List[DataDecl] = sir match
@@ -671,8 +656,8 @@ object UplcBlaster {
     }
 
     /** `expression` inside the data declarations collected from its pieces, each declared once. */
-    private def withDeclarations(data: List[DataDecl], expression: AnnotatedSIR): SIR =
-        data.distinctBy(_.name).foldRight[SIR](expression)((decl, body) => SIR.Decl(decl, body))
+    private def withDeclarations(data: List[DataDecl], expression: SIR): SIR =
+        data.distinctBy(_.name).foldRight(expression)((decl, body) => SIR.Decl(decl, body))
 
     /** `fn` applied to `values`, one at a time: a function's program is curried. `fn` is an
       * `ExternalVar` that [[compileSirFunction]] links to the function's own program.
@@ -765,21 +750,18 @@ object UplcBlaster {
     /** The components of a tuple of `arity` values written out as `(a, b, ...)`. The definitions
       * the compiler put around the tuple stay around each component.
       */
-    private def tupleComponents(sir: SIR, arity: Int): Either[String, List[SIR]] = sir match
-        case SIR.Decl(data, term) =>
-            tupleComponents(term, arity).map(_.map(component => SIR.Decl(data, component)))
-        case SIR.Let(bindings, body, flags, anns) =>
-            tupleComponents(body, arity).map(
-              _.map(component => SIR.Let(bindings, component, flags, anns))
-            )
-        case SIR.Constr(name, _, arguments, _, _)
-            if name == s"scala.Tuple$arity" && arguments.size == arity =>
-            Right(arguments)
-        case other =>
-            Left(
-              s"a function of $arity parameters takes a tuple of $arity values written out as " +
-                  s"(a, b, ...), not an expression of type ${other.tp.show}"
-            )
+    private def tupleComponents(sir: SIR, arity: Int): Either[String, List[SIR]] = {
+        val (wrappers, tuple) = Wrappers.of(sir)
+        tuple match
+            case SIR.Constr(name, _, arguments, _, _)
+                if name == s"scala.Tuple$arity" && arguments.size == arity =>
+                Right(arguments.map(wrappers(_)))
+            case other =>
+                Left(
+                  s"a function of $arity parameters takes a tuple of $arity values written out " +
+                      s"as (a, b, ...), not an expression of type ${other.tp.show}"
+                )
+    }
 
     /** `left` and `right` evaluate to equal values. */
     private def equality(left: SIR, right: SIR): Either[String, SIR] = {

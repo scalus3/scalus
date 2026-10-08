@@ -1,6 +1,7 @@
 package scalus.verify
 
 import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, SIR, SIRPosition, SIRType}
+import scalus.compiler.sir.linking.Wrappers
 import scalus.compiler.sir.transform.EraseSpecifications
 import scalus.uplc.Constant
 
@@ -27,12 +28,11 @@ private[verify] object Obligations {
     /** A call of `callee`, with the arguments of one full application. */
     final case class Site(node: SIR.Apply, callee: String, arguments: List[AnnotatedSIR])
 
-    /** The parameters of a function and its body, and the definitions around it, innermost first.
-      */
+    /** The parameters of a function and its body, and the definitions around it. */
     final case class Body(
         parameters: List[SIR.Var],
         term: SIR,
-        wrappers: List[SIR => SIR]
+        wrappers: Wrappers
     ) {
 
         /** The parameters, as the variables of a statement about the function. */
@@ -42,7 +42,7 @@ private[verify] object Obligations {
             )
 
         /** `sir`, an expression of the body, inside the definitions around the function. */
-        def wrapped(sir: SIR): SIR = wrappers.foldLeft(sir)((inner, wrap) => wrap(inner))
+        def wrapped(sir: SIR): SIR = wrappers(sir)
     }
 
     /** The body of `function` in the SIR its entry was compiled from. A method of an `@Compile`
@@ -50,23 +50,8 @@ private[verify] object Obligations {
       * definitions around the lambda; another function is the lambda itself.
       */
     def body(function: FunctionDef[?, ?], sir: SIR): Body = {
-        @annotation.tailrec
-        def unwrap(
-            current: SIR,
-            wrappers: List[SIR => SIR],
-            definition: Option[SIR]
-        ): (SIR, List[SIR => SIR], Option[SIR]) = current match
-            case SIR.Decl(data, term) =>
-                unwrap(term, (inner => SIR.Decl(data, inner)) :: wrappers, definition)
-            case SIR.Let(bindings, term, flags, anns) =>
-                val own = bindings.find(_.name == function.name).map(_.value)
-                unwrap(
-                  term,
-                  (inner => SIR.Let(bindings, inner, flags, anns)) :: wrappers,
-                  definition.orElse(own)
-                )
-            case root => (root, wrappers, definition)
-        val (root, wrappers, definition) = unwrap(sir, Nil, None)
+        val (wrappers, root) = Wrappers.of(sir)
+        val definition = wrappers.bindings.find(_.name == function.name).map(_.value)
         val (parameters, term) = lambda(definition.getOrElse(root), function.arity, function.name)
         Body(parameters, term, wrappers)
     }
