@@ -815,15 +815,12 @@ test("vesting authorisation is proved about the shipped script") {
 - **Not in scalac.** Lean runs take seconds to minutes, and Z3 is not fully deterministic. At
   compile time we only capture: statements become values.
 - **`sbt verify`** discovers verifier instances and their batch requests the way test frameworks
-  discover suites. It calls each verifier's `verify` method and stores results in a
-  content-addressed cache. The key includes the statement IR, every referenced function
-  representation and target script hash, the identities and trust metadata of used lemmas, the
-  tactic and its configuration, and the backend pins (Lean toolchain, Blaster and PlutusCore
-  revisions).
-- **At test time**, `VerificationResult`s are read from the cache, and policy tests like the one
-  above run.
+  discover suites. It calls each verifier's `verify` method and keeps the results (§5.6).
+- **At test time**, `VerificationResult`s are read from what is kept, and policy tests like the
+  one above run.
 - **In CI**, keep the split that `scalus-verification` already uses. At PR time, a cheap check that
-  the statements and targets still match the cache. Nightly, the full proof run.
+  the statements and targets still match what is kept. Nightly, the full proof run, which
+  recalculates every result.
 
 ### 5.5 Lemmas and composition
 
@@ -833,6 +830,120 @@ test("vesting authorisation is proved about the shipped script") {
   its own tactic, as in `verifier.verify(statement, split(blasterUplc(40), leanDirect))`.
 - This is the seed of a Scala-side proof kernel. A full LCF-style kernel is deliberately not part
   of this design (§6.7).
+
+### 5.6 Kept results
+
+Proposed. A result is kept with a hash of everything it rests on, so that a later run need not
+ask the backend again for a statement that has not changed. It is the same for every tactic: the
+verifier keeps and looks up, and a tactic says what its results rest on.
+
+**What is kept, by the result.**
+
+| Result | Kept | On a later run | What is trusted |
+|---|---|---|---|
+| `Refuted` | the counterexample's values | replayed on the Scalus CEK, without the backend | nothing: it is checked again each time |
+| `Proven` | that it was proved, and with what | taken as it is | the run that proved it |
+| `Inconclusive`, `Failed` | nothing | the tactic runs | |
+
+- **A refutation is its own evidence.** The replay of §5.2 takes milliseconds and needs no Lean.
+- **A proof is not.** Blaster and the solver say `Valid` and give nothing that could be checked
+  again. A kept proof is the word of an earlier run. Should Blaster come to give proofs that
+  Lean's kernel checks, a kept proof could be checked like a counterexample.
+- **The rest depends on the machine and its time limits,** and says nothing worth keeping.
+
+**The fingerprint.** A tactic gives, for a statement it has prepared, the hashes of what its
+result rests on. Preparing needs no backend, so the fingerprint is known wherever the code compiles.
+
+```scala
+trait Tactic:
+    ...
+    /** The hashes of everything a result for `prepared` rests on, part by part. */
+    def fingerprint(prepared: Prepared): Fingerprint
+```
+
+For `blaster-uplc` it is over:
+
+- the program of each test, and the statement as it is given to Lean: the text of the check,
+  without the paths of its files and without the budget. A change of the validator, of a
+  function it calls, of the compiler or of how the tactic reads a statement changes one of them;
+- the Lean side: the toolchain, the revisions of Blaster and PlutusCore, and Scalus's own Lean
+  library. A fix of a soundness bug in one of them must not leave the proofs made before it;
+- the lemmas a proof used, by their fingerprints.
+
+The budget is not in it. A proof at any budget holds without the budget, and a refutation is
+replayed without one.
+
+A fingerprint is kept in its parts, not as one hash of them all: the statement, each program,
+the Lean side. Two fingerprints are the same where every part is. A reader of the file then
+sees what a result rests on, and a change of the file says which part moved: the program of
+the second test, or the revision of Blaster.
+
+**The file** is one for a suite, in JSON that is written out in lines, with the statements in
+the order of their names. It is made to be read: in an editor, in a review, with `jq`.
+
+```json
+{
+  "lean": {
+    "toolchain": "leanprover/lean4:v4.24.0",
+    "Blaster": "3a141c8d",
+    "PlutusCore": "2919b664",
+    "ScalusProofs": "77aa01c2"
+  },
+  "results": {
+    "the same holds whatever the outputs are #1": {
+      "source": "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala",
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "budget": 1608,
+      "statement": "9c41e0b7",
+      "programs": ["a1f3077e", "5be2d910"]
+    },
+    "clamp stays in range #2": {
+      "source": "scalus-verification/src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala",
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "counterexample": { "x": "5", "lo": "10", "hi": "0" },
+      "statement": "0d77aa3c",
+      "programs": ["c09e1b44"]
+    }
+  }
+}
+```
+
+- **A name for every statement:** the test, and the place of the statement among those of the
+  test, or the name the statement was declared with. `source` is the file the test is in. The
+  line is not kept: it moves with every edit above it, and would change the file for nothing.
+- **Used by the fingerprint, replaced by the name.** An entry counts only where its fingerprint
+  is that of the statement now. A statement that changed gets a new entry under its name, in
+  place of the old one, so the file does not grow with every change of the compiler.
+- **The Lean side is said once,** for the file. A change of the toolchain or of Blaster is then
+  one line that changes, and every entry of the file is stale with it.
+- **A tactic keeps its own notes with a result.** `blaster-uplc` keeps the budget its search came
+  to, which a later run starts from
+  ([Finding the budget](verification-details/blaster-budget-search.md)).
+- **A counterexample is kept as the values of the variables,** by their names, as a reader
+  would write them.
+- **The text of the statement is not kept,** only its hash. As Lean is given it, it is three
+  times the rest of an entry, and reads to few.
+
+**Three ways to run.**
+
+| | An entry with the statement's fingerprint | None, or another fingerprint |
+|---|---|---|
+| **use** | the kept result; a refutation is replayed | the tactic runs, and the result is kept |
+| **recalculate** | the tactic runs; a result that differs is a failure | the tactic runs, and the result is kept |
+| **frozen** | the kept result; a refutation is replayed | the statement is stale: no result, and its test is canceled |
+
+- **Use** is for work on a machine with the backend.
+- **Recalculate** is what keeps the kept proofs honest. The nightly proof run is one: it takes
+  nothing from the file, and a proof that no longer comes out is found there.
+- **Frozen** is for where no backend runs, as in `ci-jvm`. Today every proof is canceled there,
+  and a change that breaks one is seen a day later. With the file, the same build sees at once
+  that a change touched code that is proved: its fingerprint is not in the file.
+
+**The file is committed.** Frozen has nothing to look at otherwise, and a result that changes is
+then seen in review. It is of the programs of one compiler. Scalus is built with several, their
+programs differ, and a build with another finds no entry.
 
 ---
 
@@ -1084,6 +1195,10 @@ Unproved premises leave the goal open.
   indistinguishable from success. `PreludeProofsTest` follows this rule per function; the runner
   does not enforce it yet.
 - **Counterexamples are replayed** (§5.2). A solver model alone is not a finding.
+- **A kept proof is an earlier run's** (§5.6). Beside what that run trusted, it trusts the file
+  it is kept in, and that the fingerprint leaves out nothing the result rests on. The file can be
+  written by hand; the run that recalculates and the review of the file are what stand against
+  that. A kept refutation is replayed, and trusts none of this.
 
 ---
 
@@ -1143,12 +1258,19 @@ same place.
    checked (see `verification-details/uplc-blaster.md`). Open: `lean-direct`'s mapping proofs
    and claims about a program's raw boundary need a Lean encoding per representation.
 5. **Budget calibration** between Scalus CEK metering and PlutusCoreBlaster step counts.
-6. **Commit policy.** Should the proof cache and the generated Lean input be committed, so Lean
-   builds without a JVM?
-7. **The default domain for validator inputs:** well-formed values or raw `Data` (§3.3).
-8. **Where mappings are declared.** `leanMapping(f, "…")` in the verification module, or an
+6. **Commit policy.** The kept results are committed (§5.6): a build without the backend has
+   nothing to compare with otherwise. Still open: the generated Lean input, so that Lean builds
+   without a JVM.
+7. **A stale statement in a build without the backend** (§5.6, frozen). Decided for now: its
+   test is canceled, as every proof is there today, with a reason that says the proof is stale
+   and what it no longer agrees with. A failure would make every change of a proved program
+   wait for a run with Lean, the compiler's changes among them. The nightly run that
+   recalculates is where a stale proof is made again, or found broken. To be a failure once
+   that run is trusted to keep the files current.
+8. **The default domain for validator inputs:** well-formed values or raw `Data` (§3.3).
+9. **Where mappings are declared.** `leanMapping(f, "…")` in the verification module, or an
    annotation on the function itself, which would tie core code to Lean names?
-9. **Naming:** `scalus.verify` and `statement` / `refute`. The precondition is `expects`, not
+10. **Naming:** `scalus.verify` and `statement` / `refute`. The precondition is `expects`, not
    `requires`, so that it does not read as the prelude's runtime `require`.
-10. **Default verifier discovery.** How should compiler-generated descriptors from multiple jars
+11. **Default verifier discovery.** How should compiler-generated descriptors from multiple jars
     be indexed and assembled without loading every `@Compile` object eagerly?
