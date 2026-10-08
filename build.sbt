@@ -30,7 +30,7 @@ val slf4jVersion = "2.0.18"
 val magnoliaVersion = "1.3.23"
 val pprintVersion = "0.9.6"
 val monocleVersion = "3.3.0"
-val jsoniterScalaVersion = "2.40.1"
+val jsoniterScalaVersion = "2.41.0"
 
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
 //ThisBuild / scalaVersion := "3.3.7-RC1-bin-SNAPSHOT"
