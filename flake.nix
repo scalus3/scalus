@@ -3,6 +3,11 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     flake-utils.url = "github:numtide/flake-utils";
     plutus.url = "github:IntersectMBO/plutus/1.63.0.0";
+    # The C crypto libraries exactly as cardano-node 11.1.3 links them: its root iohkNix input
+    # (iohk-nix 74bae4f8). Keep in step with CONTRIBUTING.md "Keeping crypto libraries in sync".
+    sodium = { url = "github:input-output-hk/libsodium/dbb48cce5429cb6585c9034f002568964f1ce567"; flake = false; };
+    secp256k1 = { url = "github:bitcoin-core/secp256k1/acf5c55ae6a94e5ca847e07def40427547876101"; flake = false; };
+    blst = { url = "github:supranational/blst/6d960cd05d6fe2b5bc9ba161edf0c1a131b87c4c"; flake = false; };
     # cardano-node-flake.url = "github:input-output-hk/cardano-node/9.1.1";
   };
 
@@ -36,6 +41,74 @@
           "--enable-module-ecdh"
         ];
       });
+
+      # Mirrors iohk-nix overlays/crypto/*.nix at 74bae4f8. Only packaging differs: static
+      # archives with position-independent code, linked into one JNI library.
+      # On macOS the archives target the same oldest release as the JNI library (Makefile
+      # MACOS_MIN), or the linker warns about objects built for a newer macOS. The stdenv preHook
+      # exports MACOSX_DEPLOYMENT_TARGET=darwinMinVersion (14.0), and darwinMinVersionHook can only
+      # raise it, so lower it in preConfigure, which runs after preHook. The cc-wrapper reads the
+      # variable on every call.
+      macosTarget = stdenv: pkgs.lib.optionalAttrs stdenv.hostPlatform.isDarwin {
+        preConfigure = "export MACOSX_DEPLOYMENT_TARGET="
+          + (if stdenv.hostPlatform.isAarch64 then "11.0" else "10.15");
+      };
+      nodeSodium = { stdenv, lib, autoreconfHook }: stdenv.mkDerivation ({
+        pname = "libsodium-vrf";
+        version = "1.0.18";
+        src = inputs.sodium;
+        nativeBuildInputs = [ autoreconfHook ];
+        configureFlags = [ "--enable-static" "--disable-shared" "--with-pic" ]
+          ++ lib.optional stdenv.hostPlatform.isMinGW "CFLAGS=-fno-stack-protector";
+        enableParallelBuilding = true;
+        doCheck = !stdenv.hostPlatform.isMinGW;
+      } // macosTarget stdenv);
+      nodeSecp256k1 = { stdenv, autoreconfHook }: stdenv.mkDerivation ({
+        pname = "secp256k1";
+        version = "0.3.2";
+        src = inputs.secp256k1;
+        nativeBuildInputs = [ autoreconfHook ];
+        configureFlags = [
+          "--enable-benchmark=no"
+          "--enable-module-recovery"
+          "--enable-static"
+          "--disable-shared"
+          "--with-pic"
+        ];
+        enableParallelBuilding = true;
+        doCheck = !stdenv.hostPlatform.isMinGW;
+      } // macosTarget stdenv);
+      nodeBlst = { stdenv, lib }: stdenv.mkDerivation ({
+        pname = "blst";
+        version = "0.3.15";
+        src = inputs.blst;
+        buildPhase = ''
+          actual=$(grep -m1 -E '^version\s*=' bindings/rust/Cargo.toml | cut -d'"' -f2)
+          [ "$actual" = "0.3.15" ] || { echo "blst version mismatch: $actual"; exit 1; }
+          ./build.sh -D__BLST_PORTABLE__ -fPIC ${lib.optionalString stdenv.hostPlatform.isWindows "flavour=mingw64"}
+        '';
+        installPhase = ''
+          mkdir -p $out/lib $out/include
+          cp libblst.a $out/lib/
+          cp bindings/blst.h bindings/blst_aux.h $out/include/
+        '';
+      } // macosTarget stdenv);
+      mingw = pkgs.pkgsCross.mingwW64;
+      cryptoHost = {
+        sodium = pkgs.callPackage nodeSodium { };
+        secp256k1 = pkgs.callPackage nodeSecp256k1 { };
+        blst = pkgs.callPackage nodeBlst { };
+      };
+      cryptoWindows = {
+        sodium = mingw.callPackage nodeSodium { };
+        secp256k1 = mingw.callPackage nodeSecp256k1 { };
+        blst = mingw.callPackage nodeBlst { };
+      };
+      # jni_md.h for win32: Linux JDKs ship only the linux variant; jni.h is platform-neutral.
+      jniMdWin32 = pkgs.fetchurl {
+        url = "https://raw.githubusercontent.com/openjdk/jdk11u/jdk-11.0.24+8/src/java.base/windows/native/include/jni_md.h";
+        hash = "sha256-TAaWEHXV5FRIkrSQYehnTbhmPRdXy7Vlha5ePMXSteU=";
+      };
 
       # Common JVM options for both app and sbt JVM
       commonDevJvmOpts = [
@@ -287,6 +360,33 @@
               pkgs.clang
               secp256k1Static
             ];
+          };
+        ci-crypto =
+          let
+            jdk = pkgs.openjdk11;
+            sbt = pkgs.sbt.override { jre = jdk; };
+          in
+          pkgs.mkShell {
+            JAVA_HOME = "${jdk}";
+            SODIUM_HOME = "${cryptoHost.sodium}";
+            SECP256K1_HOME = "${cryptoHost.secp256k1}";
+            BLST_HOME = "${cryptoHost.blst}";
+            # Clear JVM options inherited from the main devshell: JDK 11 rejects some of them.
+            JAVA_OPTS = "";
+            SBT_OPTS = "";
+            packages = [ jdk sbt pkgs.clang ];
+          };
+        ci-crypto-windows =
+          let
+            jdk = pkgs.openjdk11;
+          in
+          pkgs.mkShell {
+            JAVA_HOME = "${jdk}";
+            SODIUM_HOME = "${cryptoWindows.sodium}";
+            SECP256K1_HOME = "${cryptoWindows.secp256k1}";
+            BLST_HOME = "${cryptoWindows.blst}";
+            JNI_MD_WIN32 = "${jniMdWin32}";
+            packages = [ jdk mingw.stdenv.cc mingw.buildPackages.binutils ];
           };
       };
     })

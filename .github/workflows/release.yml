@@ -2,9 +2,12 @@ name: Release
 on:
   push:
     branches: [ master ]
-    tags: [ "*" ]
+    # Scalus version tags only. GitHub ignores path filters on tag pushes, so "*" also ran this
+    # release for secp256k1-jni-v* tags (Dec 2025) and would for crypto-jni-v* tags.
+    tags: [ "v[0-9]*" ]
     paths-ignore:
       - 'scalus-secp256k1-jni/**'
+      - 'scalus-crypto-jni/**'
       - '.github/workflows/**'
       - '*.md'
       - 'docs/**'

@@ -4,6 +4,7 @@ on:
   push:
     paths-ignore:
       - 'scalus-secp256k1-jni/**'
+      - 'scalus-crypto-jni/**'
       - '.github/workflows/**'
 jobs:
   test:

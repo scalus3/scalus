@@ -1,0 +1,184 @@
+name: crypto-jni
+
+# Builds and tests scalus-crypto-jni (libsodium, libsecp256k1 and blst at cardano-node's pins) on
+# 5 platforms. Publishes to Maven Central on a crypto-jni-v* tag, or on a manual run with
+# publish = true. The main CI ignores scalus-crypto-jni/**: this module changes rarely.
+
+on:
+  push:
+    branches: [ '**' ]
+    paths:
+      - 'scalus-crypto-jni/**'
+      - '.github/workflows/crypto-jni.yml'
+    tags:
+      - 'crypto-jni-v*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to Sonatype (tags always publish)'
+        type: boolean
+        default: false
+
+jobs:
+  build-native:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux_64
+            check: bash scalus-crypto-jni/ci/check-linux.sh scalus-crypto-jni/src/main/resources/natives/linux_64/libscalus_crypto.so
+          - os: ubuntu-24.04-arm
+            platform: linux_arm64
+            check: bash scalus-crypto-jni/ci/check-linux.sh scalus-crypto-jni/src/main/resources/natives/linux_arm64/libscalus_crypto.so
+          - os: macos-15-intel
+            platform: osx_64
+            check: bash scalus-crypto-jni/ci/check-macos.sh scalus-crypto-jni/src/main/resources/natives/osx_64/libscalus_crypto.dylib 10.15
+          - os: macos-latest
+            platform: osx_arm64
+            check: bash scalus-crypto-jni/ci/check-macos.sh scalus-crypto-jni/src/main/resources/natives/osx_arm64/libscalus_crypto.dylib 11.0
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: nixbuild/nix-quick-install-action@v34
+      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+        with:
+          use-flakehub: false
+      - name: Build and test
+        run: |
+          nix develop .#ci-crypto --accept-flake-config --command bash -c "cd scalus-crypto-jni && make && sbt test"
+      # Platform policy: glibc <= 2.34 and only JNI symbols on Linux; macOS 11.0 (arm64) / 10.15 (x64).
+      - name: Check the platform policy
+        run: ${{ matrix.check }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.platform }}
+          path: scalus-crypto-jni/src/main/resources/natives/${{ matrix.platform }}/
+
+  # Cross-compiled with MinGW on Linux, as iohk-nix builds cardano-node for Windows.
+  build-windows:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: nixbuild/nix-quick-install-action@v34
+      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+        with:
+          use-flakehub: false
+      - name: Cross-compile for Windows x64
+        run: |
+          nix develop .#ci-crypto-windows --accept-flake-config --command bash -c "cd scalus-crypto-jni && make windows"
+      - name: Check the DLL imports only system libraries
+        run: |
+          nix develop .#ci-crypto-windows --accept-flake-config --command bash -c \
+            "x86_64-w64-mingw32-objdump -p scalus-crypto-jni/src/main/resources/natives/windows_64/scalus_crypto.dll" \
+            | grep 'DLL Name' | tee imports.txt
+          test -s imports.txt
+          ! grep -viE 'KERNEL32|msvcrt|api-ms-win-crt|ucrtbase|ADVAPI32|bcrypt' imports.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-windows_64
+          path: scalus-crypto-jni/src/main/resources/natives/windows_64/
+
+  test-windows:
+    needs: build-windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+      - uses: sbt/setup-sbt@v1
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-windows_64
+          path: scalus-crypto-jni/src/main/resources/natives/windows_64/
+      - name: Test
+        shell: bash
+        run: cd scalus-crypto-jni && sbt test
+
+  # The oldest supported glibc bases: run the JNI tests there, against the library built above.
+  test-linux-distros:
+    needs: build-native
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ 'ubuntu:22.04', 'rockylinux:9' ]
+        arch: [ { runner: ubuntu-latest, platform: linux_64 }, { runner: ubuntu-24.04-arm, platform: linux_arm64 } ]
+    runs-on: ${{ matrix.arch.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '11'
+      - uses: sbt/setup-sbt@v1
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-${{ matrix.arch.platform }}
+          path: scalus-crypto-jni/src/main/resources/natives/${{ matrix.arch.platform }}/
+      - name: Compile the tests on the runner
+        run: |
+          cd scalus-crypto-jni
+          sbt -batch -error "export Test/fullClasspath" | tail -1 > classpath.txt
+          test -s classpath.txt
+      - name: Run the tests in ${{ matrix.image }}
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -v "$HOME/.cache:$HOME/.cache" \
+            -w "$GITHUB_WORKSPACE/scalus-crypto-jni" "${{ matrix.image }}" sh -c '
+              set -e
+              if command -v apt-get >/dev/null; then
+                apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openjdk-17-jre-headless >/dev/null
+              else
+                dnf install -y -q java-17-openjdk-headless >/dev/null
+              fi
+              ldd --version | head -1
+              java -cp "$(cat classpath.txt)" org.junit.runner.JUnitCore \
+                scalus.crypto.jni.SodiumTest scalus.crypto.jni.Secp256k1Test scalus.crypto.jni.BlstTest'
+
+  publish:
+    needs: [ build-native, build-windows, test-windows, test-linux-distros ]
+    if: startsWith(github.ref, 'refs/tags/crypto-jni-v') || inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: nixbuild/nix-quick-install-action@v34
+      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+        with:
+          use-flakehub: false
+      - uses: actions/download-artifact@v4
+        with:
+          path: scalus-crypto-jni/src/main/resources/natives/
+          pattern: native-*
+          merge-multiple: false
+      - name: Organize native libraries
+        run: |
+          cd scalus-crypto-jni/src/main/resources/natives
+          for platform in linux_64 linux_arm64 osx_64 osx_arm64 windows_64; do
+            test -d "native-$platform" || { echo "missing native-$platform"; exit 1; }
+            mkdir -p "$platform"
+            mv native-$platform/* "$platform/"
+            rmdir "native-$platform"
+          done
+          find . -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.dll" \)
+      - name: Publish to Sonatype
+        run: |
+          nix develop .#ci-crypto --accept-flake-config --command bash -c "cd scalus-crypto-jni && sbt ci-release"
+        env:
+          PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+          PGP_SECRET: ${{ secrets.PGP_SECRET }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}

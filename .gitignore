@@ -57,3 +57,7 @@ scalus-site/public/llms-api.txt
 
 # Local-only working notes, never committed
 docs/internal/local/
+
+# scalus-crypto-jni build outputs
+scalus-crypto-jni/src/main/resources/natives/
+scalus-crypto-jni/build/
