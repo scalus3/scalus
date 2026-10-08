@@ -5,8 +5,9 @@ import scalus.uplc.builtin.ByteString
 /** Cross-platform Ed25519 signing capability.
   *
   * Implementations are provided per-platform:
-  *   - JVM: BouncyCastle
-  *   - JS: @noble/curves/ed25519
+  *   - JVM: signs with BouncyCastle; verifies with the libsodium build cardano-node links
+  *     (scalus-crypto-jni)
+  *   - JS: @noble/curves/ed25519, verifying with libsodium's rules (JsEd25519Verifier)
   *   - Native: libsodium
   */
 trait Ed25519Signer:

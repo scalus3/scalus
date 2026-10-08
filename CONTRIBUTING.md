@@ -152,7 +152,108 @@ of the project.
 For benchmarking of allocations use `event=alloc` instead of `event=cycles` option in the command
 above.
 
+## Keeping crypto libraries in sync with cardano-node
+
+Scalus must give the same verdict as the Cardano node for every signature check and every crypto
+builtin. A different library version, or a different way of calling it, can change a verdict. For
+example, libsodium and bcprov disagree on 174 of 930 Ed25519 test vectors. A script can then pass in
+Scalus and fail on the node.
+
+So Scalus runs the same C crypto libraries, at the same commits, as the **latest production
+cardano-node release**. Check this on every cardano-node release and every Plutus release.
+
+### Current state
+
+Last checked against cardano-node 11.1.3 (plutus-core 1.70.0.0) on 2026-10-07.
+
+| Library | cardano-node 11.1.3 | Scalus JVM | Scalus Native |
+|---|---|---|---|
+| libsodium (Ed25519) | `input-output-hk/libsodium` `dbb48cce5429cb6585c9034f002568964f1ce567` (1.0.18 code) | same, via `scalus-crypto-jni` | system libsodium (nixpkgs) |
+| libsecp256k1 | v0.3.2 `acf5c55ae6a94e5ca847e07def40427547876101` | same, via `scalus-crypto-jni` | system libsecp256k1 (nixpkgs) |
+| blst | v0.3.15 `6d960cd05d6fe2b5bc9ba161edf0c1a131b87c4c` | same, via `scalus-crypto-jni` | system blst (nixpkgs) |
+| Plutus conformance corpus | plutus-core 1.70.0.0 | 1.63.0.0 (`plutus` input in `flake.nix`) | same |
+
+The JVM needs `scalus-crypto-jni`'s native library: Linux with glibc 2.34+, macOS 11+ (arm64) or
+10.15+ (x64), or Windows x64. JavaScript uses `@noble/curves` and cannot link these libraries.
+There, the vector, conformance and property tests are the only guard. Scala Native still links the
+system (nixpkgs) libraries, not the node's pins. This is a known gap, recorded in the table above;
+the parity, conformance and property tests guard it.
+
+### On each cardano-node release
+
+1. Read the node's pins. Resolve them from the **root** `iohkNix` input. The lock file also holds
+   other `iohkNix` nodes (for example from `cardano-dev`) with other pins.
+
+   ```bash
+   NODE=11.1.3
+   curl -sL https://raw.githubusercontent.com/IntersectMBO/cardano-node/$NODE/flake.lock |
+     jq -r '.nodes as $n | $n[$n.root.inputs.iohkNix].inputs | to_entries[]
+       | select(.key | test("sodium|secp256k1|blst"))
+       | "\(.key)\t\($n[.value].locked.owner)/\($n[.value].locked.repo)\t\($n[.value].locked.rev)\t\($n[.value].original.ref // "")"'
+   ```
+
+2. Read the Haskell package versions from the release notes. You need `plutus-core`,
+   `cardano-crypto-class` and `cardano-crypto-praos`. Each row links a CHANGELOG at the exact commit.
+
+   ```bash
+   gh release view $NODE -R IntersectMBO/cardano-node --json body --jq .body |
+     grep -E '^\| (plutus-core|plutus-ledger-api|cardano-crypto-class|cardano-crypto-praos) '
+   ```
+
+3. Read every commit since the last check in the places that decide verdicts. Look for pin changes,
+   new checks before or after a library call, changed argument handling, and new builtins.
+
+   | Repository | Paths |
+   |---|---|
+   | `IntersectMBO/cardano-node` | `flake.lock` |
+   | `input-output-hk/iohk-nix` | `overlays/crypto/`, `flake.lock` (build flags, pins) |
+   | `IntersectMBO/cardano-base` | `cardano-crypto-class/`, `cardano-crypto-praos/` |
+   | `IntersectMBO/plutus` | `plutus-core/plutus-core/src/PlutusCore/Crypto/`, `plutus-core/plutus-core/src/PlutusCore/Default/Builtins.hs`, `plutus-conformance/` |
+
+   ```bash
+   git -C ../plutus log --oneline <last-checked>..<new> -- plutus-core/plutus-core/src/PlutusCore/Crypto
+   ```
+
+4. If a pin or a call changed:
+   1. Bump the library in the JNI build and in the Native build.
+   2. Regenerate the Ed25519 fixture with the new libsodium
+      (`scalus-core/shared/src/test/resources/ed25519/generate_libsodium_verdicts.py`).
+   3. Bump the `plutus` input in `flake.nix` so the conformance corpus matches.
+   4. Run the vector and conformance tests on JVM, JS and Native.
+   5. Release the JNI artifact, then bump it in `build.sbt`.
+   6. Add a CHANGELOG entry.
+
+5. Update the "Current state" table, even if nothing changed. The date shows the check happened.
+
+## Publishing scalus-crypto-jni to Maven Central
+
+`scalus-crypto-jni/` is a standalone project with its own `build.sbt`. It binds libsodium,
+libsecp256k1 and blst at cardano-node's pins (see its README). It is versioned on its own with
+`crypto-jni-v*` tags, and the main CI ignores it.
+
+The `crypto-jni` workflow builds and tests 5 platforms (Linux and macOS, x64 and arm64, and
+Windows x64 cross-compiled with MinGW) on every push that changes the module. It also enforces the
+platform policy: Linux glibc 2.34+ (tested in `ubuntu:22.04` and `rockylinux:9`), macOS 11.0+ on
+arm64 and 10.15+ on x64, and Windows x64. Alpine/musl is not supported. If a nixpkgs bump raises
+the glibc floor, `scalus-crypto-jni/ci/check-linux.sh` fails and names the symbol.
+
+1. Run the workflow by hand with `publish = false`, and check that all 5 platforms pass.
+2. Tag and push:
+   ```bash
+   git tag crypto-jni-v0.1.0
+   git push origin crypto-jni-v0.1.0
+   ```
+3. When the version is on Maven Central, update `build.sbt`:
+   ```scala
+   libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0"
+   ```
+
+Build locally from `scalus-crypto-jni/` with `nix develop ..#ci-crypto --command bash -c 'make && sbt test'`.
+
 ## Publishing scalus-secp256k1-jni to Maven Central
+
+**Frozen at 0.6.0.** Scalus uses `scalus-crypto-jni` instead. This section is kept for reference.
+
 
 The `scalus-secp256k1-jni` library is a standalone project in the `scalus-secp256k1-jni/` directory with its own `build.sbt`. It provides JNI bindings for libsecp256k1 and is versioned independently from Scalus using `secp256k1-jni-v*` tags.
 
@@ -203,31 +304,6 @@ Update the version in `scalus-cardano-ledger/js/src/main/npm/package.json` and p
 ```bash
 npm publish --access public
 ```
-
-## Notes on issues
-
-### BLS12-381 signature library
-
-If you stumbled upon such failure during `sbt precommit`:
-
-```
-# A fatal error has been detected by the Java Runtime Environment:
-...
-# Problematic frame:
-# C  [libblst.so+0x2daa1]  sqrx_mont_384+0x41
-```
-
-you can resolve it if you will locally build Java binding of `blst` native library from:
-
-[https://github.com/supranational/blst/tree/master/bindings/java](https://github.com/supranational/blst/tree/master/bindings/java)
-
-and place resulted JAR into Coursier's cache at
-
-```
-~/.cache/coursier/v1/https/repo1.maven.org/maven2/foundation/icon/blst-java/0.3.2/blst-java-0.3.2.jar 
-```
-
-Note please that for this you will need have installed [SWIG](https://swig.org/) toolchain.
 
 ## Scala 3 Code Style
 

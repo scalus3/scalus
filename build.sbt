@@ -658,8 +658,8 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
               .withGC(GC.immix)
       },
       // Set library path for Scala Native test execution to find libblst at runtime.
-      // BLST_NATIVE_LIB_PATH is provided by flake.nix separately from DYLD_LIBRARY_PATH/LD_LIBRARY_PATH
-      // to avoid conflicts with blst-java on JVM (see flake.nix shellHook comment for details).
+      // BLST_NATIVE_LIB_PATH comes from flake.nix; blst is not on DYLD_LIBRARY_PATH/LD_LIBRARY_PATH,
+      // because only Scala Native links it.
       Test / envVars ++= {
           val blstPath = sys.env.getOrElse("BLST_NATIVE_LIB_PATH", "")
           if (blstPath.nonEmpty) {

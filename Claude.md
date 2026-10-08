@@ -239,6 +239,16 @@ These can be obtained in sibling directories (`../`) or directly on GitHub.
 - Use `@deprecated("use XYZ instead", "$version")` on deprecated APIs
 - Use latest git tag for deprecated $version (e.g., if tag is "v0.14.2", write `@deprecated("use XYZ instead", "0.14.2")`)
 
+## Crypto Library Parity with cardano-node
+
+Scalus must run the same crypto C libraries (libsodium, libsecp256k1, blst), at the same commits,
+as the latest production cardano-node release, and call them the same way. A different version can
+change a signature verdict. When cardano-node or Plutus releases, or when you touch crypto code or
+its dependencies, follow "Keeping crypto libraries in sync with cardano-node" in `CONTRIBUTING.md`
+and update its "Current state" table. Scala Native still links the system (nixpkgs) libraries, not
+the node's pins. This is a known gap, recorded in that table; the parity, conformance and property
+tests guard it.
+
 ## Important Files
 
 - `build.sbt` - Build configuration
