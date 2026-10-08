@@ -22,7 +22,7 @@ class ConfiguredCryptoEvaluationTest extends AnyFunSuite {
             val program = term.plutusV3.deBruijnedProgram
             val legacy = vm.evaluateScriptDebug(program).asInstanceOf[Result.Failure]
             val expected =
-                s"Builtin error: $fun $term, caused by java.lang.RuntimeException: $diagnostic"
+                s"Builtin error: $fun $term, caused by java.lang.IllegalArgumentException: $diagnostic"
             assert(legacy.exception.getMessage == expected)
             val failure = vm
                 .runWithBudgetTracking(
@@ -34,7 +34,7 @@ class ConfiguredCryptoEvaluationTest extends AnyFunSuite {
                 )
                 .asInstanceOf[Result.Failure]
             assert(failure.exception.getMessage == expected)
-            // blst's own exception reaches the result untouched: there is no longer a wrapper
+            // The library's exception reaches the result untouched: there is no longer a wrapper
             // type between the library and the failure the caller sees.
             assert(failure.exception.asInstanceOf[BuiltinError].cause.getMessage == diagnostic)
             assert(failure.budget == legacy.budget)

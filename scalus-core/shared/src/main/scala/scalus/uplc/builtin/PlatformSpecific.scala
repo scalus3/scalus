@@ -1,6 +1,6 @@
 package scalus.uplc.builtin
 
-import scalus.compiler.Compile
+import scalus.compiler.{Compile, Ignore}
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
 /** Provides access to platform-specific built-in functions.
@@ -289,6 +289,16 @@ trait PlatformSpecific:
 object PlatformSpecific:
     val bls12_381_scalar_period: BigInt =
         BigInt("52435875175126190479447740508185965837690552500527637822603658699938581184513")
+
+    /** `n mod r` as 32 big-endian bytes, as cardano-crypto-class `scalarFromInteger` does. */
+    @Ignore
+    private[builtin] def blsScalar(n: BigInt): Array[Byte] = {
+        val reduced = n.bigInteger.mod(bls12_381_scalar_period.bigInteger).toByteArray
+        val out = new Array[Byte](32)
+        val len = math.min(reduced.length, 32)
+        System.arraycopy(reduced, reduced.length - len, out, 32 - len, len)
+        out
+    }
 
     val bls12_381_G1_compressed_zero: ByteString =
         ByteString.fromHex(

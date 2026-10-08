@@ -8,10 +8,25 @@
 #include <blst.h>
 #include "jni_util.h"
 
+/* The messages blst's own bindings use (bindings/blst.swg), so diagnostics stay the same. */
 static void throw_blst(JNIEnv *env, BLST_ERROR err) {
-    char msg[32];
-    snprintf(msg, sizeof msg, "BLST_ERROR %d", (int) err);
-    throw_iae(env, msg);
+    static const char *const names[] = {
+        "BLST_ERROR: success",
+        "BLST_ERROR: bad point encoding",
+        "BLST_ERROR: point is not on curve",
+        "BLST_ERROR: point is not in group",
+        "BLST_ERROR: context type mismatch",
+        "BLST_ERROR: verify failed",
+        "BLST_ERROR: public key is infinite",
+        "BLST_ERROR: bad scalar",
+    };
+    char msg[48];
+    if ((unsigned) err < sizeof names / sizeof names[0]) {
+        throw_iae(env, names[err]);
+    } else {
+        snprintf(msg, sizeof msg, "BLST_ERROR: %d", (int) err);
+        throw_iae(env, msg);
+    }
 }
 
 #define BLST_GROUP(X, G, POINT, AFFINE, COMPRESSED)                                              \
@@ -22,7 +37,7 @@ JNIEXPORT jbyteArray JNICALL Java_scalus_crypto_jni_Blst_##X##Uncompress0(      
     BLST_ERROR err = blst_##X##_uncompress(&a, buf);                                             \
     if (err != BLST_SUCCESS) { throw_blst(env, err); return NULL; }                              \
     blst_##X##_from_affine(&p, &a);                                                              \
-    if (!blst_##X##_in_##G(&p)) { throw_iae(env, "point not in group"); return NULL; }          \
+    if (!blst_##X##_in_##G(&p)) { throw_blst(env, BLST_POINT_NOT_IN_GROUP); return NULL; }          \
     return new_array(env, &p, sizeof p);                                                         \
 }                                                                                                \
 JNIEXPORT jbyteArray JNICALL Java_scalus_crypto_jni_Blst_##X##Compress0(                        \

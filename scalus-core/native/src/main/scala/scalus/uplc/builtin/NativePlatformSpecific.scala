@@ -403,22 +403,8 @@ object Blst:
         val compressed = stackalloc[Byte](G1_COMPRESSED_SIZE)
         val scalarBytes = stackalloc[Byte](SCALAR_SIZE)
 
-        // Reduce scalar modulo the curve order (Java BigInteger.mod always returns non-negative)
-        val reduced =
-            BigInt(scalar.bigInteger.mod(PlatformSpecific.bls12_381_scalar_period.bigInteger))
-        val bytes = reduced.toByteArray
-
-        // Pad or trim to 32 bytes (big-endian from BigInt)
-        val padded = new Array[Byte](SCALAR_SIZE)
-        if bytes.length <= SCALAR_SIZE then
-            System.arraycopy(bytes, 0, padded, SCALAR_SIZE - bytes.length, bytes.length)
-        else
-            // bytes.length > 32, take the last 32 bytes
-            System.arraycopy(bytes, bytes.length - SCALAR_SIZE, padded, 0, SCALAR_SIZE)
-
-        // blst expects little-endian scalar, reverse from big-endian
-        val leBytes = padded.reverse
-        copyFromArray(leBytes, scalarBytes)
+        // blst expects a little-endian scalar; blsScalar is big-endian
+        copyFromArray(PlatformSpecific.blsScalar(scalar).reverse, scalarBytes)
 
         // Uncompress point
         blst_p1_uncompress(affine, p.compressed.atUnsafe(0))
@@ -531,19 +517,8 @@ object Blst:
         val compressed = stackalloc[Byte](G2_COMPRESSED_SIZE)
         val scalarBytes = stackalloc[Byte](SCALAR_SIZE)
 
-        // Reduce scalar modulo the curve order (Java BigInteger.mod always returns non-negative)
-        val reduced =
-            BigInt(scalar.bigInteger.mod(PlatformSpecific.bls12_381_scalar_period.bigInteger))
-        val bytes = reduced.toByteArray
-
-        val padded = new Array[Byte](SCALAR_SIZE)
-        if bytes.length <= SCALAR_SIZE then
-            System.arraycopy(bytes, 0, padded, SCALAR_SIZE - bytes.length, bytes.length)
-        else System.arraycopy(bytes, bytes.length - SCALAR_SIZE, padded, 0, SCALAR_SIZE)
-
-        // blst expects little-endian scalar, reverse from big-endian
-        val leBytes = padded.reverse
-        copyFromArray(leBytes, scalarBytes)
+        // blst expects a little-endian scalar; blsScalar is big-endian
+        copyFromArray(PlatformSpecific.blsScalar(scalar).reverse, scalarBytes)
 
         blst_p2_uncompress(affine, p.compressed.atUnsafe(0))
         blst_p2_from_affine(jac, affine)

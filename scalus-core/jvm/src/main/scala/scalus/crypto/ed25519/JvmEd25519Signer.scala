@@ -1,8 +1,9 @@
 package scalus.crypto.ed25519
 
 import org.bouncycastle.crypto.digests.SHA512Digest
-import org.bouncycastle.crypto.params.{Ed25519PrivateKeyParameters, Ed25519PublicKeyParameters}
+import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.crypto.signers.Ed25519Signer as BCSigner
+import scalus.crypto.jni.Sodium
 import scalus.uplc.builtin.ByteString
 
 /** JVM implementation of Ed25519Signer using BouncyCastle. */
@@ -33,13 +34,7 @@ object JvmEd25519Signer extends Ed25519Signer:
         message: ByteString,
         signature: Signature
     ): Boolean =
-        try
-            val pubKeyParams = Ed25519PublicKeyParameters(verificationKey.bytes, 0)
-            val verifier = new BCSigner()
-            verifier.init(false, pubKeyParams)
-            verifier.update(message.bytes, 0, message.size)
-            verifier.verifySignature(signature.bytes)
-        catch case _: Exception => false
+        Sodium.ed25519VerifyDetached(signature.bytes, message.bytes, verificationKey.bytes)
 
     override def derivePublicKey(signingKey: SigningKey): VerificationKey =
         val privateKeyParams = Ed25519PrivateKeyParameters(signingKey.bytes, 0)

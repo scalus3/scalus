@@ -4,8 +4,7 @@ package eval
 
 /** JVM-specific Plutus Conformance tests.
   *
-  * BLS12-381 goes through the blst Java binding, which has a bug for DSTs longer than 255 bytes.
+  * BLS12-381 goes through scalus-crypto-jni, which passes the DST to blst as raw bytes, so no case
+  * is skipped.
   */
-class PlutusConformanceJvmTest extends PlutusConformanceTest {
-    override protected def ignoredCases: Map[String, String] = blstLargeDstCases
-}
+class PlutusConformanceJvmTest extends PlutusConformanceTest

@@ -1,8 +1,7 @@
 package scalus.cardano.ledger
 package rules
 
-import scalus.uplc.builtin.{platform, ByteString}
-import scala.util.control.NonFatal
+import scalus.uplc.builtin.{platform, ByteString, PlatformSpecific}
 
 // It's Shelley.validateVerifiedWits in cardano-ledger
 object VerifiedSignaturesInWitnessesValidator extends STS.Validator {
@@ -34,7 +33,12 @@ object VerifiedSignaturesInWitnessesValidator extends STS.Validator {
         val vkeyWitnesses = event.witnessSet.vkeyWitnesses
 
         vkeyWitnesses.toSet.filterNot(vkeyWitness =>
-            verifyWitnessSignature(transactionId, vkeyWitness.vkey, vkeyWitness.signature)
+            verifyWitnessSignature(
+              platform,
+              transactionId,
+              vkeyWitness.vkey,
+              vkeyWitness.signature
+            )
         )
     }
 
@@ -46,6 +50,7 @@ object VerifiedSignaturesInWitnessesValidator extends STS.Validator {
 
         bootstrapWitnesses.toSet.filterNot(bootstrapWitness =>
             verifyWitnessSignature(
+              platform,
               transactionId,
               bootstrapWitness.publicKey,
               bootstrapWitness.signature
@@ -53,12 +58,16 @@ object VerifiedSignaturesInWitnessesValidator extends STS.Validator {
         )
     }
 
-    private def verifyWitnessSignature(
+    /** The platform is a parameter so a test can stand in for the native library. */
+    private[rules] def verifyWitnessSignature(
+        ps: PlatformSpecific,
         transactionId: TransactionHash,
         key: ByteString,
         signature: ByteString
     ): Boolean = {
-        try platform.verifyEd25519Signature(key, transactionId, signature)
-        catch case NonFatal(exception) => false
+        // Only a wrong key or signature length (a `require` on every platform) is an invalid
+        // signature. Anything else, such as a missing native library, must not look like one.
+        try ps.verifyEd25519Signature(key, transactionId, signature)
+        catch case _: IllegalArgumentException => false
     }
 }

@@ -565,8 +565,43 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         s"-Dscalus.test.classpath=${(Test / fullClasspath).value.files.map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}"
       ),
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2",
-      libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
-      libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
+      libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0-SNAPSHOT",
+      // BLS12-381 moved from blst-java to scalus-crypto-jni (the blst build cardano-node links), so
+      // G1Element, G2Element and MLResult hold raw blst structs as Array[Byte] instead of blst-java's
+      // P1/P2/PT, and the apply overloads taking those types are gone. PippengerMSM was
+      // private[builtin]: blst's own Pippenger, called as cardano-crypto-class does, replaces it.
+      mimaBinaryIssueFilters ++= Seq(
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.PippengerMSM"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.PippengerMSM$"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.uplc.builtin.bls12_381.G1Element.this"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.uplc.builtin.bls12_381.G1Element.value"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.uplc.builtin.bls12_381.G1Element.apply"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.uplc.builtin.bls12_381.G2Element.this"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.uplc.builtin.bls12_381.G2Element.value"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.uplc.builtin.bls12_381.G2Element.apply"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.uplc.builtin.bls12_381.MLResult.this"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.uplc.builtin.bls12_381.MLResult.value"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.uplc.builtin.bls12_381.MLResult.apply"
+        ),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.bls12_381.MLResult$")
+      ),
       // Ethereum KZG ceremony JSON is in scalus-ethereum-kzg-ceremony resources, needed for benchmark tests
       Test / unmanagedResourceDirectories += (LocalRootProject / baseDirectory).value / "scalus-ethereum-kzg-ceremony" / "src" / "main" / "resources"
     )
@@ -587,7 +622,20 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         // linked before still links. Only a Scala caller of this JS-only export would notice.
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "scalus.cardano.ledger.JsUtxo.withScriptRef"
-        )
+        ),
+        // The private @noble/curves facade for ed25519.verify is gone: Ed25519 verification now
+        // checks libsodium's rules on noble's point arithmetic (JsEd25519Verifier).
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.Ed25519"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.Ed25519Curves"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.Ed25519Curves$"),
+        // Ed25519MathPlatform's private copy of the @noble/curves/ed25519 facade is gone: it uses
+        // the one in JsEd25519Signer, which reads noble's `Point.Fn.ORDER`, not `CURVE.n`.
+        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.ExtendedPoint"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.ExtendedPointCompanion"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleCurveParams"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleEd25519Math"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleEd25519Math$"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleEd25519Ops")
       )
     )
     .nativeSettings(
@@ -1253,8 +1301,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3" % "test",
       libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.3" % "test",
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2" % "test",
-      libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
-      libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
+      libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0-SNAPSHOT",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       // Testcontainers for Yaci DevKit integration tests
       libraryDependencies += "com.dimafeng" %% "testcontainers-scala-core" % "0.44.1" % "test",
