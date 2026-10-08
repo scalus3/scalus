@@ -6,9 +6,15 @@ Scalus is a platform for developing decentralized applications (DApps) on Cardan
 It compiles a subset of Scala 3 to Scalus Intermediate Representation (SIR) and then
 lowers to Untyped Plutus Core (UPLC), the language of Cardano smart contracts.
 
-**For smart contract development:** Use `/contract` skill
-**For smart contract testing:** Use `/contract-test` skill
-**For reviewing on-chain code** (`@Compile`, `extends Validator`): Use `/smart-contract-security-review` skill
+## Smart Contract Work: Use the Scalus Plugin Skills
+
+All guidance for writing, testing, optimizing and reviewing smart contracts lives in the
+`scalus` plugin (`/plugin install scalus@scalus`). Its source is `scalus-skills/`. At session
+start the plugin injects its routing table (`scalus:using-scalus`); follow it.
+
+- Put new contract knowledge in `scalus-skills/skills/`, not in this file.
+- When you change `scalus-skills/`, follow "Agent artifacts" in `CONTRIBUTING.md`
+  (version bump, local test, g8 templates).
 
 ## Commands
 

@@ -37,7 +37,8 @@ are AI-ready out of the box:
   subset rules (`@Compile` restrictions, `toData` comparisons, prelude-only imports), common
   pitfalls, and the artifact URLs above. Claude Code, Cursor, and most agents read it
   automatically. `CLAUDE.md` points at it.
-- **`.claude/skills/`** – the five Scalus task skills (below), pre-installed.
+- **`.claude/settings.json`** – registers the Scalus marketplace and enables the Scalus Claude
+  Code plugin (below). Install the plugin once with `/plugin install scalus@scalus`.
 
 ## Claude Code plugin
 
@@ -48,15 +49,17 @@ For existing projects, install the skills with the Scalus plugin:
 /plugin install scalus@scalus
 ```
 
-The plugin ships five skills that load on demand when the task matches:
+In a Scalus project, the plugin adds a routing table to each session at start-up, so the
+agent picks the right skill before it writes code. The five task skills load when the task
+matches:
 
 | Skill | Use |
 |---|---|
-| `contract` | Writing validators |
-| `contract-test` | Testing validators |
-| `local-development` | Emulator + TxBuilder development loop |
-| `optimize-contract` | Execution-budget optimization review |
-| `smart-contract-security-review` | Pre-deploy security audit |
+| `scalus:contract` | Writing validators |
+| `scalus:contract-test` | Testing validators |
+| `scalus:local-development` | Emulator + TxBuilder development loop |
+| `scalus:optimize-contract` | Execution-budget optimization review |
+| `scalus:smart-contract-security-review` | Pre-deploy security audit |
 
 Skills are plain markdown in
 [`scalus-skills/`](https://github.com/scalus3/scalus/tree/master/scalus-skills) – agents other

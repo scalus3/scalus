@@ -1,0 +1,19 @@
+name: Skills
+on:
+  push:
+    paths:
+      - 'scalus-skills/**'
+      - 'scripts/check-skills-version.sh'
+jobs:
+  plugin-version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Skill changes come with a plugin version bump
+        run: bash scripts/check-skills-version.sh

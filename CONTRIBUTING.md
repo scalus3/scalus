@@ -85,6 +85,41 @@ This makes the compiler wait for a debugger to attach on port 5005.
 
 Run GitHub Actions "Deploy site" workflow.
 
+## Agent artifacts: plugin, skills, llms.txt
+
+AI coding agents get Scalus knowledge from three places. Each has its own update path.
+
+| Artifact | Source | Reaches users when |
+|---|---|---|
+| `scalus` Claude Code plugin (skills, session-start routing) | `scalus-skills/` | `version` in `scalus-skills/.claude-plugin/plugin.json` changes and users update the plugin |
+| `llms.txt`, `llms-full.txt`, `llms-examples.txt` | `scalus-site/content/`, `scalus-examples/` | the Deploy Site workflow runs (`yarn build` generates them) |
+| `llms-api.txt` | public API of the **latest release tag** | the Deploy Site workflow runs |
+
+The `.claude/skills/` copies in the `scalus3/hello.g8` and `scalus3/validator.g8` templates are
+retired: the templates enable the plugin instead (`.claude/settings.json`).
+
+### When you change a skill
+
+1. Edit `scalus-skills/skills/<skill>/SKILL.md`. Put contract knowledge here, not in `Claude.md`.
+2. Bump `version` in `scalus-skills/.claude-plugin/plugin.json` in the same commit: patch for
+   wording, minor for a new rule, a new skill or a hook change. The `Skills` workflow
+   (`scripts/check-skills-version.sh`) fails when `scalus-skills/` changes without a bump.
+3. Test the working copy in a Scalus project: `claude --plugin-dir ./scalus-skills`. For the
+   session-start hook, also run
+   `CLAUDE_PROJECT_DIR=$PWD bash scalus-skills/hooks/session-start` and check that it prints JSON.
+4. After the push, update your own install: `/plugin marketplace update scalus`, then update
+   `scalus@scalus` from `/plugin`.
+
+### When you release
+
+1. Update version-bound text in the skills (for example "needs Scalus 1.2.0 or newer") if the
+   release adds or removes API the skills name. Bump the plugin version if you change anything.
+2. After the tag is pushed and published, run the **Deploy Site** workflow with
+   `api_mode: regenerate`. It regenerates the Scaladoc, `llms-api.txt` from the new tag, and the
+   other `llms*.txt` files from `master`.
+3. Check that the first line of https://scalus.org/llms-api.txt names the new tag.
+4. Bump the Scalus version in the `hello.g8` and `validator.g8` templates.
+
 ## Run benchmarks
 
 Measurement of throughput:

@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# SessionStart hook for the scalus plugin.
+# In a Scalus project, injects the using-scalus routing table, so the contract
+# skills are chosen before the first response. Elsewhere it prints nothing.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SKILL="${PLUGIN_ROOT}/skills/using-scalus/SKILL.md"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+
+# A missing skill file must not break the session.
+[ -r "$SKILL" ] || exit 0
+
+# A Scalus project names scalus in its build definition.
+is_scalus_project() {
+    local f
+    for f in "$PROJECT_DIR"/build.sbt "$PROJECT_DIR"/*.sbt "$PROJECT_DIR"/project/*.sbt \
+        "$PROJECT_DIR"/project.scala "$PROJECT_DIR"/build.mill "$PROJECT_DIR"/build.sc; do
+        [ -f "$f" ] && grep -qi 'scalus' "$f" && return 0
+    done
+    return 1
+}
+is_scalus_project || exit 0
+
+# JSON-escape with bash parameter substitution: no jq or python dependency.
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+skill_escaped=$(escape_for_json "$(cat "$SKILL")")
+
+context="<EXTREMELY_IMPORTANT>\nThis is a Scalus project and the scalus plugin is active. Below is its 'scalus:using-scalus' skill. Read its routing table before you answer, and load the matching scalus: skill with the 'Skill' tool.\n\n${skill_escaped}\n</EXTREMELY_IMPORTANT>"
+
+# printf rather than a heredoc: bash 5.3+ hangs on heredocs in this position.
+printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$context"
+
+exit 0

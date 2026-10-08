@@ -54,8 +54,8 @@ Study existing validators before creating new ones:
 
 **Safe API** (one rule per check; full table with rationale and costs:
 `https://scalus.org/docs/security/safe-api-cheatsheet`). Check the project's Scalus version first:
-everything below except `hasOnly`, `inlineOrFail` and `getOrFail` needs a release newer than
-1.1.1; on 1.1.1 or older, write the expansion the cheatsheet lists in its "Replaces" column.
+everything below except `hasOnly`, `inlineOrFail` and `getOrFail` needs Scalus 1.2.0 or
+newer; on 1.1.1 or older, write the expansion the cheatsheet lists in its "Replaces" column.
 - Mint: `tx.mint.hasOnly(policyId, tokenName, signedQty)` is the mint check (`1` mints, `-1` burns;
   exactly that token under the policy, nothing else). Not `quantityOf(...) === BigInt(1)` alone.
 - Datum equality: `out.hasInlineDatum(expected)`. Use `out.datum.inlineOrFail[T](msg)` only to
@@ -107,6 +107,14 @@ everything below except `hasOnly`, `inlineOrFail` and `getOrFail` needs a releas
 private given Options = Options.release
 val compiled = PlutusV3.compile(MyValidator.validate)
 ```
+
+**Parameterized validators:**
+- If the parameter is applied as `Data` (`compiled.program $ param.toData`: per-instance
+  parameters built off-chain, blueprint application, scripts that must match an Aiken
+  blueprint), extend `DataParameterizedValidator` and decode it in the handler:
+  `val p = param.to[MyParams]`.
+- `ParameterizedValidator[A]` compiles `A` to its lowered form, not to `Data`. Applying
+  `param.toData` to it fails at run time with `HeadList` / `DropList` errors.
 
 ## Placement
 
