@@ -102,9 +102,6 @@ ThisBuild / run / javaOptions ++= (if (javaVersion >= 23)
 // through scalus-bloxbean-cardano-client-lib target JDK 11. Only the Java sources need this; Scala
 // already defaults to -Xtarget:8. Without it, building on JDK 21 emitted v65 Java classes.
 ThisBuild / javacOptions ++= Seq("--release", "11")
-// scalus-crypto-jni 0.1.0-SNAPSHOT is published by the crypto-jni workflow from master. Drop this
-// resolver once build.sbt depends on the released 0.1.0.
-ThisBuild / resolvers += Resolver.sonatypeCentralSnapshots
 
 // Improve incremental compilation
 ThisBuild / incOptions := {
@@ -568,7 +565,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         s"-Dscalus.test.classpath=${(Test / fullClasspath).value.files.map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}"
       ),
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2",
-      libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0-SNAPSHOT",
+      libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0",
       // BLS12-381 moved from blst-java to scalus-crypto-jni (the blst build cardano-node links), so
       // G1Element, G2Element and MLResult hold raw blst structs as Array[Byte] instead of blst-java's
       // P1/P2/PT, and the apply overloads taking those types are gone. PippengerMSM was
@@ -1304,7 +1301,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3" % "test",
       libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.3" % "test",
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2" % "test",
-      libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0-SNAPSHOT",
+      libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       // Testcontainers for Yaci DevKit integration tests
       libraryDependencies += "com.dimafeng" %% "testcontainers-scala-core" % "0.44.1" % "test",

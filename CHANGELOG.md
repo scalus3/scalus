@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Ed25519, secp256k1 and BLS12-381 give the Cardano node's verdicts on every platform. On the JVM
+  they run the C libraries cardano-node 11.1.3 links (libsodium IOG fork, libsecp256k1 v0.3.2,
+  blst v0.3.15) through the new `scalus-crypto-jni` 0.1.0, called as cardano-crypto-class calls
+  them. JavaScript Ed25519 applies libsodium's rules. Before, the JVM and JavaScript accepted some
+  Ed25519 signatures the node rejects.
+- `bls12_381_G1_hashToGroup` and `bls12_381_G2_hashToGroup` give the node's point for any DST on
+  the JVM; a DST byte of 0x80 or more used to change the point.
+- `verifyEcdsaSecp256k1Signature` returns False for r = 0 or s = 0, as Plutus does, on the JVM and
+  in JavaScript. JavaScript reads the signature as compact only.
+- `bls12_381_G1_scalarMul` and `bls12_381_G2_scalarMul` reject a scalar outside the signed 4096-bit
+  range in semantics variants D and E, as Plutus does.
+- Scala Native adds a BLS12-381 point to itself correctly and signs with extended (BIP32-Ed25519)
+  keys; JavaScript pairs the point at infinity as blst does.
+
+### Changed
+
+- **Breaking:** on the JVM, Ed25519, secp256k1 and BLS12-381 need `scalus-crypto-jni`'s native
+  library: Linux with glibc 2.34+, macOS 11+ (arm64) or 10.15+ (x64), or Windows x64. Elsewhere
+  these operations throw `IllegalStateException`. Alpine/musl is not supported.
+- **Breaking:** `G1Element.apply(P1)`, `G2Element.apply(P2)` and `MLResult.apply(PT)` are removed,
+  and blst-java is no longer a dependency. Build points with `G1Element(ByteString)` or the
+  builtins.
+- Ed25519 verification on the JVM takes about 30 µs instead of 52 µs.
+
 ## 1.3.0 (2026-09-28)
 
 Scalus 1.3 balances transactions from JavaScript, evaluates scripts two to three times faster from

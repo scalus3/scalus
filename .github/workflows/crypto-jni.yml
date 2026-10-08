@@ -155,7 +155,7 @@ jobs:
 
   publish:
     needs: [ build-native, build-windows, test-windows, test-linux-distros ]
-    # Tags publish a release; pushes to master publish 0.1.0-SNAPSHOT for the main build.
+    # Tags publish a release; pushes to master publish the next snapshot (see build.sbt).
     if: startsWith(github.ref, 'refs/tags/crypto-jni-v') || github.ref == 'refs/heads/master' || inputs.publish
     runs-on: ubuntu-latest
     permissions:

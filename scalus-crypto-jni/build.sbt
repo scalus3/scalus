@@ -10,7 +10,7 @@ ThisBuild / dynverTagPrefix := "crypto-jni-v"
 // tagged builds keep dynver's release version. Bump it after each release.
 ThisBuild / version := {
   val v = (ThisBuild / version).value
-  if (v.endsWith("-SNAPSHOT")) "0.1.0-SNAPSHOT" else v
+  if (v.endsWith("-SNAPSHOT")) "0.1.1-SNAPSHOT" else v
 }
 
 lazy val root = (project in file("."))
