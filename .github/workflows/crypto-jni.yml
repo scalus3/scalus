@@ -126,13 +126,22 @@ jobs:
           path: scalus-crypto-jni/src/main/resources/natives/${{ matrix.arch.platform }}/
       - name: Compile the tests on the runner
         run: |
+          set -o pipefail
           cd scalus-crypto-jni
-          sbt -batch -error "export Test/fullClasspath" | tail -1 > classpath.txt
-          test -s classpath.txt
+          sbt -batch "export Test/fullClasspath" | tee sbt-export.txt
+          grep -E '^/' sbt-export.txt | tail -1 > classpath.txt
+          # Copy the jars into the workspace, which the container mounts, so the container needs
+          # nothing from the runner's caches.
+          mkdir -p cp
+          tr ':' '\n' < classpath.txt | grep '\.jar$' | xargs -I{} cp {} cp/
+          dirs=$(tr ':' '\n' < classpath.txt | grep -v '\.jar$' | paste -sd: -)
+          jars=$(printf '%s\n' "$PWD"/cp/*.jar | paste -sd: -)
+          echo "$dirs:$jars" > classpath.txt
+          compgen -G 'cp/junit-4*.jar' > /dev/null || { echo "no junit jar on the test classpath"; ls cp; exit 1; }
       - name: Run the tests in ${{ matrix.image }}
         run: |
           docker run --rm \
-            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -v "$HOME/.cache:$HOME/.cache" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
             -w "$GITHUB_WORKSPACE/scalus-crypto-jni" "${{ matrix.image }}" sh -c '
               set -e
               if command -v apt-get >/dev/null; then
