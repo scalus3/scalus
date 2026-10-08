@@ -287,7 +287,7 @@ private object LibBlst {
     // blst_scalar: 32 bytes
 
     // P1 (G1) operations
-    def blst_p1_add(out: Ptr[Byte], a: Ptr[Byte], b: Ptr[Byte]): Unit = extern
+    def blst_p1_add_or_double(out: Ptr[Byte], a: Ptr[Byte], b: Ptr[Byte]): Unit = extern
     def blst_p1_mult(out: Ptr[Byte], p: Ptr[Byte], scalar: Ptr[Byte], nbits: CSize): Unit = extern
     def blst_p1_cneg(p: Ptr[Byte], cbit: CBool): Unit = extern
     def blst_p1_in_g1(p: Ptr[Byte]): CBool = extern
@@ -306,7 +306,7 @@ private object LibBlst {
     ): Unit = extern
 
     // P2 (G2) operations
-    def blst_p2_add(out: Ptr[Byte], a: Ptr[Byte], b: Ptr[Byte]): Unit = extern
+    def blst_p2_add_or_double(out: Ptr[Byte], a: Ptr[Byte], b: Ptr[Byte]): Unit = extern
     def blst_p2_mult(out: Ptr[Byte], p: Ptr[Byte], scalar: Ptr[Byte], nbits: CSize): Unit = extern
     def blst_p2_cneg(p: Ptr[Byte], cbit: CBool): Unit = extern
     def blst_p2_in_g2(p: Ptr[Byte]): CBool = extern
@@ -389,7 +389,7 @@ object Blst:
         blst_p1_from_affine(jac2, affine2)
 
         // Add
-        blst_p1_add(result, jac1, jac2)
+        blst_p1_add_or_double(result, jac1, jac2)
 
         // Compress result
         blst_p1_compress(compressed, result)
@@ -518,7 +518,7 @@ object Blst:
         blst_p2_from_affine(jac1, affine1)
         blst_p2_from_affine(jac2, affine2)
 
-        blst_p2_add(result, jac1, jac2)
+        blst_p2_add_or_double(result, jac1, jac2)
 
         blst_p2_compress(compressed, result)
 
