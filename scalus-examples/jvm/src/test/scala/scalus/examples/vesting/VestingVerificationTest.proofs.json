@@ -1,0 +1,321 @@
+{
+  "environment": {
+    "uplc-blaster": {
+      "Blaster": "3a141c8d06f1",
+      "LinearVesting": "09efb627c5f4970c",
+      "PlutusCore": "2919b66445cd",
+      "ScalusProofs": "eb9642f1ddd4f46e",
+      "toolchain": "leanprover/lean4:v4.24.0"
+    }
+  },
+  "results": {
+    "a sample withdrawal is accepted on the Lean machine, and rejected unsigned #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2d3cb18e20f505f4",
+      "programs": [
+        "cdfbaa5d75a38ed9"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "LeanNative"
+      }
+    },
+    "a sample withdrawal is accepted on the Lean machine, and rejected unsigned #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "87acb769a9c0ddb7",
+      "programs": [
+        "67fea25543682765"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "LeanNative"
+      }
+    },
+    "a withdrawal of a non-positive amount is rejected #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "cb8aa581c9abc2ac",
+      "programs": [
+        "2d836507fba7b7c3",
+        "c31d8c26d1e64064"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "Blaster"
+      }
+    },
+    "after the end of the period the beneficiary withdraws everything that is locked #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "27fb46cb7b334b13",
+      "programs": [
+        "d033e2da9a098c33",
+        "d22c85ae6b26ad0a"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "Blaster"
+      }
+    },
+    "after the end of the period the beneficiary withdraws everything that is locked #2": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "27fb46cb7b334b13",
+      "programs": [
+        "49aeb66f9d34555b",
+        "d22c85ae6b26ad0a"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "amount": 1,
+        "duration": 3,
+        "fee": 0,
+        "locked": 1,
+        "start": -1,
+        "time": -2
+      }
+    },
+    "an output without a datum cannot be spent #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "1c207e4e5e5ea831",
+      "programs": [
+        "a2a8e059fdd76a7a"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "Blaster"
+      }
+    },
+    "everything is vested from the end of the period on #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "318cc4c423632e0e",
+      "programs": [
+        "cd650d3a1fc3f07a",
+        "113d3a4e2d70942f"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      }
+    },
+    "nobody withdraws without the beneficiary's signature #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "e281ad1f61b49d8a",
+      "programs": [
+        "e05f299f12b359b2"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "Blaster"
+      }
+    },
+    "nobody withdraws without the beneficiary's signature #2": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "afb97d43bd33715b",
+      "programs": [
+        "ad69a1d00edaa251"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "amount": 0,
+        "duration": 1,
+        "fee": 1,
+        "locked": 1,
+        "paid": 0,
+        "requested": 1,
+        "start": 0,
+        "time": 0
+      }
+    },
+    "nothing is vested before the start #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "318cc4c423632e0e",
+      "programs": [
+        "6ff97ca2f7903ef7",
+        "a520a7adccc409e9"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      }
+    },
+    "the same holds whatever the outputs are, at a budget that ends before they are read #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "72003b9c14b54091",
+      "programs": [
+        "dd259a1f1235ed04",
+        "5c409699b2b32a23"
+      ],
+      "notes": {
+        "budget": "1608",
+        "kind": "Blaster"
+      }
+    },
+    "the schedule returns for every datum and time #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "e121d366325ced83",
+      "programs": [
+        "1a02b353d6639bbb"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      }
+    },
+    "the schedule's contract, stated in its body, holds of its compiled program #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2e67634cb9bbebf9",
+      "programs": [
+        "5c653021f0f6dce1",
+        "1a02b353d6639bbb",
+        "c761d7b2b6f3888c",
+        "c7cf963a7d7378f2"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      }
+    },
+    "the schedule's contract, stated in its body, holds of its compiled program #2": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "48db2e9a3a68bcde",
+      "programs": [
+        "4a0d6db9e431a08e",
+        "c761d7b2b6f3888c",
+        "b0b68c98588bda12"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "config.beneficiary.hash": "",
+        "config.duration": 0,
+        "config.initialAmount": 1,
+        "config.startTimestamp": -1,
+        "time": 0
+      }
+    },
+    "the schedule's contract, stated in its body, holds of its compiled program #3": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "48db2e9a3a68bcde",
+      "programs": [
+        "5c653021f0f6dce1",
+        "c761d7b2b6f3888c",
+        "31eaff46ab8ee110"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "config.beneficiary.hash": "",
+        "config.duration": 1,
+        "config.initialAmount": -1,
+        "config.startTimestamp": 0,
+        "time": -1
+      }
+    },
+    "the script validates nothing but spending #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "0127eb16b379b16e",
+      "programs": [
+        "d2a643a94d9ac501",
+        "7dc0c63ece5f2d1a"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "Blaster"
+      }
+    },
+    "the vested amount does not decrease with time #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "1ac3cc3bac313300",
+      "programs": [
+        "1a72b1e091801333",
+        "81ebb2fdf61f999e"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      }
+    },
+    "the vested amount does not decrease with time #2": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "1ac3cc3bac313300",
+      "programs": [
+        "4233d166e3119bbd",
+        "81ebb2fdf61f999e"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "config.beneficiary.hash": "",
+        "config.duration": 0,
+        "config.initialAmount": -1,
+        "config.startTimestamp": -4,
+        "earlier": -5,
+        "later": -3
+      }
+    },
+    "what stays locked is at least what has not vested yet #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d7d35bcf2ded662a",
+      "programs": [
+        "dd259a1f1235ed04",
+        "ad69a1d00edaa251"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "Blaster"
+      }
+    },
+    "what stays locked is at least what has not vested yet #2": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "d7d35bcf2ded662a",
+      "programs": [
+        "df2ea761551afc0a",
+        "ad69a1d00edaa251"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "amount": 0,
+        "duration": 1,
+        "fee": 0,
+        "locked": 1,
+        "paid": 1,
+        "requested": 1,
+        "start": 1,
+        "time": 0
+      }
+    }
+  }
+}

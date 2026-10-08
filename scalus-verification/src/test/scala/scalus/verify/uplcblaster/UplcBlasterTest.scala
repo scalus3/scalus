@@ -1055,6 +1055,127 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         assert(negative.exists((name, value) => name.endsWith(".amount") && integer(value) < 0))
     }
 
+    test("what a result rests on is hashed part by part, without Lean and without the budget") {
+        val goal = lowered(forAll[BigInt](x => x + BigInt(0) == x), FunctionTable.empty)
+        val fingerprint = UplcBlaster.fingerprint(goal, leanWorkspace)
+        assert(fingerprint == UplcBlaster.fingerprint(goal, leanWorkspace))
+        // Lean's side: its toolchain, the packages the workspace clones, and Scalus's library.
+        assert(
+          fingerprint.environment.keySet == Set(
+            "toolchain",
+            "Blaster",
+            "PlutusCore",
+            "ScalusProofs"
+          )
+        )
+        assert(fingerprint.environment("toolchain") == LeanProofs.toolchain(leanWorkspace))
+        assert(fingerprint.programs.sizeIs == goal.leaves.size)
+        // Another statement over the same variable is another statement, and another program.
+        val other = UplcBlaster.fingerprint(
+          lowered(forAll[BigInt](x => x + BigInt(1) > x), FunctionTable.empty),
+          leanWorkspace
+        )
+        assert(other.statement == fingerprint.statement)
+        assert(other.programs != fingerprint.programs)
+        val shaped = UplcBlaster.fingerprint(
+          lowered(forAll[BigInt](x => !Prop(x + BigInt(0) != x)), FunctionTable.empty),
+          leanWorkspace
+        )
+        assert(shaped.statement != fingerprint.statement)
+        // The tactic gives it for its servers' workspace, whatever its budget, and none where
+        // its provider does not say which workspace that is.
+        def of(tactic: UplcBlaster): Option[Fingerprint] = tactic.fingerprint(goal)
+        assert(of(UplcBlaster(Budget.LeanSteps(40), lean)).contains(fingerprint))
+        assert(of(UplcBlaster(Budget.Auto, lean)).contains(fingerprint))
+        assert(of(UplcBlaster(Budget.Auto, () => Left("no Lean here"))).isEmpty)
+    }
+
+    test("a kept proof is taken without Lean, and a kept refutation is replayed") {
+        // A provider that says its workspace and has no server: whatever asks Lean fails.
+        val silent = new scalus.verify.lean.LeanServerProvider {
+            override def server(): Either[String, LeanServer] = Left("Lean was asked")
+            override def workspace: Option[java.nio.file.Path] = Some(leanWorkspace)
+        }
+        val holds = forAll[BigInt](x => x + BigInt(0) == x)
+        val fails = forAll[BlasterOwned](o => o.amount >= BigInt(0))
+        val broken = forAll[Data](d => denotes(d.to[BlasterPair]))
+        val directory = Files.createTempDirectory("scalus-kept-")
+        val file = directory.resolve("Kept.proofs.json")
+        def verified(
+            name: String,
+            prop: Prop,
+            mode: KeptResults.Mode,
+            servers: scalus.verify.lean.LeanServerProvider
+        ): VerificationResult = {
+            val verifier = Verifier.keeping(KeptResults.in(file, mode))
+            verifier.verify(
+              verifier.statement(name, prop),
+              UplcBlaster(Budget.LeanSteps(160), servers)
+            )
+        }
+        try
+            // With Lean, once.
+            assert(
+              verified("holds", holds, KeptResults.Mode.Use, lean)
+                  .isInstanceOf[VerificationResult.Proven]
+            )
+            assert(
+              verified("fails", fails, KeptResults.Mode.Use, lean)
+                  .isInstanceOf[VerificationResult.Refuted]
+            )
+            assert(
+              verified("broken", broken, KeptResults.Mode.Use, lean)
+                  .isInstanceOf[VerificationResult.Refuted]
+            )
+            val text = Files.readString(file)
+            assert(
+              text.contains("\"budget\": \"160\"") && text.contains("\"kind\": \"Blaster\""),
+              text
+            )
+
+            // Without Lean: the proof is the kept one, and says so.
+            verified("holds", holds, KeptResults.Mode.Frozen, silent) match
+                case VerificationResult.Proven(proof) =>
+                    val artifact = proof.artifact.asInstanceOf[UplcBlaster.Artifact]
+                    assert(
+                      artifact.kept && artifact.budget == 160 && artifact.kind == ProofKind.Blaster
+                    )
+                case other => fail(s"expected the kept proof, got $other")
+            // The refutations are replayed, with the values that were kept: a number, bytes, Data.
+            verified("fails", fails, KeptResults.Mode.Frozen, silent) match
+                case VerificationResult.Refuted(proof) =>
+                    val values =
+                        proof.artifact.asInstanceOf[UplcBlaster.Artifact].counterexample.toMap
+                    assert(
+                      values.exists((name, value) => name.endsWith(".amount") && integer(value) < 0)
+                    )
+                    assert(values.exists((name, _) => name.endsWith(".owner.key")), values)
+                case other => fail(s"expected the kept refutation, got $other")
+            assert(
+              verified("broken", broken, KeptResults.Mode.Frozen, silent)
+                  .isInstanceOf[VerificationResult.Refuted]
+            )
+
+            // A statement that is another one now is stale, where no Lean is asked.
+            verified(
+              "holds",
+              forAll[BigInt](x => x + BigInt(1) > x),
+              KeptResults.Mode.Frozen,
+              silent
+            ) match
+                case VerificationResult.Inconclusive(reason) =>
+                    assert(reason.startsWith(KeptResults.stale), reason)
+                    assert(reason.contains("the program of test 1"), reason)
+                case other => fail(s"expected a stale statement, got $other")
+
+            // A run that recalculates asks Lean, and comes to the same.
+            verified("holds", holds, KeptResults.Mode.Recalculate, lean) match
+                case VerificationResult.Proven(proof) =>
+                    assert(!proof.artifact.asInstanceOf[UplcBlaster.Artifact].kept)
+                case other => fail(s"expected a proof, got $other")
+        finally Directories.remove(directory)
+    }
+
     test("a check that is given up says how far it had come") {
         // No Lean is asked for: these are the tactic's readings of what the server reports. The
         // commands are those of checks the tactic writes, so a change of their text shows here.

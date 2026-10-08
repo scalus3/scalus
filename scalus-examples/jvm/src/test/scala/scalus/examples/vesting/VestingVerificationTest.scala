@@ -68,6 +68,24 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofs {
     override protected def leanWorkspace: Path =
         LeanProofs.inSources("scalus-examples", "jvm", "src", "test", "lean", "LinearVesting")
 
+    /** The results of the statements below are kept beside this file: a run without Lean passes on
+      * them, and sees at once where the validator's code is no longer the one they are of.
+      */
+    override protected def keptResultsFile: Option[Path] = Some(
+      LeanProofs
+          .inSources(
+            "scalus-examples",
+            "jvm",
+            "src",
+            "test",
+            "scala",
+            "scalus",
+            "examples",
+            "vesting"
+          )
+          .resolve("VestingVerificationTest.proofs.json")
+    )
+
     test("the example's Lean workspace has the Lean and the packages of Scalus's library") {
         // The two workspaces share the clones of the packages and what is built of them. A
         // manifest that names another revision would check it out for both, and another Lean

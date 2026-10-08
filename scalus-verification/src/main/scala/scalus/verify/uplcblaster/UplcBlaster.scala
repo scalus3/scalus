@@ -9,7 +9,7 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.utils.{Hex, Utils}
 import scalus.verify.*
-import scalus.verify.lean.{Directories, LeanServer, LeanServerProvider}
+import scalus.verify.lean.{Directories, LeanServer, LeanServerProvider, LeanWorkspace}
 
 import java.nio.file.{Files, Path}
 import scala.collection.mutable.ArrayBuffer
@@ -112,7 +112,11 @@ final class UplcBlaster private (
                 )
             )
 
-    override def run(prepared: Prepared): ExecutionResult = {
+    override def run(prepared: Prepared): ExecutionResult = run(prepared, None)
+
+    /** Runs the check, or the search for its budget, which starts at `first` where that is given.
+      */
+    private def run(prepared: Prepared, first: Option[Int]): ExecutionResult = {
         val kept = UplcBlaster.keptChecks
         budget match
             case Budget.LeanSteps(steps) =>
@@ -123,8 +127,37 @@ final class UplcBlaster private (
                         UplcBlaster.check(prepared, steps, maxHeartbeats, server, shorter, kept)
             // A search makes several checks, and asks for the server before each.
             case Budget.Auto =>
-                UplcBlaster.search(prepared, maxHeartbeats, servers, timeout, attemptTimeout, kept)
+                UplcBlaster.search(
+                  prepared,
+                  maxHeartbeats,
+                  servers,
+                  timeout,
+                  attemptTimeout,
+                  kept,
+                  first
+                )
     }
+
+    /** What a result rests on: the statement as Lean is given it, the programs, and Lean's side,
+      * which is read from the workspace of the tactic's servers. A tactic whose provider does not
+      * say which workspace that is, or names a directory that is none, keeps no results.
+      */
+    override def fingerprint(prepared: Prepared): Option[Fingerprint] =
+        servers.workspace
+            .filter(workspace => Files.isRegularFile(workspace.resolve("lean-toolchain")))
+            .map(UplcBlaster.fingerprint(prepared, _))
+
+    override def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] =
+        UplcBlaster.kept(prepared, result)
+
+    override def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult] =
+        UplcBlaster.restored(prepared, kept)
+
+    /** A search starts at the budget that was kept: where the statement is still decided there,
+      * that is one check.
+      */
+    override def run(prepared: Prepared, earlier: Kept): ExecutionResult =
+        run(prepared, earlier.notes.get(UplcBlaster.budgetNote).flatMap(_.toIntOption))
 }
 
 object UplcBlaster {
@@ -142,13 +175,18 @@ object UplcBlaster {
       * @param kind
       *   [[ProofKind.Blaster]] for a statement with quantified variables, and
       *   [[ProofKind.LeanNative]] for a closed statement, which Lean decides by evaluation
+      * @param kept
+      *   whether the result is one that was kept, and this run did not ask Lean
+      *   ([[scalus.verify.KeptResults]]). A proof is then the word of the run that kept it, and
+      *   `output` is empty; a refutation was replayed on the Scalus CEK as any other.
       */
     final case class Artifact(
         programHashes: List[String],
         budget: Int,
         output: String,
         counterexample: List[(String, Constant)],
-        kind: ProofKind
+        kind: ProofKind,
+        kept: Boolean
     ) extends ProofArtifact
 
     /** A lowered statement over its leaves, retaining its quantifiers and connectives.
@@ -1131,7 +1169,8 @@ object UplcBlaster {
       *
       * A falsification without values to count on has the budget doubled, up to
       * [[maxDoubledBudget]]. `timeout` is the time of the whole search, and `attempt` that of one
-      * check of it. The server is asked for before every check, as for any other.
+      * check of it. The server is asked for before every check, as for any other. `first` is a
+      * budget an earlier search came to, which is tried before the search begins.
       */
     private[uplcblaster] def search(
         goal: Lowered,
@@ -1139,7 +1178,8 @@ object UplcBlaster {
         servers: LeanServerProvider,
         timeout: Option[FiniteDuration],
         attempt: Option[FiniteDuration],
-        keep: Option[Path]
+        keep: Option[Path],
+        first: Option[Int]
     ): ExecutionResult = {
         val deadline = timeout.map(_.fromNow)
         // The time the next check gets, with the name of that limit for the reason of a check
@@ -1217,7 +1257,19 @@ object UplcBlaster {
                                 case Right(more)  => at(more, steps :: tried, Some(reason))
                                 case Left(result) => result
 
-        try at(searchStart, Nil, None)
+        // A budget that was kept is tried first. Where it does not decide the statement any
+        // more, it says nothing about where to look, and the search is from the start.
+        def kept: Option[ExecutionResult] =
+            for
+                steps <- first
+                (wait, limit) <- time()
+                result <- probe(steps, wait, limit) match
+                    case Probe.Decided(proved: VerificationResult.Proven)   => Some(proved)
+                    case Probe.Decided(refuted: VerificationResult.Refuted) => Some(refuted)
+                    case _                                                  => None
+            yield result
+
+        try kept.getOrElse(at(searchStart, Nil, None))
         finally Directories.remove(directory)
     }
 
@@ -1499,7 +1551,8 @@ object UplcBlaster {
           budget,
           output.trim,
           Nil,
-          if closed then ProofKind.LeanNative else ProofKind.Blaster
+          if closed then ProofKind.LeanNative else ProofKind.Blaster,
+          kept = false
         )
         // Lean gives a command up at its own limit of work, `maxHeartbeats`, and says so. The
         // statement is then not decided, as when the time limit passes: nothing went wrong.
@@ -1787,7 +1840,12 @@ object UplcBlaster {
         flats: Vector[Path],
         budget: Int,
         maxHeartbeats: Int
-    ): String = {
+    ): String = document(flats, checkBody(goal, budget), maxHeartbeats)
+
+    /** The commands of a check after its programs: the symbolic runs and the statement, or the
+      * closed statement.
+      */
+    private def checkBody(goal: Lowered, budget: Int): String = {
         val check =
             if goal.binders.isEmpty then
                 val state = (leaf: Int) => s"(runProgramFor leaf$leaf.script [] $budget)"
@@ -1806,7 +1864,7 @@ object UplcBlaster {
                     ((s"def arguments$leaf" +: parameters) :+
                         s": List Term := [${terms.mkString(", ")}]").mkString(" ")
                 }
-                val prepared = flats.indices.map(index =>
+                val prepared = goal.leaves.indices.map(index =>
                     s"#prep_uplc_run prepared$index leaf$index arguments$index $budget"
                 )
                 val state = (leaf: Int) => {
@@ -1821,8 +1879,118 @@ object UplcBlaster {
                    |
                    |#blaster (gen-cex: 1) [$formula]""".stripMargin
 
-        document(flats, check, maxHeartbeats)
+        check
     }
+
+    /** What the result of a check of `goal` rests on (docs/design/verification-overview.md §5.6):
+      * the text of the check, without its budget, its limit of Lean's work and the places of its
+      * programs, each program, and Lean's side as `workspace` has it.
+      *
+      * The budget is not part of it: a proof at any budget holds without the budget, and a
+      * refutation is replayed without one.
+      */
+    private[uplcblaster] def fingerprint(goal: Lowered, workspace: Path): Fingerprint =
+        Fingerprint(
+          LeanWorkspace.environment(workspace),
+          Fingerprint.hash(document(Vector.empty, checkBody(goal, 0), 0)),
+          goal.leaves.toList.map(program => Fingerprint.hash(program.cborEncoded))
+        )
+
+    /** The notes the tactic keeps with a result: the budget the check ran with, which a later
+      * search starts at, and how the statement was decided.
+      */
+    private[uplcblaster] val budgetNote = "budget"
+    private val kindNote = "kind"
+
+    /** What is kept of a result: a proof, or a refutation with the values of its counterexample.
+      */
+    private[uplcblaster] def kept(goal: Lowered, result: ExecutionResult): Option[Kept] = {
+        def notes(artifact: Artifact) =
+            Map(budgetNote -> artifact.budget.toString, kindNote -> artifact.kind.toString)
+        result match
+            case VerificationResult.Proven(proof) =>
+                proof.artifact match
+                    case artifact: Artifact =>
+                        Some(Kept(Kept.Result.Proved, notes(artifact), Map.empty))
+                    case _ => None
+            case VerificationResult.Refuted(proof) =>
+                proof.artifact match
+                    case artifact: Artifact =>
+                        val values = artifact.counterexample.map((_, value) => json(value))
+                        val named = keptNames(goal.binders).zip(values).toMap
+                        Some(Kept(Kept.Result.Refuted, notes(artifact), named))
+                    case _ => None
+            case _ => None
+    }
+
+    /** The result that `kept` stands for, for the statement `goal`. A proof is taken as it was
+      * kept. A refutation is replayed on the Scalus CEK, as one that Lean has just given, and is a
+      * result only where the statement is false on its values.
+      */
+    private[uplcblaster] def restored(goal: Lowered, kept: Kept): Option[ExecutionResult] =
+        for
+            budget <- kept.notes.get(budgetNote).flatMap(_.toIntOption)
+            kind <- kept.notes.get(kindNote)
+            artifact = Artifact(
+              goal.leaves.toList.map(program =>
+                  Hex.bytesToHex(Utils.sha2_256(program.cborEncoded)).toLowerCase
+              ),
+              budget,
+              "",
+              Nil,
+              ProofKind.valueOf(kind),
+              kept = true
+            )
+            result <- restored(goal, kept, artifact)
+        yield result
+
+    private def restored(goal: Lowered, kept: Kept, artifact: Artifact): Option[ExecutionResult] =
+        kept.result match
+            case Kept.Result.Proved => Some(VerificationResult.Proven(Proof(artifact)))
+            case Kept.Result.Refuted =>
+                val values = keptNames(goal.binders).zip(goal.binders).map { (name, binder) =>
+                    kept.counterexample.get(name).map(constant(binder.tp, _))
+                }
+                if values.contains(None) then None
+                else
+                    replayValues(goal, artifact, values.flatten) match
+                        case Probe.Decided(refuted: VerificationResult.Refuted) => Some(refuted)
+                        case _                                                  => None
+
+    private val madeUnique = """^([^.]*?)[_-]\d+(\..*)?$""".r
+
+    /** The names a counterexample's values are kept under: those of the variables as their
+      * statement has them, without the number the compiler made each unique with, which is another
+      * after every compilation. Two variables of one name are told apart by their places.
+      */
+    private[uplcblaster] def keptNames(binders: List[PropExpr.Ident[?]]): List[String] = {
+        val written = binders.map(_.name).map {
+            case madeUnique(name, field) => name + Option(field).getOrElse("")
+            case name                    => name
+        }
+        written.zipWithIndex.map { (name, index) =>
+            if written.count(_ == name) > 1 then s"$name#${index + 1}" else name
+        }
+    }
+
+    /** A value of a variable as JSON, for a file a reader opens: a number, `true` or `false`, the
+      * bytes in hexadecimal, and `Data` as Plutus writes it in JSON.
+      */
+    private def json(value: Constant): String = value match
+        case Constant.Integer(number)    => number.toString
+        case Constant.Bool(truth)        => truth.toString
+        case Constant.ByteString(string) => s"\"${string.toHex}\""
+        case Constant.Data(tree)         => Data.toJson(tree)
+        case other =>
+            throw new IllegalArgumentException(s"no variable of a statement has the value $other")
+
+    /** The value of a variable of type `tp` that [[json]] wrote. */
+    private def constant(tp: SIRType, json: String): Constant = tp match
+        case SIRType.Integer => Constant.Integer(BigInt(json.trim))
+        case SIRType.Boolean => Constant.Bool(json.trim.toBoolean)
+        case SIRType.ByteString =>
+            Constant.ByteString(ByteString.fromHex(json.trim.stripPrefix("\"").stripSuffix("\"")))
+        case _ => Constant.Data(Data.fromJson(json))
 
     /** The text of a check: the library, the limit of Lean's work, the programs in `flats` as
       * `leaf<n>`, and the commands of `body`. The lines up to the programs are the same in every
