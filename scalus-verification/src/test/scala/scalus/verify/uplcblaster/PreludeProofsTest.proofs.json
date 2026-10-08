@@ -1,0 +1,406 @@
+{
+  "environment": {
+    "uplc-blaster": {
+      "Blaster": "3a141c8d06f1",
+      "PlutusCore": "2919b66445cd",
+      "ScalusProofs": "eb9642f1ddd4f46e",
+      "toolchain": "leanprover/lean4:v4.24.0"
+    }
+  },
+  "results": {
+    "a fold over a two-element list is the sum #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "708e3bf12cabc19e"
+      ],
+      "notes": {
+        "budget": "320",
+        "kind": "Blaster"
+      }
+    },
+    "a fold over a two-element list is the sum #2": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "b0c9bf770bc8e08c"
+      ],
+      "notes": {
+        "budget": "320",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "a": -1,
+        "b": 0
+      }
+    },
+    "abs is a non-negative magnitude #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "21fae736685d64c3",
+      "programs": [
+        "0e99796ac11af631"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      }
+    },
+    "abs is a non-negative magnitude #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "21fae736685d64c3",
+      "programs": [
+        "d1016bca67f6f7a1"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      }
+    },
+    "abs is a non-negative magnitude #3": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "21fae736685d64c3",
+      "programs": [
+        "f51b0ac1ebac47aa"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "x": 0
+      }
+    },
+    "an Option match doubles a positive value and defaults otherwise #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "4c05b745268b0fce",
+      "programs": [
+        "171628cceef1b617",
+        "6d2b2403ffa2413e"
+      ],
+      "notes": {
+        "budget": "160",
+        "kind": "Blaster"
+      }
+    },
+    "an Option match doubles a positive value and defaults otherwise #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "4c05b745268b0fce",
+      "programs": [
+        "05df314b7a5928de",
+        "2e942727c998138c"
+      ],
+      "notes": {
+        "budget": "160",
+        "kind": "Blaster"
+      }
+    },
+    "an Option match doubles a positive value and defaults otherwise #3": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "21fae736685d64c3",
+      "programs": [
+        "6d2b2403ffa2413e"
+      ],
+      "notes": {
+        "budget": "160",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "x": 0
+      }
+    },
+    "clamp stays in range, and keeps a value already in range #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "112a877d1a7b5ccf",
+      "programs": [
+        "76ed15abf3e4599d",
+        "c2511f3971e3b24e"
+      ],
+      "notes": {
+        "budget": "120",
+        "kind": "Blaster"
+      }
+    },
+    "clamp stays in range, and keeps a value already in range #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "112a877d1a7b5ccf",
+      "programs": [
+        "6f9693ceff7ec2d2",
+        "35db08a69d4974a6"
+      ],
+      "notes": {
+        "budget": "120",
+        "kind": "Blaster"
+      }
+    },
+    "clamp stays in range, and keeps a value already in range #3": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "104be38635b7155a",
+      "programs": [
+        "c2511f3971e3b24e"
+      ],
+      "notes": {
+        "budget": "120",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "hi": -1,
+        "lo": 0,
+        "x": -1
+      }
+    },
+    "exp2 of a negative exponent is zero #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "4c05b745268b0fce",
+      "programs": [
+        "6e3f203106018b53",
+        "b7cc881c8274754e"
+      ],
+      "notes": {
+        "budget": "60",
+        "kind": "Blaster"
+      }
+    },
+    "exp2 of a negative exponent is zero #2": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "4c05b745268b0fce",
+      "programs": [
+        "6e3f203106018b53",
+        "8f81cddfbd8374bc"
+      ],
+      "notes": {
+        "budget": "60",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "e": -1
+      }
+    },
+    "max is an upper bound, and min + max is the sum #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "82cd76adf7d17cba"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      }
+    },
+    "max is an upper bound, and min + max is the sum #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "62b967469d71d071"
+      ],
+      "notes": {
+        "budget": "120",
+        "kind": "Blaster"
+      }
+    },
+    "max is an upper bound, and min + max is the sum #3": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "0f81c0cedbbbb2d1"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "x": 0,
+        "y": 1
+      }
+    },
+    "min is a lower bound and one of its arguments #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "8c5e658ba54594b4"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      }
+    },
+    "min is a lower bound and one of its arguments #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "377f284a3aa632e5"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      }
+    },
+    "min is a lower bound and one of its arguments #3": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "2780e05c52c8494f"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "x": -1,
+        "y": 0
+      }
+    },
+    "the samples of abs hold on the Lean model #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "30e761a980e7373d",
+      "programs": [
+        "fe261d1c062139c1",
+        "49a854ac084f9f4d",
+        "9437dd8ac7e05672"
+      ],
+      "notes": {
+        "budget": "60",
+        "kind": "LeanNative"
+      }
+    },
+    "the samples of gcd_unoptimized hold on the Lean model #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "a3925ffa64031632",
+        "de298faf8bae1aeb"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "LeanNative"
+      }
+    },
+    "the samples of list_sum2 hold on the Lean model #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "ec292d4cda21e30a",
+        "69feba268caad17e"
+      ],
+      "notes": {
+        "budget": "320",
+        "kind": "LeanNative"
+      }
+    },
+    "the samples of max hold on the Lean model #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "ec149392b691d6f3",
+        "b702ab936100ccba"
+      ],
+      "notes": {
+        "budget": "60",
+        "kind": "LeanNative"
+      }
+    },
+    "the samples of min hold on the Lean model #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "b12d21d828cadf3d",
+        "5371ca1de0c79dbf"
+      ],
+      "notes": {
+        "budget": "60",
+        "kind": "LeanNative"
+      }
+    },
+    "the samples of opt_double_or_default hold on the Lean model #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "a99f9a8a516fdce6",
+        "ce434c12e3568b6a"
+      ],
+      "notes": {
+        "budget": "160",
+        "kind": "LeanNative"
+      }
+    },
+    "the samples of scalus.cardano.onchain.plutus.prelude.Math$.clamp hold on the Lean model #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "30e761a980e7373d",
+      "programs": [
+        "ef51fab73a076e20",
+        "c621cf0f1b60c5b2",
+        "ce7cee1006dd20ec"
+      ],
+      "notes": {
+        "budget": "80",
+        "kind": "LeanNative"
+      }
+    },
+    "the samples of scalus.cardano.onchain.plutus.prelude.Math$.exp2 hold on the Lean model #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "30e761a980e7373d",
+      "programs": [
+        "fd4060c3346b8249",
+        "b6d906eb70958d9f",
+        "8fb15d02ac6e9bdc"
+      ],
+      "notes": {
+        "budget": "200",
+        "kind": "LeanNative"
+      }
+    },
+    "the samples of scalus.cardano.onchain.plutus.prelude.Math$.gcd hold on the Lean model #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "30e761a980e7373d",
+      "programs": [
+        "41b1cf7fd6cf784f",
+        "f6e07b5e2669bd5d",
+        "19eda53a4b88d3b0"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "LeanNative"
+      }
+    },
+    "the samples of scalus.cardano.onchain.plutus.prelude.Math$.sqrt hold on the Lean model #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "fb9f3fbc8bc7723b",
+        "e0accb77e29a546b"
+      ],
+      "notes": {
+        "budget": "1000",
+        "kind": "LeanNative"
+      }
+    }
+  }
+}

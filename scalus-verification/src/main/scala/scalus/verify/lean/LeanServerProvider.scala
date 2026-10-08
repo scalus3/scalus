@@ -14,6 +14,12 @@ trait LeanServerProvider {
 
     /** The server for the next check, or the reason there is none. */
     def server(): Either[String, LeanServer]
+
+    /** The workspace the servers are of, where the provider says. What the results of their checks
+      * rest on, on Lean's side, is read from its files ([[LeanWorkspace.environment]]), and a
+      * tactic keeps its results only where it knows that.
+      */
+    def workspace: Option[Path] = None
 }
 
 /** The Lean servers of one workspace, one at a time: a server is started when a check first asks
@@ -22,10 +28,12 @@ trait LeanServerProvider {
   *
   * Whoever creates it ends it with [[close]], which ends the server that runs.
   */
-final class LeanServers private (workspace: Path) extends LeanServerProvider with AutoCloseable {
+final class LeanServers private (directory: Path) extends LeanServerProvider with AutoCloseable {
 
     private var running: Option[LeanServer] = None
     private var closed = false
+
+    override def workspace: Option[Path] = Some(directory)
 
     /** The server of the workspace that runs, or one started now, or the reason none starts. */
     override def server(): Either[String, LeanServer] = synchronized {
@@ -34,7 +42,7 @@ final class LeanServers private (workspace: Path) extends LeanServerProvider wit
             running.filterNot(_.isClosed) match
                 case Some(server) => Right(server)
                 case None =>
-                    val started = LeanServer.start(workspace)
+                    val started = LeanServer.start(directory)
                     running = started.toOption
                     started
     }

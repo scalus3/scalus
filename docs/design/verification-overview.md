@@ -833,9 +833,14 @@ test("vesting authorisation is proved about the shipped script") {
 
 ### 5.6 Kept results
 
-Proposed. A result is kept with a hash of everything it rests on, so that a later run need not
-ask the backend again for a statement that has not changed. It is the same for every tactic: the
+A result is kept with a hash of everything it rests on, so that a later run need not ask the
+backend again for a statement that has not changed. It is the same for every tactic: the
 verifier keeps and looks up, and a tactic says what its results rest on.
+
+Built: `KeptResults` and `Verifier.keeping(results)`, the tactic's side for `blaster-uplc`, and
+the two suites of proofs about code, `PreludeProofsTest` and `VestingVerificationTest`, each with
+its file. A suite about the tactic itself keeps nothing: what it tests is not in a statement's
+fingerprint, and Lean is to be asked every time.
 
 **What is kept, by the result.**
 
@@ -857,9 +862,20 @@ result rests on. Preparing needs no backend, so the fingerprint is known whereve
 ```scala
 trait Tactic:
     ...
-    /** The hashes of everything a result for `prepared` rests on, part by part. */
-    def fingerprint(prepared: Prepared): Fingerprint
+    /** The hashes of everything a result for `prepared` rests on, part by part.
+      * None where the tactic's results are not kept. */
+    def fingerprint(prepared: Prepared): Option[Fingerprint]
+    /** What is kept of a result: a proof, or a refutation with its counterexample. */
+    def keep(prepared: Prepared, result: ExecutionResult): Option[Kept]
+    /** The result that `kept` stands for, made without the backend. */
+    def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult]
+    /** `run`, starting from what was kept of an earlier result. */
+    def run(prepared: Prepared, earlier: Kept): ExecutionResult
 ```
+
+A tactic that defines none of them runs as before. A hash is the first 16 hexadecimal digits of
+a SHA-256: the file is guarded against a change, not against a hand, and the whole hash would
+say no more and read worse.
 
 For `blaster-uplc` it is over:
 
@@ -879,50 +895,69 @@ sees what a result rests on, and a change of the file says which part moved: the
 the second test, or the revision of Blaster.
 
 **The file** is one for a suite, in JSON that is written out in lines, with the statements in
-the order of their names. It is made to be read: in an editor, in a review, with `jq`.
+the order of their names. It is made to be read: in an editor, in a review, with `jq`. It lies
+beside the suite's source, as `<Suite>.proofs.json`.
 
 ```json
 {
-  "lean": {
-    "toolchain": "leanprover/lean4:v4.24.0",
-    "Blaster": "3a141c8d",
-    "PlutusCore": "2919b664",
-    "ScalusProofs": "77aa01c2"
+  "environment": {
+    "uplc-blaster": {
+      "Blaster": "3a141c8d06f1",
+      "PlutusCore": "2919b66445cd",
+      "ScalusProofs": "eb9642f1ddd4f46e",
+      "toolchain": "leanprover/lean4:v4.24.0"
+    }
   },
   "results": {
-    "the same holds whatever the outputs are #1": {
-      "source": "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala",
+    "a fold over a two-element list is the sum #1": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "budget": 1608,
-      "statement": "9c41e0b7",
-      "programs": ["a1f3077e", "5be2d910"]
+      "statement": "d46783623238bc41",
+      "programs": [
+        "5d0c1d4f7b6e29a3"
+      ],
+      "notes": {
+        "budget": "320",
+        "kind": "Blaster"
+      }
     },
-    "clamp stays in range #2": {
-      "source": "scalus-verification/src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala",
+    "a fold over a two-element list is the sum #2": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "counterexample": { "x": "5", "lo": "10", "hi": "0" },
-      "statement": "0d77aa3c",
-      "programs": ["c09e1b44"]
+      "statement": "d46783623238bc41",
+      "programs": [
+        "b0c9bf770bc8e08c"
+      ],
+      "notes": {
+        "budget": "320",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "a": -1,
+        "b": 0
+      }
     }
   }
 }
 ```
 
 - **A name for every statement:** the test, and the place of the statement among those of the
-  test, or the name the statement was declared with. `source` is the file the test is in. The
-  line is not kept: it moves with every edit above it, and would change the file for nothing.
+  test, or the name the statement was declared with.
 - **Used by the fingerprint, replaced by the name.** An entry counts only where its fingerprint
   is that of the statement now. A statement that changed gets a new entry under its name, in
   place of the old one, so the file does not grow with every change of the compiler.
-- **The Lean side is said once,** for the file. A change of the toolchain or of Blaster is then
-  one line that changes, and every entry of the file is stale with it.
+- **The backend's side is said once,** for the file and the tactic. A change of the toolchain or
+  of Blaster is then one line that changes, and every entry of the tactic is stale with it. The
+  first result that is kept for the new side takes the others out of the file: they were proved
+  with the old one.
 - **A tactic keeps its own notes with a result.** `blaster-uplc` keeps the budget its search came
   to, which a later run starts from
-  ([Finding the budget](verification-details/blaster-budget-search.md)).
-- **A counterexample is kept as the values of the variables,** by their names, as a reader
-  would write them.
+  ([Finding the budget](verification-details/blaster-budget-search.md)), and how the statement
+  was decided.
+- **A counterexample is kept as the values of the variables,** as JSON: a number, `true` or
+  `false`, bytes in hexadecimal, `Data` as Plutus writes it. They are under the names the
+  statement gives its variables, without the number the compiler makes each unique with, which
+  is another after every compilation.
 - **The text of the statement is not kept,** only its hash. As Lean is given it, it is three
   times the rest of an entry, and reads to few.
 
@@ -934,12 +969,19 @@ the order of their names. It is made to be read: in an editor, in a review, with
 | **recalculate** | the tactic runs; a result that differs is a failure | the tactic runs, and the result is kept |
 | **frozen** | the kept result; a refutation is replayed | the statement is stale: no result, and its test is canceled |
 
-- **Use** is for work on a machine with the backend.
-- **Recalculate** is what keeps the kept proofs honest. The nightly proof run is one: it takes
-  nothing from the file, and a proof that no longer comes out is found there.
-- **Frozen** is for where no backend runs, as in `ci-jvm`. Today every proof is canceled there,
-  and a change that breaks one is seen a day later. With the file, the same build sees at once
-  that a change touched code that is proved: its fingerprint is not in the file.
+A suite chooses by where it runs, and the environment variable `SCALUS_KEPT_RESULTS` says it
+outright: `use`, `recalculate`, `frozen`, or `off` for a run that keeps and takes nothing.
+
+- **Use** is for work on a machine with the backend, and what a suite does where Lean runs.
+- **Recalculate** is what keeps the kept proofs honest. The Lean-Proofs workflow is one, as
+  every run is that requires Lean (`SCALUS_REQUIRE_LEAN`): it takes nothing from the file, and
+  a proof that no longer comes out is found there. It is also the way to run the proofs again
+  after a change of the tactic that no fingerprint shows.
+- **Frozen** is for where no backend runs, as in `ci-jvm`, and what a suite does without Lean.
+  Before, every proof was canceled there, and a change that broke one was seen a day later.
+  With the file, the same build passes the proofs that are kept, and sees at once that a change
+  touched code that is proved: its fingerprint is not in the file, and its test is canceled
+  with the part that moved as the reason.
 
 **The file is committed.** Frozen has nothing to look at otherwise, and a result that changes is
 then seen in review. It is of the programs of one compiler. Scalus is built with several, their

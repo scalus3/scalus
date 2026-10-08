@@ -3,8 +3,8 @@
 How the `blaster-uplc` tactic finds the number of steps a check lets its programs run
 ([Budgets](uplc-blaster.md#budgets)), and how a budget that was found is kept for the next run.
 
-Status: the search is built, as `Budget.Auto`. "Keeping what was found" is proposed, as part of
-the results the verifier keeps for every tactic
+Status: built. The search is `Budget.Auto`, and the budget it finds is kept with the statement's
+result, among the results the verifier keeps for every tactic
 ([overview §5.6](../verification-overview.md#56-kept-results)).
 
 ## Why
@@ -116,8 +116,8 @@ is proved; at 1600 it is not.
 
 ## Keeping what was found
 
-Proposed. A search costs several checks for a number that is the same on the next run, as long
-as nothing the statement is about has changed.
+A search costs several checks for a number that is the same on the next run, as long as nothing
+the statement is about has changed.
 
 The budget is kept with the statement's result, among the results the verifier keeps for every
 tactic ([overview §5.6](../verification-overview.md#56-kept-results)). An entry there is under

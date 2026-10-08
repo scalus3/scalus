@@ -20,6 +20,21 @@ import scalus.verify.Props.*
   * proved through Lean on the Lean model, so the two machines are checked against each other.
   */
 class PreludeProofsTest extends AnyFunSuite with LeanProofs {
+
+    /** These are proofs about the prelude's code, and their results are kept beside this file. */
+    override protected def keptResultsFile: scala.Option[java.nio.file.Path] = scala.Some(
+      LeanProofs
+          .inSources(
+            "scalus-verification",
+            "src",
+            "test",
+            "scala",
+            "scalus",
+            "verify",
+            "uplcblaster"
+          )
+          .resolve("PreludeProofsTest.proofs.json")
+    )
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
     private val abs = FunctionDef.named("abs", (x: BigInt) => Math.abs(x))

@@ -1,11 +1,9 @@
 package scalus.verify.uplcblaster
 
-import com.github.plokhotnyuk.jsoniter_scala.core.*
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import org.scalatest.{Assertions, BeforeAndAfterAll, Suite, Tag}
+import org.scalatest.{Assertions, BeforeAndAfterAll, Outcome, Tag, TestSuite, TestSuiteMixin}
 import scalus.uplc.Constant
 import scalus.verify.*
-import scalus.verify.lean.{LeanServer, LeanServerProvider, LeanServers}
+import scalus.verify.lean.{LeanServer, LeanServerProvider, LeanServers, LeanWorkspace}
 
 import java.io.File
 import java.nio.file.{Files, Path}
@@ -25,8 +23,12 @@ object Unfinished extends Tag("scalus.verify.uplcblaster.Unfinished")
 
 /** Runs [[UplcBlaster]] on statements through Lean, for test suites. A suite has one Lean server at
   * a time, started for its first check and closed after its last test.
+  *
+  * A suite of proofs about code can keep its results ([[keepsResults]]): a statement that has not
+  * changed is then not asked of Lean again, and where no Lean runs, its test passes on what is
+  * kept.
   */
-trait LeanProofs extends Assertions with BeforeAndAfterAll { this: Suite =>
+trait LeanProofs extends TestSuiteMixin with Assertions with BeforeAndAfterAll { this: TestSuite =>
 
     /** The Lean workspace the suite's checks run in: that of Scalus's Lean library, unless the
       * suite overrides it. A workspace of its own requires that library, as a check imports it.
@@ -40,9 +42,62 @@ trait LeanProofs extends Assertions with BeforeAndAfterAll { this: Suite =>
       * ended. A tactic asks when it runs a check. The test is then canceled, or fails, where Lean
       * cannot run here ([[requireLean]]). One that runs no check needs no Lean.
       */
-    protected def lean: LeanServerProvider = () => {
-        requireLean()
-        servers.server()
+    protected def lean: LeanServerProvider = new LeanServerProvider {
+        override def server(): Either[String, LeanServer] = {
+            requireLean()
+            servers.server()
+        }
+        override def workspace: Option[Path] = Some(leanWorkspace)
+    }
+
+    /** The file in which the suite keeps the results of the statements its helpers prove and refute
+      * (docs/design/verification-overview.md §5.6), or none for a suite that does not keep them. It
+      * is beside the suite's source, `<Suite>.proofs.json`, and is committed.
+      *
+      * It is for a suite of proofs about code. A suite about the tactic itself has Lean asked every
+      * time: what it tests is not in a statement's fingerprint.
+      */
+    protected def keptResultsFile: Option[Path] = None
+
+    /** How a suite that keeps its results uses them: as the environment variable
+      * `SCALUS_KEPT_RESULTS` says, `use`, `recalculate`, `frozen`, or `off` for not at all. Without
+      * it, a run that requires Lean recalculates, as the Lean-Proofs workflow does; one that has
+      * Lean uses what is kept; and one without Lean, as ci-jvm, takes what is kept and asks
+      * nothing.
+      */
+    protected lazy val keptMode: Option[KeptResults.Mode] =
+        if keptResultsFile.isEmpty then None
+        else
+            sys.env.get("SCALUS_KEPT_RESULTS") match
+                case Some("off")         => None
+                case Some("use")         => Some(KeptResults.Mode.Use)
+                case Some("recalculate") => Some(KeptResults.Mode.Recalculate)
+                case Some("frozen")      => Some(KeptResults.Mode.Frozen)
+                case Some(other) =>
+                    throw new IllegalArgumentException(
+                      s"SCALUS_KEPT_RESULTS is use, recalculate, frozen or off, not $other"
+                    )
+                case None =>
+                    if sys.env.contains("SCALUS_REQUIRE_LEAN") then
+                        Some(KeptResults.Mode.Recalculate)
+                    else if leanAvailable then Some(KeptResults.Mode.Use)
+                    else Some(KeptResults.Mode.Frozen)
+
+    /** The results kept for the suite, used in the way of [[keptMode]]. */
+    private lazy val results: Option[KeptResults] =
+        for
+            file <- keptResultsFile
+            mode <- keptMode
+        yield KeptResults.in(file, mode)
+
+    /** The test that runs, and how many statements it has stated: a kept result is under both. */
+    private var running = ""
+    private var stated = 0
+
+    abstract override protected def withFixture(test: NoArgTest): Outcome = {
+        running = test.name
+        stated = 0
+        super.withFixture(test)
     }
 
     /** The suite's Lean server itself, for a test that speaks to it. */
@@ -85,17 +140,23 @@ trait LeanProofs extends Assertions with BeforeAndAfterAll { this: Suite =>
         else assume(leanAvailable, missing)
     }
 
-    /** Declares `prop` in a fresh verifier and runs [[UplcBlaster]] on it through Lean. */
+    /** Declares `prop` in a fresh verifier and runs [[UplcBlaster]] on it, through Lean or, where
+      * the suite keeps its results, from what is kept. A statement that is stale, with nothing kept
+      * for it as it is now and no Lean to ask, cancels the test.
+      */
     protected def run(
         prop: Prop,
         budget: Budget,
         functions: Seq[FunctionDef[?, ?]]
     ): (Verifier, Statement, VerificationResult) = {
-        requireLean()
-        val verifier = Verifier.empty
+        stated += 1
+        val verifier = results.fold(Verifier.empty)(kept => Verifier.keeping(kept.under(running)))
         functions.foreach(verifier.addFunction)
-        val statement = verifier.statement(prop)
-        (verifier, statement, verifier.verify(statement, UplcBlaster(budget, lean)))
+        val statement = verifier.statement(s"#$stated", prop)
+        verifier.verify(statement, UplcBlaster(budget, lean)) match
+            case VerificationResult.Inconclusive(reason) if reason.startsWith(KeptResults.stale) =>
+                cancel(reason)
+            case result => (verifier, statement, result)
     }
 
     /** [[run]], at a budget of `budget` steps of Lean's machine. */
@@ -103,7 +164,8 @@ trait LeanProofs extends Assertions with BeforeAndAfterAll { this: Suite =>
         prop: Prop,
         budget: Int,
         functions: Seq[FunctionDef[?, ?]]
-    ): (Verifier, Statement, VerificationResult) = run(prop, Budget.LeanSteps(budget), functions)
+    ): (Verifier, Statement, VerificationResult) =
+        run(prop, Budget.LeanSteps(budget), functions)
 
     /** Proves `prop` at a budget of `budget` steps, and returns how the proof was checked. */
     protected def proven(prop: Prop, budget: Int, functions: FunctionDef[?, ?]*): ProofKind =
@@ -123,8 +185,9 @@ trait LeanProofs extends Assertions with BeforeAndAfterAll { this: Suite =>
             case (verifier, statement, VerificationResult.Proven(proof)) =>
                 val artifact = proof.artifact.asInstanceOf[UplcBlaster.Artifact]
                 artifact.kind match
+                    // A proof that was kept has nothing of Lean's from this run.
                     case ProofKind.Blaster =>
-                        if !artifact.output.contains("✅ Valid") then
+                        if !artifact.kept && !artifact.output.contains("✅ Valid") then
                             fail(s"expected a valid proof, got ${artifact.output}")
                     case ProofKind.LeanNative => assert(!artifact.output.contains("error"))
                     case other                => fail(s"unexpected proof kind $other")
@@ -138,7 +201,8 @@ trait LeanProofs extends Assertions with BeforeAndAfterAll { this: Suite =>
         prop: Prop,
         budget: Int,
         functions: FunctionDef[?, ?]*
-    ): Map[String, Constant] = refuted(prop, Budget.LeanSteps(budget), functions*)
+    ): Map[String, Constant] =
+        refuted(prop, Budget.LeanSteps(budget), functions*)
 
     /** The replayed counterexample of a refuted statement. */
     protected def refuted(
@@ -217,38 +281,15 @@ object LeanProofs {
       * path.
       */
     def isBuilt(workspace: Path): Boolean =
-        (workspace :: required(workspace)).exists { directory =>
+        (workspace :: LeanWorkspace.required(workspace).values.toList).exists { directory =>
             Files.isRegularFile(directory.resolve(".lake/build/lib/lean/ScalusProofs/Run.olean"))
         }
-
-    /** A package of a workspace's manifest: one that is cloned has a revision, and one that is
-      * required by its path has a directory.
-      */
-    private final case class Package(name: String, rev: Option[String], dir: Option[String])
-    private final case class Manifest(packages: List[Package])
-    private given JsonValueCodec[Manifest] = JsonCodecMaker.make
-
-    /** The packages of the manifest of `workspace`: none where it has no manifest. */
-    private def packages(workspace: Path): List[Package] = {
-        val manifest = workspace.resolve("lake-manifest.json")
-        if Files.isRegularFile(manifest) then
-            readFromArray[Manifest](Files.readAllBytes(manifest)).packages
-        else Nil
-    }
-
-    /** The workspaces that `workspace` requires by their paths. */
-    private def required(workspace: Path): List[Path] =
-        packages(workspace).flatMap(_.dir).map(workspace.resolve(_).normalize)
 
     /** The revisions at which the manifest of `workspace` pins the packages it clones, by their
       * names.
       */
-    def pinned(workspace: Path): Map[String, String] =
-        packages(workspace).collect { case Package(name, Some(revision), _) =>
-            name -> revision
-        }.toMap
+    def pinned(workspace: Path): Map[String, String] = LeanWorkspace.pinned(workspace)
 
     /** The Lean that `workspace` pins. */
-    def toolchain(workspace: Path): String =
-        Files.readString(workspace.resolve("lean-toolchain")).trim
+    def toolchain(workspace: Path): String = LeanWorkspace.toolchain(workspace)
 }

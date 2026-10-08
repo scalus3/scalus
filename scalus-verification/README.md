@@ -287,6 +287,37 @@ the built library. A suite starts one Lean server for its checks, in its workspa
 it after its last test. Without them those tests are canceled, as in ci-jvm. With the
 `SCALUS_REQUIRE_LEAN` environment variable set, as in the Lean-Proofs workflow, they fail instead.
 
+### Kept results
+
+`PreludeProofsTest` and `VestingVerificationTest` keep the results of their statements, each in
+a file beside its source, `<Suite>.proofs.json`, which is committed. An entry has the hashes of
+what the result rests on: the statement as Lean is given it, the program of each test, and
+Lean's side. See the [overview](../docs/design/verification-overview.md#56-kept-results).
+
+- **With Lean**, a statement whose entry still agrees is not asked of Lean again: a kept proof
+  is taken as it is, and a kept refutation is replayed on the Scalus CEK. A statement that
+  changed is proved again, and its entry replaced. Commit the file with the change.
+- **Without Lean**, as in ci-jvm, the same statements pass on what is kept. One whose entry no
+  longer agrees is stale: its test is canceled, and the reason names the part that moved.
+- **With `SCALUS_REQUIRE_LEAN`**, as in the Lean-Proofs workflow, every statement is asked of
+  Lean whatever is kept, and a result that differs from the kept one fails.
+
+`SCALUS_KEPT_RESULTS` says which of these a run is: `use`, `frozen`, `recalculate`, or `off` for
+a run that keeps and takes nothing. After a change of the tactic that no fingerprint shows, run
+with `recalculate`.
+
+```scala
+// Another suite keeps its results by naming the file.
+override protected def keptResultsFile: Option[Path] = Some(
+  LeanProofs.inSources("my-module", "src", "test", "scala", "my", "pkg").resolve("MyTest.proofs.json")
+)
+
+// Outside the tests: a verifier that keeps its results.
+val verifier = Verifier.keeping(KeptResults.in(file, KeptResults.Mode.Use))
+```
+
+### The workspace of a suite
+
 A suite's workspace is `leanWorkspace` of `LeanProofs`. Unless the suite overrides it, it is the
 workspace of the library, `src/main/lean` in these sources, or the directory
 `SCALUS_LEAN_WORKSPACE` names. `VestingVerificationTest` overrides it with a workspace of the
