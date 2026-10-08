@@ -7,7 +7,7 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
-import scalus.cardano.txbuilder.{ScriptSource, TwoArgumentPlutusScriptWitness, TxBuilder}
+import scalus.cardano.txbuilder.{ScriptSource, TransactionSigner, TwoArgumentPlutusScriptWitness, TxBuilder}
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
 import scalus.utils.await
@@ -301,6 +301,48 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(!emulator.certState.dstate.accounts.contains(alwaysOkStake.credential))
         val aliceAda = emulator.utxos.values.filter(_.address == alice).map(_.value.coin)
         assert(aliceAda.foldLeft(Coin.zero)(_ + _) == Coin.ada(5007) + deposit - tx.body.value.fee)
+    }
+
+    /** Submits a tx built by `build` from `emulator`'s UTxOs, paid and signed by Alice with her
+      * payment and stake keys.
+      */
+    private def submitBuilt(emulator: Emulator)(build: TxBuilder => TxBuilder) = {
+        val signer = new TransactionSigner(
+          Set(Alice.account.paymentKeyPair, Alice.account.stakeKeyPair)
+        )
+        val tx = build(TxBuilder(testEnv))
+            .complete(emulator.utxos, Alice.address(Network.Mainnet))
+            .sign(signer)
+            .transaction
+        emulator.submitSync(tx)
+    }
+
+    test("deregisterStake with a script witness refunds the deposit registerStake paid") {
+        val emulator = Emulator(
+          Map(Input(genesisHash, 0) -> Output(Alice.address(Network.Mainnet), Value.ada(5000)))
+        )
+        val registered =
+            submitBuilt(emulator)(_.registerStake(alwaysOkStake.address, alwaysOkStake.witness))
+        assert(registered.isRight, registered)
+
+        val deregistered =
+            submitBuilt(emulator)(_.deregisterStake(alwaysOkStake.address, alwaysOkStake.witness))
+        assert(deregistered.isRight, deregistered)
+        assert(!emulator.certState.dstate.accounts.contains(alwaysOkStake.credential))
+    }
+
+    test("deregisterStake of a key refunds the deposit registerStake paid") {
+        val stakeAddress =
+            StakeAddress(Network.Mainnet, StakePayload.Stake(Alice.account.stakeKeyHash))
+        val emulator = Emulator(
+          Map(Input(genesisHash, 0) -> Output(Alice.address(Network.Mainnet), Value.ada(5000)))
+        )
+        val registered = submitBuilt(emulator)(_.registerStake(stakeAddress))
+        assert(registered.isRight, registered)
+
+        val deregistered = submitBuilt(emulator)(_.deregisterStake(stakeAddress))
+        assert(deregistered.isRight, deregistered)
+        assert(!emulator.certState.dstate.accounts.contains(stakeAddress.credential))
     }
 
     test("a phase-2-invalid tx with an invalid certificate is accepted and takes only collateral") {

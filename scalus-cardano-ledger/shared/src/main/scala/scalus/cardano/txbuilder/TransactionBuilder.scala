@@ -1017,8 +1017,9 @@ object TransactionBuilder {
         // CertState from the amounts declared on the transaction's own deregistration
         // certificates. The ledger enforces these declared amounts equal the actual deposits
         // (GOVCERT `ConwayDRepIncorrectRefund`), so this yields exactly the refund a node
-        // computes. Stake-key refunds don't need this: `UnregCert` carries its refund explicitly
-        // and `TxBalance` already uses it.
+        // computes. Stake-key refunds don't need this when `UnregCert` carries its refund, which
+        // `TxBalance` uses. A legacy `UnregCert(cred, None)` balances with no refund, so the
+        // `TxBuilder.deregisterStake` overloads always state one.
         val consumed = TxBalance.consumed(tx, certStateForBalancing(tx), utxo, params).toTry.get
         consumed - produced
     }

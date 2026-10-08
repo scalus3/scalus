@@ -949,13 +949,12 @@ case class TxBuilder(
 
     /** Deregisters a stake key from the network.
       *
-      * The refund amount is taken from protocol parameters (stakeAddressDeposit).
+      * The refund amount is taken from protocol parameters (stakeAddressDeposit), the deposit that
+      * [[registerStake]] pays. If the account paid another deposit, use the overload with an
+      * explicit refund.
       */
-    def deregisterStake(stakeAddress: StakeAddress): TxBuilder = {
-        val credential = stakeAddress.credential
-        val cert = Certificate.UnregCert(credential, None)
-        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
-    }
+    def deregisterStake(stakeAddress: StakeAddress): TxBuilder =
+        deregisterStake(stakeAddress, Coin(env.protocolParams.stakeAddressDeposit))
 
     /** Deregisters a stake key with an explicit refund amount.
       *
@@ -969,6 +968,10 @@ case class TxBuilder(
     }
 
     /** Deregisters a script-based stake key from the network.
+      *
+      * The refund amount is taken from protocol parameters (stakeAddressDeposit), the deposit that
+      * [[registerStake]] pays. If the account paid another deposit, use the overload with an
+      * explicit refund.
       *
       * Use the factory methods to create the witness:
       * {{{
@@ -990,7 +993,7 @@ case class TxBuilder(
       *   the script witness authorizing the deregistration
       */
     def deregisterStake(stakeAddress: StakeAddress, witness: ScriptWitness): TxBuilder =
-        deregisterStake(stakeAddress, None, witness)
+        deregisterStake(stakeAddress, Some(Coin(env.protocolParams.stakeAddressDeposit)), witness)
 
     /** Deregisters a script-based stake key from the network with explicit refund.
       *
