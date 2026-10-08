@@ -119,6 +119,25 @@ trait Tactic {
     def name: String
     def prepare(goal: Goal): Either[CompatibilityReport, Prepared]
     def run(prepared: Prepared): ExecutionResult
+
+    /** The hashes of everything a result for `prepared` rests on, part by part. Nothing where the
+      * results of the tactic are not kept ([[KeptResults]]). It is read without the backend.
+      */
+    def fingerprint(prepared: Prepared): Option[Fingerprint] = None
+
+    /** What is kept of `result`, where it is one that is kept: a proof or a refutation. */
+    def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] = None
+
+    /** The result that `kept` stands for, made without the backend. A refutation is replayed here,
+      * so it is no more than the tactic can check again. A proof is the word of the run that kept
+      * it. Nothing where `kept` no longer stands.
+      */
+    def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult] = None
+
+    /** [[run]], with what was kept of an earlier result for the same fingerprint, to start from: a
+      * budget that was found, for instance.
+      */
+    def run(prepared: Prepared, earlier: Kept): ExecutionResult = run(prepared)
 }
 
 /** One reason a tactic cannot prepare a goal in its input language. */
@@ -163,7 +182,7 @@ final class PreparedRun private[verify] (
   * identity when needed. Tactics decide whether artifacts and imported lemmas are compatible. The
   * verifier checks registration and explicit function calls.
   */
-final class Verifier private () {
+final class Verifier private (results: Option[KeptResults]) {
     private var functionTable: FunctionTable = FunctionTable.empty
     private var declarations: Map[String, Statement] = Map.empty
     private var proven: Map[String, Theorem] = Map.empty
@@ -437,8 +456,49 @@ final class Verifier private () {
         )
         val goal = Goal(statement, functionTable, proven.values.toList.sortBy(_.statement.name))
         tactic.prepare(goal).map { prepared =>
-            new PreparedRun(this, statement, tactic.name, () => tactic.run(prepared))
+            new PreparedRun(this, statement, tactic.name, () => run(tactic)(statement, prepared))
         }
+    }
+
+    /** Runs `tactic` on a prepared statement, with the results that are kept
+      * (docs/design/verification-overview.md §5.6): a result that was kept for the statement as it
+      * is now need not be asked of the backend again.
+      */
+    private def run(tactic: Tactic)(
+        statement: Statement,
+        prepared: tactic.Prepared
+    ): ExecutionResult = {
+        val name = statement.name
+        results.flatMap(kept => tactic.fingerprint(prepared).map(kept -> _)) match
+            case None => tactic.run(prepared)
+            case Some((kept, fingerprint)) =>
+                val earlier = kept.lookup(name, tactic.name, fingerprint)
+                def restored: Option[ExecutionResult] = earlier.flatMap(tactic.restore(prepared, _))
+                def asked: ExecutionResult =
+                    earlier.fold(tactic.run(prepared))(tactic.run(prepared, _))
+                def keeping(result: ExecutionResult): ExecutionResult = {
+                    tactic
+                        .keep(prepared, result)
+                        .foreach(kept.keep(name, tactic.name, fingerprint, _))
+                    result
+                }
+                kept.mode match
+                    case KeptResults.Mode.Use => restored.getOrElse(keeping(asked))
+                    case KeptResults.Mode.Frozen =>
+                        restored.getOrElse {
+                            val why = kept.stale(name, tactic.name, fingerprint)
+                            VerificationResult.Inconclusive(s"${KeptResults.stale}: $why")
+                        }
+                    case KeptResults.Mode.Recalculate =>
+                        val result = asked
+                        val now = tactic.keep(prepared, result).map(_.result)
+                        earlier.map(_.result) match
+                            case Some(before) if !now.contains(before) =>
+                                VerificationResult.Failed(
+                                  s"the result kept for $name is $before, and this run gives " +
+                                      Verifier.outcome(result)
+                                )
+                            case _ => keeping(result)
     }
 
     /** Runs an already compatible tactic and registers a successful theorem for later goals. */
@@ -478,5 +538,17 @@ final class Verifier private () {
 }
 
 object Verifier {
-    def empty: Verifier = new Verifier()
+    def empty: Verifier = new Verifier(None)
+
+    /** A verifier that keeps the results of its tactics in `results`, and uses those that are kept
+      * in the way `results` says (docs/design/verification-overview.md §5.6).
+      */
+    def keeping(results: KeptResults): Verifier = new Verifier(Some(results))
+
+    /** A result in a few words, for a reason. */
+    private def outcome(result: ExecutionResult): String = result match
+        case VerificationResult.Proven(_)            => "a proof"
+        case VerificationResult.Refuted(_)           => "a refutation"
+        case VerificationResult.Inconclusive(reason) => s"no result: $reason"
+        case VerificationResult.Failed(reason)       => s"a failure: $reason"
 }
