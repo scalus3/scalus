@@ -42,11 +42,25 @@ object TxBalance {
         Right(conwayConsumed)
     }
 
-    def produced(tx: Transaction, protocolParams: ProtocolParams): Value = {
+    /** The value `tx` produces, with a pool deposit for every pool registration, as no pool is
+      * registered. Use the overload with a [[CertState]] for a tx that may re-register a pool.
+      */
+    def produced(tx: Transaction, protocolParams: ProtocolParams): Value =
+        produced(tx, CertState.empty, protocolParams)
+
+    /** The value `tx` produces, as Haskell `conwayProducedValue`. A pool registration pays the pool
+      * deposit only for a pool not in `certState` and not registered earlier in the tx.
+      */
+    def produced(tx: Transaction, certState: CertState, protocolParams: ProtocolParams): Value = {
         val fee = producedFee(tx)
         val outputs = producedOutputs(tx)
         val burned = producedMint(tx)
-        val conwayTotalDepositsTxCerts = this.conwayTotalDepositsTxCerts(tx, protocolParams)
+        val conwayTotalDepositsTxCerts =
+            this.conwayTotalDepositsTxCerts(
+              tx,
+              certState.pstate.stakePools.contains,
+              protocolParams
+            )
         val proposalDeposits = producedProposalDeposits(tx)
         val donation = producedDonation(tx)
 
@@ -158,6 +172,7 @@ object TxBalance {
 
     private def conwayTotalDepositsTxCerts(
         tx: Transaction,
+        isRegisteredPool: PoolKeyHash => Boolean,
         protocolParams: ProtocolParams
     ): Coin = {
         // Calculate total deposits for Shelley-era certificates (stake pool and delegation)
@@ -165,6 +180,7 @@ object TxBalance {
 
         val shelleyTotalDepositsTxCerts: Coin = Certificate.shelleyTotalDeposits(
           protocolParams,
+          isRegisteredPool,
           certificates
         )
 

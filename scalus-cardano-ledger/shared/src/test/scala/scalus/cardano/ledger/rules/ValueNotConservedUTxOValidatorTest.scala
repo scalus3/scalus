@@ -733,4 +733,62 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
         assert(result.isRight)
     }
+
+    // ============ Pool Deposit Tests ============
+
+    private val poolOperator = AddrKeyHash.fromHex("1" * 56)
+    private val poolRegistration: Certificate.PoolRegistration = Certificate.PoolRegistration(
+      operator = poolOperator,
+      vrfKeyHash = VrfKeyHash.fromHex("a" * 64),
+      pledge = Coin.ada(100),
+      cost = Coin(defaultContext.env.params.minPoolCost),
+      margin = UnitInterval.one,
+      rewardAccount = arbitrary[RewardAccount].sample.get,
+      poolOwners = Set(poolOperator),
+      relays = IndexedSeq.empty,
+      poolMetadata = None
+    )
+    private val poolDeposit = defaultContext.env.params.stakePoolDeposit
+
+    /** A tx that spends 10 ADA, pays `deposit` lovelace, the 0.1 ADA fee, and the rest to an
+      * output, and carries `certificates`.
+      */
+    private def poolTx(deposit: Long, certificates: Certificate*): (State, Transaction) = {
+        val input = createInput()
+        val inputCoin = 10_000_000L + poolDeposit
+        val output = Output(createAddress(), Value(Coin(inputCoin - 100_000 - deposit)))
+        val tx = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq(Sized(output)),
+            fee = Coin(100_000),
+            certificates = TaggedOrderedStrictSet.from(certificates)
+          ),
+          witnessSet = TransactionWitnessSet.empty
+        )
+        (State(utxos = Map(input -> Output(createAddress(), Value(Coin(inputCoin))))), tx)
+    }
+
+    test("a new pool registration pays the pool deposit") {
+        val (state, tx) = poolTx(poolDeposit, poolRegistration)
+        assert(ValueNotConservedUTxOValidator.validate(defaultContext, state, tx).isRight)
+    }
+
+    test("a re-registration of a registered pool pays no deposit") {
+        val (state, tx) = poolTx(0, poolRegistration)
+        val registered = state.copy(certState =
+            CertState.empty.copy(pstate =
+                PoolsState(stakePools =
+                    Map(PoolKeyHash.fromByteString(poolOperator) -> poolRegistration)
+                )
+            )
+        )
+        assert(ValueNotConservedUTxOValidator.validate(defaultContext, registered, tx).isRight)
+    }
+
+    test("two registrations of one new pool in a tx pay one deposit") {
+        val (state, tx) =
+            poolTx(poolDeposit, poolRegistration, poolRegistration.copy(pledge = Coin.ada(200)))
+        assert(ValueNotConservedUTxOValidator.validate(defaultContext, state, tx).isRight)
+    }
 }

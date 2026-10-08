@@ -17,7 +17,7 @@ object ValueNotConservedUTxOValidator extends STS.Validator {
 
         for
             consumed <- TxBalance.consumed(tx, state.certState, state.utxos, params)
-            produced = TxBalance.produced(tx, params)
+            produced = TxBalance.produced(tx, state.certState, params)
             _ <-
                 if consumed == produced then success
                 else

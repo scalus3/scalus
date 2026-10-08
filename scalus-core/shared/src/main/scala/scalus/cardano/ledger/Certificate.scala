@@ -196,14 +196,36 @@ object Certificate {
       * @param certificates
       *   Certificates in the transaction
       * @return
-      *   Total deposit amount
+      *   Total deposit amount, with a pool deposit for every pool registration, as no pool is
+      *   registered
       */
     def shelleyTotalDeposits(
         params: ProtocolParams,
         certificates: Iterable[Certificate]
+    ): Coin = shelleyTotalDeposits(params, _ => false, certificates)
+
+    /** Calculate total deposits required for Shelley-era certificates (stake pool and delegation),
+      * as Haskell `shelleyTotalDepositsTxCerts`: a pool registration pays the pool deposit only if
+      * its pool is not registered and no earlier certificate of the tx registered it. A
+      * re-registration updates the pool's parameters and keeps its deposit.
+      *
+      * @param params
+      *   Protocol parameters containing deposit amounts
+      * @param isRegisteredPool
+      *   whether a pool is registered before the transaction
+      * @param certificates
+      *   Certificates in the transaction
+      * @return
+      *   Total deposit amount
+      */
+    def shelleyTotalDeposits(
+        params: ProtocolParams,
+        isRegisteredPool: PoolKeyHash => Boolean,
+        certificates: Iterable[Certificate]
     ): Coin = {
         val keyDeposit = params.stakeAddressDeposit
         val poolDeposit = params.stakePoolDeposit
+        val newPools = mutable.Set.empty[PoolKeyHash]
         var totalDeposits = 0L
 
         certificates.foreach {
@@ -222,9 +244,9 @@ object Certificate {
             case Certificate.StakeVoteRegDelegCert(_, _, _, deposit) =>
                 // Registration, pool delegation and vote delegation with deposit
                 totalDeposits += deposit.value
-            case Certificate.PoolRegistration(_, _, _, _, _, _, _, _, _) =>
-                // Pool registration
-                totalDeposits += poolDeposit
+            case registration: Certificate.PoolRegistration =>
+                val pool = PoolKeyHash.fromByteString(registration.operator)
+                if !isRegisteredPool(pool) && newPools.add(pool) then totalDeposits += poolDeposit
             case _ => // Other certificates don't require deposits
         }
         Coin(totalDeposits)
