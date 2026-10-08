@@ -62,14 +62,15 @@ class CardanoBuiltins(
     ) =
         BuiltinRuntime(t, f, ArraySeq.empty, costFunction)
 
-    private val costStringsByByteLength =
+    /** Whether this is a van Rossem (PV11) variant, D or E. Plutus calls this `ensurable`. */
+    private val ensurable =
         semanticVariant == BuiltinSemanticsVariant.D || semanticVariant == BuiltinSemanticsVariant.E
 
     private def stringCostingFun[M <: CostModel](
         costFunction: DefaultCostingFun[M],
         argIndices: Int*
     ): CostingFun =
-        if costStringsByByteLength then StringByByteLengthCostingFun(costFunction, argIndices*)
+        if ensurable then StringByByteLengthCostingFun(costFunction, argIndices*)
         else costFunction
 
     /** Van Rossem (PV11) variants D/E unlift the shiftByteString/rotateByteString amount as a
@@ -78,13 +79,11 @@ class CardanoBuiltins(
       * all-zeroes; a rotation is reduced modulo the bit length). Matches Plutus `ensurable`-gated
       * `ShiftByteString`/`RotateByteString` denotations.
       */
-    private val enforcesInt64ShiftAmount =
-        semanticVariant == BuiltinSemanticsVariant.D || semanticVariant == BuiltinSemanticsVariant.E
     private val Int64Min = BigInt(Long.MinValue)
     private val Int64Max = BigInt(Long.MaxValue)
 
     private def requireInt64ShiftAmount(name: String, amount: BigInt): BigInt =
-        if enforcesInt64ShiftAmount && (amount < Int64Min || amount > Int64Max) then
+        if ensurable && (amount < Int64Min || amount > Int64Max) then
             throw new BuiltinException(s"$name: shift amount out of Int64 range: $amount")
         else amount
 
@@ -96,6 +95,14 @@ class CardanoBuiltins(
     private def requireMsmScalarsInBounds(group: String, scalars: collection.Seq[BigInt]): Unit =
         if scalars.exists(s => s < MsmScalarLb || s > MsmScalarUb) then
             throw new BuiltinException(s"Scalar exceeds 512-byte bound for $group.multiScalarMul")
+
+    /** Van Rossem (PV11) variants D/E apply the same 512-byte bound to
+      * `bls12_381_G{1,2}_scalarMul`. Variants A/B/C accept any scalar. Matches Plutus
+      * `ensurable`-gated `scalarMulE`.
+      */
+    private def requireScalarMulScalarInBounds(group: String, scalar: BigInt): Unit =
+        if ensurable && (scalar < MsmScalarLb || scalar > MsmScalarUb) then
+            throw new BuiltinException(s"Scalar exceeds 512-byte bound for $group.scalarMul")
 
     import TypeScheme.*
 
@@ -817,6 +824,7 @@ class CardanoBuiltins(
               case VCon(Constant.BLS12_381_G1_Element(p)) => p
               case _ => throw new KnownTypeUnliftingError(DefaultUni.BLS12_381_G1_Element, args(1))
           }
+          requireScalarMulScalarInBounds("G1", aa)
           VCon(Constant.BLS12_381_G1_Element(platformSpecific.bls12_381_G1_scalarMul(aa, bb)))
       ,
       builtinCostModel.bls12_381_G1_scalarMul
@@ -905,6 +913,7 @@ class CardanoBuiltins(
               case VCon(Constant.BLS12_381_G2_Element(p)) => p
               case _ => throw new KnownTypeUnliftingError(DefaultUni.BLS12_381_G2_Element, args(1))
           }
+          requireScalarMulScalarInBounds("G2", aa)
           VCon(Constant.BLS12_381_G2_Element(platformSpecific.bls12_381_G2_scalarMul(aa, bb)))
       ,
       builtinCostModel.bls12_381_G2_scalarMul
