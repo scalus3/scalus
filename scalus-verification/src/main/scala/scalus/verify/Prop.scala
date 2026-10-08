@@ -1,6 +1,7 @@
 package scalus.verify
 
 import scalus.compiler.sir.{SIR, SIRType}
+import scalus.compiler.sir.linking.Wrappers
 import scala.language.implicitConversions
 
 enum PropExpr[A] {
@@ -442,22 +443,15 @@ object Props {
                           s"$kind requires a monomorphic SIR lambda of $arity parameters: $other"
                         )
 
-        // Definitions and data declarations around the lambda, innermost first.
-        @annotation.tailrec
-        def loop(current: SIR, wrappers: List[SIR => SIR]): (List[SIR.Var], SIR) = current match
+        val (wrappers, root) = Wrappers.of(sir)
+        root match
             case lambda: SIR.LamAbs =>
                 val (params, term) = parameters(lambda, arity)
-                params -> wrappers.foldLeft(term)((body, wrap) => wrap(body))
-            case SIR.Let(bindings, body, flags, anns) =>
-                loop(body, (inner => SIR.Let(bindings, inner, flags, anns)) :: wrappers)
-            case SIR.Decl(data, body) =>
-                loop(body, (inner => SIR.Decl(data, inner)) :: wrappers)
+                params -> wrappers(term)
             case other =>
                 throw new IllegalArgumentException(
                   s"$kind requires a monomorphic SIR lambda: $other"
                 )
-
-        loop(sir, Nil)
     }
 
     inline def denotes[A](inline e: A): Prop = ${ PropMacro.denotes('e) }
