@@ -94,91 +94,95 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
         dataDecls
     }
 
-    private def traverseAndLink(sir: SIR, pos: SIRPosition): SIR = sir match
-        case SIR.Decl(data, term) =>
-            SIR.Decl(data, traverseAndLink(term, pos))
-        case ans: AnnotatedSIR =>
-            traverseAndLinkExpr(ans, pos)
+    /** Links the definitions `sir` refers to, each on the first reference to it, and takes the data
+      * declarations of the constructors `sir` applies. It returns `sir` as it is in the linked
+      * program: with the universal data conversions, where the options ask for them.
+      */
+    private def traverseAndLink(sir: SIR, pos: SIRPosition): SIR = {
+        val converted =
+            if options.useUniversalDataConversion then convertUniversalData(sir) else sir
+        // The order in which this meets references is the order in which definitions finish
+        // linking, which decides how they are nested (see `SIRLinker.nest`).
+        SIRLinker.foreachLinked(converted) {
+            case SIR.ExternalVar(moduleName, name, tp, ann) if !globalDefs.contains(name) =>
+                if moduleName == "scalus.uplc.builtin.internal.UniversalDataConversion$" then
+                    if name != "scalus.uplc.builtin.internal.UniversalDataConversion$.fromData" &&
+                        name != "scalus.uplc.builtin.internal.UniversalDataConversion$.toData"
+                    then
+                        val msg =
+                            s"Unknown external variable in universal data conversion module: ${name}"
+                        error(msg, ann.pos, ())
+                    // For fromData/toData, we allow them as ExternalVar here
+                    // They will be handled during UPLC lowering in Apply position
+                else if isPairListConversion(name) then ()
+                // PairList.toList and PairList.toPairList are always noops in UPLC lowering.
+                // Skip linking to avoid dead-code let-bindings and their transitive dependencies.
+                else linkDefinition(moduleName, name, pos, tp, ann)
+            case SIR.Constr(_, data, _, _, _) => globalDataDecls.update(data.name, data)
+            case _                            => ()
+        }
+        converted
+    }
 
-    // The order in which this meets references is the order in which definitions finish linking,
-    // which decides how they are nested (see `SIRLinker.nest`). `EraseSpecifications` repeats the
-    // walk over a linked program; `SpecTest` checks that the two agree.
-    private def traverseAndLinkExpr(sir: AnnotatedSIR, pos: SIRPosition): AnnotatedSIR = sir match
-        case v @ SIR.ExternalVar(moduleName, name, tp, ann) if !globalDefs.contains(name) =>
-            if moduleName == "scalus.uplc.builtin.internal.UniversalDataConversion$" then
-                if name != "scalus.uplc.builtin.internal.UniversalDataConversion$.fromData" &&
-                    name != "scalus.uplc.builtin.internal.UniversalDataConversion$.toData"
-                then
-                    val msg =
-                        s"Unknown external variable in universal data conversion module: ${name}"
-                    error(msg, ann.pos, v)
-                // For fromData/toData, we allow them as ExternalVar here
-                // They will be handled during UPLC lowering in Apply position
-            else if isPairListConversion(name) then ()
-            // PairList.toList and PairList.toPairList are always noops in UPLC lowering.
-            // Skip linking to avoid dead-code let-bindings and their transitive dependencies.
-            else linkDefinition(moduleName, name, pos, tp, ann)
-            v
-        case v @ SIR.Let(bindings, body, flags, anns) =>
-            val nBingings =
-                bindings.map(b => Binding(b.name, b.tp, traverseAndLink(b.value, pos)))
-            val nBody = traverseAndLink(body, pos)
-            SIR.Let(nBingings, nBody, flags, anns)
+    /** `sir` with the function of every application marked `fromData` or `toData` replaced by the
+      * universal conversion, which the lowering resolves where it is applied. What the conversion
+      * replaces is dropped, so nothing it refers to is linked. An error's message is left as it is:
+      * linking does not look into it.
+      */
+    private def convertUniversalData(sir: SIR): SIR = sir match
+        case SIR.Decl(data, term) => SIR.Decl(data, convertUniversalData(term))
+        case ans: AnnotatedSIR    => convertUniversalDataExpr(ans)
+
+    private def convertUniversalDataExpr(sir: AnnotatedSIR): AnnotatedSIR = sir match
+        case SIR.Let(bindings, body, flags, anns) =>
+            val nBindings =
+                bindings.map(b => Binding(b.name, b.tp, convertUniversalData(b.value)))
+            SIR.Let(nBindings, convertUniversalData(body), flags, anns)
         case SIR.LamAbs(param, term, typeParams, anns) =>
-            SIR.LamAbs(param, traverseAndLink(term, pos), typeParams, anns)
+            SIR.LamAbs(param, convertUniversalData(term), typeParams, anns)
         case SIR.Apply(f, arg, tp, anns) =>
-            val fReplaced =
-                if options.useUniversalDataConversion then
-                    anns.data.get("fromData") match
-                        case Some(v) =>
-                            SIR.ExternalVar(
-                              "scalus.uplc.builtin.internal.UniversalDataConversion$",
-                              "scalus.uplc.builtin.internal.UniversalDataConversion$.fromData",
-                              SIRType.Fun(SIRType.Data.tp, tp),
-                              AnnotationsDecl.empty.copy(pos = f.anns.pos)
-                            )
-                        case None =>
-                            anns.data.get("toData") match
-                                case Some(v) =>
-                                    SIR.ExternalVar(
-                                      "scalus.uplc.builtin.internal.UniversalDataConversion$",
-                                      "scalus.uplc.builtin.internal.UniversalDataConversion$.toData",
-                                      SIRType.Fun(arg.tp, SIRType.Data.tp),
-                                      AnnotationsDecl.empty.copy(pos = f.anns.pos)
-                                    )
-                                case None => f
-                else f
-            val nF = traverseAndLinkExpr(fReplaced, pos)
-            val nArg = traverseAndLinkExpr(arg, pos)
-            SIR.Apply(nF, nArg, tp, anns)
+            val nF =
+                anns.data.get("fromData") match
+                    case Some(_) =>
+                        SIR.ExternalVar(
+                          "scalus.uplc.builtin.internal.UniversalDataConversion$",
+                          "scalus.uplc.builtin.internal.UniversalDataConversion$.fromData",
+                          SIRType.Fun(SIRType.Data.tp, tp),
+                          AnnotationsDecl.empty.copy(pos = f.anns.pos)
+                        )
+                    case None =>
+                        anns.data.get("toData") match
+                            case Some(_) =>
+                                SIR.ExternalVar(
+                                  "scalus.uplc.builtin.internal.UniversalDataConversion$",
+                                  "scalus.uplc.builtin.internal.UniversalDataConversion$.toData",
+                                  SIRType.Fun(arg.tp, SIRType.Data.tp),
+                                  AnnotationsDecl.empty.copy(pos = f.anns.pos)
+                                )
+                            case None => convertUniversalDataExpr(f)
+            SIR.Apply(nF, convertUniversalDataExpr(arg), tp, anns)
         case SIR.And(lhs, rhs, anns) =>
-            val nLhs = traverseAndLinkExpr(lhs, pos)
-            val nRhs = traverseAndLinkExpr(rhs, pos)
-            SIR.And(nLhs, nRhs, anns)
+            SIR.And(convertUniversalDataExpr(lhs), convertUniversalDataExpr(rhs), anns)
         case SIR.Or(lhs, rhs, anns) =>
-            val nLhs = traverseAndLinkExpr(lhs, pos)
-            val nRhs = traverseAndLinkExpr(rhs, pos)
-            SIR.Or(nLhs, nRhs, anns)
-        case SIR.Not(term, anns) => SIR.Not(traverseAndLinkExpr(term, pos), anns)
+            SIR.Or(convertUniversalDataExpr(lhs), convertUniversalDataExpr(rhs), anns)
+        case SIR.Not(term, anns) => SIR.Not(convertUniversalDataExpr(term), anns)
         case SIR.IfThenElse(cond, t, f, tp, anns) =>
-            val nCond = traverseAndLinkExpr(cond, pos)
-            val nT = traverseAndLinkExpr(t, pos)
-            val nR = traverseAndLinkExpr(f, pos)
-            SIR.IfThenElse(nCond, nT, nR, tp, anns)
+            SIR.IfThenElse(
+              convertUniversalDataExpr(cond),
+              convertUniversalDataExpr(t),
+              convertUniversalDataExpr(f),
+              tp,
+              anns
+            )
         case SIR.Constr(name, data, args, tp, anns) =>
-            globalDataDecls.put(data.name, data)
-            val nArgs = args.map(a => traverseAndLink(a, pos))
-            SIR.Constr(name, data, nArgs, tp, anns)
+            SIR.Constr(name, data, args.map(convertUniversalData), tp, anns)
         case SIR.Match(scrutinee, cases, rhsType, anns) =>
-            val nScrutinee = traverseAndLinkExpr(scrutinee, pos)
-            val nCases =
-                cases.map(c => SIR.Case(c.pattern, traverseAndLink(c.body, pos), c.anns))
-            SIR.Match(nScrutinee, nCases, rhsType, anns)
+            val nCases = cases.map(c => SIR.Case(c.pattern, convertUniversalData(c.body), c.anns))
+            SIR.Match(convertUniversalDataExpr(scrutinee), nCases, rhsType, anns)
         case SIR.Select(scrutinee, field, tp, anns) =>
-            val nScrutinee = traverseAndLink(scrutinee, pos)
-            SIR.Select(nScrutinee, field, tp, anns)
+            SIR.Select(convertUniversalData(scrutinee), field, tp, anns)
         case SIR.Cast(term, tp, anns) =>
-            SIR.Cast(traverseAndLinkExpr(term, pos), tp, anns)
+            SIR.Cast(convertUniversalDataExpr(term), tp, anns)
         case other => other
 
     private def findAndLinkDefinition(
@@ -423,28 +427,55 @@ object SIRLinker {
         }
     }
 
+    /** Whether a binding is a definition linking put around a program: its name is a qualified one,
+      * which a local value's never is.
+      */
+    def isDefinition(binding: Binding): Boolean = binding.name.contains('.')
+
+    /** Visits what linking looks into of `sir`, each node before the ones under it, in the order
+      * linking meets them. An error's message is not looked into.
+      *
+      * The order in which this meets references is the order in which definitions finish linking.
+      * [[scalus.compiler.sir.transform.EraseSpecifications]] walks a linked program with it, to
+      * nest the definitions again in the order the code gives without its specification.
+      */
+    private[sir] def foreachLinked(sir: SIR)(visit: AnnotatedSIR => Unit): Unit = {
+        def go(current: SIR): Unit = current match
+            case SIR.Decl(_, term) => go(term)
+            case node: AnnotatedSIR =>
+                visit(node)
+                node match
+                    case SIR.Let(bindings, body, _, _) =>
+                        bindings.foreach(b => go(b.value))
+                        go(body)
+                    case SIR.LamAbs(_, term, _, _)     => go(term)
+                    case SIR.Apply(f, arg, _, _)       => go(f); go(arg)
+                    case SIR.And(a, b, _)              => go(a); go(b)
+                    case SIR.Or(a, b, _)               => go(a); go(b)
+                    case SIR.Not(a, _)                 => go(a)
+                    case SIR.IfThenElse(c, t, f, _, _) => go(c); go(t); go(f)
+                    case SIR.Constr(_, _, args, _, _)  => args.foreach(go)
+                    case SIR.Match(scrutinee, cases, _, _) =>
+                        go(scrutinee)
+                        cases.foreach(c => go(c.body))
+                    case SIR.Select(scrutinee, _, _, _) => go(scrutinee)
+                    case SIR.Cast(term, _, _)           => go(term)
+                    case _: SIR.Var | _: SIR.ExternalVar | _: SIR.Const | _: SIR.Builtin |
+                        _: SIR.Error =>
+                        ()
+        go(sir)
+    }
+
     /** Names of global defs referenced from `sir` (syntactic, no shadow tracking: global names are
       * dot-qualified full names that locals never collide with).
       */
     private def collectGlobalRefs(sir: SIR, keys: Set[String]): Set[String] = {
         val acc = mutable.Set.empty[String]
-        def go(s: SIR): Unit = s match
-            case SIR.Decl(_, term)                 => go(term)
-            case SIR.Var(name, _, _)               => if keys.contains(name) then acc += name
-            case SIR.ExternalVar(_, name, _, _)    => if keys.contains(name) then acc += name
-            case SIR.Let(bindings, body, _, _)     => bindings.foreach(b => go(b.value)); go(body)
-            case SIR.LamAbs(_, term, _, _)         => go(term)
-            case SIR.Apply(f, arg, _, _)           => go(f); go(arg)
-            case SIR.Select(s1, _, _, _)           => go(s1)
-            case SIR.IfThenElse(c, t, f, _, _)     => go(c); go(t); go(f)
-            case SIR.And(a, b, _)                  => go(a); go(b)
-            case SIR.Or(a, b, _)                   => go(a); go(b)
-            case SIR.Not(a, _)                     => go(a)
-            case SIR.Match(scrutinee, cases, _, _) => go(scrutinee); cases.foreach(c => go(c.body))
-            case SIR.Constr(_, _, args, _, _)      => args.foreach(go)
-            case SIR.Cast(expr, _, _)              => go(expr)
-            case _: SIR.Builtin | _: SIR.Error | _: SIR.Const => ()
-        go(sir)
+        foreachLinked(sir) {
+            case SIR.Var(name, _, _)            => if keys.contains(name) then acc += name
+            case SIR.ExternalVar(_, name, _, _) => if keys.contains(name) then acc += name
+            case _                              => ()
+        }
         acc.toSet
     }
 

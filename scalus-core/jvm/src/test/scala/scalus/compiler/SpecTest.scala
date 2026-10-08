@@ -157,8 +157,9 @@ class SpecTest extends AnyFunSuite {
     }
 
     test("a program without clauses is nested again as the linker nested it") {
-        // The erasure repeats the linker's walk, to nest definitions in the order of the code.
-        // Were the two walks to differ, a specified script's bytes would follow its clauses.
+        // The erasure walks a linked program as the linker walked its code, and nests what the
+        // walk reaches by the linker's rule. Were that to give another nesting than linking gave,
+        // a specified script's bytes would follow its clauses.
         val programs = List(
           "clamp" -> compile(SpecExamples.clamp),
           "combined" -> compile(SpecExamples.combined),

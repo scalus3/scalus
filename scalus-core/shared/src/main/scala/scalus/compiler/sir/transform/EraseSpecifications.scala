@@ -1,7 +1,7 @@
 package scalus.compiler.sir.transform
 
 import scalus.compiler.sir.{AnnotatedSIR, Binding, RemoveRecursivity, SIR, SIRPosition, SIRType}
-import scalus.compiler.sir.linking.SIRLinker
+import scalus.compiler.sir.linking.{SIRLinker, Wrappers}
 import scalus.uplc.Constant
 
 import scala.collection.mutable
@@ -44,23 +44,22 @@ object EraseSpecifications {
       * Linking nests the definitions a program uses in the order it first meets them, and a clause
       * at the head of a function meets the functions it names before the code does. With the
       * clauses gone, the order has to be the one the code alone gives, or the script's bytes would
-      * depend on its specification. So the walk of [[SIRLinker]] is repeated here, over the program
-      * as it is now, and the definitions it reaches are nested by the linker's own rule. A
-      * definition it does not reach was used by a clause only, and is left out.
+      * depend on its specification. So the program as it is now is walked as [[SIRLinker]] walks
+      * one, and the definitions the walk reaches are nested by the linker's own rule. A definition
+      * it does not reach was used by a clause only, and is left out.
       *
       * A program applied to its parameters, as `PlutusV3.apply` leaves a parameterized script, has
       * its definitions inside the application, around the function. They are nested again there.
       *
-      * A program without clauses comes out as it is: that is how `SpecTest` checks that the walk
-      * here and the linker's agree.
+      * A program without clauses comes out as it is, which `SpecTest` checks.
       */
     private[compiler] def reordered(sir: SIR): SIR = sir match
         case SIR.Decl(data, term) => SIR.Decl(data, reordered(term))
         case SIR.Apply(f, arg, tp, anns) =>
             SIR.Apply(undeclared(reordered(f)), undeclared(reordered(arg)), tp, anns)
-        case SIR.Let(bindings, _, _, anns) if bindings.forall(isDefinition) =>
-            val (definitions, root) = definitionsAround(sir)
-            nested(definitions, root, anns.pos)
+        case SIR.Let(bindings, _, _, anns) if bindings.forall(SIRLinker.isDefinition) =>
+            val (definitions, root) = Wrappers.definitions(sir)
+            nested(definitions.bindings, root, anns.pos)
         case other => other
 
     /** The ones among `definitions` that `root` reaches, around it, in the linker's order and by
@@ -69,32 +68,15 @@ object EraseSpecifications {
     private def nested(definitions: List[Binding], root: SIR, pos: SIRPosition): SIR = {
         val byName = definitions.map(binding => binding.name -> binding).toMap
         // The order in which the linker finishes each definition: after everything its own code
-        // refers to, walking references in the order of the code, as `traverseAndLinkExpr` does.
+        // refers to, on the walk the linker makes of the code.
         val started = mutable.Set.empty[String]
         val finished = mutable.ListBuffer.empty[Binding]
-        def walk(code: SIR): Unit = code match {
-            case SIR.Decl(_, term) => walk(term)
+        def walk(code: SIR): Unit = SIRLinker.foreachLinked(code) {
             case SIR.ExternalVar(_, name, _, _) =>
                 for definition <- byName.get(name) if started.add(name) do
                     walk(definition.value)
                     finished += definition
-            case SIR.Let(bindings, body, _, _) =>
-                bindings.foreach(binding => walk(binding.value))
-                walk(body)
-            case SIR.LamAbs(_, term, _, _)        => walk(term)
-            case SIR.Apply(f, arg, _, _)          => walk(f); walk(arg)
-            case SIR.And(a, b, _)                 => walk(a); walk(b)
-            case SIR.Or(a, b, _)                  => walk(a); walk(b)
-            case SIR.Not(a, _)                    => walk(a)
-            case SIR.IfThenElse(cond, t, f, _, _) => walk(cond); walk(t); walk(f)
-            case SIR.Constr(_, _, args, _, _)     => args.foreach(walk)
-            case SIR.Match(scrutinee, cases, _, _) =>
-                walk(scrutinee)
-                cases.foreach(caze => walk(caze.body))
-            case SIR.Select(scrutinee, _, _, _) => walk(scrutinee)
-            case SIR.Cast(term, _, _)           => walk(term)
-            // The linker does not look into the others, an error's message included.
-            case _: SIR.Var | _: SIR.Const | _: SIR.Builtin | _: SIR.Error => ()
+            case _ => ()
         }
         walk(root)
         val linked = finished.toList.map(binding =>
@@ -117,18 +99,6 @@ object EraseSpecifications {
         case annotated: AnnotatedSIR => annotated
         case SIR.Decl(data, _) =>
             throw new IllegalStateException(s"the declaration of ${data.name} is in an application")
-
-    /** A definition that linking put around a program: its name is a qualified one, which a local
-      * value's never is.
-      */
-    private def isDefinition(binding: Binding): Boolean = binding.name.contains('.')
-
-    /** The definitions in the `let`s around a program, outermost first, and the program. */
-    private def definitionsAround(sir: SIR): (List[Binding], SIR) = sir match
-        case SIR.Let(bindings, body, _, _) if bindings.forall(isDefinition) =>
-            val (inner, root) = definitionsAround(body)
-            (bindings ++ inner) -> root
-        case root => Nil -> root
 
     /** `Spec.expects(condition)` or `Spec.ensures(condition)`: a clause written as a statement, one
       * application of its function.
