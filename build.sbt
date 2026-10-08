@@ -499,6 +499,72 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[ReversedMissingMethodProblem](
           "scalus.cardano.ledger.PlutusScript.scalus$cardano$ledger$PlutusScript$$_cachedDeBruijned_="
         ),
+        // 1.4, spec [SC-13b]: `DatumOption.Inline` keeps the datum bytes as a `KeepRaw[Data]`, so
+        // `DatumOption` is a sealed trait instead of an enum (an enum case cannot define its own
+        // `apply` and `unapply`) and `Inline` is a case class over the bytes. Source compatible:
+        // `Inline(data)`, `Hash(hash)` and `case Inline(d)` with `d: Data` still compile, and both
+        // factories stay typed as `DatumOption`, as the enum cases were. Binary incompatible.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DatumOption#Hash.ordinal"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DatumOption#Inline.copy"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DatumOption#Inline.copy$default$1"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DatumOption#Inline.ordinal"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DatumOption.fromOrdinal"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DatumOption.ordinal"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.DatumOption#Inline.this"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.DatumOption#Hash.apply"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.DatumOption#Inline._1"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.DatumOption#Inline.apply"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.DatumOption#Inline.unapply"
+        ),
+        ProblemFilters.exclude[IncompatibleTemplateDefProblem]("scalus.cardano.ledger.DatumOption"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.DatumOption$"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.DatumOption$Hash"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.DatumOption$Inline"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.DatumOption$Inline$"),
+        // 1.4: `Script.Native` keeps the timelock bytes as a `KeepRaw[Timelock]` for its hash, size
+        // and encoding, so its constructor is private and `copy` is gone. `Native(timelock)`,
+        // `case Native(t)` with `t: Timelock` and `native.script` still compile. `Script`'s decoder
+        // needs the `OriginalCborByteArray`, so `Codec[Script]` splits into an encoder and a
+        // decoder; `Script.fromCbor` decodes standalone bytes. Binary incompatible.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.Script.given_Codec_Script"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.Script#Native.copy"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.Script#Native.copy$default$1"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.Script#Native.this"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.Script#Native._1"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.Script#Native.unapply"
+        ),
         // Compiler-internal packages: no supported external implementors or instantiators;
         // excluded from the binary-compat promise (README: "compiler internals carry no
         // compatibility promise"; interop style guide: SIR compiler out of scope). Everything
@@ -635,7 +701,11 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleCurveParams"),
         ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleEd25519Math"),
         ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleEd25519Math$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleEd25519Ops")
+        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleEd25519Ops"),
+        // 1.4, spec [SC-11b]: the `PlainUtxo` facade gained `script`, the reference script as
+        // `{ type, script }`. Only a Scala class implementing this JS-only trait would notice.
+        ProblemFilters
+            .exclude[ReversedMissingMethodProblem]("scalus.cardano.ledger.JsPlainUtxo.script")
       )
     )
     .nativeSettings(
@@ -1056,6 +1126,115 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.this"
         ),
+        // 1.4, spec [SC-15], [SC-17]: `DelegationState` stores one `ConwayAccountState` per account
+        // instead of 4 maps. The old maps stay as deprecated views, and a deprecated constructor and
+        // `apply` take them, so only the constructor defaults, `copy` and the product accessors
+        // break. The deprecated `apply` has its own defaults, `apply$default$N`.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.<init>$default$1"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.<init>$default$2"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.<init>$default$3"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.<init>$default$4"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState._2"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState._3"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState._4"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.copy"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.copy$default$2"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.copy$default$3"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.copy$default$4"
+        ),
+        // 1.4, spec [SC-6]: `UtxoEnv` carries `treasury`. A deprecated 4-argument constructor and
+        // `apply` keep the old form; `copy` breaks.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.rules.UtxoEnv.copy"
+        ),
+        // 1.4, spec [SC-4], [SC-5]: `StakeCertificatesException` reports the unregistered pools and
+        // DReps a tx delegates to, in 2 new fields. A deprecated 6-argument constructor and `apply`
+        // keep the old form; `copy` breaks.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.TransactionException#StakeCertificatesException.copy"
+        ),
+        // 1.4, spec [SC-3], [SC-4], [SC-15]: the `ValidationState` of `CertsValidator` and
+        // `StakeCertificatesValidator` reads the accounts, the pools and the DReps. Both are private
+        // case classes, so no caller outside this artifact can reach them; MiMa sees their bytecode.
+        // Per symbol: `scalus.cardano.ledger.rules` is a MIXED package.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.rules.CertsValidator#ValidationState.rewards"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.<init>$default$4"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.apply"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.onChainDeposits"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.rewardAccounts"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.this"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.<init>$default$5"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.<init>$default$8"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState._2"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState._3"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState._4"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState._5"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState._8"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$2"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$3"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$4"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$5"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$8"
+        ),
         // The streaming hub's internals churn while the provider implementations are built –
         // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: CLAUDE.md
         // reserves wildcards for wholly-internal packages, and a wildcard over the whole
@@ -1105,6 +1284,46 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // `JsUtxo.withScriptRef`, no JS call that linked before stops linking.
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "scalus.cardano.node.JEmulator.evaluateTx"
+        ),
+        // 1.4, spec [SC-7b], [SC-8], [SC-9], [SC-10b], [SC-12]: new optional fields of the JS
+        // option and result facades (`treasury`, `protocolParams`, `clock`, a pool registration by
+        // `poolId`, `rewardAddress`). `JPoolRegistration.params` became optional. A JS literal that
+        // linked before still links; only a Scala class implementing these traits would notice.
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.node.JPoolRegistration.params"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JPoolRegistration.params"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JPoolRegistration.poolId"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JPoolRegistration.scalus$cardano$node$JPoolRegistration$_setter_$params_="
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JPoolRegistration.scalus$cardano$node$JPoolRegistration$_setter_$poolId_="
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.clock"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.protocolParams"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$clock_="
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$protocolParams_="
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$treasury_="
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.treasury"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsStakeDistributionEntry.rewardAddress"
         )
       ),
       // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).
