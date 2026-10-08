@@ -37,6 +37,16 @@ private[verify] object Specifications {
         rest: SIR
     )
 
+    /** How many `Spec.expects` clauses of the body `term` are part of the contract [[read]] makes
+      * of it: those the body starts with, also inside what `ensuring` is applied to.
+      */
+    def expected(term: SIR, name: String): Int = {
+        val head = statements(term)
+        val (inner, ofResult) = ensuring(head.rest, name)
+        val within = if ofResult.isEmpty then Nil else statements(inner).expected
+        head.expected.size + within.size
+    }
+
     def read[A, R](function: FunctionDef[A, R]): Option[Contract[A, R]] = {
         val body = Obligations.body(function, function(Representation.Sir))
         val head = statements(body.term)

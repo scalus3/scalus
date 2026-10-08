@@ -332,6 +332,17 @@ final class Verifier private (results: Option[KeptResults]) {
                     unsupported += s"$where: its condition must be a function literal, as in " +
                         "body.ensuring(r => ...)"
         }
+        // A precondition is part of the contract where the body starts with it. One that is
+        // written after another statement is erased from the script like the rest, and is in no
+        // contract: no caller owes it, and nothing checks it where the script runs.
+        Obligations
+            .sites(body.term, Map(Obligations.Expects -> 1))
+            .drop(Specifications.expected(body.term, function.displayName))
+            .foreach { (site, _) =>
+                unsupported += s"the precondition of ${function.displayName} at line " +
+                    s"${Obligations.line(site)} is not at the start of the body: it is no part " +
+                    "of the contract, and nothing checks it in the script"
+            }
         val each = statements.result()
         val together = each match
             case Nil        => None

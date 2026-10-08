@@ -228,6 +228,9 @@ private[verify] object Obligations {
 
     val truth: SIR = isTrue
 
+    /** The name of `Spec.expects` in SIR: a clause is a call of it with its condition. */
+    val Expects: String = EraseSpecifications.Expects
+
     /** The name of `Spec.ensuring` in SIR: a clause is a call of it with the clause's body and its
       * condition.
       */
