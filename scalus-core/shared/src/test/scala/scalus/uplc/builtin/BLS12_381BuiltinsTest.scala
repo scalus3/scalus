@@ -50,9 +50,10 @@ class BLS12_381BuiltinsTest extends AnyFunSuite {
         assert(bls12_381_G1_equal(p, genG1))
     }
 
-    test("G1: equal points have equal hashCodes") {
-        val a = genG1
-        val b = genG1
+    test("G1: equal points built in different ways have equal hashCodes") {
+        val p = bls12_381_G1_hashToGroup(msg, dst)
+        val a = bls12_381_G1_add(p, p)
+        val b = bls12_381_G1_scalarMul(BigInt(2), p)
         assert(a == b)
         assert(a.hashCode == b.hashCode)
         assert(Set(a).contains(b))
@@ -85,9 +86,10 @@ class BLS12_381BuiltinsTest extends AnyFunSuite {
         assert(bls12_381_G2_equal(p, genG2))
     }
 
-    test("G2: equal points have equal hashCodes") {
-        val a = genG2
-        val b = genG2
+    test("G2: equal points built in different ways have equal hashCodes") {
+        val p = bls12_381_G2_hashToGroup(msg, dst)
+        val a = bls12_381_G2_add(p, p)
+        val b = bls12_381_G2_scalarMul(BigInt(2), p)
         assert(a == b)
         assert(a.hashCode == b.hashCode)
         assert(Set(a).contains(b))
@@ -111,9 +113,11 @@ class BLS12_381BuiltinsTest extends AnyFunSuite {
         assert(b == millerLoopOfGenerators)
     }
 
-    test("ML result: equal results have equal hashCodes") {
-        val a = millerLoopOfGenerators
-        val b = millerLoopOfGenerators
+    test("ML result: equal results built in different ways have equal hashCodes") {
+        val p = bls12_381_G1_hashToGroup(msg, dst)
+        val q = bls12_381_G2_hashToGroup(msg, dst)
+        val a = bls12_381_millerLoop(bls12_381_G1_add(p, p), q)
+        val b = bls12_381_millerLoop(bls12_381_G1_scalarMul(BigInt(2), p), q)
         assert(a == b)
         assert(a.hashCode == b.hashCode)
         assert(Set(a).contains(b))

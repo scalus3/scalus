@@ -431,6 +431,29 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
         assertTermEvalThrows[BuiltinError](rIsOrder)
     }
 
+    test("verifyEcdsaSecp256k1Signature returns False for a high-S signature and fails for s = n") {
+        // libsecp256k1's ecdsa_verify rejects s > n/2 and Cardano does not normalise the
+        // signature, so (r, n - s) of a valid CIP-49 signature is False, not True.
+        val sir = compile { scalus.uplc.builtin.Builtins.verifyEcdsaSecp256k1Signature }
+        val verify = sir.toUplc()
+        val pubKey = hex"03427d3132a06e31bf66791dda478b5ebec79bd045247126396fccdf11e42a3627"
+        val msg = hex"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        val r = hex"040f5b6a2bb4e024d47eab02d4073da655af77c0cf0efdb19c6771378da175c4"
+
+        val lowS = verify $ pubKey $ msg $
+            (r ++ hex"5ffac010a1bd9b9a275ad685ea4052f4bc72c0dc27094422ba9379e7bf44b29b")
+        assertTermEvalEq(lowS, true)
+
+        val highS = verify $ pubKey $ msg $
+            (r ++ hex"a0053fef5e426465d8a5297a15bfad09fe3c1c0a883f5c19053ee4a510f18ea6")
+        assertTermEvalEq(highS, false)
+
+        // s = n is out of range: an evaluation failure
+        val sIsOrder = verify $ pubKey $ msg $
+            (r ++ hex"fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141")
+        assertTermEvalThrows[BuiltinError](sIsOrder)
+    }
+
     test("verifySchnorrSecp256k1Signature follows CIP-49") {
         // https://cips.cardano.org/cip/CIP-49
         val sir = compile { scalus.uplc.builtin.Builtins.verifySchnorrSecp256k1Signature }

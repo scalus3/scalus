@@ -7,10 +7,14 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.Test;
 
 public class SodiumTest {
     static final String FIXTURE = "../scalus-core/shared/src/test/resources/ed25519/libsodium-verdicts.tsv";
+
+    static final Pattern HEADER = Pattern.compile("# rows=(\\d+) accepts=(\\d+)");
 
     static byte[] hex(String s) {
         byte[] out = new byte[s.length() / 2];
@@ -26,8 +30,13 @@ public class SodiumTest {
     @Test
     public void givesLibsodiumVerdictOnEveryVector() throws Exception {
         List<String> wrong = new ArrayList<>();
-        int rows = 0, accepted = 0;
+        int rows = 0, accepted = 0, expectedRows = -1, expectedAccepts = -1;
         for (String line : Files.readAllLines(Paths.get(FIXTURE), StandardCharsets.UTF_8)) {
+            Matcher header = HEADER.matcher(line);
+            if (header.matches()) {
+                expectedRows = Integer.parseInt(header.group(1));
+                expectedAccepts = Integer.parseInt(header.group(2));
+            }
             if (line.isEmpty() || line.startsWith("#")) continue;
             String[] f = line.split("\t");
             boolean expected = f[5].equals("accept");
@@ -35,8 +44,9 @@ public class SodiumTest {
             if (expected) accepted++;
             if (Sodium.ed25519VerifyDetached(hex(f[4]), hex(f[3]), hex(f[2])) != expected) wrong.add(f[0] + "#" + f[1]);
         }
-        assertEquals(930, rows);
-        assertEquals(45, accepted);
+        assertTrue("fixture has no '# rows=N accepts=M' header", expectedRows >= 0);
+        assertEquals(expectedRows, rows);
+        assertEquals(expectedAccepts, accepted);
         assertTrue(wrong.size() + " mismatches: " + wrong, wrong.isEmpty());
     }
 

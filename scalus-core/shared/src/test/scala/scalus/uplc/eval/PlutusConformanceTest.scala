@@ -57,18 +57,6 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
       */
     protected def ignoredCases: Map[String, String] = Map.empty
 
-    /** The three BLS12-381 cases that fail wherever blst is used with a DST longer than 255 bytes
-      * (supranational/blst#232). Platform subclasses that link blst mix this in.
-      */
-    protected val blstLargeDstCases: Map[String, String] = Map(
-      "builtin/semantics/bls12_381-cardano-crypto-tests/signature/large-dst/large-dst" ->
-          "blst binding bug for DST longer than 255 bytes (supranational/blst#232)",
-      "builtin/semantics/bls12_381_G1_hashToGroup/hash-dst-len-255/hash-dst-len-255" ->
-          "blst binding bug for DST longer than 255 bytes (supranational/blst#232)",
-      "builtin/semantics/bls12_381_G2_hashToGroup/hash-dst-len-255/hash-dst-len-255" ->
-          "blst binding bug for DST longer than 255 bytes (supranational/blst#232)"
-    )
-
     discoveredCases.foreach { name =>
         ignoredCases.get(name) match
             case Some(reason) => ignore(s"$name [ignored: $reason]")(())

@@ -1,7 +1,7 @@
 package scalus.uplc
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.{platform, ByteString}
+import scalus.uplc.builtin.{platform, ByteString, PlatformSpecific}
 import scalus.uplc.eval.{BuiltinException, CekValue, NoLogger, PlutusVM}
 
 /** Plutus semantics variants D and E (`ensurable`) denote `bls12_381_G{1,2}_scalarMul` with
@@ -60,6 +60,32 @@ class BLS12_381ScalarMulBoundTest extends AnyFunSuite {
         scalar: BigInt
     ): Unit =
         assert(scalarMul(variant, group, scalar) == CekValue.VCon(group.expected(scalar)))
+
+    private val r = PlatformSpecific.bls12_381_scalar_period
+
+    // An independent check of the bound scalars: the expected values above come from the same
+    // platform scalarMul, so also compare with a scalar reduced mod r first.
+    test("G1.scalarMul of the bound scalars equals scalarMul of their residues mod r") {
+        val p = platform.bls12_381_G1_hashToGroup(msg, dst)
+        assert(
+          platform.bls12_381_G1_scalarMul(ub, p) == platform.bls12_381_G1_scalarMul(ub.mod(r), p)
+        )
+        assert(
+          platform.bls12_381_G1_scalarMul(lb, p) ==
+              platform.bls12_381_G1_neg(platform.bls12_381_G1_scalarMul((-lb).mod(r), p))
+        )
+    }
+
+    test("G2.scalarMul of the bound scalars equals scalarMul of their residues mod r") {
+        val p = platform.bls12_381_G2_hashToGroup(msg, dst)
+        assert(
+          platform.bls12_381_G2_scalarMul(ub, p) == platform.bls12_381_G2_scalarMul(ub.mod(r), p)
+        )
+        assert(
+          platform.bls12_381_G2_scalarMul(lb, p) ==
+              platform.bls12_381_G2_neg(platform.bls12_381_G2_scalarMul((-lb).mod(r), p))
+        )
+    }
 
     for group <- groups do {
         for variant <- Seq(BuiltinSemanticsVariant.D, BuiltinSemanticsVariant.E) do {
