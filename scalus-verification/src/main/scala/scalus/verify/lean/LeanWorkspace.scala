@@ -53,31 +53,38 @@ object LeanWorkspace {
       * Scalus's own Lean library, must not leave the proofs that were made before it.
       */
     def environment(workspace: Path): Map[String, String] = {
-        val own = manifest(workspace).fold(workspace.getFileName.toString)(_.name)
-        val sourced = required(workspace) + (own -> workspace)
-        Map("toolchain" -> toolchain(workspace)) ++
-            pinned(workspace).view.mapValues(_.take(12)) ++
-            sourced.view.mapValues(sources)
+        val read = manifest(workspace)
+        val packages = read.fold(Nil)(_.packages)
+        val own = read.fold(workspace.getFileName.toString)(_.name)
+        val cloned = packages.collect { case Package(name, Some(revision), _) =>
+            name -> revision.take(12)
+        }
+        val sourced = packages.collect { case Package(name, _, Some(directory)) =>
+            name -> workspace.resolve(directory).normalize
+        } :+ (own -> workspace)
+        Map("toolchain" -> toolchain(workspace)) ++ cloned ++
+            sourced.map((name, directory) => name -> sources(directory, name))
     }
 
-    /** A hash of the Lean sources of the package in `directory`: every `.lean` file that is not
-      * under `.lake`, by its path in the package and its text.
+    /** A hash of the Lean sources of the package `name` in `directory`: its `lakefile.lean`, and
+      * the modules of the library of its name, `<name>.lean` and those under `<name>`, by their
+      * paths in the package and their texts.
+      *
+      * Other Lean files of the directory are not the package's: a check that is kept there to be
+      * run by hand, or a file someone tries something in, changes no result.
       */
-    private def sources(directory: Path): String = {
-        val walked = Files.walk(directory)
+    private def sources(directory: Path, name: String): String = {
+        val modules = directory.resolve(name)
+        val below =
+            if Files.isDirectory(modules) then
+                val walked = Files.walk(modules)
+                try walked.iterator().asScala.filter(Files.isRegularFile(_)).toList
+                finally walked.close()
+            else Nil
         val files =
-            try
-                walked
-                    .iterator()
-                    .asScala
-                    .filter { file =>
-                        val relative = directory.relativize(file)
-                        file.toString.endsWith(".lean") && Files.isRegularFile(file) &&
-                        !relative.iterator().asScala.exists(_.toString == ".lake")
-                    }
-                    .toList
-                    .sortBy(file => directory.relativize(file).toString)
-            finally walked.close()
+            (directory.resolve("lakefile.lean") :: directory.resolve(s"$name.lean") :: below)
+                .filter(file => file.toString.endsWith(".lean") && Files.isRegularFile(file))
+                .sortBy(file => directory.relativize(file).toString)
         val text = files.map { file =>
             s"${directory.relativize(file)}\n${Files.readString(file, StandardCharsets.UTF_8)}"
         }

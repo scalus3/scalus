@@ -23,6 +23,8 @@ class KeptResultsTest extends AnyFunSuite {
         var backend = "1.0"
         var text = "s-1"
         var programs = List("p-1", "p-2")
+        var found = "5"
+        var stands = true
 
         def proved: ExecutionResult = VerificationResult.Proven(Proof(Evidence, Nil))
         def refuted: ExecutionResult = VerificationResult.Refuted(Proof(Evidence, Nil))
@@ -43,12 +45,15 @@ class KeptResultsTest extends AnyFunSuite {
             case VerificationResult.Proven(_) =>
                 Some(Kept(Kept.Result.Proved, Map("budget" -> "160"), Map.empty))
             case VerificationResult.Refuted(_) =>
-                Some(Kept(Kept.Result.Refuted, Map.empty, Map("x" -> "5", "d" -> """{"int":3}""")))
+                Some(
+                  Kept(Kept.Result.Refuted, Map.empty, Map("x" -> found, "d" -> """{"int":3}"""))
+                )
             case _ => None
         override def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult] =
             kept.result match
-                case Kept.Result.Proved  => Some(proved)
-                case Kept.Result.Refuted => Option.when(kept.counterexample.contains("x"))(refuted)
+                case Kept.Result.Proved => Some(proved)
+                case Kept.Result.Refuted =>
+                    Option.when(stands && kept.counterexample.contains("x"))(refuted)
     }
 
     /** A test with a file for the results, which is not there at its start. */
@@ -203,6 +208,48 @@ class KeptResultsTest extends AnyFunSuite {
         )
         // What is kept stays as it was.
         assert(Files.readString(file) == before)
+    }
+
+    kept("a run that recalculates leaves an entry as it is where the result comes out again") {
+        file =>
+            val tactic = new Counting
+            tactic.answer = () => tactic.refuted
+            verify(file, KeptResults.Mode.Use, tactic)
+            val before = Files.readString(file)
+            // This run comes to another counterexample of the same statement: a solver gives
+            // any of them. The file is not written for it, so one that such a run did write had
+            // an entry that was missing or stale.
+            tactic.found = "-7"
+            assert(
+              verify(file, KeptResults.Mode.Recalculate, tactic)
+                  .isInstanceOf[VerificationResult.Refuted]
+            )
+            assert(tactic.runs == 2)
+            assert(Files.readString(file) == before)
+            // A statement nothing was kept for is kept by it.
+            verify(file, KeptResults.Mode.Recalculate, tactic, "new")
+            assert(Files.readString(file) != before)
+    }
+
+    kept(
+      "what is kept and no longer stands is stale, with every part of its fingerprint as it was"
+    ) { file =>
+        val tactic = new Counting
+        tactic.answer = () => tactic.refuted
+        verify(file, KeptResults.Mode.Use, tactic)
+        // The tactic does not stand for the kept counterexample any more: it is none of the
+        // statement as it is now, though the fingerprint is the same.
+        tactic.stands = false
+        verify(file, KeptResults.Mode.Frozen, tactic) match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(reason.startsWith(KeptResults.stale), reason)
+                assert(reason.endsWith("does not stand for the statement as it is now"), reason)
+            case other => fail(s"expected a stale statement, got $other")
+        // With a backend it is asked again.
+        assert(
+          verify(file, KeptResults.Mode.Use, tactic).isInstanceOf[VerificationResult.Refuted]
+        )
+        assert(tactic.runs == 2)
     }
 
     kept("another side of the backend takes the results that were kept for the old one") { file =>

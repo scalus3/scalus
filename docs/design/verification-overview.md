@@ -884,7 +884,8 @@ For `blaster-uplc` it is over:
   function it calls, of the compiler or of how the tactic reads a statement changes one of them;
 - the Lean side: the toolchain, the revisions of Blaster and PlutusCore, and Scalus's own Lean
   library. A fix of a soundness bug in one of them must not leave the proofs made before it;
-- the lemmas a proof used, by their fingerprints.
+- nothing of lemmas: this tactic uses none. One that does has to put the fingerprints of the
+  lemmas a proof used into its own, or a kept proof would outlive what it was proved from.
 
 The budget is not in it. A proof at any budget holds without the budget, and a refutation is
 replayed without one.
@@ -966,7 +967,7 @@ beside the suite's source, as `<Suite>.proofs.json`.
 | | An entry with the statement's fingerprint | None, or another fingerprint |
 |---|---|---|
 | **use** | the kept result; a refutation is replayed | the tactic runs, and the result is kept |
-| **recalculate** | the tactic runs; a result that differs is a failure | the tactic runs, and the result is kept |
+| **recalculate** | the tactic runs; a result that differs is a failure, and one that agrees leaves the entry as it is | the tactic runs, and the result is kept |
 | **frozen** | the kept result; a refutation is replayed | the statement is stale: no result, and its test is canceled |
 
 A suite chooses by where it runs, and the environment variable `SCALUS_KEPT_RESULTS` says it
@@ -976,7 +977,10 @@ outright: `use`, `recalculate`, `frozen`, or `off` for a run that keeps and take
 - **Recalculate** is what keeps the kept proofs honest. The Lean-Proofs workflow is one, as
   every run is that requires Lean (`SCALUS_REQUIRE_LEAN`): it takes nothing from the file, and
   a proof that no longer comes out is found there. It is also the way to run the proofs again
-  after a change of the tactic that no fingerprint shows.
+  after a change of the tactic that no fingerprint shows. An entry whose result comes out again
+  is not written again, so a file that such a run changed had an entry that was missing or
+  stale. The workflow fails on a file that changed: the files in the repository are then not
+  those of its code, and are to be made again and committed.
 - **Frozen** is for where no backend runs, as in `ci-jvm`, and what a suite does without Lean.
   Before, every proof was canceled there, and a change that broke one was seen a day later.
   With the file, the same build passes the proofs that are kept, and sees at once that a change
@@ -1306,9 +1310,10 @@ same place.
 7. **A stale statement in a build without the backend** (§5.6, frozen). Decided for now: its
    test is canceled, as every proof is there today, with a reason that says the proof is stale
    and what it no longer agrees with. A failure would make every change of a proved program
-   wait for a run with Lean, the compiler's changes among them. The nightly run that
-   recalculates is where a stale proof is made again, or found broken. To be a failure once
-   that run is trusted to keep the files current.
+   wait for a run with Lean, the compiler's changes among them. The run that recalculates is
+   where a stale proof is made again, or found broken, and it fails where the files are not
+   those of the code: nightly, and on a push that changes what the proofs are made of. So a
+   stale file does not stay unseen, and is not in the way of a change that only caused it.
 8. **The default domain for validator inputs:** well-formed values or raw `Data` (§3.3).
 9. **Where mappings are declared.** `leanMapping(f, "…")` in the verification module, or an
    annotation on the function itself, which would tie core code to Lean names?

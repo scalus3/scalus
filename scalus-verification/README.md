@@ -300,7 +300,9 @@ Lean's side. See the [overview](../docs/design/verification-overview.md#56-kept-
 - **Without Lean**, as in ci-jvm, the same statements pass on what is kept. One whose entry no
   longer agrees is stale: its test is canceled, and the reason names the part that moved.
 - **With `SCALUS_REQUIRE_LEAN`**, as in the Lean-Proofs workflow, every statement is asked of
-  Lean whatever is kept, and a result that differs from the kept one fails.
+  Lean whatever is kept, and a result that differs from the kept one fails. The workflow also
+  fails where a file changed in the run: an entry was missing or stale, and the file is to be
+  made again with Lean and committed.
 
 `SCALUS_KEPT_RESULTS` says which of these a run is: `use`, `frozen`, `recalculate`, or `off` for
 a run that keeps and takes nothing. After a change of the tactic that no fingerprint shows, run
