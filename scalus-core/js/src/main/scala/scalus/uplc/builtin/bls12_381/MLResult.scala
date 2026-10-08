@@ -17,5 +17,9 @@ class MLResult(private val gt: BLS.GT):
     override def hashCode: Int = BLS.GT.toBytes(gt).toByteString.hashCode
 
 object MLResult:
+    /** noble refuses to pair the point at infinity. blst, and so the node, accepts it: the pairing
+      * with a zero point is the identity of GT.
+      */
     def apply(elemG1: G1Element, elemG2: G2Element): MLResult =
-        new MLResult(BLS.pairing(elemG1.point, elemG2.point))
+        if elemG1.point.is0() || elemG2.point.is0() then new MLResult(BLS.GT.one)
+        else new MLResult(BLS.pairing(elemG1.point, elemG2.point))

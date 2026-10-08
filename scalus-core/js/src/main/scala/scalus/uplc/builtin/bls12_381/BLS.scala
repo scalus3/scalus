@@ -49,6 +49,7 @@ private[bls12_381] object BLS:
             def add(other: Point): Point = js.native
             def multiply(scalar: js.BigInt): Point = js.native
             def negate(): Point = js.native
+            def is0(): Boolean = js.native
             def toRawBytes(isCompressed: Boolean = true): Uint8Array = js.native
             def toHex(isCompressed: Boolean = true): String = js.native
 
@@ -77,6 +78,7 @@ private[bls12_381] object BLS:
             def add(other: Point): Point = js.native
             def multiply(scalar: js.BigInt): Point = js.native
             def negate(): Point = js.native
+            def is0(): Boolean = js.native
             def toRawBytes(isCompressed: Boolean = true): Uint8Array = js.native
             def toHex(isCompressed: Boolean = true): String = js.native
 
@@ -91,6 +93,7 @@ private[bls12_381] object BLS:
         def isEquals(lhs: GT, rhs: GT): Boolean = bls12_381.fields.gtModule.isEquals(lhs, rhs)
         def multiply(lhs: GT, rhs: GT): GT = bls12_381.fields.gtModule.multiply(lhs, rhs)
         def toBytes(value: GT): Uint8Array = bls12_381.fields.gtModule.toBytes(value)
+        def one: GT = bls12_381.fields.gtModule.one
 
     @js.native
     trait Fields extends js.Object:
@@ -104,4 +107,6 @@ private[bls12_381] object BLS:
         @JSName("mul")
         def multiply(lhs: GT, rhs: GT): GT = js.native
         def toBytes(value: GT): Uint8Array = js.native
+        @JSName("ONE")
+        def one: GT = js.native
 end BLS

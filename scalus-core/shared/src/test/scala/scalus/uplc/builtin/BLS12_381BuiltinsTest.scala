@@ -95,6 +95,14 @@ class BLS12_381BuiltinsTest extends AnyFunSuite {
 
     private def millerLoopOfGenerators: MLResult = bls12_381_millerLoop(genG1, genG2)
 
+    // blst, and so the node, accepts the point at infinity: the result is the identity of GT.
+    test("ML result: a zero point gives the identity") {
+        val zeroLeft = bls12_381_millerLoop(zeroG1, genG2)
+        val zeroRight = bls12_381_millerLoop(genG1, zeroG2)
+        assert(bls12_381_finalVerify(zeroLeft, zeroRight))
+        assert(!bls12_381_finalVerify(zeroLeft, millerLoopOfGenerators))
+    }
+
     test("ML result: mulMlResult leaves its arguments unchanged") {
         val a = millerLoopOfGenerators
         val b = millerLoopOfGenerators
