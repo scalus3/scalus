@@ -3,7 +3,9 @@
 How the `blaster-uplc` tactic finds the number of steps a check lets its programs run
 ([Budgets](uplc-blaster.md#budgets)), and how a budget that was found is kept for the next run.
 
-Status: the search is built, as `Budget.Auto`. "Keeping what was found" is proposed.
+Status: the search is built, as `Budget.Auto`. "Keeping what was found" is proposed, as part of
+the results the verifier keeps for every tactic
+([overview §5.6](../verification-overview.md#56-kept-results)).
 
 ## Why
 
@@ -117,66 +119,30 @@ is proved; at 1600 it is not.
 Proposed. A search costs several checks for a number that is the same on the next run, as long
 as nothing the statement is about has changed.
 
-### What is kept
+The budget is kept with the statement's result, among the results the verifier keeps for every
+tactic ([overview §5.6](../verification-overview.md#56-kept-results)). An entry there is under
+the statement's name, and counts only where its fingerprint is that of the statement now: the
+programs, the statement as Lean is given it, and the Lean side. The budget is the tactic's own
+note in that entry.
 
-For a statement, the budget its search came to, with a hash of the statement.
+### What the budget is kept for
 
-It is not a proof that is kept. Lean checks the statement on every run, at the kept budget, and
-what is trusted is that run. A kept budget that is wrong costs a search, and no more.
+The fingerprint leaves the budget out. A proof at any budget holds without it, so a kept proof
+stands whatever budget it was found at, and a run that takes the kept result does not ask Lean
+at all. The kept budget is for the runs that do ask Lean: the one that recalculates every
+result, and any run of a statement whose result was not kept.
 
-### The statement's hash
+### A run that asks Lean
 
-The hash is over what the check is made of, without the budget: the program of each test
-(`Artifact.programHashes` are those), the formula over them, and the types of the variables.
-
-Anything that changes a program changes the hash: the validator, a function it calls, the
-compiler, its options. The budget follows exactly these, so a kept budget is used only for the
-programs it was found for. A change means a search, once.
-
-Not in the hash: Lean's toolchain, Blaster and the solver. The budget is a property of the
-programs' runs, not of who checks them. Where one of those changes what a check at the kept
-budget gives, the search runs again, as below.
-
-### An entry
-
-```
-<name>  <hash>  <budget>  <result>
-```
-
-- **The name** says whose entry it is: the suite, the test, and the place of the statement among
-  those of the test. A test framework has all three. ScalaTest gives a running test its name,
-  and Scala gives the place of a call in its source at compile time
-  (`org.scalactic.source.Position`, which every `test` and assertion already takes).
-- **The name is what an entry is replaced by.** A statement whose hash changed gets a new entry
-  under its name, in place of the old one. So the file does not grow with every change of the
-  compiler, and needs no time after which an entry is dropped.
-- **The hash is what an entry is used by.** A kept budget is taken only where the hash is that
-  of the statement now.
-- **The result** is `proved` or `refuted`, for the reader of the file.
-
-### A run with what is kept
-
-1. No entry under the name, or one with another hash: search, and write the entry.
-2. An entry with the statement's hash: check at its budget.
+1. No entry under the name, or one with another fingerprint: search from the start, and keep the
+   result with the budget it was found at. A change of a program means a search, once.
+2. An entry with the statement's fingerprint: check at its budget.
    - A proof, or a refutation: done, in one check.
    - Anything else, a spurious counterexample or a check that is given up: the kept budget does
-     not serve any more. Search from the start, and write what is found. This is what a change
-     of Lean, of Blaster or of the solver comes to.
-3. A search that finds no budget leaves the entry as it is, and the result is inconclusive.
-
-### Where it is kept
-
-A file of the suite, one line for an entry, in the order of the names, so that it reads and
-compares as text. Tests of one suite run one after the other, and no two suites share a file.
-The file is written whole, to a file beside it that then takes its place.
-
-- **In the tactic** it is a parameter, like the provider of the server:
-  `tactic.remembering(budgets, name)`, where `budgets` is a `BudgetCache` and one that keeps a
-  file is `BudgetCache.in(file)`. Without it `Budget.Auto` searches every time.
-- **In the tests** `LeanProofs` gives it: a file beside the suite's source, or in the suite's
-  Lean workspace, and the name from the test that runs.
-
-Whether the file is committed is open ("Open questions").
+     not serve any more. Search from the start, and keep what is found. A change of the solver
+     can come to this, where it leaves the fingerprint as it was.
+3. A search that finds no budget leaves the entry as it is. The result is inconclusive, and for
+   the run that recalculates, a proof that no longer comes out.
 
 ## Tests
 
@@ -192,26 +158,13 @@ Whether the file is committed is open ("Open questions").
 
 ## Open questions
 
-1. **Is the file committed?**
-   - *Committed* (recommended): the proofs in CI and on another machine take one check each. A
-     change of a budget is seen in review, as the budgets of the scripts are. The price is a
-     change of the file with every change of a program, the compiler's among them.
-   - *Not committed,* under the build's directory: nothing to review and nothing to merge, and
-     only a second run on the same machine is faster.
-2. **Entries nobody uses.** A test that is renamed or removed leaves its entry. They do no
-   harm. Dropping them needs to know that a whole suite ran, which a run of one test does not.
-   A time after which an entry is dropped would write a date on every run, and change a
-   committed file each time.
-3. **Start from the old budget.** Where the hash changed, the old budget is likely near the new
-   one. Starting the search there would save checks after a small change, and cost one that is
-   given up where the programs became shorter. Not proposed: a change is rare, and a search
-   from the start is always right.
-4. **A step over the least.** The search ends at the least budget, and so makes a check for
+1. **Start from the old budget.** Where the fingerprint changed, the old budget is likely near
+   the new one. Starting the search there would save checks after a small change, and cost one
+   that is given up where the programs became shorter. Not proposed: a change is rare, and a
+   search from the start is always right.
+2. **A step over the least.** The search ends at the least budget, and so makes a check for
    every place the validator can stop. A budget a few percent above each counterexample's
    would skip some of them, and could step over a narrow window.
-5. **A kept proof.** The same hash with the budget, the toolchain and the libraries would name
-   a check whose result is known, and Lean need not run. That is a different trust: the proof
-   of this run would be one of an earlier run.
 
 ## Limits
 
