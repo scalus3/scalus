@@ -4,55 +4,57 @@ import scala.scalajs.js
 import scala.scalajs.js.annotation.*
 import scala.scalajs.js.typedarray.Uint8Array
 import scalus.uplc.builtin.ByteString
+import scalus.utils.Hex
 import scalus.utils.scalajs.internal.*
 
 @JSImport("@noble/curves/ed25519", JSImport.Namespace)
 @js.native
-private object NobleEd25519 extends js.Object:
+private[ed25519] object NobleEd25519 extends js.Object:
     val ed25519: NobleEd25519Trait = js.native
 
 @js.native
-private trait NobleEd25519Trait extends js.Object:
+private[ed25519] trait NobleEd25519Trait extends js.Object:
     def sign(message: Uint8Array, privateKey: Uint8Array): Uint8Array = js.native
-    def verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Boolean =
-        js.native
     def getPublicKey(privateKey: Uint8Array): Uint8Array = js.native
-    val ExtendedPoint: NobleExtendedPointCompanion = js.native
-    val CURVE: NobleCurveParams = js.native
+    val Point: NobleExtendedPointCompanion = js.native
 
+/** noble's `ed25519.Point`, the same object as its deprecated `ExtendedPoint` alias. */
 @js.native
-private trait NobleExtendedPointCompanion extends js.Object:
+private[ed25519] trait NobleExtendedPointCompanion extends js.Object:
     val BASE: NobleExtendedPoint = js.native
+    val Fn: NobleScalarField = js.native
+    def fromBytes(bytes: Uint8Array, zip215: Boolean): NobleExtendedPoint = js.native
 
 @js.native
-private trait NobleExtendedPoint extends js.Object:
+private[ed25519] trait NobleExtendedPoint extends js.Object:
     def multiply(scalar: js.BigInt): NobleExtendedPoint = js.native
-    def toRawBytes(): Uint8Array = js.native
+    def multiplyUnsafe(scalar: js.BigInt): NobleExtendedPoint = js.native
+    def subtract(other: NobleExtendedPoint): NobleExtendedPoint = js.native
+    def toBytes(): Uint8Array = js.native
 
 @js.native
-private trait NobleCurveParams extends js.Object:
-    val n: js.BigInt = js.native // curve order L
+private[ed25519] trait NobleScalarField extends js.Object:
+    val ORDER: js.BigInt = js.native // curve order L
 
 @JSImport("@noble/hashes/sha512", JSImport.Namespace)
 @js.native
-private object NobleSha512 extends js.Object:
+private[ed25519] object NobleSha512 extends js.Object:
     def sha512(data: Uint8Array): Uint8Array = js.native
 
 @JSImport("@noble/hashes/utils", JSImport.Namespace)
 @js.native
-private object NobleHashUtils extends js.Object:
+private[ed25519] object NobleHashUtils extends js.Object:
     def concatBytes(arrays: Uint8Array*): Uint8Array = js.native
 
 /** JS implementation of Ed25519Signer using @noble/curves. */
 object JsEd25519Signer extends Ed25519Signer:
 
     /** Ed25519 curve order L */
-    private lazy val L: js.BigInt = NobleEd25519.ed25519.CURVE.n
+    private[ed25519] lazy val L: js.BigInt = NobleEd25519.ed25519.Point.Fn.ORDER
 
     /** Convert little-endian bytes to BigInt. */
-    private def bytesToBigInt(bytes: Array[Byte]): js.BigInt =
-        val hex = bytes.reverse.map(b => f"${b & 0xff}%02x").mkString
-        if hex.isEmpty then js.BigInt(0) else js.BigInt("0x" + hex)
+    private[ed25519] def bytesToBigInt(bytes: Array[Byte]): js.BigInt =
+        if bytes.isEmpty then js.BigInt(0) else js.BigInt("0x" + Hex.bytesToHex(bytes.reverse))
 
     /** Convert BigInt to 32-byte little-endian array. */
     private def bigIntToBytes32(n: js.BigInt): Array[Byte] =
@@ -92,8 +94,8 @@ object JsEd25519Signer extends Ed25519Signer:
         val r = bytesToBigInt(rHash) % L
 
         // Step 2: R = r * G (r is already < L, safe for multiply)
-        val RPoint = NobleEd25519.ed25519.ExtendedPoint.BASE.multiply(r)
-        val RBytes = RPoint.toRawBytes().toByteArray
+        val RPoint = NobleEd25519.ed25519.Point.BASE.multiply(r)
+        val RBytes = RPoint.toBytes().toByteArray
 
         // Step 3: k = SHA-512(R || A || message) mod L
         val kInput = RBytes ++ pk ++ msgBytes
@@ -114,13 +116,7 @@ object JsEd25519Signer extends Ed25519Signer:
         message: ByteString,
         signature: Signature
     ): Boolean =
-        try
-            NobleEd25519.ed25519.verify(
-              signature.toUint8Array,
-              message.toUint8Array,
-              verificationKey.toUint8Array
-            )
-        catch case _: Exception => false
+        JsEd25519Verifier.verify(verificationKey.bytes, message.bytes, signature.bytes)
 
     override def derivePublicKey(signingKey: SigningKey): VerificationKey =
         val pubKey = NobleEd25519.ed25519.getPublicKey(signingKey.toUint8Array)

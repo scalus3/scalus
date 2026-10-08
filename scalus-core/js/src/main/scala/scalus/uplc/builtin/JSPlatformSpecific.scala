@@ -1,5 +1,6 @@
 package scalus.uplc.builtin
 
+import scalus.crypto.ed25519.JsEd25519Verifier
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
 import scala.scalajs.js
@@ -47,18 +48,6 @@ private object Ripemd160 extends js.Object {
 private object Secp256k1Curve extends js.Object {
     val secp256k1: Secp256k1 = js.native
     val schnorr: Secp256k1Schnorr = js.native
-}
-
-@JSImport("@noble/curves/ed25519", JSImport.Namespace)
-@js.native
-private object Ed25519Curves extends js.Object {
-    val ed25519: Ed25519 = js.native
-}
-
-@js.native
-private trait Ed25519 extends js.Object {
-    def verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Boolean =
-        js.native
 }
 
 @js.native
@@ -122,7 +111,7 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
     override def verifyEd25519Signature(pk: ByteString, msg: ByteString, sig: ByteString): Boolean =
         require(pk.size == 32, s"Invalid public key length ${pk.size}")
         require(sig.size == 64, s"Invalid signature length ${sig.size}")
-        Ed25519Curves.ed25519.verify(sig.toUint8Array, msg.toUint8Array, pk.toUint8Array)
+        JsEd25519Verifier.verify(pk.bytes, msg.bytes, sig.bytes)
 
     override def signEd25519(privateKey: ByteString, msg: ByteString): ByteString =
         require(privateKey.size == 32, s"Invalid private key length ${privateKey.size}")

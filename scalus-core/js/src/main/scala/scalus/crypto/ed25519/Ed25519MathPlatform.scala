@@ -1,28 +1,6 @@
 package scalus.crypto.ed25519
 
-import scala.scalajs.js
-import scala.scalajs.js.annotation.*
-import scala.scalajs.js.typedarray.Uint8Array
 import scalus.utils.scalajs.internal.*
-
-@JSImport("@noble/curves/ed25519", JSImport.Namespace)
-@js.native
-private object NobleEd25519Math extends js.Object:
-    val ed25519: NobleEd25519Ops = js.native
-
-@js.native
-private trait NobleEd25519Ops extends js.Object:
-    def getPublicKey(privateKey: Uint8Array): Uint8Array = js.native
-    val ExtendedPoint: ExtendedPointCompanion = js.native
-
-@js.native
-private trait ExtendedPointCompanion extends js.Object:
-    val BASE: ExtendedPoint = js.native
-
-@js.native
-private trait ExtendedPoint extends js.Object:
-    def multiply(scalar: js.BigInt): ExtendedPoint = js.native
-    def toRawBytes(): Uint8Array = js.native
 
 /** JS implementation of Ed25519 mathematical operations using @noble/curves.
   *
@@ -38,19 +16,6 @@ private trait ExtendedPoint extends js.Object:
   */
 object Ed25519MathPlatform {
 
-    /** Ed25519 curve order L = 2^252 + 27742317777372353535851937790883648493 */
-    private val L: js.BigInt =
-        js.BigInt("7237005577332262213973186563042994240857116359379907606001950938285454250989")
-
-    /** Convert little-endian bytes to BigInt for JS. */
-    private def bytesToBigInt(bytes: Array[Byte]): js.BigInt = {
-        if bytes.isEmpty then js.BigInt(0)
-        else
-            // Convert little-endian bytes to hex string (big-endian)
-            val hex = bytes.reverse.map(b => f"${b & 0xff}%02x").mkString
-            js.BigInt("0x" + hex)
-    }
-
     /** Multiply the Ed25519 base point by a scalar to derive the public key.
       *
       * For BIP32-Ed25519, the scalar is already clamped and we need direct scalar*base
@@ -62,11 +27,10 @@ object Ed25519MathPlatform {
       *   32-byte compressed public key point
       */
     def scalarMultiplyBase(scalar: Array[Byte]): Array[Byte] = {
-        // Use ExtendedPoint.BASE.multiply for direct scalar multiplication
+        // Use Point.BASE.multiply for direct scalar multiplication
         // The scalar must be reduced mod L for @noble/curves which requires 1 <= n < L
-        val scalarBigInt = bytesToBigInt(scalar)
-        val reducedScalar = scalarBigInt % L
-        val point = NobleEd25519Math.ed25519.ExtendedPoint.BASE.multiply(reducedScalar)
-        point.toRawBytes().toByteArray
+        val reducedScalar = JsEd25519Signer.bytesToBigInt(scalar) % JsEd25519Signer.L
+        val point = NobleEd25519.ed25519.Point.BASE.multiply(reducedScalar)
+        point.toBytes().toByteArray
     }
 }
