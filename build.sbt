@@ -21,7 +21,7 @@ val scalusCompatibleVersion = scalusStableVersion
 
 // Bloxbean Cardano Client Library versions
 val cardanoClientLibVersion = "0.7.2"
-val yaciVersion = "0.4.5"
+val yaciVersion = "0.4.6"
 val yaciCardanoTestVersion = "0.1.0"
 val scalatestVersion = "3.2.20"
 val scalatestPlusScalacheckVersion = "3.2.20.0"
