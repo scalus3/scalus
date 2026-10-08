@@ -93,6 +93,13 @@ object SpecifiedExamples {
         require(x <= limit)
         (x + BigInt(1)).ensuring(r => r <= limit)
     }
+
+    /** Its precondition is written after another statement, where it is part of no contract. */
+    def expectsLate(x: BigInt, limit: BigInt): BigInt = {
+        val doubled = x + x
+        Spec.expects(doubled <= limit)
+        doubled
+    }
 }
 
 /** An entry point that calls an `inline` handler, as a validator's `validate` calls `spend`. */
@@ -131,6 +138,7 @@ class SpecificationsTest extends AnyFunSuite with LeanProofs {
     private val branchWrongly = FunctionDef(SpecifiedExamples.branchWrongly)
     private val bounded = FunctionDef(SpecifiedExamples.bounded)
     private val boundedWrongly = FunctionDef(SpecifiedExamples.boundedWrongly)
+    private val expectsLate = FunctionDef(SpecifiedExamples.expectsLate)
     private val entry = FunctionDef.named("entry", (x: BigInt) => SpecifiedHandler.entry(x))
 
     private def inSource[A, R](function: FunctionDef[A, R]): Contract[A, R] =
@@ -208,6 +216,26 @@ class SpecificationsTest extends AnyFunSuite with LeanProofs {
         val none = Verifier.empty
         none.addFunction(plain)
         assert(none.guarantees(plain.ref) == StatedGuarantees(Nil, Nil, None))
+    }
+
+    test("a precondition that is not at the start of a body is reported") {
+        // It is erased from the script like every clause, and the contract that is read from
+        // the source does not have it: no caller would owe it, and nothing would check it.
+        assert(Contract.inSource(expectsLate).isEmpty)
+        val verifier = Verifier.empty
+        verifier.addFunction(expectsLate)
+        val stated = verifier.guarantees(expectsLate.ref)
+        assert(stated.statements.isEmpty)
+        stated.unsupported match
+            case List(reason) =>
+                assert(reason.startsWith("the precondition of "), reason)
+                assert(reason.contains("is not at the start of the body"), reason)
+            case other => fail(s"expected the precondition to be reported, got $other")
+        // One that the body starts with is the contract's, and is not reported.
+        val atStart = Verifier.empty
+        atStart.addFunction(clamp)
+        assert(Contract.inSource(clamp).nonEmpty)
+        assert(atStart.guarantees(clamp.ref).unsupported.isEmpty)
     }
 
     test("the clauses of a function are also stated together, about one run of its body") {
