@@ -867,7 +867,8 @@ class EmulatorJsTest extends AnyFunSuite {
     }
 
     private def aliceSubmits(emulator: JEmulator, builder: TxBuilder): JSubmitResult = {
-        val tx = builder.complete(aliceUtxos, Alice.address(Network.Mainnet)).sign(Alice.signer)
+        val utxos = emulator.getUtxos().toSeq.map(utxo => utxo.input -> utxo.output).toMap
+        val tx = builder.complete(utxos, Alice.address(Network.Mainnet)).sign(Alice.signer)
         emulator.submitTx(tx.transaction.toCbor.toUint8Array)
     }
 
@@ -880,6 +881,11 @@ class EmulatorJsTest extends AnyFunSuite {
         assert(account.deposit.toString == testEnv.protocolParams.stakeAddressDeposit.toString)
         assert(account.poolId.toOption.isEmpty)
         assert(account.drep.toOption.isEmpty)
+
+        // spec [SC-23]: a key account withdraws only once it delegates its votes
+        val voteDelegation = TxBuilder(testEnv).delegateVoteToDRep(aliceStake, DRep.AlwaysAbstain)
+        val delegated = aliceSubmits(emulator, voteDelegation)
+        assert(delegated.isSuccess, delegated.error.toOption)
 
         val withdrawal = TxBuilder(testEnv).withdrawRewards(aliceStake, Coin(7_000_000))
         val result = aliceSubmits(emulator, withdrawal)

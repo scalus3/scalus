@@ -36,7 +36,8 @@ object DefaultValidators {
       CertsValidator,
       WrongNetworkInTxBodyValidator,
       WrongNetworkValidator,
-      WrongNetworkWithdrawalValidator
+      WrongNetworkWithdrawalValidator,
+      WithdrawalsDelegatedValidator
     )(using Ordering.by(_.name))
 }
 

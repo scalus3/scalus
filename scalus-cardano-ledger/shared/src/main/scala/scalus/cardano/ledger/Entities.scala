@@ -336,6 +336,14 @@ object TransactionException {
              |withdrawals that do not drain accounts (expected -> provided): $nonDrainingWithdrawals.""".stripMargin
         )
 
+    // It's Conway.ConwayWdrlNotDelegatedToDRep in cardano-ledger
+    final case class WithdrawalsNotDelegatedToDRepException(
+        transactionId: TransactionHash,
+        notDelegated: Set[AddrKeyHash]
+    ) extends TransactionException(
+          s"Withdrawals from key accounts not delegated to a DRep for transactionId $transactionId: $notDelegated"
+        )
+
     // It's Conway.ConwayTreasuryValueMismatch in cardano-ledger
     final case class TreasuryValueMismatchException(
         transactionId: TransactionHash,
@@ -524,6 +532,7 @@ object TransactionException {
         case _: DRepException                              => "DRep"
         case _: WithdrawalsNotInRewardsException           => "WithdrawalsNotInRewards"
         case _: TreasuryValueMismatchException             => "TreasuryValueMismatch"
+        case _: WithdrawalsNotDelegatedToDRepException     => "WithdrawalsNotDelegatedToDRep"
         case _: ExUnitsExceedMaxException                  => "ExUnitsExceedMax"
         case _: TooManyCollateralInputsException           => "TooManyCollateralInputs"
         case _: InvalidScriptDataHashException             => "InvalidScriptDataHash"
