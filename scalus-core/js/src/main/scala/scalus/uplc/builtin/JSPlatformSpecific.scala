@@ -63,11 +63,18 @@ private trait Ed25519 extends js.Object {
 
 @js.native
 private trait Secp256k1 extends js.Object {
-    def verify(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): Boolean =
-        js.native
+    def verify(
+        signature: Uint8Array,
+        message: Uint8Array,
+        publicKey: Uint8Array,
+        opts: EcdsaVerifyOpts
+    ): Boolean = js.native
 
     def ProjectivePoint: ProjectivePointModule = js.native
 }
+
+/** Options for noble's `secp256k1.verify`. `format = "compact"` parses only r || s. */
+private class EcdsaVerifyOpts(val format: String) extends js.Object
 
 @js.native
 trait ProjectivePointModule extends js.Object:
@@ -151,7 +158,18 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
         require(r < SECP256K1_ORDER, s"Invalid signature: r out of range")
         require(s < SECP256K1_ORDER, s"Invalid signature: s out of range")
 
-        Secp256k1Curve.secp256k1.verify(sig.toUint8Array, msg.toUint8Array, pk.toUint8Array)
+        // Compact only, as secp256k1_ecdsa_signature_parse_compact in the node. Without a format,
+        // noble tries DER first, so a 64-byte value that is also valid DER would give another
+        // (r, s). With "compact", noble throws for r = 0 or s = 0, where Plutus wants False; the
+        // r and s range errors are already raised by the requires above.
+        try
+            Secp256k1Curve.secp256k1.verify(
+              sig.toUint8Array,
+              msg.toUint8Array,
+              pk.toUint8Array,
+              EcdsaVerifyOpts(format = "compact")
+            )
+        catch case _: js.JavaScriptException => false
     }
 
     override def verifySchnorrSecp256k1Signature(
