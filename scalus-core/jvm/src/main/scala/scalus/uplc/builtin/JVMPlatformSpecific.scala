@@ -92,11 +92,12 @@ trait JVMPlatformSpecific extends PlatformSpecific {
         require(NativeSecp256k1.isValidPubKey(pk.bytes), s"Invalid public key ${pk}")
         require(msg.size == 32, s"Invalid message length ${msg.size}, expected 32")
         require(sig.size == 64, s"Invalid signature length ${sig.size}, expected 64")
-        // Validate signature components r and s are in valid range [1, n-1]
+        // r and s must be below the group order. Zero is allowed: like the Plutus builtin, it
+        // parses and then fails verification, so the result is False, not an error.
         val r = BigInt(1, sig.bytes.slice(0, 32))
         val s = BigInt(1, sig.bytes.slice(32, 64))
-        require(r > 0 && r < SECP256K1_ORDER, s"Invalid signature: r out of range")
-        require(s > 0 && s < SECP256K1_ORDER, s"Invalid signature: s out of range")
+        require(r < SECP256K1_ORDER, s"Invalid signature: r out of range")
+        require(s < SECP256K1_ORDER, s"Invalid signature: s out of range")
         // Our JNI accepts compact signature (r || s) directly, no DER encoding needed
         NativeSecp256k1.ecdsaVerify(msg.bytes, sig.bytes, pk.bytes)
     }

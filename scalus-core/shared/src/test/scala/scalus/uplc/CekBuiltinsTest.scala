@@ -409,6 +409,28 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
         assertTermEvalEq(wrongSignature, false)
     }
 
+    test("verifyEcdsaSecp256k1Signature returns False for r = 0 or s = 0, as Plutus does") {
+        // The Plutus spec allows 0 <= r, s < n. libsecp256k1 parses a zero component and then
+        // fails verification, so the builtin returns False rather than an evaluation failure.
+        val sir = compile { scalus.uplc.builtin.Builtins.verifyEcdsaSecp256k1Signature }
+        val verify = sir.toUplc()
+        val pubKey = hex"03427d3132a06e31bf66791dda478b5ebec79bd045247126396fccdf11e42a3627"
+        val msg = hex"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+        val zeroR = verify $ pubKey $ msg $
+            hex"00000000000000000000000000000000000000000000000000000000000000005ffac010a1bd9b9a275ad685ea4052f4bc72c0dc27094422ba9379e7bf44b29b"
+        assertTermEvalEq(zeroR, false)
+
+        val zeroS = verify $ pubKey $ msg $
+            hex"040f5b6a2bb4e024d47eab02d4073da655af77c0cf0efdb19c6771378da175c40000000000000000000000000000000000000000000000000000000000000000"
+        assertTermEvalEq(zeroS, false)
+
+        // r = n is out of range: an evaluation failure
+        val rIsOrder = verify $ pubKey $ msg $
+            hex"fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd03641415ffac010a1bd9b9a275ad685ea4052f4bc72c0dc27094422ba9379e7bf44b29b"
+        assertTermEvalThrows[BuiltinError](rIsOrder)
+    }
+
     test("verifySchnorrSecp256k1Signature follows CIP-49") {
         // https://cips.cardano.org/cip/CIP-49
         val sir = compile { scalus.uplc.builtin.Builtins.verifySchnorrSecp256k1Signature }
