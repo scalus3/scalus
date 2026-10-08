@@ -87,24 +87,38 @@ object NativeEd25519Signer extends Ed25519Signer:
         require(signResult == 0, "Failed to sign message")
         Signature.unsafeFromArray(sig)
 
-    /** Extended signing for SLIP-001/HD wallets.
+    /** Extended signing for BIP32-Ed25519/SLIP-001 HD wallets, with libsodium's scalar API.
       *
-      * Note: Libsodium's Ed25519 implementation uses standard Ed25519 which doesn't directly
-      * support Cardano's SLIP-001 extended key format. This implementation uses a simplified
-      * approach that extracts the first 32 bytes and uses standard signing.
-      *
-      * For full SLIP-001 compatibility in Native, consider implementing the algorithm directly
-      * using low-level Ed25519 operations.
+      * The 64-byte key is `kL ‖ kR`; kL is the scalar itself, not hashed. As `JsEd25519Signer`:
+      *   1. r = SHA-512(kR ‖ message) mod L
+      *   1. R = r·B
+      *   1. k = SHA-512(R ‖ A ‖ message) mod L
+      *   1. S = (r + k·kL) mod L
+      *   1. signature = R ‖ S
       */
     override def signExtended(
         extendedKey: ExtendedSigningKey,
         publicKey: VerificationKey,
         message: ByteString
     ): Signature =
-        // SLIP-001 extended signing requires special handling.
-        // For now, we use the standard key (first 32 bytes) approach.
-        val standardKey = extendedKey.standardKey
-        sign(standardKey, message)
+        val xsk = extendedKey.bytes
+        val msg = message.bytes
+        val rInput = new Array[Byte](32 + msg.length)
+        Array.copy(xsk, 32, rInput, 0, 32)
+        Array.copy(msg, 0, rInput, 32, msg.length)
+        val r = Ed25519MathPlatform.hashToScalar(rInput)
+        Ed25519MathPlatform.memzero(rInput)
+        val kLBytes = xsk.take(32)
+        val kL = Ed25519MathPlatform.reduce32(kLBytes)
+        Ed25519MathPlatform.memzero(kLBytes)
+        try
+            val rPoint = Ed25519MathPlatform.mulBase(r)
+            val k = Ed25519MathPlatform.hashToScalar(rPoint ++ publicKey.bytes ++ msg)
+            val s = Ed25519MathPlatform.mulAdd(k, kL, r)
+            Signature.unsafeFromArray(rPoint ++ s)
+        finally
+            Ed25519MathPlatform.memzero(r)
+            Ed25519MathPlatform.memzero(kL)
 
     override def verify(
         verificationKey: VerificationKey,
