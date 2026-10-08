@@ -50,6 +50,18 @@ jobs:
           SCALUS_REQUIRE_LEAN: "1"
         run: |
           nix develop .#ci --accept-flake-config --command bash -c "sbt --batch scalusVerification/test 'scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest -- -l scalus.verify.uplcblaster.Unfinished'"
+      - name: The kept results are current
+        # The run above asked Lean for every statement. One whose entry was missing or stale was
+        # proved again and written into its file, so a file that changed is not the one of this
+        # code. It is to be committed: a build without Lean passes a statement on it.
+        run: |
+          changed="$(git status --porcelain -- '*.proofs.json')"
+          if [ -n "$changed" ]; then
+            echo "$changed"
+            git diff -- '*.proofs.json' | head -200
+            echo "::error::The kept results are not those of this code. Run the proofs with Lean, and commit the *.proofs.json files."
+            exit 1
+          fi
       - name: Report results
         uses: sarisia/actions-status-discord@v1
         if: always()

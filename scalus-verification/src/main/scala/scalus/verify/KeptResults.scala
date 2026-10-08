@@ -1,7 +1,7 @@
 package scalus.verify
 
 import com.github.plokhotnyuk.jsoniter_scala.core.*
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}
 import scalus.utils.{Hex, Utils}
 
 import java.nio.charset.StandardCharsets
@@ -157,8 +157,14 @@ final class KeptResults private (
                         if entry.statement != fingerprint.statement then List("the statement")
                         else Nil
                     val changed = statement ++ programs ++ side.map(part => s"$part of the backend")
-                    s"what is kept for it in $file was ${entry.result} with another " +
-                        changed.mkString(", ")
+                    // With every part as it was, it is what was kept that the tactic does not
+                    // stand for: a counterexample that is none of the statement as it is now.
+                    if changed.isEmpty then
+                        s"what is kept for it in $file, ${entry.result}, does not stand for the " +
+                            "statement as it is now"
+                    else
+                        s"what is kept for it in $file was ${entry.result} with another " +
+                            changed.mkString(", ")
         }
 
     private def read(): Stored =
@@ -237,7 +243,10 @@ object KeptResults {
         results: TreeMap[String, Entry]
     )
 
-    private given JsonValueCodec[Stored] = JsonCodecMaker.make
+    // A file has an entry for every statement of a suite, and the reader's own limit on the
+    // entries of a map is lower than a large suite's.
+    private given JsonValueCodec[Stored] =
+        JsonCodecMaker.make(CodecMakerConfig.withMapMaxInsertNumber(1000000))
 
     private def sorted(parts: Map[String, String]): TreeMap[String, String] = TreeMap.from(parts)
 

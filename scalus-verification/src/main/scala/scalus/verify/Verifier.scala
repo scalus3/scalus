@@ -502,13 +502,17 @@ final class Verifier private (results: Option[KeptResults]) {
                         }
                     case KeptResults.Mode.Recalculate =>
                         val result = asked
-                        val now = tactic.keep(prepared, result).map(_.result)
-                        earlier.map(_.result) match
-                            case Some(before) if !now.contains(before) =>
+                        val now = tactic.keep(prepared, result)
+                        earlier match
+                            case Some(before) if !now.exists(_.result == before.result) =>
                                 VerificationResult.Failed(
-                                  s"the result kept for $name is $before, and this run gives " +
-                                      Verifier.outcome(result)
+                                  s"the result kept for $name is ${before.result}, and this run " +
+                                      s"gives ${Verifier.outcome(result)}"
                                 )
+                            // The result that is kept, with the same notes: the entry stays as
+                            // it is, whichever counterexample this run came to. So a file that
+                            // changes in such a run had an entry that was missing or stale.
+                            case Some(before) if now.exists(_.notes == before.notes) => result
                             case _ => keeping(result)
     }
 

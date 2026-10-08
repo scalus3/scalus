@@ -224,6 +224,11 @@ object UplcBlaster {
         private[uplcblaster] val leafBinders: Vector[List[Int]]
     ) {
 
+        /** The SHA-256 of each leaf's program CBOR, in the order of [[leaves]]. */
+        def programHashes: List[String] = leaves.toList.map { program =>
+            Hex.bytesToHex(Utils.sha2_256(program.cborEncoded)).toLowerCase
+        }
+
         /** Whether a quantifier of the statement asks for a witness: an `exists` in a positive
           * position, or a `forAll` in a negative one, under `!` or in the premise of `==>`. Either
           * side of `<=>` is in both.
@@ -1203,11 +1208,16 @@ object UplcBlaster {
             reason: String,
             tried: List[Int],
             last: Option[String]
-        ): ExecutionResult =
+        ): ExecutionResult = {
+            val sought =
+                if tried.isEmpty then "The tactic sought the budget, and had not tried one"
+                else
+                    "The tactic sought the budget, and tried " +
+                        s"${tried.reverse.mkString(", ")} steps"
             VerificationResult.Inconclusive(
-              s"$reason. The tactic sought the budget, and tried ${tried.reverse.mkString(", ")} " +
-                  "steps" + last.fold("")(gave => s". The last counterexample: $gave")
+              s"$reason. $sought" + last.fold("")(gave => s". The last counterexample: $gave")
             )
+        }
         def outOfTime(tried: List[Int], last: Option[String]): ExecutionResult =
             inconclusive(s"Lean did not finish within ${timeout.mkString}", tried, last)
 
@@ -1258,12 +1268,14 @@ object UplcBlaster {
                                 case Left(result) => result
 
         // A budget that was kept is tried first. Where it does not decide the statement any
-        // more, it says nothing about where to look, and the search is from the start.
+        // more, it says nothing about where to look, and the search is from the start. It gets
+        // half of the time at most: the budget may be one that was given, not found, and too
+        // large for the statement, and the search is to have its time after it.
         def kept: Option[ExecutionResult] =
             for
                 steps <- first
                 (wait, limit) <- time()
-                result <- probe(steps, wait, limit) match
+                result <- probe(steps, wait.map(_ / 2), limit) match
                     case Probe.Decided(proved: VerificationResult.Proven)   => Some(proved)
                     case Probe.Decided(refuted: VerificationResult.Refuted) => Some(refuted)
                     case _                                                  => None
@@ -1545,9 +1557,7 @@ object UplcBlaster {
     ): Probe = {
         val closed = goal.binders.isEmpty
         val artifact = Artifact(
-          goal.leaves.toList.map(program =>
-              Hex.bytesToHex(Utils.sha2_256(program.cborEncoded)).toLowerCase
-          ),
+          goal.programHashes,
           budget,
           output.trim,
           Nil,
@@ -1728,7 +1738,7 @@ object UplcBlaster {
       * did not finish within the replay budget.
       */
     private def holds(formula: LeafFormula, outcomes: Vector[Outcome]): Option[Boolean] =
-        formula match
+        formula match {
             case LeafFormula.Test(leaf) =>
                 outcomes(leaf) match
                     case Outcome.Returned(Term.Const(Constant.Bool(value), _)) => Some(value)
@@ -1759,6 +1769,7 @@ object UplcBlaster {
             // `forAll` in a positive position, an `exists` in a negative one.
             case LeafFormula.Forall(_, body) => holds(body, outcomes)
             case LeafFormula.Exists(_, body) => holds(body, outcomes)
+        }
 
     /** Lean's output, without the lines that report each imported program, and shortened. */
     private def concise(output: String): String = {
@@ -1801,7 +1812,7 @@ object UplcBlaster {
         state: Int => String,
         binder: Int => String,
         positive: Boolean
-    ): String =
+    ): String = {
         def render(inner: LeafFormula, positive: Boolean) =
             renderFormula(inner, state, binder, positive)
         def quantified(symbol: String, binders: List[Int], body: LeafFormula): String =
@@ -1830,6 +1841,7 @@ object UplcBlaster {
                   LeafFormula.Not(LeafFormula.Forall(binders, LeafFormula.Not(body))),
                   positive
                 )
+    }
 
     /** The Lean check of a lowered statement. A statement with quantified variables is proved by
       * Blaster over `#prep_uplc_run`. A closed statement has nothing to search for: its predicates
@@ -1932,9 +1944,7 @@ object UplcBlaster {
             budget <- kept.notes.get(budgetNote).flatMap(_.toIntOption)
             kind <- kept.notes.get(kindNote)
             artifact = Artifact(
-              goal.leaves.toList.map(program =>
-                  Hex.bytesToHex(Utils.sha2_256(program.cborEncoded)).toLowerCase
-              ),
+              goal.programHashes,
               budget,
               "",
               Nil,
