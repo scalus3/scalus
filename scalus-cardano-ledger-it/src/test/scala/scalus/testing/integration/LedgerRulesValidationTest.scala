@@ -5,7 +5,6 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.testing.integration.BlocksTestUtils.*
 import scalus.bloxbean.StakeStateResolver
-import scalus.cardano.ledger.TransactionException.*
 
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
@@ -24,10 +23,13 @@ class LedgerRulesValidationTest extends AnyFunSuite {
       getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
     )
 
-    private def blocksEraContext(slot: SlotNo): Context =
+    /** The context of a tx at `slot`, with the treasury at the start of its epoch. */
+    private def blocksEraContext(slot: SlotNo): Context = {
+        val treasury = stakeStateResolver.treasuryAt(SlotConfig.mainnet.epochOf(slot).toInt)
         Context(env =
-            UtxoEnv(slot, blocksEraParams, CertState.empty, scalus.cardano.address.Network.Mainnet, Coin.zero)
+            UtxoEnv(slot, blocksEraParams, CertState.empty, scalus.cardano.address.Network.Mainnet, treasury)
         )
+    }
 
     test("validate transactions") {
         val transactionsCount = AtomicInteger()
@@ -45,7 +47,7 @@ class LedgerRulesValidationTest extends AnyFunSuite {
             _ = transactionsCount.incrementAndGet()
             utxos <- Try(scalusUtxoResolver.resolveUtxos(transaction)).toOption
             _ = utxosResolvedCount.incrementAndGet()
-            certState = stakeStateResolver.resolveForTx(transaction, epochMagic)
+            certState = stakeStateResolver.resolveForTx(transaction, block.slot)
             state = State(utxos = utxos, certState = certState)
             result <- CardanoMutator
                 .transit(blocksEraContext(block.slot), state, transaction)
@@ -56,58 +58,12 @@ class LedgerRulesValidationTest extends AnyFunSuite {
         println(s"Transactions count: ${transactionsCount.get()}")
         println(s"UTXOs resolved count: ${utxosResolvedCount.get()}")
         println(s"Failed transactions: ${failed.size}")
-
-        val (withdrawalErrors, otherErrors) = failed.partitionMap {
-            case (path, tx, e: WithdrawalsNotInRewardsException) => Left((path, tx, e))
-            case other => Right(other)
+        failed.foreach { case (path, tx, error) =>
+            println(s"  ${tx.id.toHex} ($path): ${error.getClass.getSimpleName}: ${error.getMessage.replace('\n', ' ')}")
         }
 
-        val (nonDrainingErrors, missingAccountErrors) = withdrawalErrors.partition {
-            case (_, _, e) => e.missingRewardAccounts.isEmpty && e.nonDrainingWithdrawals.nonEmpty
-        }
-
-        val (stakeCertErrors, remainingErrors) = otherErrors.partitionMap {
-            case (path, tx, e: StakeCertificatesException) => Left((path, tx, e))
-            case other => Right(other)
-        }
-        val (valueNotConservedErrors, unexpectedErrors) = remainingErrors.partitionMap {
-            case (path, tx, e: ValueNotConservedUTxOException) => Left((path, tx, e))
-            case other => Right(other)
-        }
-
-        println(s"\nNon-draining withdrawals: ${nonDrainingErrors.size}")
-        println(s"Missing account withdrawals: ${missingAccountErrors.size}")
-        println(s"Stake certificate errors: ${stakeCertErrors.size}")
-        println(s"Value not conserved errors: ${valueNotConservedErrors.size}")
-        println(s"Unexpected errors: ${unexpectedErrors.size}")
-        unexpectedErrors.foreach { case (path, tx, error) =>
-            println(s"  ${tx.id.toHex} ($path): ${error.getClass.getSimpleName}: ${error.getMessage.takeWhile(_ != '\n')}")
-        }
-
-        // Non-draining withdrawal errors: StakeStateResolver.computeRewardBalanceAtEpoch sums all
-        // historical rewards but doesn't subtract prior withdrawals, so the resolved reward balance
-        // is too high and doesn't match the actual withdrawal amount.
-        assert(
-          nonDrainingErrors.size == 744,
-          s"Expected 744 non-draining withdrawal errors, got ${nonDrainingErrors.size}"
-        )
-        assert(
-          missingAccountErrors.isEmpty,
-          s"Expected no missing-account withdrawal errors, got ${missingAccountErrors.size}"
-        )
-        // Stake certificate and value-not-conserved errors both stem from StakeStateResolver not
-        // populating DelegationState.deposits accurately. StakeCertificatesValidator fails when
-        // deposit/refund/registration state is wrong; ValueNotConservedUTxOValidator fails when
-        // deregistration refunds (looked up from deposits) are missing, making consumed < produced.
-        // Which validator fires first varies, so we assert on the combined total.
-        val depositRelatedErrors = stakeCertErrors.size + valueNotConservedErrors.size
-        assert(
-          depositRelatedErrors == 75,
-          s"Expected 75 deposit-related errors (stakeCert + valueNotConserved), got $depositRelatedErrors"
-        )
-        assert(
-          unexpectedErrors.isEmpty,
-          s"Expected no unexpected errors, got ${unexpectedErrors.size}"
-        )
+        // Mainnet blocks hold only valid transactions, so with the stake state each saw, from
+        // StakeStateResolver.resolveForTx(tx, slot), and the treasury of its epoch, every one passes.
+        assert(failed.isEmpty, s"Expected no failed transactions, got ${failed.size}")
     }
 }
