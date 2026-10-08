@@ -1276,6 +1276,113 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         }
     }
 
+    /** Alice's pool, as a registration certificate and a CertState that registers it. */
+    private object alicePool {
+        val params: ProtocolParams = CardanoInfo.mainnet.protocolParams
+        val registration: Certificate.PoolRegistration = Certificate.PoolRegistration(
+          operator = Alice.addrKeyHash,
+          vrfKeyHash = VrfKeyHash.fromHex("a" * 64),
+          pledge = Coin.ada(100),
+          cost = Coin(params.minPoolCost),
+          margin = UnitInterval.one,
+          rewardAccount = RewardAccount(Alice.account.stakeAddress(Mainnet)),
+          poolOwners = Set(Alice.addrKeyHash),
+          relays = IndexedSeq.empty,
+          poolMetadata = None
+        )
+        val registered: CertState = CertState(pstate =
+            PoolsState(stakePools =
+                Map(PoolKeyHash.fromByteString(Alice.addrKeyHash) -> registration)
+            )
+        )
+
+        /** A tx that spends `utxos`, pays `outputs`, a 1 ADA fee, and registers the pool. */
+        def registeringTx(utxos: Utxos, outputs: IndexedSeq[TransactionOutput]): Transaction =
+            Transaction(
+              TransactionBody(
+                inputs = TaggedSortedSet.from(utxos.keySet),
+                outputs = outputs.map(Sized(_)),
+                fee = Coin.ada(1),
+                certificates = TaggedOrderedStrictSet.from(Seq(registration))
+              )
+            )
+    }
+
+    test("calculateChangeValue charges no deposit for a pool the CertState registers") {
+        import alicePool.*
+        val input = Input(TransactionHash.fromByteString(ByteString.fromHex("0" * 64)), 0)
+        val utxos: Utxos = Map(input -> Output(Alice.address, Value.ada(1000)))
+        val tx = registeringTx(utxos, IndexedSeq.empty)
+
+        assert(
+          TransactionBuilder.calculateChangeValue(tx, utxos, params, registered) == Value.ada(999)
+        )
+        assert(
+          TransactionBuilder.calculateChangeValue(tx, utxos, params) ==
+              Value(Coin.ada(999) - Coin(params.stakePoolDeposit))
+        )
+    }
+
+    test("calculateChangeValue against a CertState takes the change of totals past Long.MaxValue") {
+        import alicePool.*
+        // Both sides hold 2 * (2^62 + 1) of the token, more than a Long holds; the change is ADA only
+        val amount = (1L << 62) + 1
+        val tokens =
+            MultiAsset.asset(ScriptHash.fromHex("1" * 56), AssetName.fromString("t"), amount)
+        val utxos: Utxos = (0 until 2).map { index =>
+            Input(TransactionHash.fromHex("0" * 64), index) ->
+                Output(Alice.address, Value(Coin.ada(500), tokens))
+        }.toMap
+        val tx = registeringTx(
+          utxos,
+          IndexedSeq.fill(2)(Output(Alice.address, Value(Coin.ada(1), tokens)))
+        )
+
+        assert(
+          TransactionBuilder.calculateChangeValue(tx, utxos, params, registered) == Value.ada(997)
+        )
+    }
+
+    test("finalizeContext balances against its CertState, so a pool update pays no deposit") {
+        import alicePool.*
+        val utxo = Utxo(
+          Input(TransactionHash.fromByteString(ByteString.fromHex("0" * 64)), 0),
+          Output(Alice.address, Value.ada(1000))
+        )
+        val ctx = fromRight(
+          TransactionBuilder.build(
+            Mainnet,
+            Seq(
+              Spend(utxo, PubKeyWitness),
+              Send(Output(Alice.address, Value.ada(1))),
+              IssueCertificate(registration, PubKeyWitness)
+            )
+          )
+        )
+        val evaluator =
+            PlutusScriptEvaluator(CardanoInfo.mainnet, EvaluatorMode.EvaluateAndComputeCost)
+        def finalized(certState: CertState): Transaction =
+            fromRight(
+              ctx.finalizeContext(
+                params,
+                Change.changeOutputDiffHandler(_, _, params, 0),
+                evaluator,
+                Seq(scalus.cardano.ledger.rules.ValueNotConservedUTxOValidator),
+                1L,
+                certState
+              )
+            ).transaction
+        def change(tx: Transaction): Coin = tx.body.value.outputs.head.value.value.coin
+
+        val update = finalized(registered)
+        assert(change(update) == Coin.ada(1000) - update.body.value.fee)
+        val newPool = finalized(CertState.empty)
+        assert(
+          change(newPool) ==
+              Coin.ada(1000) - newPool.body.value.fee - Coin(params.stakePoolDeposit)
+        )
+    }
+
     test("validate checks currentTreasuryValue against the given treasury") {
         val treasury = Coin.ada(1000)
         val ctx =

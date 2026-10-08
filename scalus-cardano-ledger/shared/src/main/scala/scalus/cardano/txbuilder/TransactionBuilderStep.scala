@@ -110,6 +110,15 @@ object TransactionBuilderStep {
             PubKeyWitness
     ) extends TransactionBuilderStep
 
+    /** Issues `cert` to update the parameters of a pool that is already registered.
+      *
+      * The certificate is the same as for a new registration; only the ledger state tells them
+      * apart. The ledger charges the pool deposit for a new pool only, so `TxBuilder.complete` and
+      * `TxBuilder.build` balance this step with no pool deposit, while [[IssueCertificate]] pays
+      * it.
+      */
+    case class UpdatePool(cert: Certificate.PoolRegistration) extends TransactionBuilderStep
+
     case class WithdrawRewards(
         stakeCredential: Credential,
         amount: Coin,

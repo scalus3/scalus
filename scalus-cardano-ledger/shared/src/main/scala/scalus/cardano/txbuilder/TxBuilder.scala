@@ -1297,6 +1297,23 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
     }
 
+    /** Updates the parameters of a registered pool. The transaction pays no pool deposit.
+      *
+      * A pool update and a new pool registration use the same `PoolRegistration` certificate. The
+      * ledger charges the pool deposit only for a pool that is not registered. The builder does not
+      * know the ledger state, so a certificate from [[TransactionBuilderStep.IssueCertificate]]
+      * always pays the deposit. For a registered pool, the ledger then rejects the transaction with
+      * `ValueNotConserved`. Use this method to update a registered pool. Do not use it for a new
+      * pool: the ledger rejects that transaction, because it pays no deposit. Do not also issue a
+      * registration of the same pool in the transaction: the builder counts that pool as
+      * registered, so the registration pays no deposit either.
+      *
+      * @param cert
+      *   the new parameters of the pool; its operator and owners must sign the transaction
+      */
+    def updatePool(cert: Certificate.PoolRegistration): TxBuilder =
+        addSteps(TransactionBuilderStep.UpdatePool(cert))
+
     /** Registers as a DRep.
       *
       * The deposit amount is taken from protocol parameters (dRepDeposit).
@@ -1466,7 +1483,13 @@ case class TxBuilder(
         val balancedContext = for {
             built <- TransactionBuilder.modify(context, steps)
             withAttachments = addAttachmentsToContext(built)
-            balanced <- withAttachments.balanceContext(params, diffHandler, evaluator, debugScripts)
+            balanced <- withAttachments.balanceContext(
+              params,
+              diffHandler,
+              evaluator,
+              debugScripts,
+              updatedPoolsState
+            )
         } yield balanced
 
         balancedContext match {
@@ -1726,7 +1749,8 @@ case class TxBuilder(
                   env.protocolParams,
                   diffHandler,
                   evaluator,
-                  debugScripts
+                  debugScripts,
+                  updatedPoolsState
                 ) match {
                     case Right(balancedCtx) =>
                         if balancedCtx.transaction.body.value.inputs.toSeq.isEmpty && pool.remainingForInputs.nonEmpty
@@ -1753,6 +1777,16 @@ case class TxBuilder(
                         throw TxBuilderException.fromBuildError(error)
                 }
         }
+    }
+
+    /** The ledger state that balancing assumes: the pools of the [[updatePool]] steps are
+      * registered, so their certificates pay no pool deposit.
+      */
+    private def updatedPoolsState: CertState = {
+        val pools = steps.collect { case TransactionBuilderStep.UpdatePool(cert) =>
+            PoolKeyHash.fromByteString(cert.operator) -> cert
+        }
+        CertState(pstate = PoolsState(stakePools = pools.toMap))
     }
 
     /** Handle balancing errors by selecting more UTXOs and retrying. */

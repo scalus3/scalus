@@ -140,7 +140,10 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             Right(useModifyAuxiliaryData(modifyAuxiliaryData))
 
         case issueCertificate: IssueCertificate =>
-            useIssueCertificate(issueCertificate)
+            useCertificate(issueCertificate.cert, issueCertificate.witness, issueCertificate)
+
+        case updatePool: UpdatePool =>
+            useCertificate(updatePool.cert, PubKeyWitness, updatePool)
 
         case withdrawRewards: WithdrawRewards =>
             useWithdrawRewards(withdrawRewards)
@@ -677,24 +680,22 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     }
 
     // -------------------------------------------------------------------------
-    // IssueCertificate step
+    // IssueCertificate and UpdatePool steps
     // -------------------------------------------------------------------------
 
-    private def useIssueCertificate(issueCertificate: IssueCertificate): Result[Unit] =
+    private def useCertificate(
+        cert: Certificate,
+        witness: PubKeyWitness.type | TwoArgumentPlutusScriptWitness | NativeScriptWitness,
+        step: TransactionBuilderStep
+    ): Result[Unit] =
         modify0(
           unsafeCtxBodyL
               .refocus(_.certificates)
               .modify(certificates =>
-                  TaggedOrderedStrictSet.from(
-                    appendDistinct(issueCertificate.cert, certificates.toSeq)
-                  )
+                  TaggedOrderedStrictSet.from(appendDistinct(cert, certificates.toSeq))
               )
         )
-        useCertificateWitness(
-          issueCertificate.cert,
-          issueCertificate.witness,
-          issueCertificate
-        )
+        useCertificateWitness(cert, witness, step)
 
     def useCertificateWitness(
         cert: Certificate,
@@ -774,8 +775,11 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                       step
                     )
             }
-        case Certificate.PoolRegistration(_, _, _, _, _, _, _, _, _) => Ok
-        case Certificate.PoolRetirement(_, _)                        => Ok
+        case _: Certificate.PoolRegistration | _: Certificate.PoolRetirement =>
+            // The pool operator signs, and so do the owners of a registration, as in
+            // cardano-ledger's witsVKeyNeeded
+            cert.keyHashes.foreach(hash => usePubKeyWitness(AddrKeyHash.fromByteString(hash)))
+            Ok
         case Certificate.VoteDelegCert(credential, _) =>
             useNonSpendingWitness(
               Operation.CertificateOperation(cert),

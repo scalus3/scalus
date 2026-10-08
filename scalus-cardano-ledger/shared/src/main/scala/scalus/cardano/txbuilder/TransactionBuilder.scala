@@ -534,22 +534,28 @@ object TransactionBuilder {
             protocolParams: ProtocolParams,
             evaluator: PlutusScriptEvaluator,
             debugScripts: Map[ScriptHash, DebugScript] = Map.empty
-        ): Either[TxBalancingError, Context] = {
-            // println(s"txWithDummySignatures=${HexUtil.encodeHexString(txWithDummySignatures.toCbor)}")
+        ): Either[TxBalancingError, Context] =
+            balance(diffHandler, protocolParams, evaluator, debugScripts, CertState.empty)
 
-            for {
-                balanced <- balanceFeeAndChangeWithTokens(
-                  initial = this.transaction,
-                  diffHandler = diffHandler,
-                  protocolParams = protocolParams,
-                  resolvedUtxo = this.getUtxos,
-                  evaluator = evaluator,
-                  debugScripts = debugScripts
-                )
-
-                // _ = println(HexUtil.encodeHexString(txWithoutDummySignatures.toCbor))
-            } yield copy(transaction = balanced)
-        }
+        /** [[balance]] against `certState`: a pool registration pays no pool deposit for a pool
+          * that `certState` registers.
+          */
+        def balance(
+            diffHandler: DiffHandler,
+            protocolParams: ProtocolParams,
+            evaluator: PlutusScriptEvaluator,
+            debugScripts: Map[ScriptHash, DebugScript],
+            certState: CertState
+        ): Either[TxBalancingError, Context] =
+            balanceFeeAndChangeWithTokens(
+              initial = this.transaction,
+              diffHandler = diffHandler,
+              protocolParams = protocolParams,
+              resolvedUtxo = this.getUtxos,
+              evaluator = evaluator,
+              debugScripts = debugScripts,
+              certState = certState
+            ).map(balanced => copy(transaction = balanced))
 
         /** Conversion help to Scalus [[scalus.cardano.ledger.Utxos]] */
         def getUtxos: Utxos = this.resolvedUtxos.utxos
@@ -616,6 +622,18 @@ object TransactionBuilder {
             diffHandler: DiffHandler,
             evaluator: PlutusScriptEvaluator,
             debugScripts: Map[ScriptHash, DebugScript] = Map.empty
+        ): Either[SomeBuildError, Context] =
+            balanceContext(protocolParams, diffHandler, evaluator, debugScripts, CertState.empty)
+
+        /** [[balanceContext]] against `certState`: a pool registration pays no pool deposit for a
+          * pool that `certState` registers.
+          */
+        def balanceContext(
+            protocolParams: ProtocolParams,
+            diffHandler: DiffHandler,
+            evaluator: PlutusScriptEvaluator,
+            debugScripts: Map[ScriptHash, DebugScript],
+            certState: CertState
         ): Either[SomeBuildError, Context] = {
             val txWithDummySignatures: Transaction =
                 addDummySignatures(this.expectedSigners.size, this.transaction)
@@ -639,7 +657,13 @@ object TransactionBuilder {
             for {
                 balancedCtx <- contextWithSignatures
                     .ensureMinAdaAll(protocolParams)
-                    .balance(combinedDiffHandler, protocolParams, evaluator, debugScripts)
+                    .balance(
+                      combinedDiffHandler,
+                      protocolParams,
+                      evaluator,
+                      debugScripts,
+                      certState
+                    )
                     .left
                     .map(BalancingError(_, this))
 
@@ -703,7 +727,8 @@ object TransactionBuilder {
         }
 
         /** Set min ada, balance, and validate a context. Validates against a treasury of zero, like
-          * the 4-argument [[validate]].
+          * the 4-argument [[validate]]. Balancing and validation both use `certState`, so a pool
+          * registration pays no pool deposit for a pool that `certState` registers.
           *
           * @param protocolParams
           *   the protocol parameters
@@ -754,7 +779,13 @@ object TransactionBuilder {
             debugScripts: Map[ScriptHash, DebugScript]
         ): Either[SomeBuildError, Context] = {
             for {
-                balancedCtx <- balanceContext(protocolParams, diffHandler, evaluator, debugScripts)
+                balancedCtx <- balanceContext(
+                  protocolParams,
+                  diffHandler,
+                  evaluator,
+                  debugScripts,
+                  certState
+                )
                 validatedCtx <- balancedCtx.validateContext(
                   validators,
                   protocolParams,
@@ -1010,33 +1041,49 @@ object TransactionBuilder {
         Right(newTx)
     }
 
-    def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value = {
+    /** The change of `tx`: what it consumes minus what it produces, as if no pool is registered, so
+      * every pool registration pays the pool deposit.
+      */
+    def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value =
+        calculateChangeValue(tx, utxo, params, CertState.empty)
+
+    /** The change of `tx` against `certState`: a pool registration pays no pool deposit for a pool
+      * that `certState` registers, as the ledger charges none for a pool update.
+      */
+    def calculateChangeValue(
+        tx: Transaction,
+        utxo: Utxos,
+        params: ProtocolParams,
+        certState: CertState
+    ): Value = {
         // Both totals are exact: a token's total on each side can pass `Long.MaxValue` while the
         // change, their difference, still fits.
-        val produced = TxBalance.producedExact(tx, CertState.empty, params)
-        // During balancing we don't have the real ledger CertState, so DRep deregistration
-        // refunds (whose amounts live in ledger state) would be lost. Reconstruct the needed
-        // CertState from the amounts declared on the transaction's own deregistration
-        // certificates. The ledger enforces these declared amounts equal the actual deposits
-        // (GOVCERT `ConwayDRepIncorrectRefund`), so this yields exactly the refund a node
-        // computes. Stake-key refunds don't need this when `UnregCert` carries its refund, which
-        // `TxBalance` uses. A legacy `UnregCert(cred, None)` balances with no refund, so the
-        // `TxBuilder.deregisterStake` overloads always state one.
-        val consumed =
-            TxBalance.consumedExact(tx, certStateForBalancing(tx), utxo, params).toTry.get
+        val produced = TxBalance.producedExact(tx, certState, params)
+        // `certState` need not hold the DRep deposits, so DRep deregistration refunds (whose
+        // amounts live in ledger state) would be lost. Add the amounts declared on the
+        // transaction's own deregistration certificates. The ledger enforces these declared
+        // amounts equal the actual deposits (GOVCERT `ConwayDRepIncorrectRefund`), so this yields
+        // exactly the refund a node computes. Stake-key refunds don't need this when `UnregCert`
+        // carries its refund, which `TxBalance` uses. A legacy `UnregCert(cred, None)` balances
+        // with no refund unless `certState` holds the account, so the `TxBuilder.deregisterStake`
+        // overloads always state one.
+        val consumed = TxBalance
+            .consumedExact(tx, withDeclaredDRepRefunds(tx, certState), utxo, params)
+            .toTry
+            .get
         (consumed - produced).toValue
     }
 
-    /** Reconstructs the [[CertState]] needed to balance DRep deposit refunds from the
-      * deregistration certificates of `tx`. Only the deregistered DRep credentials are seeded,
-      * using the refund amount declared on each `UnregDRepCert`.
+    /** `certState` with the DRep deposits that the deregistration certificates of `tx` declare,
+      * using the refund amount stated on each `UnregDRepCert`.
       */
-    private def certStateForBalancing(tx: Transaction): CertState = {
+    private def withDeclaredDRepRefunds(tx: Transaction, certState: CertState): CertState = {
         val drepDeposits = tx.body.value.certificates.toSeq.collect {
             case Certificate.UnregDRepCert(cred, refund) =>
                 cred -> DRepState(expiry = 0L, anchor = None, refund, delegates = Set.empty)
         }.toMap
-        CertState(vstate = VotingState(dreps = drepDeposits))
+        val vstate = certState.vstate
+        certState.copy(vstate = vstate.copy(dreps = vstate.dreps ++ drepDeposits))
     }
 
     // -------------------------------------------------------------------------
@@ -1056,16 +1103,38 @@ object TransactionBuilder {
         resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
         debugScripts: Map[ScriptHash, DebugScript] = Map.empty
-    ): Either[TxBalancingError, Transaction] = {
+    ): Either[TxBalancingError, Transaction] =
+        balanceFeeAndChange(
+          initial,
+          changeOutputIdx,
+          protocolParams,
+          resolvedUtxo,
+          evaluator,
+          debugScripts,
+          CertState.empty
+        )
+
+    /** [[balanceFeeAndChange]] against `certState`: a pool registration pays no pool deposit for a
+      * pool that `certState` registers.
+      */
+    def balanceFeeAndChange(
+        initial: Transaction,
+        changeOutputIdx: Int,
+        protocolParams: ProtocolParams,
+        resolvedUtxo: Utxos,
+        evaluator: PlutusScriptEvaluator,
+        debugScripts: Map[ScriptHash, DebugScript],
+        certState: CertState
+    ): Either[TxBalancingError, Transaction] =
         balanceFeeAndChangeWithTokens(
           initial,
           Change.changeOutputDiffHandler(_, _, protocolParams, changeOutputIdx),
           protocolParams,
           resolvedUtxo,
           evaluator,
-          debugScripts
+          debugScripts,
+          certState
         )
-    }
 
     /** Balances the transaction using a diff handler to adjust the transaction.
       *
@@ -1083,6 +1152,28 @@ object TransactionBuilder {
         resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
         debugScripts: Map[ScriptHash, DebugScript] = Map.empty
+    ): Either[TxBalancingError, Transaction] =
+        balanceFeeAndChangeWithTokens(
+          initial,
+          diffHandler,
+          protocolParams,
+          resolvedUtxo,
+          evaluator,
+          debugScripts,
+          CertState.empty
+        )
+
+    /** [[balanceFeeAndChangeWithTokens]] against `certState`: a pool registration pays no pool
+      * deposit for a pool that `certState` registers.
+      */
+    def balanceFeeAndChangeWithTokens(
+        initial: Transaction,
+        diffHandler: (Value, Transaction) => Either[TxBalancingError, Transaction],
+        protocolParams: ProtocolParams,
+        resolvedUtxo: Utxos,
+        evaluator: PlutusScriptEvaluator,
+        debugScripts: Map[ScriptHash, DebugScript],
+        certState: CertState
     ): Either[TxBalancingError, Transaction] = {
         var iteration = 0
 
@@ -1105,7 +1196,7 @@ object TransactionBuilder {
                 // Don't go below initial fee
                 fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
                 txWithFees = txWithExUnits.withBody(_.copy(fee = fee))
-                diff = calculateChangeValue(txWithFees, resolvedUtxo, protocolParams)
+                diff = calculateChangeValue(txWithFees, resolvedUtxo, protocolParams, certState)
                 // try to balance it
                 balanced <- diffHandler(diff, txWithFees)
             } yield balanced

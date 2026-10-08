@@ -7,8 +7,9 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
-import scalus.cardano.txbuilder.{ScriptSource, TransactionSigner, TwoArgumentPlutusScriptWitness, TxBuilder}
-import scalus.testing.kit.Party.{Alice, Bob}
+import scalus.cardano.txbuilder.{PubKeyWitness, ScriptSource, TransactionBuilderStep, TransactionSigner, TwoArgumentPlutusScriptWitness, TxBuilder}
+import scalus.testing.kit.Party
+import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.uplc.PlutusV3
 import scalus.utils.await
 
@@ -306,15 +307,20 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     /** Submits a tx built by `build` from `emulator`'s UTxOs, paid and signed by Alice with her
       * payment and stake keys.
       */
-    private def submitBuilt(emulator: Emulator)(build: TxBuilder => TxBuilder) = {
+    private def submitBuilt(emulator: Emulator)(build: TxBuilder => TxBuilder) =
+        emulator.submitSync(buildSigned(emulator)(build))
+
+    /** A tx built by `build` from `emulator`'s UTxOs, paid and signed by Alice with her payment and
+      * stake keys.
+      */
+    private def buildSigned(emulator: Emulator)(build: TxBuilder => TxBuilder): Transaction = {
         val signer = new TransactionSigner(
           Set(Alice.account.paymentKeyPair, Alice.account.stakeKeyPair)
         )
-        val tx = build(TxBuilder(testEnv))
+        build(TxBuilder(testEnv))
             .complete(emulator.utxos, Alice.address(Network.Mainnet))
             .sign(signer)
             .transaction
-        emulator.submitSync(tx)
     }
 
     test("deregisterStake with a script witness refunds the deposit registerStake paid") {
@@ -581,8 +587,15 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     private val poolId = PoolKeyHash.fromByteString(poolOperator)
 
     private def mkPoolRegistration(params: ProtocolParams): Certificate.PoolRegistration =
+        mkPoolRegistration(params, poolOperator)
+
+    /** A pool registration whose operator is also its only owner. */
+    private def mkPoolRegistration(
+        params: ProtocolParams,
+        operator: AddrKeyHash
+    ): Certificate.PoolRegistration =
         Certificate.PoolRegistration(
-          operator = poolOperator,
+          operator = operator,
           vrfKeyHash = VrfKeyHash.fromHex("a" * 64),
           pledge = Coin.ada(100),
           cost = Coin(params.minPoolCost),
@@ -590,7 +603,7 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
           rewardAccount = RewardAccount(
             StakeAddress(Network.Mainnet, StakePayload.Stake(StakeKeyHash.fromHex("b" * 56)))
           ),
-          poolOwners = Set(poolOperator),
+          poolOwners = Set(operator),
           relays = IndexedSeq.empty,
           poolMetadata = None
         )
@@ -646,6 +659,130 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(reRegResult.isRight, s"Pool re-registration should succeed: $reRegResult")
         assert(!emulator.certState.pstate.retiring.contains(poolId))
         assert(emulator.certState.pstate.futureStakePoolParams.contains(poolId))
+    }
+
+    /** Alice's pool, registered in an Emulator that funds her with 5000 ADA. */
+    private object alicePool {
+        val params: ProtocolParams = testEnv.protocolParams
+        val deposit: Coin = Coin(params.stakePoolDeposit)
+        val id: PoolKeyHash = PoolKeyHash.fromByteString(Alice.addrKeyHash)
+        val registration: Certificate.PoolRegistration =
+            mkPoolRegistration(params, Alice.addrKeyHash)
+        val update: Certificate.PoolRegistration = registration.copy(pledge = Coin.ada(200))
+
+        def registered(): Emulator = {
+            val emulator = Emulator(
+              Map(Input(genesisHash, 0) -> Output(Alice.address(Network.Mainnet), Value.ada(5000)))
+            )
+            val tx = buildSigned(emulator)(
+              _.addSteps(TransactionBuilderStep.IssueCertificate(registration, PubKeyWitness))
+            )
+            val result = emulator.submitSync(tx)
+            assert(result.isRight, result)
+            assert(aliceAda(emulator) == Coin.ada(5000) - deposit - tx.body.value.fee)
+            assert(emulator.certState.pstate.deposits.get(id).contains(deposit))
+            emulator
+        }
+    }
+
+    private def aliceAda(emulator: Emulator): Coin =
+        emulator.utxos.values
+            .filter(_.address == Alice.address(Network.Mainnet))
+            .map(_.value.coin)
+            .foldLeft(Coin.zero)(_ + _)
+
+    test("updatePool updates a registered pool and pays no pool deposit") {
+        val emulator = alicePool.registered()
+        val before = aliceAda(emulator)
+
+        val tx = buildSigned(emulator)(_.updatePool(alicePool.update))
+        val result = emulator.submitSync(tx)
+
+        assert(result.isRight, result)
+        assert(aliceAda(emulator) == before - tx.body.value.fee)
+        assert(
+          emulator.certState.pstate.futureStakePoolParams
+              .get(alicePool.id)
+              .contains(alicePool.update)
+        )
+        assert(emulator.certState.pstate.deposits.get(alicePool.id).contains(alicePool.deposit))
+    }
+
+    test("updatePool with a new pool's registration in one tx pays the new pool's deposit only") {
+        val emulator = alicePool.registered()
+        val before = aliceAda(emulator)
+        val bobPoolId = PoolKeyHash.fromByteString(Bob.addrKeyHash)
+        val bobPool = mkPoolRegistration(alicePool.params, Bob.addrKeyHash)
+            .copy(vrfKeyHash = VrfKeyHash.fromHex("c" * 64))
+
+        val tx = TxBuilder(testEnv)
+            .updatePool(alicePool.update)
+            .addSteps(TransactionBuilderStep.IssueCertificate(bobPool, PubKeyWitness))
+            .complete(emulator.utxos, Alice.address(Network.Mainnet))
+            .sign(
+              new TransactionSigner(Set(Alice.account.paymentKeyPair, Bob.account.paymentKeyPair))
+            )
+            .transaction
+        val result = emulator.submitSync(tx)
+
+        assert(result.isRight, result)
+        assert(aliceAda(emulator) == before - tx.body.value.fee - alicePool.deposit)
+        assert(emulator.certState.pstate.deposits.get(bobPoolId).contains(alicePool.deposit))
+        assert(emulator.certState.pstate.stakePools.get(bobPoolId).contains(bobPool))
+        assert(
+          emulator.certState.pstate.futureStakePoolParams
+              .get(alicePool.id)
+              .contains(alicePool.update)
+        )
+    }
+
+    test("a pool update issued as a plain certificate still pays the pool deposit") {
+        // the builder cannot tell an update from a new registration, so only updatePool skips it
+        val emulator = alicePool.registered()
+        val before = aliceAda(emulator)
+
+        val tx = buildSigned(emulator)(
+          _.addSteps(TransactionBuilderStep.IssueCertificate(alicePool.update, PubKeyWitness))
+        )
+
+        val change = tx.body.value.outputs.map(_.value.value.coin).foldLeft(Coin.zero)(_ + _)
+        assert(change == before - tx.body.value.fee - alicePool.deposit)
+        val result = emulator.submitSync(tx)
+        assert(result.left.map(_.rule) == Left("ValueNotConserved"), result)
+    }
+
+    test("the fee pays for the signatures of a pool's operator and owners") {
+        // Alice pays; Bob operates the pool, which Bob and Charles own. The ledger needs all
+        // three signatures to register or update the pool, and Bob's to retire it.
+        val params = testEnv.protocolParams
+        val registration = mkPoolRegistration(params, Bob.addrKeyHash)
+            .copy(poolOwners = Set(Bob.addrKeyHash, Charles.addrKeyHash))
+        val emulator = Emulator(
+          Map(Input(genesisHash, 0) -> Output(Alice.address(Network.Mainnet), Value.ada(5000)))
+        )
+        def submit(signers: Set[Party], build: TxBuilder => TxBuilder) = {
+            val tx = build(TxBuilder(testEnv))
+                .complete(emulator.utxos, Alice.address(Network.Mainnet))
+                .sign(new TransactionSigner(signers.map(_.account.paymentKeyPair)))
+                .transaction
+            emulator.submitSync(tx)
+        }
+        val owners = Set(Alice, Bob, Charles)
+        val retirement =
+            Certificate.PoolRetirement(PoolKeyHash.fromByteString(Bob.addrKeyHash), 209L)
+
+        val registered = submit(
+          owners,
+          _.addSteps(TransactionBuilderStep.IssueCertificate(registration, PubKeyWitness))
+        )
+        assert(registered.isRight, registered)
+        val updated = submit(owners, _.updatePool(registration.copy(pledge = Coin.ada(200))))
+        assert(updated.isRight, updated)
+        val retired = submit(
+          Set(Alice, Bob),
+          _.addSteps(TransactionBuilderStep.IssueCertificate(retirement, PubKeyWitness))
+        )
+        assert(retired.isRight, retired)
     }
 
     test("Emulator applies DRep registration, update and deregistration certificates") {

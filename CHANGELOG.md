@@ -33,6 +33,10 @@ Evolution provider needs.
 - `TxBalance.produced(tx, certState, params)` and `Certificate.shelleyTotalDeposits(params,
   isRegisteredPool, certificates)` take the registered pools, so a pool re-registration pays no
   deposit. The old forms count no pool as registered.
+- `TxBuilder.updatePool(cert)` updates the parameters of a registered pool and pays no pool
+  deposit. `TransactionBuilder.calculateChangeValue`, `balanceFeeAndChange`,
+  `balanceFeeAndChangeWithTokens`, `Context.balance` and `Context.balanceContext` have overloads
+  that take a `CertState`. A pool that the `CertState` registers pays no deposit.
 - `TransactionBuilder.Context.validate`, `validateContext` and `finalizeContext` have overloads
   that take the treasury. The old forms validate against a treasury of 0, so they reject a
   transaction that states a non-zero `currentTreasuryValue`.
@@ -181,6 +185,19 @@ Evolution provider needs.
   certificate without its refund, so the balancer missed the refunded deposit and the ledger
   rejected the transaction with `ValueNotConserved`. They now state the `stakeAddressDeposit` of
   the protocol parameters as the refund, as a Conway `UnregCert`.
+- `TransactionBuilder.Context.finalizeContext` balanced with no pool or account registered, but
+  validated against its `certState`. A pool update against a `certState` that registers the pool
+  paid the pool deposit and then failed with `ValueNotConserved`. It now balances against
+  `certState` too, so that pool pays no deposit, and a legacy `UnregCert(cred, None)` of an account
+  in `certState` gets its refund.
+- `TxBuilder` could not build a pool update. A `PoolRegistration` certificate always paid the pool
+  deposit, so the ledger rejected the update with `ValueNotConserved`. Use `updatePool`, which
+  pays none. A certificate added with `IssueCertificate` still pays the deposit, as for a new pool.
+- `TxBuilder` did not expect the signatures of a pool's operator and owners. For a pool that
+  another key pays for, `sign` dropped their signatures and the fee did not cover them. A pool
+  registration or update now expects its operator and owners, and a pool retirement its operator.
+  So the fee of such a transaction rises: it now includes one vkey witness, about 100 bytes, for
+  each distinct operator or owner key.
 - Ed25519, secp256k1 and BLS12-381 give the Cardano node's verdicts on every platform. On the JVM
   they run the C libraries cardano-node 11.1.3 links (libsodium IOG fork, libsecp256k1 v0.3.2,
   blst v0.3.15) through the new `scalus-crypto-jni` 0.1.0, called as cardano-crypto-class calls
