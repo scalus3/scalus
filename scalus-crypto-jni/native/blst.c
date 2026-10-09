@@ -62,6 +62,13 @@ JNIEXPORT jbyteArray JNICALL Java_scalus_crypto_jni_Blst_##X##Neg0(             
     blst_##X##_cneg(&p, 1);                                                                      \
     return new_array(env, &p, sizeof p);                                                         \
 }                                                                                                \
+/* cardano-crypto-class blsMult: the scalar reduced mod r, then multiplied with nbits = 256     \
+   (sizeScalar * 8), whatever its size. blst picks the algorithm from nbits: below 176 a        \
+   windowed loop over nbits bits, otherwise GLV over the full width. So a small scalar costs    \
+   what a full one does: x44 takes 57 us on G1, as on the node. blst-java's                     \
+   mult(BigInteger) passed 8 bits per significant byte instead, and took 6.6 us for x44;        \
+   passing the scalar's bit length would match it with the same result, but leaves the          \
+   node's path. */                                                                              \
 JNIEXPORT jbyteArray JNICALL Java_scalus_crypto_jni_Blst_##X##Mult0(                            \
     JNIEnv *env, jclass c, jbyteArray in, jbyteArray scalar_be) {                                \
     POINT p, r; byte be[32]; blst_scalar s;                                                      \
