@@ -1174,8 +1174,12 @@ object Lowering {
               app.anns.pos
             )
         }
+        // A constructor typed at a sum lowers to its variant (`DataConstrEmitter.genConstrLowered`),
+        // so the lowered value can be narrower than `app.arg.tp`. Upcast it to that type before
+        // asking for the type's data representation, as a let binding or a normal application does.
         val value = lctx
             .lower(app.arg)
+            .maybeUpcast(app.arg.tp, app.anns.pos)
             .toRepresentation(
               typegens.SirTypeUplcGenerator.defaultDataRepresentation(app.arg.tp),
               app.anns.pos
