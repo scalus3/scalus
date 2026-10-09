@@ -163,15 +163,17 @@ echo ""
 echo -e "${BOLD}${YELLOW}📊 Lines of Code${RESET}"
 echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 
-# Count Scala files
-total_scala_files=$(find . -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | wc -l | awk '{print $1}')
-main_scala_files=$(find . -path "*/src/main/*" -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | wc -l | awk '{print $1}')
-test_scala_files=$(find . -path "*/src/test/*" -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | wc -l | awk '{print $1}')
+# Count tracked Scala files only (skips worktrees, target/, and other untracked copies)
+scala_files() { git ls-files -- "$@"; }
+count_lines() { scala_files "$@" | tr '\n' '\0' | xargs -0 cat 2>/dev/null | wc -l | awk '{print $1}'; }
 
-# Count lines of code
-total_lines=$(find . -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
-main_lines=$(find . -path "*/src/main/*" -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
-test_lines=$(find . -path "*/src/test/*" -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+total_scala_files=$(scala_files '*.scala' | wc -l | awk '{print $1}')
+main_scala_files=$(scala_files '*/src/main/*.scala' | wc -l | awk '{print $1}')
+test_scala_files=$(scala_files '*/src/test/*.scala' | wc -l | awk '{print $1}')
+
+total_lines=$(count_lines '*.scala')
+main_lines=$(count_lines '*/src/main/*.scala')
+test_lines=$(count_lines '*/src/test/*.scala')
 
 echo -e "${GREEN}Total Scala files:${RESET}  ${BOLD}${WHITE}${total_scala_files}${RESET}"
 echo -e "${GREEN}Main files:${RESET}         ${BOLD}${WHITE}${main_scala_files}${RESET}"
