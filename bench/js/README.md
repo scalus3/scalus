@@ -30,7 +30,8 @@ node bench/js/compare-evaluators.mjs --dump deep-deposit \
 ```
 
 An engine whose name starts with `aiken` is loaded as Lucid's `uplc` package; one starting with
-`txeval` uses `TxEvaluator`, one evaluator per parameter set; any other name calls
+`txeval` uses `TxEvaluator`, one evaluator per parameter set, all sharing one `ScriptCache` if the
+name contains `cache`; any other name calls
 `Scalus.evalPlutusScripts` per request.
 
 To check that two builds, or the JVM and JS, agree, write the budgets and diff them:

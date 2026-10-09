@@ -148,7 +148,9 @@ async function loadEngine(spec) {
     const lib = abs.endsWith(".mjs") || isEsm(abs) ? await import(pathToFileURL(abs).href) : createRequire(import.meta.url)(abs);
     if (name.startsWith("txeval")) {
         // TxEvaluator, one per (cost models, slot configuration, budget), as an SDK keeps it.
+        // A name containing "cache" gives them all one shared ScriptCache.
         const evaluators = new Map();
+        const scriptCache = name.includes("cache") ? new lib.ScriptCache(64) : undefined;
         return {
             name,
             run(r) {
@@ -160,6 +162,7 @@ async function loadEngine(spec) {
                     costModels: { PlutusV1: r.cmArrays[0], PlutusV2: r.cmArrays[1], PlutusV3: r.cmArrays[2] },
                     protocolMajorVersion: 11,
                     maxBudget: { memory: BigInt(d.maxMemory), steps: BigInt(d.maxSteps) },
+                    scriptCache,
                 }));
                 r.pairs ??= r.inputs.map((a, i) => {
                     const b = r.outputs[i], p = new Uint8Array(1 + a.length + b.length);
