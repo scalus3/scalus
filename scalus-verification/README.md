@@ -41,6 +41,10 @@ validator actually runs on chain.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala`, in
   the examples module - properties of the vesting contract: its schedule, and its validator on
   script contexts and withdrawals. The JVM tests of `scalus-examples` depend on this module.
+- `scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala` -
+  properties of the hashed timelock contract, for every datum and whatever else the transaction
+  has: who refunds and who reveals, when, and of what, and that there is no time at which both
+  can.
 
 ## Statements
 
@@ -282,18 +286,20 @@ precondition.
 cd scalus-verification/src/main/lean && lake build && cd -   # once, and after a Lean change
 sbt scalusVerification/test                                                        # about 1 min of tests
 sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 2 min
+sbt "scalusExamplesJVM/testOnly scalus.examples.htlc.HtlcVerificationTest"         # about 3 min
 sbt "scalusVerification/testOnly *UplcBlasterLimitsTest"   # the statements Lean does not finish
 ```
 
 The tests that run Lean need `lake` on the `PATH` (the default and `ci` nix shells have it) and
 the built library. A suite starts one Lean server for its checks, in its workspace, and closes
-it after its last test. Without them those tests are canceled, as in ci-jvm. With the
+it after its last test. Without them a test that asks Lean is canceled, as in ci-jvm, and a
+suite that keeps its results passes on them (below). With the
 `SCALUS_REQUIRE_LEAN` environment variable set, as in the Lean-Proofs workflow, they fail instead.
 
 ### Kept results
 
-`PreludeProofsTest` and `VestingVerificationTest` keep the results of their statements, each in
-a file beside its source, `<Suite>.proofs.json`, which is committed. An entry has the hashes of
+`PreludeProofsTest`, `VestingVerificationTest` and `HtlcVerificationTest` keep the results of
+their statements, each in a file beside its source, `<Suite>.proofs.json`, which is committed. An entry has the hashes of
 what the result rests on: the statement as Lean is given it, the program of each test, and
 Lean's side. See the [overview](../docs/design/verification-overview.md#56-kept-results).
 
