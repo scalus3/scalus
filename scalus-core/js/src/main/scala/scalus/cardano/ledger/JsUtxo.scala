@@ -293,7 +293,7 @@ object JsUtxo {
     private def plainScriptOf(script: Script): JsPlainScript = {
         def plutus(single: ByteString) = Hex.bytesToHex(Cbor.encode(single.bytes).toByteArray)
         val (tpe, hex) = script match
-            case Script.Native(timelock) => ("Native", Hex.bytesToHex(timelock.toCbor))
+            case native: Script.Native   => ("Native", Hex.bytesToHex(native.binaryScript.raw))
             case Script.PlutusV1(single) => ("PlutusV1", plutus(single))
             case Script.PlutusV2(single) => ("PlutusV2", plutus(single))
             case Script.PlutusV3(single) => ("PlutusV3", plutus(single))
@@ -308,7 +308,7 @@ object JsUtxo {
         def plutus =
             ByteString.unsafeFromArray(Cbor.encode(flatOf(fields.script, "script")).toByteArray)
         fields.`type`.asInstanceOf[Any] match
-            case "Native"   => Script.Native(decodeOf(fields.script, "script")(Timelock.fromCbor))
+            case "Native"   => decodeOf(fields.script, "script")(Script.Native.fromCbor)
             case "PlutusV1" => Script.PlutusV1(plutus)
             case "PlutusV2" => Script.PlutusV2(plutus)
             case "PlutusV3" => Script.PlutusV3(plutus)

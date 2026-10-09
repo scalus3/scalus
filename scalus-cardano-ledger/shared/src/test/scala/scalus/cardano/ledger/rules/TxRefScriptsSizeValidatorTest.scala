@@ -102,6 +102,18 @@ class TxRefScriptsSizeValidatorTest extends AnyFunSuite {
         )
     }
 
+    test("measures a native script by its original bytes") {
+        // originalBytesSize: 7 bytes, where the canonical encoding 82040a has 3
+        val native = Script.Native.fromCbor(ByteString.fromHex("82041a0000000a").bytes)
+        val transaction = tx(Seq.empty, Seq(input(0), input(1)))
+        def utxos(plutusSize: Int): Utxos = Map(
+          input(0) -> withScript(native),
+          input(1) -> withScript(plutusScript(plutusSize))
+        )
+        assert(validate(utxos(limit - 7), transaction) == Right(()))
+        assert(validate(utxos(limit - 6), transaction) == tooBig(transaction, limit + 1))
+    }
+
     test("skips an input that is not in the UTxO") {
         // getReferenceScriptsNonDistinct restricts the UTxO to the inputs it holds
         val transaction = tx(Seq(input(0)), Seq(input(1)))

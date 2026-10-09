@@ -34,10 +34,10 @@ object TxRefScriptsSizeValidator extends STS.Validator {
             )
     }
 
-    /** `originalBytesSize` of a script in cardano-ledger: the CBOR of a timelock, or the bytes of a
-      * Plutus script.
+    /** `originalBytesSize` of a script in cardano-ledger: the original CBOR of a timelock, or the
+      * bytes of a Plutus script.
       */
     private[ledger] def scriptSize(script: Script): Int = script match
-        case s: Script.Native => s.script.toCbor.length
+        case s: Script.Native => s.binaryScript.raw.length
         case s: PlutusScript  => s.script.size
 }

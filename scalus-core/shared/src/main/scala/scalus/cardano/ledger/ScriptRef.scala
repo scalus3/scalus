@@ -16,8 +16,9 @@ object ScriptRef:
             // Tag 24 is used for embedded CBOR
             w.writeTag(EmbeddedCBOR)
 
-            // Serialize the script to CBOR bytes
-            val scriptBytes = Cbor.encode(value.script).toByteArray
+            // Serialize the script to CBOR bytes; this encoder writes the original bytes of a
+            // native script, which borer's validating writer rejects
+            val scriptBytes = scalus.serialization.cbor.Cbor.encode(value.script)
 
             // Write the bytes
             w.writeBytes(scriptBytes)
@@ -34,10 +35,8 @@ object ScriptRef:
             // Read the embedded CBOR bytes
             val bytes: Array[Byte] = r.readBytes()
 
-            // Parse the bytes as a Script
-            val script = Cbor.decode(bytes).to[Script].value
-
-            ScriptRef(script)
+            // Parse the bytes as a Script, keeping the bytes of a native script
+            ScriptRef(Script.fromCbor(bytes))
 
     /** Pretty prints ScriptRef with script hash (concise) or full hex (detailed) */
     given Pretty[ScriptRef] = Pretty.instanceWithDetailed(

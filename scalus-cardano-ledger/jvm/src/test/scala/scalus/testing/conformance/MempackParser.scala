@@ -1,6 +1,5 @@
 package scalus.testing.conformance
 
-import io.bullet.borer.Cbor
 import scalus.uplc.builtin.ByteString
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
@@ -394,7 +393,7 @@ object MempackParser {
 
                 val scriptBytes = bytes.slice(offset, offset + scriptLen)
                 // Parse native script from CBOR
-                val nativeScript = Cbor.decode(scriptBytes).to[Script.Native].value
+                val nativeScript = Script.Native.fromCbor(scriptBytes)
                 Some(ScriptRef(nativeScript))
             case 1 =>
                 // PlutusScript - first read version tag, then script bytes

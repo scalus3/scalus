@@ -193,6 +193,24 @@ class JsUtxoTest extends AnyFunSuite {
         assert((plain.`type`, plain.script) == ("Native", native))
     }
 
+    test("a native script in a non-minimal encoding keeps its bytes and their hash") {
+        // `RequireTimeAfter 10` with the slot in 5 bytes
+        val native = "82041a0000000a"
+        val record = js.Dynamic.literal(`type` = "Native", script = native)
+        val utxo = JsUtxo
+            .wrap(TransactionInput(hash, 0), TransactionOutput(address, Value.ada(1)))
+            .withScriptRef(record)
+        val plain = utxo.script.toOption.getOrElse(fail("no script"))
+        assert((plain.`type`, plain.script) == ("Native", native))
+        assert(
+          JsHashes
+              .scriptHash(record) == Script.Native.fromCbor(Hex.hexToBytes(native)).scriptHash.toHex
+        )
+        assert(
+          JsHashes.scriptHash(record) != Script.Native(Timelock.TimeStart(10)).scriptHash.toHex
+        )
+    }
+
     test("scriptHash ignores the wrapping; dataHash hashes the CBOR as given") {
         val flat = Array[Byte](1, 1, 0, 0x33, 0x70)
         val single = Cbor.encode(flat).toByteArray

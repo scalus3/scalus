@@ -492,6 +492,28 @@ class EmulatorParityTest extends AnyFunSuite {
         assert(stored.toSeq == Seq(datum), "Inline compares the bytes, spec [SC-13g]")
     }
 
+    test("a native reference script keeps its original bytes through submit and query") {
+        // `RequireTimeAfter 10` with the slot in 5 bytes, which re-encodes as 82040a
+        val native = Script.Native.fromCbor(ByteString.fromHex("82041a0000000a").bytes)
+        val utxos = genesisUtxos(Value.ada(100))
+        val emulator = emulatorOver(utxos)
+        val built = TxBuilder(testEnv)
+            .output(TransactionOutput.Babbage(bob, Value.ada(10), None, Some(ScriptRef(native))))
+            .complete(utxos, alice)
+            .sign(Alice.signer)
+            .transaction
+        val tx = Transaction.fromCbor(built.toCbor)
+        assert(ByteString.unsafeFromArray(tx.toCbor).toHex.contains("d81849820082041a0000000a"))
+        assert(emulator.submitSync(tx) == Right(tx.id))
+
+        val stored = emulator
+            .findUtxosSync(UtxoQuery(UtxoSource.FromTransaction(tx.id)))
+            .values
+            .flatMap(_.scriptRef)
+            .map(_.script)
+        assert(stored.toSeq == Seq(native), "Native compares the bytes")
+    }
+
     test("getDatum finds a submitted inline datum by the hash of its original bytes") {
         // spec [SC-13j]
         val probeBytes = ByteString.fromHex("d879811a0000000a").bytes

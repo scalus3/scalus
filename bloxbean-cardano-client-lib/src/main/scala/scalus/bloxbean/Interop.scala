@@ -145,7 +145,7 @@ object Interop {
     extension [A](inline a: A) inline infix def ??(b: => A): A = if a != null then a else b
 
     private[bloxbean] def getScriptFromScriptRefBytes(scriptRefBytes: Array[Byte]): Script = {
-        Cbor.decode(scriptRefBytes).to[Script].value
+        Script.fromCbor(scriptRefBytes)
     }
 
     /** Converts Cardano Client Lib's [[com.bloxbean.cardano.client.plutus.spec.PlutusData]] to

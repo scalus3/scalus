@@ -87,11 +87,51 @@ object PlutusScript {
 
 object Script {
 
-    /** Native script (timelock) */
-    @key(0) final case class Native(script: Timelock) extends Script derives Codec {
+    /** Native script (timelock), with the CBOR it arrived in.
+      *
+      * Haskell memoizes these bytes (`MemoBytes`), and so does this: the script hash, the
+      * reference-script size and the encoder use them, and two native scripts are equal only if
+      * their bytes are. Build one with `Native(timelock)` or `Native.fromCbor(cbor)`, and read its
+      * timelock with `script` or `case Native(t)`.
+      */
+    @key(0) final case class Native private (binaryScript: KeepRaw[Timelock]) extends Script {
 
-        /** Get the script hash for this native script */
-        @transient lazy val scriptHash: ScriptHash = script.scriptHash
+        /** The timelock. */
+        def script: Timelock = binaryScript.value
+
+        /** `blake2b_224(0x00 ++ bytes)` of the original bytes, `hashScript` in cardano-ledger. */
+        @transient lazy val scriptHash: ScriptHash = Hash(
+          platform.blake2b_224(ByteString.unsafeFromArray(0 +: binaryScript.raw))
+        )
+
+        override def toString: String = s"Native($script)"
+    }
+
+    object Native {
+
+        /** A native script encoded canonically. */
+        def apply(script: Timelock): Native = new Native(KeepRaw(script))
+
+        /** A native script decoded from `cbor` that keeps these bytes, a non-minimal encoding
+          * included.
+          */
+        def fromCbor(cbor: Array[Byte]): Native =
+            new Native(KeepRaw.unsafe(Timelock.fromCbor(cbor), cbor))
+
+        /** Binds the timelock. */
+        def unapply(native: Native): Some[Timelock] = Some(native.script)
+
+        /** Writes the original bytes. Canonical bytes go through the timelock encoder, so borer's
+          * validating writer still accepts them; other bytes need `scalus.serialization.cbor.Cbor`.
+          */
+        given Encoder[Native] = (w, native) =>
+            if java.util.Arrays.equals(native.binaryScript.raw, native.script.toCbor) then
+                w.write(native.script)
+            else w.write(native.binaryScript)
+
+        /** Keeps the bytes the timelock is decoded from. */
+        given decoder(using OriginalCborByteArray): Decoder[Native] =
+            Decoder(r => new Native(r.read[KeepRaw[Timelock]]()))
     }
 
     /** Plutus V1 script */
@@ -182,7 +222,17 @@ object Script {
         }
     }
 
-    given Codec[Script] = deriveCodec
+    given Encoder[Script] = deriveEncoder
+
+    /** Decodes a native script keeping its bytes, which `OriginalCborByteArray` holds. */
+    given decoder(using OriginalCborByteArray): Decoder[Script] = deriveDecoder
+
+    /** A script decoded from `cbor`, `[language, script]`, that keeps the bytes of a native script.
+      */
+    def fromCbor(cbor: Array[Byte]): Script = {
+        given OriginalCborByteArray = OriginalCborByteArray(cbor)
+        Cbor.decode(cbor).to[Script].value
+    }
 
     import Doc.*
     import Pretty.inParens
