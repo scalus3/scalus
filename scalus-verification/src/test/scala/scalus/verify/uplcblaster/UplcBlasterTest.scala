@@ -217,7 +217,28 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         run(forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x), 3, Nil) match
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("spurious"), reason)
+                // Lean's machine counted the steps of the counterexample: the budget is at fault.
+                assert(reason.contains("a test needs more than 3 steps"), reason)
+                assert(reason.contains("On Lean's machine it holds there from"), reason)
             case (_, _, other) => fail(s"expected an inconclusive result, got $other")
+    }
+
+    test("a counterexample that takes a hash for what it is not is not laid to the budget") {
+        // The statement is false: some bytes hash to some image. But Lean's library declares the
+        // hash opaque, so the solver's counterexample has an image it takes for the hash of its
+        // bytes, which the real hash is not. On those values the statement holds, on the Scalus
+        // CEK and on Lean's machine alike, within the budget: more steps would change nothing.
+        val reason = inconclusive(
+          forAll[ByteString, ByteString]((bytes, image) =>
+              !Prop(Builtins.sha3_256(bytes) == image)
+          ),
+          100,
+          2.minutes
+        )
+        assert(reason.contains("is spurious"), reason)
+        assert(reason.contains("they do not show what Lean found"), reason)
+        assert(reason.contains("The programs apply sha3_256"), reason)
+        assert(!reason.contains("needs more than"), reason)
     }
 
     test("closed statements, equality and denotes") {

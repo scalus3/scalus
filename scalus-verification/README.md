@@ -94,8 +94,11 @@ result for its statement, and the server takes the next one. Where the server it
   `!denotes(BigInt(7) / BigInt(0))`, can be proved (design doc §6.2).
 - **Falsified** is replayed on the Scalus CEK with a large budget. If the statement is false
   there too, the result is `Refuted` with the counterexample; otherwise it is `Inconclusive`, and
-  the message says the counterexample is spurious. A spurious counterexample means the budget is
-  too small. A falsified statement that asks for a witness, with an ordinary `exists` or with a
+  the message says the counterexample is spurious, and why: Lean's machine counts what each
+  test's program does on it. Mostly the budget is too small, and the message says how many steps
+  would do. Where the statement holds on it within the budget, the values do not show what Lean
+  found: a program applies a builtin of which Lean knows nothing, such as a hash, and no budget
+  helps. A falsified statement that asks for a witness, with an ordinary `exists` or with a
   `forAll` under `!` or in a premise, is `Inconclusive`, because it has no finite counterexample
   that the Scalus CEK can replay to establish that no witness exists; use `existsLet` when a
   witness is known.
