@@ -1,17 +1,19 @@
 package scalus
 
-/** Backward compatibility package for scalus.builtin.
+/** Deprecated: use [[scalus.uplc.builtin]] and [[scalus.uplc.builtin.bls12_381]] instead.
   *
-  * Provides BLS12-381 type aliases that are still in transition.
+  * Kept so that code using the old BLS12-381 names still compiles.
   */
 package object builtin {
-    // BLS12-381 types - new short names (canonical)
+    @deprecated("use scalus.uplc.builtin.bls12_381.G1Element instead", "1.3.0")
     type G1Element = scalus.uplc.builtin.bls12_381.G1Element
+    @deprecated("use scalus.uplc.builtin.bls12_381.G2Element instead", "1.3.0")
     type G2Element = scalus.uplc.builtin.bls12_381.G2Element
+    @deprecated("use scalus.uplc.builtin.bls12_381.MLResult instead", "1.3.0")
     type MLResult = scalus.uplc.builtin.bls12_381.MLResult
 
-    // BLS12-381 companion objects - new short names (canonical)
+    @deprecated("use scalus.uplc.builtin.bls12_381.G1Element instead", "1.3.0")
     val G1Element = scalus.uplc.builtin.bls12_381.G1Element
+    @deprecated("use scalus.uplc.builtin.bls12_381.G2Element instead", "1.3.0")
     val G2Element = scalus.uplc.builtin.bls12_381.G2Element
-    // Note: MLResult doesn't have a usable companion object from this package
 }

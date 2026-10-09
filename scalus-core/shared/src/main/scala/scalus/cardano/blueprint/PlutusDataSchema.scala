@@ -264,8 +264,7 @@ object PlutusDataSchema {
             tpe.show match {
                 case "scala.Int" | "scala.Long" | "scala.math.BigInt" =>
                     '{ Some(DataType.Integer) }
-                case "scala.Array[scala.Byte]" | "scalus.builtin.ByteString" |
-                    "scalus.uplc.builtin.ByteString" =>
+                case "scala.Array[scala.Byte]" | "scalus.uplc.builtin.ByteString" =>
                     '{ Some(DataType.Bytes) }
                 case "scala.Boolean" =>
                     '{ Some(DataType.BooleanBuiltin) }
@@ -339,8 +338,7 @@ object PlutusDataSchema {
             case "scala.Int" | "scala.Long" | "scala.math.BigInt" | "scala.Boolean" |
                 "java.lang.String" =>
                 true
-            case "scala.Array[scala.Byte]" | "scalus.builtin.ByteString" |
-                "scalus.uplc.builtin.ByteString" =>
+            case "scala.Array[scala.Byte]" | "scalus.uplc.builtin.ByteString" =>
                 true
             case _ if tpe.typeSymbol.name == "List" || tpe.typeSymbol.name == "Map" => true
             case _                                                                  => false

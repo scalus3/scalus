@@ -298,7 +298,7 @@ the correct creator royalty address.
 
 ```scala
 import scalus.patterns.ParameterValidation
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.Data.toData
 
 // 1. Compute marketplace hash for specific creator
 def computeMarketplaceHash(creatorPkh: PubKeyHash): ValidatorHash = {

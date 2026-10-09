@@ -765,9 +765,9 @@ The classes should be named following Scala 3's conventions and should be placed
 Use scala BigInt for the big_int type.
 
 Use scalus.ledger.api.Timelock for NativeScript type.
-Use scalus.builtin.Data for the plutus_data type.
+Use scalus.uplc.builtin.Data for the plutus_data type.
 
-The `ByteString` class should be used to represent the `bytes` type. This class is already provided in the `scalus.builtin` package.
+The `ByteString` class should be used to represent the `bytes` type. This class is already provided in the `scalus.uplc.builtin` package.
 Here is its definition:
 
 ```scala
