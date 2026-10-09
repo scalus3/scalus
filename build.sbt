@@ -1037,9 +1037,9 @@ lazy val scalusVerification = project
     .disablePlugins(MimaPlugin)
     .settings(
       name := "scalus-verification",
+      publishOnlyLts,
       crossScalaVersions := supportedScalaVersions,
       scalacOptions ++= commonScalacOptions,
-      publish / skip := true,
       run / fork := true,
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
       // Statements Lean does not finish are left out of `test` and `testQuick`, and run by
