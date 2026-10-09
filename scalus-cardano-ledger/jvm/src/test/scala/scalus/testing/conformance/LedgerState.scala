@@ -1,7 +1,7 @@
 package scalus.testing.conformance
 
 import io.bullet.borer.*
-import io.bullet.borer.Dom.Element
+import io.bullet.borer.Dom.{ArrayElem, ByteArrayElem, Element, MapElem}
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import scalus.cardano.ledger.*
 
@@ -100,15 +100,19 @@ object LedgerState {
 
     /** Conway PState from cardano-ledger test vectors.
       *
-      * PState is encoded as: [psStakePoolParams, psFutureStakePoolParams, psRetiring, psDeposits]
-      * (4 elements)
-      *   - psStakePoolParams: Map PoolKeyHash PoolParams
-      *   - psFutureStakePoolParams: Map PoolKeyHash PoolParams
-      *   - psRetiring: Map PoolKeyHash EpochNo
-      *   - psDeposits: Map PoolKeyHash Coin
+      * PState is a 4-element array in one of two layouts:
+      *   - older dumps (the JVM vectors): [psStakePoolParams: Map PoolKeyHash PoolParams,
+      *     psFutureStakePoolParams: Map PoolKeyHash PoolParams, psRetiring: Map PoolKeyHash
+      *     EpochNo, psDeposits: Map PoolKeyHash Coin]
+      *   - current cardano-ledger (the IT vectors, `CertState.hs` `EncCBOR (PState era)`):
+      *     [psVRFKeyHashes: Map VrfKeyHash Word64, psStakePools: Map PoolKeyHash StakePoolState,
+      *     psFutureStakePoolParams: Map PoolKeyHash StakePoolParams, psRetiring: Map PoolKeyHash
+      *     EpochNo]; a pool deposit is the `spsDeposit` field of its StakePoolState.
       *
-      * PoolParams is encoded as a 9-element array (without certificate tag prefix): [operator,
-      * vrfKeyHash, pledge, cost, margin, rewardAccount, poolOwners, relays, poolMetadata]
+      * PoolParams and StakePoolParams are a 9-element array: [operator, vrfKeyHash, pledge, cost,
+      * margin, rewardAccount, poolOwners, relays, poolMetadata]. StakePoolState is a 10-element
+      * array: [vrfKeyHash, pledge, cost, margin, accountId, poolOwners, relays, poolMetadata,
+      * deposit, delegators].
       */
     case class PState(
         stakePools: Map[PoolKeyHash, Certificate.PoolRegistration],
@@ -120,54 +124,47 @@ object LedgerState {
     object PState {
         val empty: PState = PState(Map.empty, Map.empty, Map.empty, Map.empty)
 
-        /** Decode PoolParams from CBOR array (internal ledger state encoding).
-          *
-          * Two formats exist:
-          *   - Old format (9 elements, matching transaction CDDL): [operator, vrfKeyHash, pledge,
-          *     cost, margin, rewardAccount, poolOwners, relays, poolMetadata]
-          *   - New format (8+ elements, operator is the map key): [vrfKeyHash, pledge, cost,
-          *     margin, rewardAccount, poolOwners, relays, poolMetadata, ...]
-          *
-          * We distinguish them by checking whether the first byte array is 28 bytes (operator/ppId)
-          * or 32 bytes (vrfKeyHash).
+        /** Decode a 9-element PoolParams or StakePoolParams; skip trailing fields of later
+          * versions.
           */
-        private def readPoolParams(r: Reader, operator: PoolKeyHash): Certificate.PoolRegistration =
+        private def readPoolParams(r: Reader): Certificate.PoolRegistration =
             val size = r.readArrayHeader()
-            // Peek at the first bytes element to determine the format.
-            // ByteString-Header carries the length; 28 = AddrKeyHash, 32 = VrfKeyHash.
-            val firstBytes = r.readBytes[Array[Byte]]()
-            val (actualOperator, vrfKeyHash) =
-                if firstBytes.length == 28 then
-                    // Old format: first element is operator (ppId), second is vrfKeyHash
-                    val vrfKH = r.read[VrfKeyHash]()
-                    val opHash = PoolKeyHash.fromArray(firstBytes)
-                    (AddrKeyHash.fromByteString(opHash), vrfKH)
-                else
-                    // New format: first element is vrfKeyHash, operator from map key
-                    (AddrKeyHash.fromByteString(operator), VrfKeyHash.fromArray(firstBytes))
-            val isOldFormat = firstBytes.length == 28
-            val pledge = r.read[Coin]()
-            val cost = r.read[Coin]()
-            val margin = r.read[UnitInterval]()
-            val rewardAccount = readRewardAccount(r, isOldFormat)
-            val poolOwners = readTaggedSet[AddrKeyHash](r)
-            val relays = r.read[IndexedSeq[Relay]]()
-            // StrictMaybe encoding: null for SNothing, [] for SNothing, [x] for SJust x
-            val poolMetadata = readStrictMaybePoolMetadata(r)
-            // Skip any extra trailing fields (old format: 9 consumed, new format: 8 consumed)
-            val consumed = if firstBytes.length == 28 then 9 else 8
-            for _ <- consumed until size.toInt do r.read[Element]()
-            Certificate.PoolRegistration(
-              operator = actualOperator,
-              vrfKeyHash = vrfKeyHash,
-              pledge = pledge,
-              cost = cost,
-              margin = margin,
-              rewardAccount = rewardAccount,
-              poolOwners = poolOwners,
-              relays = relays,
-              poolMetadata = poolMetadata
+            val registration: Certificate.PoolRegistration = Certificate.PoolRegistration(
+              operator = r.read[AddrKeyHash](),
+              vrfKeyHash = r.read[VrfKeyHash](),
+              pledge = r.read[Coin](),
+              cost = r.read[Coin](),
+              margin = r.read[UnitInterval](),
+              rewardAccount = r.read[RewardAccount](),
+              poolOwners = readTaggedSet[AddrKeyHash](r),
+              relays = r.read[IndexedSeq[Relay]](),
+              poolMetadata = readStrictMaybePoolMetadata(r)
             )
+            for _ <- 9 until size.toInt do r.read[Element]()
+            registration
+
+        /** Decode a StakePoolState of a registered pool into its registration and deposit. The
+          * delegators field has no counterpart in [[PoolsState]] and is skipped.
+          */
+        private def readStakePoolState(
+            r: Reader,
+            operator: PoolKeyHash
+        ): (Certificate.PoolRegistration, Coin) =
+            r.readArrayHeader(10)
+            val registration: Certificate.PoolRegistration = Certificate.PoolRegistration(
+              operator = AddrKeyHash.fromByteString(operator),
+              vrfKeyHash = r.read[VrfKeyHash](),
+              pledge = r.read[Coin](),
+              cost = r.read[Coin](),
+              margin = r.read[UnitInterval](),
+              rewardAccount = readAccountId(r),
+              poolOwners = readTaggedSet[AddrKeyHash](r),
+              relays = r.read[IndexedSeq[Relay]](),
+              poolMetadata = readStrictMaybePoolMetadata(r)
+            )
+            val deposit = r.read[Coin]()
+            r.read[Element]() // delegators
+            (registration, deposit)
 
         /** Read StrictMaybe PoolMetadata: null, [] (SNothing), or [x] / value (SJust). */
         private def readStrictMaybePoolMetadata(r: Reader): Option[PoolMetadata] =
@@ -185,33 +182,16 @@ object LedgerState {
                     Some(PoolMetadata(url, hash))
             else Some(r.read[PoolMetadata]())
 
-        /** Read RewardAccount from ledger state encoding.
-          *
-          * Two formats:
-          *   - Old format (isOldFormat=true): raw bytes (same as transaction CDDL)
-          *   - New internal format (isOldFormat=false): Credential [tag, hash] array, reconstructed
-          *     with Testnet network
-          */
-        private def readRewardAccount(r: Reader, isOldFormat: Boolean): RewardAccount =
-            if isOldFormat then
-                // Old format: raw bytes encoding matching transaction CDDL
-                r.read[RewardAccount]()
-            else
-                // New internal format: Credential [tag, hash]
-                val cred = r.read[Credential]()
-                val payload = cred match
-                    case Credential.KeyHash(hash) =>
-                        scalus.cardano.address.StakePayload.Stake(
-                          StakeKeyHash.fromByteString(hash)
-                        )
-                    case Credential.ScriptHash(hash) =>
-                        scalus.cardano.address.StakePayload.Script(hash)
-                RewardAccount(
-                  scalus.cardano.address.StakeAddress(
-                    scalus.cardano.address.Network.Testnet,
-                    payload
-                  )
-                )
+        /** Read an AccountId (a staking Credential [tag, hash]) as a Testnet reward account. */
+        private def readAccountId(r: Reader): RewardAccount =
+            val payload = r.read[Credential]() match
+                case Credential.KeyHash(hash) =>
+                    scalus.cardano.address.StakePayload.Stake(StakeKeyHash.fromByteString(hash))
+                case Credential.ScriptHash(hash) =>
+                    scalus.cardano.address.StakePayload.Script(hash)
+            RewardAccount(
+              scalus.cardano.address.StakeAddress(scalus.cardano.address.Network.Testnet, payload)
+            )
 
         private def readTaggedSet[A](r: Reader)(using decoder: Decoder[A]): Set[A] =
             if r.dataItem() == DataItem.Tag then
@@ -222,35 +202,72 @@ object LedgerState {
         given Decoder[PState] with
             def read(r: Reader): PState =
                 r.readArrayHeader(4)
-                // psStakePoolParams: Map PoolKeyHash PoolParams
-                val stakePoolsSize = r.readMapHeader()
-                val stakePools = (0 until stakePoolsSize.toInt).map { _ =>
-                    val poolId = r.read[PoolKeyHash]()
-                    val params = readPoolParams(r, poolId)
-                    poolId -> params
-                }.toMap
-                // psFutureStakePoolParams: Map PoolKeyHash PoolParams
-                val futureSize = r.readMapHeader()
-                val futureStakePoolParams = (0 until futureSize.toInt).map { _ =>
-                    val poolId = r.read[PoolKeyHash]()
-                    val params = readPoolParams(r, poolId)
-                    poolId -> params
-                }.toMap
-                // psRetiring: Map PoolKeyHash EpochNo
-                val retiringSize = r.readMapHeader()
-                val retiring = (0 until retiringSize.toInt).map { _ =>
-                    val poolId = r.read[PoolKeyHash]()
-                    val epoch = r.readLong()
-                    poolId -> epoch
-                }.toMap
-                // psDeposits: Map PoolKeyHash Coin
-                val depositsSize = r.readMapHeader()
-                val deposits = (0 until depositsSize.toInt).map { _ =>
-                    val poolId = r.read[PoolKeyHash]()
-                    val coin = r.read[Coin]()
-                    poolId -> coin
-                }.toMap
-                PState(stakePools, futureStakePoolParams, retiring, deposits)
+                val maps = Vector.fill(4)(r.read[Element]() match
+                    case m: MapElem => m
+                    case other      => r.validationFailure(s"Expected a map in PState, got $other"))
+                if isCurrentLayout(maps) then
+                    val stakePools = decodeMap(maps(1))(
+                      r => r.read[PoolKeyHash](),
+                      (r, pool) => readStakePoolState(r, pool)
+                    )
+                    PState(
+                      stakePools = stakePools.view.mapValues(_._1).toMap,
+                      futureStakePoolParams = decodeMap(maps(2))(
+                        r => r.read[PoolKeyHash](),
+                        (r, _) => readPoolParams(r)
+                      ),
+                      retiring =
+                          decodeMap(maps(3))(r => r.read[PoolKeyHash](), (r, _) => r.readLong()),
+                      deposits = stakePools.view.mapValues(_._2).toMap
+                    )
+                else
+                    PState(
+                      stakePools = decodeMap(maps(0))(
+                        r => r.read[PoolKeyHash](),
+                        (r, _) => readPoolParams(r)
+                      ),
+                      futureStakePoolParams = decodeMap(maps(1))(
+                        r => r.read[PoolKeyHash](),
+                        (r, _) => readPoolParams(r)
+                      ),
+                      retiring =
+                          decodeMap(maps(2))(r => r.read[PoolKeyHash](), (r, _) => r.readLong()),
+                      deposits =
+                          decodeMap(maps(3))(r => r.read[PoolKeyHash](), (r, _) => r.read[Coin]())
+                    )
+
+        /** Tell the layouts apart by the first non-empty map among the first three: its values are
+          * VRF counts or PoolParams (slot 0), StakePoolState starting with a 32-byte VRF hash or
+          * PoolParams starting with a 28-byte operator (slot 1), StakePoolParams or EpochNo (slot
+          * 2). With all three empty, both layouts decode to the same pools.
+          */
+        private def isCurrentLayout(maps: Vector[MapElem]): Boolean =
+            def firstValue(slot: Int): Option[Element] = maps(slot).members.nextOption().map(_._2)
+            firstValue(0)
+                .map(!_.isInstanceOf[ArrayElem])
+                .orElse(firstValue(1).map {
+                    case pool: ArrayElem =>
+                        pool.elems.headOption.exists {
+                            case bytes: ByteArrayElem => bytes.bytes.length == 32
+                            case _                    => false
+                        }
+                    case _ => false
+                })
+                .orElse(firstValue(2).map(_.isInstanceOf[ArrayElem]))
+                .getOrElse(false)
+
+        private def decodeMap[K, V](m: MapElem)(
+            readKey: Reader => K,
+            readValue: (Reader, K) => V
+        ): Map[K, V] =
+            m.members.map { (k, v) =>
+                val key = reread(k)(readKey)
+                key -> reread(v)(readValue(_, key))
+            }.toMap
+
+        private def reread[A](element: Element)(read: Reader => A): A =
+            given Decoder[A] = r => read(r)
+            Cbor.decode(Cbor.encode(element).toByteArray).to[A].value
 
         given Encoder[PState] with
             def write(w: Writer, value: PState): Writer =
