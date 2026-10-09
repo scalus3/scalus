@@ -24,10 +24,12 @@ enum EnumCaseToDataNative derives FromData, ToData:
 
 /** `.toData` on an enum case written directly, without a `val` or an ascription in between.
   *
-  * A constructor typed at the enum lowers to a value typed at its variant. `toData` asks for the
-  * enum's data representation, so it has to upcast that value first. A case with fields did not
-  * show the problem: its inlined receiver is bound to a `val` of the enum's type, and a let binding
-  * upcasts. See https://github.com/scalus3/scalus/issues/377.
+  * The plugin types a case without fields as the enum, and the lowering turns the constructor into
+  * a value typed at its variant. `toData` asks for the enum's data representation, so it has to
+  * upcast that value first. The other forms did not show the problem. An ascription or a `val` goes
+  * through a let binding of the enum's type, which upcasts. A case with fields is typed at the case
+  * itself, so `toData` asks for the case's own representation. See
+  * https://github.com/scalus3/scalus/issues/377.
   */
 class EnumCaseToDataLoweringTest extends AnyFunSuite {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
