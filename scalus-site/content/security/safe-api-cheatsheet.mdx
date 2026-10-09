@@ -146,6 +146,7 @@ change in the last row is different: it is in place, with no deprecated overload
 | `getValidityStartTime` | `validFromOrFail(msg)` | returned `0` for an unbounded range (TI-1) |
 | `Utils.getAdaFromOutputs(outs)` | `valuePaidTo(addr).getLovelace` | summed lovelace only (VP-2); the replacement sums the whole `Value` |
 | `Utils.getAdaFromInputs(ins)` | `valueSpentFrom(addr).getLovelace` | same |
+| `value.lovelaceAmount` | `value.getLovelace` | `getLovelace` is one `lookupCoin` builtin at PV11; `lovelaceAmount` walks the `Data` map and returns another token's quantity when there is no lovelace |
 | `List.single(a)` | `List.singleton(a)` | one constructor name across all four collections |
 | `PairList.single(a, b)` | `PairList.singleton(a, b)` | same |
 | Design-pattern `Boolean` callbacks (`UtxoIndexer`, `StakeValidator`, `TransactionLevelMinterValidator`) | `=> Unit` callbacks that `require` / `fail` with their own message | changed in place, no overload. **Hazard:** a `Boolean` lambda still compiles against the `Unit` parameter (value discard) and then checks nothing. Grep every callback and wrap its condition in `require(..., message)` |

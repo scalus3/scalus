@@ -190,6 +190,37 @@ Notice how the optimized version:
 - Hoisted `(force (builtin ifThenElse))` and `(force (builtin trace))` as shared lambdas
 - Converted `ifThenElse` application to a `case`/`constr` node (via `CaseConstrApply`)
 
+## Prefer Intrinsics
+
+Some prelude methods are *intrinsics*: the compiler replaces the call with a builtin or a direct
+recursion instead of compiling the method body. When two methods do the same job, choose the
+intrinsic one.
+
+| Type | Intrinsic methods | Lowered to |
+|---|---|---|
+| `Value` (PV11, `Options.valueBuiltins`) | `quantityOf`, `getLovelace` | `lookupCoin` |
+| | `+`, `-`, `*`, unary `-` | `unionValue`, `scaleValue` |
+| | `containsAtLeast` | `valueContains` |
+| | `insertCoin`, `withoutLovelace` | `insertCoin` |
+| `List` backed by `Data` (`tx.inputs`, `tx.outputs`, `tx.signatories`, ...) | `isEmpty`, `head`, `tail` | `nullList`, `headList`, `tailList` |
+| | `contains`, `indexOf`, `deleteFirst`, `distinct`, `diff` | direct recursion with `equalsData` |
+| | `drop`, `at` (PV11) | `dropList` |
+| `PairList` | `isEmpty`, `head`, `tail`; `drop` (PV11) | list builtins |
+| `SortedMap`, `AssocMap` | `singleton`, `empty` | `mapData` of one pair; an empty map |
+
+Methods built on intrinsics inherit them: `hasNft` is `quantityOf(...) === 1`, and
+`hasSameTokensAndAtLeastAda` uses `withoutLovelace` and `getLovelace`. Some common choices:
+
+| Write | Not | Why |
+|---|---|---|
+| `value.getLovelace` | `value.lovelaceAmount` (deprecated) | one builtin against a walk of the `Data` map, about 30 machine steps per call |
+| `xs.contains(x)` | `xs.exists(_ === x)` | `exists` allocates an `Option` and an `Eq` closure |
+| `xs.count(p)` | `xs.filter(p).length` | one pass, no intermediate list |
+
+Memory is mostly machine steps: every CEK step costs 100 memory units, and builtin calls are
+usually about 5% of a validator's memory. An intrinsic that replaces a walk saves the steps of
+the walk. [Profiling](/docs/smart-contract-optimisations/profiling) shows which lines spend them.
+
 ## Optimization Techniques
 
 - **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** -- script evaluation, emulator-based transaction fees

@@ -38,8 +38,11 @@ val paid = output.value.quantityOf(policyId, tokenName)
 
 Not rewritten (they are already cheap or have no builtin counterpart): `===` (a single
 `equalsData` on the underlying `Data`), `flatten`, `policyIds`, `tokens`, `isPositive`,
-`hasOnly`, and the constructors (`Value.zero`, `Value.lovelace`, `Value.apply`,
-`Value.fromList`).
+`hasOnly`, `lovelaceAmount` (deprecated, use `getLovelace`), and the constructors
+(`Value.zero`, `Value.lovelace`, `Value.apply`, `Value.fromList`).
+
+Methods built on the rewritten ones get the builtins too: `hasNft` is `quantityOf(...) === 1`,
+and `hasSameTokensAndAtLeastAda` uses `withoutLovelace` and `getLovelace`.
 
 ## Measured Improvements
 
@@ -107,6 +110,20 @@ require(tx.mint.hasOnly(policyId, config.beaconName, 1), "must mint exactly one 
 
 This is roughly 35% cheaper in fee than the equivalent
 `tx.mint.tokens(policyId) === SortedMap.singleton(beaconName, BigInt(1))`.
+
+**"How much ADA is in this output"** – use `getLovelace`. It is one `lookupCoin` call. The
+deprecated `lovelaceAmount` walks the `Data` map to the first entry instead: about 30 more
+machine steps per call, and on a value without lovelace it returns another token's quantity.
+Replacing 7 `lovelaceAmount` calls in a port of the Midgard DA bond pool validator cut the script
+from 2485 to 2431 bytes and memory by 6–10% per transaction:
+
+```scala
+val outLovelace = out.value.getLovelace
+require(outLovelace - poolIn.value.getLovelace >= minTopUp, "top-up is below the minimum")
+```
+
+Reading the amount is fine. Comparing *only* the ADA of a script UTxO lets native tokens slip
+out; pin the token set too, with `hasSameTokensAndAtLeastAda` or `withoutLovelace`.
 
 **Adjusting a value** – `insertCoin(cs, tn, amount)` replaces the quantity (it does not add);
 amount `0` deletes the coin and drops the policy entry when it becomes empty, keeping the value

@@ -71,6 +71,9 @@ newer; on 1.1.1 or older, write the expansion the cheatsheet lists in its "Repla
   It returns the input and is cheaper than `inputs.count(p) === BigInt(1)` (measured).
 - Value sums: `tx.valuePaidTo(addr)` / `tx.valueSpentFrom(addr)` (whole address, whole `Value`;
   add `.getLovelace` for ADA). Never `getAdaFromOutputs` / `getAdaFromInputs`.
+- ADA amount: `value.getLovelace` (one `lookupCoin` builtin at PV11). Never `lovelaceAmount`
+  (deprecated: a `Data` map walk, about 30 more machine steps per call). Reading the amount is
+  fine; comparing only the ADA of a script UTxO is not (V027 in the security review).
 - Token presence: `value.hasNft(policyId, tokenName)` (quantity exactly 1). Continuing value:
   `out.value.hasSameTokensAndAtLeastAda(ownInput.resolved.value)`, not `===` and not `>=`.
 - Burn: `tx.onlyBurnsUnder(policyId)` (non-empty and every quantity negative).
@@ -93,6 +96,21 @@ newer; on 1.1.1 or older, write the expansion the cheatsheet lists in its "Repla
     (the extension infers `Eq[BigInt | Int]`, which does not exist)
   - generic positions that would infer `Int` (unsupported on-chain): `Option.Some(BigInt(1))`,
     `foldLeft(BigInt(0))(...)`, `List(BigInt(1), BigInt(2))`
+
+**Intrinsics (prefer them):** the compiler replaces these prelude calls with builtins or a direct
+recursion. A hand-written `Data` walk or a non-intrinsic method that does the same job costs more.
+- `Value`, at PV11 with `Options.valueBuiltins` (both defaults): `quantityOf` and `getLovelace`
+  (`lookupCoin`), `+` (`unionValue`), `-`, `*` and unary `-` (`scaleValue`), `containsAtLeast`
+  (`valueContains`), `insertCoin` and `withoutLovelace` (`insertCoin`). Built on them:
+  `hasNft`, `hasSameTokensAndAtLeastAda`. Not intrinsic: `lovelaceAmount` (deprecated),
+  `Value.apply`, `Value.lovelace`, `tokens`, `flatten`, `policyIds`, `isPositive`.
+- `List` backed by `Data` (every `ScriptContext` list: `inputs`, `outputs`, `signatories`, ...):
+  `isEmpty`, `head`, `tail`, `contains`, `indexOf`, `deleteFirst`, `distinct`, `diff`, and at PV11
+  `drop` and `at` (`dropList`). Not intrinsic: `exists`, `filter`, `length`, `map`. Write
+  `xs.contains(x)`, not `xs.exists(_ === x)`; `xs.count(p)`, not `xs.filter(p).length`.
+- `PairList`: `isEmpty`, `head`, `tail`, and `drop` at PV11. `SortedMap` / `AssocMap`:
+  `singleton`, `empty`.
+- Check a choice with a budget test; the `optimize-contract` skill has the measured costs.
 
 **Script purposes (Plutus V3):**
 - `spend` - spending UTxOs

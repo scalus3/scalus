@@ -95,6 +95,7 @@ For detailed patterns with Scalus code examples, see `references/patterns.md`.
 | O032 | `xs.exists(_ === x)` | `exists` is `find(p).isDefined`: allocates an `Option` for a `Boolean`; a fixed per-call tax of 326 483 cpu (miss) / 564 996 cpu (hit) on V3 | `xs.contains(x)`: an intrinsic, no `Option`, no `Eq` closure. For a non-equality predicate use `forall` or a hand fold, not `exists` |
 | O033 | `xs.filter(p).length` | 2 traversals plus k `mkCons`; `filter` is a non-tail `foldRight`; no pass fuses them | `xs.count(p)`: one tail-recursive `foldLeft`, no allocation |
 | O034 | `filter(p).length === BigInt(1)` then `.head`, or `count(p) === BigInt(1)` | 2 passes (or 1 pass plus a second scan for the element); the guard and the lookup are separate | `xs.findUniqueOrFail(p, msg)`: one pass, returns the element, fails on 0 or 2+. Against `count(p) === BigInt(1)` on inputs: fee 3 175 vs 3 307 (3 inputs), 6 289 vs 6 804 (10 inputs) |
+| O035 | `value.lovelaceAmount` or a hand-written walk to the ADA entry | Walks the `Data` map: about 30 more machine steps per call than the builtin; `lovelaceAmount` is deprecated | `value.getLovelace`: one `lookupCoin` at PV11 |
 
 ### Low Impact — Micro-Optimizations
 
@@ -223,6 +224,26 @@ val powerOf2 = n.exp2
 // Expensive
 val bits = manualLog2Loop(x)
 val powerOf2 = pow(BigInt(2), n)
+```
+
+### 9. Prefer Intrinsics
+The compiler swaps some prelude calls for builtins or a direct recursion; the `contract` skill
+lists them under "Intrinsics". At PV11 the `Value` operations lower to the CIP-153 builtins:
+`quantityOf`/`getLovelace` to `lookupCoin`, `+`/`-`/`*` to `unionValue`/`scaleValue`,
+`containsAtLeast` to `valueContains`, `insertCoin`/`withoutLovelace` to `insertCoin`. A method
+that is not on the list (`lovelaceAmount`, `exists`, `filter(p).length`) runs as ordinary
+compiled code.
+
+Memory is mostly machine steps, not builtins: every CEK step costs 100 memory units. A per-line
+profile (`evaluateProfile`, see the `profiling` docs page) of a typical validator shows builtin
+calls at about 5% of memory. Cut steps: fewer calls, fewer pattern matches, intrinsics instead of
+walks.
+
+```scala
+// ~30 machine steps per call: walks the Data map
+val ada = out.value.lovelaceAmount
+// One builtin at PV11
+val ada = out.value.getLovelace
 ```
 
 ## Compiler Options That Affect Budget
