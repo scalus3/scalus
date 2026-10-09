@@ -61,13 +61,7 @@ object MinTransactionFee {
 
     private object RefScriptsFeeCalculator {
         def apply(scripts: Seq[Script], protocolParams: ProtocolParams): Coin = {
-            val refScriptsSize = scripts.foldLeft(0) { case (length, script) =>
-                val scripLength = script match
-                    case s: Script.Native => s.script.toCbor.length
-                    case s: PlutusScript  => s.script.size
-
-                length + scripLength
-            }
+            val refScriptsSize = scripts.map(rules.TxRefScriptsSizeValidator.scriptSize).sum
             new RefScriptFee(protocolParams).calculate(refScriptsSize)
         }
     }

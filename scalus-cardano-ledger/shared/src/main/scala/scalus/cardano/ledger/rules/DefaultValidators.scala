@@ -29,6 +29,7 @@ object DefaultValidators {
       TooManyCollateralInputsValidator,
       TransactionSizeValidator,
       TreasuryValueMismatchValidator,
+      TxRefScriptsSizeValidator,
       ValueNotConservedUTxOValidator,
       VerifiedSignaturesInWitnessesValidator,
       StakeCertificatesValidator,

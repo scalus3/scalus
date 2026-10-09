@@ -387,6 +387,30 @@ class EmulatorParityTest extends AnyFunSuite {
         assert(emulator.donation == Coin.zero)
     }
 
+    /** Submits a payment that references one UTxO with a reference script of `size` bytes. */
+    private def submitWithRefScript(size: Int): Either[String, TransactionHash] = {
+        val script = Script.PlutusV3(ByteString.fromArray(Array.fill(size)(0.toByte)))
+        val refUtxo = Utxo(
+          Input(genesisHash, 1),
+          TransactionOutput(alice, Value.ada(100), None, Some(ScriptRef(script)))
+        )
+        val utxos = genesisUtxos(Value.ada(100)) + refUtxo.toTuple
+        val emulator = emulatorOver(utxos)
+        val tx = TxBuilder(testEnv)
+            .references(refUtxo)
+            .payTo(bob, Value.ada(1))
+            .complete(genesisUtxos(Value.ada(100)), alice)
+            .sign(Alice.signer)
+            .transaction
+        emulator.submitSync(tx).left.map(_.rule)
+    }
+
+    test("a tx whose reference scripts exceed 200 KiB is rejected") {
+        // spec [SC-24]
+        assert(submitWithRefScript(200 * 1024).isRight)
+        assert(submitWithRefScript(200 * 1024 + 1) == Left("TxRefScriptsSizeTooBig"))
+    }
+
     test("a slot change within an epoch leaves the donations pending") {
         // spec [SC-7a]: only an epoch boundary moves the donations
         val emulator = emulatorWithTreasury(Coin(1000))

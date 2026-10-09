@@ -19,13 +19,11 @@ object AllProvidedReferenceScripts {
         )
     }
 
-    /** Returns all reference scripts provided by transaction inputs and reference inputs as a
-      * non-distinct sequence.
+    /** Returns the reference scripts of the union of the inputs and the reference inputs of a
+      * transaction, duplicates kept, as `getReferenceScriptsNonDistinct` in cardano-ledger.
       *
-      * Unlike `allProvidedReferenceScripts`, this method preserves duplicates. Each occurrence of a
-      * script in the UTxO set is counted separately, which is important for fee calculation where
-      * the same script referenced multiple times counts towards the minFee calculation for each
-      * reference.
+      * A script carried by two UTxOs occurs twice, and a UTxO that is both spent and referenced
+      * occurs once. The min fee measures this sequence, as `txNonDistinctRefScriptsSize` does.
       *
       * @param transaction
       *   the transaction to analyze
@@ -44,20 +42,27 @@ object AllProvidedReferenceScripts {
           TransactionException.BadReferenceInputsUTxOException,
       Seq[Script]
     ] = {
-        for
-            inputScripts <- providedReferenceScriptsSeq(
-              transaction.id,
-              transaction.body.value.inputs.toSeq,
-              utxos,
-              TransactionException.BadInputsUTxOException(_)
-            )
-            refInputScripts <- providedReferenceScriptsSeq(
-              transaction.id,
-              transaction.body.value.referenceInputs.toSeq,
-              utxos,
-              TransactionException.BadReferenceInputsUTxOException(_)
-            )
-        yield inputScripts ++ refInputScripts
+        val body = transaction.body.value
+        if !body.inputs.toSeq.forall(utxos.contains) then
+            Left(TransactionException.BadInputsUTxOException(transaction.id))
+        else if !body.referenceInputs.toSeq.forall(utxos.contains) then
+            Left(TransactionException.BadReferenceInputsUTxOException(transaction.id))
+        else Right(nonDistinctReferenceScripts(transaction, utxos))
+    }
+
+    /** The reference scripts of the union of the inputs and the reference inputs of a transaction,
+      * duplicates kept, as `getReferenceScriptsNonDistinct` in cardano-ledger. An input missing
+      * from `utxos` adds nothing.
+      */
+    private[ledger] def nonDistinctReferenceScripts(
+        transaction: Transaction,
+        utxos: Utxos
+    ): Seq[Script] = {
+        val body = transaction.body.value
+        (body.inputs.toSet ++ body.referenceInputs.toSet).toSeq
+            .flatMap(utxos.get)
+            .flatMap(_.scriptRef)
+            .map(_.script)
     }
 
     def allProvidedReferenceScripts(
@@ -326,24 +331,6 @@ object AllProvidedReferenceScripts {
                 case Some(output) => output.scriptRef.map(_.script)
                 // This check allows to be an order independent in the sequence of validation rules
                 case None => break(Left(missingUTxOException(transactionId)))
-        yield script
-        Right(result)
-    }
-
-    private def providedReferenceScriptsSeq[
-        ExceptionT <: TransactionException.BadInputsUTxOException |
-            TransactionException.BadReferenceInputsUTxOException
-    ](
-        transactionId: TransactionHash,
-        inputs: Seq[TransactionInput],
-        utxos: Utxos,
-        missingUTxOException: TransactionHash => ExceptionT
-    ): Either[ExceptionT, Seq[Script]] = boundary {
-        val result = for
-            input <- inputs
-            script <- utxos.get(input) match
-                case Some(output) => output.scriptRef.map(_.script)
-                case None         => break(Left(missingUTxOException(transactionId)))
         yield script
         Right(result)
     }

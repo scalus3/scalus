@@ -353,6 +353,15 @@ object TransactionException {
           s"Treasury value mismatch for transactionId $transactionId: supplied $supplied, expected $expected"
         )
 
+    // It's Conway.ConwayTxRefScriptsSizeTooBig in cardano-ledger
+    final case class TxRefScriptsSizeTooBigException(
+        transactionId: TransactionHash,
+        supplied: Int,
+        expected: Int
+    ) extends TransactionException(
+          s"Reference scripts too big for transactionId $transactionId: supplied $supplied bytes, maximum $expected"
+        )
+
     // It's Alonzo.ExUnitsTooBigUTxO in cardano-ledger
     final case class ExUnitsExceedMaxException(
         transactionId: TransactionHash,
@@ -532,6 +541,7 @@ object TransactionException {
         case _: DRepException                              => "DRep"
         case _: WithdrawalsNotInRewardsException           => "WithdrawalsNotInRewards"
         case _: TreasuryValueMismatchException             => "TreasuryValueMismatch"
+        case _: TxRefScriptsSizeTooBigException            => "TxRefScriptsSizeTooBig"
         case _: WithdrawalsNotDelegatedToDRepException     => "WithdrawalsNotDelegatedToDRep"
         case _: ExUnitsExceedMaxException                  => "ExUnitsExceedMax"
         case _: TooManyCollateralInputsException           => "TooManyCollateralInputs"
