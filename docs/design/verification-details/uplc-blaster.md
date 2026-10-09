@@ -329,8 +329,21 @@ false. `replay` works in four steps:
 The result depends on what `holds` finds:
 
 - **False:** `Refuted`, with the counterexample in the artifact.
-- **True:** `Inconclusive`, with the message "Lean's counterexample (x = …) is spurious: … a test
-  needs more than N steps".
+- **True:** `Inconclusive`: "Lean's counterexample (x = …) is spurious: the statement holds
+  there on the Scalus CEK", and why. At a budget that was given, Lean's machine then counts what
+  each leaf's program does on those values (`measureRun`, as a search does to find the next
+  budget), and the message ends in one of:
+  - "On Lean's machine it holds there from M steps on, so a test needs more than N steps": the
+    budget is too small, and M would do for this counterexample.
+  - "On the values read from Lean's counterexample the statement holds within N steps of Lean's
+    machine, so they do not show what Lean found": more steps change nothing. Where a program
+    applies a builtin that Lean's library declares `opaque`, a hash, a signature check or the
+    arithmetic of a curve, the message names it: Lean knows of it only that equal arguments give
+    equal results, so the solver's counterexample can take a result for what the builtin does
+    not give. A statement about such a result writes it as the builtin applied, as
+    `sha3_256(preimage)` for an image.
+  - that the statement takes more steps there than a search counts, or holds at no budget on
+    Lean's machine.
 - **Undecided, because a leaf exhausted the replay budget:** `Inconclusive`.
 
 ## Budgets

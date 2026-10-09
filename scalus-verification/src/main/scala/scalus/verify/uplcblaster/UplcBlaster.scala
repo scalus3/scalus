@@ -5,7 +5,7 @@ import scalus.cardano.ledger.ExUnits
 import scalus.compiler.Options
 import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, DataDecl, SIR, SIRBuiltins, SIRType}
 import scalus.compiler.sir.linking.Wrappers
-import scalus.uplc.{Constant, DeBruijn, Program, Term}
+import scalus.uplc.{Constant, DeBruijn, DefaultFun, Program, Term}
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.utils.{Hex, Utils}
@@ -1063,7 +1063,9 @@ object UplcBlaster {
         case Decided(result: ExecutionResult)
 
         /** Lean falsified the statement under the budget with `values`, on which it holds without
-          * the budget: the program of a test needs more steps.
+          * the budget on the Scalus CEK. Why, Lean's machine says on those values ([[counted]]):
+          * the program of a test needs more steps, or the values are not those Lean falsified the
+          * statement with.
           */
         case Spurious(values: List[Constant], reason: String)
 
@@ -1097,7 +1099,28 @@ object UplcBlaster {
     ): ExecutionResult = {
         keep.foreach(kept => writeCheck(goal, budget, maxHeartbeats, keptDirectory(kept)))
         val checked = server.check(checkSource(goal, budget, maxHeartbeats, _), timeout)
-        probed(goal, budget, checked, timeout.mkString).toResult
+        probed(goal, budget, checked, timeout.mkString) match
+            // The budget was given, so no other is tried. Lean's machine says whether the budget
+            // is at fault: a counterexample is spurious for another reason too.
+            case Probe.Spurious(values, reason) =>
+                keepCount(goal, values, maxHeartbeats, keep)
+                val count = server.check(
+                  directory =>
+                      measureSource(goal, written(goal.leaves, directory), values, maxHeartbeats),
+                  timeout
+                )
+                val why = runs(goal, count).map(counted(goal, _, budget)) match
+                    case Right(Right(more)) =>
+                        s"On Lean's machine it holds there from $more steps on, so a test needs " +
+                            s"more than $budget steps"
+                    case Right(Left(other)) => other.capitalize
+                    case Left(VerificationResult.Inconclusive(uncounted)) =>
+                        s"A test may need more than $budget steps: $uncounted"
+                    case Left(VerificationResult.Failed(uncounted)) =>
+                        s"A test may need more than $budget steps: $uncounted"
+                    case Left(_) => s"A test may need more than $budget steps"
+                VerificationResult.Inconclusive(s"$reason. $why")
+            case probe => probe.toResult
     }
 
     /** A directory of its own under `kept`, for one check that is kept. */
@@ -1279,32 +1302,75 @@ object UplcBlaster {
         servers: LeanServerProvider,
         wait: Option[FiniteDuration],
         keep: Option[Path]
-    ): Either[ExecutionResult, Int] = {
-        def none(reason: String): Either[ExecutionResult, Int] =
-            Left(VerificationResult.Inconclusive(reason))
+    ): Either[ExecutionResult, Int] =
         measured(goal, flats, values, maxHeartbeats, servers, wait, keep).flatMap { runs =>
-            // Lean falsified the statement at `steps`. Where the runs do not, the values read
-            // from its model are not those it falsified the statement with.
-            if holdsWithin(goal.body, runs, steps, positive = true) then
-                none(
-                  s"on the values read from Lean's counterexample the statement holds within " +
-                      s"$steps steps of Lean's machine, so they do not show what Lean found"
-                )
-            else
-                needed(goal.body, runs, steps) match
-                    case Some(more) => Right(more)
-                    case None if runs.exists(_.end == End.Running) =>
-                        none(
-                          s"on Lean's counterexample the statement takes more than " +
-                              s"$maxSearchedBudget steps of Lean's machine, the most the tactic " +
-                              "counts"
-                        )
-                    case None =>
-                        none(
-                          s"on Lean's counterexample the statement holds at no budget on Lean's " +
-                              "machine, though it holds on the Scalus CEK"
-                        )
+            counted(goal, runs, steps).left.map(VerificationResult.Inconclusive(_))
         }
+
+    /** What the runs of the tests' programs on Lean's counterexample to a check at `steps` come to,
+      * where the statement holds on it on the Scalus CEK: the least budget at which it holds on
+      * Lean's machine too, or why there is none.
+      */
+    private def counted(goal: Lowered, runs: Vector[Run], steps: Int): Either[String, Int] =
+        // Lean falsified the statement at `steps`. Where the runs do not, the values read from
+        // its model are not those it falsified the statement with.
+        if holdsWithin(goal.body, runs, steps, positive = true) then
+            Left(
+              s"on the values read from Lean's counterexample the statement holds within " +
+                  s"$steps steps of Lean's machine, so they do not show what Lean found" +
+                  unknownTo(goal)
+            )
+        else
+            needed(goal.body, runs, steps) match
+                case Some(more) => Right(more)
+                case None if runs.exists(_.end == End.Running) =>
+                    Left(
+                      s"on Lean's counterexample the statement takes more than " +
+                          s"$maxSearchedBudget steps of Lean's machine, the most the tactic counts"
+                    )
+                case None =>
+                    Left(
+                      s"on Lean's counterexample the statement holds at no budget on Lean's " +
+                          "machine, though it holds on the Scalus CEK"
+                    )
+
+    /** The builtins whose functions Lean's library declares `opaque`: hashes, signatures and the
+      * arithmetic of curves. A proof knows nothing of such a function but that equal arguments give
+      * equal results, so a counterexample can take a result for one that it does not have.
+      */
+    private val opaqueBuiltins: Set[DefaultFun] = {
+        import DefaultFun.*
+        Set(
+          Sha2_256,
+          Sha3_256,
+          Blake2b_224,
+          Blake2b_256,
+          Keccak_256,
+          Ripemd_160,
+          VerifyEd25519Signature,
+          VerifyEcdsaSecp256k1Signature,
+          VerifySchnorrSecp256k1Signature,
+          ExpModInteger
+        ) ++ DefaultFun.values.filter(_.toString.startsWith("Bls12_381"))
+    }
+
+    /** What may make values that do not show what Lean found: the builtins the programs of `goal`
+      * apply of which Lean knows nothing ([[opaqueBuiltins]]). Empty where they apply none.
+      */
+    private def unknownTo(goal: Lowered): String = {
+        val applied = goal.leaves
+            .flatMap(_.term.collectBuiltins)
+            .filter(opaqueBuiltins)
+            .map(_.toString)
+            .map(name => s"${name.head.toLower}${name.tail}")
+            .distinct
+            .sorted
+        if applied.isEmpty then ""
+        else
+            s". The programs apply ${applied.mkString(", ")}, of which Lean knows only that equal " +
+                "arguments give equal results: its counterexample can take a result for what " +
+                "the builtin does not give, and no budget changes that. Write such a result in " +
+                "a statement as the builtin applied to its arguments"
     }
 
     /** How the program of a test ended on Lean's machine. */
@@ -1335,38 +1401,53 @@ object UplcBlaster {
         wait: Option[FiniteDuration],
         keep: Option[Path]
     ): Either[ExecutionResult, Vector[Run]] = {
-        def failed(reason: String): Either[ExecutionResult, Vector[Run]] =
-            Left(VerificationResult.Failed(reason))
-        // A count that is kept has the programs beside it, to be run by hand.
+        keepCount(goal, values, maxHeartbeats, keep)
+        servers.server() match
+            case Left(reason) => Left(VerificationResult.Failed(reason))
+            case Right(server) =>
+                runs(goal, server.check(measureSource(goal, flats, values, maxHeartbeats), wait))
+    }
+
+    /** Writes the count of a counterexample that is kept into `keep`, with the programs beside it,
+      * to be run by hand.
+      */
+    private def keepCount(
+        goal: Lowered,
+        values: List[Constant],
+        maxHeartbeats: Int,
+        keep: Option[Path]
+    ): Unit =
         keep.foreach { kept =>
             val directory = keptDirectory(kept)
             val text = measureSource(goal, written(goal.leaves, directory), values, maxHeartbeats)
             Files.writeString(directory.resolve("Count.lean"), text)
         }
-        servers.server() match {
-            case Left(reason) => failed(reason)
-            case Right(server) =>
-                server.check(measureSource(goal, flats, values, maxHeartbeats), wait) match {
-                    case LeanServer.Result.Finished(messages) =>
-                        val runs = messages
-                            .map(_.text.trim)
-                            .collect { case measurement(steps, end) =>
-                                Run(steps.toInt, ended(end))
-                            }
-                            .toVector
-                        val errors = messages.exists(_.severity == LeanServer.Severity.Error)
-                        if !errors && runs.size == goal.leaves.size then Right(runs)
-                        else
-                            val output = concise(messages.map(_.text).mkString("\n"))
-                            failed(s"Lean did not count the steps of its counterexample: $output")
-                    case LeanServer.Result.TimedOut(_) =>
-                        Left(
-                          VerificationResult.Inconclusive(
-                            "Lean did not count the steps of its counterexample in the time it had"
-                          )
-                        )
-                    case LeanServer.Result.Failed(reason) => failed(reason)
-                }
+
+    /** The run of each test's program, from what Lean reported of a count ([[measureSource]]). */
+    private def runs(
+        goal: Lowered,
+        reported: LeanServer.Result
+    ): Either[ExecutionResult, Vector[Run]] = {
+        def failed(reason: String): Either[ExecutionResult, Vector[Run]] =
+            Left(VerificationResult.Failed(reason))
+        reported match {
+            case LeanServer.Result.Finished(messages) =>
+                val read = messages
+                    .map(_.text.trim)
+                    .collect { case measurement(steps, end) => Run(steps.toInt, ended(end)) }
+                    .toVector
+                val errors = messages.exists(_.severity == LeanServer.Severity.Error)
+                if !errors && read.size == goal.leaves.size then Right(read)
+                else
+                    val output = concise(messages.map(_.text).mkString("\n"))
+                    failed(s"Lean did not count the steps of its counterexample: $output")
+            case LeanServer.Result.TimedOut(_) =>
+                Left(
+                  VerificationResult.Inconclusive(
+                    "Lean did not count the steps of its counterexample in the time it had"
+                  )
+                )
+            case LeanServer.Result.Failed(reason) => failed(reason)
         }
     }
 
@@ -1628,8 +1709,7 @@ object UplcBlaster {
             case Some(true) =>
                 Probe.Spurious(
                   values,
-                  s"$falsification is spurious: the statement holds there on the Scalus CEK, so a " +
-                      s"test needs more than ${artifact.budget} steps"
+                  s"$falsification is spurious: the statement holds there on the Scalus CEK"
                 )
             case None =>
                 Probe.Decided(
