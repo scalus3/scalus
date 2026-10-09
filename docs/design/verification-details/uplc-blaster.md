@@ -3,8 +3,8 @@
 How `blaster-uplc` from [the verification overview](../verification-overview.md) (§6.2) is built.
 Code: `scalus-verification/src/main/scala/scalus/verify/uplcblaster/UplcBlaster.scala` and
 `scalus-verification/src/main/lean/ScalusProofs/Run.lean`. Tests: `UplcBlasterTest`,
-`PreludeProofsTest` and `UplcBlasterLimitsTest`, and `VestingVerificationTest` in
-`scalus-examples`. For how to use it, see `scalus-verification/README.md`.
+`PreludeProofsTest` and `UplcBlasterLimitsTest`, and `VestingVerificationTest` and
+`HtlcVerificationTest` in `scalus-examples`. For how to use it, see `scalus-verification/README.md`.
 
 ## Pipeline
 
@@ -397,11 +397,13 @@ The workspace is `scalus-verification/src/main/lean`: Lean 4.24.0 (`lean-toolcha
 - **The toolchain** is `elan` and `z3`, from the default and `ci` nix shells.
 
 CI: `.github/workflows/lean-proofs.yml` runs on a push that changes the verification module,
-the vesting example or the workflow itself, daily, and on demand. The daily run is for changes
-elsewhere, such as in the compiler, which change the programs the proofs are about. It builds
-the workspace of the library and that of the vesting example, then runs
-`sbt scalusVerification/test` and `VestingVerificationTest` with `SCALUS_REQUIRE_LEAN=1`, so a
-test that cannot run Lean fails instead of being canceled. In `ci-jvm` those tests are canceled.
+the vesting or the HTLC example or the workflow itself, daily, and on demand. The daily run is
+for changes elsewhere, such as in the compiler, which change the programs the proofs are about.
+It builds the workspace of the library and that of the vesting example, then runs
+`sbt scalusVerification/test`, `VestingVerificationTest` and `HtlcVerificationTest` with
+`SCALUS_REQUIRE_LEAN=1`, so a test that cannot run Lean fails instead of being canceled. In
+`ci-jvm`, without Lean, a suite that keeps its results passes on them, and a test that asks Lean
+is canceled.
 
 ## Limits
 
@@ -533,6 +535,75 @@ What the suite shows about the tactic:
   ([Limits](#limits)); the statements are about the validator compiled with `UplcBlaster.options`.
 - **Nested `inline def`s of a class cannot be used in a statement.** One that uses another leaves a
   reference to the class's `this` in the leaf, which the plugin rejects. They are in an object.
+
+## What `HtlcVerificationTest` covers
+
+`scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala` states
+properties of the hashed timelock example, in the library's Lean workspace. The validator reads
+the datum, the redeemer, one bound of the validity range and the signatures. A statement is
+about every datum: a `Config` variable, which is one variable per field for Lean, the two keys
+among them. And it is about a transaction whose other parts are any `Data`: an `Unread` variable
+has the fourteen other fields of the transaction, the other bound of the validity range and the
+reference of the output. So that the validator reads nothing else is proved with each
+statement, and not only seen in its source. The context is written field by field, as the
+ledger encodes it; a test without Lean checks that against the ledger's types.
+
+Its source states no contract: the validator is the read of a bound and two or three `require`s
+on each of two branches, and a clause would say them again.
+
+| About | Statement | Quantified over | Budget |
+|---|---|---|---|
+| the validator | an output without a datum cannot be spent | `txInfo`, redeemer, reference: any `Data` | 600 |
+| | nothing but spending is validated | `txInfo`, redeemer, script info: any `Data` | |
+| | a redeemer that is neither action is rejected | `txInfo`, reference, datum, redeemer: any `Data` | |
+| a refund | signed by another key, by two other keys, or by nobody, it is rejected | the datum, the lower bound, the signers; what is not read | 4000 |
+| | before the timeout it is rejected | the datum, the lower bound, the signer; what is not read | |
+| | with a lower bound of the validity range that is no time it is rejected | the datum; what is not read, the upper bound with it | |
+| | from the timeout on the committer's is accepted, also where another signature comes first | the datum, the lower bound, the other signer; what is not read | |
+| a reveal | signed by another key, by two other keys, or by nobody, it is rejected | the datum, the preimage, the upper bound, the signers; what is not read | |
+| | with a validity range that ends after the timeout it is rejected | the datum, the preimage, the upper bound, the signer; what is not read | |
+| | with an upper bound of the validity range that is no time it is rejected | the datum, the preimage; what is not read, the lower bound with it | |
+| | of what is not a preimage of the image it is rejected | the datum, the preimage, the upper bound, the signer; what is not read | |
+| | up to the timeout the receiver's of a preimage is accepted, also where another signature comes first | both keys, the preimage, the timeout, the upper bound, the other signer; what is not read | |
+| both | an accepted reveal ends before any accepted refund begins | the datum, the preimage, two signers, both bounds; what is not read, of each transaction | |
+| | it accepts a transaction with the one closure of a bound where it accepts it with the other | the datum, the bound, the signer, the preimage; what is not read | |
+| samples | a reveal and a refund are accepted, and rejected unsigned or with another secret | closed, `native_decide`, on a transaction the ledger's types build | |
+
+The suite keeps the results of 35 statements, seven of them negative controls that are refuted,
+and takes about 3 min with Lean. On its kept results it takes up to a minute: a refutation is
+replayed, and one statement is asked of Lean every time, the second point below.
+
+What the suite shows about the tactic:
+
+- **A hash of unknown bytes is a function.** Lean's model declares `sha3_256` `opaque`, so a
+  proof knows nothing of it but that equal bytes have equal hashes. That is enough for both
+  directions of the hash lock: a reveal is accepted where the image is written as
+  `sha3_256(preimage)`, and rejected under the premise `sha3_256(preimage) != image`. A proof
+  holds whatever the function is, and says nothing of how hard a preimage is to find. A closed
+  statement runs the real hash.
+- **A counterexample cannot name a preimage.** To "no reveal is accepted", over any image, the
+  solver gives an image it takes for the hash of its preimage. Replayed with the real hash that
+  reveal is rejected, so the counterexample is spurious and the result inconclusive: one test
+  states this. A negative control that needs an accepted reveal therefore writes the image as
+  the hash of the preimage, and is refuted. The tactic's message says that the budget is not at
+  fault, and names the hash ([Replay](#replay)).
+- **Unknown `Data` costs where a program reads it.** A refund or a reveal has no loop but the
+  search of at most two signatures: with `Budget.Auto` a refund proves at about 750 steps and a
+  reveal at about 830, and the suite's statements about them prove at its budget of 4000, with
+  sixteen parts of the context that are any `Data` and never read. With those parts written out
+  as constants the suite took 1 min 43 s. The three statements over a transaction that is any
+  `Data` as a whole took nearly three minutes together at that budget and a quarter of a minute
+  at 600: there Lean also runs the contexts that pass the check, on into the unknown
+  transaction, as for the vesting statement with any outputs.
+- **`.toData` on an enum case without fields does not lower**: `Action.Timeout.toData` gives
+  "Unsupported conversion for `Action$.Timeout` from ProdDataList to DataConstr", in any compiled
+  code and not only in a statement
+  ([#377](https://github.com/scalus3/scalus/issues/377)). The suite writes the redeemer out as
+  `constrData(0, [])`, and checks that against the encoding in a test without Lean.
+
+What it does not show: that a bound of the validity range is inclusive or not, which the
+validator does not read and the ledger decides; a transaction of more than two signatures; and
+the published script, which `HtlcContract` compiles with other options.
 
 ## Statements that do not finish
 

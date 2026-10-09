@@ -838,8 +838,8 @@ backend again for a statement that has not changed. It is the same for every tac
 verifier keeps and looks up, and a tactic says what its results rest on.
 
 Built: `KeptResults` and `Verifier.keeping(results)`, the tactic's side for `blaster-uplc`, and
-the two suites of proofs about code, `PreludeProofsTest` and `VestingVerificationTest`, each with
-its file. A suite about the tactic itself keeps nothing: what it tests is not in a statement's
+the suites of proofs about code, `PreludeProofsTest`, `VestingVerificationTest` and
+`HtlcVerificationTest`, each with its file. A suite about the tactic itself keeps nothing: what it tests is not in a statement's
 fingerprint, and Lean is to be asked every time.
 
 **What is kept, by the result.**

@@ -1,0 +1,634 @@
+{
+  "environment": {
+    "uplc-blaster": {
+      "Blaster": "3a141c8d06f1",
+      "PlutusCore": "2919b66445cd",
+      "ScalusProofs": "eb9642f1ddd4f46e",
+      "toolchain": "leanprover/lean4:v4.24.0"
+    }
+  },
+  "results": {
+    "a redeemer that is neither action is rejected #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5d26b1219dea1da5",
+      "programs": [
+        "5fa25ee310d96502",
+        "277d82654b67870a"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "Blaster"
+      }
+    },
+    "a refund is rejected before the timeout #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "9a5c1375ec7827ca",
+      "programs": [
+        "46e23b6836940095",
+        "c0468f563188290d"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "a refund is rejected before the timeout #2": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "9a5c1375ec7827ca",
+      "programs": [
+        "74bb2ac9ec7fcb16",
+        "c0468f563188290d"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "config.committer.hash": "213021",
+        "config.image": "",
+        "config.receiver.hash": "",
+        "config.timeout": 0,
+        "from": 0,
+        "rest.certificates": {"list":[{"int":10}]},
+        "rest.currentTreasuryAmount": {"int":4},
+        "rest.data": {"list":[{"int":14}]},
+        "rest.fee": {"list":[{"int":15}]},
+        "rest.id": {"list":[{"int":6}]},
+        "rest.inputs": {"list":[{"int":11}]},
+        "rest.mint": {"list":[{"int":12}]},
+        "rest.otherBound": {"bytes":"213121"},
+        "rest.outputs": {"list":[{"int":13}]},
+        "rest.proposalProcedures": {"list":[{"int":8}]},
+        "rest.redeemers": {"list":[{"int":7}]},
+        "rest.ref": {"bytes":"213221"},
+        "rest.referenceInputs": {"list":[{"int":17}]},
+        "rest.treasuryDonation": {"int":5},
+        "rest.votes": {"list":[{"int":9}]},
+        "rest.withdrawals": {"list":[{"int":16}]},
+        "signer": "213021"
+      }
+    },
+    "a refund needs the lower bound of its validity range #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "f9ae8de5e10bd5da",
+      "programs": [
+        "0989b2e1b21da959"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "a refund needs the lower bound of its validity range #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "f9ae8de5e10bd5da",
+      "programs": [
+        "f88b4b4f91b9c727"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "a reveal is rejected when its validity range ends after the timeout #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "41a01d0b6dd13683",
+      "programs": [
+        "bae1556497820609",
+        "15bb5c65d55c08a9"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "a reveal is rejected when its validity range ends after the timeout #2": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "8430abaea8b4d6d7",
+      "programs": [
+        "57b4789f6dee542e",
+        "ef85a5a16e6ddd6f"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "committer": "",
+        "preimage": "",
+        "receiver": "",
+        "rest.certificates": {"list":[{"int":12}]},
+        "rest.currentTreasuryAmount": {"int":4},
+        "rest.data": {"list":[{"int":6}]},
+        "rest.fee": {"list":[{"int":16}]},
+        "rest.id": {"list":[{"int":9}]},
+        "rest.inputs": {"list":[{"int":8}]},
+        "rest.mint": {"list":[{"int":13}]},
+        "rest.otherBound": {"bytes":"213021"},
+        "rest.outputs": {"list":[{"int":15}]},
+        "rest.proposalProcedures": {"list":[{"int":7}]},
+        "rest.redeemers": {"list":[{"int":14}]},
+        "rest.ref": {"bytes":"213121"},
+        "rest.referenceInputs": {"list":[{"int":10}]},
+        "rest.treasuryDonation": {"int":5},
+        "rest.votes": {"list":[{"int":17}]},
+        "rest.withdrawals": {"list":[{"int":11}]},
+        "timeout": 0,
+        "to": 0
+      }
+    },
+    "a reveal needs the upper bound of its validity range #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2845743feb259ef9",
+      "programs": [
+        "9174a561b62caf08"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "a reveal needs the upper bound of its validity range #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2845743feb259ef9",
+      "programs": [
+        "5575c6259a9773a7"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "a reveal of what is not a preimage of the image is rejected #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "54a605a8e4075aa0",
+      "programs": [
+        "45e21617840663b2",
+        "15bb5c65d55c08a9"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "a sample reveal and a sample refund are accepted on the Lean machine, and not unsigned #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2d3cb18e20f505f4",
+      "programs": [
+        "5e291a4fc246e021"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "LeanNative"
+      }
+    },
+    "a sample reveal and a sample refund are accepted on the Lean machine, and not unsigned #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2d3cb18e20f505f4",
+      "programs": [
+        "74cd0f89ee72d670"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "LeanNative"
+      }
+    },
+    "a sample reveal and a sample refund are accepted on the Lean machine, and not unsigned #3": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "87acb769a9c0ddb7",
+      "programs": [
+        "a07328686b948653"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "LeanNative"
+      }
+    },
+    "a sample reveal and a sample refund are accepted on the Lean machine, and not unsigned #4": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "87acb769a9c0ddb7",
+      "programs": [
+        "5a80998cdd905412"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "LeanNative"
+      }
+    },
+    "a sample reveal and a sample refund are accepted on the Lean machine, and not unsigned #5": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "87acb769a9c0ddb7",
+      "programs": [
+        "a5c9c0f2c17b0f9b"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "LeanNative"
+      }
+    },
+    "an accepted reveal ends before any accepted refund begins #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "ee1b8798e83a6ded",
+      "programs": [
+        "1ffd5f23ba1b4ec5",
+        "4ff6a90d68d0027b",
+        "a4025a6d6d0f71a7"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "an accepted reveal ends before any accepted refund begins #2": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "e6db624ed84d9ec6",
+      "programs": [
+        "4a8478a9b6e44bf8",
+        "5e72139d280340d5",
+        "32b2fa8a5290d4ad"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "committer": "",
+        "from": 0,
+        "preimage": "",
+        "receiver": "",
+        "refunded.certificates": {"list":[]},
+        "refunded.currentTreasuryAmount": {"int":5},
+        "refunded.data": {"list":[]},
+        "refunded.fee": {"list":[]},
+        "refunded.id": {"list":[]},
+        "refunded.inputs": {"list":[]},
+        "refunded.mint": {"list":[]},
+        "refunded.otherBound": {"bytes":"213021"},
+        "refunded.outputs": {"list":[]},
+        "refunded.proposalProcedures": {"list":[]},
+        "refunded.redeemers": {"list":[]},
+        "refunded.ref": {"bytes":"213121"},
+        "refunded.referenceInputs": {"list":[]},
+        "refunded.treasuryDonation": {"int":6},
+        "refunded.votes": {"list":[]},
+        "refunded.withdrawals": {"list":[]},
+        "revealed.certificates": {"list":[]},
+        "revealed.currentTreasuryAmount": {"list":[]},
+        "revealed.data": {"list":[]},
+        "revealed.fee": {"list":[]},
+        "revealed.id": {"list":[]},
+        "revealed.inputs": {"list":[]},
+        "revealed.mint": {"list":[]},
+        "revealed.otherBound": {"list":[]},
+        "revealed.outputs": {"list":[]},
+        "revealed.proposalProcedures": {"list":[]},
+        "revealed.redeemers": {"list":[]},
+        "revealed.ref": {"list":[]},
+        "revealed.referenceInputs": {"list":[]},
+        "revealed.treasuryDonation": {"list":[]},
+        "revealed.votes": {"list":[]},
+        "revealed.withdrawals": {"list":[]},
+        "timeout": 0,
+        "to": 0
+      }
+    },
+    "an output without a datum cannot be spent #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "1c207e4e5e5ea831",
+      "programs": [
+        "e59e13ac253da501"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "Blaster"
+      }
+    },
+    "from the timeout on, the committer refunds #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "e5d6aec0aa32186c",
+      "programs": [
+        "d8ffed0e6555b361",
+        "beb00424dd60a305"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "from the timeout on, the committer refunds #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d28c176c09b45a05",
+      "programs": [
+        "2377001613b53351",
+        "7b9293465af7556d"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "from the timeout on, the committer refunds #3": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "e094cde77d267c04",
+      "programs": [
+        "beb00424dd60a305"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "config.committer.hash": "",
+        "config.image": "",
+        "config.receiver.hash": "",
+        "config.timeout": 0,
+        "from": -1,
+        "rest.certificates": {"list":[{"int":12}]},
+        "rest.currentTreasuryAmount": {"int":4},
+        "rest.data": {"list":[{"int":6}]},
+        "rest.fee": {"list":[{"int":16}]},
+        "rest.id": {"list":[{"int":9}]},
+        "rest.inputs": {"list":[{"int":8}]},
+        "rest.mint": {"list":[{"int":13}]},
+        "rest.otherBound": {"bytes":"213021"},
+        "rest.outputs": {"list":[{"int":15}]},
+        "rest.proposalProcedures": {"list":[{"int":7}]},
+        "rest.redeemers": {"list":[{"int":14}]},
+        "rest.ref": {"bytes":"213121"},
+        "rest.referenceInputs": {"list":[{"int":10}]},
+        "rest.treasuryDonation": {"int":5},
+        "rest.votes": {"list":[{"int":17}]},
+        "rest.withdrawals": {"list":[{"int":11}]}
+      }
+    },
+    "nobody but the committer refunds #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "a3c657590c0aaea8",
+      "programs": [
+        "242f02a513cb9f56",
+        "c0468f563188290d"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "nobody but the committer refunds #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2b1b9117ff894e51",
+      "programs": [
+        "74e244f75d422f83"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "nobody but the committer refunds #3": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2561277435f4f7e7",
+      "programs": [
+        "d1591ba1df616118",
+        "1878050e1e4d4bfd"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "nobody but the committer refunds #4": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "1b2ba75c6a3bcdd6",
+      "programs": [
+        "c0468f563188290d"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "config.committer.hash": "213021",
+        "config.image": "",
+        "config.receiver.hash": "",
+        "config.timeout": 0,
+        "from": 0,
+        "rest.certificates": {"list":[{"int":14}]},
+        "rest.currentTreasuryAmount": {"int":4},
+        "rest.data": {"list":[{"int":17}]},
+        "rest.fee": {"list":[{"int":6}]},
+        "rest.id": {"list":[{"int":8}]},
+        "rest.inputs": {"list":[{"int":10}]},
+        "rest.mint": {"list":[{"int":9}]},
+        "rest.otherBound": {"bytes":"213121"},
+        "rest.outputs": {"list":[{"int":12}]},
+        "rest.proposalProcedures": {"list":[{"int":7}]},
+        "rest.redeemers": {"list":[{"int":11}]},
+        "rest.ref": {"bytes":"213221"},
+        "rest.referenceInputs": {"list":[{"int":15}]},
+        "rest.treasuryDonation": {"int":5},
+        "rest.votes": {"list":[{"int":13}]},
+        "rest.withdrawals": {"list":[{"int":16}]},
+        "signer": "213021"
+      }
+    },
+    "nobody but the receiver reveals #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "54a605a8e4075aa0",
+      "programs": [
+        "1772bf8f46b03014",
+        "15bb5c65d55c08a9"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "nobody but the receiver reveals #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "afe6be86325219cd",
+      "programs": [
+        "b77f68699e5cd647"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "nobody but the receiver reveals #3": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "84be0841e97d248a",
+      "programs": [
+        "e6ad1f9daa9a845e",
+        "3ae5755db262a0e1"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "nobody but the receiver reveals #4": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "97022b4088df3645",
+      "programs": [
+        "9436b684a497d2dc"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "committer": "",
+        "preimage": "",
+        "receiver": "213021",
+        "rest.certificates": {"list":[{"int":14}]},
+        "rest.currentTreasuryAmount": {"int":4},
+        "rest.data": {"list":[{"int":17}]},
+        "rest.fee": {"list":[{"int":6}]},
+        "rest.id": {"list":[{"int":8}]},
+        "rest.inputs": {"list":[{"int":10}]},
+        "rest.mint": {"list":[{"int":9}]},
+        "rest.otherBound": {"bytes":"213121"},
+        "rest.outputs": {"list":[{"int":12}]},
+        "rest.proposalProcedures": {"list":[{"int":7}]},
+        "rest.redeemers": {"list":[{"int":11}]},
+        "rest.ref": {"bytes":"213221"},
+        "rest.referenceInputs": {"list":[{"int":15}]},
+        "rest.treasuryDonation": {"int":5},
+        "rest.votes": {"list":[{"int":13}]},
+        "rest.withdrawals": {"list":[{"int":16}]},
+        "signer": "213021",
+        "timeout": 0,
+        "to": 0
+      }
+    },
+    "the script validates nothing but spending #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "0127eb16b379b16e",
+      "programs": [
+        "d2a643a94d9ac501",
+        "7d65c34a6bf59fe6"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "Blaster"
+      }
+    },
+    "up to the timeout, the receiver reveals any preimage of the image #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "cb33680e8915b8fc",
+      "programs": [
+        "71585b7489159cb8",
+        "ef85a5a16e6ddd6f"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "up to the timeout, the receiver reveals any preimage of the image #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "222551a9fdc5a9c3",
+      "programs": [
+        "92c60e7c79f743e3",
+        "d7451a726d907cae"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "up to the timeout, the receiver reveals any preimage of the image #3": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "b1e59df26e013d42",
+      "programs": [
+        "ef85a5a16e6ddd6f"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "committer": "",
+        "preimage": "",
+        "receiver": "",
+        "rest.certificates": {"list":[{"int":12}]},
+        "rest.currentTreasuryAmount": {"int":4},
+        "rest.data": {"list":[{"int":6}]},
+        "rest.fee": {"list":[{"int":16}]},
+        "rest.id": {"list":[{"int":9}]},
+        "rest.inputs": {"list":[{"int":8}]},
+        "rest.mint": {"list":[{"int":13}]},
+        "rest.otherBound": {"bytes":"213021"},
+        "rest.outputs": {"list":[{"int":15}]},
+        "rest.proposalProcedures": {"list":[{"int":7}]},
+        "rest.redeemers": {"list":[{"int":14}]},
+        "rest.ref": {"bytes":"213121"},
+        "rest.referenceInputs": {"list":[{"int":10}]},
+        "rest.treasuryDonation": {"int":5},
+        "rest.votes": {"list":[{"int":17}]},
+        "rest.withdrawals": {"list":[{"int":11}]},
+        "timeout": -1,
+        "to": 0
+      }
+    },
+    "whether a bound of the validity range is inclusive does not matter to the validator #1": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "8384e2b0298ccd16",
+      "programs": [
+        "c0468f563188290d",
+        "14b259edd1b43710"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    },
+    "whether a bound of the validity range is inclusive does not matter to the validator #2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "52ecdd564c4e3baf",
+      "programs": [
+        "42088b3fec06d630",
+        "15bb5c65d55c08a9"
+      ],
+      "notes": {
+        "budget": "4000",
+        "kind": "Blaster"
+      }
+    }
+  }
+}
