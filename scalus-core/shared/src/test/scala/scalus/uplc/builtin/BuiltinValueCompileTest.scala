@@ -1,4 +1,4 @@
-package scalus.builtin
+package scalus.uplc.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*

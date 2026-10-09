@@ -1,4 +1,4 @@
-package scalus.builtin
+package scalus.uplc.builtin
 
 import org.scalacheck.Arbitrary
 import org.scalacheck.Gen

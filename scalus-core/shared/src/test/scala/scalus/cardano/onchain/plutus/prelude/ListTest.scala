@@ -1,4 +1,4 @@
-package scalus.prelude
+package scalus.cardano.onchain.plutus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.OnchainError

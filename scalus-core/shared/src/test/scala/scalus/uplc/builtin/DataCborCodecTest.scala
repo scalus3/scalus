@@ -1,4 +1,4 @@
-package scalus.builtin
+package scalus.uplc.builtin
 
 import io.bullet.borer.Cbor
 import org.scalatest.funsuite.AnyFunSuite

@@ -1,4 +1,4 @@
-package scalus.prelude
+package scalus.cardano.onchain.plutus.prelude
 
 import scalus.cardano.onchain.plutus.prelude.Option
 

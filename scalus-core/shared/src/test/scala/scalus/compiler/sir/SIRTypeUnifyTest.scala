@@ -280,8 +280,10 @@ class SIRTypeUnifyTest extends AnyFunSuite {
 
     test("subtypeSeq from enum variant to enum (child to parent - upcasting)") {
         // EqBudgetStatus.Done -> EqBudgetStatus should find subtype relationship
-        val doneFun = compile { (x: scalus.prelude.EqBudgetStatus.Done) => x }
-        val statusFun = compile { (x: scalus.prelude.EqBudgetStatus) => x }
+        val doneFun = compile { (x: scalus.cardano.onchain.plutus.prelude.EqBudgetStatus.Done) =>
+            x
+        }
+        val statusFun = compile { (x: scalus.cardano.onchain.plutus.prelude.EqBudgetStatus) => x }
 
         val doneType = doneFun.tp match {
             case SIRType.Fun(_, tp) => tp
@@ -306,8 +308,10 @@ class SIRTypeUnifyTest extends AnyFunSuite {
     test("subtypeSeq from enum to enum variant (parent to child - for type test)") {
         // EqBudgetStatus -> EqBudgetStatus.Done - this is what happens in type tests
         // The current code checks this direction which is wrong for type tests
-        val doneFun = compile { (x: scalus.prelude.EqBudgetStatus.Done) => x }
-        val statusFun = compile { (x: scalus.prelude.EqBudgetStatus) => x }
+        val doneFun = compile { (x: scalus.cardano.onchain.plutus.prelude.EqBudgetStatus.Done) =>
+            x
+        }
+        val statusFun = compile { (x: scalus.cardano.onchain.plutus.prelude.EqBudgetStatus) => x }
 
         val doneType = doneFun.tp match {
             case SIRType.Fun(_, tp) => tp
