@@ -1,0 +1,269 @@
+{
+  "preamble": {
+    "title": "al-ft/midgard",
+    "description": "Aiken contracts for project 'al-ft/midgard'",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.23+8949565"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "da_bond_pool.da_bond_pool.spend",
+      "datum": {
+        "title": "_datum",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/midgard~1da_bond_pool~1SpendRedeemer"
+        }
+      },
+      "parameters": [
+        {
+          "title": "init_ref",
+          "schema": {
+            "$ref": "#/definitions/cardano~1transaction~1OutputReference"
+          }
+        },
+        {
+          "title": "hub_oracle_policy_id",
+          "schema": {
+            "$ref": "#/definitions/cardano~1assets~1PolicyId"
+          }
+        },
+        {
+          "title": "da_params_policy_id",
+          "schema": {
+            "$ref": "#/definitions/cardano~1assets~1PolicyId"
+          }
+        },
+        {
+          "title": "parameters",
+          "schema": {
+            "$ref": "#/definitions/midgard~1availability_challenge~1ParametersV1"
+          }
+        }
+      ],
+      "compiledCode": "591045010100222229800aba2aba1aba0aab9faab9eaab9dab9a9bae0049bae00348888888896600330013005375401523009300a300a300a300a300a300a300a300a300a300a00191191919800800802112cc004006007132325980099b910060018acc004cdc7803000c4dd59806001401500a44cc010010c04000d00a1bae300a001300d001402c297adef6c609b874800244646600200200644b30010018a5eb7bdb1822646644b30013372200c00515980099b8f0060028800c401100a44cc03800ccc01401400500a1bae3009001300e002300c001402923009300a300a001918049805180518051805000cdd2a400137009000cdd7a6103d87980009ba54800a6e1d20049b874800922222222222229800980b006cc0540364446466446600400400244b3001001801c4c8c96600266e440180062b30013371e00c0031375a60340050054061133004004301e00340606eb8c060004c06c005019198078020018a4001222598009806800c52f5bded8c1133017337606ea400cdd31980b99bb037520046ea00052f5bded8c097adef6c60404d23300a0014881009112cc00400a298103d87a80008acc004c034006260126602e603000497ae08cc00400e60320053008001400c809901624444453001301b006980d980e0034a6002003488100a441004015300100148888cc8966002602c00513259800980b980f1baa007899192cc004c09400a264b300130260018992cc004cdc7a45144d4944474152445f44415f424f4e445f504f4f4c00375c604400315980098091bad30230018acc004c8cc004004dd6181398121baa0112259800800c528456600266ebcc0a0c094dd518140008174528c4cc008008c0a4005023204c8992cc004c070c08cdd5000c4c8c8c8cc8966002603260506ea800a2b30013018302837546058605a00715980099baf302c005301d3302b301a3302b375201697ae03302b4c103d87a80004bd7045660026036605860526ea800a2b30013375e6e98c04c004dd34c00402e9101144d4944474152445f44415f424f4e445f504f4f4c00a400480a22b3001337126eb4c08cc0a4dd50179807800c528c5902745902745902745902745902745902718150009bab302a002302a001302900130243754604e60486ea80062c8110cc018dd6180c98119baa010375a604c60466ea802e2c810a2c810a2c8108c0940062c8118cc068dd5980b18109baa00e0038b2044375a6046002603e6ea801e2c80e8dd71810980f1baa0058acc004c03400a26465300113232332259800980e18119baa002899194c004dd59814800cc0a4c0a800660520049112cc004c064c0a0dd500144cc8966002603460546ea8006264b3001301b980080340069101144d4944474152445f44415f424f4e445f504f4f4c0040611332259800980e9919800800807112cc0040062900044cc896600266ebcc0d4c0c8dd5181a98191baa3006303237540046046660686ea401d2f5c1130050018800a060303300133002002303400140c513322598009814000c56600260606ea801e0051640c5159800980f800c4c8c966002606c0050048b2066375a606800260606ea801e2c817102e0cc004c050022444464b3001302b3032375400313232323322598009814181b9baa0028acc004c09cc0dcdd5181d981e001c56600266ebcc0ec0140222b30013375e6e98c088004dd34c00401e911144d4944474152445f44415f424f4e445f504f4f4c00a4004811a266074607660706ea8008cc0e8dd4180f000a5eb822c81b22c81b22c81b22c81b0c0e4004dd5981c801181c800981c00098199baa3036303337540031640c46602a00800722325980099b8800148002290004400502f19b81002375a605460606ea8006460646066606660666066606660666066003222323322332298008014006900020042225980099b890050018a518acc00400a29422653001004981e001d66002646600200200c44b30010018a508acc004cdc79bae303d0010038a51899801001181f000a07040ed1300b0028801206c40106eb8c0e8009038206a3758606e60706070607060686ea800cdd6981398191baa0013758606a606c606c606c606c606c606c606c606c60646ea8010c966002605460626ea8006264646464b30013026303537540031598009812981a9baa3039303a0028992cc004c098c0d8dd5000c56600266e3cdd7181d181b9baa0010088acc004c09a60026eacc0e8012011489114d4944474152445f44415f504152414d5300408d132598009818181b9baa001899191919194c004dd69820000cdd71820002cdd718200024dd69820001a4444b30013045005899198008009bac30450072259800800c56600266e3cdca1bae3046304337540186eb8c05cc10cdd5006440322c820a2646600600660900046eb8c1180050444590420c100004c0fc004c0f8004c0f4004c0e0dd5000c59036181d181b9baa0028b206a8b206a8b206a30393036375460720091640d11640d060700026070002606e00260646ea8c0d4c0d8c0c8dd5181a98191baa0018b2060330143758600a60626ea800c00644b3001001880144c08c00902e48966002003100289801801205c98169baa01691819181998199819981998199819981998199819800a44444444464b300130300038992cc004cdd7981e000808456600266e24dd69801981c9baa03f337026eb4c0f0c0f400402e29462c81ba2c81ba600202b375a607660706ea808202100d40251598009813801c4c8ca6002607c003375a607a003375a607a0049112cc004cdc3a40146eb4c0f0c8cdd81ba8303d001374e607c0026ea8c8c966002606e607c6ea8006264b30013375e607e0026068660846ea4c966002606260806ea8006264b3001303a375a608200313259800800c5a26eb8c11800504418231823182318231bac30420018b208032337606ea0c104004dd398210009baa3044304137540031640fc60866088608860806ea8c10cc110c100dd5192cc004c0e4c100dd5000c4c8c8c966002606660866ea80062b30015980099b8f375c608e60886ea8004106266ebcdd3992cc004c12400626464b3001304b001899198251823801998251823800998251824000a5eb80c1280062c8240dd598230009824000c590461981d9bab3047304800248900374e6608c6ea4104cc11930113524d4944474152445f4855425f4f5241434c4500330464c10101004bd70452820848801c59042459042182318219baa304600130423754608a608c60846ea8004c110c104dd5000c5903f198119bac30143040375405a00897ae089820000c5903e1919bb030430013043304400137586084607e6ea80062c81e96600266e2000d20008a6103d87a80008cc0040066eacc020c0f8dd5015c00d0012078222598008014530103d87a80008992cc004c0e400a2606a660866e9ccc10cc100004cc10cc1040052f5c097ae08cc004012608a0073034002401081f8c10c00904144c966002606c607a6ea8006264b3001302e98009bab3013303f375400303ca45174d4944474152445f434f5252454354494f4e5f4c4f434b0040ad1598009818992cc004c0c0c0fcdd5000c4c8cc8966002607600315980098219baa003801459044456600260640031323322598009825000c4c8c96600260800031323259800982700140262c8258dd7182600098241baa0028acc004c0dc0062b3001304837540050078b20928acc004c0e000626464b3001304e002804c5904b1bae304c00130483754005164118823104618231baa00130490018b208e375c608e002609000260866ea800e2c8209041080098201baa0013043304037540031640f8606a607e6ea8006264b30013375e608600202f15980099b87375a6086608800266e04048cc896600266e2000400a2003100241006eb4c050c100dd5023198080090234528c5903e45903e4c0040726eb4c108c10c01602f01440411640f51640f460826084607c6ea8c104c0f8dd5000c5903c1981000e1bad30400038b2076181e800981c1baa0208acc004c0a000e264b3001980081340d66eb4c0f00050074566002606260706ea8042264b30013375e607a0026056660786ea0cdc0241017909cc0a6eb4c0f4c0f8c966002606660746ea80062646644b30013371266e040040092080cc3a8998201ba800233040375000297ae08b2078375a607e0026eb4c0fcc100004c0ecdd5000c5903918019804981d1baa0274bd70456600266e1cdd6981e981f0008064528c590384590384c00405a6eb4c0f0c0f400602300e40291640dd1640dc60706ea80822b30013370e9003001c4c966003300102681acdd6981e000a00e8acc004c0a0c0e0dd500844c9660026058607a00315980099b87375a607a607c00201914a31640e11640e130010169bad303c303d001808c03900a459037459037181c1baa02089919912cc00660020510379bad303e00240251598009815181d1baa0128acc004cdc49bad303e303b37540246464b3001303500189bad3040303d37540051598009816800c4dd69820181e9baa0028b207640ec60766ea8004c010c028c0ecdd5014456600266e2120000018acc004cdc480099805806820c4c966002605c607e00315980099b87375a607e608000266e0403800a29462c81d22c81d26002031375a607c607e00501380820188b20728b20728b20728b20728b2072303d001375a607800260706ea8081036206c40d881b08c8cc88c8ca600260786ea8006298103d87d80009816181e1baa304030410039816181e1baa304030410044888966002607200913232598009819800c5300103d87c80008acc004c0c8006260686608a6ea0cc040dd6982318219baa0020044bd7040150412082304137540026088608a00d159800981800244c8c9660026064003133225980099b890010028a6103d87d80008981c998239ba800233047375000297ae0410c6601e6eb4c118c10cdd5003801998081bad3046304337540040091598009819800c4cdd2a40086608a6ea0cc03cdd6982318219baa0070034bd7040150412082304137540026088608a00d00340fc81f8607e0026607a607c0046607a607c00297ae030393754607800260726ea8c0f0c0f4004c0e0dd50008c0b4dd5002c5902c1181818188009b804800a2c8150dd7181718159baa0018b2052302c30293754004605860526ea80062c8138605200260486ea8c09cc0a0c090dd5181398121baa0028b204432330010010022259800800c530103d87a80008992cc004cdd7981418129baa0010068980c99813800a5eb8226600600660520048118c09c0050251bac3025302630260023758604800260406ea8036603e6ea8022604660480049112cc004c06c00a26464b30013029002802c590261bad302700130233754017159800980900144c8c8c8ca60026eb4c0a80066eb4c0a80126eb4c0a800e6eb4c0a80092222598009817802c02e2c816060540026052002605000260466ea802e2b300130130028991919912cc004c0ac00e00f1640a06eb4c0a0004dd69814001181400098119baa00b8acc004cdc3a400c005132323322598009815801c01e2c8140dd698140009bad302800230280013023375401715980099b874802000a26464653001375a6052003375a6052007375a60520049112cc004c0b40120131640a830290013028001302337540171640848109021204240843022001301e375400b16407080e0c06cdd5001912cc004cdc4000a400114c103d87a8000899801801000a0381149a26cac8019",
+      "hash": "fba9e869e1bdf4aa08d26abe599a5836958cd21a380cafacdf3d183d"
+    }
+  ],
+  "definitions": {
+    "ByteArray": {
+      "title": "ByteArray",
+      "dataType": "bytes"
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "cardano/assets/PolicyId": {
+      "title": "PolicyId",
+      "dataType": "bytes"
+    },
+    "cardano/transaction/OutputReference": {
+      "title": "OutputReference",
+      "description": "An `OutputReference` is a unique reference to an output on-chain. The `output_index`\n corresponds to the position in the output list of the transaction (identified by its id)\n that produced that output",
+      "anyOf": [
+        {
+          "title": "OutputReference",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "transaction_id",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "output_index",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "midgard/availability_challenge/ParametersV1": {
+      "title": "ParametersV1",
+      "anyOf": [
+        {
+          "title": "ParametersV1",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "response_geometry",
+              "$ref": "#/definitions/midgard~1availability_challenge~1ResponseGeometryV1"
+            },
+            {
+              "title": "da_bond_lovelace",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "challenger_bond_lovelace",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "max_open_fee_lovelace",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "max_publication_fee_lovelace",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "max_settlement_fee_lovelace",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "max_close_fee_lovelace",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "max_timeout_fee_lovelace",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "da_slash_penalty_lovelace",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "da_bond_min_top_up_lovelace",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "da_bond_pool_floor_lovelace",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "challenge_record_lovelace",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "midgard/availability_challenge/ResponseGeometryV1": {
+      "title": "ResponseGeometryV1",
+      "anyOf": [
+        {
+          "title": "ResponseGeometryV1",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "chunk_byte_length",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "tranche_byte_length",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "max_tranche_count",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "midgard/da_bond_pool/SpendRedeemer": {
+      "title": "SpendRedeemer",
+      "description": "Every arm continues the pool at `output_index`.",
+      "anyOf": [
+        {
+          "title": "TopUp",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "output_index",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        },
+        {
+          "title": "Slash",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "hub_oracle_ref_input_index",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "state_queue_mint_redeemer_index",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "correction_lock_input_index",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "output_index",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        },
+        {
+          "title": "BeginWithdraw",
+          "dataType": "constructor",
+          "index": 2,
+          "fields": [
+            {
+              "title": "da_params_ref_input_index",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "output_index",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        },
+        {
+          "title": "CancelWithdraw",
+          "dataType": "constructor",
+          "index": 3,
+          "fields": [
+            {
+              "title": "da_params_ref_input_index",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "output_index",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        },
+        {
+          "title": "CompleteWithdraw",
+          "dataType": "constructor",
+          "index": 4,
+          "fields": [
+            {
+              "title": "amount",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "da_params_ref_input_index",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "output_index",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
