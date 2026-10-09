@@ -123,7 +123,6 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofs {
         val ref = TxOutRef(TxId(hex"00"), 0)
         val datum = Config(committer, receiver, hex"ab", BigInt(7)).toData
         val timeout: Action = Action.Timeout
-        assert(timeoutRedeemer == timeout.toData)
         def expected(datum: prelude.Option[Data]) = {
             ScriptContext(
               TxInfo.placeholder,
@@ -134,7 +133,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofs {
         def built(datum: Data) = {
             scriptContext(
               TxInfo.placeholder.toData,
-              timeoutRedeemer,
+              timeout.toData,
               spendingInfo(ref.toData, datum)
             )
         }
@@ -182,7 +181,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofs {
         }
         assert(
           refund(sample, BigInt(5), signedBy(committer), unread(to.toData)) ==
-              expected(timeoutRedeemer)
+              expected(Action.Timeout.toData)
         )
         assert(
           reveal(sample, hex"cafe", BigInt(9), signedBy(committer), unread(from.toData)) ==
@@ -318,7 +317,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofs {
                 validator,
                 spending(
                   config,
-                  timeoutRedeemer,
+                  Action.Timeout.toData,
                   IntervalBound.negInf.toData,
                   rest.otherBound,
                   signedBy(config.committer),
@@ -335,7 +334,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofs {
                 validator,
                 spending(
                   config,
-                  timeoutRedeemer,
+                  Action.Timeout.toData,
                   IntervalBound.posInf.toData,
                   rest.otherBound,
                   signedBy(config.committer),
@@ -753,7 +752,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofs {
         assert(kind(revealed) == ProofKind.LeanNative)
         val refunded = succeeds(
           validator,
-          sampleSpending(timeoutRedeemer, Interval.after(BigInt(1000)), signedBy(committer))
+          sampleSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), signedBy(committer))
         )
         assert(kind(refunded) == ProofKind.LeanNative)
         val unsignedReveal = fails(
@@ -767,7 +766,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofs {
         assert(kind(unsignedReveal) == ProofKind.LeanNative)
         val unsignedRefund = fails(
           validator,
-          sampleSpending(timeoutRedeemer, Interval.after(BigInt(1000)), unsigned)
+          sampleSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), unsigned)
         )
         assert(kind(unsignedRefund) == ProofKind.LeanNative)
         // The receiver's reveal of another secret is not accepted either.
@@ -823,12 +822,6 @@ object HtlcVerificationTest {
         inline second: PubKeyHash
     ): prelude.List[PubKeyHash] =
         prelude.List.Cons(first, prelude.List.Cons(second, prelude.List.Nil))
-
-    /** `Action.Timeout` as the ledger encodes it. It is written out: `Action.Timeout.toData` does
-      * not lower ("Unsupported conversion for Action$.Timeout from ProdDataList to DataConstr",
-      * https://github.com/scalus3/scalus/issues/377).
-      */
-    inline def timeoutRedeemer: Data = constrData(0, mkNilData())
 
     /** The script context of spending the output locked under `config`, with `redeemer`, in a
       * transaction whose validity range is from the bound `from` to the bound `to`, both encoded,
@@ -910,7 +903,7 @@ object HtlcVerificationTest {
     ): Data = {
         spending(
           config,
-          timeoutRedeemer,
+          Action.Timeout.toData,
           IntervalBound(IntervalBoundType.Finite(from), inclusive).toData,
           unread.otherBound,
           signatories,
