@@ -28,6 +28,12 @@
   builtins.
 - Ed25519 verification on the JVM takes about 30 µs instead of 52 µs.
 
+### Deprecated
+
+- `Value.lovelaceAmount`: use `getLovelace`, which lowers to the `lookupCoin` builtin at PV11.
+  `lovelaceAmount` walks the `Data` map, and on a value without lovelace it returns another
+  token's quantity.
+
 ## 1.3.0 (2026-09-28)
 
 Scalus 1.3 balances transactions from JavaScript, evaluates scripts two to three times faster from

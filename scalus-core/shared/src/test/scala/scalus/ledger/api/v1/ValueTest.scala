@@ -1,6 +1,7 @@
 package scalus.cardano.onchain.plutus.v1
 
 import org.scalatest.funsuite.AnyFunSuite
+import scala.annotation.nowarn
 import scalus.cardano.ledger.{Coin, ExUnits, MajorProtocolVersion}
 import scalus.uplc.PlutusV3
 import scalus.uplc.Term.asTerm
@@ -1015,37 +1016,43 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
-    test("lovelaceAmount lovelace-only") {
-        assertEvalWithBudget(
-          Value.lovelace(1000).lovelaceAmount,
-          BigInt(1000),
-          ExUnits(memory = 200, steps = 16_100)
-        )
-    }
+    /** `lovelaceAmount` is deprecated; its tests stay until it is removed. */
+    @nowarn("cat=deprecation")
+    private def lovelaceAmountTests(): Unit = {
+        test("lovelaceAmount lovelace-only") {
+            assertEvalWithBudget(
+              Value.lovelace(1000).lovelaceAmount,
+              BigInt(1000),
+              ExUnits(memory = 200, steps = 16_100)
+            )
+        }
 
-    test("lovelaceAmount lovelace + native asset") {
-        assertEvalWithBudget(
-          Value
-              .fromList(
-                List(
-                  (
-                    utf8"PolicyId",
-                    List((utf8"TokenName", BigInt(500)))
-                  ),
-                  (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
-                )
-              )
-              .lovelaceAmount,
-          BigInt(2000),
-          ExUnits(memory = 200, steps = 16_100)
-        )
-    }
+        test("lovelaceAmount lovelace + native asset") {
+            assertEvalWithBudget(
+              Value
+                  .fromList(
+                    List(
+                      (
+                        utf8"PolicyId",
+                        List((utf8"TokenName", BigInt(500)))
+                      ),
+                      (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
+                    )
+                  )
+                  .lovelaceAmount,
+              BigInt(2000),
+              ExUnits(memory = 200, steps = 16_100)
+            )
+        }
 
-    test("lovelaceAmount fails on zero") {
-        assertEvalFails[NoSuchElementException] {
-            Value.zero.lovelaceAmount
+        test("lovelaceAmount fails on zero") {
+            assertEvalFails[NoSuchElementException] {
+                Value.zero.lovelaceAmount
+            }
         }
     }
+
+    lovelaceAmountTests()
 
     test("isZero") {
         checkEval { (value: Value) =>
