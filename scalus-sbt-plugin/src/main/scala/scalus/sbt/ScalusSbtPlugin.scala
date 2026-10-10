@@ -8,7 +8,7 @@ import sbt.complete.DefaultParsers.*
 import sbtcompat.PluginCompat.*
 
 /** sbt plugin that adds blueprint generation, pinning and deploy tasks for Cardano smart
-  * contracts.
+  * contracts, and the Lean workspace of their proofs.
   *
   * Blueprint output has two layers:
   *
@@ -37,6 +37,16 @@ import sbtcompat.PluginCompat.*
   *   - `CARDANO_NETWORK` for `--network` (default: "preview")
   *   - `BLOCKFROST_API_KEY` for `--blockfrost-key`
   *   - `CARDANO_MNEMONIC` for `--mnemonic`
+  *
+  * Proofs with `scalus-verification` run their checks in a Lean workspace of the project, the
+  * directory `leanWorkspace`: `src/test/lean/<Project>` unless the build says another.
+  * `leanInit` makes it ready: it creates it where it is missing, and brings Scalus's Lean
+  * library up to date in `.scalus` of the repository, which the workspaces of a build share.
+  * A suite of proofs does the same when it runs, so `test` does not need `leanInit`.
+  * `leanBuild` runs `lake build` in the workspace, which a suite needs before it asks Lean. It
+  * is not part of `test`: the first build clones and builds what the library requires, which
+  * takes minutes and the network. A project without `scalus-verification` is passed over by
+  * both tasks.
   */
 object ScalusSbtPlugin extends AutoPlugin {
 
@@ -60,6 +70,18 @@ object ScalusSbtPlugin extends AutoPlugin {
         val deploy =
             inputKey[Unit](
               "Deploy a contract as a reference script UTXO"
+            )
+        val leanWorkspace =
+            settingKey[java.io.File](
+              "The Lean workspace of the project's proofs: a Lake package whose directory names it"
+            )
+        val leanInit =
+            taskKey[java.io.File](
+              "Create the Lean workspace where it is missing, and bring Scalus's Lean library beside it up to date"
+            )
+        val leanBuild =
+            taskKey[Unit](
+              "Run `lake build` in the Lean workspace, which the checks of the proofs need"
             )
     }
 
@@ -246,6 +268,132 @@ object ScalusSbtPlugin extends AutoPlugin {
         }
     }
 
+    /** The tasks that write a Lean workspace run one at a time in a build. Its workspaces share
+      * Scalus's Lean library and the packages Lake clones for it, and sbt runs the tasks of
+      * different projects at once.
+      */
+    private val LeanTag = Tags.Tag("scalus-lean")
+
+    /** What `leanInit` made ready: the workspace, and where it does not agree with Scalus's Lean
+      * library. None where the project has no `scalus-verification`.
+      */
+    private val leanReady =
+        taskKey[Option[(java.io.File, Seq[String])]](
+          "The Lean workspace that leanInit made ready, and where it does not agree with Scalus's Lean library"
+        )
+
+    /** The tool of `scalus-verification` that has Scalus's Lean library and knows what a
+      * workspace is made of, where the classpath has it. A project without `scalus-verification`
+      * has none, and is passed over: the tasks are aggregated over every project of a build. A
+      * `scalus-verification` from before the tool is an error.
+      */
+    private def loadLeanTool(cl: ClassLoader): Option[Class[?]] =
+        try {
+            Some(cl.loadClass("scalus.verify.lean.LeanWorkspaceTool$"))
+        } catch {
+            case _: ClassNotFoundException =>
+                val older =
+                    try {
+                        cl.loadClass("scalus.verify.Verifier")
+                        true
+                    } catch {
+                        case _: ClassNotFoundException => false
+                    }
+                if (older)
+                    sys.error(
+                      "The scalus-verification among the test dependencies is from before " +
+                          "LeanWorkspaceTool, and older than this plugin. Use the version of the plugin."
+                    )
+                None
+        }
+
+    /** Creates the workspace through `scalus-verification`. It is among the project's test
+      * dependencies, and is Scala 3, so it is called by reflection, as the deployer is. Only the
+      * dependencies are read: the project itself need not compile for its workspace to be made.
+      */
+    lazy val leanReadyTask: Def.Initialize[Task[Option[(java.io.File, Seq[String])]]] = Def.task {
+        implicit val conv: xsbti.FileConverter = fileConverter.value
+        val cp = toFiles((Test / externalDependencyClasspath).value)
+        val workspace = leanWorkspace.value
+        val project = name.value
+        val log = streams.value.log
+        val urls = cp.map(_.toURI.toURL).toArray
+        val cl = new java.net.URLClassLoader(urls, ClassLoader.getPlatformClassLoader)
+        try {
+            loadLeanTool(cl) match {
+                case None =>
+                    log.info(
+                      s"leanInit: $project has no scalus-verification among its test " +
+                          "dependencies, and gets no Lean workspace"
+                    )
+                    None
+                case Some(toolClass) =>
+                    val tool = toolClass.getField("MODULE$").get(null)
+                    val outcome = toolClass
+                        .getMethod("init", classOf[java.nio.file.Path])
+                        .invoke(tool, workspace.toPath)
+                    def lines(method: String): Seq[String] = {
+                        val list = outcome.getClass
+                            .getMethod(method)
+                            .invoke(outcome)
+                            .asInstanceOf[java.util.List[String]]
+                        (0 until list.size).map(i => list.get(i))
+                    }
+                    lines("doneLines").foreach(line => log.info(line))
+                    val notes = lines("noteLines")
+                    notes.foreach(note => log.warn(s"The Lean workspace $workspace: $note"))
+                    Some((workspace, notes))
+            }
+        } catch {
+            case e: java.lang.reflect.InvocationTargetException =>
+                // The cause as a whole: the message of a file system's exception is a path only.
+                sys.error(s"leanInit failed: ${e.getCause}")
+        } finally {
+            cl.close()
+        }
+    }.tag(LeanTag)
+
+    lazy val leanInitTask: Def.Initialize[Task[java.io.File]] = Def.task {
+        val _ = leanReady.value
+        leanWorkspace.value
+    }
+
+    /** Runs `lake build` in the workspace, which `leanInit` has created where it was missing.
+      * Lake writes the workspace's manifest on its first build, to be committed with the
+      * workspace. A workspace that does not agree with Scalus's Lean library is not built: its
+      * proofs would be checked with another Lean, or other packages, than the library is for.
+      */
+    lazy val leanBuildTask: Def.Initialize[Task[Unit]] = Def.task {
+        val log = streams.value.log
+        leanReady.value match {
+            case None => ()
+            case Some((workspace, notes)) =>
+                if (notes.nonEmpty)
+                    sys.error(
+                      (s"leanBuild: the Lean workspace $workspace does not agree with Scalus's Lean library" +: notes)
+                          .mkString("\n  ")
+                    )
+                log.info(s"Running `lake build` in $workspace")
+                val output =
+                    scala.sys.process.ProcessLogger(line => log.info(line), line => log.info(line))
+                val exit =
+                    try {
+                        scala.sys.process.Process(Seq("lake", "build"), workspace).!(output)
+                    } catch {
+                        case e: java.io.IOException =>
+                            sys.error(
+                              s"leanBuild could not run `lake`: ${e.getMessage}. " +
+                                  "Install Lean with elan, and have `lake` on the PATH of sbt."
+                            )
+                    }
+                if (exit != 0) sys.error(s"`lake build` failed in $workspace, with exit code $exit")
+        }
+    }.tag(LeanTag)
+
+    override lazy val globalSettings: Seq[Setting[?]] = Seq(
+      Global / concurrentRestrictions += Tags.limit(LeanTag, 1)
+    )
+
     override lazy val projectSettings: Seq[Setting[?]] = Seq(
       // Def.uncached opts these out of sbt 2's task cache: they return Seq[File] (not a
       // cacheable output type) and write files, and `deploy` performs network I/O. No-op on
@@ -261,7 +409,14 @@ object ScalusSbtPlugin extends AutoPlugin {
       blueprintCheck := Def.uncached(blueprintCheckTask.value),
       // Embed blueprints in the JAR via the resources pipeline.
       Compile / resourceGenerators += blueprintGenerator.taskValue,
-      deploy := Def.uncached(deployTask.evaluated)
+      deploy := Def.uncached(deployTask.evaluated),
+      leanWorkspace := baseDirectory.value / "src" / "test" / "lean" / LeanLayout.packageName(
+        name.value
+      ),
+      // Uncached, as the tasks above: they write files, and `leanBuild` runs a process.
+      leanReady := Def.uncached(leanReadyTask.value),
+      leanInit := Def.uncached(leanInitTask.value),
+      leanBuild := Def.uncached(leanBuildTask.value)
     )
 
     /** Derive a simple file name from a fully qualified class name. */
@@ -527,4 +682,5 @@ object ScalusSbtPlugin extends AutoPlugin {
 object ScalusBlueprintPlugin extends AutoPlugin {
     val autoImport = ScalusSbtPlugin.autoImport
     override lazy val projectSettings: Seq[Setting[?]] = ScalusSbtPlugin.projectSettings
+    override lazy val globalSettings: Seq[Setting[?]] = ScalusSbtPlugin.globalSettings
 }
