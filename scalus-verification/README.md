@@ -341,6 +341,68 @@ workspace builds that module, in seconds. Its `lean-toolchain` and its manifest 
 the Lean and the revisions the library's name: after `lake update` in the library's workspace,
 run `lake update` in it too. The suite checks that they agree.
 
+### The workspace of a project outside these sources
+
+A project that depends on `scalus-verification` has no path to the library's workspace here, so
+the jar carries the library, and `LeanWorkspaceTool.init(directory)` makes a workspace from it:
+
+```
+.scalus/ScalusProofs/           Scalus's Lean library, unpacked from the jar; git-ignored
+contracts/src/test/lean/Htlc/   a workspace: lakefile.lean, lean-toolchain, Htlc.lean, Htlc/
+```
+
+- The workspace is a Lake package with the name of its directory. The name cannot be that of a
+  library of Lean itself (`Init`, `Std`, `Lean`, `Lake`) or of a package of the library: Lean
+  looks for a module in the workspace's own package first.
+- `.scalus` is one for the project: in the nearest directory above the workspace that has
+  `.git`, or without one, beside the workspace. Every workspace of the project requires
+  `ScalusProofs` from it and uses the library's `packagesDir`, so Blaster and PlutusCore are
+  cloned and built once for the project.
+- Its library has every module under `<Name>/`, so `lake build` checks a proof written by hand
+  there without it being imported. Lake does not build without that directory, and a checkout
+  does not have it while it is empty: `init` makes it.
+- It is created where the directory has no lakefile, and is the project's from then on: nothing
+  in it is written again. Every call says where its `lean-toolchain` or the revisions its
+  manifest pins are not the library's.
+- The library is Scalus's: every call brings it up to the version in the build, where the
+  workspace's lakefile requires it from, and writes only the files that changed. Only a library
+  in a `.scalus` is written. A workspace that requires it from another path, as `LinearVesting`
+  here does, is only looked at.
+- Lake writes the workspace's `lake-manifest.json` on its first build, with the revisions the
+  library's manifest pins. Commit it with the workspace.
+
+A suite makes its workspace ready itself, with `readyWorkspace` of `LeanProofs`, which calls
+`init` and fails the test where the workspace does not agree with the library:
+
+```scala
+private lazy val workspace = readyWorkspace(Path.of("src/test/lean/Htlc"))
+override protected def leanWorkspace: Path = workspace
+```
+
+That needs neither Lean nor the network. So a fresh checkout has the library, which is not
+committed, before a suite asks what is kept for it, and its kept results stand where no Lean
+runs.
+
+What does need Lean and the network is the build of the workspace, which is not part of `test`.
+With the Scalus sbt plugin, the directory is the setting `leanWorkspace`,
+`src/test/lean/<Project>` unless the build says another, and two tasks do the work:
+
+```
+sbt leanInit     # make the workspace ready, as a suite does
+sbt leanBuild    # leanInit, then `lake build` in the workspace
+```
+
+- The first `leanBuild` clones and builds Blaster and PlutusCore, which takes minutes. Until
+  then a suite that would ask Lean is canceled, and says to run it.
+- `leanBuild` does not build a workspace that does not agree with the library, and says what
+  differs: after a Scalus upgrade that moves the library's Lean or its packages, run
+  `lake update` in the workspace.
+- Both tasks pass over a project without `scalus-verification` among its test dependencies, so
+  they can be run for a whole build, and they run one at a time.
+
+Without sbt, the same is `scalus.verify.lean.LeanWorkspaceTool init <directory>` and
+`lake build` there.
+
 ## Adding a property
 
 1. Register the function: `FunctionDef(Obj.method)` for a `@Compile` method, or

@@ -3,7 +3,7 @@ package scalus.verify.uplcblaster
 import org.scalatest.{Assertions, BeforeAndAfterAll, Outcome, Tag, TestSuite, TestSuiteMixin}
 import scalus.uplc.Constant
 import scalus.verify.*
-import scalus.verify.lean.{LeanServer, LeanServerProvider, LeanServers, LeanWorkspace}
+import scalus.verify.lean.{LeanServer, LeanServerProvider, LeanServers, LeanWorkspace, LeanWorkspaceTool}
 
 import java.io.File
 import java.nio.file.{Files, Path}
@@ -34,6 +34,31 @@ trait LeanProofs extends TestSuiteMixin with Assertions with BeforeAndAfterAll {
       * suite overrides it. A workspace of its own requires that library, as a check imports it.
       */
     protected def leanWorkspace: Path = LeanProofs.libraryWorkspace
+
+    /** The Lean workspace of a project's own in `directory`, made ready
+      * ([[LeanWorkspaceTool.init]]): created where it is missing, with Scalus's Lean library where
+      * its lakefile requires it from. That needs neither Lean nor the network, so a suite has its
+      * workspace in a checkout that has run nothing else, and the results kept for the suite stand
+      * there: they rest on the library's sources, which are not committed.
+      *
+      * The test fails where the workspace does not agree with the library. Its checks would run
+      * with another Lean, or other packages, than the library is for.
+      *
+      * A suite keeps what this returns, and gives it as [[leanWorkspace]]:
+      * {{{
+      * private lazy val workspace = readyWorkspace(Path.of("src/test/lean/Htlc"))
+      * override protected def leanWorkspace: Path = workspace
+      * }}}
+      */
+    protected def readyWorkspace(directory: Path): Path = {
+        val outcome = LeanWorkspaceTool.init(directory)
+        if outcome.notes.nonEmpty then
+            fail(
+              (s"the Lean workspace ${outcome.workspace} does not agree with Scalus's Lean " +
+                  "library" :: outcome.notes).mkString("\n  ")
+            )
+        outcome.workspace
+    }
 
     /** The Lean servers of the suite's workspace: none is started before a check asks for one. */
     private lazy val servers = LeanServers.in(leanWorkspace)
@@ -135,7 +160,8 @@ trait LeanProofs extends TestSuiteMixin with Assertions with BeforeAndAfterAll {
       * proofs cannot pass by not running.
       */
     protected def requireLean(): Unit = {
-        val missing = s"requires lake and a built Lean workspace in $leanWorkspace"
+        val missing = s"requires lake and a built Lean workspace in $leanWorkspace: " +
+            "run `lake build` there, the sbt task leanBuild"
         if sys.env.contains("SCALUS_REQUIRE_LEAN") then assert(leanAvailable, missing)
         else assume(leanAvailable, missing)
     }

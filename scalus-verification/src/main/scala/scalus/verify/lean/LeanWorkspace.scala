@@ -31,6 +31,10 @@ object LeanWorkspace {
     /** The packages of the manifest of `workspace`: none where it has no manifest. */
     def packages(workspace: Path): List[Package] = manifest(workspace).fold(Nil)(_.packages)
 
+    /** The packages of a manifest that is given as its bytes. */
+    private[lean] def packagesIn(manifest: Array[Byte]): List[Package] =
+        readFromArray[Manifest](manifest).packages
+
     /** The revisions at which the manifest of `workspace` pins the packages it clones, by their
       * names.
       */

@@ -1045,6 +1045,26 @@ lazy val scalusVerification = project
       // Statements Lean does not finish are left out of `test` and `testQuick`, and run by
       // `testOnly`.
       excludeFromTest("scalus.verify.uplcblaster.Unfinished"),
+      // Scalus's Lean library goes into the jar, for the workspaces a project's proofs get
+      // (scalus.verify.lean.LeanWorkspaceTool): its sources, and not what Lake builds beside
+      // them in `.lake`. `index` names them, as a jar's resources cannot be listed.
+      Compile / resourceGenerators += Def.task {
+          val source = baseDirectory.value / "src" / "main" / "lean"
+          val target =
+              (Compile / resourceManaged).value / "scalus" / "verify" / "lean" / "library"
+          val top =
+              Seq("lakefile.lean", "lean-toolchain", "lake-manifest.json", "ScalusProofs.lean")
+                  .map(source / _)
+          val modules = ((source / "ScalusProofs") ** "*.lean").get
+          val copied = (top ++ modules).sortBy(_.getPath).map { file =>
+              val relative = IO.relativize(source, file).get.replace('\\', '/')
+              IO.copyFile(file, target / relative)
+              relative
+          }
+          val index = target / "index"
+          IO.write(index, copied.mkString("", "\n", "\n"))
+          index +: copied.map(target / _)
+      }.taskValue,
       PluginDependency
     )
 
