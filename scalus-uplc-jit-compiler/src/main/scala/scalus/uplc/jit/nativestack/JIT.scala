@@ -91,7 +91,7 @@ object JIT extends JitRunner {
         case Lam(f: Any => Any)
         case Builtin(f: Any => Any)
 
-    private def genCodeFromTerm(
+    private[jit] def genCodeFromTerm(
         term: Term
     )(using Quotes): Expr[(Logger, BudgetSpender, MachineParams) => Any] = {
         import quotes.reflect.{Lambda, MethodType, Symbol, TypeRepr, asTerm}
