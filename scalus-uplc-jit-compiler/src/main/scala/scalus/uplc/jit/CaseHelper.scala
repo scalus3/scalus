@@ -20,9 +20,9 @@ object CaseHelper {
       * non-selected branches (e.g. Error terms, division by zero).
       */
     private def wrapInThunks[T: Type](
-        branches: List[Expr[T]]
+        branches: List[Quotes ?=> Expr[T]]
     )(using Quotes): Expr[IndexedSeq[() => T]] =
-        '{ IndexedSeq(${ Varargs(branches.map(b => '{ () => $b })) }*) }
+        '{ IndexedSeq(${ Varargs(branches.map(b => '{ () => ${ b } })) }*) }
 
     /** Generate case dispatch code that selects and evaluates the appropriate branch.
       *
@@ -32,16 +32,20 @@ object CaseHelper {
       * IMPORTANT: Keep in sync with [[genCaseDispatchCont]] — both methods implement the same
       * dispatch logic but for different JIT backends (nativestack vs mincont).
       *
+      * Scrutinee and branches are generators, not finished expressions: each runs inside its own
+      * splice, so its code is created with the owner of that splice. A finished expression spliced
+      * under a `val` or a lambda would be copied once more to change its owner.
+      *
       * @param scrutinee
-      *   Expression that evaluates to the scrutinee value
+      *   generates the expression that evaluates to the scrutinee value
       * @param branches
-      *   List of branch expressions
+      *   generate the branch expressions
       * @return
       *   Expression that selects and processes the appropriate branch
       */
     def genCaseDispatch(
-        scrutinee: Expr[Any],
-        branches: List[Expr[Any]]
+        scrutinee: Quotes ?=> Expr[Any],
+        branches: List[Quotes ?=> Expr[Any]]
     )(using Quotes): Expr[Any] = {
         val branchCountExpr = Expr(branches.size)
 
@@ -51,7 +55,7 @@ object CaseHelper {
         '{
             val cases = ${ wrapInThunks(branches) }
             val bc = $branchCountExpr
-            val scrutineeVal = $scrutinee
+            val scrutineeVal = ${ scrutinee }
             if scrutineeVal.isInstanceOf[Boolean] then
                 // Bool case - False=0, True=1
                 val b = scrutineeVal.asInstanceOf[Boolean]
@@ -161,7 +165,7 @@ object CaseHelper {
 
         // Check primitives (Boolean, Unit) first to avoid Scala 3 erasure issues
         '{
-            val cases = ${ wrapInThunks(branches) }
+            val cases = ${ wrapInThunks(branches.map(b => (_: Quotes) ?=> b)) }
             val bc = $branchCountExpr
             val scrutinee = ContinuationJitRepr.eval($scrutineeCont)
             if scrutinee.isInstanceOf[Boolean] then

@@ -94,60 +94,58 @@ object JIT extends JitRunner {
     private[jit] def genCodeFromTerm(
         term: Term
     )(using Quotes): Expr[(Logger, BudgetSpender, MachineParams) => Any] = {
-        import quotes.reflect.{Lambda, MethodType, Symbol, TypeRepr, asTerm}
 
-        val nativeStackContext = '{ new NativeStackContext() }
-
+        /** Generates code for `term`.
+          *
+          * Takes the `Quotes` of the splice it is called from, and every recursive call sits inside
+          * the splice of its result. So each piece of code is created with its final owner. A
+          * finished `Expr` spliced under a `val` or a lambda is copied to change its owner, which
+          * makes the generation quadratic in the nesting depth of the term.
+          */
         def genCode(
             term: Term,
-            env: List[(String, quotes.reflect.Term)],
+            env: List[(String, Expr[Any])],
             logger: Expr[Logger],
             budget: Expr[BudgetSpender],
             params: Expr[MachineParams],
             nativeStackContext: Expr[NativeStackContext]
-        ): Expr[Any] = {
+        )(using Quotes): Expr[Any] = {
+            def gen(t: Term)(using Quotes): Expr[Any] =
+                genCode(t, env, logger, budget, params, nativeStackContext)
+
             term match
                 case Term.Var(name, _) =>
-                    val vr = env.find(_._1 == name.name).get._2.asExprOf[Any]
+                    val vr = env.find(_._1 == name.name).get._2
                     '{
                         $budget.spendBudget(Step(StepKind.Var), $params.machineCosts.varCost, Nil)
                         $vr
                     }
-                case Term.LamAbs(name, term, _) =>
-                    val mtpe =
-                        MethodType(List(name))(_ => List(TypeRepr.of[Any]), _ => TypeRepr.of[Any])
-                    val lambda = Lambda(
-                      Symbol.spliceOwner,
-                      mtpe,
-                      { case (methSym, args) =>
-                          genCode(
-                            term,
-                            (name -> args.head.asInstanceOf[quotes.reflect.Term]) :: env,
-                            logger,
-                            budget,
-                            params,
-                            nativeStackContext
-                          ).asTerm
-                              .changeOwner(methSym)
-                      }
-                    ).asExprOf[Any]
+                case Term.LamAbs(name, body, _) =>
                     '{
                         $budget.spendBudget(
                           Step(StepKind.LamAbs),
                           $params.machineCosts.varCost,
                           Nil
                         )
-                        $lambda
+                        (arg: Any) =>
+                            ${
+                                genCode(
+                                  body,
+                                  (name -> 'arg) :: env,
+                                  logger,
+                                  budget,
+                                  params,
+                                  nativeStackContext
+                                )
+                            }
                     }
                 case Term.Apply(f, arg, _) =>
                     // Optimize: detect fully-applied 1-argument builtins with simple arg
                     if UplcTermHelper.isApplyBuiltin1WithSimpleArg(term) then {
                         f match
                             case Term.Builtin(bn, _) if BuiltinAppliedGenerator.isSupported1(bn) =>
-                                val argCode =
-                                    genCode(arg, env, logger, budget, params, nativeStackContext)
                                 // Generate inline code for one-argument builtins
-                                BuiltinEmitter.emitAppliedBuiltin1(bn, argCode, budget, params)
+                                BuiltinEmitter.emitAppliedBuiltin1(bn, gen(arg), budget, params)
                             case _ =>
                                 throw IllegalStateException(
                                   s"isApplyBuiltin1WithSimpleArg returned true but term has wrong shape"
@@ -157,14 +155,10 @@ object JIT extends JitRunner {
                     else if UplcTermHelper.isApplyBuiltin2WithSimpleArgs(term) then {
                         f match
                             case Term.Apply(Term.Builtin(bn, _), arg1, _) =>
-                                val arg1Code =
-                                    genCode(arg1, env, logger, budget, params, nativeStackContext)
-                                val arg2Code =
-                                    genCode(arg, env, logger, budget, params, nativeStackContext)
                                 BuiltinEmitter.emitAppliedBuiltin2(
                                   bn,
-                                  arg1Code,
-                                  arg2Code,
+                                  gen(arg1),
+                                  gen(arg),
                                   budget,
                                   params
                                 )
@@ -172,37 +166,33 @@ object JIT extends JitRunner {
                                 throw IllegalStateException(
                                   s"isApplyBuiltin2WithSimpleArgs returned true but term has wrong shape"
                                 )
-                    } else {
-                        val func = genCode(f, env, logger, budget, params, nativeStackContext)
-                        val a = genCode(arg, env, logger, budget, params, nativeStackContext)
-                        if UplcTermHelper.isSimpleTerm(f) && UplcTermHelper.isSimpleTerm(arg) then {
-                            // can not check stack-overflow
-                            '{
-                                $budget.spendBudget(
-                                  Step(StepKind.Apply),
-                                  $params.machineCosts.applyCost,
-                                  Nil
-                                )
-                                ${ func }.asInstanceOf[Any => Any].apply($a)
-                            }
-                        } else
-                            '{
-                                $budget.spendBudget(
-                                  Step(StepKind.Apply),
-                                  $params.machineCosts.applyCost,
-                                  Nil
-                                )
-                                ${ nativeStackContext }.incr()
-                                val r = ${ func }.asInstanceOf[Any => Any].apply($a)
-                                ${ nativeStackContext }.decr()
-                                r
-                            }
-                    }
+                    } else if UplcTermHelper.isSimpleTerm(f) && UplcTermHelper.isSimpleTerm(arg)
+                    then {
+                        // can not check stack-overflow
+                        '{
+                            $budget.spendBudget(
+                              Step(StepKind.Apply),
+                              $params.machineCosts.applyCost,
+                              Nil
+                            )
+                            ${ gen(f) }.asInstanceOf[Any => Any].apply(${ gen(arg) })
+                        }
+                    } else
+                        '{
+                            $budget.spendBudget(
+                              Step(StepKind.Apply),
+                              $params.machineCosts.applyCost,
+                              Nil
+                            )
+                            ${ nativeStackContext }.incr()
+                            val r = ${ gen(f) }.asInstanceOf[Any => Any].apply(${ gen(arg) })
+                            ${ nativeStackContext }.decr()
+                            r
+                        }
 
                 case Term.Force(term, _) =>
-                    val expr = genCode(term, env, logger, budget, params, nativeStackContext)
                     '{
-                        val forceTerm = ${ expr }.asInstanceOf[() => Any]
+                        val forceTerm = ${ gen(term) }.asInstanceOf[() => Any]
                         $budget.spendBudget(
                           Step(StepKind.Force),
                           $params.machineCosts.forceCost,
@@ -217,7 +207,7 @@ object JIT extends JitRunner {
                           $params.machineCosts.delayCost,
                           Nil
                         )
-                        () => ${ genCode(term, env, logger, budget, params, nativeStackContext) }
+                        () => ${ gen(term) }
                     }
                 case Term.Const(const, _) =>
                     val expr = constantToExpr(const)
@@ -234,30 +224,21 @@ object JIT extends JitRunner {
                 case _: Term.Error =>
                     '{ throw new JitEvaluationFailure("UPLC Error term evaluated") }
                 case Term.Constr(tag, args, _) =>
-                    val expr = Expr.ofTuple(
-                      Expr(tag.value) -> Expr.ofList(
-                        args.map(a => genCode(a, env, logger, budget, params, nativeStackContext))
-                      )
-                    )
                     '{
                         $budget.spendBudget(
                           Step(StepKind.Constr),
                           $params.machineCosts.constrCost,
                           Nil
                         )
-                        $expr
+                        ${ Expr.ofTuple(Expr(tag.value) -> Expr.ofList(args.map(gen(_)))) }
                     }
                 case Term.Case(arg, cases, _) =>
-                    val scrutinee =
-                        genCode(arg, env, logger, budget, params, nativeStackContext)
-                    val branchExprs: List[Expr[Any]] =
-                        cases.map(c => genCode(c, env, logger, budget, params, nativeStackContext))
                     '{
                         $budget.spendBudget(Step(StepKind.Case), $params.machineCosts.caseCost, Nil)
                         ${
                             CaseHelper.genCaseDispatch(
-                              scrutinee,
-                              branchExprs
+                              gen(arg),
+                              cases.map(c => (q: Quotes) ?=> gen(c)(using q))
                             )
                         }
                     }
