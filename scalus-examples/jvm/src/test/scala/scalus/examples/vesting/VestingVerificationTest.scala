@@ -15,7 +15,7 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.{Budget, LeanProofs, Unfinished, UplcBlaster}
+import scalus.verify.uplcblaster.{Budget, LeanProofs, LeanProofsSuite, Unfinished, UplcBlaster}
 
 import java.nio.file.Path
 import scala.concurrent.duration.*
@@ -59,7 +59,9 @@ object Withdrawal
   * The tests need Lean: without `lake` and a built workspace they are canceled (see
   * [[LeanProofs]]).
   */
-class VestingVerificationTest extends AnyFunSuite with LeanProofs {
+class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
+    import proofs.*
+
     import VestingVerificationTest.*
 
     /** The example's own Lean workspace, `src/test/lean/LinearVesting`. It requires Scalus's Lean

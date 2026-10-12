@@ -119,7 +119,8 @@ object SpecifiedHandler extends SpecifiedEntry {
 
 /** Contracts written in a function's body with `Spec`, read from its SIR by [[Contract.inSource]].
   */
-class SpecificationsTest extends AnyFunSuite with LeanProofs {
+class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
+    import proofs.*
 
     private val clamp = FunctionDef(SpecifiedExamples.clamp)
     private val increment = FunctionDef(SpecifiedExamples.increment)

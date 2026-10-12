@@ -42,7 +42,9 @@ enum BlasterShape derives FromData, ToData:
 @Compile
 object BlasterShape
 
-class UplcBlasterTest extends AnyFunSuite with LeanProofs {
+class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
+    import proofs.*
+
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
     private val div10 = FunctionDef.named("div10", (x: BigInt) => BigInt(10) / x)
@@ -141,7 +143,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         proven(splitScope, budget = 20)
 
         // There is no finite counterexample that CEK replay can use to check every witness.
-        run(exists[BigInt](x => x != x), 20, Nil) match
+        check(exists[BigInt](x => x != x), 20, Nil) match
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("establish that no witness exists"), reason)
             case (_, _, other) =>
@@ -164,7 +166,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         // True, with the witness 2, which Lean does not find at a budget no run finishes in.
         // The value a replay would take for `n` shows nothing about the others.
         val squareRoot = !forAll[BigInt](n => n * n != BigInt(4))
-        run(squareRoot, 3, Nil) match
+        check(squareRoot, 3, Nil) match
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("establish that no witness exists"), reason)
             case (_, _, other) => fail(s"expected an inconclusive result, got $other")
@@ -214,7 +216,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
     }
 
     test("a falsification caused by too small a budget is reported as spurious") {
-        run(forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x), 3, Nil) match
+        check(forAll[BigInt, BigInt]((x, y) => Math.min(x, y) <= x), 3, Nil) match
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("spurious"), reason)
                 // Lean's machine counted the steps of the counterexample: the budget is at fault.
@@ -257,7 +259,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
     test("proves that a program fails, apart from a budget that runs out") {
         proven(!denotes(BigInt(7) / BigInt(0)), budget = 40)
         refuted(!denotes(BigInt(7) / BigInt(2)), budget = 40)
-        run(!denotes(BigInt(7) / BigInt(0)), 2, Nil) match
+        check(!denotes(BigInt(7) / BigInt(0)), 2, Nil) match
             case (_, _, VerificationResult.Inconclusive(reason)) =>
                 assert(reason.contains("spurious"), reason)
             case (_, _, other) => fail(s"expected an inconclusive result, got $other")
@@ -810,7 +812,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofs {
         // `BitVec`, which Blaster cannot translate (README, Limitations). When it can, this test
         // needs another statement Blaster rejects.
         val exp2 = FunctionDef(Math.exp2)
-        run(forAll[BigInt](e => callRef(exp2.ref, e)(r => r >= BigInt(0))), 120, Seq(exp2)) match
+        check(forAll[BigInt](e => callRef(exp2.ref, e)(r => r >= BigInt(0))), 120, Seq(exp2)) match
             case (verifier, _, VerificationResult.Failed(reason)) =>
                 assert(reason.startsWith("Lean reported an error: "), reason)
                 assert(reason.contains("Inductive datatype with instance parameters"), reason)

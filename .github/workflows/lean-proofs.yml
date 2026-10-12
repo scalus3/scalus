@@ -6,6 +6,7 @@ on:
   push:
     paths:
       - 'scalus-verification/**'
+      - 'scalus-verification-scalatest/**'
       - 'scalus-examples/jvm/src/test/lean/**'
       - 'scalus-examples/**/vesting/**'
       - 'scalus-examples/**/scalus/examples/htlc/**'

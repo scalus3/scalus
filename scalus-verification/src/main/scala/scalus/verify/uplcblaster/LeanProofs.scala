@@ -1,0 +1,359 @@
+package scalus.verify.uplcblaster
+
+import scalus.uplc.Constant
+import scalus.verify.*
+import scalus.verify.lean.{LeanServer, LeanServerProvider, LeanServers, LeanWorkspace, LeanWorkspaceTool}
+
+import java.io.File
+import java.lang.ref.Cleaner
+import java.nio.file.{Files, Path}
+import scala.concurrent.duration.FiniteDuration
+
+/** Proves and refutes statements with [[UplcBlaster]] through Lean, for whoever states them: a test
+  * of any framework, or a program. It has one Lean server at a time, started for its first check
+  * and ended by [[close]].
+  *
+  * It asks for no test framework, and says what happened in two ways.
+  *   - An expectation that does not hold, as a statement that is refuted where a proof was
+  *     expected, throws an `AssertionError`. Every test framework takes that for a failed test.
+  *   - A statement that cannot be checked here is another thing: Lean does not run here, or the
+  *     result kept for the statement is stale and there is no Lean to ask. What happens then is
+  *     `notChecked`, the caller's. A test framework has its own way to say that a test did not run,
+  *     as ScalaTest's `cancel`. Without one, a [[LeanProofs.NotChecked]] is thrown.
+  *
+  * Proofs about code can keep their results, in the file `kept`
+  * (docs/design/verification-overview.md §5.6): a statement that has not changed is then not asked
+  * of Lean again, and where no Lean runs, it stands on what is kept. A result is kept under the
+  * name of what runs ([[during]]), as a test's name, and the count of the statements stated there.
+  *
+  * {{{
+  * val proofs = LeanProofs(LeanProofs.ready(Path.of("src/test/lean/Htlc")))
+  * import proofs.*
+  * proven(forAll[BigInt](x => x + BigInt(0) == x), 40)
+  * }}}
+  *
+  * @param workspace
+  *   the Lean workspace the checks run in. A workspace of a project's own requires Scalus's Lean
+  *   library, as a check imports it: [[LeanProofs.ready]] makes one.
+  * @param kept
+  *   the file of the kept results, or none where they are not kept. It is for proofs about code.
+  *   Where the tactic itself is tested, Lean is asked every time: what is tested is not in a
+  *   statement's fingerprint.
+  * @param notChecked
+  *   what happens where a statement cannot be checked here, with the reason. It does not return.
+  */
+final class LeanProofs(
+    val workspace: Path,
+    kept: Option[Path],
+    notChecked: String => Nothing
+) extends AutoCloseable {
+
+    /** The Lean servers of the workspace: none is started before a check asks for one. */
+    private val servers = LeanServers.in(workspace)
+
+    /** Ends the server where [[close]] was not called and this is no longer used. A server that
+      * still runs when the JVM ends is ended by the server itself.
+      */
+    private val cleanable = LeanProofs.cleaner.register(this, LeanProofs.Closing(servers))
+
+    /** Ends the Lean server that runs. None is started after. Closing again does nothing. */
+    override def close(): Unit = cleanable.clean()
+
+    /** Gives a tactic the Lean server: the one that runs, or another where that one has ended. A
+      * tactic asks when it runs a check, and the statement is then not checked, or the check fails,
+      * where Lean cannot run here ([[requireLean]]). A tactic that runs no check needs no Lean.
+      */
+    val lean: LeanServerProvider = new LeanServerProvider {
+        override def server(): Either[String, LeanServer] = {
+            requireLean()
+            servers.server()
+        }
+        override def workspace: Option[Path] = Some(LeanProofs.this.workspace)
+    }
+
+    /** Whether Lean can run here: `lake` on the `PATH`, and Scalus's Lean library built where the
+      * workspace has it. Build the workspace with `lake build` to run the checks.
+      */
+    lazy val leanAvailable: Boolean =
+        sys.env
+            .getOrElse("PATH", "")
+            .split(File.pathSeparator)
+            .exists(directory => Files.isExecutable(Path.of(directory, "lake"))) &&
+            LeanProofs.isBuilt(workspace)
+
+    /** Says that nothing is checked where Lean cannot run here ([[notChecked]]). With the
+      * `SCALUS_REQUIRE_LEAN` environment variable set, as in the Lean-Proofs workflow, a missing
+      * Lean is a failure, so the proofs cannot pass by not running.
+      */
+    def requireLean(): Unit =
+        if !leanAvailable then
+            val missing = s"requires lake and a built Lean workspace in $workspace: " +
+                "run `lake build` there, the sbt task leanBuild"
+            if sys.env.contains("SCALUS_REQUIRE_LEAN") then failed(missing)
+            else notChecked(missing)
+
+    /** How the kept results are used: as the environment variable `SCALUS_KEPT_RESULTS` says,
+      * `use`, `recalculate`, `frozen`, or `off` for not at all. Without it, a run that requires
+      * Lean recalculates, as the Lean-Proofs workflow does; one that has Lean uses what is kept;
+      * and one without Lean, as ci-jvm, takes what is kept and asks nothing.
+      */
+    lazy val keptMode: Option[KeptResults.Mode] =
+        if kept.isEmpty then None
+        else
+            sys.env.get("SCALUS_KEPT_RESULTS") match
+                case Some("off")         => None
+                case Some("use")         => Some(KeptResults.Mode.Use)
+                case Some("recalculate") => Some(KeptResults.Mode.Recalculate)
+                case Some("frozen")      => Some(KeptResults.Mode.Frozen)
+                case Some(other) =>
+                    throw new IllegalArgumentException(
+                      s"SCALUS_KEPT_RESULTS is use, recalculate, frozen or off, not $other"
+                    )
+                case None =>
+                    if sys.env.contains("SCALUS_REQUIRE_LEAN") then
+                        Some(KeptResults.Mode.Recalculate)
+                    else if leanAvailable then Some(KeptResults.Mode.Use)
+                    else Some(KeptResults.Mode.Frozen)
+
+    /** The kept results, used in the way of [[keptMode]]. */
+    private lazy val results: Option[KeptResults] =
+        for
+            file <- kept
+            mode <- keptMode
+        yield KeptResults.in(file, mode)
+
+    /** What runs, and how many statements it has stated: a kept result is under both. */
+    private var running = ""
+    private var stated = 0
+
+    /** Runs `body` as `context`: the results of the statements it states are kept under that name
+      * and their count in it, from one. A test framework gives the name of the test that runs. So a
+      * statement keeps its result while the tests around it change, and while only some of them
+      * run.
+      */
+    def during[A](context: String)(body: => A): A = {
+        running = context
+        stated = 0
+        body
+    }
+
+    /** The Lean server itself, for whoever speaks to it. */
+    def leanServer: LeanServer = lean.server() match
+        case Right(server) => server
+        case Left(reason)  => failed(reason)
+
+    /** Starts a Lean server in `workspace`, for whoever closes it. Nothing is checked, or the check
+      * fails, where Lean cannot run here ([[requireLean]]), and it fails where the server does not
+      * start.
+      */
+    def startLean(workspace: Path): LeanServer = {
+        requireLean()
+        LeanServer.start(workspace) match
+            case Right(started) => started
+            case Left(reason)   => failed(reason)
+    }
+
+    /** Declares `prop` in a fresh verifier and runs [[UplcBlaster]] on it, through Lean or, where
+      * the results are kept, from what is kept. A statement that is stale, with nothing kept for it
+      * as it is now and no Lean to ask, is not checked ([[notChecked]]).
+      */
+    def check(
+        prop: Prop,
+        budget: Budget,
+        functions: Seq[FunctionDef[?, ?]]
+    ): (Verifier, Statement, VerificationResult) = {
+        stated += 1
+        val verifier = results.fold(Verifier.empty)(kept => Verifier.keeping(kept.under(running)))
+        functions.foreach(verifier.addFunction)
+        val statement = verifier.statement(s"#$stated", prop)
+        verifier.verify(statement, UplcBlaster(budget, lean)) match
+            case VerificationResult.Inconclusive(reason) if reason.startsWith(KeptResults.stale) =>
+                notChecked(reason)
+            case result => (verifier, statement, result)
+    }
+
+    /** [[check]], at a budget of `budget` steps of Lean's machine. */
+    def check(
+        prop: Prop,
+        budget: Int,
+        functions: Seq[FunctionDef[?, ?]]
+    ): (Verifier, Statement, VerificationResult) =
+        check(prop, Budget.LeanSteps(budget), functions)
+
+    /** Proves `prop` at a budget of `budget` steps, and returns how the proof was checked. */
+    def proven(prop: Prop, budget: Int, functions: FunctionDef[?, ?]*): ProofKind =
+        proof(prop, Budget.LeanSteps(budget), functions*).kind
+
+    /** Proves `prop` at a budget the tactic finds, and returns that budget. */
+    def provenAt(prop: Prop, functions: FunctionDef[?, ?]*): Int =
+        proof(prop, Budget.Auto, functions*).budget
+
+    /** Proves `prop`, and returns what the tactic keeps of the proof. */
+    def proof(
+        prop: Prop,
+        budget: Budget,
+        functions: FunctionDef[?, ?]*
+    ): UplcBlaster.Artifact =
+        check(prop, budget, functions) match
+            case (verifier, statement, VerificationResult.Proven(proof)) =>
+                val artifact = proof.artifact.asInstanceOf[UplcBlaster.Artifact]
+                artifact.kind match
+                    // A proof that was kept has nothing of Lean's from this run.
+                    case ProofKind.Blaster =>
+                        if !artifact.kept && !artifact.output.contains("✅ Valid") then
+                            failed(s"expected a valid proof, got ${artifact.output}")
+                    case ProofKind.LeanNative =>
+                        if artifact.output.contains("error") then
+                            failed(s"expected a proof without an error, got ${artifact.output}")
+                    case other => failed(s"unexpected proof kind $other")
+                if !verifier.theorems.exists(_.statement eq statement) then
+                    failed("the statement was proved, and is not among the verifier's theorems")
+                artifact
+            case (_, _, other) => failed(s"expected a proof, got $other")
+
+    /** The replayed counterexample of a statement that is refuted at a budget of `budget` steps.
+      */
+    def refuted(
+        prop: Prop,
+        budget: Int,
+        functions: FunctionDef[?, ?]*
+    ): Map[String, Constant] =
+        refuted(prop, Budget.LeanSteps(budget), functions*)
+
+    /** The replayed counterexample of a refuted statement. */
+    def refuted(
+        prop: Prop,
+        budget: Budget,
+        functions: FunctionDef[?, ?]*
+    ): Map[String, Constant] =
+        check(prop, budget, functions) match
+            case (verifier, _, VerificationResult.Refuted(proof)) =>
+                if verifier.theorems.nonEmpty then
+                    failed("the statement was refuted, and the verifier has a theorem")
+                proof.artifact.asInstanceOf[UplcBlaster.Artifact].counterexample.toMap
+            case (_, _, other) => failed(s"expected a refutation, got $other")
+
+    /** Why [[UplcBlaster]] is inconclusive about `prop`, with its check given up after `timeout`.
+      */
+    def inconclusive(
+        prop: Prop,
+        budget: Int,
+        timeout: FiniteDuration,
+        functions: FunctionDef[?, ?]*
+    ): String =
+        inconclusive(prop, UplcBlaster(Budget.LeanSteps(budget), lean, timeout), functions*)
+
+    /** Why `tactic` is inconclusive about `prop`. */
+    def inconclusive(
+        prop: Prop,
+        tactic: UplcBlaster,
+        functions: FunctionDef[?, ?]*
+    ): String = {
+        val verifier = Verifier.empty
+        functions.foreach(verifier.addFunction)
+        val statement = verifier.statement(prop)
+        verifier.verify(statement, tactic) match
+            case VerificationResult.Inconclusive(reason) =>
+                if verifier.theorems.nonEmpty then
+                    failed("the statement is inconclusive, and the verifier has a theorem")
+                reason
+            case other => failed(s"expected an inconclusive result, got $other")
+    }
+
+    /** The integer `value` is, as a variable of a counterexample. */
+    def integer(value: Constant): BigInt = value match
+        case Constant.Integer(integer) => integer
+        case other                     => failed(s"expected an integer, got $other")
+
+    private def failed(message: String): Nothing = throw new AssertionError(message)
+}
+
+object LeanProofs {
+
+    /** A statement was not checked here, with the reason: thrown where the caller of [[LeanProofs]]
+      * says nothing else.
+      */
+    final class NotChecked(reason: String) extends RuntimeException(reason)
+
+    /** Proofs in `workspace` that keep no results, and throw [[NotChecked]]. */
+    def apply(workspace: Path): LeanProofs = apply(workspace, None)
+
+    /** Proofs in `workspace` that keep their results in `kept`, and throw [[NotChecked]]. */
+    def apply(workspace: Path, kept: Option[Path]): LeanProofs =
+        apply(workspace, kept, reason => throw new NotChecked(reason))
+
+    /** Proofs in `workspace`, with what happens where a statement cannot be checked here. */
+    def apply(workspace: Path, kept: Option[Path], notChecked: String => Nothing): LeanProofs =
+        new LeanProofs(workspace, kept, notChecked)
+
+    private val cleaner = Cleaner.create()
+
+    /** What ends the servers of proofs that are no longer used. It does not hold the proofs. */
+    private final class Closing(servers: LeanServers) extends Runnable {
+        override def run(): Unit = servers.close()
+    }
+
+    /** The Lean workspace of a project's own in `directory`, made ready
+      * ([[LeanWorkspaceTool.init]]): created where it is missing, with Scalus's Lean library where
+      * its lakefile requires it from. That needs neither Lean nor the network. So whoever states
+      * proofs has the workspace in a checkout that has run nothing else, and the results kept for
+      * them stand there: they rest on the library's sources, which are not committed.
+      *
+      * It fails where the workspace does not agree with the library. Its checks would run with
+      * another Lean, or other packages, than the library is for.
+      */
+    def ready(directory: Path): Path = {
+        val outcome = LeanWorkspaceTool.init(directory)
+        if outcome.notes.nonEmpty then
+            throw new AssertionError(
+              (s"the Lean workspace ${outcome.workspace} does not agree with Scalus's Lean " +
+                  "library" :: outcome.notes).mkString("\n  ")
+            )
+        outcome.workspace
+    }
+
+    /** The workspace of Scalus's Lean library: the directory the environment variable
+      * `SCALUS_LEAN_WORKSPACE` names, or the one in Scalus's sources. A project of its own has
+      * neither, and a workspace of its own ([[ready]]).
+      */
+    lazy val libraryWorkspace: Path =
+        sys.env
+            .get("SCALUS_LEAN_WORKSPACE")
+            .filter(_.nonEmpty)
+            .map(Path.of(_))
+            .getOrElse(librarySources)
+
+    /** The workspace of Scalus's Lean library in Scalus's sources. */
+    def librarySources: Path = inSources("scalus-verification", "src", "main", "lean")
+
+    /** A directory of a build's sources, named from the build's root, and looked up from the
+      * working directory upwards. A forked test of a module runs in that module's directory, not in
+      * the build's root.
+      */
+    def inSources(first: String, more: String*): Path = {
+        val directory = Path.of(first, more*)
+        Iterator
+            .iterate(Path.of("").toAbsolutePath)(_.getParent)
+            .takeWhile(_ != null)
+            .map(_.resolve(directory))
+            .find(Files.isDirectory(_))
+            .getOrElse(directory)
+    }
+
+    /** Whether a check can run in `workspace`: Scalus's Lean library, which every check imports, is
+      * compiled. It lies in the workspace itself, or in one that the workspace requires by its
+      * path.
+      */
+    def isBuilt(workspace: Path): Boolean =
+        (workspace :: LeanWorkspace.required(workspace).values.toList).exists { directory =>
+            Files.isRegularFile(directory.resolve(".lake/build/lib/lean/ScalusProofs/Run.olean"))
+        }
+
+    /** The revisions at which the manifest of `workspace` pins the packages it clones, by their
+      * names.
+      */
+    def pinned(workspace: Path): Map[String, String] = LeanWorkspace.pinned(workspace)
+
+    /** The Lean that `workspace` pins. */
+    def toolchain(workspace: Path): String = LeanWorkspace.toolchain(workspace)
+}

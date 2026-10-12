@@ -471,7 +471,7 @@ What is not stated, and why:
 
 `scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala` states
 properties of the vesting example. The JVM tests of `scalus-examples` depend on this module and
-on its test support (`LeanProofs`), so a contract's proofs sit next to its other tests.
+on its ScalaTest layer (`LeanProofsSuite`), so a contract's proofs sit next to its other tests.
 
 | About | Statement | Quantified over | Budget | Time |
 |---|---|---|---|---|

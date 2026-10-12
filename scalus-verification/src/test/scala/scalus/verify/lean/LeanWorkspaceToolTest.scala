@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.{Budget, LeanProofs, UplcBlaster}
+import scalus.verify.uplcblaster.{Budget, LeanProofs, LeanProofsSuite, UplcBlaster}
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
@@ -13,7 +13,8 @@ import scala.jdk.CollectionConverters.*
 /** The workspace a project's proofs get from [[LeanWorkspaceTool]]. All but the last test write
   * files and run no Lean.
   */
-class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofs {
+class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofsSuite {
+    import proofs.*
 
     /** Runs `body` with a directory of its own, which is removed after. It has `.git`, as the root
       * of a project has, so what is not the project's own goes into its `.scalus`, and into no
@@ -255,7 +256,7 @@ class LeanWorkspaceToolTest extends AnyFunSuite with LeanProofs {
             assert(Files.isRegularFile(library(root).resolve("ScalusProofs/Run.lean")))
 
             Files.writeString(workspace.resolve("lean-toolchain"), "leanprover/lean4:v4.0.0\n")
-            val failed = intercept[org.scalatest.exceptions.TestFailedException] {
+            val failed = intercept[AssertionError] {
                 readyWorkspace(workspace)
             }
             assert(failed.getMessage.contains("does not agree with Scalus's Lean library"))

@@ -2,7 +2,7 @@ package scalus.verify.lean
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.verify.lean.LeanServer.{Message, Progress, Reached, Result, Severity}
-import scalus.verify.uplcblaster.LeanProofs
+import scalus.verify.uplcblaster.LeanProofsSuite
 
 import java.nio.file.{Files, Path}
 import java.util.concurrent.{CompletableFuture, TimeUnit}
@@ -12,7 +12,8 @@ import scala.jdk.CollectionConverters.*
 /** A Lean language server, started in the module's workspace. The tests need Lean: without `lake`
   * and a built workspace they are canceled (see [[LeanProofs]]).
   */
-class LeanServerTest extends AnyFunSuite with LeanProofs {
+class LeanServerTest extends AnyFunSuite with LeanProofsSuite {
+    import proofs.*
 
     /** The header of every check here: one text, so the workspace is loaded once for a server. */
     private val header = "import ScalusProofs.Run\n"

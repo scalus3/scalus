@@ -278,6 +278,7 @@ lazy val root: Project = project
       scalusDesignPatterns,
       bench,
       scalusVerification,
+      scalusVerificationScalatest,
       `scalus-bloxbean-cardano-client-lib`,
       scalusEthereumKzgCeremony,
       scalusSbtPlugin,
@@ -305,6 +306,7 @@ lazy val jvm: Project = project
       bench,
       llmApiGen,
       scalusVerification,
+      scalusVerificationScalatest,
       `scalus-bloxbean-cardano-client-lib`,
       scalusEthereumKzgCeremony,
     )
@@ -968,8 +970,8 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       _.dependsOn(
         scalusDesignPatterns,
         scalusEthereumKzgCeremony,
-        // The verifier and its Lean test support (LeanProofs), for the proofs about the examples.
-        scalusVerification % "test->test"
+        // The verifier and its ScalaTest layer (LeanProofsSuite), for the proofs about the examples.
+        scalusVerificationScalatest % Test
       )
     )
     .jvmSettings(
@@ -1136,6 +1138,11 @@ lazy val scalusVerification = project
       // Statements Lean does not finish are left out of `test` and `testQuick`, and run by
       // `testOnly`.
       excludeFromTest("scalus.verify.uplcblaster.Unfinished"),
+      // The suites here extend LeanProofsSuite, which is scalus-verification-scalatest's. That
+      // project depends on this one and cannot be depended on from here, so its sources are
+      // compiled with these tests.
+      Test / unmanagedSourceDirectories +=
+          (LocalRootProject / baseDirectory).value / "scalus-verification-scalatest" / "src" / "main" / "scala",
       // Scalus's Lean library goes into the jar, for the workspaces a project's proofs get
       // (scalus.verify.lean.LeanWorkspaceTool): its sources, and not what Lake builds beside
       // them in `.lake`. `index` names them, as a jar's resources cannot be listed.
@@ -1157,6 +1164,21 @@ lazy val scalusVerification = project
           index +: copied.map(target / _)
       }.taskValue,
       PluginDependency
+    )
+
+// LeanProofsSuite: scalus-verification's LeanProofs for a ScalaTest suite, and no more than
+// ScalaTest is asked for. It is an artifact of its own, so that scalus-verification asks for no
+// test framework.
+lazy val scalusVerificationScalatest = project
+    .in(file("scalus-verification-scalatest"))
+    .dependsOn(scalusVerification)
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-verification-scalatest",
+      publishOnlyLts,
+      crossScalaVersions := supportedScalaVersions,
+      scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion
     )
 
 // Cardano Ledger domain model and CBOR serialization

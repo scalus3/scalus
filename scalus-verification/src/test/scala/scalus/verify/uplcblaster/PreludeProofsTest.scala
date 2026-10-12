@@ -19,7 +19,8 @@ import scalus.verify.Props.*
   * has a negative control, which must be refuted. Its samples are checked on the Scalus CEK, and
   * proved through Lean on the Lean model, so the two machines are checked against each other.
   */
-class PreludeProofsTest extends AnyFunSuite with LeanProofs {
+class PreludeProofsTest extends AnyFunSuite with LeanProofsSuite {
+    import proofs.*
 
     /** These are proofs about the prelude's code, and their results are kept beside this file. */
     override protected def keptResultsFile: scala.Option[java.nio.file.Path] = scala.Some(

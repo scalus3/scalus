@@ -22,7 +22,8 @@ import scala.concurrent.duration.*
   * A test here that starts to fail because Lean finishes is good news: the statement then needs a
   * larger budget, or is no longer a limit.
   */
-class UplcBlasterLimitsTest extends AnyFunSuite with LeanProofs {
+class UplcBlasterLimitsTest extends AnyFunSuite with LeanProofsSuite {
+    import proofs.*
 
     /** The time a statement that Lean can finish gets. They take seconds. */
     private val finishes = 2.minutes

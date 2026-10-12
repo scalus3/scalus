@@ -26,7 +26,8 @@ object ObligationExamples {
         xs.map(x => Math.clamp(x, lo, hi))
 }
 
-class ObligationsTest extends AnyFunSuite with LeanProofs {
+class ObligationsTest extends AnyFunSuite with LeanProofsSuite {
+    import proofs.*
 
     private val clamp = FunctionDef(Math.clamp)
     private val violates = FunctionDef(ObligationExamples.violates)

@@ -33,6 +33,13 @@ validator actually runs on chain.
 - `src/main/scala/scalus/verify/lean/LeanServerProvider.scala` - what gives a tactic its server,
   and `LeanServers`, the provider for a workspace: one server at a time, started when a check
   needs it.
+- `src/main/scala/scalus/verify/uplcblaster/LeanProofs.scala` - `LeanProofs`, what states proofs
+  uses: it has the Lean server and the kept results, and `proven`, `refuted` and `inconclusive`
+  for statements. It asks for no test framework (below).
+- `scalus-verification-scalatest/` beside this module - `LeanProofsSuite`, `LeanProofs` for a
+  ScalaTest suite, and the tag `Unfinished`. It is an artifact of its own,
+  `scalus-verification-scalatest`. The suites here cannot depend on it, as it depends on this
+  module, and compile its sources with their tests.
 - `src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala` - properties of `Math` and
   of prelude data structures, each with a negative control and samples.
 - `src/test/scala/scalus/verify/uplcblaster/UplcBlasterLimitsTest.scala` - natural statements
@@ -40,7 +47,8 @@ validator actually runs on chain.
   `test` leaves out and `testOnly` runs.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala`, in
   the examples module - properties of the vesting contract: its schedule, and its validator on
-  script contexts and withdrawals. The JVM tests of `scalus-examples` depend on this module.
+  script contexts and withdrawals. The JVM tests of `scalus-examples` depend on
+  `scalus-verification-scalatest`, as a project outside these sources does.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala` -
   properties of the hashed timelock contract, for every datum and whatever else the transaction
   has: who refunds and who reveals, when, and of what, and that there is no time at which both
@@ -296,6 +304,48 @@ it after its last test. Without them a test that asks Lean is canceled, as in ci
 suite that keeps its results passes on them (below). With the
 `SCALUS_REQUIRE_LEAN` environment variable set, as in the Lean-Proofs workflow, they fail instead.
 
+### `LeanProofs` and a test framework
+
+`LeanProofs` is a class of this module, and asks for no test framework. What a framework is
+needed for, it leaves to its caller:
+
+- **An expectation that does not hold**, as a refutation where `proven` expected a proof, throws
+  an `AssertionError`. Every test framework takes that for a failed test.
+- **A statement that cannot be checked here**, as Lean does not run here or its kept result is
+  stale, is the third argument's, `notChecked`: a function of the reason that does not return.
+  Without it, a `LeanProofs.NotChecked` is thrown.
+- **The name a result is kept under** is that of what runs, which the caller says with
+  `proofs.during(name) { ... }`. Without it, a result is under the count of the statements
+  stated so far, which holds only while all of them are stated in the same order.
+- **The Lean server** is ended by `close()`. One that is left is ended when the proofs are no
+  longer used, or with the JVM.
+
+With any framework, that is the two lines above, and what the framework has for the rest. For
+ScalaTest the rest is in `LeanProofsSuite`, of the artifact `scalus-verification-scalatest`: it
+cancels the test of a statement that is not checked, keeps a result under the name of its test,
+and closes after the suite.
+
+```scala
+libraryDependencies ++= Seq(
+  "org.scalus" %% "scalus-verification" % scalusVersion % Test,
+  "org.scalus" %% "scalus-verification-scalatest" % scalusVersion % Test
+)
+```
+
+```scala
+class HtlcProofsTest extends AnyFunSuite with LeanProofsSuite {
+    import proofs.*
+
+    private lazy val workspace = readyWorkspace(Path.of("src/test/lean/Htlc"))
+    override protected def leanWorkspace: Path = workspace
+
+    test("x + 0 is x") { proven(forAll[BigInt](x => x + BigInt(0) == x), 40) }
+}
+```
+
+A suite has to name its workspace: the one it has otherwise is that of the library in these
+sources.
+
 ### Kept results
 
 `PreludeProofsTest`, `VestingVerificationTest` and `HtlcVerificationTest` keep the results of
@@ -329,7 +379,7 @@ val verifier = Verifier.keeping(KeptResults.in(file, KeptResults.Mode.Use))
 
 ### The workspace of a suite
 
-A suite's workspace is `leanWorkspace` of `LeanProofs`. Unless the suite overrides it, it is the
+A suite's workspace is `leanWorkspace` of `LeanProofsSuite`. Unless the suite overrides it, it is the
 workspace of the library, `src/main/lean` in these sources, or the directory
 `SCALUS_LEAN_WORKSPACE` names. `VestingVerificationTest` overrides it with a workspace of the
 example, `scalus-examples/jvm/src/test/lean/LinearVesting`, where proofs about the validator
@@ -371,12 +421,14 @@ contracts/src/test/lean/Htlc/   a workspace: lakefile.lean, lean-toolchain, Htlc
 - Lake writes the workspace's `lake-manifest.json` on its first build, with the revisions the
   library's manifest pins. Commit it with the workspace.
 
-A suite makes its workspace ready itself, with `readyWorkspace` of `LeanProofs`, which calls
-`init` and fails the test where the workspace does not agree with the library:
+Whoever states the proofs makes the workspace ready itself, with `LeanProofs.ready`, which
+calls `init` and fails where the workspace does not agree with the library:
 
 ```scala
-private lazy val workspace = readyWorkspace(Path.of("src/test/lean/Htlc"))
-override protected def leanWorkspace: Path = workspace
+val proofs = LeanProofs(LeanProofs.ready(Path.of("src/test/lean/Htlc")))
+import proofs.*
+
+proven(forAll[BigInt](x => x + BigInt(0) == x), 40)
 ```
 
 That needs neither Lean nor the network. So a fresh checkout has the library, which is not

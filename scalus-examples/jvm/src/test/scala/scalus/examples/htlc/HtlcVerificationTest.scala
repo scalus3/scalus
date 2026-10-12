@@ -14,7 +14,7 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{toData, FromData, ToData}
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.LeanProofs
+import scalus.verify.uplcblaster.{LeanProofs, LeanProofsSuite}
 
 import java.nio.file.Path
 import scala.concurrent.duration.*
@@ -76,7 +76,9 @@ object Unread
   * beside this file (see [[LeanProofs]]). One test is about the tactic and keeps nothing: it is
   * canceled there.
   */
-class HtlcVerificationTest extends AnyFunSuite with LeanProofs {
+class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
+    import proofs.*
+
     import HtlcVerificationTest.*
 
     /** The results of the statements below are kept beside this file: a run without Lean passes on

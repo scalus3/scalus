@@ -8,7 +8,7 @@ Lean.
 
 Status: built, up to and with the tactic. `LeanServer` is in `scalus.verify.lean`, with
 `JsonRpcSession` under it and `LeanServers`, which gives a tactic its server, over it.
-`UplcBlaster` and the tests' `LeanProofs` run on them. "Exporting
+`UplcBlaster` and `LeanProofs`, which states proofs, run on them. "Exporting
 to the workspace" and "Keeping prepared leaves" are proposed. "What was measured" records an
 experiment made before any of it, outside the code base, with checks written by
 `UplcBlaster.writeCheck`, on Lean 4.24.0 (language server 0.3.0), the version in
@@ -237,13 +237,14 @@ A server is started in a workspace directory, and that is its one setting. The d
 `lakefile`, the `lean-toolchain` and the built libraries, so it decides which Lean runs and what
 a check can import.
 
-- **Today** the workspaces are directories in Scalus's own sources: the library's,
+- **In Scalus's own sources** the workspaces are directories of them: the library's,
   `scalus-verification/src/main/lean`, and the vesting example's ("Several workspaces").
-  `LeanProofs` looks them up from the working directory upwards. That serves the Scalus
-  repository, and no project that uses Scalus as a library.
+  `LeanProofs` looks them up from the working directory upwards. A project that uses Scalus as
+  a library has a workspace of its own, which `LeanProofs.ready` makes from the library in the
+  jar (`scalus-verification/README.md`, "The workspace of a project outside these sources").
 - **Given when the server is created.** `LeanServer.start(directory)` takes it, and the tactic
   takes the server. Neither has a default: a tactic without a server cannot be made.
-- **In the tests** a suite names it, as `leanWorkspace` of `LeanProofs`. Unless the suite
+- **In the tests** a suite names it, as `leanWorkspace` of `LeanProofsSuite`. Unless the suite
   overrides it, it is the library's: the environment variable `SCALUS_LEAN_WORKSPACE`, and then
   the directory in Scalus's sources, looked up from the working directory.
 
@@ -357,9 +358,10 @@ the code that started and stopped it: there is one way to run Lean, not two to k
   still checked. Whoever made it closes it, which ends the server that runs. One server of the
   caller's own is the provider `() => Right(server)`: once it is closed, its checks fail, and
   say so.
-- **`LeanProofs` has the servers of its suite's workspace.** They are closed after the suite's
-  last test. Its provider also asks whether Lean can run here: without Lean no server starts,
-  and the test is canceled, or fails under `SCALUS_REQUIRE_LEAN`, when its first check runs. A
+- **`LeanProofs` has the servers of its workspace.** `close()` ends them, which
+  `LeanProofsSuite` calls after its suite's last test. Its provider also asks whether Lean can
+  run here: without Lean no server starts, and the statement is not checked, which cancels a
+  ScalaTest test, or the check fails under `SCALUS_REQUIRE_LEAN`, when its first check runs. A
   test that runs no check is not canceled.
 - **One reading of the result.** The text of a check is the one `writeCheck` writes. Its leaves
   are files in a directory of the server's while it runs. The messages of `Finished` are joined
@@ -486,7 +488,7 @@ cost together. The document is opened anew when it has grown beyond a number of 
    workspace directory, there can be several, and one may first have to be exported, so no
    place is left to choose a server silently.
    - *A provider, created explicitly and passed to the tactic* (decided): `LeanServers` for a
-     workspace, which `LeanProofs` has for a test suite, and a runner for its run. The JVM's
+     workspace, which `LeanProofs` has for whoever states proofs, and a runner for its run. The JVM's
      shutdown hook closes what was not closed.
    - *A server, created explicitly and passed to the tactic:* the first form. A tactic then
      needed a running Lean to be made at all, also for what needs none, and a tactic that was
