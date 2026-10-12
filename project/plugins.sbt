@@ -16,7 +16,7 @@ addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.6.1")
 // Migration Manager for Scala
 addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.6")
 // buildinfo
-addSbtPlugin("com.eed3si9n" % "sbt-buildinfo" % "0.13.1")
+addSbtPlugin("com.eed3si9n" % "sbt-buildinfo" % "0.13.2")
 // shared-source shim used by scalus-sbt-plugin (compiled here via unmanagedSourceDirectories below)
 addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.2.0")
 
