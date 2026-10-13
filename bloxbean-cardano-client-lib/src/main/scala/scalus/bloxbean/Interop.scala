@@ -44,7 +44,14 @@ given Ordering[Redeemer] with
             case 0 => x.getIndex.compareTo(y.getIndex)
             case c => c
 
-/** Interoperability between Cardano Client Lib and Scalus */
+/** Interoperability between Cardano Client Lib and Scalus.
+  *
+  * The methods that translate Cardano Client Lib types into Plutus script-context types (`v1`, `v2`
+  * and `v3`) are deprecated. They were written for the removed `TxEvaluator`, and
+  * [[scalus.cardano.ledger.LedgerToPlutusTranslation]] is the translation Scalus evaluates with and
+  * keeps in step with the ledger. Decode the transaction with
+  * `scalus.cardano.ledger.Transaction.fromCbor(tx.serialize())` and use that instead.
+  */
 object Interop {
 
     /** Ordering matches the ledger's derived `Ord Voter`: constructors
@@ -325,6 +332,7 @@ object Interop {
     private def decodeToSingleCbor(script: PlutusScript): ByteString =
         ByteString.unsafeFromArray(Cbor.decode(script.getCborHex.hexToBytes).to[Array[Byte]].value)
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getCredential(cred: Credential): v1.Credential = {
         cred.getType match
             case CredentialType.Key =>
@@ -333,6 +341,7 @@ object Interop {
                 v1.Credential.ScriptCredential(ByteString.fromArray(cred.getBytes))
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getCredential(cred: StakeCredential): v1.Credential = {
         cred.getType match
             case StakeCredType.ADDR_KEYHASH =>
@@ -341,6 +350,7 @@ object Interop {
                 v1.Credential.ScriptCredential(ByteString.fromArray(cred.getHash))
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getStakingCredential(cred: StakeCredential): v1.StakingCredential = {
         cred.getType match
             case StakeCredType.ADDR_KEYHASH =>
@@ -353,10 +363,12 @@ object Interop {
                 )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getStakingCredential(cred: Credential): v1.StakingCredential = {
         v1.StakingCredential.StakingHash(getCredential(cred))
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getAddress(address: Address): v1.Address = {
         val cred = address.getPaymentCredential.map(getCredential).get
         val staking = address.getDelegationCredential
@@ -365,6 +377,7 @@ object Interop {
         v1.Address(cred, staking)
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxInInfoV1(
         input: TransactionInput,
         utxos: Map[TransactionInput, TransactionOutput]
@@ -389,6 +402,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxInInfoV2(
         input: TransactionInput,
         utxos: Map[TransactionInput, TransactionOutput]
@@ -413,6 +427,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getValue(value: Value): v1.Value = {
         val ma = getValue(value.getMultiAssets)
         if value.getCoin != null then
@@ -421,6 +436,7 @@ object Interop {
         else ma
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getValue(value: util.List[MultiAsset]): v1.Value = {
         // get sorted multi assets
         val multi = mutable.TreeMap.empty[ByteString, mutable.TreeMap[ByteString, BigInt]]
@@ -440,12 +456,14 @@ object Interop {
 
     private val ADA_ZERO = ByteString.empty -> prelude.List(ByteString.empty -> BigInt(0))
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getMintValue(value: util.List[MultiAsset]): v1.Value = {
         // Always include ADA entry with zero value for minting
         val x = getValue(value).toSortedMap.toList.map(x => x._1 -> x._2.toList)
         v1.Value.unsafeFromList(x.prepended(ADA_ZERO))
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxOutV1(out: TransactionOutput): v1.TxOut = {
         val addr = Address(out.getAddress)
         val optionDatumHash =
@@ -460,6 +478,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxOutV2(out: TransactionOutput): v2.TxOut = {
         val addr = Address(out.getAddress)
         v2.TxOut(
@@ -473,6 +492,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getOutputDatum(out: TransactionOutput): v2.OutputDatum = {
         if out.getDatumHash != null then
             v2.OutputDatum.OutputDatumHash(ByteString.fromArray(out.getDatumHash))
@@ -482,6 +502,7 @@ object Interop {
     }
 
     // https://github.com/IntersectMBO/cardano-ledger/blob/28ab3884cac8edbb7270fd4b8628a16429d2ec9e/eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Plutus/TxInfo.hs#L186
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getInterval(tx: Transaction, slotConfig: SlotConfig, protocolVersion: Int): v1.Interval = {
         val validFrom = tx.getBody.getValidityStartInterval
         (validFrom, tx.getBody.getTtl) match
@@ -556,6 +577,7 @@ object Interop {
       * (`Alonzo/Plutus/TxInfo.hs:301-309`), so `PubKeyCredential` sorts before `ScriptCredential`.
       * Deliberately the opposite constructor order to V3; do not unify.
       */
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getWithdrawals(
         withdrawals: util.List[Withdrawal]
     ): prelude.List[(v1.StakingCredential, BigInt)] = {
@@ -573,6 +595,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getDCert(cert: Certificate): v1.DCert = {
         cert match
             case c: StakeRegistration =>
@@ -598,6 +621,7 @@ object Interop {
             case c: MoveInstataneous     => v1.DCert.Mir
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxCertV3(cert: Certificate): v3.TxCert = {
         cert match
             case c: AuthCommitteeHotCert =>
@@ -704,6 +728,7 @@ object Interop {
                 v3.DRep.AlwaysNoConfidence
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxInfoV1(
         tx: Transaction,
         datums: collection.Seq[(ByteString, Data)],
@@ -719,6 +744,7 @@ object Interop {
       protocolVersion
     )
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxInfoV1(
         tx: Transaction,
         txhash: String,
@@ -755,6 +781,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxInfoV2(
         tx: Transaction,
         datums: collection.Seq[(ByteString, Data)],
@@ -770,6 +797,7 @@ object Interop {
       protocolVersion
     )
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxInfoV2(
         tx: Transaction,
         txhash: String,
@@ -821,6 +849,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxOutRefV1(input: TransactionInput): v1.TxOutRef = {
         v1.TxOutRef(
           v1.TxId(ByteString.fromHex(input.getTransactionId)),
@@ -828,6 +857,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxOutRefV3(input: TransactionInput): v3.TxOutRef = {
         v3.TxOutRef(
           v3.TxId(ByteString.fromHex(input.getTransactionId)),
@@ -835,6 +865,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getScriptPurposeV1(
         redeemer: Redeemer,
         tx: Transaction
@@ -847,6 +878,7 @@ object Interop {
           tx.getBody.getWithdrawals
         )
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getScriptPurposeV1(
         redeemer: Redeemer,
         inputs: util.List[TransactionInput],
@@ -885,6 +917,7 @@ object Interop {
                   s"Unsupported redeemer tag: ${redeemer.getTag} in PlutusV1/V2"
                 )
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getScriptPurposeV2(
         redeemer: Redeemer,
         inputs: util.List[TransactionInput],
@@ -893,6 +926,7 @@ object Interop {
         withdrawals: util.List[Withdrawal]
     ): v1.ScriptPurpose = getScriptPurposeV1(redeemer, inputs, mint, certificates, withdrawals)
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getScriptPurposeV2(redeemer: Redeemer, tx: Transaction): v2.ScriptPurpose = {
         getScriptPurposeV2(
           redeemer,
@@ -903,6 +937,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getScriptPurposeV3(tx: Transaction, redeemer: Redeemer): v3.ScriptPurpose = {
         val inputs = tx.getBody.getInputs
         val mint = tx.getBody.getMint
@@ -959,6 +994,7 @@ object Interop {
                     )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getScriptInfoV3(tx: Transaction, redeemer: Redeemer, datum: Option[Data]): v3.ScriptInfo = {
         getScriptPurposeV3(tx, redeemer) match
             case v3.ScriptPurpose.Spending(ref) =>
@@ -975,6 +1011,7 @@ object Interop {
                 v3.ScriptInfo.VotingScript(voter)
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getScriptContextV2(
         redeemer: Redeemer,
         tx: Transaction,
@@ -990,6 +1027,7 @@ object Interop {
       protocolVersion
     )
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getScriptContextV2(
         redeemer: Redeemer,
         tx: Transaction,
@@ -1014,6 +1052,7 @@ object Interop {
         scriptContext
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getProposalProcedureV3(proposal: ProposalProcedure): v3.ProposalProcedure = {
         v3.ProposalProcedure(
           proposal.getDeposit,
@@ -1022,6 +1061,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getGovernanceActionV3(action: GovAction): v3.GovernanceAction = {
         action match
             case a: ParameterChangeAction =>
@@ -1109,10 +1149,12 @@ object Interop {
 
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getProtocolVersion(version: ProtocolVersion): v3.ProtocolVersion = {
         v3.ProtocolVersion(version.getMajor, version.getMinor)
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getGovActionId(id: GovActionId): v3.GovernanceActionId = {
         v3.GovernanceActionId(
           v3.TxId(ByteString.fromHex(id.getTransactionId)),
@@ -1120,6 +1162,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getVoterV3(voter: Voter): v3.Voter = {
         voter.getType match
             case VoterType.CONSTITUTIONAL_COMMITTEE_HOT_KEY_HASH |
@@ -1133,6 +1176,7 @@ object Interop {
                 )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getVotingProcedures(
         voting: VotingProcedures
     ): SortedMap[v3.Voter, SortedMap[GovernanceActionId, v3.Vote]] = {
@@ -1154,6 +1198,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getVoteV3(procedure: VotingProcedure): v3.Vote = {
         procedure.getVote match
             case Vote.YES     => v3.Vote.Yes
@@ -1161,6 +1206,7 @@ object Interop {
             case Vote.ABSTAIN => v3.Vote.Abstain
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxInInfoV3(
         input: TransactionInput,
         utxos: Map[TransactionInput, TransactionOutput]
@@ -1172,6 +1218,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxInfoV3(
         tx: Transaction,
         datums: collection.Seq[(ByteString, Data)],
@@ -1181,6 +1228,7 @@ object Interop {
     ): v3.TxInfo =
         getTxInfoV3(tx, TransactionUtil.getTxHash(tx), datums, utxos, slotConfig, protocolVersion)
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getTxInfoV3(
         tx: Transaction,
         txhash: String,
@@ -1245,6 +1293,7 @@ object Interop {
         )
     }
 
+    @deprecated("use scalus.cardano.ledger.LedgerToPlutusTranslation instead", "1.3.0")
     def getScriptContextV3(
         redeemer: Redeemer,
         datum: Option[Data],
