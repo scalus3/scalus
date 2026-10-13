@@ -2,7 +2,7 @@ package scalus.cardano.ledger
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.prelude
-import scalus.cardano.onchain.plutus.prelude.{List as PList, Option as POption}
+import scalus.cardano.onchain.plutus.prelude.{<=>, ===, List as PList, Option as POption}
 import scalus.cardano.onchain.plutus.v3
 import scalus.compiler.{compile, Compile}
 import scalus.toUplc
@@ -20,6 +20,16 @@ object NewConstitutionScript {
             case v3.GovernanceAction.NewConstitution(_, constitution) =>
                 constitution.constitutionScript.getOrElse(ByteString.empty)
             case _ => prelude.fail("not a NewConstitution")
+
+    /** Whether a node-encoded action is the `NewConstitution` a script builds for `hash`. */
+    def isNewConstitution(action: Data, hash: ByteString): Boolean = {
+        val expected: v3.GovernanceAction = v3.GovernanceAction.NewConstitution(
+          prelude.Option.None,
+          v3.Constitution(prelude.Option.Some(hash))
+        )
+        val actual = action.to[v3.GovernanceAction]
+        actual === expected && (actual <=> expected).isEqual && expected.toData === action
+    }
 }
 
 /** A V3 `NewConstitution` carries the `Constitution` data type, a one-field constructor around
@@ -71,5 +81,20 @@ class NewConstitutionEncodingTest extends AnyFunSuite {
                 case other => fail(s"unexpected result: $other")
         assert(guardrails(newConstitution(just(Data.B(hash)))) == hash)
         assert(guardrails(newConstitution(none)) == ByteString.empty)
+    }
+
+    test("a NewConstitution built by a compiled script equals the node-encoded one") {
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        val script = compile { NewConstitutionScript.isNewConstitution }.toUplc()
+        def isNewConstitution(action: Data, hash: ByteString): Boolean =
+            val applied =
+                script $ Term.Const(Constant.Data(action)) $ Term.Const(Constant.ByteString(hash))
+            applied.evaluateDebug match
+                case Result.Success(Term.Const(Constant.Bool(value), _), _, _, _) => value
+                case other => fail(s"unexpected result: $other")
+        val otherHash = ByteString.fromHex("08" * 28)
+        assert(isNewConstitution(newConstitution(just(Data.B(hash))), hash))
+        assert(!isNewConstitution(newConstitution(just(Data.B(hash))), otherHash))
+        assert(!isNewConstitution(newConstitution(none), hash))
     }
 }

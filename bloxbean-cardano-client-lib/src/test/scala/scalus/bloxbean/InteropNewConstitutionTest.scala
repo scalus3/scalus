@@ -11,7 +11,7 @@ import scalus.uplc.builtin.Data.toData
   * in the `Constitution` constructor, `Constr 0 [Maybe ScriptHash]`
   * (PlutusLedgerApi/V3/Contexts.hs).
   */
-class InteropNewConstitutionTest extends AnyFunSuite:
+class InteropNewConstitutionTest extends AnyFunSuite {
     private val hash = "07" * 28
     private val none = Data.Constr(1, PList.Nil)
     private def just(d: Data) = Data.Constr(0, PList(d))
@@ -32,3 +32,4 @@ class InteropNewConstitutionTest extends AnyFunSuite:
         )
         assert(Interop.getGovernanceActionV3(withoutScript).toData == newConstitution(none))
     }
+}

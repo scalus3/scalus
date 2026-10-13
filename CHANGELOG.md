@@ -152,8 +152,9 @@ Evolution provider needs.
   so a script that verifies a long message exceeded a budget the node accepts.
 - A V3 `NewConstitution` governance action carried the guardrails script hash as a bare `Option`.
   A node wraps it in the `Constitution` constructor, `Constr 0 [Maybe ScriptHash]`, so a script
-  read a different proposal than on chain. The script context from `LedgerToPlutusTranslation` and
-  the bloxbean `Interop` now matches the node, and compiled scripts read the wrapped form.
+  read a different proposal than on chain. `getGovernanceActionV3` in `LedgerToPlutusTranslation`
+  and in the bloxbean `Interop` now encodes it as the node does, and compiled scripts read and
+  build the wrapped form.
 
 
 ### Deprecated
