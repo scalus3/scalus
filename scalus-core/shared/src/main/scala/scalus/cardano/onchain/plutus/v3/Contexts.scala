@@ -494,7 +494,25 @@ object Committee:
 
 end Committee
 
-type Constitution = Option[ScriptHash]
+/** A constitution. The optional anchor is omitted.
+  *
+  * A one-field constructor, as in Plutus: a `NewConstitution` carries
+  * `Constr 0 [Maybe ScriptHash]`, not the `Maybe` itself.
+  */
+case class Constitution(constitutionScript: Option[ScriptHash])
+
+@Compile
+object Constitution:
+    given Eq[Constitution] = Eq.structural: (lhs: Constitution, rhs: Constitution) =>
+        lhs.constitutionScript === rhs.constitutionScript
+
+    given Ord[Constitution] = (x: Constitution, y: Constitution) =>
+        x.constitutionScript <=> y.constitutionScript
+
+    given FromData[Constitution] = FromData.derived
+    given ToData[Constitution] = ToData.derived
+
+end Constitution
 
 case class ProtocolVersion(pvMajor: BigInt, pvMinor: BigInt)
 
