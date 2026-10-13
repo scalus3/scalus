@@ -23,20 +23,20 @@ object Unfinished extends Tag("scalus.verify.uplcblaster.Unfinished")
   * class HtlcProofsTest extends AnyFunSuite with LeanProofsSuite {
   *     import proofs.*
   *
-  *     private lazy val workspace = readyWorkspace(Path.of("src/test/lean/Htlc"))
-  *     override protected def leanWorkspace: Path = workspace
-  *
   *     test("x + 0 is x") { proven(forAll[BigInt](x => x + BigInt(0) == x), 40) }
   * }
   * }}}
   */
 trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: TestSuite =>
 
-    /** The Lean workspace the suite's checks run in. A suite of a project of its own overrides this
-      * with a workspace of the project, made ready by [[readyWorkspace]]. Unless it is overridden,
-      * it is the workspace of Scalus's Lean library, which only Scalus's own sources have.
+    /** The Lean workspace the suite's checks run in: the project's
+      * ([[LeanProofs.projectWorkspace]]), which the build has, so that a suite does not name it. A
+      * suite whose proofs are in another workspace overrides this.
       */
-    protected def leanWorkspace: Path = LeanProofs.libraryWorkspace
+    protected def leanWorkspace: Path = projects
+
+    /** The project's workspace, as the class path of the suite says it. */
+    private lazy val projects: Path = LeanProofs.projectWorkspace(getClass.getClassLoader)
 
     /** [[LeanProofs.ready]]: a workspace of the project's own in `directory`, made ready. */
     protected def readyWorkspace(directory: Path): Path = LeanProofs.ready(directory)
@@ -47,16 +47,30 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
       */
     protected def keptResultsFile: Option[Path] = None
 
+    /** The test that runs: a result is kept under its name. */
+    private var running = ""
+
+    /** The proofs, once a test has asked for them. A suite whose tests ask for none has no
+      * workspace made ready, and nothing to close.
+      */
+    private var made: Option[LeanProofs] = None
+
     /** The suite's proofs. Its members are the suite's with `import proofs.*`, for which it is
       * final.
       */
-    protected final lazy val proofs: LeanProofs =
-        LeanProofs(leanWorkspace, keptResultsFile, reason => cancel(reason))
+    protected final lazy val proofs: LeanProofs = {
+        val proofs =
+            LeanProofs(leanWorkspace, keptResultsFile, reason => cancel(reason), () => running)
+        made = Some(proofs)
+        proofs
+    }
 
-    abstract override protected def withFixture(test: NoArgTest): Outcome =
-        proofs.during(test.name)(super.withFixture(test))
+    abstract override protected def withFixture(test: NoArgTest): Outcome = {
+        running = test.name
+        super.withFixture(test)
+    }
 
     override protected def afterAll(): Unit =
         try super.afterAll()
-        finally proofs.close()
+        finally made.foreach(_.close())
 }

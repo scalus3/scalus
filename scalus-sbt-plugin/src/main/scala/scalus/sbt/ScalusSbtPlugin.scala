@@ -42,7 +42,9 @@ import sbtcompat.PluginCompat.*
   * directory `leanWorkspace`: `src/test/lean/<Project>` unless the build says another.
   * `leanInit` makes it ready: it creates it where it is missing, and brings Scalus's Lean
   * library up to date in `.scalus` of the repository, which the workspaces of a build share.
-  * A suite of proofs does the same when it runs, so `test` does not need `leanInit`.
+  * Once it is there, the project's tests are told the workspace, by a resource on their class
+  * path. So a suite of proofs does not name it, and brings the library to it itself when it
+  * runs: a checkout that has the workspace does not need `leanInit` before `test`.
   * `leanBuild` runs `lake build` in the workspace, which a suite needs before it asks Lean. It
   * is not part of `test`: the first build clones and builds what the library requires, which
   * takes minutes and the network. A project without `scalus-verification` is passed over by
@@ -307,6 +309,37 @@ object ScalusSbtPlugin extends AutoPlugin {
                 None
         }
 
+    /** The resource that tells the project's tests where its Lean workspace is. */
+    private val leanWorkspaceResource =
+        taskKey[Seq[java.io.File]](
+          "The resource on the test class path that says where the project's Lean workspace is"
+        )
+
+    /** Writes the workspace's directory where `scalus-verification` looks for it
+      * (`LeanProofs.workspaceResource`). A project has one workspace and the build has it, so
+      * its tests are told, and name none: they need not know where sbt runs them.
+      *
+      * They are told of a workspace that is there, which `leanInit` has created. A project that
+      * has none is told nothing, and its tests create none: running them writes no workspace
+      * into the sources.
+      */
+    lazy val leanWorkspaceResourceTask: Def.Initialize[Task[Seq[java.io.File]]] = Def.task {
+        val file = (Test / resourceManaged).value / "scalus" / "verify" / "lean" / "workspace"
+        val workspace = leanWorkspace.value
+        if ((workspace / "lakefile.lean").isFile || (workspace / "lakefile.toml").isFile) {
+            val directory = workspace.getAbsolutePath
+            if (!file.isFile || IO.read(file) != directory) IO.write(file, directory)
+            Seq(file)
+        } else {
+            IO.delete(file)
+            Seq.empty[java.io.File]
+        }
+    }
+
+    lazy val leanWorkspaceGenerator: Def.Initialize[Task[Seq[java.io.File]]] = Def.task {
+        leanWorkspaceResource.value
+    }
+
     /** Creates the workspace through `scalus-verification`. It is among the project's test
       * dependencies, and is Scala 3, so it is called by reflection, as the deployer is. Only the
       * dependencies are read: the project itself need not compile for its workspace to be made.
@@ -414,6 +447,8 @@ object ScalusSbtPlugin extends AutoPlugin {
         name.value
       ),
       // Uncached, as the tasks above: they write files, and `leanBuild` runs a process.
+      leanWorkspaceResource := Def.uncached(leanWorkspaceResourceTask.value),
+      Test / resourceGenerators += leanWorkspaceGenerator.taskValue,
       leanReady := Def.uncached(leanReadyTask.value),
       leanInit := Def.uncached(leanInitTask.value),
       leanBuild := Def.uncached(leanBuildTask.value)

@@ -6,8 +6,10 @@ import scalus.verify.lean.{LeanServer, LeanServerProvider, LeanServers, LeanWork
 
 import java.io.File
 import java.lang.ref.Cleaner
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Using
 
 /** Proves and refutes statements with [[UplcBlaster]] through Lean, for whoever states them: a test
   * of any framework, or a program. It has one Lean server at a time, started for its first check
@@ -24,28 +26,33 @@ import scala.concurrent.duration.FiniteDuration
   * Proofs about code can keep their results, in the file `kept`
   * (docs/design/verification-overview.md §5.6): a statement that has not changed is then not asked
   * of Lean again, and where no Lean runs, it stands on what is kept. A result is kept under the
-  * name of what runs ([[during]]), as a test's name, and the count of the statements stated there.
+  * name of what runs, as a test's name, and the count of the statements stated there. The caller
+  * says what runs, with `running` or with [[during]].
   *
   * {{{
-  * val proofs = LeanProofs(LeanProofs.ready(Path.of("src/test/lean/Htlc")))
+  * val proofs = LeanProofs(LeanProofs.projectWorkspace)
   * import proofs.*
   * proven(forAll[BigInt](x => x + BigInt(0) == x), 40)
   * }}}
   *
   * @param workspace
-  *   the Lean workspace the checks run in. A workspace of a project's own requires Scalus's Lean
-  *   library, as a check imports it: [[LeanProofs.ready]] makes one.
+  *   the Lean workspace the checks run in: the project's, [[LeanProofs.projectWorkspace]]. A
+  *   workspace of a project's own requires Scalus's Lean library, as a check imports it.
   * @param kept
   *   the file of the kept results, or none where they are not kept. It is for proofs about code.
   *   Where the tactic itself is tested, Lean is asked every time: what is tested is not in a
   *   statement's fingerprint.
   * @param notChecked
   *   what happens where a statement cannot be checked here, with the reason. It does not return.
+  * @param running
+  *   the name of what runs now, asked when a statement is stated: a test framework says the test.
+  *   Where tests of one instance run at the same time, it has to say which of them is asking.
   */
-final class LeanProofs(
+final class LeanProofs private (
     val workspace: Path,
     kept: Option[Path],
-    notChecked: String => Nothing
+    notChecked: String => Nothing,
+    running: () => String
 ) extends AutoCloseable {
 
     /** The Lean servers of the workspace: none is started before a check asks for one. */
@@ -78,7 +85,11 @@ final class LeanProofs(
         sys.env
             .getOrElse("PATH", "")
             .split(File.pathSeparator)
-            .exists(directory => Files.isExecutable(Path.of(directory, "lake"))) &&
+            .exists(directory =>
+                // `lake.exe` is its name on Windows.
+                List("lake", "lake.exe")
+                    .exists(lake => Files.isExecutable(Path.of(directory, lake)))
+            ) &&
             LeanProofs.isBuilt(workspace)
 
     /** Says that nothing is checked where Lean cannot run here ([[notChecked]]). With the
@@ -122,33 +133,55 @@ final class LeanProofs(
             mode <- keptMode
         yield KeptResults.in(file, mode)
 
-    /** What runs, and how many statements it has stated: a kept result is under both. */
-    private var running = ""
-    private var stated = 0
+    /** What `during` says runs, in place of what `running` says. */
+    private var named: Option[String] = None
 
-    /** Runs `body` as `context`: the results of the statements it states are kept under that name
-      * and their count in it, from one. A test framework gives the name of the test that runs. So a
-      * statement keeps its result while the tests around it change, and while only some of them
-      * run.
+    /** How many statements each of what runs has stated: a kept result is under both. */
+    private val stated = scala.collection.mutable.Map.empty[String, Int]
+
+    /** Runs `body` as `context`, for a caller that has no `running` to give: the results of the
+      * statements it states are kept under that name and their count in it, from one. After it,
+      * what ran before runs again. So a statement keeps its result while what is around it changes,
+      * and while only some of it runs.
+      *
+      * It names what runs for every thread that states meanwhile. Tests that run at the same time
+      * are told apart by `running`.
       */
     def during[A](context: String)(body: => A): A = {
-        running = context
-        stated = 0
-        body
+        val before = synchronized {
+            val before = named
+            named = Some(context)
+            stated.remove(context)
+            before
+        }
+        try body
+        finally synchronized { named = before }
     }
 
-    /** The Lean server itself, for whoever speaks to it. */
+    /** What states the next statement, and which of its statements that is. */
+    private def next(): (String, Int) = synchronized {
+        val context = named.getOrElse(running())
+        val count = stated.getOrElse(context, 0) + 1
+        stated(context) = count
+        (context, count)
+    }
+
+    /** The Lean server itself, for whoever speaks to it. It is these proofs': it is ended with
+      * them, also where they are no longer used and were not closed. Whoever speaks to it keeps the
+      * proofs.
+      */
     def leanServer: LeanServer = lean.server() match
         case Right(server) => server
         case Left(reason)  => failed(reason)
 
-    /** Starts a Lean server in `workspace`, for whoever closes it. Nothing is checked, or the check
-      * fails, where Lean cannot run here ([[requireLean]]), and it fails where the server does not
-      * start.
+    /** Starts a Lean server in `directory`, for whoever closes it. Nothing is checked, or the check
+      * fails, where Lean cannot run for these proofs ([[requireLean]]): that is asked of their own
+      * workspace, and not of `directory`, which may have no library of its own. It fails where the
+      * server does not start.
       */
-    def startLean(workspace: Path): LeanServer = {
+    def startLean(directory: Path): LeanServer = {
         requireLean()
-        LeanServer.start(workspace) match
+        LeanServer.start(directory) match
             case Right(started) => started
             case Left(reason)   => failed(reason)
     }
@@ -162,10 +195,10 @@ final class LeanProofs(
         budget: Budget,
         functions: Seq[FunctionDef[?, ?]]
     ): (Verifier, Statement, VerificationResult) = {
-        stated += 1
-        val verifier = results.fold(Verifier.empty)(kept => Verifier.keeping(kept.under(running)))
+        val (context, count) = next()
+        val verifier = results.fold(Verifier.empty)(kept => Verifier.keeping(kept.under(context)))
         functions.foreach(verifier.addFunction)
-        val statement = verifier.statement(s"#$stated", prop)
+        val statement = verifier.statement(s"#$count", prop)
         verifier.verify(statement, UplcBlaster(budget, lean)) match
             case VerificationResult.Inconclusive(reason) if reason.startsWith(KeptResults.stale) =>
                 notChecked(reason)
@@ -284,13 +317,58 @@ object LeanProofs {
 
     /** Proofs in `workspace`, with what happens where a statement cannot be checked here. */
     def apply(workspace: Path, kept: Option[Path], notChecked: String => Nothing): LeanProofs =
-        new LeanProofs(workspace, kept, notChecked)
+        apply(workspace, kept, notChecked, () => "")
+
+    /** Proofs in `workspace`, with what happens where a statement cannot be checked here, and the
+      * name of what runs when a statement is stated.
+      */
+    def apply(
+        workspace: Path,
+        kept: Option[Path],
+        notChecked: String => Nothing,
+        running: () => String
+    ): LeanProofs =
+        new LeanProofs(workspace, kept, notChecked, running)
 
     private val cleaner = Cleaner.create()
 
     /** What ends the servers of proofs that are no longer used. It does not hold the proofs. */
     private final class Closing(servers: LeanServers) extends Runnable {
         override def run(): Unit = servers.close()
+    }
+
+    /** The resource by which a build tells the tests of a project where the project's Lean
+      * workspace is: the directory, as text. The Scalus sbt plugin writes it, from its setting
+      * `leanWorkspace`.
+      */
+    val workspaceResource: String = "scalus/verify/lean/workspace"
+
+    /** The Lean workspace of the project whose tests run. The build has it, and no test names it.
+      *   - Where the build says it ([[workspaceResource]], on the class path `loader` reads), it is
+      *     that directory, made ready ([[ready]]).
+      *   - Otherwise it is the workspace of Scalus's Lean library ([[libraryWorkspace]]), where
+      *     there is one: in Scalus's own sources.
+      *
+      * It fails where there is neither, so that proofs do not pass by having no workspace.
+      */
+    def projectWorkspace(loader: ClassLoader): Path =
+        Option(loader.getResourceAsStream(workspaceResource)) match
+            case Some(stream) =>
+                val said = Using.resource(stream)(_.readAllBytes())
+                ready(Path.of(new String(said, StandardCharsets.UTF_8).trim))
+            case None =>
+                if Files.isDirectory(libraryWorkspace) then libraryWorkspace
+                else
+                    throw new IllegalStateException(
+                      "no Lean workspace is known for this project. With the Scalus sbt plugin, " +
+                          "`sbt leanInit` creates the project's, and the build then says it to " +
+                          "the tests. Without the plugin, name one: LeanProofs.ready(directory)"
+                    )
+
+    /** [[projectWorkspace]], with the class path of the thread that asks. */
+    def projectWorkspace: Path = {
+        val loader = Thread.currentThread.getContextClassLoader
+        projectWorkspace(if loader != null then loader else getClass.getClassLoader)
     }
 
     /** The Lean workspace of a project's own in `directory`, made ready
@@ -301,6 +379,10 @@ object LeanProofs {
       *
       * It fails where the workspace does not agree with the library. Its checks would run with
       * another Lean, or other packages, than the library is for.
+      *
+      * A `directory` that is not absolute is taken from the working directory, which for the tests
+      * of a module is the build's root unless they are forked. [[inSources]] finds a workspace that
+      * is there from either.
       */
     def ready(directory: Path): Path = {
         val outcome = LeanWorkspaceTool.init(directory)

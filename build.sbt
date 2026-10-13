@@ -1131,6 +1131,7 @@ lazy val scalusVerification = project
     .settings(
       name := "scalus-verification",
       publishOnlyLts,
+      jvmReleaseTarget,
       crossScalaVersions := supportedScalaVersions,
       scalacOptions ++= commonScalacOptions,
       run / fork := true,
@@ -1176,6 +1177,7 @@ lazy val scalusVerificationScalatest = project
     .settings(
       name := "scalus-verification-scalatest",
       publishOnlyLts,
+      jvmReleaseTarget,
       crossScalaVersions := supportedScalaVersions,
       scalacOptions ++= commonScalacOptions,
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion

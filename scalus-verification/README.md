@@ -314,16 +314,27 @@ needed for, it leaves to its caller:
 - **A statement that cannot be checked here**, as Lean does not run here or its kept result is
   stale, is the third argument's, `notChecked`: a function of the reason that does not return.
   Without it, a `LeanProofs.NotChecked` is thrown.
-- **The name a result is kept under** is that of what runs, which the caller says with
-  `proofs.during(name) { ... }`. Without it, a result is under the count of the statements
-  stated so far, which holds only while all of them are stated in the same order.
+- **The name a result is kept under** is that of what runs, with the count of the statements
+  stated there. The caller says what runs: with a fourth argument, `running`, a function that
+  is asked when a statement is stated, or with `proofs.during(name) { ... }`. Without either, a
+  result is under the count of the statements stated so far, which holds only while all of
+  them are stated in the same order. Where tests of one instance run at the same time,
+  `running` has to tell them apart.
 - **The Lean server** is ended by `close()`. One that is left is ended when the proofs are no
   longer used, or with the JVM.
 
-With any framework, that is the two lines above, and what the framework has for the rest. For
-ScalaTest the rest is in `LeanProofsSuite`, of the artifact `scalus-verification-scalatest`: it
-cancels the test of a statement that is not checked, keeps a result under the name of its test,
-and closes after the suite.
+With any framework, that is two lines, and what the framework has for the rest:
+
+```scala
+val proofs = LeanProofs(LeanProofs.projectWorkspace)
+import proofs.*
+
+proven(forAll[BigInt](x => x + BigInt(0) == x), 40)
+```
+
+For ScalaTest the rest is in `LeanProofsSuite`, of the artifact `scalus-verification-scalatest`:
+it cancels the test of a statement that is not checked, keeps a result under the name of its
+test, and closes after the suite.
 
 ```scala
 libraryDependencies ++= Seq(
@@ -336,15 +347,11 @@ libraryDependencies ++= Seq(
 class HtlcProofsTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
 
-    private lazy val workspace = readyWorkspace(Path.of("src/test/lean/Htlc"))
-    override protected def leanWorkspace: Path = workspace
-
     test("x + 0 is x") { proven(forAll[BigInt](x => x + BigInt(0) == x), 40) }
 }
 ```
 
-A suite has to name its workspace: the one it has otherwise is that of the library in these
-sources.
+Neither names a workspace. A project has one, and its build has it (below).
 
 ### Kept results
 
@@ -379,9 +386,10 @@ val verifier = Verifier.keeping(KeptResults.in(file, KeptResults.Mode.Use))
 
 ### The workspace of a suite
 
-A suite's workspace is `leanWorkspace` of `LeanProofsSuite`. Unless the suite overrides it, it is the
-workspace of the library, `src/main/lean` in these sources, or the directory
-`SCALUS_LEAN_WORKSPACE` names. `VestingVerificationTest` overrides it with a workspace of the
+A suite's workspace is `leanWorkspace` of `LeanProofsSuite`: the project's,
+`LeanProofs.projectWorkspace`, unless the suite overrides it. For the suites here that is
+`LeanProofs.libraryWorkspace`, the workspace of the library: `src/main/lean` in these sources,
+or the directory `SCALUS_LEAN_WORKSPACE` names. `VestingVerificationTest` overrides it with a workspace of the
 example, `scalus-examples/jvm/src/test/lean/LinearVesting`, where proofs about the validator
 written by hand belong as well. Such a workspace is a Lake package that requires `ScalusProofs`
 by its path, and sets its `packagesDir` to that of the library's workspace, so Blaster and
@@ -421,23 +429,24 @@ contracts/src/test/lean/Htlc/   a workspace: lakefile.lean, lean-toolchain, Htlc
 - Lake writes the workspace's `lake-manifest.json` on its first build, with the revisions the
   library's manifest pins. Commit it with the workspace.
 
-Whoever states the proofs makes the workspace ready itself, with `LeanProofs.ready`, which
-calls `init` and fails where the workspace does not agree with the library:
-
-```scala
-val proofs = LeanProofs(LeanProofs.ready(Path.of("src/test/lean/Htlc")))
-import proofs.*
-
-proven(forAll[BigInt](x => x + BigInt(0) == x), 40)
-```
+A project has one workspace, and its build has it: with the Scalus sbt plugin, the setting
+`leanWorkspace`, `src/test/lean/<Project>` unless the build says another. `sbt leanInit` creates
+it. Once it is there, the plugin tells the project's tests, by a resource on their class path,
+and `LeanProofs.projectWorkspace` is that directory, made ready: `init` is called, and it fails
+where the workspace does not agree with the library. So a suite names no workspace, the suites
+of a project have the same one, and it does not matter where sbt runs the tests. A project
+without a workspace is told nothing, and its tests create none.
 
 That needs neither Lean nor the network. So a fresh checkout has the library, which is not
 committed, before a suite asks what is kept for it, and its kept results stand where no Lean
 runs.
 
+Without the plugin, whoever states the proofs names the workspace, `LeanProofs.ready(directory)`,
+which does the same for that directory. A directory that is not absolute is taken from the
+working directory.
+
 What does need Lean and the network is the build of the workspace, which is not part of `test`.
-With the Scalus sbt plugin, the directory is the setting `leanWorkspace`,
-`src/test/lean/<Project>` unless the build says another, and two tasks do the work:
+Two tasks of the plugin do the work:
 
 ```
 sbt leanInit     # make the workspace ready, as a suite does

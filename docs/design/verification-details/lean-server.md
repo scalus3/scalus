@@ -244,9 +244,12 @@ a check can import.
   jar (`scalus-verification/README.md`, "The workspace of a project outside these sources").
 - **Given when the server is created.** `LeanServer.start(directory)` takes it, and the tactic
   takes the server. Neither has a default: a tactic without a server cannot be made.
-- **In the tests** a suite names it, as `leanWorkspace` of `LeanProofsSuite`. Unless the suite
-  overrides it, it is the library's: the environment variable `SCALUS_LEAN_WORKSPACE`, and then
-  the directory in Scalus's sources, looked up from the working directory.
+- **In the tests** a suite has it as `leanWorkspace` of `LeanProofsSuite`, and does not name
+  it: it is the project's, `LeanProofs.projectWorkspace`, which the build says to the tests of a
+  project, by a resource on their class path. Where no build says it, it is the library's: the
+  environment variable `SCALUS_LEAN_WORKSPACE`, and then the directory in Scalus's sources,
+  looked up from the working directory. A suite whose proofs are in another workspace
+  overrides it.
 
 ### Several workspaces
 

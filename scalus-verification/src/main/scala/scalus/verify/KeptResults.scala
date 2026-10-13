@@ -206,8 +206,16 @@ object KeptResults {
         case Frozen
     }
 
+    /** The lock of each file, by its path. A change writes the whole file, so whoever keeps results
+      * in one file of a JVM takes turns: each test of a suite may have results of its own.
+      */
+    private val locks = new java.util.concurrent.ConcurrentHashMap[Path, AnyRef]
+
     /** The results kept in `file`, used in the way `mode` says. The file need not be there yet. */
-    def in(file: Path, mode: Mode): KeptResults = new KeptResults(file, mode, "", new AnyRef)
+    def in(file: Path, mode: Mode): KeptResults = {
+        val lock = locks.computeIfAbsent(file.toAbsolutePath.normalize, _ => new AnyRef)
+        new KeptResults(file, mode, "", lock)
+    }
 
     /** How the reason of a statement begins that is stale: nothing kept counts for it, and no
       * backend ran ([[Mode.Frozen]]).
