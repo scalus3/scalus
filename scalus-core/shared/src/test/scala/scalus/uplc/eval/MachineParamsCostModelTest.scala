@@ -2,7 +2,8 @@ package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{CardanoInfo, CostModels, ExUnits, Language, MajorProtocolVersion}
-import scalus.uplc.{Constant, DefaultUni, PlutusV1Params, PlutusV2Params, PlutusV3Params}
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.{BuiltinSemanticsVariant, Constant, DefaultUni, PlutusV1Params, PlutusV2Params, PlutusV3Params}
 
 class MachineParamsCostModelTest extends AnyFunSuite {
     private val protocolParams = CardanoInfo.mainnet.protocolParams
@@ -156,6 +157,37 @@ class MachineParamsCostModelTest extends AnyFunSuite {
             assert(steps.forall(_ == ExUnits(100, stepCost)))
 
         assert(CekMachineCosts.defaultMachineCosts == CekMachineCosts.defaultMachineCostsB)
+    }
+
+    test("verifyEd25519Signature is costed by the signature in variant A, by the message after") {
+        // plutus-core/cost-model/data/builtinCostModel{A..E}.json: the CPU model is linear_in_z
+        // (the signature) in variant A and linear_in_y (the message) in B to E.
+        def bytes(n: Int) = CekValue.VCon(Constant.ByteString(ByteString.fill(n, 0)))
+        for (language, protocol, variant) <- Seq(
+              (Language.PlutusV1, MajorProtocolVersion.valentinePV, BuiltinSemanticsVariant.A),
+              (Language.PlutusV2, MajorProtocolVersion.valentinePV, BuiltinSemanticsVariant.A),
+              (Language.PlutusV2, MajorProtocolVersion.changPV, BuiltinSemanticsVariant.B),
+              (Language.PlutusV3, MajorProtocolVersion.changPV, BuiltinSemanticsVariant.C),
+              (Language.PlutusV2, MajorProtocolVersion.vanRossemPV, BuiltinSemanticsVariant.D),
+              (Language.PlutusV3, MajorProtocolVersion.vanRossemPV, BuiltinSemanticsVariant.E)
+            )
+        do
+            assert(
+              BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(protocol, language) == variant
+            )
+            val model = MachineParams
+                .fromCostModels(protocolParams.costModels, language, protocol)
+                .builtinCostModel
+                .verifyEd25519Signature
+            def cpu(messageBytes: Int, signatureBytes: Int): Long =
+                model.calculateCost(bytes(32), bytes(messageBytes), bytes(signatureBytes)).steps
+            val clue = s"$language at $protocol (variant $variant)"
+            if variant == BuiltinSemanticsVariant.A then
+                assert(cpu(1000, 64) == cpu(8, 64), clue)
+                assert(cpu(8, 640) > cpu(8, 64), clue)
+            else
+                assert(cpu(1000, 64) > cpu(8, 64), clue)
+                assert(cpu(8, 640) == cpu(8, 64), clue)
     }
 
     test("a language without a cost model is rejected by name") {

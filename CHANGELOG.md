@@ -142,6 +142,9 @@ Evolution provider needs.
   range in semantics variants D and E, as Plutus does.
 - Scala Native adds a BLS12-381 point to itself correctly and signs with extended (BIP32-Ed25519)
   keys; JavaScript pairs the point at infinity as blst does.
+- `MachineParams.fromCostModels` costs `verifyEd25519Signature` by the signature in semantics
+  variant A (PlutusV1 and V2 before protocol version 9), as Plutus does. It costed by the message,
+  so a script that verifies a long message exceeded a budget the node accepts.
 
 
 ### Deprecated
