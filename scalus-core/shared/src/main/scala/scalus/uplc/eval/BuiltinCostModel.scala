@@ -1147,12 +1147,15 @@ object BuiltinCostModel {
             )
           ),
           verifyEd25519Signature = DefaultCostingFun(
-            cpu = ThreeArguments.LinearInY(
-              OneVariableLinearFunction(
-                intercept = params.`verifyEd25519Signature-cpu-arguments-intercept`,
-                slope = params.`verifyEd25519Signature-cpu-arguments-slope`
-              )
-            ),
+            cpu = {
+                val cpuModel = OneVariableLinearFunction(
+                  intercept = params.`verifyEd25519Signature-cpu-arguments-intercept`,
+                  slope = params.`verifyEd25519Signature-cpu-arguments-slope`
+                )
+                // variant A costs by the signature, B to E by the message
+                if semvar == BuiltinSemanticsVariant.A then ThreeArguments.LinearInZ(cpuModel)
+                else ThreeArguments.LinearInY(cpuModel)
+            },
             memory = ThreeArguments.ConstantCost(
               cost = params.`verifyEd25519Signature-memory-arguments`
             )
