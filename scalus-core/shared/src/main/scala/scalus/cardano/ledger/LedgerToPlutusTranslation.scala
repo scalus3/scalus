@@ -939,15 +939,22 @@ object LedgerToPlutusTranslation {
                   id = previousActionId
                       .map(id => prelude.Option.Some(getGovActionId(id)))
                       .getOrElse(prelude.Option.None),
+                  // The ledger lists its `Set (Credential ColdCommitteeRole)` with `Set.toList`,
+                  // ascending in its `Ord Credential`, which `Ordering[Credential]` mirrors.
                   removedMembers = prelude.List
-                      .from(membersToRemove.toSeq.map(getCredential)),
+                      .from(membersToRemove.toSeq.sorted.map(getCredential)),
                   addedMembers = SortedMap.fromList(
                     prelude.List.from(membersToAdd.map { case (cred, epoch) =>
                         getCredential(cred) -> BigInt(epoch)
                     }.toSeq)
                   ),
-                  newQuorum = scalus.cardano.onchain.plutus.prelude
-                      .Rational(BigInt(newQuorum.numerator), BigInt(newQuorum.denominator))
+                  // `transBoundedRational` goes through a Haskell `Ratio`, so a script always sees
+                  // the quorum in lowest terms, however the transaction encodes it.
+                  newQuorum = {
+                      val quorum = newQuorum.reduce
+                      scalus.cardano.onchain.plutus.prelude
+                          .Rational(BigInt(quorum.numerator), BigInt(quorum.denominator))
+                  }
                 )
             case GovAction.NewConstitution(previousActionId, constitution) =>
                 v3.GovernanceAction.NewConstitution(
