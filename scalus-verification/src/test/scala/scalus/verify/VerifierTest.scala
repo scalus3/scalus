@@ -156,6 +156,27 @@ class VerifierTest extends AnyFunSuite {
         assert(verifier.statement(Prop(BigInt(3) > BigInt(0))).name == "statement_3")
     }
 
+    test("a negative control expects a refutation, and a request expects what was declared") {
+        val verifier = Verifier.empty
+        val claim = verifier.statement("holds", Prop(BigInt(1) > BigInt(0)))
+        val control = verifier.refute("does_not_hold", Prop(BigInt(0) > BigInt(1)))
+        assert(claim.expected == ExpectedOutcome.Valid)
+        assert(control.expected == ExpectedOutcome.Falsified)
+        val stub = tactic(_ => VerificationResult.Inconclusive("not run"))
+        assert(VerificationRequest(claim, stub).expected == ExpectedOutcome.Valid)
+        assert(VerificationRequest(control, stub).expected == ExpectedOutcome.Falsified)
+        // A refuted control is no theorem, and its name is taken as any statement's is.
+        val proof = Proof(TestArtifact(ProofKind.Blaster, "counterexample"))
+        assert(
+          verifier.prove(control, tactic(_ => VerificationResult.Refuted(proof))) ==
+              VerificationResult.Refuted(proof)
+        )
+        assert(verifier.theorems.isEmpty)
+        assertThrows[IllegalArgumentException](
+          verifier.refute("holds", Prop(BigInt(0) > BigInt(1)))
+        )
+    }
+
     test("a contract is registered with its function") {
         val double = FunctionDef.named("double", (x: BigInt) => x * BigInt(2))
         val verifier = Verifier.empty

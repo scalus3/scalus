@@ -1285,6 +1285,24 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         finally Directories.remove(kept)
     }
 
+    test("a tactic told where to keep its checks writes them there") {
+        val kept = Files.createTempDirectory("scalus-kept-checks-")
+        try
+            val tactic = UplcBlaster(Budget.LeanSteps(40), lean).withChecksKeptIn(kept)
+            // The other options leave it, as they leave each other.
+            assert(
+              tactic.withMaxHeartbeats(5).withoutTimeout.withAttemptTimeout(1.minute).keptChecks ==
+                  Some(kept)
+            )
+            val verifier = Verifier.empty
+            val statement = verifier.statement(forAll[BigInt](x => x + BigInt(0) == x))
+            val result = verifier.verify(statement, tactic)
+            assert(result.isInstanceOf[VerificationResult.Proven], result)
+            val List(directory) = Files.list(kept).iterator().asScala.toList
+            assert(Files.isRegularFile(directory.resolve("Check.lean")))
+        finally Directories.remove(kept)
+    }
+
     test("statements outside the fragment are unsupported") {
         // The tactic reports these without running Lean. An enum has several constructors, so
         // it is not built from one set of fields.

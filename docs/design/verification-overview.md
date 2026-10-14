@@ -54,9 +54,12 @@ and on a push that changes what the proofs are made of.
 The `spec.requires` / `spec.ensures` clauses of the local branch `feature/verification-blaster`
 are superseded by `Spec`, and `VestingValidator` states its guarantees with it (§8.2).
 
-Not built yet: the other tactics (§6.3–§6.7); script targets, `refute` and `Verifier.default`
-(§3.6, §4.5); a serializable `Prop`; and the `sbt verify` runner (§5.4). Proofs run as test suites
-instead. §9 has the plan with the status of each phase.
+Statements are declared by name, `statement` or `refute` for a negative control, and run as
+`VerificationRequest`s by `LeanProofs`, which holds each to its `ExpectedOutcome` (§4.5, §5.2).
+
+Not built yet: the other tactics (§6.3–§6.7); script targets, target capture and
+`Verifier.default` (§3.6, §4.5); a serializable `Prop`; and the `sbt verify` runner (§5.4). Proofs
+run as test suites instead. §9 has the plan with the status of each phase.
 
 ---
 
@@ -619,8 +622,10 @@ available as lemmas. `statement(prop)` generates a local name when the caller do
 these names depend on declaration order. `addTheorem` imports a theorem from another verifier.
 `contract(name, …)` and `contracts` declare a function's contracts, `guarantees` and `obligations`
 what follows from them (§3.7), and `Verifier.keeping(results)` is a verifier that keeps its
-results (§5.6). Source capture methods such as `statement(name, target)` and `refute` remain
-planned.
+results (§5.6). `refute(name, prop)` declares a negative control, which expects a refutation;
+each statement carries its `ExpectedOutcome`, and a `VerificationRequest` defaults to it.
+`LeanProofs.check` runs a request in its verifier and holds the result to it. Source capture
+methods such as `statement(name, target)` remain planned.
 
 The compiler can emit verifier descriptors alongside `sirModule`: functions and in-body contracts
 from a `@Compile` module, with their SIR names and source positions. A planned `Verifier.default` builds a
@@ -1298,8 +1303,8 @@ same place.
 
 | Phase | Deliverables | Exit criterion | Status (2026-10-14) |
 |---|---|---|---|
-| **0** | `scalus.verify` surface (`Prop`, `forAll`, connectives, `Quantifiable` for `BigInt`/`Boolean`/`ByteString`); verifier-owned `statement` / `refute` methods; generated verifier descriptors; statement capture by macros (§4.3); `Prop` with flat serialization; `@Compile` function and script targets; `blaster-uplc` for ∀-prefix statements with the polarity rule; `sbt verify` generating a Lean workspace and parsing verdicts | the `Math.lean` theorems and controls, restated in Scala over `Math.*` targets, give the same verdicts; generated files replace the hand-written ones | Built, in part by other means: the surface (`Quantifiable` also for `Data` and case classes), capture by macros, `@Compile` function targets, `blaster-uplc` with the polarity rule. The `Math.lean` theorems are restated in `PreludeProofsTest`, and the hand-written files are gone (§8.1). Proofs run as ScalaTest suites, not through `sbt verify`. Not built: `refute`, verifier descriptors, script targets, a serialized `Prop`. |
-| **1** | `exists` / `existsLet`, `denotes`, `equal`; `refute` with replay; `scalacheck`; external contracts (`verifier.contract(f)`); `Theorem`, report, cache; PR-time freshness check and nightly run | a suite without a negative control fails; a planted spurious counterexample is reported as spurious; `Math.clamp`'s contract proved about its compiled code | Built: `exists` / `existsLet`, `denotes`, `equal`; replayed refutations, and spurious counterexamples reported as such; external contracts, proved about compiled code; `Theorem`; the kept results, with ci-jvm passing on them and the Lean-Proofs workflow nightly and on a push. Not built: `refute` on the verifier (tests use `LeanProofs.refuted`), `scalacheck`, a report, and failing a suite without a negative control. |
+| **0** | `scalus.verify` surface (`Prop`, `forAll`, connectives, `Quantifiable` for `BigInt`/`Boolean`/`ByteString`); verifier-owned `statement` / `refute` methods; generated verifier descriptors; statement capture by macros (§4.3); `Prop` with flat serialization; `@Compile` function and script targets; `blaster-uplc` for ∀-prefix statements with the polarity rule; `sbt verify` generating a Lean workspace and parsing verdicts | the `Math.lean` theorems and controls, restated in Scala over `Math.*` targets, give the same verdicts; generated files replace the hand-written ones | Built, in part by other means: the surface (`Quantifiable` also for `Data` and case classes), capture by macros, `@Compile` function targets, `blaster-uplc` with the polarity rule. The `Math.lean` theorems are restated in `PreludeProofsTest`, and the hand-written files are gone (§8.1). Proofs run as ScalaTest suites, not through `sbt verify`. Not built: verifier descriptors, script targets, a serialized `Prop`. |
+| **1** | `exists` / `existsLet`, `denotes`, `equal`; `refute` with replay; `scalacheck`; external contracts (`verifier.contract(f)`); `Theorem`, report, cache; PR-time freshness check and nightly run | a suite without a negative control fails; a planted spurious counterexample is reported as spurious; `Math.clamp`'s contract proved about its compiled code | Built: `exists` / `existsLet`, `denotes`, `equal`; replayed refutations, and spurious counterexamples reported as such; external contracts, proved about compiled code; `Theorem`; the kept results, with ci-jvm passing on them and the Lean-Proofs workflow nightly and on a push; and `refute`, `ExpectedOutcome` and `VerificationRequest`, run by `LeanProofs.check`. Not built: `scalacheck`, a report, and failing a suite without a negative control. |
 | **2** | in-body `spec` capture in the plugin; `lean-direct` for integers, `Bool`, `ByteString`, `List`, `Option` and case classes; declared Lean mappings, proved by `blaster-uplc`; `using`, `split`, `cases`; contract VCG for modular proofs | adding clauses leaves the script hash unchanged; a list lemma proved with `induction xs <;> blaster`; a Mathlib `Int.gcd` theorem transferred to the compiled `Math.gcd` through a proved mapping; a caller's obligation discharged with its callee's contract | Built: in-body `Spec` capture, with the script's bytes unchanged (`SpecTest`), and the caller's side of contracts (`obligations`). Not built: `lean-direct`, mappings, `using` / `split` / `cases`, the VCG. |
 | **3** | validators: `ScriptContext` targets with the CardanoLedgerApiBlaster validity predicates; bring `feature/verification-blaster`'s Vesting annotations forward | one real contract (Vesting) with authorisation and conservation properties proved about its script hash | In part: Vesting, HTLC and the payment splitters have properties proved about their validators, over script contexts written as `Data`, and Vesting's annotations are back (§8.2). Not built: the validity predicates, and proofs about the published script hash, which wait for Value and array builtins in PlutusCoreBlaster. |
 | **4** | a Scala kernel only if a lemma backlog demands it | representative lemmas elaborate and discharge through `Prop` | Not started. |

@@ -47,6 +47,13 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
       */
     protected def keptResultsFile: Option[Path] = None
 
+    /** The directory into which the suite's checks are also written, each in a directory of its
+      * own, to read the Lean they are given; none to follow the environment variable
+      * `SCALUS_LEAN_KEEP_CHECKS`. A statement whose kept result is taken runs no check, and writes
+      * none.
+      */
+    protected def keptChecksDirectory: Option[Path] = None
+
     /** The test that runs: a result is kept under its name. */
     private var running = ""
 
@@ -60,7 +67,13 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
       */
     protected final lazy val proofs: LeanProofs = {
         val proofs =
-            LeanProofs(leanWorkspace, keptResultsFile, reason => cancel(reason), () => running)
+            LeanProofs(
+              leanWorkspace,
+              keptResultsFile,
+              reason => cancel(reason),
+              () => running,
+              keptChecksDirectory
+            )
         made = Some(proofs)
         proofs
     }

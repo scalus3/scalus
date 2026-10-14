@@ -135,7 +135,11 @@ result for its statement, and the server takes the next one. Where the server it
   end of a command that grows without bound, the same on every machine, and it does not end
   every check that does not finish: the solver's time does not count towards it.
 - With the environment variable `SCALUS_LEAN_KEEP_CHECKS` set to a directory, every check that
-  runs is also written there, to read or to run by hand with `lake lean Check.lean`.
+  runs is also written there, to read or to run by hand with `lake lean Check.lean`. Code says
+  the same where it makes the tactic, `UplcBlaster(budget, lean).withChecksKeptIn(directory)`,
+  or the proofs, `LeanProofs(workspace, kept, notChecked, running, Some(directory))`; a ScalaTest
+  suite overrides `keptChecksDirectory` of `LeanProofsSuite`. What code says is taken in place of
+  the variable. A statement whose kept result is taken runs no check, and writes none.
 
 `verifier.prepare(statement, tactic)` returns an opaque `PreparedRun` only when the complete goal
 is in the tactic's language. Passing that evidence to `verifier.prove(prepared)` cannot return
@@ -312,35 +316,48 @@ suite that keeps its results passes on them (below). With the
 
 ### `LeanProofs` and a test framework
 
-`LeanProofs` is a class of this module, and asks for no test framework. What a framework is
-needed for, it leaves to its caller:
+`LeanProofs` runs the statements of a verifier, and asks for no test framework. Statements are
+declared by name in its `verifier`: `statement(name, prop)` expects a proof, and
+`refute(name, prop)`, a negative control, a refutation (overview §5.2). `check` runs one and holds
+it to that:
 
-- **An expectation that does not hold**, as a refutation where `proven` expected a proof, throws
-  an `AssertionError`. Every test framework takes that for a failed test.
+```scala
+val proofs = LeanProofs(LeanProofs.projectWorkspace, Some(keptFile))
+val plusZero = proofs.verifier.statement("plus_zero", forAll[BigInt](x => x + BigInt(0) == x))
+val plusOne = proofs.verifier.refute("plus_one", forAll[BigInt](x => x + BigInt(1) == x))
+proofs.check(plusZero, 40)   // UplcBlaster at 40 steps; a VerificationRequest names another tactic
+proofs.check(plusOne, 40)
+```
+
+`check(VerificationRequest(statement, tactic, expected))` is the general form, with any tactic;
+`check(statement, budget)` is it for `UplcBlaster`. A statement is a value with a stable name: the
+class that declares it is what other code refers to, its result is kept under that name, and an
+export to Lean will use it. Checks run one at a time; declare the statements before tests run
+them concurrently, as `Verifier` is not made for concurrent declarations. What a framework is
+needed for, `LeanProofs` leaves to its caller:
+
+- **An expectation that does not hold**, as a refutation where a proof was expected, throws an
+  `AssertionError`. Every test framework takes that for a failed test.
 - **A statement that cannot be checked here**, as Lean does not run here or its kept result is
   stale, is the third argument's, `notChecked`: a function of the reason that does not return.
   Without it, a `LeanProofs.NotChecked` is thrown.
-- **The name a result is kept under** is that of what runs, with the count of the statements
-  stated there. The caller says what runs: with a fourth argument, `running`, a function that
-  is asked when a statement is stated, or with `proofs.during(name) { ... }`. Without either, a
-  result is under the count of the statements stated so far, which holds only while all of
-  them are stated in the same order. Where tests of one instance run at the same time,
-  `running` has to tell them apart.
+- **A kept result** is under the name of its statement, so it keeps while the statements around
+  it change. Where the checks are kept, a statement's are in a directory named after it, which
+  holds those of its last run; a statement whose kept result is taken runs no check and leaves it
+  as it is.
+- **A result that is not the expected one** fails with what came instead: the replayed
+  counterexample of a refutation, or the reason there is no result.
 - **The Lean server** is ended by `close()`. One that is left is ended when the proofs are no
   longer used, or with the JVM.
 
-With any framework, that is two lines, and what the framework has for the rest:
-
-```scala
-val proofs = LeanProofs(LeanProofs.projectWorkspace)
-import proofs.*
-
-proven(forAll[BigInt](x => x + BigInt(0) == x), 40)
-```
+The anonymous `proven`, `refuted` and `inconclusive` remain until the suites here state theirs
+by name. Each states its statement in a verifier of its own, and keeps the result under the name
+of what runs and the count of the statements stated there: the fourth argument, `running`, or
+`proofs.during(name) { ... }`, says what runs, and has to tell apart tests that run at the same
+time.
 
 For ScalaTest the rest is in `LeanProofsSuite`, of the artifact `scalus-verification-scalatest`:
-it cancels the test of a statement that is not checked, keeps a result under the name of its
-test, and closes after the suite.
+it cancels the test of a statement that is not checked, and closes after the suite.
 
 ```scala
 libraryDependencies ++= Seq(
@@ -350,12 +367,19 @@ libraryDependencies ++= Seq(
 ```
 
 ```scala
-class HtlcProofsTest extends AnyFunSuite with LeanProofsSuite {
-    import proofs.*
+final class ArithmeticProofs(val verifier: Verifier) {
+    val plusZero = verifier.statement("plus_zero", forAll[BigInt](x => x + BigInt(0) == x))
+}
 
-    test("x + 0 is x") { proven(forAll[BigInt](x => x + BigInt(0) == x), 40) }
+class ArithmeticProofsTest extends AnyFunSuite with LeanProofsSuite {
+    private lazy val p = ArithmeticProofs(proofs.verifier)
+
+    test("x + 0 is x") { proofs.check(p.plusZero, 40) }
 }
 ```
+
+`PaymentSplitterVerificationTest` is written this way: `PaymentSplitterProofs` declares its
+statements and controls, and the suite checks them.
 
 Neither names a workspace. A project has one, and its build has it (below).
 
@@ -510,9 +534,14 @@ and goes on at the least budget at which the statement holds there. That is the 
 runs the statement is about: a premise that is false need only be seen to be false, however
 long the program of the conclusion runs. For the vesting statement above the search goes
 100, 262, 649, 694, 1315, 1573, 1584, 1608, and proves it there, in 45 seconds for the eight
-checks. The proof's `Artifact.budget` is the budget found, to give as `Budget.LeanSteps` where
-the search is to be saved. A statement no budget proves, such as one about a loop over a whole
-list, gets a longer counterexample from every check, and ends at the time limit.
+checks. The proof's `Artifact.budget` is the budget found. It is a result, as the proof is, and
+so it is not written in the code: where results are kept, it is kept with the proof, and a later
+search starts at it. A statement that has not changed is then taken as it was kept, or, in a run
+that recalculates, decided in one check at its budget. Only a statement whose programs changed is
+searched for again. `proofs.check(statement)` is the search; a fixed `Budget.LeanSteps` is for
+the tactic's own tests, and for a run without kept results that is to be saved the search. A
+statement no budget proves, such as one about a loop over a whole list, gets a longer
+counterexample from every check, and ends at the time limit.
 
 ## Pinned dependencies
 

@@ -11,9 +11,23 @@ import java.nio.file.{Files, Path}
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Using
 
-/** Proves and refutes statements with [[UplcBlaster]] through Lean, for whoever states them: a test
-  * of any framework, or a program. It has one Lean server at a time, started for its first check
-  * and ended by [[close]].
+/** Runs the statements of a [[Verifier]] with [[UplcBlaster]] through Lean, for whoever states
+  * them: a test of any framework, or a program. It has one Lean server at a time, started for its
+  * first check and ended by [[close]].
+  *
+  * Statements are declared by name in [[verifier]], as statements or as negative controls
+  * ([[Verifier.refute]]), and run with [[check]], which holds each to what it was declared to
+  * expect (docs/design/verification-overview.md §5.1, §5.2):
+  *
+  * {{{
+  * val proofs = LeanProofs(LeanProofs.projectWorkspace, Some(keptFile))
+  * val zero = proofs.verifier.statement("plus_zero", forAll[BigInt](x => x + BigInt(0) == x))
+  * proofs.check(zero, 40)
+  * }}}
+  *
+  * The anonymous `proven`, `refuted` and `inconclusive` state a statement in a verifier of their
+  * own, and keep its result under the name of what runs; they remain until the suites state theirs
+  * by name.
   *
   * It asks for no test framework, and says what happened in two ways.
   *   - An expectation that does not hold, as a statement that is refuted where a proof was
@@ -52,7 +66,8 @@ final class LeanProofs private (
     val workspace: Path,
     kept: Option[Path],
     notChecked: String => Nothing,
-    running: () => String
+    running: () => String,
+    checksKeptIn: Option[Path]
 ) extends AutoCloseable {
 
     /** The Lean servers of the workspace: none is started before a check asks for one. */
@@ -186,6 +201,99 @@ final class LeanProofs private (
             case Left(reason)   => failed(reason)
     }
 
+    /** The verifier of these proofs, in which statements are declared by name, and run with
+      * [[check]]. Their results are kept in the file of these proofs, where they keep them, under
+      * the statements' names, and used in the way of [[keptMode]]: a statement keeps its result
+      * while statements around it change, are added or are removed.
+      */
+    lazy val verifier: Verifier = results.fold(Verifier.empty)(Verifier.keeping)
+
+    /** Runs `request` in [[verifier]], and holds its result to the one the request expects. A
+      * statement that cannot be checked here, as Lean does not run here or its kept result is
+      * stale, is not checked ([[notChecked]]). A result other than the expected one throws an
+      * `AssertionError` that says what came instead: the counterexample of a refutation, replayed,
+      * or the reason.
+      *
+      * Checks run one at a time: the verifier is not made for concurrent use, and its Lean server
+      * runs one check after another anyway. An [[UplcBlaster]] of the request writes its checks
+      * where these proofs keep them ([[keepingChecks]]).
+      *
+      * @return
+      *   the result: a proof where the request expects one, and a refutation, whose counterexample
+      *   was replayed on the Scalus CEK, where it expects that
+      */
+    def check(request: VerificationRequest): VerificationResult = {
+        val name = request.statement.name
+        val tactic = request.tactic match
+            case blaster: UplcBlaster => keepingChecks(blaster, name)
+            case other                => other
+        val result = verifier.synchronized { verifier.verify(request.statement, tactic) }
+        (request.expected, result) match
+            case (_, VerificationResult.Inconclusive(reason))
+                if reason.startsWith(KeptResults.stale) =>
+                notChecked(s"$name: $reason")
+            case (ExpectedOutcome.Valid, VerificationResult.Proven(proof)) =>
+                proof.artifact match
+                    case artifact: UplcBlaster.Artifact => checkedProof(artifact)
+                    case _                              =>
+            case (ExpectedOutcome.Falsified, VerificationResult.Refuted(_)) =>
+            case (ExpectedOutcome.Valid, other) =>
+                failed(s"$name: expected a proof, got ${LeanProofs.describe(other)}")
+            case (ExpectedOutcome.Falsified, other) =>
+                failed(s"$name: expected a refutation, got ${LeanProofs.describe(other)}")
+        result
+    }
+
+    /** [[check]] with [[UplcBlaster]] at a budget it finds ([[Budget.Auto]]), expecting what
+      * `statement` was declared to be. The budget is a result, not a part of the statement: where
+      * results are kept, it is kept with the proof, and a later search starts at it, so a statement
+      * that has not changed is decided in one check, or taken as it was kept.
+      */
+    def check(statement: Statement): VerificationResult = {
+        check(statement, Budget.Auto)
+    }
+
+    /** [[check]] with [[UplcBlaster]] at a budget of `budget` steps of Lean's machine, expecting
+      * what `statement` was declared to be.
+      */
+    def check(statement: Statement, budget: Int): VerificationResult = {
+        check(statement, Budget.LeanSteps(budget))
+    }
+
+    /** [[check]] with [[UplcBlaster]] at `budget`, which the tactic may find ([[Budget.Auto]]),
+      * expecting what `statement` was declared to be.
+      */
+    def check(statement: Statement, budget: Budget): VerificationResult = {
+        check(VerificationRequest(statement, UplcBlaster(budget, lean)))
+    }
+
+    /** `tactic`, writing the checks of `statement` into a directory named after it: under the
+      * directory the tactic was told, or else the one of these proofs, or else the one of
+      * `SCALUS_LEAN_KEEP_CHECKS`. The directory holds the checks of the statement's last run
+      * ([[UplcBlaster.withLastChecksKeptIn]]).
+      */
+    private def keepingChecks(tactic: UplcBlaster, statement: String): UplcBlaster = {
+        tactic.checksKeptIn.orElse(checksKeptIn).orElse(tactic.keptChecks) match
+            case None => tactic
+            case Some(base) =>
+                tactic.withLastChecksKeptIn(base.resolve(LeanProofs.directoryName(statement)))
+    }
+
+    /** Fails where a proof by [[UplcBlaster]] is not one by its own account: Blaster did not say
+      * valid, or Lean reported an error in deciding a closed statement. A proof that was kept has
+      * nothing of Lean's from this run.
+      */
+    private def checkedProof(artifact: UplcBlaster.Artifact): Unit = {
+        artifact.kind match
+            case ProofKind.Blaster =>
+                if !artifact.kept && !artifact.output.contains("✅ Valid") then
+                    failed(s"expected a valid proof, got ${artifact.output}")
+            case ProofKind.LeanNative =>
+                if artifact.output.contains("error") then
+                    failed(s"expected a proof without an error, got ${artifact.output}")
+            case other => failed(s"unexpected proof kind $other")
+    }
+
     /** Declares `prop` in a fresh verifier and runs [[UplcBlaster]] on it, through Lean or, where
       * the results are kept, from what is kept. A statement that is stale, with nothing kept for it
       * as it is now and no Lean to ask, is not checked ([[notChecked]]).
@@ -199,7 +307,7 @@ final class LeanProofs private (
         val verifier = results.fold(Verifier.empty)(kept => Verifier.keeping(kept.under(context)))
         functions.foreach(verifier.addFunction)
         val statement = verifier.statement(s"#$count", prop)
-        verifier.verify(statement, UplcBlaster(budget, lean)) match
+        verifier.verify(statement, tactic(UplcBlaster(budget, lean))) match
             case VerificationResult.Inconclusive(reason) if reason.startsWith(KeptResults.stale) =>
                 notChecked(reason)
             case result => (verifier, statement, result)
@@ -230,19 +338,11 @@ final class LeanProofs private (
         check(prop, budget, functions) match
             case (verifier, statement, VerificationResult.Proven(proof)) =>
                 val artifact = proof.artifact.asInstanceOf[UplcBlaster.Artifact]
-                artifact.kind match
-                    // A proof that was kept has nothing of Lean's from this run.
-                    case ProofKind.Blaster =>
-                        if !artifact.kept && !artifact.output.contains("✅ Valid") then
-                            failed(s"expected a valid proof, got ${artifact.output}")
-                    case ProofKind.LeanNative =>
-                        if artifact.output.contains("error") then
-                            failed(s"expected a proof without an error, got ${artifact.output}")
-                    case other => failed(s"unexpected proof kind $other")
+                checkedProof(artifact)
                 if !verifier.theorems.exists(_.statement eq statement) then
                     failed("the statement was proved, and is not among the verifier's theorems")
                 artifact
-            case (_, _, other) => failed(s"expected a proof, got $other")
+            case (_, _, other) => failed(s"expected a proof, got ${LeanProofs.describe(other)}")
 
     /** The replayed counterexample of a statement that is refuted at a budget of `budget` steps.
       */
@@ -264,7 +364,8 @@ final class LeanProofs private (
                 if verifier.theorems.nonEmpty then
                     failed("the statement was refuted, and the verifier has a theorem")
                 proof.artifact.asInstanceOf[UplcBlaster.Artifact].counterexample.toMap
-            case (_, _, other) => failed(s"expected a refutation, got $other")
+            case (_, _, other) =>
+                failed(s"expected a refutation, got ${LeanProofs.describe(other)}")
 
     /** Why [[UplcBlaster]] is inconclusive about `prop`, with its check given up after `timeout`.
       */
@@ -276,6 +377,12 @@ final class LeanProofs private (
     ): String =
         inconclusive(prop, UplcBlaster(Budget.LeanSteps(budget), lean, timeout), functions*)
 
+    /** `tactic`, writing its checks where it was told, or else where these proofs keep them. */
+    private def tactic(tactic: UplcBlaster): UplcBlaster = {
+        if tactic.checksKeptIn.isDefined then tactic
+        else checksKeptIn.fold(tactic)(tactic.withChecksKeptIn)
+    }
+
     /** Why `tactic` is inconclusive about `prop`. */
     def inconclusive(
         prop: Prop,
@@ -285,7 +392,7 @@ final class LeanProofs private (
         val verifier = Verifier.empty
         functions.foreach(verifier.addFunction)
         val statement = verifier.statement(prop)
-        verifier.verify(statement, tactic) match
+        verifier.verify(statement, this.tactic(tactic)) match
             case VerificationResult.Inconclusive(reason) =>
                 if verifier.theorems.nonEmpty then
                     failed("the statement is inconclusive, and the verifier has a theorem")
@@ -328,9 +435,61 @@ object LeanProofs {
         notChecked: String => Nothing,
         running: () => String
     ): LeanProofs =
-        new LeanProofs(workspace, kept, notChecked, running)
+        apply(workspace, kept, notChecked, running, None)
+
+    /** Proofs as above, whose tactics also write every check they run into `checksKeptIn`, each in
+      * a directory of its own ([[UplcBlaster.withChecksKeptIn]]). With `None` they follow the
+      * environment variable `SCALUS_LEAN_KEEP_CHECKS`. A statement whose kept result is taken runs
+      * no check, and writes none.
+      */
+    def apply(
+        workspace: Path,
+        kept: Option[Path],
+        notChecked: String => Nothing,
+        running: () => String,
+        checksKeptIn: Option[Path]
+    ): LeanProofs =
+        new LeanProofs(workspace, kept, notChecked, running, checksKeptIn)
 
     private val cleaner = Cleaner.create()
+
+    /** The name of the directory for the checks of the statement `name`: the name itself where it
+      * is a plain one, of lower-case letters, digits and `._-`. Otherwise each other character is
+      * replaced, and a hash of the name is added, so that two names that differ only there, or only
+      * in case, as a file system may not tell them apart, do not share a directory.
+      */
+    private[uplcblaster] def directoryName(name: String): String = {
+        def plain(c: Char): Boolean =
+            (c.isLetterOrDigit && !c.isUpper) || c == '.' || c == '_' || c == '-'
+        if name.forall(plain) && !name.forall(_ == '.') then name
+        else
+            val safe = name.map(c => if plain(c) then c else '_')
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            val hash = digest
+                .digest(name.getBytes(StandardCharsets.UTF_8))
+                .take(4)
+                .map(b => f"${b & 0xff}%02x")
+                .mkString
+            s"$safe-$hash"
+    }
+
+    /** A result in a few words, for a failure: a refutation with its replayed counterexample, or
+      * the reason there is no result.
+      */
+    private[uplcblaster] def describe(result: VerificationResult): String = {
+        result match
+            case VerificationResult.Proven(_) => "a proof"
+            case VerificationResult.Refuted(proof) =>
+                proof.artifact match
+                    case artifact: UplcBlaster.Artifact if artifact.counterexample.nonEmpty =>
+                        artifact.counterexample
+                            .map((variable, value) => s"$variable = $value")
+                            .mkString("a refutation, replayed with ", ", ", "")
+                    case _ => "a refutation"
+            case VerificationResult.Inconclusive(reason) => s"no result: $reason"
+            case VerificationResult.Failed(reason)       => s"a failure: $reason"
+            case VerificationResult.Unsupported(report)  => s"an unsupported statement: $report"
+    }
 
     /** What ends the servers of proofs that are no longer used. It does not hold the proofs. */
     private final class Closing(servers: LeanServers) extends Runnable {

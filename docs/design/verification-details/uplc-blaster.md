@@ -282,6 +282,8 @@ messages, each after a `Content-Length` header, on the server's standard input a
   of each `#prep_uplc_run`. (`lake env lean` runs it as well, with Blaster interpreted and not
   loaded as the native library it is built as, and several times slower.) With the environment variable `SCALUS_LEAN_KEEP_CHECKS` set to
   a directory, the tactic writes every check it runs there, each in a directory of its own.
+  `tactic.withChecksKeptIn(directory)` says the same in code, in place of the variable, and so do
+  `LeanProofs` and a `LeanProofsSuite`'s `keptChecksDirectory`.
 
 The verdict is read from the messages Lean reports, which are Blaster's:
 

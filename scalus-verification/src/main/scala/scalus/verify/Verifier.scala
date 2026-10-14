@@ -3,8 +3,15 @@ package scalus.verify
 import scalus.compiler.sir.SIR
 import scalus.compiler.sir.transform.EraseSpecifications
 
-/** A named proposition declared in a [[Verifier]], and where it comes from. */
-final class Statement private[verify] (val name: String, val prop: Prop, val origin: Origin) {
+/** A named proposition declared in a [[Verifier]], where it comes from, and what checking it is
+  * expected to give: a proof, or for a negative control ([[Verifier.refute]]) a refutation.
+  */
+final class Statement private[verify] (
+    val name: String,
+    val prop: Prop,
+    val origin: Origin,
+    val expected: ExpectedOutcome
+) {
     override def toString: String = s"Statement($name)"
 }
 
@@ -202,6 +209,14 @@ final class Verifier private (results: Option[KeptResults]) {
     }
 
     def statement(name: String, prop: Prop): Statement = declare(name, prop, Origin.Explicit)
+
+    /** Declares a negative control: a statement expected to be refuted, with a counterexample
+      * replayed in the semantics of the code (docs/design/verification-overview.md §5.2). A control
+      * shows that the statements beside it can fail, and so are not proved for a reason that has
+      * nothing to do with the code. A refuted statement is no theorem.
+      */
+    def refute(name: String, prop: Prop): Statement =
+        declare(name, prop, Origin.Explicit, ExpectedOutcome.Falsified)
 
     /** Declares the contract of a function, built by [[Props.contract]] or [[Props.totalContract]].
       * It is proved like any statement, and [[contracts]] finds it by its function.
@@ -423,11 +438,16 @@ final class Verifier private (results: Option[KeptResults]) {
         CallObligations(statements.result(), unsupported.result())
     }
 
-    private def declare(name: String, prop: Prop, origin: Origin): Statement = {
+    private def declare(
+        name: String,
+        prop: Prop,
+        origin: Origin,
+        expected: ExpectedOutcome = ExpectedOutcome.Valid
+    ): Statement = {
         require(name.trim.nonEmpty, "a statement name must be non-empty")
         require(!declarations.contains(name), s"a statement named $name is already declared")
         require(!proven.contains(name), s"a theorem named $name is already available")
-        val declared = new Statement(name, prop, origin)
+        val declared = new Statement(name, prop, origin, expected)
         declarations = declarations.updated(name, declared)
         declared
     }

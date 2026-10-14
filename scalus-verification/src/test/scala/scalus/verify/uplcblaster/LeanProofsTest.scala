@@ -146,4 +146,20 @@ class LeanProofsTest extends AnyFunSuite {
             close()
             Directories.remove(directory)
     }
+
+    test("the checks of a statement are in a directory named after it, and only after it") {
+        // A plain name is the directory's name.
+        assert(
+          LeanProofs.directoryName("payment_splitter.naive.only_a_payee_submits") ==
+              "payment_splitter.naive.only_a_payee_submits"
+        )
+        // Another is made one, with a hash of the name, so that names do not meet in one.
+        val spaced = LeanProofs.directoryName("a b")
+        val underscored = LeanProofs.directoryName("a_b")
+        assert(spaced.startsWith("a_b-") && spaced != underscored)
+        // A file system may not tell case apart: names that differ in it differ in their hash.
+        assert(LeanProofs.directoryName("Split").toLowerCase != LeanProofs.directoryName("split"))
+        assert(!LeanProofs.directoryName("x/../y").contains("/"))
+        assert(LeanProofs.directoryName("..") != "..")
+    }
 }

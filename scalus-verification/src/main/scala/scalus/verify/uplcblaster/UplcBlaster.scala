@@ -62,7 +62,9 @@ final class UplcBlaster private (
     val servers: LeanServerProvider,
     val timeout: Option[FiniteDuration],
     val attemptTimeout: Option[FiniteDuration],
-    val maxHeartbeats: Int
+    val maxHeartbeats: Int,
+    val checksKeptIn: Option[Path],
+    lastChecksOnly: Boolean
 ) extends Tactic {
     override type Prepared = UplcBlaster.Lowered
 
@@ -82,14 +84,22 @@ final class UplcBlaster private (
       * ends, or until the tactic's time limit.
       */
     def withMaxHeartbeats(limit: Int): UplcBlaster =
-        new UplcBlaster(budget, servers, timeout, attemptTimeout, limit)
+        new UplcBlaster(
+          budget,
+          servers,
+          timeout,
+          attemptTimeout,
+          limit,
+          checksKeptIn,
+          lastChecksOnly
+        )
 
     /** The same tactic with no time limit, of the whole run or of one attempt. A check then runs
       * until it ends or Lean gives it up at its limit of work, and one that does neither until its
       * thread is interrupted or the server closed.
       */
     def withoutTimeout: UplcBlaster =
-        new UplcBlaster(budget, servers, None, None, maxHeartbeats)
+        new UplcBlaster(budget, servers, None, None, maxHeartbeats, checksKeptIn, lastChecksOnly)
 
     /** The same tactic with a time limit for one attempt, beside that of the whole run. A tactic
       * that finds its budget ([[Budget.Auto]]) makes one check after the other, and its time limit
@@ -99,7 +109,52 @@ final class UplcBlaster private (
       * which gets the shorter of the two.
       */
     def withAttemptTimeout(limit: FiniteDuration): UplcBlaster =
-        new UplcBlaster(budget, servers, timeout, Some(limit), maxHeartbeats)
+        new UplcBlaster(
+          budget,
+          servers,
+          timeout,
+          Some(limit),
+          maxHeartbeats,
+          checksKeptIn,
+          lastChecksOnly
+        )
+
+    /** The same tactic, writing every check it runs into `directory` as well, each in a directory
+      * of its own: the check's `Check.lean` and the files of its leaves, to read or to run by hand
+      * with `lake lean Check.lean` in the workspace. It is set here in place of the environment
+      * variable `SCALUS_LEAN_KEEP_CHECKS`, which a tactic otherwise follows.
+      */
+    def withChecksKeptIn(directory: Path): UplcBlaster =
+        new UplcBlaster(
+          budget,
+          servers,
+          timeout,
+          attemptTimeout,
+          maxHeartbeats,
+          Some(directory),
+          false
+        )
+
+    /** [[withChecksKeptIn]], keeping only the checks of the tactic's last run in `directory`: a run
+      * removes what an earlier one wrote there before it writes its own. A run is what one
+      * statement asks of the tactic, its search for a budget included; a statement whose kept
+      * result is taken runs nothing, and leaves the directory as it is.
+      */
+    def withLastChecksKeptIn(directory: Path): UplcBlaster =
+        new UplcBlaster(
+          budget,
+          servers,
+          timeout,
+          attemptTimeout,
+          maxHeartbeats,
+          Some(directory),
+          true
+        )
+
+    /** Where the tactic writes the checks it runs: the directory it was told
+      * ([[withChecksKeptIn]]), or the one the environment variable `SCALUS_LEAN_KEEP_CHECKS` names.
+      */
+    def keptChecks: Option[Path] = checksKeptIn.orElse(UplcBlaster.keptChecksFromEnvironment)
 
     override val name: String = "uplc-blaster"
 
@@ -118,7 +173,8 @@ final class UplcBlaster private (
     /** Runs the check, or the search for its budget, which starts at `first` where that is given.
       */
     private def run(prepared: Prepared, first: Option[Int]): ExecutionResult = {
-        val kept = UplcBlaster.keptChecks
+        val kept = keptChecks
+        if lastChecksOnly then kept.foreach(Directories.remove)
         budget match
             case Budget.LeanSteps(steps) =>
                 servers.server() match
@@ -266,12 +322,21 @@ object UplcBlaster {
       * that has this module's Lean library. Whoever made the provider ends its servers. A check is
       * given up after [[defaultTimeout]].
       */
-    def apply(budget: Budget, servers: LeanServerProvider): UplcBlaster =
-        new UplcBlaster(budget, servers, Some(defaultTimeout), None, defaultMaxHeartbeats)
+    def apply(budget: Budget, servers: LeanServerProvider): UplcBlaster = {
+        new UplcBlaster(
+          budget,
+          servers,
+          Some(defaultTimeout),
+          None,
+          defaultMaxHeartbeats,
+          None,
+          false
+        )
+    }
 
-    /** A tactic that gives a check up after `timeout`, in place of [[defaultTimeout]]. */
-    def apply(budget: Budget, servers: LeanServerProvider, timeout: FiniteDuration): UplcBlaster =
-        new UplcBlaster(budget, servers, Some(timeout), None, defaultMaxHeartbeats)
+    def apply(budget: Budget, servers: LeanServerProvider, timeout: FiniteDuration): UplcBlaster = {
+        new UplcBlaster(budget, servers, Some(timeout), None, defaultMaxHeartbeats, None, false)
+    }
 
     /** The time a check gets unless told otherwise: ten minutes by the clock, from the moment the
       * tactic runs it. A check that takes longer is given up, and the tactic is inconclusive.
@@ -297,10 +362,11 @@ object UplcBlaster {
       */
     val defaultMaxHeartbeats: Int = 2 * leanMaxHeartbeats
 
-    /** Where the checks that run are also written, for looking into one: the directory the
-      * environment variable `SCALUS_LEAN_KEEP_CHECKS` names, where it is set.
+    /** Where the checks that run are also written, for looking into one, where code says nothing
+      * ([[UplcBlaster.withChecksKeptIn]]): the directory the environment variable
+      * `SCALUS_LEAN_KEEP_CHECKS` names, where it is set.
       */
-    private def keptChecks: Option[Path] =
+    private[uplcblaster] def keptChecksFromEnvironment: Option[Path] =
         sys.env.get("SCALUS_LEAN_KEEP_CHECKS").filter(_.nonEmpty).map(Path.of(_))
 
     /** Lowers a statement in the supported fragment, or explains why it is outside it.
