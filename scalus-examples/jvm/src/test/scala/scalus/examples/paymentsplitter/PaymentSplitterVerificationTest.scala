@@ -15,7 +15,7 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{toData, FromData, ToData}
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.{Budget, LeanProofs, LeanProofsSuite}
+import scalus.verify.uplcblaster.{LeanProofs, LeanProofsSuite}
 
 import java.nio.file.Path
 
@@ -94,21 +94,17 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
           .resolve("PaymentSplitterVerificationTest.proofs.json")
     )
 
-    /** The naive validator, applied to its payees and then to a script context. */
-    private val naive = FunctionDef.named(
-      "naiveSplitter",
-      (payees: Data, context: Data) => NaivePaymentSplitterValidator.validate(payees)(context)
+    /** The checks of each statement's last run are also written into the suite's Lean workspace, in
+      * `KeptChecks/PaymentSplitterVerificationTest/<statement>/`: the Lean each is given,
+      * `Check.lean`, and its programs. There an editor opens them with Lean's tooling, which finds
+      * the library they import. The directory is git-ignored, and `lake build` does not build it.
+      */
+    override protected def keptChecksDirectory: Option[Path] = Some(
+      leanWorkspace.resolve("KeptChecks").resolve("PaymentSplitterVerificationTest")
     )
 
-    /** The optimized validator, applied to its payees and then to a script context. */
-    private val optimized = FunctionDef.named(
-      "optimizedSplitter",
-      (payees: Data, context: Data) => OptimizedPaymentSplitterValidator.validate(payees)(context)
-    )
-
-    /** Proves `prop` at a budget the tactic finds, and reports it. */
-    private def measured(prop: Prop, functions: FunctionDef[?, ?]*): Unit =
-        info(s"budget ${provenAt(prop, functions*)}")
+    /** The statements, declared in the suite's verifier. */
+    private val p = PaymentSplitterProofs(proofs.verifier)
 
     test("the contexts written field by field are the ledger's encoding") {
         // The statements write the transaction out, so that what the validators do not read can
@@ -178,6 +174,13 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
                 ScriptInfo.SpendingScript(contractRef, prelude.Option.Some(BigInt(1).toData))
               ).toData
         )
+        // The value of a contract output with a token, written out for the solver, is the sum the
+        // ledger's types make.
+        val token = hex"44444444444444444444444444444444444444444444444444444444"
+        assert(
+          lovelaceAnd(BigInt(7), token, hex"cafe", BigInt(3)) ==
+              Value.lovelace(BigInt(7)) + Value(token, hex"cafe", BigInt(3))
+        )
         val redeemer = SplitVerificationRedeemer(PubKeyHash(first), 100, 50, 2).toData
         assert(
           rewarding(script, redeemer, inputs.toData, outputs.toData, unread) == ScriptContext(
@@ -192,196 +195,46 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     test("only a payee submits a payout") {
         // Whatever the transaction pays: the input of a key that is not a payee is rejected.
-        measured(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, ByteString]((a, b, payer) =>
-                  forAll[BigInt, BigInt, BigInt]((locked, funds, paid) =>
-                      !Prop(payer == a || payer == b) ==> fails(
-                        naive,
-                        (
-                          payees(a, b),
-                          payout(locked, payer, funds, both(toKey(a, paid), toKey(b, paid)), rest)
-                        )
-                      )
-                  )
-              )
-          ),
-          naive
-        )
+        check(p.onlyAPayeeSubmits)
     }
 
     test("the payees other than the submitter are paid exactly the split") {
         // The payee who submits is paid the rest, so the other one is paid half the contract's
         // lovelace, rounded down: an accepted payout pays it no more and no less.
-        measured(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
-                  forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
-                      !Prop(2 * toB <= locked && locked < 2 * toB + 2) ==> fails(
-                        naive,
-                        (
-                          payees(a, b),
-                          payout(locked, a, funds, both(toKey(a, toA), toKey(b, toB)), rest)
-                        )
-                      )
-                  )
-              )
-          ),
-          naive
-        )
+        check(p.otherPayeeIsPaidExactlyTheSplit)
     }
 
     test("nobody but the payees is paid") {
         // A key that is not a payee, and a script, whatever the amounts.
-        measured(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, ByteString]((a, b, other) =>
-                  forAll[BigInt, BigInt, BigInt]((locked, funds, paid) =>
-                      !Prop(other == a || other == b) ==> fails(
-                        naive,
-                        (
-                          payees(a, b),
-                          payout(locked, a, funds, both(toKey(a, paid), toKey(other, paid)), rest)
-                        )
-                      )
-                  )
-              )
-          ),
-          naive
-        )
-        measured(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, ByteString]((a, b, other) =>
-                  forAll[BigInt, BigInt, BigInt]((locked, funds, paid) =>
-                      fails(
-                        naive,
-                        (
-                          payees(a, b),
-                          payout(
-                            locked,
-                            a,
-                            funds,
-                            both(toKey(a, paid), toScript(other, Value.lovelace(paid))),
-                            rest
-                          )
-                        )
-                      )
-                  )
-              )
-          ),
-          naive
-        )
+        check(p.noOtherKeyIsPaid)
+        check(p.noScriptIsPaid)
     }
 
     test("every payee is paid") {
         // A payout that pays the submitter alone leaves the other payee out.
-        measured(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
-                  forAll[BigInt, BigInt]((funds, paid) =>
-                      fails(
-                        naive,
-                        (payees(a, b), payout(locked, a, funds, only(toKey(a, paid)), rest))
-                      )
-                  )
-              )
-          ),
-          naive
-        )
+        check(p.everyPayeeIsPaid)
     }
 
     test("the payees other than the submitter are paid exactly the split, negative control") {
         // The split is rounded down, so an odd amount locked is not paid out in two exact halves.
-        refuted(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
-                  forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
-                      !Prop(2 * toB == locked) ==> fails(
-                        naive,
-                        (
-                          payees(a, b),
-                          payout(locked, a, funds, both(toKey(a, toA), toKey(b, toB)), rest)
-                        )
-                      )
-                  )
-              )
-          ),
-          Budget.Auto,
-          naive
-        )
+        check(p.splitIsExactlyHalf)
     }
 
     test("only ADA is split") {
         // A contract output that holds a token besides its lovelace is rejected: the payout
-        // reconciles lovelace alone, so its submitter would keep the token.
-        measured(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
-                  forAll[ByteString, ByteString, BigInt]((policy, name, amount) =>
-                      forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
-                          (!Prop(policy == ByteString.empty && name == ByteString.empty) && !Prop(
-                            amount == BigInt(0)
-                          )) ==>
-                              fails(
-                                naive,
-                                (
-                                  payees(a, b),
-                                  payoutOf(
-                                    Value.lovelace(locked) + Value(policy, name, amount),
-                                    a,
-                                    funds,
-                                    both(toKey(a, toA), toKey(b, toB)),
-                                    rest
-                                  )
-                                )
-                              )
-                      )
-                  )
-              )
-          ),
-          naive
-        )
+        // reconciles lovelace alone, so its submitter would keep the token. The token is under a
+        // policy that is not Ada's, the empty one: a ledger `Value` never holds one there. That
+        // lets the value be written as one sorted map, which the solver follows in far fewer
+        // steps than the sum `Value.lovelace(locked) + Value(policy, name, amount)` it equals.
+        check(p.onlyAdaIsSplit)
     }
 
     test("an honest payout is accepted") {
         // The funds are not stuck: whatever else the transaction has, a payout by one payee that
         // pays the other the split is accepted, for any two different payees and any amounts.
-        measured(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
-                  forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
-                      (!Prop(a == b) && Prop(
-                        2 * toB <= locked && locked < 2 * toB + 2
-                      )) ==> succeeds(
-                        naive,
-                        (
-                          payees(a, b),
-                          payout(locked, a, funds, both(toKey(a, toA), toKey(b, toB)), rest)
-                        )
-                      )
-                  )
-              )
-          ),
-          naive
-        )
+        check(p.honestPayoutIsAccepted)
         // negative control: not with any amount to the other payee
-        refuted(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
-                  forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
-                      !Prop(a == b) ==> succeeds(
-                        naive,
-                        (
-                          payees(a, b),
-                          payout(locked, a, funds, both(toKey(a, toA), toKey(b, toB)), rest)
-                        )
-                      )
-                  )
-              )
-          ),
-          Budget.Auto,
-          naive
-        )
+        check(p.everyPayoutIsAccepted)
     }
 
     // The optimized validator
@@ -390,221 +243,428 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // The spending endpoint checks nothing of the payout itself: the withdrawal makes the
         // ledger run the stake validator, which does. Without one from the contract's script, a
         // spend is rejected, whatever the parameter and the outputs are.
-        measured(
-          forAll[Unread](rest =>
-              forAll[Data, Data, ByteString]((parameter, outputs, payer) =>
-                  forAll[BigInt](locked =>
-                      fails(
-                        optimized,
-                        (
-                          parameter,
-                          spendingAt(
-                            BigInt(1),
-                            payer,
-                            BigInt(0),
-                            locked,
-                            outputs,
-                            noWithdrawals,
-                            rest
-                          )
-                        )
-                      )
-                  )
-              )
-          ),
-          optimized
-        )
-        measured(
-          forAll[Unread](rest =>
-              forAll[Data, Data, ByteString]((parameter, outputs, payer) =>
-                  forAll[ByteString, BigInt, BigInt]((other, amount, locked) =>
-                      !Prop(other == script) ==> fails(
-                        optimized,
-                        (
-                          parameter,
-                          spendingAt(
-                            BigInt(1),
-                            payer,
-                            BigInt(0),
-                            locked,
-                            outputs,
-                            withdrawalOf(other, amount),
-                            rest
-                          )
-                        )
-                      )
-                  )
-              )
-          ),
-          optimized
-        )
+        check(p.spendNeedsAWithdrawal)
+        check(p.spendNeedsItsOwnWithdrawal)
         // With it, and the redeemer naming the contract's output, the spend is accepted.
-        measured(
-          forAll[Unread](rest =>
-              forAll[Data, Data, ByteString]((parameter, outputs, payer) =>
-                  forAll[BigInt, BigInt]((amount, locked) =>
-                      succeeds(
-                        optimized,
-                        (
-                          parameter,
-                          spendingAt(
-                            BigInt(1),
-                            payer,
-                            BigInt(0),
-                            locked,
-                            outputs,
-                            withdrawalOf(script, amount),
-                            rest
-                          )
-                        )
-                      )
-                  )
-              )
-          ),
-          optimized
-        )
+        check(p.spendWithItsWithdrawalIsAccepted)
     }
 
     test("the redeemer of a spend names the contract's output") {
-        measured(
-          forAll[Unread](rest =>
-              forAll[Data, Data, ByteString]((parameter, outputs, payer) =>
-                  forAll[BigInt, BigInt, BigInt]((index, amount, locked) =>
-                      !Prop(index == BigInt(1)) ==> fails(
-                        optimized,
-                        (
-                          parameter,
-                          spendingAt(
-                            index,
-                            payer,
-                            BigInt(0),
-                            locked,
-                            outputs,
-                            withdrawalOf(script, amount),
-                            rest
-                          )
-                        )
-                      )
-                  )
-              )
-          ),
-          optimized
-        )
+        check(p.spendRedeemerNamesItsInput)
     }
 
     test("the stake validator pays the payees other than the submitter exactly the split") {
         // Whatever the redeemer claims: an accepted payout pays the other payee the split, which
         // is half the contract's lovelace, rounded down.
-        measured(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
-                  forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
-                      forAll[ByteString, BigInt, BigInt]((change, claimed, split) =>
-                          forAll[BigInt](n =>
-                              (!Prop(a == b) && !Prop(
-                                toB == split && 2 * split <= locked && locked < 2 * split + 2
-                              )) ==> fails(
-                                optimized,
-                                (
-                                  payees(a, b),
-                                  payoutReward(
-                                    SplitVerificationRedeemer(
-                                      PubKeyHash(change),
-                                      claimed,
-                                      split,
-                                      n
-                                    ).toData,
-                                    locked,
-                                    a,
-                                    funds,
-                                    both(toKey(a, toA), toKey(b, toB)),
-                                    rest
-                                  )
-                                )
-                              )
-                          )
-                      )
-                  )
-              )
-          ),
-          optimized
-        )
+        check(p.stakeValidatorPaysExactlyTheSplit)
     }
 
     test("the stake validator accepts an honest payout") {
-        measured(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
-                  forAll[BigInt, BigInt, BigInt]((funds, toA, split) =>
-                      (!Prop(a == b) && Prop(
-                        split <= toA && 2 * split <= locked && locked < 2 * split + 2
-                      )) ==> succeeds(
-                        optimized,
-                        (
-                          payees(a, b),
-                          payoutReward(
-                            SplitVerificationRedeemer(
-                              PubKeyHash(a),
-                              locked,
-                              split,
-                              BigInt(2)
-                            ).toData,
-                            locked,
-                            a,
-                            funds,
-                            both(toKey(a, toA), toKey(b, split)),
-                            rest
-                          )
-                        )
-                      )
-                  )
-              )
-          ),
-          optimized
-        )
+        check(p.stakeValidatorAcceptsAnHonestPayout)
     }
 
     test("the contract's stake credential is registered and deregistered, and not delegated") {
         // `RegStaking` is the certificate of tag 0 and `UnRegStaking` the one of tag 1: any other,
         // a delegation among them, is rejected, whatever the transaction is.
-        measured(
-          forAll[Data, Data, Data]((parameter, txInfo, redeemer) =>
-              forAll[Data, BigInt]((cert, index) =>
-                  !Prop(
-                    unConstrData(cert).fst == BigInt(0) || unConstrData(cert).fst == BigInt(1)
-                  ) ==>
-                      fails(
-                        optimized,
-                        (parameter, scriptContext(txInfo, redeemer, certifying(index, cert)))
-                      )
-              )
-          ),
-          optimized
-        )
-        measured(
-          forAll[Data, Data, Data]((parameter, txInfo, redeemer) =>
-              forAll[BigInt](index =>
-                  succeeds(
-                    optimized,
+        check(p.stakeIsNeverDelegated)
+        check(p.stakeRegistrationIsAccepted)
+    }
+}
+
+/** The statements about [[NaivePaymentSplitterValidator]] and
+  * [[OptimizedPaymentSplitterValidator]], by name, declared in `verifier`, and the validators they
+  * are about. A statement declared with `refute` is a negative control: it is expected to be
+  * refuted. [[PaymentSplitterVerificationTest]] says why each holds, and checks them.
+  */
+final class PaymentSplitterProofs(val verifier: Verifier) {
+    import PaymentSplitterVerificationTest.*
+
+    /** The naive validator, applied to its payees and then to a script context. */
+    val naive: FunctionDef[(Data, Data), Unit] = FunctionDef.named(
+      "naiveSplitter",
+      (payees: Data, context: Data) => NaivePaymentSplitterValidator.validate(payees)(context)
+    )
+
+    /** The optimized validator, applied to its payees and then to a script context. */
+    val optimized: FunctionDef[(Data, Data), Unit] = FunctionDef.named(
+      "optimizedSplitter",
+      (payees: Data, context: Data) => OptimizedPaymentSplitterValidator.validate(payees)(context)
+    )
+
+    verifier.addFunction(naive)
+    verifier.addFunction(optimized)
+
+    val onlyAPayeeSubmits: Statement = verifier.statement(
+      "payment_splitter.naive.only_a_payee_submits",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, ByteString]((a, b, payer) =>
+              forAll[BigInt, BigInt, BigInt]((locked, funds, paid) =>
+                  !Prop(payer == a || payer == b) ==> fails(
+                    naive,
                     (
-                      parameter,
-                      scriptContext(
-                        txInfo,
-                        redeemer,
-                        certifying(
-                          index,
-                          TxCert
-                              .RegStaking(Credential.ScriptCredential(script), prelude.Option.None)
-                              .toData
-                        )
+                      payees(a, b),
+                      payout(locked, payer, funds, both(toKey(a, paid), toKey(b, paid)), rest)
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    val otherPayeeIsPaidExactlyTheSplit: Statement = verifier.statement(
+      "payment_splitter.naive.other_payee_is_paid_exactly_the_split",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
+              forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
+                  !Prop(2 * toB <= locked && locked < 2 * toB + 2) ==> fails(
+                    naive,
+                    (
+                      payees(a, b),
+                      payout(locked, a, funds, both(toKey(a, toA), toKey(b, toB)), rest)
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    val noOtherKeyIsPaid: Statement = verifier.statement(
+      "payment_splitter.naive.no_other_key_is_paid",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, ByteString]((a, b, other) =>
+              forAll[BigInt, BigInt, BigInt]((locked, funds, paid) =>
+                  !Prop(other == a || other == b) ==> fails(
+                    naive,
+                    (
+                      payees(a, b),
+                      payout(locked, a, funds, both(toKey(a, paid), toKey(other, paid)), rest)
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    val noScriptIsPaid: Statement = verifier.statement(
+      "payment_splitter.naive.no_script_is_paid",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, ByteString]((a, b, other) =>
+              forAll[BigInt, BigInt, BigInt]((locked, funds, paid) =>
+                  fails(
+                    naive,
+                    (
+                      payees(a, b),
+                      payout(
+                        locked,
+                        a,
+                        funds,
+                        both(toKey(a, paid), toScript(other, Value.lovelace(paid))),
+                        rest
                       )
                     )
                   )
               )
-          ),
-          optimized
-        )
-    }
+          )
+      )
+    )
+
+    val everyPayeeIsPaid: Statement = verifier.statement(
+      "payment_splitter.naive.every_payee_is_paid",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
+              forAll[BigInt, BigInt]((funds, paid) =>
+                  fails(
+                    naive,
+                    (payees(a, b), payout(locked, a, funds, only(toKey(a, paid)), rest))
+                  )
+              )
+          )
+      )
+    )
+
+    val splitIsExactlyHalf: Statement = verifier.refute(
+      "payment_splitter.naive.split_is_exactly_half",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
+              forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
+                  !Prop(2 * toB == locked) ==> fails(
+                    naive,
+                    (
+                      payees(a, b),
+                      payout(locked, a, funds, both(toKey(a, toA), toKey(b, toB)), rest)
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    val onlyAdaIsSplit: Statement = verifier.statement(
+      "payment_splitter.naive.only_ada_is_split",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
+              forAll[ByteString, ByteString, BigInt]((policy, name, amount) =>
+                  forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
+                      (!Prop(policy == ByteString.empty) && !Prop(amount == BigInt(0))) ==>
+                          fails(
+                            naive,
+                            (
+                              payees(a, b),
+                              payoutOf(
+                                lovelaceAnd(locked, policy, name, amount),
+                                a,
+                                funds,
+                                both(toKey(a, toA), toKey(b, toB)),
+                                rest
+                              )
+                            )
+                          )
+                  )
+              )
+          )
+      )
+    )
+
+    val honestPayoutIsAccepted: Statement = verifier.statement(
+      "payment_splitter.naive.honest_payout_is_accepted",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
+              forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
+                  (!Prop(a == b) && Prop(
+                    2 * toB <= locked && locked < 2 * toB + 2
+                  )) ==> succeeds(
+                    naive,
+                    (
+                      payees(a, b),
+                      payout(locked, a, funds, both(toKey(a, toA), toKey(b, toB)), rest)
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    val everyPayoutIsAccepted: Statement = verifier.refute(
+      "payment_splitter.naive.every_payout_is_accepted",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
+              forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
+                  !Prop(a == b) ==> succeeds(
+                    naive,
+                    (
+                      payees(a, b),
+                      payout(locked, a, funds, both(toKey(a, toA), toKey(b, toB)), rest)
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    val spendNeedsAWithdrawal: Statement = verifier.statement(
+      "payment_splitter.optimized.spend_needs_a_withdrawal",
+      forAll[Unread](rest =>
+          forAll[Data, Data, ByteString]((parameter, outputs, payer) =>
+              forAll[BigInt](locked =>
+                  fails(
+                    optimized,
+                    (
+                      parameter,
+                      spendingAt(
+                        BigInt(1),
+                        payer,
+                        BigInt(0),
+                        locked,
+                        outputs,
+                        noWithdrawals,
+                        rest
+                      )
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    val spendNeedsItsOwnWithdrawal: Statement = verifier.statement(
+      "payment_splitter.optimized.spend_needs_its_own_withdrawal",
+      forAll[Unread](rest =>
+          forAll[Data, Data, ByteString]((parameter, outputs, payer) =>
+              forAll[ByteString, BigInt, BigInt]((other, amount, locked) =>
+                  !Prop(other == script) ==> fails(
+                    optimized,
+                    (
+                      parameter,
+                      spendingAt(
+                        BigInt(1),
+                        payer,
+                        BigInt(0),
+                        locked,
+                        outputs,
+                        withdrawalOf(other, amount),
+                        rest
+                      )
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    val spendWithItsWithdrawalIsAccepted: Statement = verifier.statement(
+      "payment_splitter.optimized.spend_with_its_withdrawal_is_accepted",
+      forAll[Unread](rest =>
+          forAll[Data, Data, ByteString]((parameter, outputs, payer) =>
+              forAll[BigInt, BigInt]((amount, locked) =>
+                  succeeds(
+                    optimized,
+                    (
+                      parameter,
+                      spendingAt(
+                        BigInt(1),
+                        payer,
+                        BigInt(0),
+                        locked,
+                        outputs,
+                        withdrawalOf(script, amount),
+                        rest
+                      )
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    val spendRedeemerNamesItsInput: Statement = verifier.statement(
+      "payment_splitter.optimized.spend_redeemer_names_its_input",
+      forAll[Unread](rest =>
+          forAll[Data, Data, ByteString]((parameter, outputs, payer) =>
+              forAll[BigInt, BigInt, BigInt]((index, amount, locked) =>
+                  !Prop(index == BigInt(1)) ==> fails(
+                    optimized,
+                    (
+                      parameter,
+                      spendingAt(
+                        index,
+                        payer,
+                        BigInt(0),
+                        locked,
+                        outputs,
+                        withdrawalOf(script, amount),
+                        rest
+                      )
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    val stakeValidatorPaysExactlyTheSplit: Statement = verifier.statement(
+      "payment_splitter.optimized.stake_validator_pays_exactly_the_split",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
+              forAll[BigInt, BigInt, BigInt]((funds, toA, toB) =>
+                  forAll[ByteString, BigInt, BigInt]((change, claimed, split) =>
+                      forAll[BigInt](n =>
+                          (!Prop(a == b) && !Prop(
+                            toB == split && 2 * split <= locked && locked < 2 * split + 2
+                          )) ==> fails(
+                            optimized,
+                            (
+                              payees(a, b),
+                              payoutReward(
+                                SplitVerificationRedeemer(
+                                  PubKeyHash(change),
+                                  claimed,
+                                  split,
+                                  n
+                                ).toData,
+                                locked,
+                                a,
+                                funds,
+                                both(toKey(a, toA), toKey(b, toB)),
+                                rest
+                              )
+                            )
+                          )
+                      )
+                  )
+              )
+          )
+      )
+    )
+
+    val stakeValidatorAcceptsAnHonestPayout: Statement = verifier.statement(
+      "payment_splitter.optimized.stake_validator_accepts_an_honest_payout",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, BigInt]((a, b, locked) =>
+              forAll[BigInt, BigInt, BigInt]((funds, toA, split) =>
+                  (!Prop(a == b) && Prop(
+                    split <= toA && 2 * split <= locked && locked < 2 * split + 2
+                  )) ==> succeeds(
+                    optimized,
+                    (
+                      payees(a, b),
+                      payoutReward(
+                        SplitVerificationRedeemer(
+                          PubKeyHash(a),
+                          locked,
+                          split,
+                          BigInt(2)
+                        ).toData,
+                        locked,
+                        a,
+                        funds,
+                        both(toKey(a, toA), toKey(b, split)),
+                        rest
+                      )
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    val stakeIsNeverDelegated: Statement = verifier.statement(
+      "payment_splitter.optimized.stake_is_never_delegated",
+      forAll[Data, Data, Data]((parameter, txInfo, redeemer) =>
+          forAll[Data, BigInt]((cert, index) =>
+              !Prop(
+                unConstrData(cert).fst == BigInt(0) || unConstrData(cert).fst == BigInt(1)
+              ) ==>
+                  fails(
+                    optimized,
+                    (parameter, scriptContext(txInfo, redeemer, certifying(index, cert)))
+                  )
+          )
+      )
+    )
+
+    val stakeRegistrationIsAccepted: Statement = verifier.statement(
+      "payment_splitter.optimized.stake_registration_is_accepted",
+      forAll[Data, Data, Data]((parameter, txInfo, redeemer) =>
+          forAll[BigInt](index =>
+              succeeds(
+                optimized,
+                (
+                  parameter,
+                  scriptContext(
+                    txInfo,
+                    redeemer,
+                    certifying(
+                      index,
+                      TxCert
+                          .RegStaking(Credential.ScriptCredential(script), prelude.Option.None)
+                          .toData
+                    )
+                  )
+                )
+              )
+          )
+      )
+    )
 }
 
 /** The values the statements of [[PaymentSplitterVerificationTest]] are about. They are `inline`,
@@ -765,6 +825,28 @@ object PaymentSplitterVerificationTest {
               .toData,
           outputs,
           unread
+        )
+
+    /** `locked` lovelace and `amount` of the token `name` of the policy `policy`, as the ledger
+      * encodes a `Value`: written out as one map, not added, which the solver follows more cheaply.
+      * `policy` must not be Ada's, the empty one, for the map to be sorted. Where `locked` is not
+      * zero it is `Value.lovelace(locked) + Value(policy, name, amount)`; at zero it keeps an entry
+      * of zero lovelace, which no output of the ledger, holding its minimum of ADA, has.
+      */
+    inline def lovelaceAnd(
+        inline locked: BigInt,
+        inline policy: ByteString,
+        inline name: ByteString,
+        inline amount: BigInt
+    ): Value =
+        Value.unsafeFromList(
+          prelude.List.Cons(
+            (ByteString.empty, prelude.List.Cons((ByteString.empty, locked), prelude.List.Nil)),
+            prelude.List.Cons(
+              (policy, prelude.List.Cons((name, amount), prelude.List.Nil)),
+              prelude.List.Nil
+            )
+          )
         )
 
     /** No withdrawal. */

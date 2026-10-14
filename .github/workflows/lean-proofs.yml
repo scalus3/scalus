@@ -52,7 +52,7 @@ jobs:
         env:
           SCALUS_REQUIRE_LEAN: "1"
         run: |
-          nix develop .#ci --accept-flake-config --command bash -c "sbt --batch scalusVerification/test 'scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest scalus.examples.htlc.HtlcVerificationTest -- -l scalus.verify.uplcblaster.Unfinished'"
+          nix develop .#ci --accept-flake-config --command bash -c "sbt --batch scalusVerification/test 'scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest scalus.examples.htlc.HtlcVerificationTest scalus.examples.paymentsplitter.PaymentSplitterVerificationTest -- -l scalus.verify.uplcblaster.Unfinished'"
       - name: The kept results are current
         # The run above asked Lean for every statement. One whose entry was missing or stale was
         # proved again and written into its file, so a file that changed is not the one of this
