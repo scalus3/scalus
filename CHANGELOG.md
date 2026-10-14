@@ -155,6 +155,10 @@ Evolution provider needs.
   read a different proposal than on chain. `getGovernanceActionV3` in `LedgerToPlutusTranslation`
   and in the bloxbean `Interop` now encodes it as the node does, and compiled scripts read and
   build the wrapped form.
+- A V3 `UpdateCommittee` governance action listed the removed committee members in Scala `Set`
+  order and passed the quorum as encoded, such as 6/10. The node lists the members scripts first,
+  then by hash, and gives the quorum in lowest terms, 3/5. `LedgerToPlutusTranslation` now does
+  the same, so a script that compares or hashes the action sees what it sees on chain.
 
 
 ### Deprecated
