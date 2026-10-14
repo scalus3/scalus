@@ -3,8 +3,9 @@
 How `blaster-uplc` from [the verification overview](../verification-overview.md) (§6.2) is built.
 Code: `scalus-verification/src/main/scala/scalus/verify/uplcblaster/UplcBlaster.scala` and
 `scalus-verification/src/main/lean/ScalusProofs/Run.lean`. Tests: `UplcBlasterTest`,
-`PreludeProofsTest` and `UplcBlasterLimitsTest`, and `VestingVerificationTest` and
-`HtlcVerificationTest` in `scalus-examples`. For how to use it, see `scalus-verification/README.md`.
+`PreludeProofsTest` and `UplcBlasterLimitsTest`, and `VestingVerificationTest`,
+`HtlcVerificationTest` and `PaymentSplitterVerificationTest` in `scalus-examples`. For how to use
+it, see `scalus-verification/README.md`.
 
 ## Pipeline
 
@@ -12,7 +13,7 @@ Code: `scalus-verification/src/main/scala/scalus/verify/uplcblaster/UplcBlaster.
 Prop ──lower──► Lowered(binders, body: LeafFormula, leaves: Vector[Program])
                   │
                   ▼
-     the check's text, its leaves in files ──► the Lean server of the workspace
+     the check's text, its leaves in files ──► Lean's language server (LSP) of the workspace
                   │
    with binders:  ├─ ✅ Valid ─────────────► Proven (ProofKind.Blaster)
                   ├─ ❌ Falsified ─────────► replay on the Scalus CEK ──► Refuted, or Inconclusive
@@ -225,16 +226,34 @@ def arguments (x0 : Integer) (x1 : Bool) : List Term :=
 end ScalusProofs.Runtime
 ```
 
-The tactic gives this text to its Lean server, as the next version of the server's one document
-([the Lean server](lean-server.md)). The leaves are files in a directory of the server's, which
-the text names, and are removed after the check. The server loads the workspace once and does
-not build it, so the workspace must be built (`lake build`). What Lean reports about the
-document, its diagnostics, is the output of the check.
+The tactic runs no Lean process for a check. It talks to Lean's language server, `lake serve`,
+started once for the workspace and spoken to over the Language Server Protocol: JSON-RPC
+messages, each after a `Content-Length` header, on the server's standard input and output
+(`JsonRpcSession`, `LeanServer`; see [the Lean server](lean-server.md)).
+
+- **A check is an edit.** The text above is the next version of the server's one document, which
+  is never written to disk: `textDocument/didOpen` sends the first check, and
+  `textDocument/didChange` every later one. The workspace's libraries are loaded once, and Lean
+  elaborates again only from the first command that changed. The header, the imports, is the same
+  text in every check, so a check pays for its own commands and not for loading the libraries.
+- **The result is the document's diagnostics.** The tactic waits with Lean's request
+  `textDocument/waitForDiagnostics` for the version it sent, and takes what
+  `textDocument/publishDiagnostics` published for that version: Blaster's messages and Lean's
+  errors are the output of the check. `$/lean/fileProgress` says which commands Lean has not
+  finished, which is where a check that is given up was.
+- **The leaves are files** in a directory of the server's, which the text names, and are removed
+  after the check.
+- **The server does not build** the workspace, so it must be built (`lake build`).
+- **One check at a time.** A server runs the checks it is given one after another, and the
+  provider `LeanServers` keeps one server per workspace, started at the first check that needs it.
+  A check that Lean's worker does not survive, for want of stack or memory, fails its statement;
+  where the server itself ends, `LeanServers` starts another for the next check.
 
 - **Time limit.** A check is given up after a time by the clock: ten minutes
   (`UplcBlaster.defaultTimeout`), or the `timeout` of `UplcBlaster(budget, servers, timeout)`.
-  The server then closes its document, which ends Lean's worker and the solver it started, and
-  the tactic is inconclusive. Its reason says where the check was: still running one of the
+  The server then closes its document (`textDocument/didClose`), which ends Lean's worker and the
+  solver it started, and the tactic is inconclusive. The next check opens the document again,
+  and loads the libraries anew. Its reason says where the check was: still running one of the
   programs symbolically, in Blaster's simplification of the statement, or after Blaster had
   started the solver, with the time the solver had worked. On some statements Lean does not return
   ([Statements that do not finish](#statements-that-do-not-finish)), and no other limit ends
@@ -304,12 +323,12 @@ So the tactic decides a closed statement by evaluation:
 example : (fromFrameToBool (runProgramFor leaf0.script [] 80) = some true) := by native_decide
 ```
 
-- **Exit code 0:** the result is `Proven`, with `ProofKind.LeanNative`. That proof trusts the Lean
-  compiler, through `Lean.ofReduceBool`, instead of Blaster and Z3.
+- **No error among Lean's diagnostics:** the result is `Proven`, with `ProofKind.LeanNative`. That
+  proof trusts the Lean compiler, through `Lean.ofReduceBool`, instead of Blaster and Z3.
 - **`native_decide` reports that the proposition is false:** the statement is replayed, as a
   falsification without values.
 
-All leaves are evaluated in the one Lean process.
+All leaves are evaluated in the one check, by the server's worker.
 
 ## Replay
 
@@ -428,7 +447,9 @@ is canceled.
   CIP-138 array builtins commented out. As of 2026-09-23, the upstream PRs were
   input-output-hk/PlutusCoreBlaster#15 (`Value`: conflicting, no review since 2026-05) and #12
   (arrays: mergeable). Until they land, programs are compiled with `valueBuiltins = false`.
-- **One Lean process per statement,** which takes several seconds each.
+- **One check at a time per workspace.** The workspace's language server elaborates one check
+  after another, so the statements of a suite take turns; a pool of servers is a later step
+  ([the Lean server](lean-server.md)).
 - **No proof reconstruction.** Blaster closes a goal with an axiom; see overview §7.
 
 ## What `PreludeProofsTest` covers
@@ -491,8 +512,9 @@ on its ScalaTest layer (`LeanProofsSuite`), so a contract's proofs sit next to i
 | | had `linearVesting` expected `initialAmount >= 0`, its call would owe it: refuted; proved under the withdrawal's own contract | a `Withdrawal` | | 11 s |
 
 The times are of the tests, each with its negative controls, in the suite's Lean server; the
-first includes loading the workspace. The suite takes about 2 min. With a Lean process for every
-check it took about 5, and the three guarantees alone 67 s together and 3 min one by one.
+first includes loading the workspace. The suite takes about 2 min. Before the tactic used the
+language server, with a Lean process for every check, it took about 5, and the three guarantees
+alone 67 s together and 3 min one by one.
 
 The validator's specification is written in `VestingValidator` itself. `spend` states its three
 guarantees at its head; `Verifier.guarantees` finds them in the code of the function that builds
@@ -595,11 +617,11 @@ What the suite shows about the tactic:
   `Data` as a whole took nearly three minutes together at that budget and a quarter of a minute
   at 600: there Lean also runs the contexts that pass the check, on into the unknown
   transaction, as for the vesting statement with any outputs.
-- **`.toData` on an enum case without fields does not lower**: `Action.Timeout.toData` gives
+- **`.toData` on an enum case without fields did not lower**: `Action.Timeout.toData` gave
   "Unsupported conversion for `Action$.Timeout` from ProdDataList to DataConstr", in any compiled
   code and not only in a statement
-  ([#377](https://github.com/scalus3/scalus/issues/377)). The suite writes the redeemer out as
-  `constrData(0, [])`, and checks that against the encoding in a test without Lean.
+  ([#377](https://github.com/scalus3/scalus/issues/377)). The suite wrote the redeemer out as
+  `constrData(0, [])` until that was fixed, and now writes `Action.Timeout.toData`.
 
 What it does not show: that a bound of the validity range is inclusive or not, which the
 validator does not read and the ledger decides; a transaction of more than two signatures; and
@@ -629,7 +651,8 @@ These tests carry the ScalaTest tag `Unfinished`. The build leaves it out of `te
 | | 1500 | spurious counterexample | 18 s |
 | | 2000 to 12000 | none | over 150 s; at 4000, over 7 min |
 
-The times are of `lake env lean` for every check, as the tactic ran when they were measured.
+The times are of `lake env lean` for every check, as the tactic ran before it used the language
+server.
 That command loads no plugin, so Lean interpreted Blaster's code. The server runs Blaster as the
 native library it is built as, and gets through the same work several times faster. Three of the
 rows, measured again with Blaster compiled:
