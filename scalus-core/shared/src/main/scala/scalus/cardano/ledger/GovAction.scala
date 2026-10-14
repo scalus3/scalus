@@ -173,27 +173,6 @@ object GovAction {
         }
     }
 
-    /** Reads a CBOR map and rejects a repeated key. A governance action exists only from protocol
-      * version 9, where the ledger's `decodeMap` fails on a repeated key (cardano-ledger-binary,
-      * Decoding/Decoder.hs); borer's `Map` decoder keeps the last value instead.
-      */
-    private def readMapNoDuplicates[K: Decoder, V: Decoder](r: Reader): Map[K, V] = {
-        val entries = IndexedSeq.newBuilder[(K, V)]
-        if r.hasMapHeader then
-            val size = r.readMapHeader()
-            var i = 0L
-            while i < size do
-                entries += r.read[K]() -> r.read[V]()
-                i += 1
-        else if r.hasMapStart then
-            r.readMapStart()
-            while !r.tryReadBreak() do entries += r.read[K]() -> r.read[V]()
-        else r.unexpectedDataItem(expected = "Map")
-        val pairs = entries.result()
-        TaggedOrderedSet.checkDuplicates(pairs.map(_._1))
-        pairs.toMap
-    }
-
     /** CBOR Decoder for GovAction. Decodes from a tagged structure based on the action type.
       */
     given Decoder[GovAction] = new Decoder[GovAction] {
@@ -215,7 +194,7 @@ object GovAction {
                     GovAction.HardForkInitiation(prevActionId, protocolVersion)
 
                 case 2 => // TreasuryWithdrawals
-                    val withdrawals = readMapNoDuplicates[RewardAccount, Coin](r)
+                    val withdrawals = LedgerMap.readDistinct[RewardAccount, Coin](r)
                     val policyHash = r.read[Option[PolicyHash]]()
                     GovAction.TreasuryWithdrawals(withdrawals, policyHash)
 
@@ -233,7 +212,7 @@ object GovAction {
                     val removedMembers = TaggedOrderedSet
                         .checkDuplicates(TaggedOrderedSet.readTagged[Credential](r))
                         .toSet
-                    val addedMembers = readMapNoDuplicates[Credential, Long](r)
+                    val addedMembers = LedgerMap.readDistinct[Credential, Long](r)
                     val threshold = r.read[UnitInterval]()
                     GovAction.UpdateCommittee(prevActionId, removedMembers, addedMembers, threshold)
 

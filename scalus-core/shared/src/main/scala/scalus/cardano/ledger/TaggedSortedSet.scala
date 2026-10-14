@@ -1,6 +1,6 @@
 package scalus.cardano.ledger
 
-import io.bullet.borer.{Decoder, Encoder}
+import io.bullet.borer.{Decoder, Encoder, Reader}
 import org.typelevel.paiges.Doc
 import org.typelevel.paiges.Doc.*
 import scalus.utils.{Pretty, Style}
@@ -34,6 +34,17 @@ object TaggedSortedSet extends TaggedSeq:
         if pv >= ProtocolVersion.conwayPV
         then r => from(checkNonEmpty(readTagged(r)))
         else r => from(readTagged(r))
+
+    /** Reads a set as the ledger's `decodeSet` does: from protocol version 9 a repeated element
+      * fails decoding. The given decoder drops repeats instead, which the witness set needs: the
+      * ledger keeps its key and bootstrap witnesses lenient until protocol version 12
+      * (`addrWitsSetDecoder` in Alonzo/TxWits.hs).
+      */
+    private[ledger] def readDistinct[A: Decoder: Ordering](r: Reader)(using
+        pv: ProtocolVersion
+    ): TaggedSortedSet[A] =
+        if pv >= ProtocolVersion.conwayPV then from(checkDuplicates(checkNonEmpty(readTagged(r))))
+        else from(readTagged(r))
 
     given [A](using p: Pretty[A]): Pretty[TaggedSortedSet[A]] with
         def pretty(a: TaggedSortedSet[A], style: Style): Doc =

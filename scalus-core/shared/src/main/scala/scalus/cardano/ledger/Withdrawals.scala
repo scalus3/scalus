@@ -37,9 +37,14 @@ object Withdrawals {
         w.write(value.withdrawals)
     }
 
-    /** CBOR Decoder for Withdrawals. Decodes from a map from reward accounts to coin values.
+    /** Reads withdrawals as the ledger does at protocol version `pv`: from version 9 a repeated
+      * reward account fails decoding, before it the last amount wins.
       */
-    given Decoder[Withdrawals] = (r: Reader) => {
-        Withdrawals(SortedMap.from(r.read[Map[RewardAccount, Coin]]()))
-    }
+    private[ledger] def read(r: Reader)(using ProtocolVersion): Withdrawals =
+        Withdrawals(SortedMap.from(LedgerMap.read[RewardAccount, Coin](r)))
+
+    /** CBOR Decoder for Withdrawals. Decodes from a map from reward accounts to coin values, as at
+      * protocol version 9 and later.
+      */
+    given Decoder[Withdrawals] = (r: Reader) => read(r)(using ProtocolVersion.conwayPV)
 }

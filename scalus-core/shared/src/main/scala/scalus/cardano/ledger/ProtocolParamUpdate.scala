@@ -170,9 +170,12 @@ object ProtocolParamUpdate {
         var drepInactivityPeriod: Option[Int] = None
         var minFeeRefScriptCoinsPerByte: Option[NonNegativeInterval] = None
 
-        // Read all fields based on their keys
+        // Read all fields based on their keys. The ledger's sparse decoder fails on a repeated
+        // key whatever the protocol version (`applyField` in cardano-ledger-binary Coders.hs).
+        val seen = scala.collection.mutable.Set.empty[Int]
         for _ <- 0L until mapSize do {
             val key = r.readInt()
+            if !seen.add(key) then r.validationFailure(s"Repeated key $key in ProtocolParamUpdate")
 
             key match {
                 // Basic parameters
@@ -192,7 +195,10 @@ object ProtocolParamUpdate {
                 // Advanced parameters
                 case 16 => minPoolCost = Some(r.read[Coin]())
                 case 17 => adaPerUtxoByte = Some(r.read[Coin]())
-                case 18 => costModels = Some(r.read[CostModels]())
+                // An update exists only from protocol version 9, where the ledger's
+                // `decodeMapByKey` fails on a repeated language.
+                case 18 =>
+                    costModels = Some(CostModels(LedgerMap.readDistinct[Int, IndexedSeq[Long]](r)))
                 case 19 => executionCosts = Some(r.read[ExUnitPrices]())
                 case 20 => maxTxExUnits = Some(r.read[ExUnits]())
                 case 21 => maxBlockExUnits = Some(r.read[ExUnits]())
