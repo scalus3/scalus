@@ -53,6 +53,11 @@ validator actually runs on chain.
   properties of the hashed timelock contract, for every datum and whatever else the transaction
   has: who refunds and who reveals, when, and of what, and that there is no time at which both
   can.
+- `scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala`
+  - properties of the two payment splitters, for two payees and whatever else the transaction
+  has: who submits a payout and who is paid, that every payee is paid exactly the split, that only
+  ADA is split, that an honest payout is accepted, and for the optimized one, that a spend needs
+  its stake validator, which checks the same split, and that its stake is never delegated.
 
 ## Statements
 
@@ -295,6 +300,7 @@ cd scalus-verification/src/main/lean && lake build && cd -   # once, and after a
 sbt scalusVerification/test                                                        # about 1 min of tests
 sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 2 min
 sbt "scalusExamplesJVM/testOnly scalus.examples.htlc.HtlcVerificationTest"         # about 3 min
+sbt "scalusExamplesJVM/testOnly scalus.examples.paymentsplitter.PaymentSplitterVerificationTest"
 sbt "scalusVerification/testOnly *UplcBlasterLimitsTest"   # the statements Lean does not finish
 ```
 
@@ -355,7 +361,8 @@ Neither names a workspace. A project has one, and its build has it (below).
 
 ### Kept results
 
-`PreludeProofsTest`, `VestingVerificationTest` and `HtlcVerificationTest` keep the results of
+`PreludeProofsTest`, `VestingVerificationTest`, `HtlcVerificationTest` and
+`PaymentSplitterVerificationTest` keep the results of
 their statements, each in a file beside its source, `<Suite>.proofs.json`, which is committed. An entry has the hashes of
 what the result rests on: the statement as Lean is given it, the program of each test, and
 Lean's side. See the [overview](../docs/design/verification-overview.md#56-kept-results).

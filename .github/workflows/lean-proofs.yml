@@ -10,6 +10,7 @@ on:
       - 'scalus-examples/jvm/src/test/lean/**'
       - 'scalus-examples/**/vesting/**'
       - 'scalus-examples/**/scalus/examples/htlc/**'
+      - 'scalus-examples/**/scalus/examples/paymentsplitter/**'
       - '.github/workflows/lean-proofs.yml'
   schedule:
     # 03:17 UTC daily. Off the hour to avoid the GitHub Actions rush.
