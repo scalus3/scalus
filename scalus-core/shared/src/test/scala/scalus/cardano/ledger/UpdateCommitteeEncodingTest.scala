@@ -23,17 +23,18 @@ class UpdateCommitteeEncodingTest extends AnyFunSuite {
         removed: Set[Credential],
         added: Map[Credential, Long],
         threshold: UnitInterval
-    ): Data =
+    ): Data = {
         LedgerToPlutusTranslation
             .getGovernanceActionV3(GovAction.UpdateCommittee(None, removed, added, threshold))
             .toData
+    }
 
     /** `UpdateCommittee Nothing removed added quorum` as a node encodes it. */
     private def updateCommittee(
         removed: List[Data],
         added: List[(Data, Data)],
         quorum: (Int, Int)
-    ): Data =
+    ): Data = {
         Data.Constr(
           4,
           PList(
@@ -43,15 +44,16 @@ class UpdateCommitteeEncodingTest extends AnyFunSuite {
             Data.Constr(0, PList(Data.I(quorum._1), Data.I(quorum._2)))
           )
         )
+    }
 
     test("committee members are listed scripts first, then by hash, as the ledger iterates them") {
         // A Scala Set or Map of up to 4 elements iterates in insertion order, which here is not
-        // the ledger's order.
-        val removed = Set(key("02"), script("02"), key("01"), script("01"))
+        // the ledger's order. Hashes compare as unsigned bytes, so 0x81.. sorts after 0x01..
+        val removed = Set(key("81"), script("81"), key("01"), script("01"))
         val added = Map(key("04") -> 10L, script("03") -> 20L)
         assert(
           translate(removed, added, UnitInterval(1, 2)) == updateCommittee(
-            List(scriptData("01"), scriptData("02"), keyData("01"), keyData("02")),
+            List(scriptData("01"), scriptData("81"), keyData("01"), keyData("81")),
             List(scriptData("03") -> Data.I(20), keyData("04") -> Data.I(10)),
             (1, 2)
           )
@@ -59,8 +61,11 @@ class UpdateCommitteeEncodingTest extends AnyFunSuite {
     }
 
     test("the quorum is in lowest terms, however the transaction encodes it") {
-        assert(
-          translate(Set.empty, Map.empty, UnitInterval(6, 10)) == updateCommittee(Nil, Nil, (3, 5))
-        )
+        for (encoded, reduced) <- Seq((6, 10) -> (3, 5), (0, 5) -> (0, 1), (7, 7) -> (1, 1)) do
+            val threshold = UnitInterval(encoded._1, encoded._2)
+            assert(
+              translate(Set.empty, Map.empty, threshold) == updateCommittee(Nil, Nil, reduced),
+              s"$encoded"
+            )
     }
 }
