@@ -194,8 +194,7 @@ object GovAction {
                     GovAction.HardForkInitiation(prevActionId, protocolVersion)
 
                 case 2 => // TreasuryWithdrawals
-                    // Read withdrawals map (as ByteString -> Coin)
-                    val withdrawals = r.read[Map[RewardAccount, Coin]]()
+                    val withdrawals = LedgerMap.readDistinct[RewardAccount, Coin](r)
                     val policyHash = r.read[Option[PolicyHash]]()
                     GovAction.TreasuryWithdrawals(withdrawals, policyHash)
 
@@ -208,8 +207,12 @@ object GovAction {
                     // `set<committee_cold_credential>` (conway.cddl:749): Conway encodes sets
                     // with the optional 258 tag. A plain Set decoder rejects the tag outright,
                     // so read it tag-aware; readTagged accepts both tagged and untagged input.
-                    val removedMembers = TaggedOrderedSet.readTagged[Credential](r).toSet
-                    val addedMembers = r.read[Map[Credential, Long]]()
+                    // The ledger's `decodeSet` rejects a repeated member from protocol version 9,
+                    // but accepts an empty set, so this is not a `TaggedOrderedStrictSet`.
+                    val removedMembers = TaggedOrderedSet
+                        .checkDuplicates(TaggedOrderedSet.readTagged[Credential](r))
+                        .toSet
+                    val addedMembers = LedgerMap.readDistinct[Credential, Long](r)
                     val threshold = r.read[UnitInterval]()
                     GovAction.UpdateCommittee(prevActionId, removedMembers, addedMembers, threshold)
 

@@ -255,8 +255,10 @@ object TransactionBody:
                 val key = r.readInt()
 
                 key match
+                    // The sets and maps below reject a repeated element or key from protocol
+                    // version 9, as the ledger's `decodeSet`, `decodeMap` and `decodeOSet` do.
                     case 0 => // Inputs
-                        inputs = r.read[TaggedSortedSet[TransactionInput]]()
+                        inputs = TaggedSortedSet.readDistinct[TransactionInput](r)
 
                     case 1 => // Outputs
                         outputs = r.read[IndexedSeq[Sized[TransactionOutput]]]()
@@ -271,7 +273,7 @@ object TransactionBody:
                         certificates = r.read[TaggedOrderedStrictSet[Certificate]]()
 
                     case 5 => // Withdrawals
-                        withdrawals = Some(r.read[Withdrawals]())
+                        withdrawals = Some(Withdrawals.read(r))
 
                     case 7 => // Auxiliary data hash
                         auxiliaryDataHash = Some(r.read[AuxiliaryDataHash]())
@@ -286,10 +288,10 @@ object TransactionBody:
                         scriptDataHash = Some(r.read[ScriptDataHash]())
 
                     case 13 => // Collateral inputs
-                        collateralInputs = r.read[TaggedSortedSet[TransactionInput]]()
+                        collateralInputs = TaggedSortedSet.readDistinct[TransactionInput](r)
 
                     case 14 => // Required signers
-                        requiredSigners = r.read[TaggedSortedSet[AddrKeyHash]]()
+                        requiredSigners = TaggedSortedSet.readDistinct[AddrKeyHash](r)
 
                     case 15 => // Network ID
                         val id = r.readInt()
@@ -304,13 +306,18 @@ object TransactionBody:
                         totalCollateral = Some(r.read[Coin]())
 
                     case 18 => // Reference inputs
-                        referenceInputs = r.read[TaggedSortedSet[TransactionInput]]()
+                        referenceInputs = TaggedSortedSet.readDistinct[TransactionInput](r)
 
                     case 19 => // Voting procedures
                         votingProcedures = Some(r.read[VotingProcedures]())
 
                     case 20 => // Proposal procedures
-                        proposalProcedures = r.read[TaggedOrderedSet[ProposalProcedure]]()
+                        // An `OSet` in the ledger, whose `decodeOSet` always rejects a repeat.
+                        proposalProcedures = TaggedOrderedSet.from(
+                          TaggedOrderedSet.checkDuplicates(
+                            TaggedOrderedSet.readTagged[ProposalProcedure](r)
+                          )
+                        )
                     case 21 => // Deposit
                         currentTreasuryValue = Some(r.read[Coin]())
 

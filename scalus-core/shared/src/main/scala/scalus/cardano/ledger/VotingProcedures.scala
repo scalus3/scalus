@@ -29,10 +29,12 @@ object VotingProcedures {
     }
 
     given Decoder[VotingProcedures] = (r: Reader) => {
+        // Votes exist only from protocol version 9, where the ledger's `decodeMapByKey` fails on a
+        // repeated voter, and on a repeated action under one voter.
+        val votes: Decoder[SortedMap[GovActionId, VotingProcedure]] =
+            Decoder(r => SortedMap.from(LedgerMap.readDistinct[GovActionId, VotingProcedure](r)))
         VotingProcedures(
-          SortedMap.from(
-            r.read[Map[Voter, Map[GovActionId, VotingProcedure]]]().view.mapValues(SortedMap.from)
-          )
+          SortedMap.from(LedgerMap.readDistinct(r)(using summon[Decoder[Voter]], votes))
         )
     }
 }
