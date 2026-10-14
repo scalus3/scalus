@@ -565,6 +565,27 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.ledger.Script#Native.unapply"
         ),
+        // 1.4: the V3 on-chain `Constitution` is a one-field case class, not an alias of
+        // `Option[ScriptHash]`. Plutus encodes it as `Constr 0 [Maybe ScriptHash]`, so the alias
+        // gave a `NewConstitution` the wrong Data. The field type of `NewConstitution` changes.
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution.this"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution.apply"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution.copy"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution.copy$default$2"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution.constitution"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution._2"
+        ),
         // Compiler-internal packages: no supported external implementors or instantiators;
         // excluded from the binary-compat promise (README: "compiler internals carry no
         // compatibility promise"; interop style guide: SIR compiler out of scope). Everything

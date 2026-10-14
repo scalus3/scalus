@@ -952,7 +952,7 @@ object LedgerToPlutusTranslation {
             case GovAction.NewConstitution(previousActionId, constitution) =>
                 v3.GovernanceAction.NewConstitution(
                   id = previousActionId.map(getGovActionId).asScalus,
-                  constitution = constitution.scriptHash.asScalus
+                  constitution = v3.Constitution(constitution.scriptHash.asScalus)
                 )
             case GovAction.InfoAction => v3.GovernanceAction.InfoAction
     }

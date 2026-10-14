@@ -1071,11 +1071,9 @@ object Interop {
                           prelude.Option
                               .Some(getGovActionId(a.getPrevGovActionId))
                   ,
-                  constitution =
-                      if a.getConstitution.getScripthash != null then
-                          prelude.Option
-                              .Some(ByteString.fromHex(a.getConstitution.getScripthash))
-                      else prelude.Option.None
+                  constitution = v3.Constitution(
+                    prelude.Option(a.getConstitution.getScripthash).map(ByteString.fromHex)
+                  )
                 )
             case a: NoConfidence =>
                 v3.GovernanceAction.NoConfidence(

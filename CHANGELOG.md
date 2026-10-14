@@ -68,6 +68,11 @@ Evolution provider needs.
   `Map[DataHash, KeepRaw[Data]]`. `datums` remains as a decoded view. A deprecated `apply` takes
   the 1.3 parameter list, with all 9 arguments, and keeps each datum in its canonical encoding.
   `copy(datums = ...)` and a named `datums` argument with defaults no longer compile.
+- **Breaking:** the V3 on-chain `Constitution` is a case class,
+  `Constitution(constitutionScript: Option[ScriptHash])`, instead of an alias of
+  `Option[ScriptHash]`. Code that builds or matches a `GovernanceAction.NewConstitution` has to
+  wrap the script hash. A file that imports both `scalus.cardano.ledger.*` and the V3 on-chain
+  types now has two `Constitution` constructors in scope and must qualify one.
 - JavaScript `Emulator.create` throws a `TypeError` for every invalid option. A bad `clock`,
   pool registration or credential type threw an `IllegalArgumentException` before. It also
   rejects a `datums` entry whose `hash` is not the blake2b-256 hash of its `datum` bytes.
@@ -145,6 +150,11 @@ Evolution provider needs.
 - `MachineParams.fromCostModels` costs `verifyEd25519Signature` by the signature in semantics
   variant A (PlutusV1 and V2 before protocol version 9), as Plutus does. It costed by the message,
   so a script that verifies a long message exceeded a budget the node accepts.
+- A V3 `NewConstitution` governance action carried the guardrails script hash as a bare `Option`.
+  A node wraps it in the `Constitution` constructor, `Constr 0 [Maybe ScriptHash]`, so a script
+  read a different proposal than on chain. `getGovernanceActionV3` in `LedgerToPlutusTranslation`
+  and in the bloxbean `Interop` now encodes it as the node does, and compiled scripts read and
+  build the wrapped form.
 
 
 ### Deprecated
