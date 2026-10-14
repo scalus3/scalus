@@ -173,6 +173,27 @@ object GovAction {
         }
     }
 
+    /** Reads a CBOR map and rejects a repeated key. A governance action exists only from protocol
+      * version 9, where the ledger's `decodeMap` fails on a repeated key (cardano-ledger-binary,
+      * Decoding/Decoder.hs); borer's `Map` decoder keeps the last value instead.
+      */
+    private def readMapNoDuplicates[K: Decoder, V: Decoder](r: Reader): Map[K, V] = {
+        val entries = IndexedSeq.newBuilder[(K, V)]
+        if r.hasMapHeader then
+            val size = r.readMapHeader()
+            var i = 0L
+            while i < size do
+                entries += r.read[K]() -> r.read[V]()
+                i += 1
+        else if r.hasMapStart then
+            r.readMapStart()
+            while !r.tryReadBreak() do entries += r.read[K]() -> r.read[V]()
+        else r.unexpectedDataItem(expected = "Map")
+        val pairs = entries.result()
+        TaggedOrderedSet.checkDuplicates(pairs.map(_._1))
+        pairs.toMap
+    }
+
     /** CBOR Decoder for GovAction. Decodes from a tagged structure based on the action type.
       */
     given Decoder[GovAction] = new Decoder[GovAction] {
@@ -194,8 +215,7 @@ object GovAction {
                     GovAction.HardForkInitiation(prevActionId, protocolVersion)
 
                 case 2 => // TreasuryWithdrawals
-                    // Read withdrawals map (as ByteString -> Coin)
-                    val withdrawals = r.read[Map[RewardAccount, Coin]]()
+                    val withdrawals = readMapNoDuplicates[RewardAccount, Coin](r)
                     val policyHash = r.read[Option[PolicyHash]]()
                     GovAction.TreasuryWithdrawals(withdrawals, policyHash)
 
@@ -208,8 +228,12 @@ object GovAction {
                     // `set<committee_cold_credential>` (conway.cddl:749): Conway encodes sets
                     // with the optional 258 tag. A plain Set decoder rejects the tag outright,
                     // so read it tag-aware; readTagged accepts both tagged and untagged input.
-                    val removedMembers = TaggedOrderedSet.readTagged[Credential](r).toSet
-                    val addedMembers = r.read[Map[Credential, Long]]()
+                    // The ledger's `decodeSet` rejects a repeated member from protocol version 9,
+                    // but accepts an empty set, so this is not a `TaggedOrderedStrictSet`.
+                    val removedMembers = TaggedOrderedSet
+                        .checkDuplicates(TaggedOrderedSet.readTagged[Credential](r))
+                        .toSet
+                    val addedMembers = readMapNoDuplicates[Credential, Long](r)
                     val threshold = r.read[UnitInterval]()
                     GovAction.UpdateCommittee(prevActionId, removedMembers, addedMembers, threshold)
 

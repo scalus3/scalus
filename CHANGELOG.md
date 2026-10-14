@@ -110,6 +110,10 @@ Evolution provider needs.
 - The min fee counted the reference script of a UTxO that a transaction both spends and references
   twice, so from protocol version 11 the Emulator rejected such a transaction at its on-chain min
   fee, and `TxBuilder` overpaid. It now counts it once, as on chain.
+- A governance action with a repeated committee member to remove, a repeated committee member to
+  add, or a repeated treasury withdrawal account decoded, keeping one of the repeats. A node fails
+  to deserialize such a transaction, since `decodeSet` and `decodeMap` reject repeats from protocol
+  version 9. Scalus now rejects it too. Order is still free, as on the node.
 - A native script in a non-minimal encoding, such as `82041a0000000a`, was re-encoded as `82040a`:
   its script hash, its size for the reference-script fee and limit, and the bytes of an output or
   witness set that held it differed from the chain. They now match, in the Emulator, the bloxbean
