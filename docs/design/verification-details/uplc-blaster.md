@@ -523,7 +523,7 @@ guarantees at its head; `Verifier.guarantees` finds them in the code of the func
 a withdrawal and validates it, where the inlined handler ends up, and they are proved as one
 statement, which runs the validator once and not once per clause. The
 schedule's contract is an `ensuring` clause of `linearVesting`, read with
-`Contract.inSource` and proved over a `Config` variable. Its bound is conditional, not a
+`FunctionContract.inSource` and proved over a `Config` variable. Its bound is conditional, not a
 precondition, because the validator would not establish one. It has two negative controls, stated
 with `contract(linearVesting)(expects, ensures)`: a wrong postcondition and a bound without its
 condition; the monotonicity statement and the three statements about withdrawals have

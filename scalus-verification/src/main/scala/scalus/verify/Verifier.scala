@@ -35,7 +35,7 @@ enum Origin {
     case Explicit
 
     /** A function's contract, declared with [[Verifier.contract]]. */
-    case Contract(contract: scalus.verify.Contract[?, ?])
+    case Contract(contract: FunctionContract[?, ?])
 
     /** What a call of `callee` in the code of `caller`, at `line` of its source file, owes to the
       * callee's contract named `contract`: its arguments satisfy the precondition. Declared with
@@ -233,7 +233,7 @@ final class Verifier private (results: Option[KeptResults]) {
     /** Declares the contract of a function, built by [[Props.contract]] or [[Props.totalContract]].
       * It is proved like any statement, and [[contracts]] finds it by its function.
       */
-    def contract(name: String, contract: Contract[?, ?]): Statement =
+    def contract(name: String, contract: FunctionContract[?, ?]): Statement =
         declare(name, contract.prop, Origin.Contract(contract))
 
     /** The contracts declared for `function`, by name. */
@@ -267,9 +267,9 @@ final class Verifier private (results: Option[KeptResults]) {
       * condition holds wherever the function returns through it. `function` must be in the function
       * table, with its SIR.
       *
-      * A clause need not be at the head of the function's body, where [[Contract.inSource]] reads
-      * it as part of the function's contract. It is found on any path: in a branch, or in the code
-      * of an `inline` method the function calls. That is where the clauses of a validator's
+      * A clause need not be at the head of the function's body, where [[FunctionContract.inSource]]
+      * reads it as part of the function's contract. It is found on any path: in a branch, or in the
+      * code of an `inline` method the function calls. That is where the clauses of a validator's
       * handlers are, once `validate` is compiled: a clause on `spend` says what holds of every
       * spend the script accepts.
       *
@@ -299,7 +299,7 @@ final class Verifier private (results: Option[KeptResults]) {
             throw new IllegalArgumentException(s"${contract.name} is not a contract")
 
     /** The precondition of `contract` over the parameters of the function it is about. */
-    private def assumption(contract: Contract[?, ?], parameters: List[SIR.Var]): Prop =
+    private def assumption(contract: FunctionContract[?, ?], parameters: List[SIR.Var]): Prop =
         Props.renameVariables(
           contract.expects,
           contract.variables.map(_.name).zip(parameters.map(_.name)).toMap
@@ -307,7 +307,7 @@ final class Verifier private (results: Option[KeptResults]) {
 
     private def declareGuarantees(
         function: FunctionRef[?, ?],
-        premise: Option[(String, Contract[?, ?])]
+        premise: Option[(String, FunctionContract[?, ?])]
     ): StatedGuarantees = {
         val definition = functionTable(function)
         val body = Obligations.body(definition, definition(Representation.Sir))
@@ -388,7 +388,7 @@ final class Verifier private (results: Option[KeptResults]) {
 
     private def declareObligations(
         caller: FunctionRef[?, ?],
-        premise: Option[(String, Contract[?, ?])]
+        premise: Option[(String, FunctionContract[?, ?])]
     ): CallObligations = {
         val definition = functionTable(caller)
         val specified = Obligations.body(definition, definition(Representation.Sir))

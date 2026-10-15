@@ -169,14 +169,14 @@ names. So the macro cannot rename them in the tree. It emits `Props.renameVariab
 renames `ensures`' variables after those of `expects` in the built statement at runtime, in its
 SIR and its binders.
 
-The macro returns a `Contract`, which keeps its parts: the function, the variables, the
+The macro returns a `FunctionContract`, which keeps its parts: the function, the variables, the
 precondition and the list of guarantees. Its statement, `prop`, is derived from them, so nothing
 has to take a contract's statement apart again.
 
 `contract.returnsWhen(args => c)` and `contract.failsWhen(args => c)` add a guarantee,
 `c ==> succeeds(f, args)` or `c ==> fails(f, args)`, written over the clause's own variables.
 `Contract.withClause` renames them after the contract's, at runtime, for the same reason as
-above. The two are extensions in `Contract`'s companion, so they need no import.
+above. The two are extensions in `FunctionContract`'s companion, so they need no import.
 
 `Verifier.contract(name, contract)` records `Origin.Contract(contract)`, so a statement that is
 not a contract cannot be declared as one; `Verifier.contracts(f)` lists them.

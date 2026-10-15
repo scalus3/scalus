@@ -243,8 +243,8 @@ class PropTest extends AnyFunSuite {
 
     test("a contract's clauses resolve without importing Props") {
         val errors = scala.compiletime.testing.typeCheckErrors(
-          """import scalus.verify.Contract
-             def more(declared: Contract[BigInt, BigInt]): Contract[BigInt, BigInt] =
+          """import scalus.verify.FunctionContract
+             def more(declared: FunctionContract[BigInt, BigInt]): FunctionContract[BigInt, BigInt] =
                  declared.returnsWhen(x => x > BigInt(0)).failsWhen(x => x == BigInt(0))"""
         )
         assert(errors.isEmpty, errors)

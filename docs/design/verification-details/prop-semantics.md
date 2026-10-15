@@ -267,7 +267,7 @@ contract from outside, in a proof suite, needs no clause: it is a statement of t
   `.returnsWhen(_ => true)` on the contract says it.
 
 It means exactly the external contract `contract(clamp)(expects, ensures)` of §6.
-`Contract.inSource(function)` reads it from the function's SIR (`Specifications.scala`), and
+`FunctionContract.inSource(function)` reads it from the function's SIR (`Specifications.scala`), and
 returns `None` for a function that states none. The contract is then declared with
 `verifier.contract`, proved, and owed by callers like any other. Registering it when a function
 table is built from an object (see
@@ -327,7 +327,7 @@ touched.
 | Claim | Check |
 |---|---|
 | a clause does not change the script | the same function with and without clauses compiles to the same bytes, under four option sets, also when a clause names functions in another order than the code, or uses a function of its own; `VestingContract`'s published hash is the same before and after `spend` and `linearVesting` were annotated |
-| a clause is kept for the verifier | the function's SIR names `Spec$.expects` and `Spec$.ensuring`; `Contract.inSource` returns the contract, and `None` for an unspecified function |
+| a clause is kept for the verifier | the function's SIR names `Spec$.expects` and `Spec$.ensuring`; `FunctionContract.inSource` returns the contract, and `None` for an unspecified function |
 | the contract is the code's | it is proved about the compiled function; a function with a wrong postcondition is refuted |
 | a handler's guarantees hold | the clauses of an inlined handler are found in the entry point's code and proved; a wrong clause in a branch or at the head is refuted; the three clauses of `VestingValidator.spend` are proved for every withdrawal of the shape |
 | callers owe the precondition | a caller that violates it is refuted, one that guards the call is proved, and one that only states the same `Spec.expects` is refuted alone and proved under its own contract |

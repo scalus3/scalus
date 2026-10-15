@@ -248,12 +248,12 @@ object Vault {
 }
 
 val clamp = FunctionDef(Vault.clamp)
-val stated = Contract.inSource(clamp).get              // None for a function that states none
+val stated = FunctionContract.inSource(clamp).get              // None for a function that states none
 verifier.verify(verifier.contract("clamp_in_range", stated), UplcBlaster(Budget.LeanSteps(120), lean)) // Proven
 ```
 
 The clauses are no part of the script: they are removed before lowering, so its bytes and hash
-are the same with and without them. They stay in the function's SIR, where `Contract.inSource`
+are the same with and without them. They stay in the function's SIR, where `FunctionContract.inSource`
 reads them, and on the JVM they are checked and throw `SpecificationError`. The contract is
 declared, proved and owed by callers like one built with `contract(f)(expects, ensures)`.
 

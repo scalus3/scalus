@@ -144,7 +144,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // negative, what is vested lies between nothing and that amount. The verifier reads the
         // clause from the function's SIR. It owes its callers nothing, and here it is also shown
         // to return.
-        val stated = Contract
+        val stated = FunctionContract
             .inSource(linearVesting)
             .getOrElse(fail("linearVesting states no contract"))
         proven(stated.returnsWhen((config, time) => true).prop, scheduleBudget, linearVesting)

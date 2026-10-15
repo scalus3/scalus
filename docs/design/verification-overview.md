@@ -35,7 +35,7 @@ side stays in the backends: Lean 4, Blaster and Z3 today.
   (`Budget.Auto`);
 - contracts (§3.7): `contract`, `totalContract`, `returnsWhen` and `failsWhen` beside a function,
   and in its body `Spec.expects`, `Spec.ensures` and `ensuring`, which are in scalus-core's prelude,
-  are erased before lowering and are read by `Contract.inSource`. `verifier.guarantees` and
+  are erased before lowering and are read by `FunctionContract.inSource`. `verifier.guarantees` and
   `verifier.obligations` state what a validator's clauses promise and what a call owes;
 - the kept results (§5.6): a run without Lean passes on the results committed beside a suite;
 - one Lean server that runs the checks
@@ -362,7 +362,7 @@ verifier.verify(clampInRange, UplcBlaster(Budget.LeanSteps(120), lean))
 ```
 
 `Props.contract` builds the statement below, with `whenReturns`; `Props.totalContract` builds it
-with `call`. Both return a `Contract`: the function, its variables, the precondition and the
+with `call`. Both return a `FunctionContract`: the function, its variables, the precondition and the
 guarantees, from which its statement is derived.
 `verifier.contract` registers it as the function's contract (`Origin.Contract`), and
 `verifier.contracts(clamp.ref)` finds it. The parameters must
@@ -517,7 +517,7 @@ the inliner erased before the plugin saw them.
 
 The clauses are calls to a marker object, `Spec.expects(c)` and `body.ensuring(r => c)`, the way
 `UniversalDataConversion` works. The plugin compiles them like any call, so they stay in the
-function's SIR. `Contract.inSource` reads them from the SIR a `FunctionDef` holds, and
+function's SIR. `FunctionContract.inSource` reads them from the SIR a `FunctionDef` holds, and
 `EraseSpecifications` drops them at the head of the lowering pipeline, so the on-chain bytes do
 not change. Reading them from `sirModule`, for a whole object, is still proposed. The same marker approach
 can capture whole statements, with `forAll` and the other combinators as Boolean pseudo-functions.
@@ -578,7 +578,7 @@ enum TargetRef:
 
 enum Origin:
     case Explicit                                // statement(...) / refute(...)
-    case Contract(contract: Contract[?, ?])      // contract(f)(...); later Spec.* clauses
+    case Contract(contract: FunctionContract[?, ?])      // contract(f)(...); later Spec.* clauses
     case Harvested                               // from a `require` (§8.4)
 
 final case class Statement(

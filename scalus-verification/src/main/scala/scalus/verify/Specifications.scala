@@ -47,7 +47,7 @@ private[verify] object Specifications {
         head.expected.size + within.size
     }
 
-    def read[A, R](function: FunctionDef[A, R]): Option[Contract[A, R]] = {
+    def read[A, R](function: FunctionDef[A, R]): Option[FunctionContract[A, R]] = {
         val body = Obligations.body(function, function(Representation.Sir))
         val head = statements(body.term)
         // The postcondition of the result is on what follows the clauses, or around them all.
@@ -75,7 +75,7 @@ private[verify] object Specifications {
                 ofParameters.map((unit, condition) =>
                     guarantee(returned, Obligations.bind(unit, Obligations.unit, condition))
                 ) ++ ofResult.map(guarantee(_, _))
-            Contract.of[A, R](
+            FunctionContract.of[A, R](
               function.ref,
               variables,
               Prop.Bool(

@@ -117,7 +117,8 @@ object SpecifiedHandler extends SpecifiedEntry {
     }
 }
 
-/** Contracts written in a function's body with `Spec`, read from its SIR by [[Contract.inSource]].
+/** Contracts written in a function's body with `Spec`, read from its SIR by
+  * [[FunctionContract.inSource]].
   */
 class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
@@ -142,8 +143,8 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
     private val expectsLate = FunctionDef(SpecifiedExamples.expectsLate)
     private val entry = FunctionDef.named("entry", (x: BigInt) => SpecifiedHandler.entry(x))
 
-    private def inSource[A, R](function: FunctionDef[A, R]): Contract[A, R] =
-        Contract.inSource(function).getOrElse(fail(s"${function.name} states no contract"))
+    private def inSource[A, R](function: FunctionDef[A, R]): FunctionContract[A, R] =
+        FunctionContract.inSource(function).getOrElse(fail(s"${function.name} states no contract"))
 
     test("a function's contract is read from its body") {
         val contract = inSource(clamp)
@@ -158,7 +159,7 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
         assert(inSource(increment).guarantees.head.isInstanceOf[Prop.Call[?, ?]])
         assert(inSource(passes).guarantees == List(inSource(passes).guarantees.head))
         assert(inSource(passes).guarantees.head.isInstanceOf[Prop.Bool])
-        assert(Contract.inSource(plain).isEmpty)
+        assert(FunctionContract.inSource(plain).isEmpty)
         // The clauses at the head of the body are the same contract.
         val atHead = inSource(clampAtHead)
         assert(atHead.variables.map(_.tp) == contract.variables.map(_.tp))
@@ -169,7 +170,7 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
                 assert(function == checked.ref)
             case other => fail(s"expected a partial call with a test, got $other")
         // A clause further inside is no part of the contract.
-        assert(Contract.inSource(branch).isEmpty)
+        assert(FunctionContract.inSource(branch).isEmpty)
     }
 
     test("a contract read from the body is proved about the compiled function") {
@@ -222,7 +223,7 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
     test("a precondition that is not at the start of a body is reported") {
         // It is erased from the script like every clause, and the contract that is read from
         // the source does not have it: no caller would owe it, and nothing would check it.
-        assert(Contract.inSource(expectsLate).isEmpty)
+        assert(FunctionContract.inSource(expectsLate).isEmpty)
         val verifier = Verifier.empty
         verifier.addFunction(expectsLate)
         val stated = verifier.guarantees(expectsLate.ref)
@@ -235,7 +236,7 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
         // One that the body starts with is the contract's, and is not reported.
         val atStart = Verifier.empty
         atStart.addFunction(clamp)
-        assert(Contract.inSource(clamp).nonEmpty)
+        assert(FunctionContract.inSource(clamp).nonEmpty)
         assert(atStart.guarantees(clamp.ref).unsupported.isEmpty)
     }
 

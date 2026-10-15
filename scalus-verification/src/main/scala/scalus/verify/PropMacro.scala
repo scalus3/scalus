@@ -172,7 +172,7 @@ private[verify] object PropMacro {
     }
 
     /** `∀ args. expects(args) ==> whenReturns(fn, args)(r => ensures(args)(r))`, or a total `call`
-      * in place of `whenReturns` (design doc §3.7), as a [[Contract]].
+      * in place of `whenReturns` (design doc §3.7), as a [[FunctionContract]].
       *
       * The arguments are the parameters of `expects`, whose types the overload of `Props.contract`
       * fixed. `ensures` names its own parameters, and its leaves were compiled before this macro,
@@ -184,7 +184,7 @@ private[verify] object PropMacro {
         expects: Expr[Any],
         ensures: Expr[Any],
         total: Boolean
-    )(using Quotes): Expr[Contract[Arg, R]] = {
+    )(using Quotes): Expr[FunctionContract[Arg, R]] = {
         import quotes.reflect.*
         val (params, pre) = lambdaOf(expects.asTerm, None, "expects must be a lambda literal")
         val arity = params.size
@@ -216,7 +216,7 @@ private[verify] object PropMacro {
               .toMap
         )
         '{
-            Contract.of[Arg, R](
+            FunctionContract.of[Arg, R](
               $fn.ref,
               ${ Expr.ofList(idents) },
               $precondition,
@@ -262,10 +262,10 @@ private[verify] object PropMacro {
       * guarantee names the arguments after the parameters of `when`; the contract renames them.
       */
     def contractClause[Arg: Type, R: Type](
-        contract: Expr[Contract[Arg, R]],
+        contract: Expr[FunctionContract[Arg, R]],
         when: Expr[Any],
         fails: Boolean
-    )(using Quotes): Expr[Contract[Arg, R]] =
+    )(using Quotes): Expr[FunctionContract[Arg, R]] =
         '{
             val declared = $contract
             ${
