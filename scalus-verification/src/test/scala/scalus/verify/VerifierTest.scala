@@ -215,6 +215,17 @@ class VerifierTest extends AnyFunSuite {
         val target = Verifier.empty
         target.addTheorem(verifier.theorems.head)
         assert(target.statement(Prop(BigInt(1) > BigInt(0))) eq holds)
+        // And where the content was stated there first, the theorem is its theorem.
+        val first = Verifier.empty
+        val stated = first.statement(Prop(BigInt(1) > BigInt(0)))
+        first.addTheorem(verifier.theorems.head)
+        assert(first.theorems.map(_.statement.name).toList == List(stated.name))
+        // A statement declared by name is another one than another verifier's of that name.
+        val other = Verifier.empty
+        other.verify(other.statement("plain", Prop(true)), proved)
+        val local = Verifier.empty
+        local.statement("plain", Prop(true))
+        assertThrows[IllegalArgumentException](local.addTheorem(other.theorems.head))
         target.verify(
           holds,
           tactic { goal =>

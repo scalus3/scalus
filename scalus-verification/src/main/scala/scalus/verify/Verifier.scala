@@ -494,18 +494,25 @@ final class Verifier private (results: Option[KeptResults]) {
             case None => declared(new Statement(name, prop, Origin.Explicit, expected))
     }
 
-    /** Imports a theorem proved in another context for use as a lemma. */
+    /** Imports a theorem proved in another context for use as a lemma. A statement named by its
+      * content is the same wherever it is stated: its theorem is taken where a statement of that
+      * content is declared here, or proved, already.
+      */
     def addTheorem(theorem: Theorem): Unit = {
+        val name = theorem.statement.name
+        def same(statement: Statement): Boolean =
+            (statement eq theorem.statement) ||
+                (statement.byContent && statement.expected == theorem.statement.expected)
         require(
-          declarations.get(theorem.statement.name).forall(_ eq theorem.statement),
-          s"a different statement named ${theorem.statement.name} is already declared"
+          declarations.get(name).forall(same),
+          s"a different statement named $name is already declared"
         )
-        proven.get(theorem.statement.name) match
-            case Some(existing) if existing.statement ne theorem.statement =>
+        proven.get(name) match
+            case Some(existing) if !same(existing.statement) =>
                 throw new IllegalArgumentException(
-                  s"a different theorem named ${theorem.statement.name} is already available"
+                  s"a different theorem named $name is already available"
                 )
-            case _ => proven = proven.updated(theorem.statement.name, theorem)
+            case _ => proven = proven.updated(name, theorem)
     }
 
     /** Checks that `tactic` supports the complete goal and, if so, returns opaque evidence that can

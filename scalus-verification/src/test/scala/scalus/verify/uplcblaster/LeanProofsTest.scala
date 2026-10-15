@@ -126,6 +126,10 @@ class LeanProofsTest extends AnyFunSuite {
                 // Stated again, it is the same statement, with one entry.
                 before.proven(holds, 40)
                 before.proven(commutes, 40)
+                // Where a test runs, it is what runs: `during` names nothing.
+                before.during("inside")(before.proven(commutes, 40))
+                // Without one, `during` names what runs.
+                runs = ""
                 before.during("a while")(before.proven(grows, 40))
             finally before.close()
             assert(
@@ -137,10 +141,12 @@ class LeanProofsTest extends AnyFunSuite {
             )
             // A later run, in which "first" states only one of its statements, and "a while"
             // states none: both ran to their end, and what they no longer state goes.
+            runs = "first"
             val after = proofs()
             try
                 after.proven(holds, 40)
                 after.finished("first")
+                runs = ""
                 after.during("a while")(())
             finally after.close()
             assert(entries == Map(named(holds) -> List("first")))
@@ -161,6 +167,10 @@ class LeanProofsTest extends AnyFunSuite {
         assert(LeanProofs.directoryName("Split").toLowerCase != LeanProofs.directoryName("split"))
         assert(!LeanProofs.directoryName("x/../y").contains("/"))
         assert(LeanProofs.directoryName("..") != "..")
+        // A long name is cut to what a file system takes, with the hash of the whole.
+        val long = LeanProofs.directoryName("x" * 300)
+        assert(long.startsWith("x" * 100 + "-") && long.length < 120)
+        assert(LeanProofs.directoryName("x" * 300) != LeanProofs.directoryName("x" * 301))
         // A statement named by its content is in a directory of the test and its hash.
         val verifier = Verifier.empty
         val content = verifier.statement(Prop(true))

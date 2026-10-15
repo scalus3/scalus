@@ -316,13 +316,17 @@ class KeptResultsTest extends AnyFunSuite {
         run().prune(Set.empty, Some(Set("a test", "a test renamed")))
         assert(testsIn(file) == Map(name(one) -> List("a test")))
 
-        // What no test states, as a program's, stays, where "a test" no longer states `one`.
+        // What no test states, as a program's, stays where the tests are not said, as "a test"
+        // no longer states `one`; a suite, which says its tests, uses what it states outside them
+        // in every run, and what it did not use goes.
         val program = KeptResults.in(file, KeptResults.Mode.Use)
         val programs = Verifier.keeping(program)
         programs.verify(programs.statement(two), tactic)
         program.prune(Set.empty, None)
-        run().prune(Set("a test"), Some(Set("a test")))
+        run().prune(Set("a test"), None)
         assert(testsIn(file) == Map(name(two) -> Nil))
+        run().prune(Set.empty, Some(Set("a test")))
+        assert(testsIn(file).isEmpty)
         assert(tactic.runs == 5)
     }
 
@@ -369,7 +373,7 @@ object KeptResultsTest {
     import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 
     private final case class Listed(tests: List[String] = Nil)
-    private final case class Listing(results: Map[String, Listed])
+    private final case class Listing(results: Map[String, Listed] = Map.empty)
     private given JsonValueCodec[Listing] = JsonCodecMaker.make
 
     /** The tests of each entry of a file of kept results, by the entries' names. */

@@ -2115,17 +2115,13 @@ object UplcBlaster {
                         case Probe.Decided(refuted: VerificationResult.Refuted) => Some(refuted)
                         case _                                                  => None
 
-    private val madeUnique = """^([^.]*?)[_-]\d+(\..*)?$""".r
-
     /** The names a counterexample's values are kept under: those of the variables as their
       * statement has them, without the number the compiler made each unique with, which is another
-      * after every compilation. Two variables of one name are told apart by their places.
+      * after every compilation ([[PropIdentity.written]]). Two variables of one name are told apart
+      * by their places.
       */
     private[uplcblaster] def keptNames(binders: List[PropExpr.Ident[?]]): List[String] = {
-        val written = binders.map(_.name).map {
-            case madeUnique(name, field) => name + Option(field).getOrElse("")
-            case name                    => name
-        }
+        val written = binders.map(binder => PropIdentity.written(binder.name))
         written.zipWithIndex.map { (name, index) =>
             if written.count(_ == name) > 1 then s"$name#${index + 1}" else name
         }

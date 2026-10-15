@@ -87,8 +87,9 @@ final class KeptResults private (
       */
     private val used = new java.util.concurrent.ConcurrentHashMap[String, Set[String]]
 
-    /** The programs of each statement this run looked up, by its name. */
-    private val looked = new java.util.concurrent.ConcurrentHashMap[String, List[String]]
+    /** The programs of each statement this run looked up, by its name and its tactic's. */
+    private val looked =
+        new java.util.concurrent.ConcurrentHashMap[(String, String), List[String]]
 
     /** Says that the test that runs uses the statement `name`. */
     private def use(name: String): Unit = {
@@ -110,8 +111,10 @@ final class KeptResults private (
       * ran to their end, and did not use it: the test no longer states it. A test that failed, was
       * canceled or did not run keeps its entries. So does one go that is not among `existing`,
       * where that is given: all the tests there are, of which a test renamed or removed is not. An
-      * entry goes when no test is left of those it had. One that never had a test, as one a program
-      * keeps that runs no tests, stays.
+      * entry goes when no test is left of those it had, and this run did not use it outside a test.
+      * One that never had a test goes too where `existing` is given and this run did not use it: a
+      * suite uses what it states outside its tests, as in its constructor, in every run. Without
+      * `existing`, as for a program that runs no tests, it stays.
       */
     def prune(completed: Set[String], existing: Option[Set[String]]): Unit = {
         if mode != Mode.Frozen then
@@ -125,7 +128,8 @@ final class KeptResults private (
                             (now.contains(test) || !completed.contains(test)) &&
                                 existing.forall(_.contains(test))
                         )
-                        if had.nonEmpty && tests.isEmpty && !now.contains("") then None
+                        val of = had.nonEmpty || existing.isDefined
+                        if of && tests.isEmpty && !now.contains("") then None
                         else Some(name -> entry.copy(tests = tests.toList.sorted))
                     }
                     if results != stored.results then write(stored.copy(results = results))
@@ -135,8 +139,8 @@ final class KeptResults private (
     /** What is kept for the statement `name`, where it was kept for `fingerprint`.
       *
       * A statement names the functions it calls by their names ([[PropIdentity]]). It fails where a
-      * statement was looked up in this run with other programs: two functions of one name, one kept
-      * result for both of them, which each would take from the other.
+      * statement was looked up in this run, for the same tactic, with other programs: two functions
+      * of one name, one kept result for both of them, which each would take from the other.
       */
     private[verify] def lookup(
         name: String,
@@ -144,7 +148,7 @@ final class KeptResults private (
         fingerprint: Fingerprint
     ): Option[Kept] = {
         use(name)
-        val before = looked.putIfAbsent(name, fingerprint.programs)
+        val before = looked.putIfAbsent((name, tactic), fingerprint.programs)
         if before != null && before != fingerprint.programs then
             throw new IllegalStateException(
               s"the statement $name is stated with other programs than before in this run: a " +

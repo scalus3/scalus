@@ -141,9 +141,11 @@ result for its statement, and the server takes the next one. Where the server it
   `UplcBlaster(budget, lean).withChecksKeptIn(directory)`, or the proofs,
   `LeanProofs(workspace, kept, notChecked, running, Some(directory))`; a ScalaTest suite overrides
   `keptChecksDirectory` of `LeanProofsSuite`. What code says is taken in place of the variable.
-  `LeanProofs` gives each statement a directory of its own, with the checks of its last run: its
-  name, or, for one stated without a name, the test that states it and the statement's hash. A
-  statement whose kept result is taken runs no check, and writes none. What one test gives Lean:
+  In the directory of the proofs, or of the variable, `LeanProofs` gives each statement a
+  directory of its own, with the checks of its last run: its name, or, for one stated without a
+  name, the test that checks it and the statement's hash. A tactic told its own directory writes
+  every check there, as it was told. A statement whose kept result is taken runs no check, and
+  writes none. What one test gives Lean:
 
   ```
   SCALUS_LEAN_KEEP_CHECKS=/tmp/checks \

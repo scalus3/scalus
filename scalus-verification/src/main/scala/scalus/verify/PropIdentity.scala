@@ -37,11 +37,19 @@ private[verify] object PropIdentity {
         Fingerprint.hash(out.result)
     }
 
-    /** A name the compiler made unique, with a number after the name as written: `_` and the offset
-      * of a statement's binder, or `-` and the plugin's count of a function's parameter. A
-      * counterexample's value is kept under the name without it, the same way.
+    /** A name the compiler made unique, with a number after the name as written, and before the
+      * field of a variable that stands for a field of another.
       */
-    private val numbered = """^(.*)[_-]\d+$""".r
+    private val numbered = """^([^.]*?)[_-]\d+(\..*)?$""".r
+
+    /** A variable's name as it is written, without the number the compiler made it unique with: `_`
+      * and the offset of a statement's binder in its file, or `-` and the plugin's count of a
+      * function's parameter in its SIR, either of which another compilation changes. The identity
+      * of a statement and the names a counterexample's values are kept under both take it.
+      */
+    private[verify] def written(name: String): String = name match
+        case numbered(written, field) => written + Option(field).getOrElse("")
+        case _                        => name
 
     /** Writes a statement as a tree of nodes and atoms. An atom is written with its length, so that
       * no two contents are written alike.
@@ -82,10 +90,7 @@ private[verify] object PropIdentity {
 
         /** Binds a statement's variable, and writes it: by its name as written, and its type. */
         private def variable(ident: PropExpr.Ident[?]): Unit = {
-            val written = ident.name match
-                case numbered(name) => name
-                case name           => name
-            node("ident") { atom(bind(ident.name, written)); tpe(ident.tp) }
+            node("ident") { atom(bind(ident.name, written(ident.name))); tpe(ident.tp) }
         }
 
         private def atom(value: String): Unit = {
@@ -98,7 +103,7 @@ private[verify] object PropIdentity {
             text.append(')')
         }
 
-        def prop(prop: Prop): Unit = prop match
+        def prop(prop: Prop): Unit = prop match {
             case Prop.Bool(expr)         => node("bool")(this.expr(expr))
             case Prop.Denotes(expr)      => node("denotes")(this.expr(expr))
             case Prop.Equal(left, right) => node("equal") { expr(left); expr(right) }
@@ -122,12 +127,13 @@ private[verify] object PropIdentity {
             case Prop.Implies(a, b) => node("implies") { this.prop(a); this.prop(b) }
             case Prop.Iff(a, b)     => node("iff") { this.prop(a); this.prop(b) }
             case Prop.Not(a)        => node("not")(this.prop(a))
+        }
 
         private def expr(expr: PropExpr[?]): Unit = expr match
             case PropExpr.Ident(name, _, tp) => node("ident") { atom(reference(name)); tpe(tp) }
             case PropExpr.SIRExpr(sir)       => sirTerm(sir)
 
-        private def sirTerm(sir: SIR): Unit = sir match
+        private def sirTerm(sir: SIR): Unit = sir match {
             case SIR.Var(name, tp, _) => node("var") { atom(reference(name)); tpe(tp) }
             case SIR.ExternalVar(module, name, tp, _) =>
                 node("external") { atom(module); atom(name); tpe(tp) }
@@ -202,6 +208,7 @@ private[verify] object PropIdentity {
                     )
                     sirTerm(term)
                 }
+        }
 
         private def pattern(pattern: SIR.Pattern): Unit = pattern match
             case SIR.Pattern.Constr(constr, bindings, typeBindings) =>

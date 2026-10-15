@@ -83,7 +83,7 @@ final class LeanProofs private (
 
     /** Ends the Lean server that runs. None is started after. Closing again does nothing. */
     override def close(): Unit = {
-        try if resultsMade then results.foreach(_.prune(completed.asScala.toSet, existing))
+        try results.foreach(_.prune(completed.asScala.toSet, existing))
         finally cleanable.clean()
     }
 
@@ -166,26 +166,20 @@ final class LeanProofs private (
                     else if leanAvailable then Some(KeptResults.Mode.Use)
                     else Some(KeptResults.Mode.Frozen)
 
-    /** Whether [[results]] were made: [[close]] prunes only what a run used. */
-    @volatile private var resultsMade = false
-
     /** The kept results, used in the way of [[keptMode]], by the test that runs. */
-    private lazy val results: Option[KeptResults] = {
-        val made =
-            for
-                file <- kept
-                mode <- keptMode
-            yield KeptResults.in(file, mode, () => currentLabel)
-        resultsMade = true
-        made
-    }
+    private lazy val results: Option[KeptResults] =
+        for
+            file <- kept
+            mode <- keptMode
+        yield KeptResults.in(file, mode, () => currentLabel)
 
     /** What `during` says runs, in place of what `running` says. */
     private var named: Option[String] = None
 
     /** Runs `body` as `context`, for a caller that has no `running` to give: the kept results and
       * the kept checks of what it checks are said to be of `context`. Where `body` returns,
-      * `context` has [[finished]]. After it, what ran before runs again.
+      * `context` has [[finished]]. After it, what ran before runs again. Where `running` says what
+      * runs, as a test framework does, that is what runs, and `during` names nothing.
       *
       * It names what runs for every thread that states meanwhile. Tests that run at the same time
       * are told apart by `running`.
@@ -198,13 +192,18 @@ final class LeanProofs private (
         }
         try
             val result = body
-            finished(context)
+            if running().isEmpty then finished(context)
             result
         finally synchronized { named = before }
     }
 
-    /** What runs now: the test that states what is checked, or the empty name for none. */
-    private def currentLabel: String = synchronized { named.getOrElse(running()) }
+    /** What runs now: the test that states what is checked, as `running` says, or else what
+      * [[during]] says, or the empty name for none.
+      */
+    private def currentLabel: String = {
+        val test = running()
+        if test.nonEmpty then test else synchronized { named.getOrElse("") }
+    }
 
     /** The Lean server itself, for whoever speaks to it. It is these proofs': it is ended with
       * them, also where they are no longer used and were not closed. Whoever speaks to it keeps the
@@ -293,17 +292,19 @@ final class LeanProofs private (
     }
 
     /** `tactic`, writing the checks of `statement` into a directory of its own
-      * ([[LeanProofs.checksDirectoryName]], with the test that runs): under the directory the
-      * tactic was told, or else the one of these proofs, or else the one of
-      * `SCALUS_LEAN_KEEP_CHECKS`. The directory holds the checks of the statement's last run
-      * ([[UplcBlaster.withLastChecksKeptIn]]).
+      * ([[LeanProofs.checksDirectoryName]], with the test that runs), under the directory of these
+      * proofs, or else the one of `SCALUS_LEAN_KEEP_CHECKS`. The directory holds the checks of the
+      * statement's last run ([[UplcBlaster.withLastChecksKeptIn]]). A tactic that was told where to
+      * write its checks writes them there, as it was told.
       */
     private def keepingChecks(tactic: UplcBlaster, statement: Statement): UplcBlaster = {
-        tactic.checksKeptIn.orElse(checksKeptIn).orElse(tactic.keptChecks) match
-            case None => tactic
-            case Some(base) =>
-                val directory = LeanProofs.checksDirectoryName(statement, currentLabel)
-                tactic.withLastChecksKeptIn(base.resolve(directory))
+        if tactic.checksKeptIn.isDefined then tactic
+        else
+            checksKeptIn.orElse(tactic.keptChecks) match
+                case None => tactic
+                case Some(base) =>
+                    val directory = LeanProofs.checksDirectoryName(statement, currentLabel)
+                    tactic.withLastChecksKeptIn(base.resolve(directory))
     }
 
     /** Fails where a proof by [[UplcBlaster]] is not one by its own account: Blaster did not say
@@ -480,14 +481,15 @@ object LeanProofs {
         (c < 128 && c.isLetterOrDigit && !c.isUpper) || c == '.' || c == '_' || c == '-'
 
     /** The name of the directory for the checks of the statement `name`: the name itself where it
-      * is a plain one ([[plain]]). Otherwise each other character is replaced, and a hash of the
-      * name is added, so that two names that differ only there, or only in case, as a file system
-      * may not tell them apart, do not share a directory.
+      * is a plain one ([[plain]]) of 100 characters at most. Otherwise each other character is
+      * replaced, the first 100 are taken, as a file system takes names of 255 bytes at most, and a
+      * hash of the name is added, so that two names that differ only there, or only in case, as a
+      * file system may not tell them apart, do not share a directory.
       */
     private[uplcblaster] def directoryName(name: String): String = {
-        if name.forall(plain) && !name.forall(_ == '.') then name
+        if name.forall(plain) && !name.forall(_ == '.') && name.length <= 100 then name
         else
-            val safe = name.map(c => if plain(c) then c else '_')
+            val safe = name.take(100).map(c => if plain(c) then c else '_')
             val digest = java.security.MessageDigest.getInstance("SHA-256")
             val hash = digest
                 .digest(name.getBytes(StandardCharsets.UTF_8))
@@ -508,7 +510,10 @@ object LeanProofs {
         if !statement.byContent then directoryName(statement.name)
         else if test.isEmpty then hash
         else
-            val plainTest = test.toLowerCase.take(100).map(c => if plain(c) then c else '_')
+            val plainTest =
+                test.toLowerCase(java.util.Locale.ROOT)
+                    .take(100)
+                    .map(c => if plain(c) then c else '_')
             s"$plainTest.$hash"
     }
 

@@ -56,7 +56,7 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
     protected def keptChecksDirectory: Option[Path] = None
 
     /** The test that runs: what it checks is said to be its. */
-    private var running = ""
+    @volatile private var running = ""
 
     /** The proofs, once a test has asked for them. A suite whose tests ask for none has no
       * workspace made ready, and nothing to close.
@@ -81,7 +81,10 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
 
     abstract override protected def withFixture(test: NoArgTest): Outcome = {
         running = test.name
-        val outcome = super.withFixture(test)
+        // What is checked after the test, as in a hook or in afterAll, is of no test.
+        val outcome =
+            try super.withFixture(test)
+            finally running = ""
         // A test that passed states all it states: what it no longer does is not kept.
         if outcome.isSucceeded then made.foreach(_.finished(test.name))
         outcome
@@ -90,11 +93,12 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
     // What is kept for a test the suite no longer has is not kept. The tests are said here, and not
     // where the proofs are made: a suite that states its statements as it is constructed makes
     // them before its tests are registered.
-    override protected def afterAll(): Unit =
+    override protected def afterAll(): Unit = {
         try super.afterAll()
         finally
             made.foreach { proofs =>
                 proofs.tests(testNames)
                 proofs.close()
             }
+    }
 }
