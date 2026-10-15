@@ -121,10 +121,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             val source = Files.readString(UplcBlaster.writeCheck(loweredSearch, 60, rendered))
             assert(source.contains("¬ (∀"), source)
             assert(!source.contains("∃"), source)
-        finally
-            Files.deleteIfExists(rendered.resolve("Check.lean"))
-            Files.deleteIfExists(rendered.resolve("Leaf0.flat"))
-            Files.deleteIfExists(rendered)
+        finally Directories.remove(rendered)
         proven(searched, budget = 60)
 
         val supplied = forAll[BigInt](x => existsLet(x + BigInt(1))(y => y > x))

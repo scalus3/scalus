@@ -1089,10 +1089,11 @@ object UplcBlaster {
         case SIR.Decl(_, term)     => freeVariables(term)
 
     /** Writes the Lean check of a lowered statement into `directory`: each leaf's program as
-      * `Leaf<n>.flat`, and `Check.lean`, whose path it returns. The tactic runs the same text in
-      * its server. A check written with this can be read, or run by hand in a process of its own
-      * and with other options: `lake lean Check.lean` in the workspace, which loads Blaster as the
-      * server does. `lake env lean` loads no plugin, and runs Blaster interpreted.
+      * `Leaf<n>.flat`, which the check imports, and as text, `Leaf<n>.uplc`, to be read; and
+      * `Check.lean`, whose path it returns. The tactic runs the same text in its server. A check
+      * written with this can be read, or run by hand in a process of its own and with other
+      * options: `lake lean Check.lean` in the workspace, which loads Blaster as the server does.
+      * `lake env lean` loads no plugin, and runs Blaster interpreted.
       */
     def writeCheck(goal: Lowered, budget: Int, directory: Path): Path =
         writeCheck(goal, budget, defaultMaxHeartbeats, directory)
@@ -1101,7 +1102,16 @@ object UplcBlaster {
     def writeCheck(goal: Lowered, budget: Int, maxHeartbeats: Int, directory: Path): Path = {
         val source = directory.resolve("Check.lean")
         Files.writeString(source, checkSource(goal, budget, maxHeartbeats, directory))
+        readable(goal.leaves, directory)
         source
+    }
+
+    /** Writes each program into `directory` as text, as `Leaf<n>.uplc`, beside its `Leaf<n>.flat`.
+      */
+    private def readable(programs: Vector[Program], directory: Path): Unit = {
+        programs.zipWithIndex.foreach { (program, index) =>
+            Files.writeString(directory.resolve(s"Leaf$index.uplc"), program.show)
+        }
     }
 
     /** The text of the check of a lowered statement. Its leaves are written into `directory`, where
@@ -1163,7 +1173,7 @@ object UplcBlaster {
         timeout: Option[FiniteDuration],
         keep: Option[Path]
     ): ExecutionResult = {
-        keep.foreach(kept => writeCheck(goal, budget, maxHeartbeats, keptDirectory(kept)))
+        keep.foreach(keepCheck(goal, budget, maxHeartbeats, _))
         val checked = server.check(checkSource(goal, budget, maxHeartbeats, _), timeout)
         probed(goal, budget, checked, timeout.mkString) match
             // The budget was given, so no other is tried. Lean's machine says whether the budget
@@ -1192,6 +1202,15 @@ object UplcBlaster {
     /** A directory of its own under `kept`, for one check that is kept. */
     private def keptDirectory(kept: Path): Path =
         Files.createTempDirectory(Files.createDirectories(kept), "check-")
+
+    /** Writes the check of a lowered statement at `budget` into a directory of its own under `kept`
+      * ([[writeCheck]]), and says where on the standard output: a check is kept to be read, and the
+      * line says which file is the one of a test that runs.
+      */
+    private def keepCheck(goal: Lowered, budget: Int, maxHeartbeats: Int, kept: Path): Unit = {
+        val source = writeCheck(goal, budget, maxHeartbeats, keptDirectory(kept))
+        println(s"Lean check at $budget steps: $source")
+    }
 
     /** What a check at `budget` came to, from what the server returned. The reason of a check that
       * was given up names its time limit as `limit`.
@@ -1298,9 +1317,7 @@ object UplcBlaster {
                 case Left(reason) => Probe.Decided(VerificationResult.Failed(reason))
                 case Right(server) =>
                     val text = renderCheck(goal, flats, steps, maxHeartbeats)
-                    keep.foreach(kept =>
-                        writeCheck(goal, steps, maxHeartbeats, keptDirectory(kept))
-                    )
+                    keep.foreach(keepCheck(goal, steps, maxHeartbeats, _))
                     probed(goal, steps, server.check(text, wait), limit)
 
         // The budget after `steps`, whose check gave the spurious counterexample `values`.
@@ -1486,7 +1503,10 @@ object UplcBlaster {
         keep.foreach { kept =>
             val directory = keptDirectory(kept)
             val text = measureSource(goal, written(goal.leaves, directory), values, maxHeartbeats)
-            Files.writeString(directory.resolve("Count.lean"), text)
+            val source = directory.resolve("Count.lean")
+            Files.writeString(source, text)
+            readable(goal.leaves, directory)
+            println(s"Lean count of a spurious counterexample: $source")
         }
 
     /** The run of each test's program, from what Lean reported of a count ([[measureSource]]). */
