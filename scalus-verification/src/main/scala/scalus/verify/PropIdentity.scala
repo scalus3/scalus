@@ -14,7 +14,9 @@ import scalus.compiler.sir.{SIR, SIRType}
   *     is the same one, and what is kept for it is stale;
   *   - the ids the compiler gives type variables and quantified variables, and the numbers it makes
   *     names unique with, which a compilation makes afresh. A statement's variable is `x_1042`
-  *     where `forAll` binds `x` at offset 1042 of its file.
+  *     where `forAll` binds `x` at offset 1042 of its file, and `time-79636` where a contract takes
+  *     it from the parameters of its function's SIR, whose number depends on what else was compiled
+  *     with it.
   *
   * A function is known by its name: functions that are not the same need names that are not the
   * same, which a kept result holds to ([[KeptResults]]).
@@ -35,8 +37,11 @@ private[verify] object PropIdentity {
         Fingerprint.hash(out.result)
     }
 
-    /** A name the compiler made unique, with a number after the name as written. */
-    private val numbered = """^(.*)_\d+$""".r
+    /** A name the compiler made unique, with a number after the name as written: `_` and the offset
+      * of a statement's binder, or `-` and the plugin's count of a function's parameter. A
+      * counterexample's value is kept under the name without it, the same way.
+      */
+    private val numbered = """^(.*)[_-]\d+$""".r
 
     /** Writes a statement as a tree of nodes and atoms. An atom is written with its length, so that
       * no two contents are written alike.

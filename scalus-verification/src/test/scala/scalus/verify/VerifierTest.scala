@@ -1,6 +1,7 @@
 package scalus.verify
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType}
 import Props.*
 
 class VerifierTest extends AnyFunSuite {
@@ -166,6 +167,18 @@ class VerifierTest extends AnyFunSuite {
           verifier.statement(callRef(increment.ref, BigInt(1))(result => result > 0)).name
         )
         assert(names.distinct == names)
+        // The number the compiler makes a name unique with is another after another compilation:
+        // `x_<offset>` of a binder, and `x-<count>` of a function's parameter in its SIR.
+        def numbered(name: String): Prop = Prop.Forall(
+          PropExpr.Ident[Boolean](name, 0L, SIRType.Boolean),
+          Prop.Bool(
+            PropExpr.SIRExpr[Boolean](SIR.Var(name, SIRType.Boolean, AnnotationsDecl.empty))
+          )
+        )
+        def nameOf(prop: Prop): String = Verifier.empty.statement(prop).name
+        assert(nameOf(numbered("flag-79636")) == nameOf(numbered("flag-81002")))
+        assert(nameOf(numbered("flag_1042")) == nameOf(numbered("flag-81002")))
+        assert(nameOf(numbered("flag-79636")) != nameOf(numbered("other-79636")))
         // A call binds its result, which is the same on another line too.
         assert(
           Verifier.empty.statement(callRef(increment.ref, BigInt(1))(result => result > 0)).name ==

@@ -40,24 +40,6 @@
         "what stays locked is at least what has not vested yet"
       ]
     },
-    "#2465b68ada71779a": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "2e67634cb9bbebf9",
-      "programs": [
-        "5c653021f0f6dce1",
-        "1a02b353d6639bbb",
-        "c761d7b2b6f3888c",
-        "c7cf963a7d7378f2"
-      ],
-      "notes": {
-        "budget": "400",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the schedule's contract, stated in its body, holds of its compiled program"
-      ]
-    },
     "#3ebd32aa82352726": {
       "tactic": "uplc-blaster",
       "result": "refuted",
@@ -238,6 +220,24 @@
       },
       "tests": [
         "the vested amount does not decrease with time"
+      ]
+    },
+    "#89da6a4afb047c5e": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2e67634cb9bbebf9",
+      "programs": [
+        "5c653021f0f6dce1",
+        "1a02b353d6639bbb",
+        "c761d7b2b6f3888c",
+        "c7cf963a7d7378f2"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the schedule's contract, stated in its body, holds of its compiled program"
       ]
     },
     "#9c164479316347f3": {
