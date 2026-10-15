@@ -6,7 +6,6 @@ import scalus.verify.*
 import scalus.verify.Props.*
 import scalus.verify.lean.Directories
 
-import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 
 /** [[LeanProofs]] as it is, without [[LeanProofsSuite]]: what whoever states proofs in another test
@@ -100,51 +99,52 @@ class LeanProofsTest extends AnyFunSuite {
         finally close()
     }
 
-    test("a result is kept under what runs, and the count of its statements") {
+    test(
+      "an unnamed statement is kept under its content, and goes once its test no longer states it"
+    ) {
         val directory = Files.createTempDirectory("scalus-lean-proofs")
         val kept = directory.resolve("kept.proofs.json")
         var runs = "first"
-        val proofs =
+        def proofs(): LeanProofs =
             LeanProofs(
               LeanProofs.libraryWorkspace,
               Some(kept),
               reason => cancel(reason),
               () => runs
             )
-        import proofs.*
+        val holds = forAll[BigInt](x => x + BigInt(0) == x)
+        val commutes = forAll[BigInt, BigInt]((x, y) => x + y == y + x)
+        val grows = forAll[BigInt](x => x + BigInt(1) > x)
+        def named(prop: Prop): String = Verifier.empty.statement(prop).name
+        // The entries of the file, by their names, with the tests that state them.
+        def entries: Map[String, List[String]] = scalus.verify.KeptResultsTest.testsIn(kept)
         try
-            requireLean()
-            val holds = forAll[BigInt](x => x + BigInt(0) == x)
-            proven(holds, 40)
-            proven(holds, 40)
-            runs = "second"
-            proven(holds, 40)
-            // A name for a while, in place of what runs, and from one each time it is given.
-            during("a while") {
-                proven(holds, 40)
-                proven(holds, 40)
-            }
-            during("a while")(proven(holds, 40))
-            proven(holds, 40)
-            runs = "first"
-            proven(holds, 40)
-
-            val text = Files.readString(kept, StandardCharsets.UTF_8)
-            val names = """"([^"]+ #\d+)"""".r.findAllMatchIn(text).map(_.group(1)).toSet
+            val before = proofs()
+            try
+                before.requireLean()
+                before.proven(holds, 40)
+                // Stated again, it is the same statement, with one entry.
+                before.proven(holds, 40)
+                before.proven(commutes, 40)
+                before.during("a while")(before.proven(grows, 40))
+            finally before.close()
             assert(
-              names == Set(
-                "first #1",
-                "first #2",
-                "first #3",
-                "second #1",
-                "second #2",
-                "a while #1",
-                "a while #2"
+              entries == Map(
+                named(holds) -> List("first"),
+                named(commutes) -> List("first"),
+                named(grows) -> List("a while")
               )
             )
-        finally
-            close()
-            Directories.remove(directory)
+            // A later run, in which "first" states only one of its statements, and "a while"
+            // states none: both ran to their end, and what they no longer state goes.
+            val after = proofs()
+            try
+                after.proven(holds, 40)
+                after.finished("first")
+                after.during("a while")(())
+            finally after.close()
+            assert(entries == Map(named(holds) -> List("first")))
+        finally Directories.remove(directory)
     }
 
     test("the checks of a statement are in a directory named after it, and only after it") {
@@ -161,5 +161,17 @@ class LeanProofsTest extends AnyFunSuite {
         assert(LeanProofs.directoryName("Split").toLowerCase != LeanProofs.directoryName("split"))
         assert(!LeanProofs.directoryName("x/../y").contains("/"))
         assert(LeanProofs.directoryName("..") != "..")
+        // A statement named by its content is in a directory of the test and its hash.
+        val verifier = Verifier.empty
+        val content = verifier.statement(Prop(true))
+        val hash = content.name.drop(1)
+        def checks(test: String) = LeanProofs.checksDirectoryName(content, test)
+        assert(checks("Only a payee submits") == s"only_a_payee_submits.$hash")
+        assert(checks("") == hash)
+        // Of a long test, or one in other letters, what a file system takes.
+        assert(checks("x" * 300) == "x" * 100 + s".$hash")
+        assert(checks("Сума додатна") == s"____________.$hash")
+        val plain = verifier.statement("plain", Prop(false))
+        assert(LeanProofs.checksDirectoryName(plain, "a test") == "plain")
     }
 }

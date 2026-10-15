@@ -75,7 +75,7 @@ class KeptResultsTest extends AnyFunSuite {
         tactic: Tactic,
         name: String = "holds"
     ): VerificationResult = {
-        val verifier = Verifier.keeping(KeptResults.in(file, mode).under("a test"))
+        val verifier = Verifier.keeping(KeptResults.in(file, mode))
         verifier.verify(verifier.statement(name, Prop(true)), tactic)
     }
 
@@ -92,7 +92,7 @@ class KeptResultsTest extends AnyFunSuite {
         assert(tactic.runs == 1)
 
         // The file reads as text: the backend's side once, and the entry under the name of its
-        // test and statement, with the parts of its fingerprint.
+        // statement, with the parts of its fingerprint.
         assert(
           Files.readString(file) ==
               """{
@@ -103,7 +103,7 @@ class KeptResultsTest extends AnyFunSuite {
                 |    }
                 |  },
                 |  "results": {
-                |    "a test holds": {
+                |    "holds": {
                 |      "tactic": "counting",
                 |      "result": "proved",
                 |      "statement": "s-1",
@@ -262,7 +262,82 @@ class KeptResultsTest extends AnyFunSuite {
         assert(text.contains("\"backend\": \"2.0\"") && !text.contains("\"1.0\""), text)
         // The other statement was proved with the old backend, and is not said to be proved
         // with this one.
-        assert(text.contains("a test first") && !text.contains("a test second"), text)
+        assert(text.contains("\"first\"") && !text.contains("\"second\""), text)
+    }
+
+    kept("an entry says the tests that state it, and goes when none is left") { file =>
+        import KeptResultsTest.testsIn
+        val tactic = new Counting
+        val (one, two, three) =
+            (Prop(BigInt(1) > BigInt(0)), Prop(BigInt(2) > BigInt(0)), Prop(BigInt(3) > BigInt(0)))
+        def name(prop: Prop): String = Verifier.empty.statement(prop).name
+        var test = "a test"
+        val first = KeptResults.in(file, KeptResults.Mode.Use, () => test)
+        val verifier = Verifier.keeping(first)
+        def check(prop: Prop): Unit = verifier.verify(verifier.statement(prop), tactic)
+        check(one)
+        check(two)
+        verifier.verify(verifier.statement("named", Prop(true)), tactic)
+        test = "another test"
+        check(one)
+        check(three)
+        first.prune(Set("a test", "another test"), None)
+        assert(
+          testsIn(file) == Map(
+            name(one) -> List("a test", "another test"),
+            name(two) -> List("a test"),
+            name(three) -> List("another test"),
+            "named" -> List("a test")
+          )
+        )
+        assert(tactic.runs == 4)
+
+        // A frozen run changes nothing.
+        KeptResults.in(file, KeptResults.Mode.Frozen).prune(Set("a test"), Some(Set.empty))
+        assert(testsIn(file).size == 4)
+
+        // A run in which "a test" states only `one`, and "another test" does not run: it keeps
+        // what it states. A named statement is no other.
+        def run(states: Prop*): KeptResults = {
+            val results = KeptResults.in(file, KeptResults.Mode.Use, () => "a test")
+            val verifier = Verifier.keeping(results)
+            states.foreach(prop => verifier.verify(verifier.statement(prop), tactic))
+            results
+        }
+        run(one).prune(Set("a test"), Some(Set("a test", "another test")))
+        assert(
+          testsIn(file) == Map(
+            name(one) -> List("a test", "another test"),
+            name(three) -> List("another test")
+          )
+        )
+
+        // "another test" was renamed: what only it stated goes.
+        run().prune(Set.empty, Some(Set("a test", "a test renamed")))
+        assert(testsIn(file) == Map(name(one) -> List("a test")))
+
+        // What no test states, as a program's, stays, where "a test" no longer states `one`.
+        val program = KeptResults.in(file, KeptResults.Mode.Use)
+        val programs = Verifier.keeping(program)
+        programs.verify(programs.statement(two), tactic)
+        program.prune(Set.empty, None)
+        run().prune(Set("a test"), Some(Set("a test")))
+        assert(testsIn(file) == Map(name(two) -> Nil))
+        assert(tactic.runs == 5)
+    }
+
+    kept("a statement stated with other programs in one run is of two functions of one name") {
+        file =>
+            val tactic = new Counting
+            val verifier = Verifier.keeping(KeptResults.in(file, KeptResults.Mode.Use))
+            val holds = verifier.statement(Prop(true))
+            assert(proved(verifier.verify(holds, tactic)))
+            tactic.programs = List("p-1", "p-9")
+            val failure = intercept[IllegalStateException](verifier.verify(holds, tactic))
+            assert(failure.getMessage.contains("another one of the same name"))
+            // Another run has the programs it has.
+            val later = Verifier.keeping(KeptResults.in(file, KeptResults.Mode.Use))
+            assert(proved(later.verify(later.statement(Prop(true)), tactic)))
     }
 
     kept("a tactic whose results are not kept runs as before") { file =>
@@ -287,4 +362,17 @@ class KeptResultsTest extends AnyFunSuite {
         assert(Fingerprint.hash("statement") != Fingerprint.hash("statements"))
         assert(Fingerprint.hash("statement").matches("[0-9a-f]{16}"))
     }
+}
+
+object KeptResultsTest {
+    import com.github.plokhotnyuk.jsoniter_scala.core.*
+    import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+
+    private final case class Listed(tests: List[String] = Nil)
+    private final case class Listing(results: Map[String, Listed])
+    private given JsonValueCodec[Listing] = JsonCodecMaker.make
+
+    /** The tests of each entry of a file of kept results, by the entries' names. */
+    def testsIn(file: Path): Map[String, List[String]] =
+        readFromArray[Listing](Files.readAllBytes(file)).results.view.mapValues(_.tests).toMap
 }

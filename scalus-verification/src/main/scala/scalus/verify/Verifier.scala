@@ -5,6 +5,9 @@ import scalus.compiler.sir.transform.EraseSpecifications
 
 /** A named proposition declared in a [[Verifier]], where it comes from, and what checking it is
   * expected to give: a proof, or for a negative control ([[Verifier.refute]]) a refutation.
+  *
+  * A statement declared without a name is named by its content, `#` and a hash of it
+  * (docs/design/verification-overview.md §4.4). A name that begins with `#` is no other's.
   */
 final class Statement private[verify] (
     val name: String,
@@ -12,7 +15,17 @@ final class Statement private[verify] (
     val origin: Origin,
     val expected: ExpectedOutcome
 ) {
+
+    /** Whether the statement is named by its content. */
+    def byContent: Boolean = Statement.contentName.matches(name)
+
     override def toString: String = s"Statement($name)"
+}
+
+object Statement {
+
+    /** The name of a statement named by its content: `#` and 16 hexadecimal digits. */
+    private[verify] val contentName = "#[0-9a-f]{16}".r
 }
 
 /** Where a statement comes from. */
@@ -193,7 +206,6 @@ final class Verifier private (results: Option[KeptResults]) {
     private var functionTable: FunctionTable = FunctionTable.empty
     private var declarations: Map[String, Statement] = Map.empty
     private var proven: Map[String, Theorem] = Map.empty
-    private var generatedStatementNumber: Long = 0L
 
     def functions: FunctionTable = functionTable
     def statements: Iterable[Statement] = declarations.values
@@ -445,22 +457,41 @@ final class Verifier private (results: Option[KeptResults]) {
         expected: ExpectedOutcome = ExpectedOutcome.Valid
     ): Statement = {
         require(name.trim.nonEmpty, "a statement name must be non-empty")
-        require(!declarations.contains(name), s"a statement named $name is already declared")
-        require(!proven.contains(name), s"a theorem named $name is already available")
-        val declared = new Statement(name, prop, origin, expected)
-        declarations = declarations.updated(name, declared)
-        declared
+        require(
+          !name.startsWith("#"),
+          s"a statement name that begins with # is a content's (statement(prop)), not $name"
+        )
+        declared(new Statement(name, prop, origin, expected))
     }
 
-    /** Registers a statement under a generated name local to this verifier. */
-    def statement(prop: Prop): Statement = {
-        var next = generatedStatementNumber + 1L
-        var name = s"statement_$next"
-        while declarations.contains(name) || proven.contains(name) do
-            next += 1L
-            name = s"statement_$next"
-        generatedStatementNumber = next
-        statement(name, prop)
+    private def declared(statement: Statement): Statement = {
+        val name = statement.name
+        require(!declarations.contains(name), s"a statement named $name is already declared")
+        require(!proven.contains(name), s"a theorem named $name is already available")
+        declarations = declarations.updated(name, statement)
+        statement
+    }
+
+    /** Declares a statement named by its content ([[Statement]]): the same content is the same
+      * statement, wherever it is stated, and declaring it again gives the statement declared, or
+      * the one of a theorem of that content that was imported ([[addTheorem]]).
+      */
+    def statement(prop: Prop): Statement = byContent(prop, ExpectedOutcome.Valid)
+
+    /** A negative control named by its content ([[refute]], [[statement]]). */
+    def refute(prop: Prop): Statement = byContent(prop, ExpectedOutcome.Falsified)
+
+    private def byContent(prop: Prop, expected: ExpectedOutcome): Statement = {
+        val name = s"#${PropIdentity.of(prop)}"
+        declarations.get(name).orElse(proven.get(name).map(_.statement)) match
+            case Some(stated) =>
+                require(
+                  stated.expected == expected,
+                  s"the statement $name is declared both as a statement and as a negative control"
+                )
+                declarations = declarations.updated(name, stated)
+                stated
+            case None => declared(new Statement(name, prop, Origin.Explicit, expected))
     }
 
     /** Imports a theorem proved in another context for use as a lemma. */
@@ -485,7 +516,9 @@ final class Verifier private (results: Option[KeptResults]) {
           declarations.get(statement.name).exists(_ eq statement),
           s"statement ${statement.name} is not registered in this verifier"
         )
-        val goal = Goal(statement, functionTable, proven.values.toList.sortBy(_.statement.name))
+        // A statement is no lemma of its own, as where one that is proved is stated again.
+        val lemmas = proven.values.filter(_.statement.name != statement.name)
+        val goal = Goal(statement, functionTable, lemmas.toList.sortBy(_.statement.name))
         tactic.prepare(goal).map { prepared =>
             new PreparedRun(this, statement, tactic.name, () => run(tactic)(statement, prepared))
         }

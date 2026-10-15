@@ -18,7 +18,10 @@
       "notes": {
         "budget": "4958",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "every payee is paid"
+      ]
     },
     "payment_splitter.naive.every_payout_is_accepted": {
       "tactic": "uplc-blaster",
@@ -55,7 +58,10 @@
         "rest.withdrawals": {"list":[]},
         "toA": 0,
         "toB": 1
-      }
+      },
+      "tests": [
+        "an honest payout is accepted"
+      ]
     },
     "payment_splitter.naive.honest_payout_is_accepted": {
       "tactic": "uplc-blaster",
@@ -69,7 +75,10 @@
       "notes": {
         "budget": "6781",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "an honest payout is accepted"
+      ]
     },
     "payment_splitter.naive.no_other_key_is_paid": {
       "tactic": "uplc-blaster",
@@ -82,7 +91,10 @@
       "notes": {
         "budget": "6180",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "nobody but the payees is paid"
+      ]
     },
     "payment_splitter.naive.no_script_is_paid": {
       "tactic": "uplc-blaster",
@@ -94,7 +106,10 @@
       "notes": {
         "budget": "4787",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "nobody but the payees is paid"
+      ]
     },
     "payment_splitter.naive.only_a_payee_submits": {
       "tactic": "uplc-blaster",
@@ -107,7 +122,10 @@
       "notes": {
         "budget": "2075",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "only a payee submits a payout"
+      ]
     },
     "payment_splitter.naive.only_ada_is_split": {
       "tactic": "uplc-blaster",
@@ -121,7 +139,10 @@
       "notes": {
         "budget": "3493",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "only ADA is split"
+      ]
     },
     "payment_splitter.naive.other_payee_is_paid_exactly_the_split": {
       "tactic": "uplc-blaster",
@@ -134,7 +155,10 @@
       "notes": {
         "budget": "6778",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "the payees other than the submitter are paid exactly the split"
+      ]
     },
     "payment_splitter.naive.split_is_exactly_half": {
       "tactic": "uplc-blaster",
@@ -171,7 +195,10 @@
         "rest.withdrawals": {"list":[]},
         "toA": 0,
         "toB": 0
-      }
+      },
+      "tests": [
+        "the payees other than the submitter are paid exactly the split, negative control"
+      ]
     },
     "payment_splitter.optimized.spend_needs_a_withdrawal": {
       "tactic": "uplc-blaster",
@@ -183,7 +210,10 @@
       "notes": {
         "budget": "1403",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "a contract output is spent only with the stake validator's withdrawal"
+      ]
     },
     "payment_splitter.optimized.spend_needs_its_own_withdrawal": {
       "tactic": "uplc-blaster",
@@ -196,7 +226,10 @@
       "notes": {
         "budget": "1607",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "a contract output is spent only with the stake validator's withdrawal"
+      ]
     },
     "payment_splitter.optimized.spend_redeemer_names_its_input": {
       "tactic": "uplc-blaster",
@@ -209,7 +242,10 @@
       "notes": {
         "budget": "1268",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "the redeemer of a spend names the contract's output"
+      ]
     },
     "payment_splitter.optimized.spend_with_its_withdrawal_is_accepted": {
       "tactic": "uplc-blaster",
@@ -221,7 +257,10 @@
       "notes": {
         "budget": "1593",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "a contract output is spent only with the stake validator's withdrawal"
+      ]
     },
     "payment_splitter.optimized.stake_is_never_delegated": {
       "tactic": "uplc-blaster",
@@ -234,7 +273,10 @@
       "notes": {
         "budget": "279",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "the contract's stake credential is registered and deregistered, and not delegated"
+      ]
     },
     "payment_splitter.optimized.stake_registration_is_accepted": {
       "tactic": "uplc-blaster",
@@ -246,7 +288,10 @@
       "notes": {
         "budget": "269",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "the contract's stake credential is registered and deregistered, and not delegated"
+      ]
     },
     "payment_splitter.optimized.stake_validator_accepts_an_honest_payout": {
       "tactic": "uplc-blaster",
@@ -260,7 +305,10 @@
       "notes": {
         "budget": "5138",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "the stake validator accepts an honest payout"
+      ]
     },
     "payment_splitter.optimized.stake_validator_pays_exactly_the_split": {
       "tactic": "uplc-blaster",
@@ -274,7 +322,10 @@
       "notes": {
         "budget": "5168",
         "kind": "Blaster"
-      }
+      },
+      "tests": [
+        "the stake validator pays the payees other than the submitter exactly the split"
+      ]
     }
   }
 }

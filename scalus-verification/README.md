@@ -135,11 +135,20 @@ result for its statement, and the server takes the next one. Where the server it
   end of a command that grows without bound, the same on every machine, and it does not end
   every check that does not finish: the solver's time does not count towards it.
 - With the environment variable `SCALUS_LEAN_KEEP_CHECKS` set to a directory, every check that
-  runs is also written there, to read or to run by hand with `lake lean Check.lean`. Code says
-  the same where it makes the tactic, `UplcBlaster(budget, lean).withChecksKeptIn(directory)`,
-  or the proofs, `LeanProofs(workspace, kept, notChecked, running, Some(directory))`; a ScalaTest
-  suite overrides `keptChecksDirectory` of `LeanProofsSuite`. What code says is taken in place of
-  the variable. A statement whose kept result is taken runs no check, and writes none.
+  runs is also written there, to read or to run by hand with `lake lean Check.lean`, with each
+  test's program beside it as text, `Leaf<n>.uplc`. A line on the standard output says where each
+  check went. Code says the same where it makes the tactic,
+  `UplcBlaster(budget, lean).withChecksKeptIn(directory)`, or the proofs,
+  `LeanProofs(workspace, kept, notChecked, running, Some(directory))`; a ScalaTest suite overrides
+  `keptChecksDirectory` of `LeanProofsSuite`. What code says is taken in place of the variable.
+  `LeanProofs` gives each statement a directory of its own, with the checks of its last run: its
+  name, or, for one stated without a name, the test that states it and the statement's hash. A
+  statement whose kept result is taken runs no check, and writes none. What one test gives Lean:
+
+  ```
+  SCALUS_LEAN_KEEP_CHECKS=/tmp/checks \
+      sbt 'scalusVerification/testOnly *UplcBlasterTest -- -z "min is a lower bound"'
+  ```
 
 `verifier.prepare(statement, tactic)` returns an opaque `PreparedRun` only when the complete goal
 is in the tactic's language. Passing that evidence to `verifier.prove(prepared)` cannot return
@@ -350,11 +359,18 @@ needed for, `LeanProofs` leaves to its caller:
 - **The Lean server** is ended by `close()`. One that is left is ended when the proofs are no
   longer used, or with the JVM.
 
-The anonymous `proven`, `refuted` and `inconclusive` remain until the suites here state theirs
-by name. Each states its statement in a verifier of its own, and keeps the result under the name
-of what runs and the count of the statements stated there: the fourth argument, `running`, or
-`proofs.during(name) { ... }`, says what runs, and has to tell apart tests that run at the same
-time.
+A statement needs no name to keep its result. The anonymous `proven`, `refuted` and
+`inconclusive` state theirs in a verifier of their own, and `verifier.statement(prop)` declares
+one without a name: it is named by its content, a hash of the statement as written, and not of
+where (`#` and 16 hexadecimal digits). Moved to another line or another test, it keeps its
+result. An entry says the tests that state its statement, named or not: the fourth argument,
+`running`, or `proofs.during(name) { ... }`, says what runs, and has to tell apart tests that run
+at the same time. Where a test ran to its end, `close()` takes it out of the entries it no longer
+states, and an entry goes when no test is left; a test that failed, was canceled or did not run
+keeps its entries. `LeanProofsSuite` also says which tests the suite has, so that a test renamed
+or removed is taken out. A statement names the functions it calls by their names: two functions
+of one name in one suite are an error. Where the checks are kept, those of a statement without a
+name are in a directory of the test that checks it and its hash.
 
 For ScalaTest the rest is in `LeanProofsSuite`, of the artifact `scalus-verification-scalatest`:
 it cancels the test of a statement that is not checked, and closes after the suite.

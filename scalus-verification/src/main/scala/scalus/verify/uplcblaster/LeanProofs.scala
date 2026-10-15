@@ -9,6 +9,7 @@ import java.lang.ref.Cleaner
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import scala.concurrent.duration.FiniteDuration
+import scala.jdk.CollectionConverters.*
 import scala.util.Using
 
 /** Runs the statements of a [[Verifier]] with [[UplcBlaster]] through Lean, for whoever states
@@ -25,9 +26,8 @@ import scala.util.Using
   * proofs.check(zero, 40)
   * }}}
   *
-  * The anonymous `proven`, `refuted` and `inconclusive` state a statement in a verifier of their
-  * own, and keep its result under the name of what runs; they remain until the suites state theirs
-  * by name.
+  * The anonymous `proven`, `refuted` and `inconclusive` state a statement without a name, in a
+  * verifier of their own.
   *
   * It asks for no test framework, and says what happened in two ways.
   *   - An expectation that does not hold, as a statement that is refuted where a proof was
@@ -40,8 +40,11 @@ import scala.util.Using
   * Proofs about code can keep their results, in the file `kept`
   * (docs/design/verification-overview.md §5.6): a statement that has not changed is then not asked
   * of Lean again, and where no Lean runs, it stands on what is kept. A result is kept under the
-  * name of what runs, as a test's name, and the count of the statements stated there. The caller
-  * says what runs, with `running` or with [[during]].
+  * name of its statement; a statement stated without one, as by `proven`, is named by its content
+  * (docs/design/verification-overview.md §4.4), so that it keeps its result wherever it is stated.
+  * An entry says the tests that state it, as `running` or [[during]] says what runs. Where a test
+  * ran to its end ([[finished]]), [[close]] takes it out of the entries of statements it no longer
+  * states, and an entry goes that no test states any longer ([[KeptResults.prune]]).
   *
   * {{{
   * val proofs = LeanProofs(LeanProofs.projectWorkspace)
@@ -59,7 +62,7 @@ import scala.util.Using
   * @param notChecked
   *   what happens where a statement cannot be checked here, with the reason. It does not return.
   * @param running
-  *   the name of what runs now, asked when a statement is stated: a test framework says the test.
+  *   the name of what runs now, asked when a statement is checked: a test framework says the test.
   *   Where tests of one instance run at the same time, it has to say which of them is asking.
   */
 final class LeanProofs private (
@@ -79,7 +82,29 @@ final class LeanProofs private (
     private val cleanable = LeanProofs.cleaner.register(this, LeanProofs.Closing(servers))
 
     /** Ends the Lean server that runs. None is started after. Closing again does nothing. */
-    override def close(): Unit = cleanable.clean()
+    override def close(): Unit = {
+        try if resultsMade then results.foreach(_.prune(completed.asScala.toSet, existing))
+        finally cleanable.clean()
+    }
+
+    /** The tests that ran to their end ([[finished]]): [[close]] prunes the kept results they no
+      * longer state.
+      */
+    private val completed = java.util.concurrent.ConcurrentHashMap.newKeySet[String]()
+
+    /** Says that the test `label` ran to its end, so that what it no longer states is not kept. A
+      * test framework says it of every test that passed; [[during]] says it where its body returns.
+      */
+    def finished(label: String): Unit = { completed.add(label) }
+
+    /** All the tests there are, said by [[tests]]. */
+    @volatile private var existing: Option[Set[String]] = None
+
+    /** Says which tests there are, all of them, whichever of them run: what is kept only for tests
+      * that are not among them, as a test that was renamed or removed, is not kept. A test
+      * framework knows them, once all of them are registered: it says them before [[close]].
+      */
+    def tests(names: Set[String]): Unit = { existing = Some(names) }
 
     /** Gives a tactic the Lean server: the one that runs, or another where that one has ended. A
       * tactic asks when it runs a check, and the statement is then not checked, or the check fails,
@@ -141,23 +166,26 @@ final class LeanProofs private (
                     else if leanAvailable then Some(KeptResults.Mode.Use)
                     else Some(KeptResults.Mode.Frozen)
 
-    /** The kept results, used in the way of [[keptMode]]. */
-    private lazy val results: Option[KeptResults] =
-        for
-            file <- kept
-            mode <- keptMode
-        yield KeptResults.in(file, mode)
+    /** Whether [[results]] were made: [[close]] prunes only what a run used. */
+    @volatile private var resultsMade = false
+
+    /** The kept results, used in the way of [[keptMode]], by the test that runs. */
+    private lazy val results: Option[KeptResults] = {
+        val made =
+            for
+                file <- kept
+                mode <- keptMode
+            yield KeptResults.in(file, mode, () => currentLabel)
+        resultsMade = true
+        made
+    }
 
     /** What `during` says runs, in place of what `running` says. */
     private var named: Option[String] = None
 
-    /** How many statements each of what runs has stated: a kept result is under both. */
-    private val stated = scala.collection.mutable.Map.empty[String, Int]
-
-    /** Runs `body` as `context`, for a caller that has no `running` to give: the results of the
-      * statements it states are kept under that name and their count in it, from one. After it,
-      * what ran before runs again. So a statement keeps its result while what is around it changes,
-      * and while only some of it runs.
+    /** Runs `body` as `context`, for a caller that has no `running` to give: the kept results and
+      * the kept checks of what it checks are said to be of `context`. Where `body` returns,
+      * `context` has [[finished]]. After it, what ran before runs again.
       *
       * It names what runs for every thread that states meanwhile. Tests that run at the same time
       * are told apart by `running`.
@@ -166,20 +194,17 @@ final class LeanProofs private (
         val before = synchronized {
             val before = named
             named = Some(context)
-            stated.remove(context)
             before
         }
-        try body
+        try
+            val result = body
+            finished(context)
+            result
         finally synchronized { named = before }
     }
 
-    /** What states the next statement, and which of its statements that is. */
-    private def next(): (String, Int) = synchronized {
-        val context = named.getOrElse(running())
-        val count = stated.getOrElse(context, 0) + 1
-        stated(context) = count
-        (context, count)
-    }
+    /** What runs now: the test that states what is checked, or the empty name for none. */
+    private def currentLabel: String = synchronized { named.getOrElse(running()) }
 
     /** The Lean server itself, for whoever speaks to it. It is these proofs': it is ended with
       * them, also where they are no longer used and were not closed. Whoever speaks to it keeps the
@@ -225,7 +250,7 @@ final class LeanProofs private (
     def check(request: VerificationRequest): VerificationResult = {
         val name = request.statement.name
         val tactic = request.tactic match
-            case blaster: UplcBlaster => keepingChecks(blaster, name)
+            case blaster: UplcBlaster => keepingChecks(blaster, request.statement)
             case other                => other
         val result = verifier.synchronized { verifier.verify(request.statement, tactic) }
         (request.expected, result) match
@@ -267,16 +292,18 @@ final class LeanProofs private (
         check(VerificationRequest(statement, UplcBlaster(budget, lean)))
     }
 
-    /** `tactic`, writing the checks of `statement` into a directory named after it: under the
-      * directory the tactic was told, or else the one of these proofs, or else the one of
+    /** `tactic`, writing the checks of `statement` into a directory of its own
+      * ([[LeanProofs.checksDirectoryName]], with the test that runs): under the directory the
+      * tactic was told, or else the one of these proofs, or else the one of
       * `SCALUS_LEAN_KEEP_CHECKS`. The directory holds the checks of the statement's last run
       * ([[UplcBlaster.withLastChecksKeptIn]]).
       */
-    private def keepingChecks(tactic: UplcBlaster, statement: String): UplcBlaster = {
+    private def keepingChecks(tactic: UplcBlaster, statement: Statement): UplcBlaster = {
         tactic.checksKeptIn.orElse(checksKeptIn).orElse(tactic.keptChecks) match
             case None => tactic
             case Some(base) =>
-                tactic.withLastChecksKeptIn(base.resolve(LeanProofs.directoryName(statement)))
+                val directory = LeanProofs.checksDirectoryName(statement, currentLabel)
+                tactic.withLastChecksKeptIn(base.resolve(directory))
     }
 
     /** Fails where a proof by [[UplcBlaster]] is not one by its own account: Blaster did not say
@@ -303,11 +330,10 @@ final class LeanProofs private (
         budget: Budget,
         functions: Seq[FunctionDef[?, ?]]
     ): (Verifier, Statement, VerificationResult) = {
-        val (context, count) = next()
-        val verifier = results.fold(Verifier.empty)(kept => Verifier.keeping(kept.under(context)))
+        val verifier = results.fold(Verifier.empty)(Verifier.keeping)
         functions.foreach(verifier.addFunction)
-        val statement = verifier.statement(s"#$count", prop)
-        verifier.verify(statement, tactic(UplcBlaster(budget, lean))) match
+        val statement = verifier.statement(prop)
+        verifier.verify(statement, keepingChecks(UplcBlaster(budget, lean), statement)) match
             case VerificationResult.Inconclusive(reason) if reason.startsWith(KeptResults.stale) =>
                 notChecked(reason)
             case result => (verifier, statement, result)
@@ -377,12 +403,6 @@ final class LeanProofs private (
     ): String =
         inconclusive(prop, UplcBlaster(Budget.LeanSteps(budget), lean, timeout), functions*)
 
-    /** `tactic`, writing its checks where it was told, or else where these proofs keep them. */
-    private def tactic(tactic: UplcBlaster): UplcBlaster = {
-        if tactic.checksKeptIn.isDefined then tactic
-        else checksKeptIn.fold(tactic)(tactic.withChecksKeptIn)
-    }
-
     /** Why `tactic` is inconclusive about `prop`. */
     def inconclusive(
         prop: Prop,
@@ -392,7 +412,7 @@ final class LeanProofs private (
         val verifier = Verifier.empty
         functions.foreach(verifier.addFunction)
         val statement = verifier.statement(prop)
-        verifier.verify(statement, this.tactic(tactic)) match
+        verifier.verify(statement, keepingChecks(tactic, statement)) match
             case VerificationResult.Inconclusive(reason) =>
                 if verifier.theorems.nonEmpty then
                     failed("the statement is inconclusive, and the verifier has a theorem")
@@ -453,14 +473,18 @@ object LeanProofs {
 
     private val cleaner = Cleaner.create()
 
+    /** Whether `c` is kept in the name of a directory: a lower-case letter or a digit of ASCII, or
+      * one of `._-`.
+      */
+    private def plain(c: Char): Boolean =
+        (c < 128 && c.isLetterOrDigit && !c.isUpper) || c == '.' || c == '_' || c == '-'
+
     /** The name of the directory for the checks of the statement `name`: the name itself where it
-      * is a plain one, of lower-case letters, digits and `._-`. Otherwise each other character is
-      * replaced, and a hash of the name is added, so that two names that differ only there, or only
-      * in case, as a file system may not tell them apart, do not share a directory.
+      * is a plain one ([[plain]]). Otherwise each other character is replaced, and a hash of the
+      * name is added, so that two names that differ only there, or only in case, as a file system
+      * may not tell them apart, do not share a directory.
       */
     private[uplcblaster] def directoryName(name: String): String = {
-        def plain(c: Char): Boolean =
-            (c.isLetterOrDigit && !c.isUpper) || c == '.' || c == '_' || c == '-'
         if name.forall(plain) && !name.forall(_ == '.') then name
         else
             val safe = name.map(c => if plain(c) then c else '_')
@@ -471,6 +495,21 @@ object LeanProofs {
                 .map(b => f"${b & 0xff}%02x")
                 .mkString
             s"$safe-$hash"
+    }
+
+    /** The name of the directory of the checks of `statement`, which the test `test` checks: its
+      * name, where it was declared with one ([[directoryName]]), and otherwise the test and its
+      * content hash, as `only_a_payee_submits.3fa2c0d4e5f6a7b8`, or the hash alone without a test.
+      * The hash tells statements of one test apart. Of the test, the first 100 characters are
+      * taken, made plain ([[plain]]): a file system takes names of 255 bytes at most.
+      */
+    private[uplcblaster] def checksDirectoryName(statement: Statement, test: String): String = {
+        val hash = statement.name.drop(1)
+        if !statement.byContent then directoryName(statement.name)
+        else if test.isEmpty then hash
+        else
+            val plainTest = test.toLowerCase.take(100).map(c => if plain(c) then c else '_')
+            s"$plainTest.$hash"
     }
 
     /** A result in a few words, for a failure: a refutation with its replayed counterexample, or

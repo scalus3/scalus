@@ -595,6 +595,15 @@ including `Call`; the call's `FunctionRef` is serialized by name, while `arg` an
 the SIR types of the call. A statement's content hash, together with
 its targets' script hashes, is its identity in the proof cache (§5.4).
 
+Built: a statement declared without a name is named by its content hash, `#` and 16 hexadecimal
+digits (`PropIdentity`). It is a hash of the logical nodes, the SIR of the tests without their
+annotations, and the types, with each function a call names by its name. Nothing of where the
+statement is written is in it: the compiler names a statement's variable after its offset in
+the file (`x_1042`), and a variable is hashed by its place among the binders, with the name it
+is written with for a statement's variable, and by its place alone for a variable a test binds.
+The same statement, on another line or in another test, is the same statement; a statement's
+variable renamed is another one, as a counterexample is kept under the variables' names.
+
 ### 4.5 Runtime representation
 
 Compilation produces a `CapturedStatement` containing the runtime `Prop` and the `Statement`
@@ -618,8 +627,10 @@ The implemented `Verifier.empty` owns a function table, named declarations and a
 `Prop`; `prove(statement, tactic)` (also named `verify`) passes the context to a tactic and returns
 a theorem, a confirmed refutation, an unsupported report, an inconclusive result, or a backend
 failure (§5.3). Successful theorems become
-available as lemmas. `statement(prop)` generates a local name when the caller does not supply one;
-these names depend on declaration order. `addTheorem` imports a theorem from another verifier.
+available as lemmas, apart from the goal's own. `statement(prop)` and `refute(prop)` name a
+statement by its content (§4.4): stating the same content again gives the statement declared, or
+that of a theorem of that content that was imported. An explicit name may not begin with `#`.
+`addTheorem` imports a theorem from another verifier.
 `contract(name, …)` and `contracts` declare a function's contracts, `guarantees` and `obligations`
 what follows from them (§3.7), and `Verifier.keeping(results)` is a verifier that keeps its
 results (§5.6). `refute(name, prop)` declares a negative control, which expects a refutation;
@@ -930,19 +941,7 @@ beside the suite's source, as `<Suite>.proofs.json`.
     }
   },
   "results": {
-    "a fold over a two-element list is the sum #1": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "d46783623238bc41",
-      "programs": [
-        "5d0c1d4f7b6e29a3"
-      ],
-      "notes": {
-        "budget": "320",
-        "kind": "Blaster"
-      }
-    },
-    "a fold over a two-element list is the sum #2": {
+    "#4f1c0a9e2d7b3c58": {
       "tactic": "uplc-blaster",
       "result": "refuted",
       "statement": "d46783623238bc41",
@@ -956,14 +955,39 @@ beside the suite's source, as `<Suite>.proofs.json`.
       "counterexample": {
         "a": -1,
         "b": 0
-      }
+      },
+      "tests": [
+        "a fold over a two-element list is the sum"
+      ]
+    },
+    "prelude.fold.sum_of_two": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "8a52e61f0c3d9b74",
+      "programs": [
+        "5d0c1d4f7b6e29a3"
+      ],
+      "notes": {
+        "budget": "320",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the fold of a sum, and of a product"
+      ]
     }
   }
 }
 ```
 
-- **A name for every statement:** the test, and the place of the statement among those of the
-  test, or the name the statement was declared with.
+- **A name for every statement:** the name it was declared with, or, for a statement stated
+  without one, its content hash (§4.4). A statement moved to another line or another test keeps
+  its result, and two tests that state the same statement have one entry.
+- **An entry says the tests that state it,** and what is of no test goes. After a run that
+  keeps, a test that ran to its end is taken out of the entries it no longer states, and so is a
+  test the suite no longer has, as one renamed; an entry goes when no test is left. A test that
+  failed, was canceled or did not run keeps its entries. A statement names the functions it calls
+  by their names, so two functions of one name in one suite are an error, not one entry for
+  both.
 - **Used by the fingerprint, replaced by the name.** An entry counts only where its fingerprint
   is that of the statement now. A statement that changed gets a new entry under its name, in
   place of the old one, so the file does not grow with every change of the compiler.
@@ -1304,7 +1328,7 @@ same place.
 | Phase | Deliverables | Exit criterion | Status (2026-10-14) |
 |---|---|---|---|
 | **0** | `scalus.verify` surface (`Prop`, `forAll`, connectives, `Quantifiable` for `BigInt`/`Boolean`/`ByteString`); verifier-owned `statement` / `refute` methods; generated verifier descriptors; statement capture by macros (§4.3); `Prop` with flat serialization; `@Compile` function and script targets; `blaster-uplc` for ∀-prefix statements with the polarity rule; `sbt verify` generating a Lean workspace and parsing verdicts | the `Math.lean` theorems and controls, restated in Scala over `Math.*` targets, give the same verdicts; generated files replace the hand-written ones | Built, in part by other means: the surface (`Quantifiable` also for `Data` and case classes), capture by macros, `@Compile` function targets, `blaster-uplc` with the polarity rule. The `Math.lean` theorems are restated in `PreludeProofsTest`, and the hand-written files are gone (§8.1). Proofs run as ScalaTest suites, not through `sbt verify`. Not built: verifier descriptors, script targets, a serialized `Prop`. |
-| **1** | `exists` / `existsLet`, `denotes`, `equal`; `refute` with replay; `scalacheck`; external contracts (`verifier.contract(f)`); `Theorem`, report, cache; PR-time freshness check and nightly run | a suite without a negative control fails; a planted spurious counterexample is reported as spurious; `Math.clamp`'s contract proved about its compiled code | Built: `exists` / `existsLet`, `denotes`, `equal`; replayed refutations, and spurious counterexamples reported as such; external contracts, proved about compiled code; `Theorem`; the kept results, with ci-jvm passing on them and the Lean-Proofs workflow nightly and on a push; and `refute`, `ExpectedOutcome` and `VerificationRequest`, run by `LeanProofs.check`. Not built: `scalacheck`, a report, and failing a suite without a negative control. |
+| **1** | `exists` / `existsLet`, `denotes`, `equal`; `refute` with replay; `scalacheck`; external contracts (`verifier.contract(f)`); `Theorem`, report, cache; PR-time freshness check and nightly run | a suite without a negative control fails; a planted spurious counterexample is reported as spurious; `Math.clamp`'s contract proved about its compiled code | Built: `exists` / `existsLet`, `denotes`, `equal`; replayed refutations, and spurious counterexamples reported as such; external contracts, proved about compiled code; `Theorem`; the kept results, with ci-jvm passing on them and the Lean-Proofs workflow nightly and on a push; and `refute`, `ExpectedOutcome` and `VerificationRequest`, run by `LeanProofs.check`; statements without a name named by their content hash (§4.4), and kept results pruned. Not built: `scalacheck`, a report, and failing a suite without a negative control. |
 | **2** | in-body `spec` capture in the plugin; `lean-direct` for integers, `Bool`, `ByteString`, `List`, `Option` and case classes; declared Lean mappings, proved by `blaster-uplc`; `using`, `split`, `cases`; contract VCG for modular proofs | adding clauses leaves the script hash unchanged; a list lemma proved with `induction xs <;> blaster`; a Mathlib `Int.gcd` theorem transferred to the compiled `Math.gcd` through a proved mapping; a caller's obligation discharged with its callee's contract | Built: in-body `Spec` capture, with the script's bytes unchanged (`SpecTest`), and the caller's side of contracts (`obligations`). Not built: `lean-direct`, mappings, `using` / `split` / `cases`, the VCG. |
 | **3** | validators: `ScriptContext` targets with the CardanoLedgerApiBlaster validity predicates; bring `feature/verification-blaster`'s Vesting annotations forward | one real contract (Vesting) with authorisation and conservation properties proved about its script hash | In part: Vesting, HTLC and the payment splitters have properties proved about their validators, over script contexts written as `Data`, and Vesting's annotations are back (§8.2). Not built: the validity predicates, and proofs about the published script hash, which wait for Value and array builtins in PlutusCoreBlaster. |
 | **4** | a Scala kernel only if a lemma backlog demands it | representative lemmas elaborate and discharge through `Prop` | Not started. |

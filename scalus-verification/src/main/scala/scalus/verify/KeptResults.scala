@@ -64,7 +64,11 @@ object Kept {
   *
   * A result is kept under the name of its statement, with the fingerprint it had. It counts only
   * where that is the fingerprint the statement has now. A statement that changed gets a new entry
-  * in place of the old one.
+  * in place of the old one. A statement named by its content that changed is another statement: its
+  * old entry is left, and [[prune]] removes it once no test states it.
+  *
+  * An entry says which tests state its statement, as `asking` says them where the statement is
+  * looked up or kept: one statement may be stated by several tests.
   *
   * The file is JSON written out in lines, with the statements in the order of their names, to be
   * read and compared as text. It is written whole on every change, to a file beside it that then
@@ -73,33 +77,89 @@ object Kept {
 final class KeptResults private (
     file: Path,
     val mode: KeptResults.Mode,
-    context: String,
-    lock: AnyRef
+    lock: AnyRef,
+    asking: () => String
 ) {
     import KeptResults.*
 
-    /** The same results, for statements whose names are those of `context`: a test's name, for the
-      * statements of the test.
+    /** The statements this run looked up or kept, by their names, with the tests that did: the
+      * empty name for a statement that no test asked for.
       */
-    def under(context: String): KeptResults = new KeptResults(file, mode, context, lock)
+    private val used = new java.util.concurrent.ConcurrentHashMap[String, Set[String]]
 
-    private def named(statement: String): String =
-        if context.isEmpty then statement else s"$context $statement"
+    /** The programs of each statement this run looked up, by its name. */
+    private val looked = new java.util.concurrent.ConcurrentHashMap[String, List[String]]
 
-    /** What is kept for the statement `name`, where it was kept for `fingerprint`. */
+    /** Says that the test that runs uses the statement `name`. */
+    private def use(name: String): Unit = {
+        val test = asking()
+        used.merge(name, Set(test), _ ++ _)
+    }
+
+    /** The tests that state the statement `name`: those its entry has, and those that used it in
+      * this run.
+      */
+    private def testsOf(name: String, stored: Stored): Set[String] =
+        stored.results.get(name).fold(Set.empty[String])(_.tests.toSet) ++
+            used.getOrDefault(name, Set.empty) - ""
+
+    /** Takes out what no test states any longer, and writes into each entry the tests that state
+      * it, where the run is one that keeps ([[Mode.Use]], [[Mode.Recalculate]]).
+      *
+      * Of the tests of an entry ([[testsOf]]), one goes that is among `completed`, the tests that
+      * ran to their end, and did not use it: the test no longer states it. A test that failed, was
+      * canceled or did not run keeps its entries. So does one go that is not among `existing`,
+      * where that is given: all the tests there are, of which a test renamed or removed is not. An
+      * entry goes when no test is left of those it had. One that never had a test, as one a program
+      * keeps that runs no tests, stays.
+      */
+    def prune(completed: Set[String], existing: Option[Set[String]]): Unit = {
+        if mode != Mode.Frozen then
+            lock.synchronized {
+                if Files.isRegularFile(file) then
+                    val stored = read()
+                    val results = stored.results.flatMap { (name, entry) =>
+                        val now = used.getOrDefault(name, Set.empty)
+                        val had = testsOf(name, stored)
+                        val tests = had.filter(test =>
+                            (now.contains(test) || !completed.contains(test)) &&
+                                existing.forall(_.contains(test))
+                        )
+                        if had.nonEmpty && tests.isEmpty && !now.contains("") then None
+                        else Some(name -> entry.copy(tests = tests.toList.sorted))
+                    }
+                    if results != stored.results then write(stored.copy(results = results))
+            }
+    }
+
+    /** What is kept for the statement `name`, where it was kept for `fingerprint`.
+      *
+      * A statement names the functions it calls by their names ([[PropIdentity]]). It fails where a
+      * statement was looked up in this run with other programs: two functions of one name, one kept
+      * result for both of them, which each would take from the other.
+      */
     private[verify] def lookup(
         name: String,
         tactic: String,
         fingerprint: Fingerprint
-    ): Option[Kept] =
+    ): Option[Kept] = {
+        use(name)
+        val before = looked.putIfAbsent(name, fingerprint.programs)
+        if before != null && before != fingerprint.programs then
+            throw new IllegalStateException(
+              s"the statement $name is stated with other programs than before in this run: a " +
+                  "function it calls is another one of the same name. A statement names a " +
+                  "function by its name, so functions that are not the same need other names"
+            )
         lock.synchronized {
             val stored = read()
-            stored.results.get(named(name)).filter { entry =>
+            stored.results.get(name).filter { entry =>
                 entry.tactic == tactic && entry.statement == fingerprint.statement &&
                 entry.programs == fingerprint.programs &&
                 stored.environment.get(tactic).contains(sorted(fingerprint.environment))
             }
         }.map(entry => Kept(result(entry.result), entry.notes, raw(entry.counterexample)))
+    }
 
     /** Keeps `kept` for the statement `name`, in place of what was kept for it.
       *
@@ -111,35 +171,40 @@ final class KeptResults private (
         tactic: String,
         fingerprint: Fingerprint,
         kept: Kept
-    ): Unit = lock.synchronized {
-        val stored = read()
-        val environment = sorted(fingerprint.environment)
-        val current =
-            if stored.environment.get(tactic).contains(environment) then stored.results
-            else stored.results.filter((_, entry) => entry.tactic != tactic)
-        val entry = Entry(
-          tactic,
-          word(kept.result),
-          fingerprint.statement,
-          fingerprint.programs,
-          sorted(kept.notes),
-          TreeMap.from(kept.counterexample.view.mapValues(json => new Raw(bytes(json))))
-        )
-        write(
-          Stored(
-            stored.environment.updated(tactic, environment),
-            current.updated(named(name), entry)
-          )
-        )
+    ): Unit = {
+        use(name)
+        lock.synchronized {
+            val stored = read()
+            val environment = sorted(fingerprint.environment)
+            val current =
+                if stored.environment.get(tactic).contains(environment) then stored.results
+                else stored.results.filter((_, entry) => entry.tactic != tactic)
+            val entry = Entry(
+              tactic,
+              word(kept.result),
+              fingerprint.statement,
+              fingerprint.programs,
+              sorted(kept.notes),
+              TreeMap.from(kept.counterexample.view.mapValues(json => new Raw(bytes(json)))),
+              testsOf(name, stored).toList.sorted
+            )
+            write(
+              Stored(
+                stored.environment.updated(tactic, environment),
+                current.updated(name, entry)
+              )
+            )
+        }
     }
 
     /** Why nothing that is kept counts for the statement `name` with `fingerprint`: what the entry
       * under its name no longer agrees with, part by part.
       */
-    private[verify] def stale(name: String, tactic: String, fingerprint: Fingerprint): String =
+    private[verify] def stale(name: String, tactic: String, fingerprint: Fingerprint): String = {
+        use(name)
         lock.synchronized {
             val stored = read()
-            stored.results.get(named(name)).filter(_.tactic == tactic) match
+            stored.results.get(name).filter(_.tactic == tactic) match
                 case None => s"no result of $tactic is kept for it in $file"
                 case Some(entry) =>
                     val before = stored.environment.getOrElse(tactic, TreeMap.empty[String, String])
@@ -166,6 +231,7 @@ final class KeptResults private (
                         s"what is kept for it in $file was ${entry.result} with another " +
                             changed.mkString(", ")
         }
+    }
 
     private def read(): Stored =
         if Files.isRegularFile(file) then readFromArray[Stored](Files.readAllBytes(file))
@@ -211,10 +277,18 @@ object KeptResults {
       */
     private val locks = new java.util.concurrent.ConcurrentHashMap[Path, AnyRef]
 
-    /** The results kept in `file`, used in the way `mode` says. The file need not be there yet. */
-    def in(file: Path, mode: Mode): KeptResults = {
+    /** The results kept in `file`, used in the way `mode` says, by no test. The file need not be
+      * there yet.
+      */
+    def in(file: Path, mode: Mode): KeptResults = in(file, mode, () => "")
+
+    /** The results kept in `file`, used in the way `mode` says, by the tests `asking` says: the
+      * test that runs where a statement is looked up or kept, or the empty name for none. Where
+      * tests run at the same time, it says which of them asks.
+      */
+    def in(file: Path, mode: Mode, asking: () => String): KeptResults = {
         val lock = locks.computeIfAbsent(file.toAbsolutePath.normalize, _ => new AnyRef)
-        new KeptResults(file, mode, "", lock)
+        new KeptResults(file, mode, lock, asking)
     }
 
     /** How the reason of a statement begins that is stale: nothing kept counts for it, and no
@@ -233,14 +307,17 @@ object KeptResults {
         override def nullValue: Raw = null
     }
 
-    /** An entry of the file. Collections that are empty are not written. */
+    /** An entry of the file, with the tests that state its statement. Collections that are empty
+      * are not written.
+      */
     private final case class Entry(
         tactic: String,
         result: String,
         statement: String,
         programs: List[String],
         notes: TreeMap[String, String],
-        counterexample: TreeMap[String, Raw]
+        counterexample: TreeMap[String, Raw],
+        tests: List[String] = Nil
     )
 
     /** The file: the side of each tactic's backend, by the tactic's name, and the entries by the

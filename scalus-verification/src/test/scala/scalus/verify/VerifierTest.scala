@@ -44,7 +44,7 @@ class VerifierTest extends AnyFunSuite {
         assert(lemma.proof eq firstProof)
 
         val second = verifier.statement(Prop(BigInt(2) > BigInt(1)))
-        assert(second.name == "statement_1")
+        assert(second.name.matches("#[0-9a-f]{16}"))
         val blasterArtifact =
             TestArtifact(ProofKind.Blaster, "checked result")
         val secondResult = verifier.verify(
@@ -149,11 +149,66 @@ class VerifierTest extends AnyFunSuite {
         )
     }
 
-    test("generated statement names skip names already declared explicitly") {
+    test("a statement without a name is named by its content, wherever it is stated") {
         val verifier = Verifier.empty
-        verifier.statement("statement_1", Prop(BigInt(1) > BigInt(0)))
-        assert(verifier.statement(Prop(BigInt(2) > BigInt(0))).name == "statement_2")
-        assert(verifier.statement(Prop(BigInt(3) > BigInt(0))).name == "statement_3")
+        val holds = verifier.statement(forAll[BigInt](x => x + BigInt(0) == x))
+        assert(holds.byContent && holds.name.matches("#[0-9a-f]{16}"))
+        // The same statement, written on another line, in another verifier, is the same one.
+        assert(Verifier.empty.statement(forAll[BigInt](x => x + BigInt(0) == x)).name == holds.name)
+        // Stated again in one verifier, it is the statement that was declared.
+        assert(verifier.statement(forAll[BigInt](x => x + BigInt(0) == x)) eq holds)
+        // Another statement, a variable renamed, or another test, is another name.
+        val names = List(
+          holds.name,
+          verifier.statement(forAll[BigInt](y => y + BigInt(0) == y)).name,
+          verifier.statement(forAll[BigInt](x => BigInt(0) + x == x)).name,
+          verifier.statement(forAll[BigInt](x => x + BigInt(1) > x)).name,
+          verifier.statement(callRef(increment.ref, BigInt(1))(result => result > 0)).name
+        )
+        assert(names.distinct == names)
+        // A call binds its result, which is the same on another line too.
+        assert(
+          Verifier.empty.statement(callRef(increment.ref, BigInt(1))(result => result > 0)).name ==
+              names.last
+        )
+        // A statement and a negative control of the same content are not one name.
+        assertThrows[IllegalArgumentException](
+          verifier.refute(forAll[BigInt](x => x + BigInt(0) == x))
+        )
+        val control = verifier.refute(forAll[BigInt](x => x + BigInt(1) == x))
+        assert(control.expected == ExpectedOutcome.Falsified && control.byContent)
+        // A name of one's own is no content's.
+        assertThrows[IllegalArgumentException](verifier.statement("#1", Prop(true)))
+        assertThrows[IllegalArgumentException](verifier.refute("#../..", Prop(false)))
+        assert(!verifier.statement("plain", Prop(true)).byContent)
+    }
+
+    test("a statement stated again after it is proved is no lemma of its own") {
+        val verifier = Verifier.empty
+        val holds = verifier.statement(Prop(BigInt(1) > BigInt(0)))
+        val proved =
+            tactic(_ => VerificationResult.Proven(Proof(TestArtifact(ProofKind.LeanKernel, "t"))))
+        assert(verifier.verify(holds, proved).isInstanceOf[VerificationResult.Proven])
+        val again = verifier.statement(Prop(BigInt(1) > BigInt(0)))
+        assert(again eq holds)
+        verifier.verify(
+          again,
+          tactic { goal =>
+              assert(goal.lemmas.isEmpty)
+              VerificationResult.Inconclusive("not run")
+          }
+        )
+        // A theorem imported into another verifier is what its content is stated as there.
+        val target = Verifier.empty
+        target.addTheorem(verifier.theorems.head)
+        assert(target.statement(Prop(BigInt(1) > BigInt(0))) eq holds)
+        target.verify(
+          holds,
+          tactic { goal =>
+              assert(goal.lemmas.isEmpty)
+              VerificationResult.Inconclusive("not run")
+          }
+        )
     }
 
     test("a negative control expects a refutation, and a request expects what was declared") {

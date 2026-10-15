@@ -17,8 +17,9 @@ import java.nio.file.Path
 object Unfinished extends Tag("scalus.verify.uplcblaster.Unfinished")
 
 /** [[LeanProofs]] for a ScalaTest suite. It has nothing of its own but what ScalaTest is asked for:
-  * a statement that cannot be checked here cancels its test, a result is kept under the name of the
-  * test that states it, and the Lean server is ended after the suite's last test.
+  * a statement that cannot be checked here cancels its test, a kept result says the tests that
+  * state it, what a test that passed no longer states is not kept, nor what only tests the suite no
+  * longer has state, and the Lean server is ended after the suite's last test.
   * {{{
   * class HtlcProofsTest extends AnyFunSuite with LeanProofsSuite {
   *     import proofs.*
@@ -54,7 +55,7 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
       */
     protected def keptChecksDirectory: Option[Path] = None
 
-    /** The test that runs: a result is kept under its name. */
+    /** The test that runs: what it checks is said to be its. */
     private var running = ""
 
     /** The proofs, once a test has asked for them. A suite whose tests ask for none has no
@@ -80,10 +81,20 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
 
     abstract override protected def withFixture(test: NoArgTest): Outcome = {
         running = test.name
-        super.withFixture(test)
+        val outcome = super.withFixture(test)
+        // A test that passed states all it states: what it no longer does is not kept.
+        if outcome.isSucceeded then made.foreach(_.finished(test.name))
+        outcome
     }
 
+    // What is kept for a test the suite no longer has is not kept. The tests are said here, and not
+    // where the proofs are made: a suite that states its statements as it is constructed makes
+    // them before its tests are registered.
     override protected def afterAll(): Unit =
         try super.afterAll()
-        finally made.foreach(_.close())
+        finally
+            made.foreach { proofs =>
+                proofs.tests(testNames)
+                proofs.close()
+            }
 }
