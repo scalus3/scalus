@@ -209,6 +209,13 @@ Evolution provider needs.
 - `Value.lovelaceAmount`: use `getLovelace`, which lowers to the `lookupCoin` builtin at PV11.
   `lovelaceAmount` walks the `Data` map, and on a value without lovelace it returns another
   token's quantity.
+- The bloxbean `Interop` methods that translate Cardano Client Lib types into Plutus script-context
+  types, from `getCredential` and `getValue` to `getTxInfoV1`, `getTxInfoV2`, `getTxInfoV3`,
+  `getScriptContextV2` and `getScriptContextV3`. Nothing in Scalus calls them since the bloxbean
+  `TxEvaluator` was removed in 1.0.0-M1. Decode the transaction with
+  `scalus.cardano.ledger.Transaction.fromCbor(tx.serialize())` and use `LedgerToPlutusTranslation`,
+  the translation Scalus evaluates with. `toScalusData`, `toPlutusData`, `getCostModels`,
+  `toTransactionOutput`, `toUtxoEntry` and `getScriptRef` stay.
 
 ## 1.3.0 (2026-09-28)
 

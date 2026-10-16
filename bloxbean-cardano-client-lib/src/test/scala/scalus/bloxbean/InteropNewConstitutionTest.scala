@@ -7,10 +7,13 @@ import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
 
+import scala.annotation.nowarn
+
 /** `Interop` must give a `NewConstitution` the encoding a node gives it: the script hash is wrapped
   * in the `Constitution` constructor, `Constr 0 [Maybe ScriptHash]`
   * (PlutusLedgerApi/V3/Contexts.hs).
   */
+@nowarn("cat=deprecation")
 class InteropNewConstitutionTest extends AnyFunSuite {
     private val hash = "07" * 28
     private val none = Data.Constr(1, PList.Nil)
