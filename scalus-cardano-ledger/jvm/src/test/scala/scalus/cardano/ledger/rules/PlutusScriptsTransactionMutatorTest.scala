@@ -281,6 +281,77 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         )
     }
 
+    test(
+      "PlutusScriptsTransactionMutator collects collateral whose inputs sum past Long.MaxValue"
+    ) {
+        val script = invalidPlutusV3Script
+
+        val input = arbitrary[TransactionInput].sample.get
+        val collateralInput1 = arbitrary[TransactionInput].sample.get
+        val collateralInput2 = arbitrary[TransactionInput].sample.get
+        val datum = arbitrary[Data].sample.get
+
+        // The inputs hold 2 * Long.MaxValue lovelace and the return takes Long.MaxValue back, so
+        // Long.MaxValue lovelace is collected.
+        val transaction = Transaction(
+          body = KeepRaw(
+            TransactionBody(
+              inputs = TaggedSortedSet(input),
+              collateralInputs = TaggedSortedSet(collateralInput1, collateralInput2),
+              outputs = IndexedSeq.empty,
+              fee = Coin(0),
+              collateralReturnOutput = Some(
+                Sized(
+                  Output(
+                    address = arbitrary[Address].sample.get,
+                    value = Value.lovelace(Long.MaxValue)
+                  )
+                )
+              )
+            )
+          ),
+          witnessSetRaw = KeepRaw(
+            TransactionWitnessSet(
+              scripts = Seq(script),
+              redeemers = Some(
+                Redeemers.Array(
+                  IndexedSeq(
+                    Redeemer(
+                      tag = RedeemerTag.Spend,
+                      index = 0,
+                      data = scalus.uplc.builtin.Data.unit,
+                      exUnits = ExUnits(100000000, 100000000)
+                    )
+                  )
+                )
+              ),
+              vkeyWitnesses = Set.empty,
+              plutusData = Seq(datum)
+            )
+          ),
+          isValid = false,
+          auxiliaryData = None
+        )
+
+        val state = State(
+          utxos = Map(
+            input -> Output(
+              address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+              value = Value.zero,
+              datumHash = DataHash.fromByteString(datum.dataHash)
+            ),
+            collateralInput1 -> Output(
+              arbitrary[Address].sample.get,
+              Value.lovelace(Long.MaxValue)
+            ),
+            collateralInput2 -> Output(arbitrary[Address].sample.get, Value.lovelace(Long.MaxValue))
+          )
+        )
+
+        val result = PlutusScriptsTransactionMutator.transit(Context(), state, transaction)
+        assert(result.map(_.fees) == Right(Coin(Long.MaxValue)), result)
+    }
+
     test("PlutusScriptsTransactionMutator success with isValid = true and empty scripts") {
         val transaction = Transaction(
           TransactionBody(

@@ -6,14 +6,36 @@ import scalus.cardano.ledger.TransactionException.BadInputsUTxOException
 import scala.util.boundary
 import scala.util.boundary.break
 
+/** The value a transaction consumes and produces.
+  *
+  * The ledger sums both sides with Haskell's `Integer`, and so do `consumedExact` and
+  * `producedExact`, which the value-conservation rule compares. A transaction sets amounts of up to
+  * `Long.MaxValue` in its outputs, deposits and withdrawals, so a `Long` sum could wrap around and
+  * make two different totals look equal. [[consumed]] and [[produced]] return the same totals as a
+  * [[Value]] and throw `ArithmeticException` when one does not fit.
+  */
 object TxBalance {
 
+    /** The value `tx` consumes, as Haskell `conwayConsumed`.
+      *
+      * @throws ArithmeticException
+      *   when an amount does not fit in a `Long`
+      */
     def consumed(
         tx: Transaction,
         certState: CertState,
         utxos: Utxos,
         protocolParams: ProtocolParams
-    ): Either[BadInputsUTxOException, Value] = {
+    ): Either[BadInputsUTxOException, Value] =
+        consumedExact(tx, certState, utxos, protocolParams).map(_.toValue)
+
+    /** [[consumed]] without a bound on the amounts. */
+    private[cardano] def consumedExact(
+        tx: Transaction,
+        certState: CertState,
+        utxos: Utxos,
+        protocolParams: ProtocolParams
+    ): Either[BadInputsUTxOException, ExactValue] = {
         val inputs = consumedInputs(tx, utxos) match
             case Right(value) => value
             case Left(err)    => return Left(err)
@@ -35,7 +57,7 @@ object TxBalance {
         val refunds = getTotalRefundsTxBody
 
         // balance (txins tx ◁ u) + wbalance (txwdrls tx) + keyRefunds pp tx
-        val consumedValue = inputs + Value(withdrawals + refunds)
+        val consumedValue = inputs + ExactValue.coin(withdrawals + refunds)
 
         val getConsumedMaryValue = consumedValue + minted
         val conwayConsumed = getConsumedMaryValue
@@ -44,14 +66,28 @@ object TxBalance {
 
     /** The value `tx` produces, with a pool deposit for every pool registration, as no pool is
       * registered. Use the overload with a [[CertState]] for a tx that may re-register a pool.
+      *
+      * @throws ArithmeticException
+      *   when an amount does not fit in a `Long`
       */
     def produced(tx: Transaction, protocolParams: ProtocolParams): Value =
         produced(tx, CertState.empty, protocolParams)
 
     /** The value `tx` produces, as Haskell `conwayProducedValue`. A pool registration pays the pool
       * deposit only for a pool not in `certState` and not registered earlier in the tx.
+      *
+      * @throws ArithmeticException
+      *   when an amount does not fit in a `Long`
       */
-    def produced(tx: Transaction, certState: CertState, protocolParams: ProtocolParams): Value = {
+    def produced(tx: Transaction, certState: CertState, protocolParams: ProtocolParams): Value =
+        producedExact(tx, certState, protocolParams).toValue
+
+    /** [[produced]] without a bound on the amounts. */
+    private[cardano] def producedExact(
+        tx: Transaction,
+        certState: CertState,
+        protocolParams: ProtocolParams
+    ): ExactValue = {
         val fee = producedFee(tx)
         val outputs = producedOutputs(tx)
         val burned = producedMint(tx)
@@ -65,9 +101,9 @@ object TxBalance {
         val donation = producedDonation(tx)
 
         val getTotalDepositsTxBody = conwayTotalDepositsTxCerts + proposalDeposits
-        val shelleyProducedValue = outputs + Value(fee + getTotalDepositsTxBody)
+        val shelleyProducedValue = outputs + ExactValue.coin(fee + getTotalDepositsTxBody)
         val getProducedMaryValue = shelleyProducedValue + burned
-        val conwayProducedValue = getProducedMaryValue + donation
+        val conwayProducedValue = getProducedMaryValue + ExactValue.coin(donation)
         val getProducedValue = conwayProducedValue
         getProducedValue
     }
@@ -75,41 +111,31 @@ object TxBalance {
     private def consumedInputs(
         tx: Transaction,
         utxo: Utxos
-    ): Either[BadInputsUTxOException, Value] = boundary {
-        val inputs = tx.body.value.inputs.toSet.view
-            .map { input =>
-                utxo.get(input) match {
-                    case Some(output) => output.value
-                    // This check allows to be an order independent in the sequence of validation rules
-                    case None => break(Left(TransactionException.BadInputsUTxOException(tx.id)))
-                }
+    ): Either[BadInputsUTxOException, ExactValue] = boundary {
+        val inputs = tx.body.value.inputs.toSet.view.map { input =>
+            utxo.get(input) match {
+                case Some(output) => output.value
+                // This check allows to be an order independent in the sequence of validation rules
+                case None => break(Left(TransactionException.BadInputsUTxOException(tx.id)))
             }
-            .foldLeft(Value.zero)(_ + _)
+        }
 
-        Right(inputs)
+        Right(ExactValue.sum(inputs))
     }
 
     private def consumedMint(
         tx: Transaction
-    ): Value = {
+    ): ExactValue = {
         val mint = tx.body.value.mint.getOrElse(MultiAsset.empty)
-
-        val mintedAssets = MultiAsset(
-          mint.assets.flatMap { case (policy, assets) =>
-              val mints = assets.filter((_, value) => value > 0)
-              if mints.isEmpty then None else Some(policy -> mints)
-          }
-        )
-
-        Value(Coin.zero, mintedAssets)
+        ExactValue(Value(Coin.zero, mint.onlyPositive))
     }
 
     private def consumedWithdrawals(
         tx: Transaction
-    ): Coin = {
+    ): BigInt = {
         tx.body.value.withdrawals
-            .map { _.withdrawals.values.foldLeft(Coin.zero)(_ + _) }
-            .getOrElse(Coin.zero)
+            .map { _.withdrawals.values.foldLeft(BigInt(0))(_ + _.value) }
+            .getOrElse(BigInt(0))
     }
 
     // Compute the key deregistration refunds in a transaction
@@ -117,7 +143,7 @@ object TxBalance {
         tx: Transaction,
         certState: CertState,
         protocolParams: ProtocolParams
-    ): Coin = {
+    ): BigInt = {
         val certificates = tx.body.value.certificates.toSeq
 
         def lookupStakingDeposit(cred: Credential): Option[Coin] = {
@@ -128,12 +154,12 @@ object TxBalance {
             certState.vstate.dreps.get(cred).map(_.deposit)
         }
 
-        Certificate.shelleyTotalRefundsTxCerts(
+        Certificate.shelleyTotalRefundsTxCertsExact(
           lookupStakingDeposit,
           protocolParams,
           certificates
         ) + Certificate
-            .conwayDRepRefundsTxCerts(
+            .conwayDRepRefundsTxCertsExact(
               lookupDRepDeposit,
               certificates
             )
@@ -141,51 +167,42 @@ object TxBalance {
 
     private def producedFee(
         tx: Transaction
-    ): Coin = {
-        tx.body.value.fee
+    ): BigInt = {
+        BigInt(tx.body.value.fee.value)
     }
 
     private def producedOutputs(
         tx: Transaction
-    ): Value = {
-        tx.body.value.outputs
-            .map(_.value.value)
-            .foldLeft(Value.zero)(_ + _)
+    ): ExactValue = {
+        ExactValue.sum(tx.body.value.outputs.view.map(_.value.value))
     }
 
     private def producedMint(
         tx: Transaction
-    ): Value = {
+    ): ExactValue = {
         val mint = tx.body.value.mint.getOrElse(MultiAsset.empty)
-
-        val burnedAssets = MultiAsset(
-          mint.assets.flatMap { case (policy, assets) =>
-              // In TxBalance.produced, the burned tokens are added with a positive sign.
-              // So we reverse the negative sign that they have in txBody.mint.
-              val burns = assets.collect { case name -> value if value < 0 => name -> -value }
-              if burns.isEmpty then None else Some(policy -> burns)
-          }
-        )
-
-        Value(Coin.zero, burnedAssets)
+        // In TxBalance.produced, the burned tokens are added with a positive sign.
+        // So we reverse the negative sign that they have in txBody.mint, exactly:
+        // negating a burn of 2^63 tokens does not fit in a `Long`.
+        ExactValue.zero - ExactValue(Value(Coin.zero, mint.negativeAssets))
     }
 
     private def conwayTotalDepositsTxCerts(
         tx: Transaction,
         isRegisteredPool: PoolKeyHash => Boolean,
         protocolParams: ProtocolParams
-    ): Coin = {
+    ): BigInt = {
         // Calculate total deposits for Shelley-era certificates (stake pool and delegation)
         val certificates = tx.body.value.certificates.toSeq
 
-        val shelleyTotalDepositsTxCerts: Coin = Certificate.shelleyTotalDeposits(
+        val shelleyTotalDepositsTxCerts: BigInt = Certificate.shelleyTotalDepositsExact(
           protocolParams,
           isRegisteredPool,
           certificates
         )
 
         // Calculate total deposits for Conway-era DRep certificates
-        val conwayDRepDepositsTxCerts: Coin = Certificate.conwayDRepDeposits(
+        val conwayDRepDepositsTxCerts: BigInt = Certificate.conwayDRepDepositsExact(
           protocolParams,
           certificates
         )
@@ -195,15 +212,15 @@ object TxBalance {
 
     private def producedDonation(
         tx: Transaction
-    ): Value = {
-        Value(tx.body.value.donation.getOrElse(Coin.zero))
+    ): BigInt = {
+        BigInt(tx.body.value.donation.getOrElse(Coin.zero).value)
     }
 
     private def producedProposalDeposits(
         tx: Transaction
-    ): Coin = {
+    ): BigInt = {
         tx.body.value.proposalProcedures.toSeq
             .map(_.deposit)
-            .foldLeft(Coin.zero)(_ + _)
+            .foldLeft(BigInt(0))(_ + _.value)
     }
 }

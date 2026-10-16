@@ -92,14 +92,19 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                                     )
                             }
                         }
-                        .foldLeft(Coin.zero)(_ + _)
+                        .foldLeft(BigInt(0))(_ + _.value)
+
+                    // The collateral inputs can hold more than `Long.MaxValue` lovelace together,
+                    // so they are summed exactly before the return is taken off.
+                    val collectedCollateral =
+                        Coin.exact(collateralCoins - collateralReturnCoins.value)
 
                     // TODO full transition
                     success(
                       state.copy(
                         utxos =
                             state.utxos -- event.body.value.collateralInputs.toSet ++ addedUtxos,
-                        fees = state.fees + (collateralCoins - collateralReturnCoins)
+                        fees = state.fees + collectedCollateral
                       )
                     )
             case NonFatal(exception) =>

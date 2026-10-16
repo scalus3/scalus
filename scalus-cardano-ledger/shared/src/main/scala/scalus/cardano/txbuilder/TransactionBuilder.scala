@@ -1011,7 +1011,9 @@ object TransactionBuilder {
     }
 
     def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value = {
-        val produced = TxBalance.produced(tx, params)
+        // Both totals are exact: a token's total on each side can pass `Long.MaxValue` while the
+        // change, their difference, still fits.
+        val produced = TxBalance.producedExact(tx, CertState.empty, params)
         // During balancing we don't have the real ledger CertState, so DRep deregistration
         // refunds (whose amounts live in ledger state) would be lost. Reconstruct the needed
         // CertState from the amounts declared on the transaction's own deregistration
@@ -1020,8 +1022,9 @@ object TransactionBuilder {
         // computes. Stake-key refunds don't need this when `UnregCert` carries its refund, which
         // `TxBalance` uses. A legacy `UnregCert(cred, None)` balances with no refund, so the
         // `TxBuilder.deregisterStake` overloads always state one.
-        val consumed = TxBalance.consumed(tx, certStateForBalancing(tx), utxo, params).toTry.get
-        consumed - produced
+        val consumed =
+            TxBalance.consumedExact(tx, certStateForBalancing(tx), utxo, params).toTry.get
+        (consumed - produced).toValue
     }
 
     /** Reconstructs the [[CertState]] needed to balance DRep deposit refunds from the

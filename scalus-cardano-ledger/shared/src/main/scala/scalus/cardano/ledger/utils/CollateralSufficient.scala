@@ -22,9 +22,18 @@ object CollateralSufficient {
         actualTotalSumOfCollateralCoins: Coin,
         transactionFee: Coin,
         collateralPercentage: Long,
-    ): Boolean = {
-        (actualTotalSumOfCollateralCoins.value * 100) >= transactionFee.value * collateralPercentage
-    }
+    ): Boolean =
+        check(BigInt(actualTotalSumOfCollateralCoins.value), transactionFee, collateralPercentage)
+
+    /** [[check]] for an exactly summed collateral. Both products are taken without a bound, as the
+      * ledger's `Integer` takes them: a `Long` product wraps for a large fee or collateral.
+      */
+    private[ledger] def check(
+        actualTotalSumOfCollateralCoins: BigInt,
+        transactionFee: Coin,
+        collateralPercentage: Long
+    ): Boolean =
+        actualTotalSumOfCollateralCoins * 100 >= BigInt(transactionFee.value) * collateralPercentage
 
     /** Calculates the required collateral amount based on the transaction fee and collateral
       * percentage from protocol parameters.
@@ -40,6 +49,7 @@ object CollateralSufficient {
         val feeValue = BigDecimal(fee.value)
         val percentage = BigDecimal(collateralPercentage)
         val result = (feeValue * percentage / 100).setScale(0, BigDecimal.RoundingMode.UP)
-        Coin(result.toLong)
+        // `toLong` would wrap an amount past `Long.MaxValue`
+        Coin.exact(result.toBigInt)
     }
 }
