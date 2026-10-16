@@ -3,7 +3,8 @@
 > Historical record. The module was renamed from `scalus-lean-proofs` to `scalus-verification`
 > (sbt project `scalusVerification`, Scala package `scalus.lean` → `scalus.verify`) on
 > 2026-09-25, and its Lean workspace moved from `lean/` to `src/main/lean/`; paths and commands
-> below use the old names.
+> below use the old names. The branch `worktree-lean-proofs` named below is obsolete: the work
+> was rebased onto master and continued as `feat/verification` (PR #401).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

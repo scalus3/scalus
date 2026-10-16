@@ -51,8 +51,8 @@ hand in Lean (§8.1). In the examples, `VestingVerificationTest`, `HtlcVerificat
 `Data`. ci-jvm passes on the kept results, and the Lean-Proofs workflow recalculates them nightly
 and on a push that changes what the proofs are made of.
 
-The `spec.requires` / `spec.ensures` clauses of the local branch `feature/verification-blaster`
-are superseded by `Spec`, and `VestingValidator` states its guarantees with it (§8.2).
+`Spec` replaces the `spec.requires` / `spec.ensures` clauses of the first prototype, and
+`VestingValidator` states its guarantees with it (§8.2).
 
 Statements are declared by name, `statement` or `refute` for a negative control, and run as
 `VerificationRequest`s by `LeanProofs`, which holds each to its `ExpectedOutcome` (§4.5, §5.2).
@@ -333,7 +333,7 @@ The most common statement about a function has one shape: for all arguments that
 precondition, the result satisfies a postcondition. It is first-class, and it can be written in two
 equivalent forms.
 
-**In the function's body**, with the `spec` clauses of `feature/verification-blaster`:
+**In the function's body**, with the clauses of `Spec` in scalus-core's prelude:
 
 ```scala
 @Compile
@@ -1306,12 +1306,13 @@ and the hand-written Lean files are gone. What the suite covers, and why the res
 is described in
 [the tactic's details](verification-details/uplc-blaster.md#what-preludeproofstest-covers).
 
-### 8.2 `spec` clauses on `feature/verification-blaster`
+### 8.2 The `spec` clauses of the first prototype
 
-That branch holds the `spec` clauses of §3.7 and an annotated `VestingValidator`, and nothing
-else. `Spec` in scalus-core's prelude replaces the clauses (§4.3), and the rewritten
-`VestingValidator` states its guarantees with it again, so the branch has nothing left to bring
-forward. It is more than 400 commits behind master and has no remote copy.
+History. The first in-body clauses, `spec.requires` and `spec.ensures`, and a `VestingValidator`
+annotated with them, were written on the branch `feature/verification-blaster` (last commit
+2026-08-17). That branch was never pushed and is obsolete. `Spec` in scalus-core's prelude
+replaces the clauses (§3.7, §4.3), and the rewritten `VestingValidator` states its guarantees with
+it again, so nothing is left to bring forward from it.
 
 ### 8.3 Obligations nobody has to write
 
@@ -1330,7 +1331,7 @@ same place.
 | **0** | `scalus.verify` surface (`Prop`, `forAll`, connectives, `Quantifiable` for `BigInt`/`Boolean`/`ByteString`); verifier-owned `statement` / `refute` methods; generated verifier descriptors; statement capture by macros (§4.3); `Prop` with flat serialization; `@Compile` function and script targets; `blaster-uplc` for ∀-prefix statements with the polarity rule; `sbt verify` generating a Lean workspace and parsing verdicts | the `Math.lean` theorems and controls, restated in Scala over `Math.*` targets, give the same verdicts; generated files replace the hand-written ones | Built, in part by other means: the surface (`Quantifiable` also for `Data` and case classes), capture by macros, `@Compile` function targets, `blaster-uplc` with the polarity rule. The `Math.lean` theorems are restated in `PreludeProofsTest`, and the hand-written files are gone (§8.1). Proofs run as ScalaTest suites, not through `sbt verify`. Not built: verifier descriptors, script targets, a serialized `Prop`. |
 | **1** | `exists` / `existsLet`, `denotes`, `equal`; `refute` with replay; `scalacheck`; external contracts (`verifier.contract(f)`); `Theorem`, report, cache; PR-time freshness check and nightly run | a suite without a negative control fails; a planted spurious counterexample is reported as spurious; `Math.clamp`'s contract proved about its compiled code | Built: `exists` / `existsLet`, `denotes`, `equal`; replayed refutations, and spurious counterexamples reported as such; external contracts, proved about compiled code; `Theorem`; the kept results, with ci-jvm passing on them and the Lean-Proofs workflow nightly and on a push; and `refute`, `ExpectedOutcome` and `VerificationRequest`, run by `LeanProofs.check`; statements without a name named by their content hash (§4.4), and kept results pruned. Not built: `scalacheck`, a report, and failing a suite without a negative control. |
 | **2** | in-body `spec` capture in the plugin; `lean-direct` for integers, `Bool`, `ByteString`, `List`, `Option` and case classes; declared Lean mappings, proved by `blaster-uplc`; `using`, `split`, `cases`; contract VCG for modular proofs | adding clauses leaves the script hash unchanged; a list lemma proved with `induction xs <;> blaster`; a Mathlib `Int.gcd` theorem transferred to the compiled `Math.gcd` through a proved mapping; a caller's obligation discharged with its callee's contract | Built: in-body `Spec` capture, with the script's bytes unchanged (`SpecTest`), and the caller's side of contracts (`obligations`). Not built: `lean-direct`, mappings, `using` / `split` / `cases`, the VCG. |
-| **3** | validators: `ScriptContext` targets with the CardanoLedgerApiBlaster validity predicates; bring `feature/verification-blaster`'s Vesting annotations forward | one real contract (Vesting) with authorisation and conservation properties proved about its script hash | In part: Vesting, HTLC and the payment splitters have properties proved about their validators, over script contexts written as `Data`, and Vesting's annotations are back (§8.2). Not built: the validity predicates, and proofs about the published script hash, which wait for Value and array builtins in PlutusCoreBlaster. |
+| **3** | validators: `ScriptContext` targets with the CardanoLedgerApiBlaster validity predicates; bring the first prototype's Vesting annotations forward (§8.2) | one real contract (Vesting) with authorisation and conservation properties proved about its script hash | In part: Vesting, HTLC and the payment splitters have properties proved about their validators, over script contexts written as `Data`, and Vesting's annotations are back (§8.2). Not built: the validity predicates, and proofs about the published script hash, which wait for Value and array builtins in PlutusCoreBlaster. |
 | **4** | a Scala kernel only if a lemma backlog demands it | representative lemmas elaborate and discharge through `Prop` | Not started. |
 
 ---
