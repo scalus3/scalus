@@ -3,7 +3,7 @@ package scalus.compiler.sir.lowering
 import scalus.cardano.ledger.Language
 import scalus.compiler.Options
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
-import scalus.compiler.sir.transform.{BooleanOptimizer, StaticArgumentTransformation}
+import scalus.compiler.sir.transform.{BooleanOptimizer, EraseSpecifications, StaticArgumentTransformation}
 import scalus.compiler.sir.{MutualRecursionElimination, RemoveTraces, SIR, TargetLoweringBackend}
 import scalus.uplc.Term
 import scalus.uplc.transform.{Optimizer, V1V2Optimizer, V3Optimizer}
@@ -11,7 +11,7 @@ import scalus.uplc.transform.{Optimizer, V1V2Optimizer, V3Optimizer}
 /** The single SIR -> UPLC pipeline, shared by [[scalus.uplc.CompiledPlutus]] and the `sir.toUplc`
   * extensions:
   *
-  * removeTraces? -> BooleanOptimizer? -> MutualRecursionElimination ->
+  * EraseSpecifications -> removeTraces? -> BooleanOptimizer? -> MutualRecursionElimination ->
   * StaticArgumentTransformation? -> lower(backend) -> optimize? -> fill positions
   *
   * BooleanOptimizer and StaticArgumentTransformation both run when `options.optimizeUplc` is set.
@@ -51,7 +51,8 @@ object UplcPipeline {
         optimizer: Optimizer,
         optimizeBooleans: Boolean
     ): Term = {
-        val sir0 = if options.removeTraces then RemoveTraces.transform(sir) else sir
+        val specified = EraseSpecifications(sir)
+        val sir0 = if options.removeTraces then RemoveTraces.transform(specified) else specified
         val sir1 = if optimizeBooleans then BooleanOptimizer.optimize(sir0) else sir0
         val sir2 = MutualRecursionElimination(sir1)
         val sirToLower =

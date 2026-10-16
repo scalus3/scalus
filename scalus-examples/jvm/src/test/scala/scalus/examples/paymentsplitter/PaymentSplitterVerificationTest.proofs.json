@@ -1,0 +1,331 @@
+{
+  "environment": {
+    "uplc-blaster": {
+      "Blaster": "3a141c8d06f1",
+      "PlutusCore": "2919b66445cd",
+      "ScalusProofs": "eb9642f1ddd4f46e",
+      "toolchain": "leanprover/lean4:v4.24.0"
+    }
+  },
+  "results": {
+    "payment_splitter.naive.every_payee_is_paid": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "3f3111b8263c579c",
+      "programs": [
+        "160706ae9dc6e9ee"
+      ],
+      "notes": {
+        "budget": "4958",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "every payee is paid"
+      ]
+    },
+    "payment_splitter.naive.every_payout_is_accepted": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "4c893089a68bd8b5",
+      "programs": [
+        "7afda6d9d38b825d",
+        "da85f6e9f44ae06a"
+      ],
+      "notes": {
+        "budget": "6781",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "a": "213021",
+        "b": "213121",
+        "funds": 0,
+        "locked": 0,
+        "rest.certificates": {"list":[]},
+        "rest.currentTreasuryAmount": {"int":3},
+        "rest.data": {"list":[]},
+        "rest.datum": {"bytes":"213321"},
+        "rest.fee": {"list":[]},
+        "rest.id": {"list":[]},
+        "rest.mint": {"list":[]},
+        "rest.proposalProcedures": {"list":[]},
+        "rest.redeemer": {"bytes":"213221"},
+        "rest.redeemers": {"list":[]},
+        "rest.referenceInputs": {"list":[]},
+        "rest.signatories": {"list":[]},
+        "rest.treasuryDonation": {"int":4},
+        "rest.validRange": {"list":[]},
+        "rest.votes": {"list":[]},
+        "rest.withdrawals": {"list":[]},
+        "toA": 0,
+        "toB": 1
+      },
+      "tests": [
+        "an honest payout is accepted"
+      ]
+    },
+    "payment_splitter.naive.honest_payout_is_accepted": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "00c9c1ba4ca3feb7",
+      "programs": [
+        "7afda6d9d38b825d",
+        "1d571b1d270396ef",
+        "da85f6e9f44ae06a"
+      ],
+      "notes": {
+        "budget": "6781",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "an honest payout is accepted"
+      ]
+    },
+    "payment_splitter.naive.no_other_key_is_paid": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "489a2bf8a33f4c7f",
+      "programs": [
+        "327c26033637a6e7",
+        "cbb7613c390c7981"
+      ],
+      "notes": {
+        "budget": "6180",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "nobody but the payees is paid"
+      ]
+    },
+    "payment_splitter.naive.no_script_is_paid": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "66ec06c310d1ad50",
+      "programs": [
+        "2172e6ec39b1a641"
+      ],
+      "notes": {
+        "budget": "4787",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "nobody but the payees is paid"
+      ]
+    },
+    "payment_splitter.naive.only_a_payee_submits": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "489a2bf8a33f4c7f",
+      "programs": [
+        "327c26033637a6e7",
+        "d73161e7a75951ba"
+      ],
+      "notes": {
+        "budget": "2075",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "only a payee submits a payout"
+      ]
+    },
+    "payment_splitter.naive.only_ada_is_split": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "1d21ac9eb4de7c68",
+      "programs": [
+        "3cbe9d3ae5d2585f",
+        "e3b5bf39a094480b",
+        "8bda82c809ae94fe"
+      ],
+      "notes": {
+        "budget": "3493",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "only ADA is split"
+      ]
+    },
+    "payment_splitter.naive.other_payee_is_paid_exactly_the_split": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "6f0807f1fa72725d",
+      "programs": [
+        "1d571b1d270396ef",
+        "da85f6e9f44ae06a"
+      ],
+      "notes": {
+        "budget": "6778",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the payees other than the submitter are paid exactly the split"
+      ]
+    },
+    "payment_splitter.naive.split_is_exactly_half": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "6f0807f1fa72725d",
+      "programs": [
+        "e52bba1132039e01",
+        "da85f6e9f44ae06a"
+      ],
+      "notes": {
+        "budget": "6778",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "a": "213021",
+        "b": "213121",
+        "funds": 0,
+        "locked": 1,
+        "rest.certificates": {"list":[]},
+        "rest.currentTreasuryAmount": {"int":4},
+        "rest.data": {"list":[]},
+        "rest.datum": {"bytes":"213321"},
+        "rest.fee": {"list":[]},
+        "rest.id": {"list":[]},
+        "rest.mint": {"list":[]},
+        "rest.proposalProcedures": {"list":[]},
+        "rest.redeemer": {"bytes":"213221"},
+        "rest.redeemers": {"list":[]},
+        "rest.referenceInputs": {"list":[]},
+        "rest.signatories": {"list":[]},
+        "rest.treasuryDonation": {"int":5},
+        "rest.validRange": {"list":[]},
+        "rest.votes": {"list":[]},
+        "rest.withdrawals": {"list":[]},
+        "toA": 0,
+        "toB": 0
+      },
+      "tests": [
+        "the payees other than the submitter are paid exactly the split, negative control"
+      ]
+    },
+    "payment_splitter.optimized.spend_needs_a_withdrawal": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "87c14ff6f518e51c",
+      "programs": [
+        "2bd60dcd44e091e2"
+      ],
+      "notes": {
+        "budget": "1403",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "a contract output is spent only with the stake validator's withdrawal"
+      ]
+    },
+    "payment_splitter.optimized.spend_needs_its_own_withdrawal": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "6284a8ecd8bd9c99",
+      "programs": [
+        "84e9d729a0a6a17f",
+        "16d9e4c1091d85e3"
+      ],
+      "notes": {
+        "budget": "1607",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "a contract output is spent only with the stake validator's withdrawal"
+      ]
+    },
+    "payment_splitter.optimized.spend_redeemer_names_its_input": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "b16aee2523c23f6d",
+      "programs": [
+        "da20ee8598dcb7ba",
+        "226933caee8c4bf5"
+      ],
+      "notes": {
+        "budget": "1268",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the redeemer of a spend names the contract's output"
+      ]
+    },
+    "payment_splitter.optimized.spend_with_its_withdrawal_is_accepted": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "c58afee1ebd83f6c",
+      "programs": [
+        "8fdd577ed0a9fb77"
+      ],
+      "notes": {
+        "budget": "1593",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "a contract output is spent only with the stake validator's withdrawal"
+      ]
+    },
+    "payment_splitter.optimized.stake_is_never_delegated": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "cf9aed4c76c9a1cc",
+      "programs": [
+        "8609c6e7efb2d96f",
+        "a150b8cbf05d3561"
+      ],
+      "notes": {
+        "budget": "279",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the contract's stake credential is registered and deregistered, and not delegated"
+      ]
+    },
+    "payment_splitter.optimized.stake_registration_is_accepted": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "b65528972ae0bb3b",
+      "programs": [
+        "7a0ea78d264fbfd6"
+      ],
+      "notes": {
+        "budget": "269",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the contract's stake credential is registered and deregistered, and not delegated"
+      ]
+    },
+    "payment_splitter.optimized.stake_validator_accepts_an_honest_payout": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "00c9c1ba4ca3feb7",
+      "programs": [
+        "7afda6d9d38b825d",
+        "b4da1362688fbe40",
+        "10b70ec6bf750984"
+      ],
+      "notes": {
+        "budget": "5138",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the stake validator accepts an honest payout"
+      ]
+    },
+    "payment_splitter.optimized.stake_validator_pays_exactly_the_split": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "cef26632b2fdf339",
+      "programs": [
+        "bf6c1778862da16c",
+        "d83bc3d89570738b",
+        "0caece4df267397c"
+      ],
+      "notes": {
+        "budget": "5168",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the stake validator pays the payees other than the submitter exactly the split"
+      ]
+    }
+  }
+}

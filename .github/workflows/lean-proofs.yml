@@ -1,0 +1,77 @@
+name: Lean-Proofs
+on:
+  workflow_dispatch:
+  # A push that changes what the proofs are made of. A change elsewhere, in the compiler for
+  # instance, changes the programs they are about as well: the daily run is for those.
+  push:
+    paths:
+      - 'scalus-verification/**'
+      - 'scalus-verification-scalatest/**'
+      - 'scalus-examples/jvm/src/test/lean/**'
+      - 'scalus-examples/**/vesting/**'
+      - 'scalus-examples/**/scalus/examples/htlc/**'
+      - 'scalus-examples/**/scalus/examples/paymentsplitter/**'
+      - '.github/workflows/lean-proofs.yml'
+  schedule:
+    # 03:17 UTC daily. Off the hour to avoid the GitHub Actions rush.
+    - cron: '17 3 * * *'
+jobs:
+  proofs:
+    name: blaster
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: nixbuild/nix-quick-install-action@v34
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          use-flakehub: false
+      - name: Cache elan and lake
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            scalus-verification/src/main/lean/.lake
+          key: lean-${{ hashFiles('scalus-verification/src/main/lean/lean-toolchain', 'scalus-verification/src/main/lean/lake-manifest.json') }}
+      - name: Build the Lean workspace
+        working-directory: scalus-verification/src/main/lean
+        run: |
+          nix develop ../../../..#ci --accept-flake-config --command bash -c "lake build"
+      - name: Build the Lean workspace of the vesting example
+        # It has the packages of the workspace above, so only its own module is built.
+        working-directory: scalus-examples/jvm/src/test/lean/LinearVesting
+        run: |
+          nix develop ../../../../../..#ci --accept-flake-config --command bash -c "lake build"
+      - name: Run the proofs
+        # SCALUS_REQUIRE_LEAN makes a test that cannot run Lean fail instead of being canceled,
+        # so the proofs cannot pass by not running.
+        env:
+          SCALUS_REQUIRE_LEAN: "1"
+        run: |
+          nix develop .#ci --accept-flake-config --command bash -c "sbt --batch scalusVerification/test 'scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest scalus.examples.htlc.HtlcVerificationTest scalus.examples.paymentsplitter.PaymentSplitterVerificationTest -- -l scalus.verify.uplcblaster.Unfinished'"
+      - name: The kept results are current
+        # The run above asked Lean for every statement. One whose entry was missing or stale was
+        # proved again and written into its file, so a file that changed is not the one of this
+        # code. It is to be committed: a build without Lean passes a statement on it.
+        run: |
+          changed="$(git status --porcelain -- '*.proofs.json')"
+          if [ -n "$changed" ]; then
+            echo "$changed"
+            git diff -- '*.proofs.json' | head -200
+            echo "::error::The kept results are not those of this code. Run the proofs with Lean, and commit the *.proofs.json files."
+            exit 1
+          fi
+      - name: Report results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "[${{ github.event.repository.name }}] Lean-Proofs ${{ job.status == 'success' && '✅' || '❌' }} - ${{ github.actor }} on ${{ github.ref_name }}"
+          url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          username: "GitHub Actions"
+          nodetail: true
+          notimestamp: true

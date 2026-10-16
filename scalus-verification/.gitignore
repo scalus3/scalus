@@ -1,0 +1,3 @@
+src/main/lean/.lake/
+# Checks written for looking into, by suites that keep them (keptChecksDirectory)
+src/main/lean/KeptChecks/
