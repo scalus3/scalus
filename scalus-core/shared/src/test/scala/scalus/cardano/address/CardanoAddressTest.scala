@@ -85,10 +85,10 @@ class CardanoAddressTest extends AnyFunSuite {
         )
 
         testCases.foreach { case (value, expectedBytes) =>
-            val encoded = VarUInt.encodeVariableLengthUInt(value)
+            val encoded = PointerNumber.encode(value)
             assert(encoded.sameElements(expectedBytes), s"Encoding failed for value $value")
 
-            val (decoded, bytesUsed) = VarUInt.decodeVariableLengthUInt(encoded, 0)
+            val (decoded, bytesUsed) = PointerNumber.decode(encoded, 0)
             assert(decoded == value)
             assert(bytesUsed == encoded.length)
         }
@@ -342,7 +342,7 @@ class CardanoAddressTest extends AnyFunSuite {
 
     /** The numbers written as `Pointer.toBytes` writes them, whether or not they fit a pointer. */
     private def pointerBytes(slot: Long, txIdx: Long, certIdx: Long): Array[Byte] =
-        Seq(slot, txIdx, certIdx).flatMap(v => VarUInt.encodeVariableLengthUInt(v).toSeq).toArray
+        Seq(slot, txIdx, certIdx).flatMap(v => PointerNumber.encode(v).toSeq).toArray
 
     /** Pointers whose slot or index does not fit the ledger's 32 and 16 bits. */
     private val outOfRange = Seq(
@@ -455,7 +455,7 @@ class CardanoAddressTest extends AnyFunSuite {
     test("A variable-length number keeps its low 64 bits, as the ledger's Word64 decoder") {
         // 2^64 + 5 in ten 7-bit groups: 2, eight zeros, 5
         val wrapping = Array(0x82.toByte) ++ Array.fill(8)(0x80.toByte) ++ Array[Byte](0x05)
-        assert(VarUInt.decodeVariableLengthUInt(wrapping, 0) == (5L, 10))
+        assert(PointerNumber.decode(wrapping, 0) == (5L, 10))
         assert(
           Pointer.fromBytes(wrapping ++ Array[Byte](0, 0), ProtocolVersion.valentinePV)
               == Success(Pointer(Slot(5), 0, 0))
@@ -464,7 +464,7 @@ class CardanoAddressTest extends AnyFunSuite {
 
     test("A long run of continuation bytes decodes without recursion") {
         val longZero = Array.fill(100_000)(0x80.toByte) ++ Array[Byte](0x00)
-        assert(VarUInt.decodeVariableLengthUInt(longZero, 0) == (0L, 100_001))
+        assert(PointerNumber.decode(longZero, 0) == (0L, 100_001))
         assert(
           Pointer.fromBytes(longZero ++ Array[Byte](0, 0), ProtocolVersion.valentinePV)
               == Success(Pointer(Slot(0), 0, 0))

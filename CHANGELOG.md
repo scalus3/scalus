@@ -98,8 +98,10 @@ Evolution provider needs.
   first, where the ledger and CIP-19 put the most significant group first. Every slot or index of
   128 or more came out wrong: the CIP-19 pointer (2498243, 27, 3) decoded as (141511681, 27, 3), so
   a script saw a different `StakingPtr`. **A pointer address Scalus built with such a slot or index
-  had other bytes than intended, so it is a different address from the one now built.** The same
-  holds for `VarUInt.encodeVariableLengthUInt` and `decodeVariableLengthUInt`. **Constructing a
+  had other bytes than intended, so it is a different address from the one now built.**
+  `VarUInt.encodeVariableLengthUInt` and `decodeVariableLengthUInt` use the CIP-19 order too, and
+  `VarUInt` is deprecated in favour of `Pointer.toBytes` and `Pointer.parseFrom`. **Bytes that code
+  stored with the old `VarUInt` read back as other numbers.** **Constructing a
   `Pointer` that does not fit the ledger's 32-bit slot and 16-bit indexes (`Pointer.MaxSlot`,
   `Pointer.MaxIndex`) throws `IllegalArgumentException`.**
 - Pointer addresses now decode as a node decodes them at the transaction's protocol version

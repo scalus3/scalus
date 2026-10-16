@@ -20,17 +20,10 @@ import scala.util.{Failure, Success, Try}
   * its high bit set. This is the ledger's `putVariableLengthWord64` and `decode7BitVarLength`
   * (cardano-ledger-core, `Cardano/Ledger/Address.hs`), so 128 is `81 00`.
   */
-object VarUInt {
+private[address] object PointerNumber {
 
-    /** Encode a non-negative integer as a variable-length natural number, most significant 7-bit
-      * group first.
-      *
-      * @param value
-      *   The positive integer to encode (must be >= 0)
-      * @return
-      *   Encoded bytes with continuation bit protocol
-      */
-    def encodeVariableLengthUInt(value: Long): Array[Byte] = {
+    /** Encode a non-negative number in its shortest encoding. */
+    def encode(value: Long): Array[Byte] = {
         require(value >= 0, "Value must be non-negative")
 
         // Fill the groups from the last one, which is the only one without the continuation bit
@@ -46,23 +39,14 @@ object VarUInt {
         bytes
     }
 
-    /** Decode a variable-length natural number, most significant 7-bit group first.
+    /** Decode a number, as the ledger's `decodeVariableLengthWord64`: it may take any number of
+      * bytes and is kept to its low 64 bits. A value of 2^63 or more comes out negative, as the
+      * bits of an unsigned 64-bit number, so [[encode]] does not take it back.
       *
-      * As the ledger's `decodeVariableLengthWord64`, the number may take any number of bytes and is
-      * kept to its low 64 bits. A value of 2^63 or more comes out negative, as the bits of an
-      * unsigned 64-bit number, so [[encodeVariableLengthUInt]] does not take it back.
-      *
-      * @param bytes
-      *   Source byte array
-      * @param startIndex
-      *   Index to start decoding from
       * @return
       *   Tuple of (decoded value, number of bytes consumed)
       */
-    def decodeVariableLengthUInt(
-        bytes: Array[Byte],
-        startIndex: Int
-    ): (Long, Int) = {
+    def decode(bytes: Array[Byte], startIndex: Int): (Long, Int) = {
         var value = 0L
         var index = startIndex
         var hasMoreBytes = true
@@ -75,16 +59,12 @@ object VarUInt {
         (value, index - startIndex)
     }
 
-    /** Decode a variable-length natural number of at most `bits` bits, as the ledger's
-      * `decodeVariableLengthWord16` and `decodeVariableLengthWord32`: the number may start with
-      * zero groups, but takes no more bytes than a `bits`-bit number needs.
+    /** Decode a number of at most `bits` bits, as the ledger's `decodeVariableLengthWord16` and
+      * `decodeVariableLengthWord32`: the number may start with zero groups, but takes no more bytes
+      * than a `bits`-bit number needs.
       */
-    private[address] def decodeVariableLengthUInt(
-        bytes: Array[Byte],
-        startIndex: Int,
-        bits: Int
-    ): (Long, Int) = {
-        val (value, size) = decodeVariableLengthUInt(bytes, startIndex)
+    def decode(bytes: Array[Byte], startIndex: Int, bits: Int): (Long, Int) = {
+        val (value, size) = decode(bytes, startIndex)
         require(
           size <= (bits + 6) / 7 && (value >>> bits) == 0,
           s"A variable-length number of more than $bits bits"
@@ -93,7 +73,39 @@ object VarUInt {
     }
 }
 
-import scalus.cardano.address.VarUInt.*
+/** The variable-length natural numbers of a pointer address (CIP-19), most significant 7-bit group
+  * first. Scalus 1.3.0 and earlier wrote the least significant group first, which is not CIP-19.
+  */
+@deprecated(
+  "it now writes the most significant 7-bit group first, as CIP-19 does, where it wrote the " +
+      "least significant first; use Pointer.toBytes and Pointer.parseFrom",
+  "1.3.0"
+)
+object VarUInt {
+
+    /** Encode a non-negative integer as a variable-length natural number, most significant 7-bit
+      * group first.
+      *
+      * @param value
+      *   The positive integer to encode (must be >= 0)
+      * @return
+      *   Encoded bytes with continuation bit protocol
+      */
+    def encodeVariableLengthUInt(value: Long): Array[Byte] = PointerNumber.encode(value)
+
+    /** Decode a variable-length natural number, most significant 7-bit group first, kept to its low
+      * 64 bits.
+      *
+      * @param bytes
+      *   Source byte array
+      * @param startIndex
+      *   Index to start decoding from
+      * @return
+      *   Tuple of (decoded value, number of bytes consumed)
+      */
+    def decodeVariableLengthUInt(bytes: Array[Byte], startIndex: Int): (Long, Int) =
+        PointerNumber.decode(bytes, startIndex)
+}
 
 /** Network identification for Cardano addresses */
 sealed trait Network {
@@ -163,9 +175,8 @@ case class Pointer(slot: Slot, txIdx: TxIdx, certIdx: CertIdx) {
       * number in its shortest encoding, as the ledger's `putVariableLengthWord64`.
       */
     def toBytes: Array[Byte] =
-        VarUInt.encodeVariableLengthUInt(slot.slot) ++
-            VarUInt.encodeVariableLengthUInt(txIdx) ++
-            VarUInt.encodeVariableLengthUInt(certIdx)
+        PointerNumber.encode(slot.slot) ++ PointerNumber.encode(txIdx) ++
+            PointerNumber.encode(certIdx)
 
     /** Convert to hex string for debugging */
     def toHex: String = scalus.utils.Hex.bytesToHex(toBytes)
@@ -216,14 +227,14 @@ object Pointer {
         protocolVersion: ProtocolVersion
     ): Try[(Pointer, Int)] = Try {
         if protocolVersion >= ProtocolVersion.conwayPV then
-            val (slot, used1) = decodeVariableLengthUInt(bytes, startIndex, 32)
-            val (txIdx, used2) = decodeVariableLengthUInt(bytes, startIndex + used1, 16)
-            val (certIdx, used3) = decodeVariableLengthUInt(bytes, startIndex + used1 + used2, 16)
+            val (slot, used1) = PointerNumber.decode(bytes, startIndex, 32)
+            val (txIdx, used2) = PointerNumber.decode(bytes, startIndex + used1, 16)
+            val (certIdx, used3) = PointerNumber.decode(bytes, startIndex + used1 + used2, 16)
             (Pointer(Slot(slot), txIdx, certIdx), used1 + used2 + used3)
         else
-            val (slot, used1) = decodeVariableLengthUInt(bytes, startIndex)
-            val (txIdx, used2) = decodeVariableLengthUInt(bytes, startIndex + used1)
-            val (certIdx, used3) = decodeVariableLengthUInt(bytes, startIndex + used1 + used2)
+            val (slot, used1) = PointerNumber.decode(bytes, startIndex)
+            val (txIdx, used2) = PointerNumber.decode(bytes, startIndex + used1)
+            val (certIdx, used3) = PointerNumber.decode(bytes, startIndex + used1 + used2)
             (normalized(slot, txIdx, certIdx), used1 + used2 + used3)
     }
 
