@@ -3,10 +3,11 @@ package scalus.utxocells
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
+import scalus.cardano.address.{Network, Pointer, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
+import scalus.cardano.onchain.plutus.prelude
 import scalus.cardano.onchain.plutus.v1 as onchain
 import scalus.testing.kit.Party.Alice
 
@@ -305,5 +306,37 @@ class CounterCellEmulatorTest extends AnyFunSuite {
                 assert(sa.payment == ShelleyPaymentPart.Script(Hash.scriptHash(hash28)))
                 assert(sa.delegation == ShelleyDelegationPart.Null)
             case _ => fail("Expected ShelleyAddress")
+    }
+
+    test("toOffchainAddress converts StakingPtr to a pointer address") {
+        val hash28 = ByteString.fromHex("aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd")
+        val address = ShelleyAddress(
+          Network.Mainnet,
+          ShelleyPaymentPart.Key(AddrKeyHash(hash28)),
+          ShelleyDelegationPart.Pointer(Pointer(Slot(2498243), 27, 3))
+        )
+        // The inverse of the ledger's translation: the script's StakingPtr pays the same address
+        val onchainAddr = LedgerToPlutusTranslation.getAddress(address)
+        assert(UtxoCellBuilder.toOffchainAddress(onchainAddr, Network.Mainnet) == address)
+    }
+
+    test("toOffchainAddress rejects a StakingPtr that no pointer holds") {
+        val hash28 = ByteString.fromHex("aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd")
+        def withPtr(slot: BigInt, txIdx: BigInt, certIdx: BigInt) = onchain.Address(
+          onchain.Credential.PubKeyCredential(onchain.PubKeyHash(hash28)),
+          prelude.Option.Some(onchain.StakingCredential.StakingPtr(slot, txIdx, certIdx))
+        )
+        val outOfRange = Seq(
+          withPtr(BigInt(Pointer.MaxSlot) + 1, 0, 0),
+          withPtr(0, Pointer.MaxIndex + 1, 0),
+          withPtr(0, 0, -1),
+          // Narrowed to a Long first, this would be the slot 5
+          withPtr(BigInt(2).pow(64) + 5, 0, 0)
+        )
+        outOfRange.foreach { addr =>
+            assertThrows[IllegalArgumentException](
+              UtxoCellBuilder.toOffchainAddress(addr, Network.Mainnet)
+            )
+        }
     }
 }

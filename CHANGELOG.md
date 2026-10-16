@@ -102,6 +102,34 @@ Evolution provider needs.
   `Value` arithmetic throws `ArithmeticException` on overflow instead of wrapping, and so do
   `TxBalance.consumed`, `TxBalance.produced` and the `Certificate` deposit and refund totals when a
   total does not fit in a `Long`.
+- Pointer addresses wrote and read their variable-length numbers least significant 7-bit group
+  first, where the ledger and CIP-19 put the most significant group first. Every slot or index of
+  128 or more came out wrong: the CIP-19 pointer (2498243, 27, 3) decoded as (141511681, 27, 3), so
+  a script saw a different `StakingPtr`. **A pointer address Scalus built with such a slot or index
+  had other bytes than intended, so it is a different address from the one now built.**
+  `VarUInt.encodeVariableLengthUInt` and `decodeVariableLengthUInt` use the CIP-19 order too, and
+  `VarUInt` is deprecated in favour of `Pointer.toBytes` and `Pointer.parseFrom`. **Bytes that code
+  stored with the old `VarUInt` read back as other numbers.** **Constructing a
+  `Pointer` that does not fit the ledger's 32-bit slot and 16-bit indexes (`Pointer.MaxSlot`,
+  `Pointer.MaxIndex`) throws `IllegalArgumentException`.**
+- Pointer addresses now decode as a node decodes them at the transaction's protocol version
+  (`fromCborBothAddr`). From version 9 a pointer that does not fit the ledger's widths, or whose
+  number takes more bytes than its width needs, fails; before it, it reads as
+  `Pointer(Slot(0), 0, 0)`, as the node keeps it in its UTxO set. From version 7 bytes after the
+  pointer fail; before it they are dropped. `Address.fromBytes`, `fromBech32`, `Pointer.fromBytes`
+  and the plain CBOR decoders read as at version 9, as the ledger's `decodeAddr`; the new overloads
+  `Address.fromBytes(bytes, protocolVersion)`, `Pointer.fromBytes(bytes, protocolVersion)` and
+  `Pointer.parseFrom(bytes, startIndex, protocolVersion)` read at an earlier version, and
+  `Transaction.fromCbor` reads its outputs at its protocol version. **An address with bytes after
+  its pointer, which these methods used to drop, now fails.** The new `Address.fromBytesLenient`
+  and `fromBech32Lenient` read an address a node already holds, as the ledger's `decompactAddr`;
+  `BlockfrostProvider` and the bloxbean `Interop.toTransactionOutput` read UTxO addresses with
+  them. `toBytes` writes a pointer in its shortest encoding, the bytes the node holds, so an
+  address read from a longer encoding does not give back the bytes it was read from.
+- `UtxoCellBuilder.toOffchainAddress` turned an on-chain `StakingPtr` into an address without
+  delegation, so a cell output to a pointer address went to the enterprise address instead, and
+  the cell's validator rejected it. It now builds the pointer address, and throws
+  `IllegalArgumentException` for a `StakingPtr` that does not fit a pointer.
 - The Emulator accepted the same reward withdrawn twice. Withdrawals now subtract from the balance
   and keep the account registered. **A test that expected a drained account to be deregistered
   now finds it registered with balance 0.**

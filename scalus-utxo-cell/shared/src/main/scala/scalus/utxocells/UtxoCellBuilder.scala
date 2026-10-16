@@ -4,9 +4,9 @@ import scalus.uplc.CompiledPlutus
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.{FromData, ToData}
-import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
+import scalus.cardano.address.{Network, Pointer, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.address.Address as OffchainAddress
-import scalus.cardano.ledger.{AddrKeyHash, AssetName, Hash, PolicyId, ScriptHash, Utxo, Utxos, Value}
+import scalus.cardano.ledger.{AddrKeyHash, AssetName, Hash, PolicyId, ScriptHash, Slot, Utxo, Utxos, Value}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.cardano.onchain.plutus.v1 as onchain
 import scalus.cardano.onchain.plutus.v1.Value as OnchainValue
@@ -30,7 +30,15 @@ object UtxoCellBuilder {
         lazy val scriptAddress: OffchainAddress = compiled.address(network)
     }
 
-    /** Convert an on-chain Plutus Address to an off-chain Shelley Address. */
+    /** Convert an on-chain Plutus Address to an off-chain Shelley Address.
+      *
+      * A `StakingPtr` becomes a pointer address, the inverse of the ledger's `transStakeReference`.
+      *
+      * @throws IllegalArgumentException
+      *   for a `StakingPtr` that no pointer holds: a slot past `Pointer.MaxSlot` or an index past
+      *   `Pointer.MaxIndex`. The ledger gives a script only pointers that fit, so no output has
+      *   such an address.
+      */
     def toOffchainAddress(addr: onchain.Address, network: Network): OffchainAddress = {
         val payment = addr.credential match
             case onchain.Credential.PubKeyCredential(pkh) =>
@@ -47,12 +55,26 @@ object UtxoCellBuilder {
                                 ShelleyDelegationPart.Key(Hash.stakeKeyHash(pkh.hash))
                             case onchain.Credential.ScriptCredential(hash) =>
                                 ShelleyDelegationPart.Script(Hash.scriptHash(hash))
-                    case _: onchain.StakingCredential.StakingPtr =>
-                        ShelleyDelegationPart.Null
+                    case onchain.StakingCredential.StakingPtr(slot, txIdx, certIdx) =>
+                        ShelleyDelegationPart.Pointer(toPointer(slot, txIdx, certIdx))
             case scalus.cardano.onchain.plutus.prelude.Option.None =>
                 ShelleyDelegationPart.Null
 
         ShelleyAddress(network, payment, delegation)
+    }
+
+    /** The numbers are checked before they are narrowed: `BigInt.toLong` keeps only the low 64
+      * bits, so 2^64 + 5 would make a pointer with the slot 5.
+      */
+    private def toPointer(slot: BigInt, txIdx: BigInt, certIdx: BigInt): Pointer = {
+        def fits(value: BigInt, max: Long) = value >= 0 && value <= max
+        require(
+          fits(slot, Pointer.MaxSlot) && fits(txIdx, Pointer.MaxIndex) &&
+              fits(certIdx, Pointer.MaxIndex),
+          s"StakingPtr($slot, $txIdx, $certIdx) is not a pointer: the slot must be at most " +
+              s"${Pointer.MaxSlot} and each index at most ${Pointer.MaxIndex}"
+        )
+        Pointer(Slot(slot.toLong), txIdx.toLong, certIdx.toLong)
     }
 
     /** Convert an off-chain ledger Value to an on-chain Plutus Value. */
