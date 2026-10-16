@@ -111,7 +111,11 @@ Evolution provider needs.
   `Address.fromBytes(bytes, protocolVersion)`, `Pointer.fromBytes(bytes, protocolVersion)` and
   `Pointer.parseFrom(bytes, startIndex, protocolVersion)` read at an earlier version, and
   `Transaction.fromCbor` reads its outputs at its protocol version. **An address with bytes after
-  its pointer, which these methods used to drop, now fails.**
+  its pointer, which these methods used to drop, now fails.** The new `Address.fromBytesLenient`
+  and `fromBech32Lenient` read an address a node already holds, as the ledger's `decompactAddr`;
+  `BlockfrostProvider` and the bloxbean `Interop.toTransactionOutput` read UTxO addresses with
+  them. `toBytes` writes a pointer in its shortest encoding, the bytes the node holds, so an
+  address read from a longer encoding does not give back the bytes it was read from.
 - The Emulator accepted the same reward withdrawn twice. Withdrawals now subtract from the balance
   and keep the account registered. **A test that expected a drained account to be deregistered
   now finds it registered with balance 0.**

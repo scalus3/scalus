@@ -1199,7 +1199,7 @@ object BlockfrostProvider {
         input: TransactionInput,
         json: ujson.Value
     ): (TransactionInput, TransactionOutput) = {
-        val address = Address.fromBech32(json("address").str)
+        val address = Address.fromBech32Lenient(json("address").str)
         val value = parseValue(json("amount").arr)
         val datumOption = parseDatumOption(json.obj)
         val txOutput = Output(

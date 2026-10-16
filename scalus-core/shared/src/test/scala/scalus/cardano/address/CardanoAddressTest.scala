@@ -395,14 +395,16 @@ class CardanoAddressTest extends AnyFunSuite {
         )
     }
 
-    test("A pointer address reads as at the protocol version it is given") {
-        def address(pointer: String) = hex("41") ++ samplePaymentHash.bytes ++ hex(pointer)
-        def withPointer(pointer: Pointer) = ShelleyAddress(
-          Network.Mainnet,
-          ShelleyPaymentPart.Key(samplePaymentHash),
-          ShelleyDelegationPart.Pointer(pointer)
-        )
+    /** The bytes of a mainnet address with the sample payment key hash and `pointer`. */
+    private def address(pointer: String) = hex("41") ++ samplePaymentHash.bytes ++ hex(pointer)
 
+    private def withPointer(pointer: Pointer) = ShelleyAddress(
+      Network.Mainnet,
+      ShelleyPaymentPart.Key(samplePaymentHash),
+      ShelleyDelegationPart.Pointer(pointer)
+    )
+
+    test("A pointer address reads as at the protocol version it is given") {
         val outOfRange = address("9080808000" + "0102") // the slot 2^32
         val tooWide = intercept[IllegalArgumentException](Address.fromBytes(outOfRange))
         assert(tooWide.getMessage.contains("more than 32 bits"))
@@ -421,6 +423,27 @@ class CardanoAddressTest extends AnyFunSuite {
           Address.fromBytes(leftOver, ProtocolVersion.alonzoPV)
               == withPointer(Pointer(Slot(5), 1, 2))
         )
+    }
+
+    test("A lenient read takes a pointer address as a node holds it") {
+        // As the ledger's decompactAddr: the pointer normalized, the bytes after it dropped
+        val outOfRange = address("9080808000" + "0102") // the slot 2^32
+        val leftOver = address("050102" + "ff00")
+        assert(Address.fromBytesLenient(outOfRange) == withPointer(Pointer(Slot(0), 0, 0)))
+        assert(Address.fromBytesLenient(leftOver) == withPointer(Pointer(Slot(5), 1, 2)))
+        val bech32 = Bech32.encode("addr", outOfRange)
+        assert(Address.fromBech32Lenient(bech32) == withPointer(Pointer(Slot(0), 0, 0)))
+        assertThrows[IllegalArgumentException](Address.fromBech32(bech32))
+    }
+
+    test("A pointer number with zero groups in front is written back in its shortest encoding") {
+        val overlong = address("8005" + "0102") // the slot 5 in two bytes
+        val parsed = Address.fromBytes(overlong)
+        assert(parsed == withPointer(Pointer(Slot(5), 1, 2)))
+        assert(parsed.toBytes.bytes.sameElements(address("05" + "0102")))
+        // parseFrom counts the bytes it read, not the bytes the pointer writes
+        val Success(pointer, bytesUsed) = Pointer.parseFrom(hex("8005" + "0102"), 0): @unchecked
+        assert(bytesUsed == 4 && pointer.toBytes.length == 3)
     }
 
     test("A pointer beyond the ledger's widths cannot be built") {

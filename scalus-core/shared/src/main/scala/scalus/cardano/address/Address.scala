@@ -159,7 +159,9 @@ case class Pointer(slot: Slot, txIdx: TxIdx, certIdx: CertIdx) {
           s"got ($slot, $txIdx, $certIdx)"
     )
 
-    /** Serialize pointer to variable-length encoded bytes following CIP-19 specification */
+    /** Serialize pointer to variable-length encoded bytes following CIP-19 specification, each
+      * number in its shortest encoding, as the ledger's `putVariableLengthWord64`.
+      */
     def toBytes: Array[Byte] =
         VarUInt.encodeVariableLengthUInt(slot.slot) ++
             VarUInt.encodeVariableLengthUInt(txIdx) ++
@@ -190,7 +192,8 @@ object Pointer {
       * @param startIndex
       *   Index to start parsing from
       * @return
-      *   Tuple of (parsed pointer, bytes consumed)
+      *   Tuple of (parsed pointer, bytes consumed). A number written with zero groups in front
+      *   takes more bytes than in `pointer.toBytes`.
       */
     def parseFrom(bytes: Array[Byte], startIndex: Int): Try[(Pointer, Int)] =
         parseFrom(bytes, startIndex, ProtocolVersion.conwayPV)
@@ -204,7 +207,8 @@ object Pointer {
       * so what a node holds for such an address in its UTxO set.
       *
       * @return
-      *   Tuple of (parsed pointer, bytes consumed)
+      *   Tuple of (parsed pointer, bytes consumed), which can be more bytes than in
+      *   `pointer.toBytes`
       */
     def parseFrom(
         bytes: Array[Byte],
@@ -377,7 +381,12 @@ case class ShelleyAddress(
         case Network.Mainnet  => Success("addr")
         case Network.Other(x) => Failure(new IllegalArgumentException(s"Unknown network: $x"))
 
-    /** Serialize address to bytes */
+    /** Serialize address to bytes, a pointer in its shortest encoding.
+      *
+      * These are the bytes a node holds for the address. They can differ from the bytes the address
+      * was read from: a pointer number written with zero groups in front, or a pointer read
+      * leniently (see `Address.fromBytesLenient`), comes out in its normal form.
+      */
     def toBytes: ByteString = {
         val header = ByteString(toHeader)
         val paymentBytes = payment.toBytes
@@ -1176,6 +1185,9 @@ object Address {
     /** Parse address from raw bytes, as a node reads one in a new transaction (protocol version 9
       * and later). This is the ledger's `decodeAddr`.
       *
+      * A pointer number may be written with zero groups in front, up to the bytes its width needs;
+      * `toBytes` writes it back without them, as the node holds it.
+      *
       * @param bytes
       *   Raw address bytes including header
       * @return
@@ -1225,6 +1237,22 @@ object Address {
     def fromBech32(bech32: String): Address = {
         fromBytes(Bech32.decode(bech32).data)
     }
+
+    /** Parse an address a node already holds, such as the address of an output in its UTxO set, as
+      * the ledger's `decompactAddr` reads one.
+      *
+      * A pointer reads as before protocol version 7: one that does not fit the ledger's widths
+      * reads as `Pointer(Slot(0), 0, 0)`, and bytes after it are dropped. An output written before
+      * version 9 can have such a pointer, so use this for an address that chain data gives, as a
+      * provider's UTxO does. An address a user gives is checked with `fromBytes` instead, as a node
+      * checks it in a new transaction.
+      */
+    def fromBytesLenient(bytes: Array[Byte]): Address =
+        fromBytes(bytes, ProtocolVersion.shelleyPV)
+
+    /** Parse a bech32 address a node already holds, see [[fromBytesLenient]]. */
+    def fromBech32Lenient(bech32: String): Address =
+        fromBytesLenient(Bech32.decode(bech32).data)
 
     /** Parse address from any string format (bech32 or base58).
       *
