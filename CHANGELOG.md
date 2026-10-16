@@ -118,6 +118,10 @@ Evolution provider needs.
   `BlockfrostProvider` and the bloxbean `Interop.toTransactionOutput` read UTxO addresses with
   them. `toBytes` writes a pointer in its shortest encoding, the bytes the node holds, so an
   address read from a longer encoding does not give back the bytes it was read from.
+- `UtxoCellBuilder.toOffchainAddress` turned an on-chain `StakingPtr` into an address without
+  delegation, so a cell output to a pointer address went to the enterprise address instead, and
+  the cell's validator rejected it. It now builds the pointer address, and throws
+  `IllegalArgumentException` for a `StakingPtr` that does not fit a pointer.
 - The Emulator accepted the same reward withdrawn twice. Withdrawals now subtract from the balance
   and keep the account registered. **A test that expected a drained account to be deregistered
   now finds it registered with balance 0.**
