@@ -249,22 +249,28 @@ object TransactionOutput:
 
                 w
 
-    /** CBOR decoder for TransactionOutput */
+    /** CBOR decoder for TransactionOutput, as at protocol version 9 and later */
     given Decoder[TransactionOutput] with
         def read(r: Reader): TransactionOutput =
-            // Check the data item type to determine the format
-            if r.hasArrayHeader then readShelleyOutput(r)
-            else if r.hasMapHeader then readBabbageOutput(r)
-            else r.validationFailure("Expected Array or Map for TransactionOutput")
+            TransactionOutput.read(r)(using ProtocolVersion.conwayPV)
+
+    /** Reads an output as the ledger does at protocol version `pv`, which decides how a pointer
+      * address reads (see `Address.fromBytes`).
+      */
+    private[ledger] def read(r: Reader)(using ProtocolVersion): TransactionOutput =
+        // Check the data item type to determine the format
+        if r.hasArrayHeader then readShelleyOutput(r)
+        else if r.hasMapHeader then readBabbageOutput(r)
+        else r.validationFailure("Expected Array or Map for TransactionOutput")
 
     /** Helper method to read Shelley-era output from CBOR */
-    private def readShelleyOutput(r: Reader): TransactionOutput.Shelley =
+    private def readShelleyOutput(r: Reader)(using ProtocolVersion): TransactionOutput.Shelley =
         val size = r.readArrayHeader()
 
         if size < 2 || size > 3 then
             r.validationFailure(s"Expected 2 or 3 elements for ShelleyTransactionOutput, got $size")
 
-        val address = r.read[Address]()
+        val address = Address.read(r)
         val value = r.read[Value]()
 
         val datumHash =
@@ -274,7 +280,7 @@ object TransactionOutput:
         TransactionOutput.Shelley(address, value, datumHash)
 
     /** Helper method to read Babbage-era output from CBOR */
-    private def readBabbageOutput(r: Reader): TransactionOutput.Babbage =
+    private def readBabbageOutput(r: Reader)(using ProtocolVersion): TransactionOutput.Babbage =
         val size = r.readMapHeader()
 
         var address: Option[Address] = None
@@ -284,7 +290,7 @@ object TransactionOutput:
 
         for _ <- 0L until size do
             r.readInt() match
-                case 0     => address = Some(r.read[Address]())
+                case 0     => address = Some(Address.read(r))
                 case 1     => value = Some(r.read[Value]())
                 case 2     => datumOption = Some(r.read[DatumOption]())
                 case 3     => scriptRef = Some(r.read[ScriptRef]())

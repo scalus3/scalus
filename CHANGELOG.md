@@ -99,10 +99,19 @@ Evolution provider needs.
   128 or more came out wrong: the CIP-19 pointer (2498243, 27, 3) decoded as (141511681, 27, 3), so
   a script saw a different `StakingPtr`. **A pointer address Scalus built with such a slot or index
   had other bytes than intended, so it is a different address from the one now built.** The same
-  holds for `VarUInt.encodeVariableLengthUInt` and `decodeVariableLengthUInt`. A pointer that does
-  not fit the ledger's 32-bit slot and 16-bit indexes (`Pointer.MaxSlot`, `Pointer.MaxIndex`) now
-  decodes as `Pointer(Slot(0), 0, 0)`, as a node reads it before protocol version 9 and keeps it in
-  its UTxO set, and **constructing such a `Pointer` throws `IllegalArgumentException`**.
+  holds for `VarUInt.encodeVariableLengthUInt` and `decodeVariableLengthUInt`. **Constructing a
+  `Pointer` that does not fit the ledger's 32-bit slot and 16-bit indexes (`Pointer.MaxSlot`,
+  `Pointer.MaxIndex`) throws `IllegalArgumentException`.**
+- Pointer addresses now decode as a node decodes them at the transaction's protocol version
+  (`fromCborBothAddr`). From version 9 a pointer that does not fit the ledger's widths, or whose
+  number takes more bytes than its width needs, fails; before it, it reads as
+  `Pointer(Slot(0), 0, 0)`, as the node keeps it in its UTxO set. From version 7 bytes after the
+  pointer fail; before it they are dropped. `Address.fromBytes`, `fromBech32`, `Pointer.fromBytes`
+  and the plain CBOR decoders read as at version 9, as the ledger's `decodeAddr`; the new overloads
+  `Address.fromBytes(bytes, protocolVersion)`, `Pointer.fromBytes(bytes, protocolVersion)` and
+  `Pointer.parseFrom(bytes, startIndex, protocolVersion)` read at an earlier version, and
+  `Transaction.fromCbor` reads its outputs at its protocol version. **An address with bytes after
+  its pointer, which these methods used to drop, now fails.**
 - The Emulator accepted the same reward withdrawn twice. Withdrawals now subtract from the balance
   and keep the account registered. **A test that expected a drained account to be deregistered
   now finds it registered with balance 0.**
