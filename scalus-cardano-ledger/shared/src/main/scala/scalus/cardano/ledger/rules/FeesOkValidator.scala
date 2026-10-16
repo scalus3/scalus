@@ -1,7 +1,7 @@
 package scalus.cardano.ledger
 package rules
 
-import scalus.cardano.ledger.utils.{CollateralSufficient, MinTransactionFee}
+import scalus.cardano.ledger.utils.{CollateralSufficient, ExactValue, MinTransactionFee}
 import scala.util.boundary
 import scala.util.boundary.break
 
@@ -31,18 +31,20 @@ object FeesOkValidator extends STS.Validator {
         val collateralInputs = body.collateralInputs.toSet
         val expectedTotalSumOfCollateralCoins = body.totalCollateral
         val collateralReturnOutput = body.collateralReturnOutput.map(_.value)
-        val Value(collateralReturnOutputCoin, collateralReturnOutputAssets) =
-            collateralReturnOutput.map(_.value).getOrElse(Value.zero)
 
         val collateralUtxos = extractCollateralUtxos(transactionId, collateralInputs, utxos) match
             case Right(utxos) => utxos
             case Left(error)  => return failure(error)
 
-        val Value(totalSumOfCollateralCoins, totalSumOfCollateralAssets) =
-            calculateTotalSumOfCollateralValues(collateralUtxos)
+        // What the collateral inputs hold less the collateral return, summed exactly as the
+        // ledger's `Integer` does: the amounts of a token in several inputs can add up past
+        // `Long.MaxValue`. The error report clamps them to the `Long` range.
+        val collateralBalance =
+            calculateTotalSumOfCollateralValues(collateralUtxos) -
+                ExactValue(collateralReturnOutput.map(_.value).getOrElse(Value.zero))
+        val reportedCollateralBalance = collateralBalance.toClampedValue
 
-        val actualTotalSumOfCollateralCoins =
-            totalSumOfCollateralCoins - collateralReturnOutputCoin
+        val actualTotalSumOfCollateralCoins = collateralBalance.coin
 
         val minRequiredFee = MinTransactionFee.computeMinFee(event, utxos, protocolParams) match
             case Right(fee)  => fee
@@ -67,7 +69,7 @@ object FeesOkValidator extends STS.Validator {
                     collateralPercentage,
                     areTotalExUnitsZero,
                     collateralReturnOutput,
-                    actualTotalSumOfCollateralCoins,
+                    reportedCollateralBalance.coin,
                     expectedTotalSumOfCollateralCoins
                   )
                 )
@@ -80,7 +82,7 @@ object FeesOkValidator extends STS.Validator {
         // Collateral inputs can contain multi-assets, as long all of them are returned to the
         // `collateralReturnTxBodyL`. This design decision was also intentional, in order to
         // simplify utxos selection for collateral.
-        val remainingAssets = totalSumOfCollateralAssets - collateralReturnOutputAssets
+        val remainingAssets = collateralBalance.assets
         val collateralsContainNotOnlyADA =
             findCollateralsContainNotOnlyADA(collateralUtxos)
 
@@ -93,8 +95,8 @@ object FeesOkValidator extends STS.Validator {
 
         // 6) The collateral is equivalent to total collateral asserted by the transaction
         val isCollateralEqualToExpected =
-            expectedTotalSumOfCollateralCoins.forall {
-                actualTotalSumOfCollateralCoins == _
+            expectedTotalSumOfCollateralCoins.forall { expected =>
+                actualTotalSumOfCollateralCoins == BigInt(expected.value)
             } // True when expectedTotalSumOfCollateralCoins is None
 
         // 7) There is at least one collateral input
@@ -115,11 +117,11 @@ object FeesOkValidator extends STS.Validator {
                 collateralPercentage,
                 areTotalExUnitsZero,
                 collateralReturnOutput,
-                actualTotalSumOfCollateralCoins,
+                reportedCollateralBalance.coin,
                 expectedTotalSumOfCollateralCoins,
                 collateralsConsistNotVKeyAddress,
                 collateralsContainNotOnlyADA,
-                remainingAssets,
+                reportedCollateralBalance.assets,
                 hasCollateralInputs
               )
             )
@@ -145,13 +147,8 @@ object FeesOkValidator extends STS.Validator {
         Right(collateralUtxos)
     }
 
-    private def calculateTotalSumOfCollateralValues(
-        collateralUtxos: Utxos
-    ): scalus.cardano.ledger.Value = {
-        collateralUtxos.foldLeft(Value.zero) { case (acc, (_, collateralOutput)) =>
-            acc + collateralOutput.value
-        }
-    }
+    private def calculateTotalSumOfCollateralValues(collateralUtxos: Utxos): ExactValue =
+        ExactValue.sum(collateralUtxos.values.map(_.value))
 
     private def findCollateralsConsistNotVKeyAddress(
         collateralUtxos: Utxos

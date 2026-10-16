@@ -51,10 +51,24 @@ trait ArbitraryInstances extends scalus.uplc.test.ArbitraryInstances {
     }
 
     given Arbitrary[Pointer] = Arbitrary {
+        // Up to the ledger's widths, every encoded length as often as another, and the values at
+        // both ends of each length, where a variable-length encoding goes wrong. A uniform slot
+        // would almost always take 5 bytes and almost never 3.
+        def upTo(max: Long): Gen[Long] = {
+            // One range per encoded length: 0..127, 128..16383, and so on up to max
+            val ranges = (1 to VarLen.size(max)).map { n =>
+                val low = if n == 1 then 0L else 1L << (7 * (n - 1))
+                (low, math.min((1L << (7 * n)) - 1, max))
+            }
+            Gen.frequency(
+              3 -> Gen.oneOf(ranges).flatMap((low, high) => Gen.choose(low, high)),
+              1 -> Gen.oneOf(ranges.flatMap((low, high) => Seq(low, high)))
+            )
+        }
         for
-            slot <- Gen.choose(0L, Long.MaxValue)
-            txIndex <- Gen.choose(0L, Long.MaxValue)
-            certIndex <- Gen.choose(0L, Long.MaxValue)
+            slot <- upTo(Pointer.MaxSlot)
+            txIndex <- upTo(Pointer.MaxIndex)
+            certIndex <- upTo(Pointer.MaxIndex)
         yield Pointer(Slot(slot), txIndex, certIndex)
     }
 

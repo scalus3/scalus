@@ -6,7 +6,6 @@ import scalus.cardano.ledger.*
 import scalus.uplc.builtin.ByteString
 import scalus.utils.{Pretty, Style}
 
-import scala.collection.mutable
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
@@ -15,39 +14,102 @@ import scala.util.{Failure, Success, Try}
   * Uses strongly typed Hash28 classes for payment, stake and script hashes.
   */
 
+/** A natural number written in 7-bit groups, most significant group first; every byte but the last
+  * has its high bit set, so 128 is `81 00`.
+  *
+  * This is the ledger's `putVariableLengthWord64` and `decode7BitVarLength` (cardano-ledger-core,
+  * `Cardano/Ledger/Address.hs`), which write the numbers of a pointer address (CIP-19), and
+  * mempack's `VarLen`.
+  */
+private[scalus] object VarLen {
+
+    /** The number of bytes [[write]] takes for a non-negative `value`. */
+    def size(value: Long): Int = {
+        require(value >= 0, "Value must be non-negative")
+        Math.max(1, (64 - java.lang.Long.numberOfLeadingZeros(value) + 6) / 7)
+    }
+
+    /** Write a non-negative number in its shortest encoding into `bytes` at `offset`.
+      *
+      * @return
+      *   The offset after the number
+      */
+    def write(value: Long, bytes: Array[Byte], offset: Int): Int = {
+        val end = offset + size(value)
+        // Fill the groups from the last one, which is the only one without the continuation bit
+        var remaining = value
+        var index = end - 1
+        bytes(index) = (remaining & 0x7f).toByte
+        while index > offset do
+            remaining >>>= 7
+            index -= 1
+            bytes(index) = ((remaining & 0x7f) | 0x80).toByte
+        end
+    }
+
+    /** Encode a non-negative number in its shortest encoding. */
+    def encode(value: Long): Array[Byte] = {
+        val bytes = new Array[Byte](size(value))
+        write(value, bytes, 0)
+        bytes
+    }
+
+    /** Decode a number, as the ledger's `decodeVariableLengthWord64`: it may take any number of
+      * bytes and is kept to its low 64 bits. A value of 2^63 or more comes out negative, as the
+      * bits of an unsigned 64-bit number, so [[encode]] does not take it back.
+      *
+      * @return
+      *   Tuple of (decoded value, number of bytes consumed)
+      */
+    def decode(bytes: Array[Byte], startIndex: Int): (Long, Int) = {
+        var value = 0L
+        var index = startIndex
+        var hasMoreBytes = true
+        while hasMoreBytes do
+            require(index < bytes.length, "Not enough bytes for a variable-length number")
+            val byte = bytes(index)
+            value = (value << 7) | (byte & 0x7f)
+            hasMoreBytes = (byte & 0x80) != 0
+            index += 1
+        (value, index - startIndex)
+    }
+
+    /** Decode a number of at most `bits` bits, as the ledger's `decodeVariableLengthWord16` and
+      * `decodeVariableLengthWord32`: the number may start with zero groups, but takes no more bytes
+      * than a `bits`-bit number needs.
+      */
+    def decode(bytes: Array[Byte], startIndex: Int, bits: Int): (Long, Int) = {
+        val (value, size) = decode(bytes, startIndex)
+        require(
+          size <= (bits + 6) / 7 && (value >>> bits) == 0,
+          s"A variable-length number of more than $bits bits"
+        )
+        (value, size)
+    }
+}
+
+/** The variable-length natural numbers of a pointer address (CIP-19), most significant 7-bit group
+  * first. Scalus 1.3.0 and earlier wrote the least significant group first, which is not CIP-19.
+  */
+@deprecated(
+  "it now writes the most significant 7-bit group first, as CIP-19 does, where it wrote the " +
+      "least significant first; use Pointer.toBytes and Pointer.parseFrom",
+  "1.3.0"
+)
 object VarUInt {
 
-    /** Encode positive integer using variable-length encoding as specified in CIP-19 Uses
-      * continuation bits to handle arbitrarily large values efficiently
+    /** Encode a non-negative integer as a variable-length natural number, most significant 7-bit
+      * group first.
       *
       * @param value
       *   The positive integer to encode (must be >= 0)
       * @return
       *   Encoded bytes with continuation bit protocol
       */
-    def encodeVariableLengthUInt(value: Long): Array[Byte] = {
-        require(value >= 0, "Value must be non-negative")
+    def encodeVariableLengthUInt(value: Long): Array[Byte] = VarLen.encode(value)
 
-        val buffer = mutable.ArrayBuffer.empty[Byte]
-        var remaining = value
-
-        while {
-            // Take lower 7 bits for this byte
-            var currentByte = (remaining & 0x7f).toByte
-            remaining >>>= 7
-
-            // Set continuation bit if more bytes follow
-            if remaining != 0 then currentByte = (currentByte | 0x80).toByte
-
-            buffer += currentByte
-            remaining != 0
-        } do ()
-
-        buffer.toArray
-    }
-
-    /** Decode variable-length integer as specified in CIP-19 Handles continuation bit protocol to
-      * reconstruct original value
+    /** Decode a variable-length natural number, most significant 7-bit group first, kept to its low
+      * 64 bits.
       *
       * @param bytes
       *   Source byte array
@@ -56,29 +118,9 @@ object VarUInt {
       * @return
       *   Tuple of (decoded value, number of bytes consumed)
       */
-    def decodeVariableLengthUInt(
-        bytes: Array[Byte],
-        startIndex: Int
-    ): (Long, Int) = {
-        require(startIndex < bytes.length, "Start index out of bounds")
-
-        val firstByte = bytes(startIndex)
-        val hasMoreBytes = (firstByte & 0x80) != 0
-
-        if !hasMoreBytes then {
-            // Simple case: single byte with MSB=0
-            (firstByte & 0x7f, 1)
-        } else {
-            // Complex case: multiple bytes with continuation
-            val valueInThisByte = firstByte & 0x7f
-            val (recursiveValue, bytesUsed) = decodeVariableLengthUInt(bytes, startIndex + 1)
-            // Shift previous value and combine with current byte
-            ((recursiveValue << 7) | valueInThisByte, bytesUsed + 1)
-        }
-    }
+    def decodeVariableLengthUInt(bytes: Array[Byte], startIndex: Int): (Long, Int) =
+        VarLen.decode(bytes, startIndex)
 }
-
-import scalus.cardano.address.VarUInt.*
 
 /** Network identification for Cardano addresses */
 sealed trait Network {
@@ -126,6 +168,10 @@ type CertIdx = Long
 /** Represents a pointer to a stake registration certificate on the blockchain Used in pointer
   * addresses to reference stake credentials indirectly
   *
+  * The ledger holds the slot in 32 bits and both indexes in 16 bits, so a pointer beyond
+  * [[Pointer.MaxSlot]] or [[Pointer.MaxIndex]] cannot be built; [[Pointer.parseFrom]] rejects one,
+  * or reads it as `Pointer(Slot(0), 0, 0)` before protocol version 9.
+  *
   * @param slot
   *   Transaction slot number where the stake registration occurred
   * @param txIdx
@@ -134,39 +180,115 @@ type CertIdx = Long
   *   Certificate index within the transaction
   */
 case class Pointer(slot: Slot, txIdx: TxIdx, certIdx: CertIdx) {
+    require(
+      Pointer.fits(slot.slot, txIdx, certIdx),
+      s"A pointer holds a slot up to ${Pointer.MaxSlot} and indexes up to ${Pointer.MaxIndex}, " +
+          s"got ($slot, $txIdx, $certIdx)"
+    )
 
-    /** Serialize pointer to variable-length encoded bytes following CIP-19 specification */
-    def toBytes: Array[Byte] =
-        VarUInt.encodeVariableLengthUInt(slot.slot) ++
-            VarUInt.encodeVariableLengthUInt(txIdx) ++
-            VarUInt.encodeVariableLengthUInt(certIdx)
+    /** Serialize pointer to variable-length encoded bytes following CIP-19 specification, each
+      * number in its shortest encoding, as the ledger's `putVariableLengthWord64`.
+      */
+    def toBytes: Array[Byte] = {
+        val bytes =
+            new Array[Byte](VarLen.size(slot.slot) + VarLen.size(txIdx) + VarLen.size(certIdx))
+        var offset = VarLen.write(slot.slot, bytes, 0)
+        offset = VarLen.write(txIdx, bytes, offset)
+        VarLen.write(certIdx, bytes, offset)
+        bytes
+    }
 
     /** Convert to hex string for debugging */
-    def toHex: String = toBytes.map("%02x".format(_)).mkString
+    def toHex: String = scalus.utils.Hex.bytesToHex(toBytes)
 }
 
 object Pointer {
 
-    /** Parse pointer from bytes starting at given index
+    /** The largest slot a pointer holds: the ledger's slot is 32 bits. */
+    val MaxSlot: Long = 0xffffffffL
+
+    /** The largest transaction or certificate index a pointer holds: the ledger's are 16 bits. */
+    val MaxIndex: Long = 0xffffL
+
+    /** Whether the numbers fit the ledger's pointer: a 32-bit slot and 16-bit indexes. */
+    private def fits(slot: Long, txIdx: Long, certIdx: Long): Boolean =
+        0 <= slot && slot <= MaxSlot && 0 <= txIdx && txIdx <= MaxIndex &&
+            0 <= certIdx && certIdx <= MaxIndex
+
+    /** Parse pointer from bytes starting at given index, as a node reads one in a new transaction
+      * (protocol version 9 and later).
+      *
+      * A slot past [[MaxSlot]], or an index past [[MaxIndex]], fails, as does a number that takes
+      * more bytes than its width needs. This is the ledger's `decodePtr`.
       *
       * @param bytes
       *   Source byte array
       * @param startIndex
       *   Index to start parsing from
       * @return
-      *   Tuple of (parsed pointer, bytes consumed)
+      *   Tuple of (parsed pointer, bytes consumed). A number written with zero groups in front
+      *   takes more bytes than in `pointer.toBytes`.
       */
-    def parseFrom(bytes: Array[Byte], startIndex: Int): Try[(Pointer, Int)] = Try {
-        val (slot, used1) = decodeVariableLengthUInt(bytes, startIndex)
-        val (txIdx, used2) = decodeVariableLengthUInt(bytes, startIndex + used1)
-        val (certIdx, used3) = decodeVariableLengthUInt(bytes, startIndex + used1 + used2)
+    def parseFrom(bytes: Array[Byte], startIndex: Int): Try[(Pointer, Int)] =
+        parseFrom(bytes, startIndex, ProtocolVersion.conwayPV)
 
-        (Pointer(Slot(slot), txIdx, certIdx), used1 + used2 + used3)
+    /** Parse pointer from bytes starting at given index, as a node reads one at `protocolVersion`.
+      *
+      * From version 9 a pointer that does not fit fails, as without a protocol version. Before it,
+      * each number may take any number of bytes and keeps its low 64 bits, and a slot past
+      * [[MaxSlot]], or an index past [[MaxIndex]], makes the whole pointer
+      * `Pointer(Slot(0), 0, 0)`. This is the ledger's `decodePtrLenient` and `mkPtrNormalized`, and
+      * so what a node holds for such an address in its UTxO set.
+      *
+      * @return
+      *   Tuple of (parsed pointer, bytes consumed), which can be more bytes than in
+      *   `pointer.toBytes`
+      */
+    def parseFrom(
+        bytes: Array[Byte],
+        startIndex: Int,
+        protocolVersion: ProtocolVersion
+    ): Try[(Pointer, Int)] = Try {
+        if protocolVersion >= ProtocolVersion.conwayPV then
+            val (slot, used1) = VarLen.decode(bytes, startIndex, 32)
+            val (txIdx, used2) = VarLen.decode(bytes, startIndex + used1, 16)
+            val (certIdx, used3) = VarLen.decode(bytes, startIndex + used1 + used2, 16)
+            (Pointer(Slot(slot), txIdx, certIdx), used1 + used2 + used3)
+        else
+            val (slot, used1) = VarLen.decode(bytes, startIndex)
+            val (txIdx, used2) = VarLen.decode(bytes, startIndex + used1)
+            val (certIdx, used3) = VarLen.decode(bytes, startIndex + used1 + used2)
+            (normalized(slot, txIdx, certIdx), used1 + used2 + used3)
     }
 
-    /** Parse pointer from complete byte array */
+    private def normalized(slot: Long, txIdx: Long, certIdx: Long): Pointer = {
+        if fits(slot, txIdx, certIdx) then Pointer(Slot(slot), txIdx, certIdx)
+        else Pointer(Slot(0), 0, 0)
+    }
+
+    /** Parse a pointer that takes the whole byte array, as a node reads one in a new transaction
+      * (protocol version 9 and later): bytes after the pointer fail.
+      */
     def fromBytes(bytes: Array[Byte]): Try[Pointer] =
-        parseFrom(bytes, 0).map(_._1)
+        fromBytes(bytes, ProtocolVersion.conwayPV)
+
+    /** Parse a pointer that takes the whole byte array, as a node reads one at `protocolVersion`
+      * (see `parseFrom`).
+      *
+      * From version 7 bytes after the pointer fail, as the ledger's `ensureBufIsConsumed`; before
+      * it they are dropped, as a node drops them.
+      */
+    def fromBytes(bytes: Array[Byte], protocolVersion: ProtocolVersion): Try[Pointer] =
+        parseFrom(bytes, 0, protocolVersion).flatMap { (pointer, used) =>
+            if used == bytes.length || protocolVersion < ProtocolVersion.vasilPV then
+                Success(pointer)
+            else
+                Failure(
+                  new IllegalArgumentException(
+                    s"${bytes.length - used} bytes left after the pointer"
+                  )
+                )
+        }
 }
 
 /** The payment part of a Shelley address - can be either a key hash or script hash */
@@ -292,7 +414,12 @@ case class ShelleyAddress(
         case Network.Mainnet  => Success("addr")
         case Network.Other(x) => Failure(new IllegalArgumentException(s"Unknown network: $x"))
 
-    /** Serialize address to bytes */
+    /** Serialize address to bytes, a pointer in its shortest encoding.
+      *
+      * These are the bytes a node holds for the address. They can differ from the bytes the address
+      * was read from: a pointer number written with zero groups in front, or a pointer read
+      * leniently (see `Address.fromBytesLenient`), comes out in its normal form.
+      */
     def toBytes: ByteString = {
         val header = ByteString(toHeader)
         val paymentBytes = payment.toBytes
@@ -1060,13 +1187,18 @@ object Address {
             w
         }
 
-    /** CBOR decoder for Address */
+    /** CBOR decoder for Address, as at protocol version 9 and later */
     given Decoder[Address] with
-        def read(r: Reader): Address = {
-            val addressBytes = r.read[AddressBytes]()
-            try Address.fromByteString(addressBytes)
-            catch case NonFatal(exception) => r.validationFailure(exception.getMessage)
-        }
+        def read(r: Reader): Address = Address.read(r)(using ProtocolVersion.conwayPV)
+
+    /** Reads an address as the ledger's `fromCborBothAddr` does at protocol version `pv`, see
+      * `fromBytes(bytes, protocolVersion)`.
+      */
+    private[cardano] def read(r: Reader)(using pv: ProtocolVersion): Address = {
+        val addressBytes = r.read[AddressBytes]()
+        try Address.fromBytes(addressBytes.bytes, pv)
+        catch case NonFatal(exception) => r.validationFailure(exception.getMessage)
+    }
 
     // Internal helper functions for variable-length encoding per CIP-19
 
@@ -1083,14 +1215,33 @@ object Address {
       */
     def fromByteString(bs: ByteString): Address = fromBytes(bs.bytes)
 
-    /** Parse address from raw bytes
+    /** Parse address from raw bytes, as a node reads one in a new transaction (protocol version 9
+      * and later). This is the ledger's `decodeAddr`.
+      *
+      * A pointer number may be written with zero groups in front, up to the bytes its width needs;
+      * `toBytes` writes it back without them, as the node holds it.
       *
       * @param bytes
       *   Raw address bytes including header
       * @return
       *   Parsed address or failure with descriptive error
       */
-    def fromBytes(bytes: Array[Byte]): Address = {
+    def fromBytes(bytes: Array[Byte]): Address = fromBytes(bytes, ProtocolVersion.conwayPV)
+
+    /** Parse address from raw bytes, as a node reads one at `protocolVersion`.
+      *
+      * The version only changes how a pointer address reads (see `Pointer.fromBytes`): before
+      * version 9 a pointer that does not fit the ledger's widths reads as `Pointer(Slot(0), 0, 0)`,
+      * and before version 7 bytes after the pointer are dropped. From version 9 both fail.
+      *
+      * @param bytes
+      *   Raw address bytes including header
+      * @param protocolVersion
+      *   The protocol version of the transaction or block the address is in
+      * @return
+      *   Parsed address or failure with descriptive error
+      */
+    def fromBytes(bytes: Array[Byte], protocolVersion: ProtocolVersion): Address = {
         require(bytes.nonEmpty, "Address bytes cannot be empty")
 
         val header = bytes.head
@@ -1104,8 +1255,8 @@ object Address {
             case 0x01 => parseType1(header, payload)
             case 0x02 => parseType2(header, payload)
             case 0x03 => parseType3(header, payload)
-            case 0x04 => parseType4(header, payload)
-            case 0x05 => parseType5(header, payload)
+            case 0x04 => parseType4(header, payload, protocolVersion)
+            case 0x05 => parseType5(header, payload, protocolVersion)
             case 0x06 => parseType6(header, payload)
             case 0x07 => parseType7(header, payload)
             case 0x08 => parseType8(header, payload)
@@ -1119,6 +1270,22 @@ object Address {
     def fromBech32(bech32: String): Address = {
         fromBytes(Bech32.decode(bech32).data)
     }
+
+    /** Parse an address a node already holds, such as the address of an output in its UTxO set, as
+      * the ledger's `decompactAddr` reads one.
+      *
+      * A pointer reads as before protocol version 7: one that does not fit the ledger's widths
+      * reads as `Pointer(Slot(0), 0, 0)`, and bytes after it are dropped. An output written before
+      * version 9 can have such a pointer, so use this for an address that chain data gives, as a
+      * provider's UTxO does. An address a user gives is checked with `fromBytes` instead, as a node
+      * checks it in a new transaction.
+      */
+    def fromBytesLenient(bytes: Array[Byte]): Address =
+        fromBytes(bytes, ProtocolVersion.shelleyPV)
+
+    /** Parse a bech32 address a node already holds, see [[fromBytesLenient]]. */
+    def fromBech32Lenient(bech32: String): Address =
+        fromBytesLenient(Bech32.decode(bech32).data)
 
     /** Parse address from any string format (bech32 or base58).
       *
@@ -1209,7 +1376,11 @@ object Address {
     }
 
     /** Parse Type 4: Payment Key Hash + Pointer */
-    private def parseType4(header: Byte, payload: Array[Byte]): Address = {
+    private def parseType4(
+        header: Byte,
+        payload: Array[Byte],
+        protocolVersion: ProtocolVersion
+    ): Address = {
         require(
           payload.length > 28,
           s"Invalid Type-4 address length: ${payload.length}, expected > 28"
@@ -1219,11 +1390,10 @@ object Address {
         val paymentHash = AddrKeyHash(ByteString.fromArray(payload.slice(0, 28)))
         val pointerBytes = payload.slice(28, payload.length)
 
-        val pointer = Pointer
-            .fromBytes(pointerBytes)
-            .getOrElse(
-              throw new IllegalArgumentException("Invalid pointer data")
-            )
+        val pointer = Pointer.fromBytes(pointerBytes, protocolVersion) match
+            case Success(pointer) => pointer
+            case Failure(e) =>
+                throw new IllegalArgumentException(s"Invalid pointer data: ${e.getMessage}", e)
 
         val payment = ShelleyPaymentPart.Key(paymentHash)
         val delegation = ShelleyDelegationPart.Pointer(pointer)
@@ -1232,7 +1402,11 @@ object Address {
     }
 
     /** Parse Type 5: Script Hash + Pointer */
-    private def parseType5(header: Byte, payload: Array[Byte]): Address = {
+    private def parseType5(
+        header: Byte,
+        payload: Array[Byte],
+        protocolVersion: ProtocolVersion
+    ): Address = {
         require(
           payload.length > 28,
           s"Invalid Type-5 address length: ${payload.length}, expected > 28"
@@ -1242,11 +1416,10 @@ object Address {
         val scriptHash = Hash.scriptHash(ByteString.fromArray(payload.slice(0, 28)))
         val pointerBytes = payload.slice(28, payload.length)
 
-        val pointer = Pointer
-            .fromBytes(pointerBytes)
-            .getOrElse(
-              throw new IllegalArgumentException("Invalid pointer data")
-            )
+        val pointer = Pointer.fromBytes(pointerBytes, protocolVersion) match
+            case Success(pointer) => pointer
+            case Failure(e) =>
+                throw new IllegalArgumentException(s"Invalid pointer data: ${e.getMessage}", e)
 
         val payment = ShelleyPaymentPart.Script(scriptHash)
         val delegation = ShelleyDelegationPart.Pointer(pointer)

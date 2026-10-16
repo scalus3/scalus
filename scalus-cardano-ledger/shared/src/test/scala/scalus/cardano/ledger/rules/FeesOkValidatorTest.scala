@@ -4,7 +4,7 @@ package rules
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
-import scalus.uplc.builtin.platform
+import scalus.uplc.builtin.{platform, Data}
 
 class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("FeesOkValidator rule success") {
@@ -854,5 +854,49 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val result = FeesOkValidator.validate(context, state, transaction)
         assert(result.isLeft)
+    }
+
+    test("FeesOkValidator sums collateral tokens past Long.MaxValue exactly") {
+        // Two collateral inputs hold Long.MaxValue of a token each, and the return takes one of
+        // them back, so Long.MaxValue of the token stays in the collateral. The sum of the inputs
+        // does not fit in a Long.
+        val (_, publicKey) = generateKeyPair()
+        val keyAddress = Arbitrary
+            .arbitrary[ShelleyAddress]
+            .sample
+            .get
+            .copy(payment = ShelleyPaymentPart.Key(Hash(platform.blake2b_224(publicKey))))
+        val token = MultiAsset.asset(
+          Arbitrary.arbitrary[PolicyId].sample.get,
+          Arbitrary.arbitrary[AssetName].sample.get,
+          Long.MaxValue
+        )
+        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
+        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
+        val redeemer = Redeemer(RedeemerTag.Spend, 0, Data.unit, ExUnits(1000, 1000))
+        val transaction = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.ada(10),
+            collateralInputs = TaggedSortedSet(collateralInput1, collateralInput2),
+            collateralReturnOutput = Some(Sized(Output(keyAddress, Value(Coin.ada(20), token))))
+          ),
+          witnessSet = TransactionWitnessSet.empty.copy(redeemers =
+              Some(KeepRaw(Redeemers.Array(IndexedSeq(redeemer))))
+          )
+        )
+        val state = State(utxos =
+            Map(
+              collateralInput1 -> Output(keyAddress, Value(Coin.ada(30), token)),
+              collateralInput2 -> Output(keyAddress, Value(Coin.ada(30), token))
+            )
+        )
+
+        FeesOkValidator.validate(Context(), state, transaction) match
+            case Left(error: TransactionException.FeesOkException) =>
+                assert(error.remainingAssets == token)
+                assert(error.actualTotalSumOfCollateralCoins == Coin.ada(40))
+            case other => fail(s"expected FeesOkException, got $other")
     }
 }

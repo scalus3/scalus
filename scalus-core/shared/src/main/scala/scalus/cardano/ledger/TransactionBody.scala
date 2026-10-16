@@ -227,6 +227,9 @@ object TransactionBody:
     /** CBOR decoder for TransactionBody */
     given (using OriginalCborByteArray, ProtocolVersion): Decoder[TransactionBody] with
         def read(r: Reader): TransactionBody =
+            // Outputs and the collateral return read their addresses at this protocol version
+            given Decoder[TransactionOutput] = TransactionOutput.read(_)
+
             val mapSize = r.readMapHeader()
 
             var inputs = TaggedSortedSet.empty[TransactionInput]

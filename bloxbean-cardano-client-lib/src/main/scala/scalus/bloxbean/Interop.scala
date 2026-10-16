@@ -281,7 +281,7 @@ object Interop {
         utxo: Utxo,
         scriptRef: Option[ScriptRef] = None
     ): ScalusTransactionOutput = {
-        val address = scalus.cardano.address.Address.fromBech32(utxo.getAddress)
+        val address = scalus.cardano.address.Address.fromBech32Lenient(utxo.getAddress)
         val datumOption: Option[DatumOption] =
             Option(utxo.getDataHash) -> Option(utxo.getInlineDatum) match
                 case (_, Some(inlineDatum)) =>
