@@ -1,5 +1,6 @@
 package scalus.cardano.address
 
+import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.ByteString
 import scalus.cardano.ledger.{Hash, *}
@@ -75,18 +76,34 @@ class CardanoAddressTest extends AnyFunSuite {
     }
 
     test("Variable length encoding should work correctly") {
-        // Test cases: (value, expected_bytes)
+        // (value, bytes) at both sides of every length from 1 to 9 bytes, as the ledger's
+        // putVariableLengthWord64 writes them: a round trip alone cannot tell the group order
         val testCases = List(
-          (0L, Array[Byte](0x00)),
-          (127L, Array[Byte](0x7f)),
-          (128L, Array[Byte](0x81.toByte, 0x00)),
-          (16383L, Array[Byte](0xff.toByte, 0x7f)),
-          (16384L, Array[Byte](0x81.toByte, 0x80.toByte, 0x00))
+          0L -> "00",
+          127L -> "7f",
+          128L -> "8100",
+          16383L -> "ff7f",
+          16384L -> "818000",
+          (1L << 21) - 1 -> "ffff7f",
+          (1L << 21) -> "81808000",
+          (1L << 28) - 1 -> "ffffff7f",
+          (1L << 28) -> "8180808000",
+          Pointer.MaxSlot -> "8fffffff7f",
+          (1L << 35) - 1 -> "ffffffff7f",
+          (1L << 35) -> "818080808000",
+          (1L << 42) -> "81808080808000",
+          (1L << 49) -> "8180808080808000",
+          (1L << 56) -> "818080808080808000",
+          Long.MaxValue -> "ffffffffffffffff7f"
         )
 
-        testCases.foreach { case (value, expectedBytes) =>
+        testCases.foreach { (value, expectedHex) =>
             val encoded = VarLen.encode(value)
-            assert(encoded.sameElements(expectedBytes), s"Encoding failed for value $value")
+            assert(
+              ByteString.fromArray(encoded).toHex == expectedHex,
+              s"Encoding failed for $value"
+            )
+            assert(VarLen.size(value) == encoded.length)
 
             val (decoded, bytesUsed) = VarLen.decode(encoded, 0)
             assert(decoded == value)
@@ -309,7 +326,8 @@ class CardanoAddressTest extends AnyFunSuite {
         // The largest pointer the ledger holds: a 32-bit slot and 16-bit indexes
         val maxPointer = Pointer(Slot(Pointer.MaxSlot), Pointer.MaxIndex, Pointer.MaxIndex)
         val encoded = maxPointer.toBytes
-        assert(encoded.length == 11) // 5 bytes for the slot, 3 for each index
+        // 5 bytes for the slot, 3 for each index
+        assert(maxPointer.toHex == "8fffffff7f" + "83ff7f" + "83ff7f")
 
         val decoded = Pointer.fromBytes(encoded)
         assert(decoded == Success(maxPointer))
@@ -444,6 +462,17 @@ class CardanoAddressTest extends AnyFunSuite {
         // parseFrom counts the bytes it read, not the bytes the pointer writes
         val Success(pointer, bytesUsed) = Pointer.parseFrom(hex("8005" + "0102"), 0): @unchecked
         assert(bytesUsed == 4 && pointer.toBytes.length == 3)
+    }
+
+    test("Generated pointers take every encoded length") {
+        // So that the property tests over addresses see a slot of 1 to 5 bytes and an index of
+        // 1 to 3, not almost only 5-byte slots
+        import ArbitraryInstances.given Arbitrary[Pointer]
+        val gen = summon[Arbitrary[Pointer]].arbitrary
+        val pointers = Seq.fill(1000)(gen.sample.get)
+        assert(pointers.map(p => VarLen.size(p.slot.slot)).toSet == (1 to 5).toSet)
+        assert(pointers.map(p => VarLen.size(p.txIdx)).toSet == (1 to 3).toSet)
+        assert(pointers.map(p => VarLen.size(p.certIdx)).toSet == (1 to 3).toSet)
     }
 
     test("A pointer beyond the ledger's widths cannot be built") {
