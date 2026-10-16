@@ -3,7 +3,9 @@ package rules
 
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.Address
+import scalus.cardano.address.{Address, Network}
+import scalus.cardano.node.Emulator
+import scalus.testing.kit.Party.{Alice, Bob}
 
 import scala.collection.immutable.SortedMap
 
@@ -790,5 +792,148 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val (state, tx) =
             poolTx(poolDeposit, poolRegistration, poolRegistration.copy(pledge = Coin.ada(200)))
         assert(ValueNotConservedUTxOValidator.validate(defaultContext, state, tx).isRight)
+    }
+
+    // ============ Sums beyond Long.MaxValue ============
+    //
+    // The ledger sums both sides with an unbounded `Integer`. A `Long` sum wraps around, and a
+    // transaction can choose amounts that wrap its produced value onto its consumed value.
+
+    private val token = createPolicyId()
+    private val tokenName = createAssetName()
+    private def tokens(amount: Long): MultiAsset = MultiAsset.asset(token, tokenName, amount)
+
+    /** A tx spending one input per `inputs` into `outputs`, paying `fee`. */
+    private def balanceTx(
+        inputs: Seq[Value],
+        outputs: Seq[Value],
+        fee: Coin,
+        mint: Option[Mint] = None,
+        certificates: Seq[Certificate] = Seq.empty
+    ): (State, Transaction) = {
+        val utxos = inputs.map(value => createInput() -> Output(createAddress(), value)).toMap
+        val tx = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet.from(utxos.keySet),
+            outputs = outputs.map(value => Sized(Output(createAddress(), value))).toIndexedSeq,
+            fee = fee,
+            mint = mint,
+            certificates =
+                if certificates.isEmpty then TaggedOrderedStrictSet.empty
+                else TaggedOrderedStrictSet.from(certificates)
+          ),
+          witnessSet = TransactionWitnessSet.empty
+        )
+        (State(utxos = utxos), tx)
+    }
+
+    private def notConserved(state: State, tx: Transaction) =
+        ValueNotConservedUTxOValidator.validate(defaultContext, state, tx) match
+            case Left(e: TransactionException.ValueNotConservedUTxOException) => e
+            case other => fail(s"expected ValueNotConservedUTxOException, got $other")
+
+    test("outputs whose lovelace wraps around to the consumed amount do not conserve value") {
+        // 2 * Long.MaxValue + 9_800_002 + 200_000 = 2^64 + 10_000_000, which wraps to 10 ADA
+        val (state, tx) = balanceTx(
+          inputs = Seq(Value.ada(10)),
+          outputs = Seq(
+            Value.lovelace(Long.MaxValue),
+            Value.lovelace(Long.MaxValue),
+            Value.lovelace(9_800_002)
+          ),
+          fee = Coin(200_000)
+        )
+        val error = notConserved(state, tx)
+        assert(error.consumed == Value.ada(10))
+        assert(error.produced == Value.lovelace(Long.MaxValue), "clamped to the Long range")
+        assertThrows[ArithmeticException](utils.TxBalance.produced(tx, defaultContext.env.params))
+    }
+
+    test("outputs whose tokens wrap around to the consumed amount do not conserve value") {
+        // 2 * Long.MaxValue + 3 = 2^64 + 1, which wraps to the 1 token consumed
+        val (state, tx) = balanceTx(
+          inputs = Seq(Value(Coin.ada(10), tokens(1))),
+          outputs = Seq(
+            Value(Coin.ada(2), tokens(Long.MaxValue)),
+            Value(Coin.ada(2), tokens(Long.MaxValue)),
+            Value(Coin(5_800_000), tokens(3))
+          ),
+          fee = Coin(200_000)
+        )
+        val error = notConserved(state, tx)
+        assert(error.produced.assets == tokens(Long.MaxValue), "clamped to the Long range")
+    }
+
+    test("inputs whose tokens wrap around to zero do not conserve value") {
+        // 4 * 2^62 = 2^64, which wraps to 0: the tokens would vanish without a burn
+        val (state, tx) = balanceTx(
+          inputs = Seq.fill(4)(Value(Coin.ada(2), tokens(1L << 62))),
+          outputs = Seq(Value(Coin(7_800_000))),
+          fee = Coin(200_000)
+        )
+        val error = notConserved(state, tx)
+        assert(error.consumed.assets == tokens(Long.MaxValue), "clamped to the Long range")
+        assert(error.produced == Value(Coin.ada(8)))
+    }
+
+    test("declared deposits whose sum wraps around do not conserve value") {
+        // 2 * Long.MaxValue of deposits wraps to -2 lovelace, which the 2 extra lovelace output
+        // would cancel
+        def registration(n: Int) = Certificate.RegCert(
+          Credential.KeyHash(AddrKeyHash.fromHex(n.toString * 56)),
+          Some(Coin(Long.MaxValue))
+        )
+        val (state, tx) = balanceTx(
+          inputs = Seq(Value.ada(10)),
+          outputs = Seq(Value.lovelace(9_800_002)),
+          fee = Coin(200_000),
+          certificates = Seq(registration(2), registration(3))
+        )
+        notConserved(state, tx)
+    }
+
+    test("tokens summing past Long.MaxValue on both sides conserve value") {
+        val amount = (1L << 62) + 1 // two of them exceed Long.MaxValue
+        val (state, tx) = balanceTx(
+          inputs = Seq.fill(2)(Value(Coin.ada(5), tokens(amount))),
+          outputs = Seq(Value(Coin.ada(5), tokens(amount)), Value(Coin(4_800_000), tokens(amount))),
+          fee = Coin(200_000)
+        )
+        assert(ValueNotConservedUTxOValidator.validate(defaultContext, state, tx).isRight)
+    }
+
+    test("a burn of 2^63 tokens conserves value") {
+        // negating the mint's Long.MinValue does not fit in a Long
+        val (state, tx) = balanceTx(
+          inputs = Seq.fill(2)(Value(Coin.ada(5), tokens(1L << 62))),
+          outputs = Seq(Value(Coin(9_800_000))),
+          fee = Coin(200_000),
+          mint = Some(Mint(tokens(Long.MinValue)))
+        )
+        assert(ValueNotConservedUTxOValidator.validate(defaultContext, state, tx).isRight)
+    }
+
+    test("the emulator rejects outputs whose lovelace wraps around to the consumed amount") {
+        val alice = Alice.address(Network.Mainnet)
+        val bob = Bob.address(Network.Mainnet)
+        val genesis = TransactionInput(TransactionHash.fromHex("0" * 64), 0)
+        val emulator = Emulator(initialUtxos = Map(genesis -> Output(alice, Value.ada(10))))
+        val tx = Alice.signer.sign(
+          Transaction(
+            body = TransactionBody(
+              inputs = TaggedSortedSet(genesis),
+              outputs = IndexedSeq(
+                Sized(Output(bob, Value.lovelace(Long.MaxValue))),
+                Sized(Output(bob, Value.lovelace(Long.MaxValue))),
+                Sized(Output(alice, Value.lovelace(9_000_002)))
+              ),
+              fee = Coin(1_000_000)
+            ),
+            witnessSet = TransactionWitnessSet.empty
+          )
+        )
+        emulator.submitSync(tx) match
+            case Left(error) => assert(error.rule == "ValueNotConserved", error)
+            case Right(_)    => fail("a transaction creating ADA was applied")
     }
 }

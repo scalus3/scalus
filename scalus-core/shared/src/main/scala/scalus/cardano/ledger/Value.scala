@@ -7,13 +7,17 @@ import scalus.utils.{Pretty, Style}
 
 import scala.annotation.targetName
 
-/** Represents a value in Cardano, which can be either pure ADA or ADA with multi-assets */
+/** Represents a value in Cardano, which can be either pure ADA or ADA with multi-assets
+  *
+  * Arithmetic throws `ArithmeticException` when an amount does not fit in a `Long`, rather than
+  * wrapping around.
+  */
 case class Value(coin: Coin, assets: MultiAsset = MultiAsset.empty) {
     @targetName("plus")
-    infix def +(rhs: Value): Value = binOp(_ + _)(rhs)
+    infix def +(rhs: Value): Value = binOp(Math.addExact)(rhs)
 
     @targetName("minus")
-    infix def -(rhs: Value): Value = binOp(_ - _)(rhs)
+    infix def -(rhs: Value): Value = binOp(Math.subtractExact)(rhs)
 
     @targetName("negate")
     def unary_- : Value = Value(-coin, -assets)

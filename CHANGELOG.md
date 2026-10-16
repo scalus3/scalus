@@ -94,6 +94,14 @@ Evolution provider needs.
 
 ### Fixed
 
+- The Emulator's value-conservation check added amounts as `Long`s, so a sum past `Long.MaxValue`
+  wrapped around. A transaction could create ADA or tokens from nothing, for example two outputs of
+  `Long.MaxValue` lovelace from a 10 ADA input, or make tokens vanish without a burn, and the
+  Emulator applied it. Both sides of the check, the declared deposits and refunds, and the
+  collateral are now summed exactly, as the ledger's `Integer` sums them. `Coin`, `MultiAsset` and
+  `Value` arithmetic throws `ArithmeticException` on overflow instead of wrapping, and so do
+  `TxBalance.consumed`, `TxBalance.produced` and the `Certificate` deposit and refund totals when a
+  total does not fit in a `Long`.
 - Pointer addresses wrote and read their variable-length numbers least significant 7-bit group
   first, where the ledger and CIP-19 put the most significant group first. Every slot or index of
   128 or more came out wrong: the CIP-19 pointer (2498243, 27, 3) decoded as (141511681, 27, 3), so

@@ -129,14 +129,29 @@ enum Certificate {
 
 object Certificate {
 
+    /** Total key-deregistration refunds; throws `ArithmeticException` when the sum does not fit in
+      * a `Long`.
+      */
     def shelleyTotalRefundsTxCerts(
         lookupStakingDeposit: Credential => Option[Coin],
         params: ProtocolParams,
         certificates: Iterable[Certificate]
-    ): Coin = {
+    ): Coin =
+        Coin.exact(shelleyTotalRefundsTxCertsExact(lookupStakingDeposit, params, certificates))
+
+    /** [[shelleyTotalRefundsTxCerts]] as an unbounded sum. A certificate that states its refund
+      * adds that amount, where the ledger takes every refund from its state; the certificate rules
+      * reject a stated refund that differs. The value-conservation rule does not depend on those
+      * rules having run, so a stated refund of up to `Long.MaxValue` must not wrap the total.
+      */
+    private[ledger] def shelleyTotalRefundsTxCertsExact(
+        lookupStakingDeposit: Credential => Option[Coin],
+        params: ProtocolParams,
+        certificates: Iterable[Certificate]
+    ): BigInt = {
         val keyDeposit = params.stakeAddressDeposit
         val regCreds = mutable.Set.empty[Credential]
-        var totalRefunds = 0L
+        var totalRefunds = BigInt(0)
         certificates.foreach { cert =>
             cert.lookupRegStakeTxCert match
                 case Some(cred) =>
@@ -161,15 +176,26 @@ object Certificate {
 
                         case _ =>
         }
-        Coin(totalRefunds)
+        totalRefunds
     }
 
+    /** Total DRep-deregistration refunds; throws `ArithmeticException` when the sum does not fit in
+      * a `Long`.
+      */
     def conwayDRepRefundsTxCerts(
         lookupDRepDeposit: Credential => Option[Coin],
         certificates: Iterable[Certificate]
-    ): Coin = {
+    ): Coin = Coin.exact(conwayDRepRefundsTxCertsExact(lookupDRepDeposit, certificates))
+
+    /** [[conwayDRepRefundsTxCerts]] as an unbounded sum: a DRep registered and deregistered in the
+      * same transaction refunds the deposit its registration states, up to `Long.MaxValue` each.
+      */
+    private[ledger] def conwayDRepRefundsTxCertsExact(
+        lookupDRepDeposit: Credential => Option[Coin],
+        certificates: Iterable[Certificate]
+    ): BigInt = {
         val drepRegsInTx = mutable.Map.empty[Credential, Coin]
-        var totalRefund = 0L
+        var totalRefund = BigInt(0)
 
         certificates.foreach {
             case Certificate.RegDRepCert(cred, deposit, _) =>
@@ -186,7 +212,7 @@ object Certificate {
 
             case _ => // Do nothing for other certificate types
         }
-        Coin(totalRefund)
+        totalRefund
     }
 
     /** Calculate total deposits required for Shelley-era certificates (stake pool and delegation)
@@ -217,16 +243,29 @@ object Certificate {
       *   Certificates in the transaction
       * @return
       *   Total deposit amount
+      * @throws ArithmeticException
+      *   when the total does not fit in a `Long`
       */
     def shelleyTotalDeposits(
         params: ProtocolParams,
         isRegisteredPool: PoolKeyHash => Boolean,
         certificates: Iterable[Certificate]
-    ): Coin = {
+    ): Coin = Coin.exact(shelleyTotalDepositsExact(params, isRegisteredPool, certificates))
+
+    /** [[shelleyTotalDeposits]] as an unbounded sum. A certificate that states its deposit adds
+      * that amount, where the ledger counts the protocol-parameter deposit; the certificate rules
+      * reject a stated deposit that differs. The value-conservation rule does not depend on those
+      * rules having run, so a stated deposit of up to `Long.MaxValue` must not wrap the total.
+      */
+    private[ledger] def shelleyTotalDepositsExact(
+        params: ProtocolParams,
+        isRegisteredPool: PoolKeyHash => Boolean,
+        certificates: Iterable[Certificate]
+    ): BigInt = {
         val keyDeposit = params.stakeAddressDeposit
         val poolDeposit = params.stakePoolDeposit
         val newPools = mutable.Set.empty[PoolKeyHash]
-        var totalDeposits = 0L
+        var totalDeposits = BigInt(0)
 
         certificates.foreach {
             case Certificate.RegCert(_, Some(deposit)) =>
@@ -249,7 +288,7 @@ object Certificate {
                 if !isRegisteredPool(pool) && newPools.add(pool) then totalDeposits += poolDeposit
             case _ => // Other certificates don't require deposits
         }
-        Coin(totalDeposits)
+        totalDeposits
     }
 
     /** Calculate total deposits required for Conway-era DRep certificates
@@ -260,13 +299,21 @@ object Certificate {
       *   Certificates in the transaction
       * @return
       *   Total DRep deposit amount
+      * @throws ArithmeticException
+      *   when the total does not fit in a `Long`
       */
     def conwayDRepDeposits(
         params: ProtocolParams,
         certificates: Iterable[Certificate]
-    ): Coin = {
+    ): Coin = Coin.exact(conwayDRepDepositsExact(params, certificates))
+
+    /** [[conwayDRepDeposits]] as an unbounded sum of the deposits the registrations state. */
+    private[ledger] def conwayDRepDepositsExact(
+        params: ProtocolParams,
+        certificates: Iterable[Certificate]
+    ): BigInt = {
         val drepDeposit = params.dRepDeposit
-        var totalDeposits = 0L
+        var totalDeposits = BigInt(0)
 
         certificates.foreach {
             case Certificate.RegDRepCert(_, deposit, _) =>
@@ -274,7 +321,7 @@ object Certificate {
                 totalDeposits += deposit.value
             case _ => // Other certificates don't require DRep deposits
         }
-        Coin(totalDeposits)
+        totalDeposits
     }
 
     given Encoder[Certificate] with
