@@ -6,7 +6,6 @@ import scalus.cardano.ledger.*
 import scalus.uplc.builtin.ByteString
 import scalus.utils.{Pretty, Style}
 
-import scala.collection.mutable
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
@@ -15,10 +14,16 @@ import scala.util.{Failure, Success, Try}
   * Uses strongly typed Hash28 classes for payment, stake and script hashes.
   */
 
+/** The variable-length natural numbers of a pointer address (CIP-19).
+  *
+  * A number is written in 7-bit groups, most significant group first; every byte but the last has
+  * its high bit set. This is the ledger's `putVariableLengthWord64` and `decode7BitVarLength`
+  * (cardano-ledger-core, `Cardano/Ledger/Address.hs`), so 128 is `81 00`.
+  */
 object VarUInt {
 
-    /** Encode positive integer using variable-length encoding as specified in CIP-19 Uses
-      * continuation bits to handle arbitrarily large values efficiently
+    /** Encode a non-negative integer as a variable-length natural number, most significant 7-bit
+      * group first.
       *
       * @param value
       *   The positive integer to encode (must be >= 0)
@@ -28,26 +33,24 @@ object VarUInt {
     def encodeVariableLengthUInt(value: Long): Array[Byte] = {
         require(value >= 0, "Value must be non-negative")
 
-        val buffer = mutable.ArrayBuffer.empty[Byte]
+        // Fill the groups from the last one, which is the only one without the continuation bit
+        val size = Math.max(1, (64 - java.lang.Long.numberOfLeadingZeros(value) + 6) / 7)
+        val bytes = new Array[Byte](size)
         var remaining = value
-
-        while {
-            // Take lower 7 bits for this byte
-            var currentByte = (remaining & 0x7f).toByte
+        var index = size - 1
+        bytes(index) = (remaining & 0x7f).toByte
+        while index > 0 do
             remaining >>>= 7
-
-            // Set continuation bit if more bytes follow
-            if remaining != 0 then currentByte = (currentByte | 0x80).toByte
-
-            buffer += currentByte
-            remaining != 0
-        } do ()
-
-        buffer.toArray
+            index -= 1
+            bytes(index) = ((remaining & 0x7f) | 0x80).toByte
+        bytes
     }
 
-    /** Decode variable-length integer as specified in CIP-19 Handles continuation bit protocol to
-      * reconstruct original value
+    /** Decode a variable-length natural number, most significant 7-bit group first.
+      *
+      * As the ledger's `decodeVariableLengthWord64`, the number may take any number of bytes and is
+      * kept to its low 64 bits. A value of 2^63 or more comes out negative, as the bits of an
+      * unsigned 64-bit number, so [[encodeVariableLengthUInt]] does not take it back.
       *
       * @param bytes
       *   Source byte array
@@ -60,21 +63,16 @@ object VarUInt {
         bytes: Array[Byte],
         startIndex: Int
     ): (Long, Int) = {
-        require(startIndex < bytes.length, "Start index out of bounds")
-
-        val firstByte = bytes(startIndex)
-        val hasMoreBytes = (firstByte & 0x80) != 0
-
-        if !hasMoreBytes then {
-            // Simple case: single byte with MSB=0
-            (firstByte & 0x7f, 1)
-        } else {
-            // Complex case: multiple bytes with continuation
-            val valueInThisByte = firstByte & 0x7f
-            val (recursiveValue, bytesUsed) = decodeVariableLengthUInt(bytes, startIndex + 1)
-            // Shift previous value and combine with current byte
-            ((recursiveValue << 7) | valueInThisByte, bytesUsed + 1)
-        }
+        var value = 0L
+        var index = startIndex
+        var hasMoreBytes = true
+        while hasMoreBytes do
+            require(index < bytes.length, "Not enough bytes for a variable-length number")
+            val byte = bytes(index)
+            value = (value << 7) | (byte & 0x7f)
+            hasMoreBytes = (byte & 0x80) != 0
+            index += 1
+        (value, index - startIndex)
     }
 }
 
@@ -126,6 +124,10 @@ type CertIdx = Long
 /** Represents a pointer to a stake registration certificate on the blockchain Used in pointer
   * addresses to reference stake credentials indirectly
   *
+  * The ledger holds the slot in 32 bits and both indexes in 16 bits, so a pointer beyond
+  * [[Pointer.MaxSlot]] or [[Pointer.MaxIndex]] cannot be built; [[Pointer.parseFrom]] reads one as
+  * `Pointer(Slot(0), 0, 0)`.
+  *
   * @param slot
   *   Transaction slot number where the stake registration occurred
   * @param txIdx
@@ -134,6 +136,11 @@ type CertIdx = Long
   *   Certificate index within the transaction
   */
 case class Pointer(slot: Slot, txIdx: TxIdx, certIdx: CertIdx) {
+    require(
+      slot.slot <= Pointer.MaxSlot && Pointer.isIndex(txIdx) && Pointer.isIndex(certIdx),
+      s"A pointer holds a slot up to ${Pointer.MaxSlot} and indexes up to ${Pointer.MaxIndex}, " +
+          s"got ($slot, $txIdx, $certIdx)"
+    )
 
     /** Serialize pointer to variable-length encoded bytes following CIP-19 specification */
     def toBytes: Array[Byte] =
@@ -142,12 +149,26 @@ case class Pointer(slot: Slot, txIdx: TxIdx, certIdx: CertIdx) {
             VarUInt.encodeVariableLengthUInt(certIdx)
 
     /** Convert to hex string for debugging */
-    def toHex: String = toBytes.map("%02x".format(_)).mkString
+    def toHex: String = scalus.utils.Hex.bytesToHex(toBytes)
 }
 
 object Pointer {
 
+    /** The largest slot a pointer holds: the ledger's slot is 32 bits. */
+    val MaxSlot: Long = 0xffffffffL
+
+    /** The largest transaction or certificate index a pointer holds: the ledger's are 16 bits. */
+    val MaxIndex: Long = 0xffffL
+
+    private def isIndex(value: Long): Boolean = 0 <= value && value <= MaxIndex
+
     /** Parse pointer from bytes starting at given index
+      *
+      * A slot past [[MaxSlot]], or an index past [[MaxIndex]], does not fit the ledger's pointer,
+      * and the whole pointer is read as `Pointer(Slot(0), 0, 0)`. This is the ledger's
+      * `decodePtrLenient` and `mkPtrNormalized`: how a node reads a pointer before protocol version
+      * 9, and so what it holds for such an address in its UTxO set. From version 9 a node rejects
+      * such a pointer in a new transaction.
       *
       * @param bytes
       *   Source byte array
@@ -161,10 +182,20 @@ object Pointer {
         val (txIdx, used2) = decodeVariableLengthUInt(bytes, startIndex + used1)
         val (certIdx, used3) = decodeVariableLengthUInt(bytes, startIndex + used1 + used2)
 
-        (Pointer(Slot(slot), txIdx, certIdx), used1 + used2 + used3)
+        (normalized(slot, txIdx, certIdx), used1 + used2 + used3)
     }
 
-    /** Parse pointer from complete byte array */
+    private def normalized(slot: Long, txIdx: Long, certIdx: Long): Pointer = {
+        if 0 <= slot && slot <= MaxSlot && isIndex(txIdx) && isIndex(certIdx) then
+            Pointer(Slot(slot), txIdx, certIdx)
+        else Pointer(Slot(0), 0, 0)
+    }
+
+    /** Parse a pointer from the start of a byte array.
+      *
+      * Bytes after the pointer are ignored, as a node ignores them before protocol version 7; from
+      * version 7 it rejects an address with bytes left over.
+      */
     def fromBytes(bytes: Array[Byte]): Try[Pointer] =
         parseFrom(bytes, 0).map(_._1)
 }

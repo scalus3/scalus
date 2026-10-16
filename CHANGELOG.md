@@ -94,6 +94,15 @@ Evolution provider needs.
 
 ### Fixed
 
+- Pointer addresses wrote and read their variable-length numbers least significant 7-bit group
+  first, where the ledger and CIP-19 put the most significant group first. Every slot or index of
+  128 or more came out wrong: the CIP-19 pointer (2498243, 27, 3) decoded as (141511681, 27, 3), so
+  a script saw a different `StakingPtr`. **A pointer address Scalus built with such a slot or index
+  had other bytes than intended, so it is a different address from the one now built.** The same
+  holds for `VarUInt.encodeVariableLengthUInt` and `decodeVariableLengthUInt`. A pointer that does
+  not fit the ledger's 32-bit slot and 16-bit indexes (`Pointer.MaxSlot`, `Pointer.MaxIndex`) now
+  decodes as `Pointer(Slot(0), 0, 0)`, as a node reads it before protocol version 9 and keeps it in
+  its UTxO set, and **constructing such a `Pointer` throws `IllegalArgumentException`**.
 - The Emulator accepted the same reward withdrawn twice. Withdrawals now subtract from the balance
   and keep the account registered. **A test that expected a drained account to be deregistered
   now finds it registered with balance 0.**

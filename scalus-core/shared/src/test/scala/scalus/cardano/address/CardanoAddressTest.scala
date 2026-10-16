@@ -62,6 +62,8 @@ class CardanoAddressTest extends AnyFunSuite {
     test("Pointer should encode and decode correctly") {
         val pointer = Pointer(Slot(2498243), 27, 3)
         val encoded = pointer.toBytes
+        // the pointer of the CIP-19 test vectors, most significant 7-bit group first
+        assert(pointer.toHex == "8198bd431b03")
 
         // Test round-trip encoding/decoding
         val decoded = Pointer.fromBytes(encoded)
@@ -77,9 +79,9 @@ class CardanoAddressTest extends AnyFunSuite {
         val testCases = List(
           (0L, Array[Byte](0x00)),
           (127L, Array[Byte](0x7f)),
-          (128L, Array[Byte](0x80.toByte, 0x01)),
+          (128L, Array[Byte](0x81.toByte, 0x00)),
           (16383L, Array[Byte](0xff.toByte, 0x7f)),
-          (16384L, Array[Byte](0x80.toByte, 0x80.toByte, 0x01))
+          (16384L, Array[Byte](0x81.toByte, 0x80.toByte, 0x00))
         )
 
         testCases.foreach { case (value, expectedBytes) =>
@@ -304,11 +306,10 @@ class CardanoAddressTest extends AnyFunSuite {
     }
 
     test("Edge cases should be handled correctly") {
-        // Test maximum values for variable length encoding
-        val maxSlot = Long.MaxValue
-        val maxPointer = Pointer(Slot(maxSlot), Long.MaxValue, Long.MaxValue)
+        // The largest pointer the ledger holds: a 32-bit slot and 16-bit indexes
+        val maxPointer = Pointer(Slot(Pointer.MaxSlot), Pointer.MaxIndex, Pointer.MaxIndex)
         val encoded = maxPointer.toBytes
-        assert(encoded.length > 21) // Will use multiple bytes per field
+        assert(encoded.length == 11) // 5 bytes for the slot, 3 for each index
 
         val decoded = Pointer.fromBytes(encoded)
         assert(decoded == Success(maxPointer))
@@ -320,6 +321,59 @@ class CardanoAddressTest extends AnyFunSuite {
 
         val minDecoded = Pointer.fromBytes(minEncoded)
         assert(minDecoded == Success(minPointer))
+    }
+
+    test("CIP-19 pointer addresses decode to their pointer and re-encode unchanged") {
+        val pointer = Pointer(Slot(2498243), 27, 3)
+        val vectors = List(
+          "addr1gx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer5pnz75xxcrzqf96k",
+          "addr128phkx6acpnf78fuvxn0mkew3l0fd058hzquvz7w36x4gtupnz75xxcrtw79hu"
+        )
+        vectors.foreach { bech32 =>
+            Address.fromBech32(bech32) match
+                case address @ ShelleyAddress(_, _, ShelleyDelegationPart.Pointer(decoded)) =>
+                    assert(decoded == pointer, bech32)
+                    assert(address.toBech32.get == bech32)
+                case other => fail(s"expected a pointer address, got $other")
+        }
+    }
+
+    test("A pointer that does not fit the ledger's widths is read as the zero pointer") {
+        // As the ledger's mkPtrNormalized: a slot of 2^32, or an index of 2^16, makes the whole
+        // pointer Ptr 0 0 0
+        def bytes(slot: Long, txIdx: Long, certIdx: Long) =
+            Seq(slot, txIdx, certIdx)
+                .flatMap(v => VarUInt.encodeVariableLengthUInt(v).toSeq)
+                .toArray
+        val zero = Success(Pointer(Slot(0), 0, 0))
+        assert(Pointer.fromBytes(bytes(Pointer.MaxSlot + 1, 1, 2)) == zero)
+        assert(Pointer.fromBytes(bytes(5, Pointer.MaxIndex + 1, 2)) == zero)
+        assert(Pointer.fromBytes(bytes(5, 1, Pointer.MaxIndex + 1)) == zero)
+        assert(Pointer.fromBytes(bytes(Long.MaxValue, 0, 0)) == zero)
+    }
+
+    test("A pointer beyond the ledger's widths cannot be built") {
+        assertThrows[IllegalArgumentException](Pointer(Slot(Pointer.MaxSlot + 1), 0, 0))
+        assertThrows[IllegalArgumentException](Pointer(Slot(0), Pointer.MaxIndex + 1, 0))
+        assertThrows[IllegalArgumentException](Pointer(Slot(0), 0, -1))
+    }
+
+    test("A variable-length number keeps its low 64 bits, as the ledger's Word64 decoder") {
+        // 2^64 + 5 in ten 7-bit groups: 2, eight zeros, 5
+        val wrapping = Array(0x82.toByte) ++ Array.fill(8)(0x80.toByte) ++ Array[Byte](0x05)
+        assert(VarUInt.decodeVariableLengthUInt(wrapping, 0) == (5L, 10))
+        assert(Pointer.fromBytes(wrapping ++ Array[Byte](0, 0)) == Success(Pointer(Slot(5), 0, 0)))
+    }
+
+    test("A long run of continuation bytes decodes without recursion") {
+        val longZero = Array.fill(100_000)(0x80.toByte) ++ Array[Byte](0x00)
+        assert(VarUInt.decodeVariableLengthUInt(longZero, 0) == (0L, 100_001))
+        assert(Pointer.fromBytes(longZero ++ Array[Byte](0, 0)) == Success(Pointer(Slot(0), 0, 0)))
+    }
+
+    test("A truncated variable-length number fails") {
+        assert(Pointer.fromBytes(Array(0x81.toByte)).isFailure)
+        assert(Pointer.fromBytes(Array[Byte](0x01, 0x02)).isFailure)
     }
 
     test("Human readable prefixes should be correct") {
