@@ -1,7 +1,7 @@
 package scalus.testing.conformance
 
 import scalus.uplc.builtin.ByteString
-import scalus.cardano.address.Address
+import scalus.cardano.address.{Address, VarLen}
 import scalus.cardano.ledger.*
 
 import java.nio.ByteBuffer
@@ -387,11 +387,10 @@ object MempackParser {
         val scriptRef: Option[ScriptRef] = scriptTag match {
             case 0 =>
                 // NativeScript - ShortByteString with VarLen length prefix
-                val scriptLenBytes = bytes.slice(offset, bytes.length)
-                val scriptLen = parseVarLenWord64(scriptLenBytes).toInt
-                offset += varLenEncodedLength(scriptLenBytes)
+                val (scriptLen, lengthSize) = VarLen.decode(bytes, offset)
+                offset += lengthSize
 
-                val scriptBytes = bytes.slice(offset, offset + scriptLen)
+                val scriptBytes = bytes.slice(offset, offset + scriptLen.toInt)
                 // Parse native script from CBOR
                 val nativeScript = Script.Native.fromCbor(scriptBytes)
                 Some(ScriptRef(nativeScript))
@@ -402,11 +401,10 @@ object MempackParser {
                 offset += 1
 
                 // Script length uses VarLen encoding (ShortByteString)
-                val scriptLenBytes = bytes.slice(offset, bytes.length)
-                val scriptLen = parseVarLenWord64(scriptLenBytes).toInt
-                offset += varLenEncodedLength(scriptLenBytes)
+                val (scriptLen, lengthSize) = VarLen.decode(bytes, offset)
+                offset += lengthSize
 
-                val scriptBytes = bytes.slice(offset, offset + scriptLen)
+                val scriptBytes = bytes.slice(offset, offset + scriptLen.toInt)
                 val scriptBs = scalus.uplc.builtin.ByteString.fromArray(scriptBytes)
 
                 val script = versionTag match {
@@ -423,56 +421,6 @@ object MempackParser {
         }
 
         TransactionOutput.Babbage(address, value, datumOption, scriptRef)
-    }
-
-    /** Parse variable-length Word64 encoding used by mempack
-      *
-      * Uses 7-bit variable-length encoding where:
-      *   - Each byte uses bit 7 as a continuation bit (1 = more bytes, 0 = last byte)
-      *   - Lower 7 bits of each byte contain data
-      *   - Values are reconstructed in big-endian order (shift left by 7 bits for each byte)
-      *
-      * Based on Cardano.Ledger.Address.decode7BitVarLength
-      */
-    private def parseVarLenWord64(bytes: Array[Byte]): Long = {
-        var offset = 0
-        var acc = 0L
-
-        while offset < bytes.length do {
-            val byte = bytes(offset) & 0xff
-            val hasContinuation = (byte & 0x80) != 0 // Test bit 7
-            val dataBits = byte & 0x7f // Clear bit 7 to get lower 7 bits
-
-            acc = (acc << 7) | dataBits
-
-            offset += 1
-
-            if !hasContinuation then {
-                // This is the last byte
-                return acc
-            }
-        }
-
-        // If we get here, we ran out of bytes with continuation bit still set
-        throw new IllegalArgumentException("VarLen encoding ended prematurely")
-    }
-
-    /** Calculate the number of bytes consumed by a VarLen-encoded value
-      *
-      * Scans the bytes to find where the continuation bit is not set (bit 7 = 0), indicating the
-      * last byte of the encoded value.
-      */
-    private def varLenEncodedLength(bytes: Array[Byte]): Int = {
-        var offset = 0
-        while offset < bytes.length do {
-            val byte = bytes(offset) & 0xff
-            val hasContinuation = (byte & 0x80) != 0
-            offset += 1
-            if !hasContinuation then {
-                return offset
-            }
-        }
-        throw new IllegalArgumentException("VarLen encoding ended prematurely")
     }
 
     /** Result of parsing a CompactValue, includes the parsed Value and bytes consumed */
@@ -493,9 +441,8 @@ object MempackParser {
         offset += 1
 
         // Parse Coin (VarLen Word64)
-        val coinBytes = bytes.slice(offset, bytes.length)
-        val coin = parseVarLenWord64(coinBytes)
-        offset += varLenEncodedLength(coinBytes)
+        val (coin, coinSize) = VarLen.decode(bytes, offset)
+        offset += coinSize
 
         val multiAsset = coinTag match {
             case 0 =>
@@ -527,10 +474,12 @@ object MempackParser {
       */
     private def parseMultiAsset(bytes: Array[Byte], startOffset: Int): (MultiAsset, Int) = {
         var offset = startOffset
-        val numAssets = parseVarLenWord64(bytes.drop(offset)).toInt
-        offset += varLenEncodedLength(bytes.drop(offset))
-        val repLength = parseVarLenWord64(bytes.drop(offset)).toInt
-        offset += varLenEncodedLength(bytes.drop(offset))
+        val (numAssetsWord, numAssetsSize) = VarLen.decode(bytes, offset)
+        val numAssets = numAssetsWord.toInt
+        offset += numAssetsSize
+        val (repLengthWord, repLengthSize) = VarLen.decode(bytes, offset)
+        val repLength = repLengthWord.toInt
+        offset += repLengthSize
         val rep = bytes.slice(offset, offset + repLength)
         offset += repLength
 

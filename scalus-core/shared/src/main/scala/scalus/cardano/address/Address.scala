@@ -14,28 +14,43 @@ import scala.util.{Failure, Success, Try}
   * Uses strongly typed Hash28 classes for payment, stake and script hashes.
   */
 
-/** The variable-length natural numbers of a pointer address (CIP-19).
+/** A natural number written in 7-bit groups, most significant group first; every byte but the last
+  * has its high bit set, so 128 is `81 00`.
   *
-  * A number is written in 7-bit groups, most significant group first; every byte but the last has
-  * its high bit set. This is the ledger's `putVariableLengthWord64` and `decode7BitVarLength`
-  * (cardano-ledger-core, `Cardano/Ledger/Address.hs`), so 128 is `81 00`.
+  * This is the ledger's `putVariableLengthWord64` and `decode7BitVarLength` (cardano-ledger-core,
+  * `Cardano/Ledger/Address.hs`), which write the numbers of a pointer address (CIP-19), and
+  * mempack's `VarLen`.
   */
-private[address] object PointerNumber {
+private[scalus] object VarLen {
 
-    /** Encode a non-negative number in its shortest encoding. */
-    def encode(value: Long): Array[Byte] = {
+    /** The number of bytes [[write]] takes for a non-negative `value`. */
+    def size(value: Long): Int = {
         require(value >= 0, "Value must be non-negative")
+        Math.max(1, (64 - java.lang.Long.numberOfLeadingZeros(value) + 6) / 7)
+    }
 
+    /** Write a non-negative number in its shortest encoding into `bytes` at `offset`.
+      *
+      * @return
+      *   The offset after the number
+      */
+    def write(value: Long, bytes: Array[Byte], offset: Int): Int = {
+        val end = offset + size(value)
         // Fill the groups from the last one, which is the only one without the continuation bit
-        val size = Math.max(1, (64 - java.lang.Long.numberOfLeadingZeros(value) + 6) / 7)
-        val bytes = new Array[Byte](size)
         var remaining = value
-        var index = size - 1
+        var index = end - 1
         bytes(index) = (remaining & 0x7f).toByte
-        while index > 0 do
+        while index > offset do
             remaining >>>= 7
             index -= 1
             bytes(index) = ((remaining & 0x7f) | 0x80).toByte
+        end
+    }
+
+    /** Encode a non-negative number in its shortest encoding. */
+    def encode(value: Long): Array[Byte] = {
+        val bytes = new Array[Byte](size(value))
+        write(value, bytes, 0)
         bytes
     }
 
@@ -91,7 +106,7 @@ object VarUInt {
       * @return
       *   Encoded bytes with continuation bit protocol
       */
-    def encodeVariableLengthUInt(value: Long): Array[Byte] = PointerNumber.encode(value)
+    def encodeVariableLengthUInt(value: Long): Array[Byte] = VarLen.encode(value)
 
     /** Decode a variable-length natural number, most significant 7-bit group first, kept to its low
       * 64 bits.
@@ -104,7 +119,7 @@ object VarUInt {
       *   Tuple of (decoded value, number of bytes consumed)
       */
     def decodeVariableLengthUInt(bytes: Array[Byte], startIndex: Int): (Long, Int) =
-        PointerNumber.decode(bytes, startIndex)
+        VarLen.decode(bytes, startIndex)
 }
 
 /** Network identification for Cardano addresses */
@@ -166,7 +181,7 @@ type CertIdx = Long
   */
 case class Pointer(slot: Slot, txIdx: TxIdx, certIdx: CertIdx) {
     require(
-      slot.slot <= Pointer.MaxSlot && Pointer.isIndex(txIdx) && Pointer.isIndex(certIdx),
+      Pointer.fits(slot.slot, txIdx, certIdx),
       s"A pointer holds a slot up to ${Pointer.MaxSlot} and indexes up to ${Pointer.MaxIndex}, " +
           s"got ($slot, $txIdx, $certIdx)"
     )
@@ -174,9 +189,14 @@ case class Pointer(slot: Slot, txIdx: TxIdx, certIdx: CertIdx) {
     /** Serialize pointer to variable-length encoded bytes following CIP-19 specification, each
       * number in its shortest encoding, as the ledger's `putVariableLengthWord64`.
       */
-    def toBytes: Array[Byte] =
-        PointerNumber.encode(slot.slot) ++ PointerNumber.encode(txIdx) ++
-            PointerNumber.encode(certIdx)
+    def toBytes: Array[Byte] = {
+        val bytes =
+            new Array[Byte](VarLen.size(slot.slot) + VarLen.size(txIdx) + VarLen.size(certIdx))
+        var offset = VarLen.write(slot.slot, bytes, 0)
+        offset = VarLen.write(txIdx, bytes, offset)
+        VarLen.write(certIdx, bytes, offset)
+        bytes
+    }
 
     /** Convert to hex string for debugging */
     def toHex: String = scalus.utils.Hex.bytesToHex(toBytes)
@@ -190,7 +210,10 @@ object Pointer {
     /** The largest transaction or certificate index a pointer holds: the ledger's are 16 bits. */
     val MaxIndex: Long = 0xffffL
 
-    private def isIndex(value: Long): Boolean = 0 <= value && value <= MaxIndex
+    /** Whether the numbers fit the ledger's pointer: a 32-bit slot and 16-bit indexes. */
+    private def fits(slot: Long, txIdx: Long, certIdx: Long): Boolean =
+        0 <= slot && slot <= MaxSlot && 0 <= txIdx && txIdx <= MaxIndex &&
+            0 <= certIdx && certIdx <= MaxIndex
 
     /** Parse pointer from bytes starting at given index, as a node reads one in a new transaction
       * (protocol version 9 and later).
@@ -227,20 +250,19 @@ object Pointer {
         protocolVersion: ProtocolVersion
     ): Try[(Pointer, Int)] = Try {
         if protocolVersion >= ProtocolVersion.conwayPV then
-            val (slot, used1) = PointerNumber.decode(bytes, startIndex, 32)
-            val (txIdx, used2) = PointerNumber.decode(bytes, startIndex + used1, 16)
-            val (certIdx, used3) = PointerNumber.decode(bytes, startIndex + used1 + used2, 16)
+            val (slot, used1) = VarLen.decode(bytes, startIndex, 32)
+            val (txIdx, used2) = VarLen.decode(bytes, startIndex + used1, 16)
+            val (certIdx, used3) = VarLen.decode(bytes, startIndex + used1 + used2, 16)
             (Pointer(Slot(slot), txIdx, certIdx), used1 + used2 + used3)
         else
-            val (slot, used1) = PointerNumber.decode(bytes, startIndex)
-            val (txIdx, used2) = PointerNumber.decode(bytes, startIndex + used1)
-            val (certIdx, used3) = PointerNumber.decode(bytes, startIndex + used1 + used2)
+            val (slot, used1) = VarLen.decode(bytes, startIndex)
+            val (txIdx, used2) = VarLen.decode(bytes, startIndex + used1)
+            val (certIdx, used3) = VarLen.decode(bytes, startIndex + used1 + used2)
             (normalized(slot, txIdx, certIdx), used1 + used2 + used3)
     }
 
     private def normalized(slot: Long, txIdx: Long, certIdx: Long): Pointer = {
-        if 0 <= slot && slot <= MaxSlot && isIndex(txIdx) && isIndex(certIdx) then
-            Pointer(Slot(slot), txIdx, certIdx)
+        if fits(slot, txIdx, certIdx) then Pointer(Slot(slot), txIdx, certIdx)
         else Pointer(Slot(0), 0, 0)
     }
 
