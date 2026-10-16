@@ -6,6 +6,10 @@ import scalus.cardano.ledger.utils.TxBalance
 /** This is Shelley.validateValueNotConservedUTxO
   *
   * consumed pp utxo txb = produced pp poolParams txb
+  *
+  * Both sides are summed and compared exactly, as the ledger's `Integer` does: a transaction can
+  * make a `Long` sum wrap around to the other side's total. The error reports amounts beyond the
+  * `Long` range as `Long.MaxValue` or `Long.MinValue`.
   */
 object ValueNotConservedUTxOValidator extends STS.Validator {
     override final type Error = TransactionException.BadInputsUTxOException |
@@ -16,14 +20,17 @@ object ValueNotConservedUTxOValidator extends STS.Validator {
         val params = context.env.params
 
         for
-            consumed <- TxBalance.consumed(tx, state.certState, state.utxos, params)
-            produced = TxBalance.produced(tx, state.certState, params)
+            consumed <- TxBalance.consumedExact(tx, state.certState, state.utxos, params)
+            produced = TxBalance.producedExact(tx, state.certState, params)
             _ <-
                 if consumed == produced then success
                 else
                     failure(
-                      TransactionException
-                          .ValueNotConservedUTxOException(transactionId, consumed, produced)
+                      TransactionException.ValueNotConservedUTxOException(
+                        transactionId,
+                        consumed.toClampedValue,
+                        produced.toClampedValue
+                      )
                     )
         yield ()
     }

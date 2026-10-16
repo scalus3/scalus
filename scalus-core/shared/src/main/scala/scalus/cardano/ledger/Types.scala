@@ -30,19 +30,22 @@ enum Era(val value: Int) extends Enumeration {
   * On the wire a coin is unsigned (Conway CDDL `coin = uint`), and the CBOR decoder rejects
   * negative values. The constructor deliberately allows negative amounts: balancing and `Value`
   * arithmetic produce transient negative differences.
+  *
+  * Arithmetic throws `ArithmeticException` when the result does not fit in a `Long`, rather than
+  * wrapping around: a wrapped sum would be a wrong amount.
   */
 final case class Coin(value: Long) {
 
     /** Add another coin amount */
     @targetName("plus")
-    infix def +(other: Coin): Coin = Coin(value + other.value)
+    infix def +(other: Coin): Coin = Coin(Math.addExact(value, other.value))
 
     /** Subtract another coin amount */
     @targetName("minus")
-    infix def -(other: Coin): Coin = Coin(value - other.value)
+    infix def -(other: Coin): Coin = Coin(Math.subtractExact(value, other.value))
 
     @targetName("negate")
-    def unary_- : Coin = Coin(-value)
+    def unary_- : Coin = Coin(Math.negateExact(value))
 
     def isZero: Boolean = value == 0L
     def nonZero: Boolean = value != 0L
@@ -59,7 +62,15 @@ object Coin {
     val zero: Coin = Coin(0)
 
     /** Create lovelace amount from ADA amount, e.g.  ada(2) = 2_000_000 lovelace */
-    def ada(amount: Long): Coin = Coin(amount * 1_000_000L)
+    def ada(amount: Long): Coin = Coin(Math.multiplyExact(amount, 1_000_000L))
+
+    /** The coin for an exactly computed amount; throws `ArithmeticException` when it does not fit
+      * in a `Long`.
+      */
+    private[ledger] def exact(amount: BigInt): Coin = {
+        if amount.isValidLong then Coin(amount.toLong)
+        else throw new ArithmeticException(s"Amount $amount does not fit in a Long")
+    }
 
     given Codec[Coin] = Codec(
       Encoder((w, coin) => w.writeLong(coin.value)),
@@ -146,16 +157,23 @@ case class MultiAsset private (assets: SortedMap[PolicyId, SortedMap[AssetName, 
         if filtered.isEmpty then MultiAsset.zero else new MultiAsset(filtered)
     }
 
+    /** Adds the amounts of each asset; throws `ArithmeticException` when a sum does not fit in a
+      * `Long`.
+      */
     @targetName("plus")
-    infix def +(other: MultiAsset): MultiAsset = MultiAsset.binOp(_ + _)(this, other)
+    infix def +(other: MultiAsset): MultiAsset = MultiAsset.binOp(Math.addExact)(this, other)
 
+    /** Subtracts the amounts of each asset; throws `ArithmeticException` when a difference does not
+      * fit in a `Long`.
+      */
     @targetName("minus")
-    infix def -(other: MultiAsset): MultiAsset = MultiAsset.binOp(_ - _)(this, other)
+    infix def -(other: MultiAsset): MultiAsset =
+        MultiAsset.binOp(Math.subtractExact)(this, other)
 
     @targetName("negate")
     def unary_- : MultiAsset = new MultiAsset(
       assets.view
-          .mapValues(_.view.mapValues(v => -v).to(SortedMap))
+          .mapValues(_.view.mapValues(v => Math.negateExact(v)).to(SortedMap))
           .to(SortedMap)
     )
 

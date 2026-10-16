@@ -455,4 +455,23 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     private def checkFeeOk(inAda: Long, outAda: Long, feeAda: Long): Unit =
         checkFeeOk(Value.lovelace(inAda), Value.lovelace(outAda), feeAda)
+
+    test("calculateChangeValue takes the change of token totals past Long.MaxValue") {
+        // Both sides hold 2 * (2^62 + 1) of the token, more than a Long holds; the change is 1 ADA
+        val amount = (1L << 62) + 1
+        val tokens =
+            MultiAsset.asset(ScriptHash.fromHex("1" * 56), AssetName.fromString("t"), amount)
+        val utxo = (0 until 2).map { index =>
+            TransactionInput(TransactionHash.fromHex("0" * 64), index) ->
+                Output(testAddress, Value(Coin.ada(5), tokens))
+        }.toMap
+        val tx = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet.from(utxo.keySet),
+            outputs = IndexedSeq.fill(2)(Sized(Output(testAddress, Value(Coin.ada(4), tokens)))),
+            fee = Coin.ada(1)
+          )
+        )
+        assert(TransactionBuilder.calculateChangeValue(tx, utxo, params) == Value.ada(1))
+    }
 }
