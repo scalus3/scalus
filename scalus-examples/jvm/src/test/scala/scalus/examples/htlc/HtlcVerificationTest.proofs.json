@@ -3,7 +3,7 @@
     "uplc-blaster": {
       "Blaster": "3a141c8d06f1",
       "PlutusCore": "2919b66445cd",
-      "ScalusProofs": "eb9642f1ddd4f46e",
+      "ScalusProofs": "6f8b045bb2678399",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },

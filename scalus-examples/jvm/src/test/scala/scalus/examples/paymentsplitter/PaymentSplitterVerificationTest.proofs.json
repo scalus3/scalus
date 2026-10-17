@@ -3,7 +3,7 @@
     "uplc-blaster": {
       "Blaster": "3a141c8d06f1",
       "PlutusCore": "2919b66445cd",
-      "ScalusProofs": "eb9642f1ddd4f46e",
+      "ScalusProofs": "6f8b045bb2678399",
       "toolchain": "leanprover/lean4:v4.24.0"
     }
   },
@@ -32,14 +32,14 @@
         "da85f6e9f44ae06a"
       ],
       "notes": {
-        "budget": "6781",
+        "budget": "5558",
         "kind": "Blaster"
       },
       "counterexample": {
         "a": "213021",
         "b": "213121",
         "funds": 0,
-        "locked": 0,
+        "locked": 2,
         "rest.certificates": {"list":[]},
         "rest.currentTreasuryAmount": {"int":3},
         "rest.data": {"list":[]},
@@ -57,7 +57,7 @@
         "rest.votes": {"list":[]},
         "rest.withdrawals": {"list":[]},
         "toA": 0,
-        "toB": 1
+        "toB": 0
       },
       "tests": [
         "an honest payout is accepted"
@@ -169,7 +169,7 @@
         "da85f6e9f44ae06a"
       ],
       "notes": {
-        "budget": "6778",
+        "budget": "6725",
         "kind": "Blaster"
       },
       "counterexample": {
@@ -177,22 +177,22 @@
         "b": "213121",
         "funds": 0,
         "locked": 1,
-        "rest.certificates": {"list":[]},
+        "rest.certificates": {"list":[{"int":15}]},
         "rest.currentTreasuryAmount": {"int":4},
-        "rest.data": {"list":[]},
+        "rest.data": {"list":[{"int":7}]},
         "rest.datum": {"bytes":"213321"},
-        "rest.fee": {"list":[]},
-        "rest.id": {"list":[]},
-        "rest.mint": {"list":[]},
-        "rest.proposalProcedures": {"list":[]},
+        "rest.fee": {"list":[{"int":9}]},
+        "rest.id": {"list":[{"int":14}]},
+        "rest.mint": {"list":[{"int":11}]},
+        "rest.proposalProcedures": {"list":[{"int":17}]},
         "rest.redeemer": {"bytes":"213221"},
-        "rest.redeemers": {"list":[]},
-        "rest.referenceInputs": {"list":[]},
-        "rest.signatories": {"list":[]},
+        "rest.redeemers": {"list":[{"int":16}]},
+        "rest.referenceInputs": {"list":[{"int":8}]},
+        "rest.signatories": {"list":[{"int":12}]},
         "rest.treasuryDonation": {"int":5},
-        "rest.validRange": {"list":[]},
-        "rest.votes": {"list":[]},
-        "rest.withdrawals": {"list":[]},
+        "rest.validRange": {"list":[{"int":13}]},
+        "rest.votes": {"list":[{"int":6}]},
+        "rest.withdrawals": {"list":[{"int":10}]},
         "toA": 0,
         "toB": 0
       },

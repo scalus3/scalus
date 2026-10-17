@@ -85,16 +85,28 @@ def measureRun (p : Program) (params : List Term) (n : Nat) : String :=
 section
 open Lean Elab Command Meta Blaster.Optimize
 
+/-- Whether `e` has a `Blaster.dite' c t f` whose branches do not take `c` and `¬ c` as they are
+    written. Blaster's optimizer writes such terms, which the kernel can reject: on a case split
+    over a `Bool` it gives the second branch `false = b` where `dite'` asks for `¬ true = b`
+    (Lean-blaster#154). -/
+def hasMismatchedDite (e : Expr) : Bool :=
+  (e.find? fun e =>
+    e.isAppOfArity ``Blaster.dite' 4 &&
+      match e.appFn!.appFn!.appArg!, e.appFn!.appArg!, e.appArg! with
+      | c, .lam _ yes _ _, .lam _ no _ _ => yes != c || no != mkNot c
+      | _, _, _ => false).isSome
+
 /-- `#prep_uplc_run name script inputs budget` defines `name` as the function of `inputs`'
     parameters that runs `script` on `inputs` for at most `budget` steps with `runFor`, optimized
-    by Blaster as `#prep_uplc` does. `inputs` is a function returning `List Term`, or a
-    `List Term` for a program without parameters. -/
+    by Blaster as `#prep_uplc` does, or as written where the kernel rejects the optimized run.
+    `inputs` is a function returning `List Term`, or a `List Term` for a program without
+    parameters. -/
 syntax (name := prepUplcRun) "#prep_uplc_run" ident ident ident num : command
 
 @[command_elab prepUplcRun]
 def prepUplcRunImp : CommandElab := fun stx => do
   let name := stx[1].getId
-  let decl ← withoutModifyingEnv $ runTermElabM fun _ => do
+  let (value, optimized, plain) ← withoutModifyingEnv $ runTermElabM fun _ => do
     let some script ← Term.resolveId? stx[2] |
       throwErrorAt stx[2] m!"unknown constant '{stx[2].getId}'"
     let some inputs ← Term.resolveId? stx[3] |
@@ -105,16 +117,31 @@ def prepUplcRunImp : CommandElab := fun stx => do
     let run ← Meta.lambdaTelescope (← Meta.etaExpand inputs) fun xs _ =>
       mkLambdaFVars xs
         (mkApp3 (mkConst ``runProgramFor) program (mkAppN inputs xs) (mkNatLit budget))
-    let (optimized, _) ← Optimize.main run |>.run default
-    return Declaration.defnDecl {
-      name := name,
-      levelParams := [],
-      type := ← inferType optimized,
-      value := optimized,
-      hints := .abbrev,
-      safety := .safe }
+    let (value, _) ← Optimize.main run |>.run default
+    let definition (value : Expr) : TermElabM Declaration := do
+      return Declaration.defnDecl {
+        name := name,
+        levelParams := [],
+        type := ← inferType value,
+        value := value,
+        hints := .abbrev,
+        safety := .safe }
+    return (value, ← definition value, ← definition run)
   modifyEnv (addNoncomputable · name)
-  liftCoreM <| addDecl decl
+  -- `addDecl` puts a definition in the environment before the kernel checks it, so the commands
+  -- after it read its term even where the kernel rejects it, whose error comes later. Where the
+  -- optimized run may be ill-typed, the kernel checks it here, first: where it accepts it,
+  -- `addDecl` need not check it again, and where it does not, `name` is the run as written.
+  if hasMismatchedDite value then
+    match (← getEnv).toKernelEnv.addDecl (← getOptions) optimized with
+    | .ok _ =>
+      liftCoreM <| withOptions (debug.skipKernelTC.set · true) <| addDecl optimized
+    | .error ex =>
+      logWarning m!"Blaster's optimization of the run of {name} is ill-typed, so {name} is \
+        the run as written: {ex.toMessageData (← getOptions)}"
+      liftCoreM <| addDecl plain
+  else
+    liftCoreM <| addDecl optimized
 
 end
 
