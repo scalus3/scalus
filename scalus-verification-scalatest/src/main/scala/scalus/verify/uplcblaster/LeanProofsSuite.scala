@@ -1,6 +1,6 @@
 package scalus.verify.uplcblaster
 
-import org.scalatest.{BeforeAndAfterAll, Outcome, Tag, TestSuite, TestSuiteMixin}
+import org.scalatest.{BeforeAndAfterAll, OneInstancePerTest, Outcome, Tag, TestSuite, TestSuiteMixin}
 
 import java.nio.file.Path
 
@@ -20,6 +20,12 @@ object Unfinished extends Tag("scalus.verify.uplcblaster.Unfinished")
   * a statement that cannot be checked here cancels its test, a kept result says the tests that
   * state it, what a test that passed no longer states is not kept, nor what only tests the suite no
   * longer has state, and the Lean server is ended after the suite's last test.
+  *
+  * The suite's tests run one after another, in one instance of the suite: a suite that is also a
+  * `OneInstancePerTest`, as `ParallelTestExecution` is, cannot be constructed. Each of its tests
+  * would run in an instance of its own, with proofs and a Lean server of its own, and ScalaTest
+  * runs `afterAll` only in the first instance: the servers would not be ended, and what the tests
+  * no longer state would stay kept. The checks run one after another on one server anyway.
   * {{{
   * class HtlcProofsTest extends AnyFunSuite with LeanProofsSuite {
   *     import proofs.*
@@ -29,6 +35,13 @@ object Unfinished extends Tag("scalus.verify.uplcblaster.Unfinished")
   * }}}
   */
 trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: TestSuite =>
+
+    require(
+      !this.isInstanceOf[OneInstancePerTest],
+      s"${getClass.getName} runs each test in an instance of its own (OneInstancePerTest or " +
+          "ParallelTestExecution), but a LeanProofsSuite runs its tests in one instance, " +
+          "one after another"
+    )
 
     /** The Lean workspace the suite's checks run in: the project's
       * ([[LeanProofs.projectWorkspace]]), which the build has, so that a suite does not name it. A
@@ -55,7 +68,10 @@ trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: Test
       */
     protected def keptChecksDirectory: Option[Path] = None
 
-    /** The test that runs: what it checks is said to be its. */
+    /** The test that runs: what it checks is said to be its. The tests run one after another, so
+      * one variable says it, also to a check the test makes on another thread, which a thread-local
+      * one would not.
+      */
     @volatile private var running = ""
 
     /** The proofs, once a test has asked for them. A suite whose tests ask for none has no
