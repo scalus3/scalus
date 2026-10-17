@@ -563,6 +563,25 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             case other                      => fail(s"expected a byte string, got $other")
     }
 
+    test("Blaster's valid verdict in a document with an error is no proof") {
+        // No Lean here. Lean's server goes on after a failed command, so the document can hold
+        // an error next to Blaster's verdict on a goal the failed command left wrong.
+        val goal = lowered(
+          forAll[ByteString](b => Builtins.lengthOfByteString(b) >= BigInt(0)),
+          FunctionTable.empty
+        )
+        val valid = "✅ Valid"
+        assert(
+          UplcBlaster
+              .verdict(goal, 40, errors = false, valid)
+              .isInstanceOf[VerificationResult.Proven]
+        )
+        UplcBlaster.verdict(goal, 40, errors = true, s"unknown identifier 'program'\n$valid") match
+            case VerificationResult.Failed(reason) =>
+                assert(reason.contains("Lean reported an error"), reason)
+            case other => fail(s"expected a failed result, got $other")
+    }
+
     test("a counterexample that is no value of its variable's type is inconclusive") {
         // No Lean here: what the tactic makes of Lean's output, on the Scalus CEK.
         val goal = lowered(

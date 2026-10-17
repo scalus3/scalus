@@ -1728,7 +1728,10 @@ object UplcBlaster {
             else if output.contains("`native_decide` evaluated that the proposition") then
                 replay(goal, artifact)
             else Probe.Decided(failure)
-        else if output.contains("✅ Valid") then
+        // Lean's server goes on after a command fails, so Blaster can call a goal valid in a
+        // document with an error, such as a definition the goal uses that did not elaborate. Only
+        // a document without errors proves the goal.
+        else if !errors && output.contains("✅ Valid") then
             Probe.Decided(VerificationResult.Proven(Proof(artifact)))
         else if output.contains("❌ Falsified") then
             if goal.hasExistential then
