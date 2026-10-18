@@ -1,0 +1,493 @@
+{
+  "environment": {
+    "uplc-blaster": {
+      "Blaster": "3a141c8d06f1",
+      "PlutusCore": "2919b66445cd",
+      "ScalusProofs": "6f8b045bb2678399",
+      "toolchain": "leanprover/lean4:v4.24.0"
+    }
+  },
+  "results": {
+    "#0330acb292815154": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "377f284a3aa632e5"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "min is a lower bound and one of its arguments"
+      ]
+    },
+    "#0b71ee32a21bc96f": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "112a877d1a7b5ccf",
+      "programs": [
+        "6f9693ceff7ec2d2",
+        "35db08a69d4974a6"
+      ],
+      "notes": {
+        "budget": "120",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "clamp stays in range, and keeps a value already in range"
+      ]
+    },
+    "#0cbf742ea8d1d2c1": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "21fae736685d64c3",
+      "programs": [
+        "6d2b2403ffa2413e"
+      ],
+      "notes": {
+        "budget": "160",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "x": 0
+      },
+      "tests": [
+        "an Option match doubles a positive value and defaults otherwise"
+      ]
+    },
+    "#14fc6e5b9fe00a7a": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "2780e05c52c8494f"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "x": -1,
+        "y": 0
+      },
+      "tests": [
+        "min is a lower bound and one of its arguments"
+      ]
+    },
+    "#1e39833427586b50": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "30e761a980e7373d",
+      "programs": [
+        "fe261d1c062139c1",
+        "49a854ac084f9f4d",
+        "9437dd8ac7e05672"
+      ],
+      "notes": {
+        "budget": "60",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the samples of abs hold on the Lean model"
+      ]
+    },
+    "#1efb813051af9e34": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "4c05b745268b0fce",
+      "programs": [
+        "171628cceef1b617",
+        "6d2b2403ffa2413e"
+      ],
+      "notes": {
+        "budget": "160",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "an Option match doubles a positive value and defaults otherwise"
+      ]
+    },
+    "#23c9c4a07d277013": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "4c05b745268b0fce",
+      "programs": [
+        "6e3f203106018b53",
+        "8f81cddfbd8374bc"
+      ],
+      "notes": {
+        "budget": "60",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "e": -1
+      },
+      "tests": [
+        "exp2 of a negative exponent is zero"
+      ]
+    },
+    "#2c8c73af87ed3cd6": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "4c05b745268b0fce",
+      "programs": [
+        "6e3f203106018b53",
+        "b7cc881c8274754e"
+      ],
+      "notes": {
+        "budget": "60",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "exp2 of a negative exponent is zero"
+      ]
+    },
+    "#2f896b2d359f9b48": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "b0c9bf770bc8e08c"
+      ],
+      "notes": {
+        "budget": "320",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "a": -1,
+        "b": 0
+      },
+      "tests": [
+        "a fold over a two-element list is the sum"
+      ]
+    },
+    "#3b0a9026d3b634cd": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "a99f9a8a516fdce6",
+        "ce434c12e3568b6a"
+      ],
+      "notes": {
+        "budget": "160",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the samples of opt_double_or_default hold on the Lean model"
+      ]
+    },
+    "#48764d575af35f53": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "4c05b745268b0fce",
+      "programs": [
+        "05df314b7a5928de",
+        "2e942727c998138c"
+      ],
+      "notes": {
+        "budget": "160",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "an Option match doubles a positive value and defaults otherwise"
+      ]
+    },
+    "#4bb1773c3f3a54d7": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "82cd76adf7d17cba"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "max is an upper bound, and min + max is the sum"
+      ]
+    },
+    "#69be1739578209cc": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "a3925ffa64031632",
+        "de298faf8bae1aeb"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the samples of gcd_unoptimized hold on the Lean model"
+      ]
+    },
+    "#75165e89a6098620": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "112a877d1a7b5ccf",
+      "programs": [
+        "76ed15abf3e4599d",
+        "c2511f3971e3b24e"
+      ],
+      "notes": {
+        "budget": "120",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "clamp stays in range, and keeps a value already in range"
+      ]
+    },
+    "#763fca63e9c7510d": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "0f81c0cedbbbb2d1"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "x": 0,
+        "y": 1
+      },
+      "tests": [
+        "max is an upper bound, and min + max is the sum"
+      ]
+    },
+    "#871ddf6330f2b579": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "fb9f3fbc8bc7723b",
+        "e0accb77e29a546b"
+      ],
+      "notes": {
+        "budget": "1000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the samples of scalus.cardano.onchain.plutus.prelude.Math$.sqrt hold on the Lean model"
+      ]
+    },
+    "#8ed767e7413fd223": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "ec149392b691d6f3",
+        "b702ab936100ccba"
+      ],
+      "notes": {
+        "budget": "60",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the samples of max hold on the Lean model"
+      ]
+    },
+    "#96248045c42aa198": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "8c5e658ba54594b4"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "min is a lower bound and one of its arguments"
+      ]
+    },
+    "#9aa53832ffb4738a": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "104be38635b7155a",
+      "programs": [
+        "c2511f3971e3b24e"
+      ],
+      "notes": {
+        "budget": "120",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "hi": -1,
+        "lo": 0,
+        "x": -1
+      },
+      "tests": [
+        "clamp stays in range, and keeps a value already in range"
+      ]
+    },
+    "#a49360ae996e9565": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "30e761a980e7373d",
+      "programs": [
+        "fd4060c3346b8249",
+        "b6d906eb70958d9f",
+        "8fb15d02ac6e9bdc"
+      ],
+      "notes": {
+        "budget": "200",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the samples of scalus.cardano.onchain.plutus.prelude.Math$.exp2 hold on the Lean model"
+      ]
+    },
+    "#b90125aab637b88a": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "21fae736685d64c3",
+      "programs": [
+        "0e99796ac11af631"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "abs is a non-negative magnitude"
+      ]
+    },
+    "#badef45765716d84": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "ec292d4cda21e30a",
+        "69feba268caad17e"
+      ],
+      "notes": {
+        "budget": "320",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the samples of list_sum2 hold on the Lean model"
+      ]
+    },
+    "#c0f447df094470ed": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "30e761a980e7373d",
+      "programs": [
+        "ef51fab73a076e20",
+        "c621cf0f1b60c5b2",
+        "ce7cee1006dd20ec"
+      ],
+      "notes": {
+        "budget": "80",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the samples of scalus.cardano.onchain.plutus.prelude.Math$.clamp hold on the Lean model"
+      ]
+    },
+    "#cd8206f986690e66": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "62b967469d71d071"
+      ],
+      "notes": {
+        "budget": "120",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "max is an upper bound, and min + max is the sum"
+      ]
+    },
+    "#d2b055d9843c0c15": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "21fae736685d64c3",
+      "programs": [
+        "d1016bca67f6f7a1"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "abs is a non-negative magnitude"
+      ]
+    },
+    "#d4a7495d44e0877c": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d46783623238bc41",
+      "programs": [
+        "708e3bf12cabc19e"
+      ],
+      "notes": {
+        "budget": "320",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "a fold over a two-element list is the sum"
+      ]
+    },
+    "#e3eb376fa2e644d6": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "21fae736685d64c3",
+      "programs": [
+        "f51b0ac1ebac47aa"
+      ],
+      "notes": {
+        "budget": "100",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "x": 0
+      },
+      "tests": [
+        "abs is a non-negative magnitude"
+      ]
+    },
+    "#ebdbac616fc4a6df": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "30e761a980e7373d",
+      "programs": [
+        "41b1cf7fd6cf784f",
+        "f6e07b5e2669bd5d",
+        "19eda53a4b88d3b0"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the samples of scalus.cardano.onchain.plutus.prelude.Math$.gcd hold on the Lean model"
+      ]
+    },
+    "#fa50751f23d0a0f2": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "5166709f0fa925d1",
+      "programs": [
+        "b12d21d828cadf3d",
+        "5371ca1de0c79dbf"
+      ],
+      "notes": {
+        "budget": "60",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "the samples of min hold on the Lean model"
+      ]
+    }
+  }
+}

@@ -277,6 +277,8 @@ lazy val root: Project = project
       scalusUtxoCell.jvm,
       scalusDesignPatterns,
       bench,
+      scalusVerification,
+      scalusVerificationScalatest,
       `scalus-bloxbean-cardano-client-lib`,
       scalusEthereumKzgCeremony,
       scalusSbtPlugin,
@@ -303,6 +305,8 @@ lazy val jvm: Project = project
       scalusDesignPatterns,
       bench,
       llmApiGen,
+      scalusVerification,
+      scalusVerificationScalatest,
       `scalus-bloxbean-cardano-client-lib`,
       scalusEthereumKzgCeremony,
     )
@@ -958,12 +962,16 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       // Exclude integration tests and benchmarks from default test runs
       excludeFromTest("scalus.testing.IntegrationTest"),
-      excludeFromTest("scalus.testing.Benchmark")
+      excludeFromTest("scalus.testing.Benchmark"),
+      // As in scalusVerification: the statements Lean does not finish.
+      excludeFromTest("scalus.verify.uplcblaster.Unfinished")
     )
     .configurePlatform(JVMPlatform)(
       _.dependsOn(
         scalusDesignPatterns,
-        scalusEthereumKzgCeremony
+        scalusEthereumKzgCeremony,
+        // The verifier and its ScalaTest layer (LeanProofsSuite), for the proofs about the examples.
+        scalusVerificationScalatest % Test
       )
     )
     .jvmSettings(
@@ -1112,6 +1120,68 @@ generateLlmsApi := Def.taskDyn {
     val argLine = (Seq(outFile, version.value) ++ dirs).mkString(" ")
     (llmApiGen / Compile / runMain).toTask(s" scalus.llmapi.LlmApiGen $argLine")
 }.value
+
+// Formal verification of Scalus code; see docs/design/verification-overview.md and
+// scalus-verification/README.md. The UplcBlaster tactic runs Lean in the workspace at
+// scalus-verification/src/main/lean.
+lazy val scalusVerification = project
+    .in(file("scalus-verification"))
+    .dependsOn(scalus.jvm)
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-verification",
+      publishOnlyLts,
+      jvmReleaseTarget,
+      crossScalaVersions := supportedScalaVersions,
+      scalacOptions ++= commonScalacOptions,
+      run / fork := true,
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      // Statements Lean does not finish are left out of `test` and `testQuick`, and run by
+      // `testOnly`.
+      excludeFromTest("scalus.verify.uplcblaster.Unfinished"),
+      // The suites here extend LeanProofsSuite, which is scalus-verification-scalatest's. That
+      // project depends on this one and cannot be depended on from here, so its sources are
+      // compiled with these tests.
+      Test / unmanagedSourceDirectories +=
+          (LocalRootProject / baseDirectory).value / "scalus-verification-scalatest" / "src" / "main" / "scala",
+      // Scalus's Lean library goes into the jar, for the workspaces a project's proofs get
+      // (scalus.verify.lean.LeanWorkspaceTool): its sources, and not what Lake builds beside
+      // them in `.lake`. `index` names them, as a jar's resources cannot be listed.
+      Compile / resourceGenerators += Def.task {
+          val source = baseDirectory.value / "src" / "main" / "lean"
+          val target =
+              (Compile / resourceManaged).value / "scalus" / "verify" / "lean" / "library"
+          val top =
+              Seq("lakefile.lean", "lean-toolchain", "lake-manifest.json", "ScalusProofs.lean")
+                  .map(source / _)
+          val modules = ((source / "ScalusProofs") ** "*.lean").get
+          val copied = (top ++ modules).sortBy(_.getPath).map { file =>
+              val relative = IO.relativize(source, file).get.replace('\\', '/')
+              IO.copyFile(file, target / relative)
+              relative
+          }
+          val index = target / "index"
+          IO.write(index, copied.mkString("", "\n", "\n"))
+          index +: copied.map(target / _)
+      }.taskValue,
+      PluginDependency
+    )
+
+// LeanProofsSuite: scalus-verification's LeanProofs for a ScalaTest suite, and no more than
+// ScalaTest is asked for. It is an artifact of its own, so that scalus-verification asks for no
+// test framework.
+lazy val scalusVerificationScalatest = project
+    .in(file("scalus-verification-scalatest"))
+    .dependsOn(scalusVerification)
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-verification-scalatest",
+      publishOnlyLts,
+      jvmReleaseTarget,
+      crossScalaVersions := supportedScalaVersions,
+      scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion
+    )
 
 // Cardano Ledger domain model and CBOR serialization
 lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)

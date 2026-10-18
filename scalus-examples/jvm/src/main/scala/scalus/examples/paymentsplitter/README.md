@@ -17,3 +17,15 @@ through all inputs and outputs.
 **Optimized version** (`OptimizedPaymentSplitterValidator.scala`) — uses the stake validator pattern. The spending
 validator does minimal per-UTxO work (O(1)), while a stake validator runs once per transaction to verify the overall
 split is correct. The off-chain code pre-computes the split amounts and passes them in the redeemer.
+
+## Verification
+
+`PaymentSplitterVerificationTest` proves properties of both validators' compiled UPLC with the
+`UplcBlaster` tactic of `scalus-verification`: for two payees, any keys and amounts, and whatever
+else the transaction has. A payout is accepted only from a payee, pays nobody but the payees, pays
+every payee, pays the payees other than its submitter exactly the split (half the locked lovelace,
+rounded down), and holds only ADA; an honest payout is accepted. For the optimized version, a
+contract output is spent only together with the stake validator's withdrawal and a redeemer that
+names it, the stake validator checks the same split, and the contract's stake credential is
+registered and deregistered but never delegated. The validators fold over lists, so the
+transactions there have a fixed shape: one payee input, one contract input, two outputs at most.

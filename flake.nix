@@ -220,6 +220,10 @@
               blst
               pandoc
               texliveSmall
+              # Lean 4 + Z3, as in the `lean` shell, so UplcBlasterTest can run its proofs
+              # (after `lake build` in scalus-verification/src/main/lean).
+              elan
+              z3
               # cardano-cli
             ];
             shellHook = ''
@@ -238,6 +242,17 @@
               export BLST_NATIVE_LIB_PATH="${pkgs.blst}/lib"
             '';
           };
+        # Lean 4 + Z3 for the scalus-verification module. `elan` fetches the exact
+        # toolchain named in scalus-verification/src/main/lean/lean-toolchain (v4.24.0).
+        # Blaster documents Z3 4.15.2; nixpkgs 25.11 ships 4.15.4, which works.
+        lean = pkgs.mkShell {
+          buildInputs = [ pkgs.bashInteractive ];
+          packages = with pkgs; [
+            elan
+            z3
+            git
+          ];
+        };
         bench =
           let
             jdk = pkgs.openjdk25;
@@ -327,6 +342,11 @@
               libsodium
               secp256k1
               blst
+              # Lean 4 + Z3 for the Lean-Proofs workflow, which builds the Lean workspace and runs
+              # the scalus-verification proofs through sbt. Without a built workspace, as in
+              # ci-jvm, the tests that run Lean are canceled.
+              elan
+              z3
             ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.chromium ];
             shellHook = ''
               unlink plutus-conformance 2>/dev/null || true

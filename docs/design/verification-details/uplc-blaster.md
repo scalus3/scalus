@@ -1,0 +1,739 @@
+# `UplcBlaster`: the `blaster-uplc` tactic
+
+How `blaster-uplc` from [the verification overview](../verification-overview.md) (§6.2) is built.
+Code: `scalus-verification/src/main/scala/scalus/verify/uplcblaster/UplcBlaster.scala` and
+`scalus-verification/src/main/lean/ScalusProofs/Run.lean`. Tests: `UplcBlasterTest`,
+`PreludeProofsTest` and `UplcBlasterLimitsTest`, and `VestingVerificationTest`,
+`HtlcVerificationTest` and `PaymentSplitterVerificationTest` in `scalus-examples`. For how to use
+it, see `scalus-verification/README.md`.
+
+## Pipeline
+
+```
+Prop ──lower──► Lowered(binders, body: LeafFormula, leaves: Vector[Program])
+                  │
+                  ▼
+     the check's text, its leaves in files ──► Lean's language server (LSP) of the workspace
+                  │
+   with binders:  ├─ ✅ Valid ─────────────► Proven (ProofKind.Blaster)
+                  ├─ ❌ Falsified ─────────► replay on the Scalus CEK ──► Refuted, or Inconclusive
+                  ├─ ❌ Falsified, a witness is asked for ► Inconclusive(no replayable certificate)
+                  ├─ ⚠️ Undetermined ──────► Inconclusive
+   closed:        ├─ native_decide holds ──► Proven (ProofKind.LeanNative)
+                  ├─ native_decide false ──► replay on the Scalus CEK ──► Refuted, or Inconclusive
+                  ├─ Lean's own limit of work ► Inconclusive(reason)
+                  ├─ backend/tool error ─────► Failed(reason)
+                  └─ no result in time ────► Inconclusive(reason)
+```
+
+## The fragment
+
+Preparation accepts statements built with:
+
+- universal and existential quantifiers over `BigInt`, `Boolean`, `ByteString`, `Data`, and case
+  classes whose fields are of these types or such case classes, at any proposition position;
+- `existsLet(w)(x => p)`, which is lowered as the strict binding `let x = w in p` and introduces
+  no SMT quantifier;
+- `&&`, `||`, `!`, `==>` and `<=>` over these leaves:
+  - a test, `Prop.Bool`;
+  - a total `call` whose continuation is a test or another total call;
+  - a partial call, `whenReturns(f, a)(r => p)`, whose continuation is the same;
+  - `denotes(e)`, where `e` has any type;
+  - `equal(a, b)` over `BigInt`, `Boolean` or `Data`.
+
+Only quantified variables are limited, because Lean builds their values, and it builds only
+`BigInt`, `Boolean`, `ByteString` and `Data` constants. A call's arguments and result, and the
+operand of `denotes`, can have any type: they live inside a test's program, and the compiler passes
+them.
+
+**A variable of a case class** is expanded by `lower`, since Lean cannot build its value. It
+ranges over the values of its constructor
+([statement semantics](prop-semantics.md#1-values-and-quantifiers)), so it stands for one
+variable per field, named `variable.field` in `Lowered.binders` and in a counterexample, and a
+field that is a case class is expanded in turn. Each test that uses the variable starts with
+`let variable = Constructor(fields…)`, which the compiler lowers to the class's own
+representation, as it does for a constructor written in the test. An enum is not expanded: it has
+several constructors. `Quantifiable` has an instance for every case class whose fields have one. The exception is a function registered
+without SIR, which has no declared type: a call to it can pass only `BigInt`, `Boolean` and `Data`
+values (see "The calling convention").
+
+`<=>` becomes two implications, because each of its operands occurs in both polarities. Each leaf
+program takes only the binders in scope at that leaf. Anything else produces a
+`CompatibilityReport`, which the one-step API returns as `Unsupported`. That covers other binder
+types, a call whose continuation
+uses connectives or `whenReturns`, a polymorphic function, and a function whose program takes its
+arguments differently from how the tests pass them.
+
+A Valid result for an existential statement is a proof in the same sense as any other Blaster
+result. The generated Lean proposition writes `∃ x, p x` in the equivalent form
+`¬ ∀ x, ¬ p x`, so the generated quantifier binders all use the universal path. A Falsified
+model is not by itself a replayable refutation of a statement that asks for a witness: showing that
+none exists requires checking the whole quantified domain, not one concrete CEK run. Such a result
+is therefore `Inconclusive`.
+
+A quantifier asks for a witness by its position, not by its name: an `exists` in a positive
+position, and a `forAll` in a negative one, under `!` or in the premise of `==>`. Either side of
+`<=>` is in both. `!forAll(n => n * n != 4)` is true, with the witness 2; at a budget no run
+finishes in, Lean falsifies it, and the body evaluated at whatever value the model leaves for `n`
+would say that it is false. Where no quantifier asks for a witness, every variable ranges over all
+its values, and the replayed assignment refutes the statement. That includes `!exists(x => p)`,
+which is `∀ x, ¬ p x`: a value with `p` refutes it. `Refuted` is also available for `existsLet`,
+because its witness has already been fixed and eliminated.
+
+## Leaves and `LeafFormula`
+
+The leaves of a statement are the nodes of its `Prop` tree that are not connectives. `lower`
+compiles each leaf to a program in `Lowered.leaves`. `LeafFormula` keeps the connectives, and
+replaces each leaf with its index in `Lowered.leaves`.
+
+| `Prop` leaf | Program, over the binders `x1 … xn` | `LeafFormula` |
+|---|---|---|
+| `Bool(b)` | `λ x1 … xn. b` | `Test(i)` |
+| `Call(f, a, r, total = true, k)` | `λ x1 … xn. (λ r. k)(f a1 … am)` | `Test(i)` |
+| `Equal(a, b)` | `λ x1 … xn. a = b`, with `equalsInteger`, `equalsData` or Boolean equality | `Test(i)` |
+| `Denotes(e)` | `λ x1 … xn. e` | `Denotes(i)` |
+| `Call(f, a, r, total = false, k)` | `λ x1 … xn. f a1 … am`, and the total call's program | `Implies(Denotes(i), Test(i + 1))` |
+
+Every program takes the binders in scope at its leaf, in declaration order, whether that leaf uses
+all of them or not. This matters when a connective has a quantified proposition on only one side.
+
+A partial call, `whenReturns(f, a)(r => k)`, is rewritten to `denotes(f(a)) ==> call(f, a)(r => k)`
+before it is lowered: if the function returns, the continuation holds of its result. The
+`denotes` leaf returns the function's result rather than a Boolean. Where the call is a
+conclusion, the polarity rule reads that `denotes` weakly, so a run of `f` that exhausts the
+budget counts as one that may return, and the continuation must then hold within the budget. A
+partial function that loops on some inputs therefore cannot be proved. Both leaves run the
+function's program.
+
+**Why one program per leaf.** A statement's truth depends on more than two outcomes per leaf. A
+leaf can return a value, fail, or exhaust the budget. `!` on a `Prop` is true when a test fails,
+while a failure inside one UPLC program would fail the whole program. And the polarity rule reads
+each leaf by its position. So the connectives stay in Lean, over one run per leaf.
+
+### Calls
+
+A call is one SIR expression, `(result => continuation)(fn(arguments…))`, where `fn` is an
+`ExternalVar` that carries the function's name. A call in the continuation nests the same way.
+
+A function of several parameters is called with a tuple written out. `lower` takes that tuple's
+components, the fields of `SIR.Constr("scala.TupleN")`, and keeps the compiler's `Let` and `Decl`
+wrappers around each component. The program then applies the function to the components one at a
+time, because compiled programs are curried. The data declarations of all the pieces move outside
+the whole expression.
+
+### Linking
+
+`compileSirFunction` turns a leaf's SIR into a program:
+
+1. `unlinkModuleDefinitions` removes the module definitions that `compile` put around the
+   expression for functions in the function table. It keeps the definitions of other functions
+   that the expression still uses, and those are compiled together with the leaf.
+2. Each `ExternalVar` that names a table function becomes an outer parameter, before the binders.
+3. The SIR is lowered to UPLC with `UplcBlaster.options`
+   (`Options.releaseUntagged.copy(valueBuiltins = false)`). The result is applied, with a plain
+   `Term.Apply`, to each function's own UPLC program (`Representation.Uplc`).
+
+So a registered function's compiled bytes appear unchanged inside the predicate, and no
+optimization runs across that boundary. A `@Compile` function that is not registered is compiled
+together with the test, so the optimizer may inline it. Other external references, such as the
+compiler's own support functions behind `d.to[A]`, are left to the lowering.
+
+**The calling convention.** The V3 lowering passes every value across a function's boundary in
+its type's default representation (`SirTypeUplcGenerator.defaultRepresentation`): an integer as a
+constant, a plain case class as a builtin `list data` of its fields (`ProdDataList`), a sum type
+as `Data` (`DataConstr`), a type marked `@UplcRepr(UplcConstr)` as `constr` terms. A function
+value's representation is `LambdaRepresentation(default(input), default(output))`, and a compiled
+program's top-level value is converted to it, so a test calling a linked function and the
+function's own program agree when both are lowered with the same options:
+
+- the call's `ExternalVar` has the function's declared type, from its SIR, so an enum constructor
+  such as `Circle(r)` is passed as the enum;
+- `FunctionDef.fromCompiled` records the program's `UplcSignature`, the representation of each
+  parameter and of the result, computed with the options it was compiled with;
+- `lower` computes, from the same declared type, the signature the tests call it with under
+  `UplcBlaster.options`, and returns `Left` on a mismatch, such as a program lowered by another
+  backend. Both sides come from one type, so they differ only where the options do;
+- a function registered with a UPLC program but no SIR has no declared type and no signature.
+  A call to it takes its type from the values, which fixes the form only of `BigInt`, `Boolean`
+  and `Data`, so other values are refused: an enum constructor would otherwise be passed as a
+  list of its fields.
+
+## Reading leaves by polarity
+
+`renderFormula` reads each leaf by its position. `s` is the leaf's final state after at most
+`budget` steps of `runFor` (next section).
+
+| Leaf | Positive: a conclusion | Negative: a premise, or under `¬` |
+|---|---|---|
+| `Test` | `fromFrameToBool s = some true` | `fromFrameToBool s ≠ some false ∧ failed s = false` |
+| `Denotes` | `halted s = true` | `failed s = false` |
+
+`→` flips the polarity of its premise and `¬` that of its operand; `∧` and `∨` keep it. A
+positive reading is strong: the program halts within the budget with the right result. A
+negative reading is weak: the program neither halts with the wrong result nor fails within the
+budget, so a run that exhausts the budget counts as possibly right. The overview (§6.2) shows why
+a proof at any budget then holds without the budget.
+
+Every reading is an equation between `Bool` values, for two reasons:
+
+- Blaster translates `fromFrameToBool` on every goal. A `Prop`-valued match on
+  `.Halt (.VCon (Const.Bool true))` fails to translate, on `Fin`, whenever the goal is
+  falsifiable.
+- `native_decide` can evaluate them (closed statements, below).
+
+Replay reads the same `LeafFormula`, over the outcomes of the Scalus CEK (`holds`, below).
+
+### `runFor`
+
+PlutusCore's `runSteps` returns `State.Error` both when a program fails and when the step budget
+runs out. `ScalusProofs/Run.lean` defines:
+
+- `runFor v s n`, which makes the same steps as `runSteps`, but ends a run that is still going
+  after `n` steps in the state it reached, not in `State.Error`. After `runFor`, `State.Error`
+  means that the program failed.
+- `runProgramFor p params n`, which is `cekExecuteProgram` over `runFor`, and is computable.
+- `fromFrameToBool`, `failed` and `halted`, the readings above.
+- `#prep_uplc_run name script inputs budget`, which is `#prep_uplc` over `runProgramFor`. It
+  builds `fun xs => runProgramFor script (inputs xs) budget`, optimizes it with Blaster's
+  `Optimize.main`, and defines `name` as noncomputable.
+
+The weak readings need `runFor`. With `runSteps`, the negative reading of `denotes` could not
+reject `State.Error`, which might be an exhausted budget, so it would be `True`. A premise
+`denotes(f(x))` would then say nothing, and `!denotes(e)` could never be proved.
+
+## The Lean check
+
+For a statement over `x0 : BigInt` and `x1 : Boolean` with one leaf, the tactic writes the file
+below. A `Data` binder is declared as `(x2 : Data)` and passed as `Const.Data x2`.
+
+```lean
+import ScalusProofs.Run
+
+set_option maxHeartbeats 400000
+
+namespace ScalusProofs.Runtime
+open …
+
+#import_uplc leaf0 PlutusV3 single_cbor_hex "/tmp/scalus-uplc-blaster-…/Leaf0.flat"
+
+def arguments (x0 : Integer) (x1 : Bool) : List Term :=
+  [Term.Const $ Const.Integer x0, Term.Const $ Const.Bool x1]
+
+#prep_uplc_run prepared0 leaf0 arguments 100
+
+#blaster (gen-cex: 1) [∀ (x0 : Integer) (x1 : Bool), (fromFrameToBool (prepared0 x0 x1) = some true)]
+
+end ScalusProofs.Runtime
+```
+
+The tactic runs no Lean process for a check. It talks to Lean's language server, `lake serve`,
+started once for the workspace and spoken to over the Language Server Protocol: JSON-RPC
+messages, each after a `Content-Length` header, on the server's standard input and output
+(`JsonRpcSession`, `LeanServer`; see [the Lean server](lean-server.md)).
+
+- **A check is an edit.** The text above is the next version of the server's one document, which
+  is never written to disk: `textDocument/didOpen` sends the first check, and
+  `textDocument/didChange` every later one. The workspace's libraries are loaded once, and Lean
+  elaborates again only from the first command that changed. The header, the imports, is the same
+  text in every check, so a check pays for its own commands and not for loading the libraries.
+- **The result is the document's diagnostics.** The tactic waits with Lean's request
+  `textDocument/waitForDiagnostics` for the version it sent, and takes what
+  `textDocument/publishDiagnostics` published for that version: Blaster's messages and Lean's
+  errors are the output of the check. `$/lean/fileProgress` says which commands Lean has not
+  finished, which is where a check that is given up was.
+- **The leaves are files** in a directory of the server's, which the text names, and are removed
+  after the check.
+- **The server does not build** the workspace, so it must be built (`lake build`).
+- **One check at a time.** A server runs the checks it is given one after another, and the
+  provider `LeanServers` keeps one server per workspace, started at the first check that needs it.
+  A check that Lean's worker does not survive, for want of stack or memory, fails its statement;
+  where the server itself ends, `LeanServers` starts another for the next check.
+
+- **Time limit.** A check is given up after a time by the clock: ten minutes
+  (`UplcBlaster.defaultTimeout`), or the `timeout` of `UplcBlaster(budget, servers, timeout)`.
+  The server then closes its document (`textDocument/didClose`), which ends Lean's worker and the
+  solver it started, and the tactic is inconclusive. The next check opens the document again,
+  and loads the libraries anew. Its reason says where the check was: still running one of the
+  programs symbolically, in Blaster's simplification of the statement, or after Blaster had
+  started the solver, with the time the solver had worked. On some statements Lean does not return
+  ([Statements that do not finish](#statements-that-do-not-finish)), and no other limit ends
+  them all: Lean's own, below, is one of work, and Blaster's `timeout` option limits only the
+  solver. `withoutTimeout` lifts the limit, and the tactic then waits for Lean.
+- **Lean's own limit.** Lean gives a command up when it has done `maxHeartbeats` of work, with
+  the error `(deterministic) timeout`. A heartbeat is a unit of Lean's own work, counted the
+  same on every machine; it has nothing to do with the connection. The statement is then not
+  decided, and the result is `Inconclusive` as well.
+  - A command is the symbolic run of one leaf, `#prep_uplc_run`, or Blaster's translation of
+    the statement. The solver's time is none of Lean's work and is not counted: a statement the
+    solver takes minutes over is not given up for it.
+  - A check sets the limit itself, to 400000, twice Lean's default
+    (`UplcBlaster.defaultMaxHeartbeats`). In the server Lean's default is about 17 s of the
+    symbolic run of a validator.
+  - The limit ends a command only where Lean's code looks at it, and more of it is not
+    proportionally more time. The vesting statement with open outputs
+    ([Statements that do not finish](#statements-that-do-not-finish)) is given up at Lean's
+    default after 17 s. At twice that the same run gets past that point, and gave no result in
+    8 minutes: a statement like it is ended by the tactic's time limit.
+  - `tactic.withMaxHeartbeats(n)` sets another, for a statement known to be large. `0` is no
+    limit, and leaves the check to the tactic's time limit.
+- **Keeping a check.** `UplcBlaster.writeCheck(lowered, budget, directory)` writes the leaves and
+  `Check.lean` into a directory of the caller's, to read or to run by hand with
+  `lake lean Check.lean`, for instance with `set_option profiler true`, which reports the time
+  of each `#prep_uplc_run`. (`lake env lean` runs it as well, with Blaster interpreted and not
+  loaded as the native library it is built as, and several times slower.) With the environment variable `SCALUS_LEAN_KEEP_CHECKS` set to
+  a directory, the tactic writes every check it runs there, each in a directory of its own.
+  `tactic.withChecksKeptIn(directory)` says the same in code, in place of the variable, and so do
+  `LeanProofs` and a `LeanProofsSuite`'s `keptChecksDirectory`.
+
+The verdict is read from the messages Lean reports, which are Blaster's:
+
+- `✅ Valid`;
+- `❌ Falsified`, followed by lines `- xN: value` for the counterexample;
+- `⚠️ Undetermined`.
+
+Blaster has no machine-readable output: it reports only these log messages. Each counterexample
+value is Z3's answer to `(eval xN)`, an SMT-LIB term that can span several indented lines, as a
+`Data` value does. `SmtValues` reads it: `(- 1)` is a negative integer, `List.cons` and
+`(as List.nil …)` build a list, `Prod.mk` a pair, and `(….ByteString.mk "ABC")` a byte string,
+one character per byte, with SMT-LIB string escapes. Z3 abbreviates a large value, such as a long
+list, with `(let ((a!1 …)) …)`, and starts each nested `let` on a new line without indentation; a
+value is read up to the line that closes its parentheses, and the names are replaced by their
+terms. Internally, `Blaster.Smt.Translate.main`
+returns a structured `Result` (`Valid`, `Falsified` with the `name: value` strings, or
+`Undetermined`). If the log format changes, a command in `Run.lean` can call it and print JSON
+instead; the values would still be SMT-LIB terms.
+
+Any other error, such as a translation error or a workspace without the library, is returned in
+the `Failed` message. The message drops the `Successfully decoded` lines and is cut to 500
+characters.
+
+The artifact records the SHA-256 of each leaf's CBOR, the budget, Lean's output, the
+counterexample and the proof kind.
+
+## Closed statements
+
+A statement without binders, such as a sample
+`callRef(clamp.ref, (BigInt(9), BigInt(1), BigInt(5)))(r => r == BigInt(5))`, has nothing for
+Blaster to search. Blaster can also fail to reduce a concrete program. PlutusCore's
+`integerToByteString` uses `Nat.log2`, and Blaster cannot reduce `Nat.log2` on a numeral
+([input-output-hk/Lean-blaster#273](https://github.com/input-output-hk/Lean-blaster/issues/273)).
+Even the samples of `exp2` and `sqrt` failed to translate.
+
+So the tactic decides a closed statement by evaluation:
+
+```lean
+example : (fromFrameToBool (runProgramFor leaf0.script [] 80) = some true) := by native_decide
+```
+
+- **No error among Lean's diagnostics:** the result is `Proven`, with `ProofKind.LeanNative`. That
+  proof trusts the Lean compiler, through `Lean.ofReduceBool`, instead of Blaster and Z3.
+- **`native_decide` reports that the proposition is false:** the statement is replayed, as a
+  falsification without values.
+
+All leaves are evaluated in the one check, by the server's worker.
+
+## Replay
+
+A falsification under the budget can be spurious: a positive leaf that needs more steps reads as
+false. `replay` works in four steps:
+
+1. It reads Blaster's counterexample and completes it: a binder the model leaves unconstrained
+   takes `0`, `false` or `I 0`. Blaster omits such a binder, or Z3 answers with its SMT name,
+   such as `$0`. A value it cannot read, such as a byte string with a character
+   above 255, makes the result `Inconclusive`.
+2. It applies each leaf's program to the values.
+3. It evaluates each program on the Scalus CEK, with a budget of a hundred times the mainnet
+   per-transaction limit. That budget only guards against a program that does not terminate.
+4. Each leaf's outcome is `Returned`, `Failed` or `Exhausted`. `holds` evaluates the
+   `LeafFormula` over them, under the semantics of overview §3.3.
+
+The result depends on what `holds` finds:
+
+- **False:** `Refuted`, with the counterexample in the artifact.
+- **True:** `Inconclusive`: "Lean's counterexample (x = …) is spurious: the statement holds
+  there on the Scalus CEK", and why. At a budget that was given, Lean's machine then counts what
+  each leaf's program does on those values (`measureRun`, as a search does to find the next
+  budget), and the message ends in one of:
+  - "On Lean's machine it holds there from M steps on, so a test needs more than N steps": the
+    budget is too small, and M would do for this counterexample.
+  - "On the values read from Lean's counterexample the statement holds within N steps of Lean's
+    machine, so they do not show what Lean found": more steps change nothing. Where a program
+    applies a builtin that Lean's library declares `opaque`, a hash, a signature check or the
+    arithmetic of a curve, the message names it: Lean knows of it only that equal arguments give
+    equal results, so the solver's counterexample can take a result for what the builtin does
+    not give. A statement about such a result writes it as the builtin applied, as
+    `sha3_256(preimage)` for an image.
+  - that the statement takes more steps there than a search counts, or holds at no budget on
+    Lean's machine.
+- **Undecided, because a leaf exhausted the replay budget:** `Inconclusive`.
+
+## Budgets
+
+The budget counts Lean CEK transitions, both `Eval` and `Return`. It is not Plutus `ExUnits`.
+Measured, the Lean count is about 1.85 times the number of steps Scalus counts: `min` needs 23
+against 13, `abs` 26 against 14, and `gcd 12 18` 161 against 87. A budget of twice Scalus's step
+count therefore leaves almost no headroom. In the original spike it produced a spurious
+counterexample: optimizer equivalence of `gcd` failed at `x = -19, y = 14` because the programs
+halt at steps 282 and 307, while the budget was 300.
+
+Proof cost grows faster than linearly in the budget. On a `gcd` property whose worst input needs
+203 steps:
+
+| Budget | Proof time |
+|---|---|
+| 250 | 2 s |
+| 350 | 52 s |
+| 500 | no result in 500 s |
+
+Programs whose step count does not depend on their input, such as `abs`, `min`, `max` and
+`clamp`, prove over the whole domain at a small budget. A program whose step count grows with its
+input, such as `gcd`, needs the input range written into the statement.
+
+### Finding the budget
+
+The budget is `Budget.LeanSteps(n)`, or `Budget.Auto`, with which the tactic finds it: from the
+counterexamples that a budget too small gives, each of which says how many steps the statement
+needs on it. [Finding the budget](blaster-budget-search.md) is the note about that search, and about
+keeping what it found.
+
+## Lean workspace and pins
+
+The workspace is `scalus-verification/src/main/lean`: Lean 4.24.0 (`lean-toolchain`),
+`lakefile.lean`, and a committed `lake-manifest.json`. `ScalusProofs.lean` only imports
+`ScalusProofs.Run`. The checks are generated for each statement and are never stored.
+
+- **PlutusCore** comes from the fork `nau/PlutusCoreBlaster` @ `fix/case-scrutinee-smt-blowup`,
+  until input-output-hk/PlutusCoreBlaster#40 merges. Without the fix, Blaster does not terminate
+  on UPLC `case`, which every PV11 program uses. The fix addresses two problems in the
+  `Frame.CaseScrutinee` handler:
+  - splitting `Const.Bool` left the decision tree stuck on `Bool.casesOn` for a symbolic value;
+  - `Ms[n.toNat]?` is an opaque recursive application for a symbolic tag.
+
+  Before the fix `Math.min` at PV11 gave no result in 10 minutes; after it, it proves in seconds.
+- **Blaster** comes from `input-output-hk/Lean-blaster` @ `main`, not from the
+  `beta-lambda-cache-optimization` branch. The two have diverged, and `main` has the
+  `Int.ediv`/`Int.emod` fix that integer programs need.
+- **Upstream force-pushes.** A lost revision shows up as `git exited with code 128`. Run
+  `lake update` again, and commit the new manifest.
+- **The toolchain** is `elan` and `z3`, from the default and `ci` nix shells.
+
+CI: `.github/workflows/lean-proofs.yml` runs on a push that changes the verification module,
+the vesting or the HTLC example or the workflow itself, daily, and on demand. The daily run is
+for changes elsewhere, such as in the compiler, which change the programs the proofs are about.
+It builds the workspace of the library and that of the vesting example, then runs
+`sbt scalusVerification/test`, `VestingVerificationTest` and `HtlcVerificationTest` with
+`SCALUS_REQUIRE_LEAN=1`, so a test that cannot run Lean fails instead of being canceled. In
+`ci-jvm`, without Lean, a suite that keeps its results passes on them, and a test that asks Lean
+is canceled.
+
+## Limits
+
+- **Types.** A quantified variable is a `BigInt`, a `Boolean`, a `ByteString`, a `Data`, or a
+  case class of them. An enum, a `List` or an `Option` cannot be quantified over yet; quantify
+  over `Data` with `denotes(d.to[A]) ==> …`. Nor can one constructor of `Data`, such as
+  `Data.I`: Lean's variable for it would be any `Data`. Quantify over its field. The operands of `equal` must be `BigInt`, `Boolean`
+  or `Data`. Call arguments and results can have any type.
+- **Byte strings.** Lean's model stores a byte string as a `String`, so a `ByteString` variable
+  ranges over more than byte strings. A proof holds of them all the same; a counterexample with
+  a character above 255 cannot be read, and is inconclusive.
+- **Byte-level builtins.** Blaster cannot translate `BitVec`, whose width is a value index rather
+  than a type parameter. The model stores a byte string as a `String`, so comparing, appending
+  and measuring byte strings translate, but reading one byte (`indexByteString`) goes through a
+  `Char`, whose `UInt32` value is a `BitVec 32`, and the bitwise builtins use `BitVec` directly. A
+  statement with binders fails to translate, at every budget, when its programs reach
+  `indexByteString`, `shiftByteString`, `integerToByteString` or `byteStringToInteger` on a
+  symbolic value. `Math.exp2`'s branch for `exp ≥ 0` is
+  `byteStringToInteger(shiftByteString(hex"01", exp % 8) ++ integerToByteString(true, exp / 8, 0))`,
+  so it is proved only for `exp < 0`.
+- **`Value` and array builtins.** PlutusCoreBlaster's flat decoder has the CIP-153 `Value` and
+  CIP-138 array builtins commented out. As of 2026-09-23, the upstream PRs were
+  input-output-hk/PlutusCoreBlaster#15 (`Value`: conflicting, no review since 2026-05) and #12
+  (arrays: mergeable). Until they land, programs are compiled with `valueBuiltins = false`.
+- **One check at a time per workspace.** The workspace's language server elaborates one check
+  after another, so the statements of a suite take turns; a pool of servers is a later step
+  ([the Lean server](lean-server.md)).
+- **No proof reconstruction.** Blaster closes a goal with an axiom; see overview §7.
+
+## What `PreludeProofsTest` covers
+
+Every function has samples: closed calls with their expected results. These are checked on the
+Scalus CEK and decided in Lean by `native_decide`.
+
+| Function | Properties proved | Negative control |
+|---|---|---|
+| `abs`, `min`, `max`, `clamp` | fully | yes |
+| `exp2` | only for `exp < 0` | yes |
+| an `Option` match, a fold over a two-element `List` | as stated | yes |
+| `gcd`, `gcd` without the optimizer, `sqrt` | samples only | no |
+
+The properties call their function with a total `call`, whose conclusion is read strongly, so each
+one also claims that the function returns. The hand-written suite needed separate totality
+theorems for that.
+
+What is not stated, and why:
+
+- **`gcd` properties.** Euclid's algorithm needs more steps for larger inputs, so a property needs
+  an input range in the statement. The budgets it then needs are where proof cost explodes.
+- **`sqrt` and `isSqrt`.** `sqrt` needs about 405 steps, which is also where proof cost explodes.
+- **`log2` and `pow`.** They reach the bitwise builtins.
+- **`Data` round-trips** of case classes. `Data` binders make them expressible now, as
+  `forAll[Data](d => denotes(d.to[A]) ==> …)`; none is stated yet.
+- **Codegen equivalence** (optimizer on and off, PV10 and PV11, the lowering backends). It can now
+  be stated:
+
+  ```scala
+  forAll[BigInt, BigInt]((x, y) =>
+      callRef(gcd.ref, (x, y))(r => callRef(gcdUnoptimized.ref, (x, y))(s => r == s))
+  )
+  ```
+
+  For `gcd`, though, it hits the budget problem. The spike proved it at PV10 in 53 s; at PV11,
+  attempts at budget 350 did not finish. Start with a function whose step count is constant.
+
+## What `VestingVerificationTest` covers
+
+`scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala` states
+properties of the vesting example. The JVM tests of `scalus-examples` depend on this module and
+on its ScalaTest layer (`LeanProofsSuite`), so a contract's proofs sit next to its other tests.
+
+| About | Statement | Quantified over | Budget | Time |
+|---|---|---|---|---|
+| `linearVesting` | nothing is vested before the start | the datum, a `Config`, and the time | 400 | 7 s |
+| | everything is vested from the end on | | | 1 s |
+| | it returns: no division by a zero duration | | | 1 s |
+| | its contract, read from its body: it returns, and for `initialAmount >= 0`, `0 <= vested <= initialAmount` | | | 4 s |
+| | it does not decrease with time, for `initialAmount >= 0` | and a second time | | 2 s |
+| the validator | an output without a datum cannot be spent | `txInfo`, redeemer, reference: any `Data` | 600 | 2 s |
+| | a non-positive amount is rejected | `txInfo`, reference, datum: any `Data` | | 1 s |
+| | nothing but spending is validated | `txInfo`, redeemer, script info: any `Data` | | 2 s |
+| a withdrawal | a sample is accepted, and rejected unsigned | closed, `native_decide` | 12000 | 1 s |
+| | unsigned, it is rejected | datum, locked and requested amounts, time, fee; outputs: any `Data` | | 14 s |
+| | it leaves at least what has not vested | the same, and the amount paid | | 24 s |
+| | after the end, everything locked can be withdrawn | datum, locked amount, time, fee | | 15 s |
+| | the three guarantees `spend` states with `Spec.ensures`: the beneficiary signed, something is withdrawn, at least the unvested amount stays locked | a `Withdrawal`: the shape's numbers, and one signer of any key | | 17 s, together |
+| | had `linearVesting` expected `initialAmount >= 0`, its call would owe it: refuted; proved under the withdrawal's own contract | a `Withdrawal` | | 11 s |
+
+The times are of the tests, each with its negative controls, in the suite's Lean server; the
+first includes loading the workspace. The suite takes about 2 min. Before the tactic used the
+language server, with a Lean process for every check, it took about 5, and the three guarantees
+alone 67 s together and 3 min one by one.
+
+The validator's specification is written in `VestingValidator` itself. `spend` states its three
+guarantees at its head; `Verifier.guarantees` finds them in the code of the function that builds
+a withdrawal and validates it, where the inlined handler ends up, and they are proved as one
+statement, which runs the validator once and not once per clause. The
+schedule's contract is an `ensuring` clause of `linearVesting`, read with
+`FunctionContract.inSource` and proved over a `Config` variable. Its bound is conditional, not a
+precondition, because the validator would not establish one. It has two negative controls, stated
+with `contract(linearVesting)(expects, ensures)`: a wrong postcondition and a bound without its
+condition; the monotonicity statement and the three statements about withdrawals have
+one each. For two of the latter, a refutation is an accepted withdrawal: the solver finds one in
+about 45 s, and it is replayed on the Scalus CEK.
+
+The obligation is `Verifier.obligations` on a function of a `Withdrawal` that builds the context
+and calls the validator; see
+[call-site obligations](prop-semantics.md#call-site-obligations). The registered validator itself
+takes any `Data`, and its obligation is one of the
+[statements that do not finish](#statements-that-do-not-finish).
+
+**Withdrawals have one shape.** The context is written with the ledger types in the statement
+(`ScriptContext(TxInfo(inputs = …), …).toData`), over integer variables: one input, the vesting
+output; at most one output, to the beneficiary; a fixed beneficiary. A statement says nothing about
+another shape.
+
+What the suite shows about the tactic:
+
+- **The budget is not the limit for a program without a data-dependent loop.** The validator makes
+  thousands of steps on a withdrawal, and those statements prove at a budget of 12000. The cost
+  explosion measured on `gcd` ([Budgets](#budgets)) comes from a loop whose length depends on a
+  symbolic value, where every further step can branch.
+- **A loop over a list of unknown length is not finished by Lean.** The outputs can be left as
+  any `Data` in the statement about an unsigned withdrawal, because every run fails before the
+  validator reads them. In the statement about the unvested amount only the runs it is about
+  fail before that, and the others go on into the list. It is proved at a budget just beyond
+  the rejection, which the tactic finds, and gives no result at the budget of a whole
+  withdrawal. See
+  [Statements that do not finish](#statements-that-do-not-finish).
+- **The proofs are not about the published script.** `VestingContract` compiles with
+  `Options.release`, which uses the `Value` builtins that Lean's model lacks
+  ([Limits](#limits)); the statements are about the validator compiled with `UplcBlaster.options`.
+- **Nested `inline def`s of a class cannot be used in a statement.** One that uses another leaves a
+  reference to the class's `this` in the leaf, which the plugin rejects. They are in an object.
+
+## What `HtlcVerificationTest` covers
+
+`scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala` states
+properties of the hashed timelock example, in the library's Lean workspace. The validator reads
+the datum, the redeemer, one bound of the validity range and the signatures. A statement is
+about every datum: a `Config` variable, which is one variable per field for Lean, the two keys
+among them. And it is about a transaction whose other parts are any `Data`: an `Unread` variable
+has the fourteen other fields of the transaction, the other bound of the validity range and the
+reference of the output. So that the validator reads nothing else is proved with each
+statement, and not only seen in its source. The context is written field by field, as the
+ledger encodes it; a test without Lean checks that against the ledger's types.
+
+Its source states no contract: the validator is the read of a bound and two or three `require`s
+on each of two branches, and a clause would say them again.
+
+| About | Statement | Quantified over | Budget |
+|---|---|---|---|
+| the validator | an output without a datum cannot be spent | `txInfo`, redeemer, reference: any `Data` | 600 |
+| | nothing but spending is validated | `txInfo`, redeemer, script info: any `Data` | |
+| | a redeemer that is neither action is rejected | `txInfo`, reference, datum, redeemer: any `Data` | |
+| a refund | signed by another key, by two other keys, or by nobody, it is rejected | the datum, the lower bound, the signers; what is not read | 4000 |
+| | before the timeout it is rejected | the datum, the lower bound, the signer; what is not read | |
+| | with a lower bound of the validity range that is no time it is rejected | the datum; what is not read, the upper bound with it | |
+| | from the timeout on the committer's is accepted, also where another signature comes first | the datum, the lower bound, the other signer; what is not read | |
+| a reveal | signed by another key, by two other keys, or by nobody, it is rejected | the datum, the preimage, the upper bound, the signers; what is not read | |
+| | with a validity range that ends after the timeout it is rejected | the datum, the preimage, the upper bound, the signer; what is not read | |
+| | with an upper bound of the validity range that is no time it is rejected | the datum, the preimage; what is not read, the lower bound with it | |
+| | of what is not a preimage of the image it is rejected | the datum, the preimage, the upper bound, the signer; what is not read | |
+| | up to the timeout the receiver's of a preimage is accepted, also where another signature comes first | both keys, the preimage, the timeout, the upper bound, the other signer; what is not read | |
+| both | an accepted reveal ends before any accepted refund begins | the datum, the preimage, two signers, both bounds; what is not read, of each transaction | |
+| | it accepts a transaction with the one closure of a bound where it accepts it with the other | the datum, the bound, the signer, the preimage; what is not read | |
+| samples | a reveal and a refund are accepted, and rejected unsigned or with another secret | closed, `native_decide`, on a transaction the ledger's types build | |
+
+The suite keeps the results of 35 statements, seven of them negative controls that are refuted,
+and takes about 3 min with Lean. On its kept results it takes up to a minute: a refutation is
+replayed, and one statement is asked of Lean every time, the second point below.
+
+What the suite shows about the tactic:
+
+- **A hash of unknown bytes is a function.** Lean's model declares `sha3_256` `opaque`, so a
+  proof knows nothing of it but that equal bytes have equal hashes. That is enough for both
+  directions of the hash lock: a reveal is accepted where the image is written as
+  `sha3_256(preimage)`, and rejected under the premise `sha3_256(preimage) != image`. A proof
+  holds whatever the function is, and says nothing of how hard a preimage is to find. A closed
+  statement runs the real hash.
+- **A counterexample cannot name a preimage.** To "no reveal is accepted", over any image, the
+  solver gives an image it takes for the hash of its preimage. Replayed with the real hash that
+  reveal is rejected, so the counterexample is spurious and the result inconclusive: one test
+  states this. A negative control that needs an accepted reveal therefore writes the image as
+  the hash of the preimage, and is refuted. The tactic's message says that the budget is not at
+  fault, and names the hash ([Replay](#replay)).
+- **Unknown `Data` costs where a program reads it.** A refund or a reveal has no loop but the
+  search of at most two signatures: with `Budget.Auto` a refund proves at about 750 steps and a
+  reveal at about 830, and the suite's statements about them prove at its budget of 4000, with
+  sixteen parts of the context that are any `Data` and never read. With those parts written out
+  as constants the suite took 1 min 43 s. The three statements over a transaction that is any
+  `Data` as a whole took nearly three minutes together at that budget and a quarter of a minute
+  at 600: there Lean also runs the contexts that pass the check, on into the unknown
+  transaction, as for the vesting statement with any outputs.
+- **`.toData` on an enum case without fields did not lower**: `Action.Timeout.toData` gave
+  "Unsupported conversion for `Action$.Timeout` from ProdDataList to DataConstr", in any compiled
+  code and not only in a statement
+  ([#377](https://github.com/scalus3/scalus/issues/377)). The suite wrote the redeemer out as
+  `constrData(0, [])` until that was fixed, and now writes `Action.Timeout.toData`.
+
+What it does not show: that a bound of the validity range is inclusive or not, which the
+validator does not read and the ledger decides; a transaction of more than two signatures; and
+the published script, which `HtlcContract` compiles with other options.
+
+## Statements that do not finish
+
+Some statements are natural to write, and Lean does not return on them. `UplcBlasterLimitsTest`
+and one test of `VestingVerificationTest` state them, with a time limit. In each, how long a loop
+runs depends on a quantified value.
+
+These tests carry the ScalaTest tag `Unfinished`. The build leaves it out of `test` and
+`testQuick`, in `Test / test / testOptions`, so `testOnly` still runs them: by suite, by name with
+`-z`, or all of a suite's with `-n scalus.verify.uplcblaster.Unfinished`. A tag excluded in
+`Test / testOptions` itself could not be included again from the command line, and a test marked
+`ignore` cannot be run at all.
+
+| Statement | Budget | Result | Time |
+|---|---|---|---|
+| a list's `length` is not negative | 100 to 800 | spurious counterexample | 5 to 7 s |
+| `filter` does not lengthen a list | 100 | spurious counterexample | 4 s |
+| | 200 | spurious counterexample | 8 s |
+| | 400 | spurious counterexample | 101 s |
+| `gcd(x, y) >= 0` | 200 | spurious counterexample | 5 s |
+| | 400 | none | over 200 s |
+| vesting: at least the unvested amount stays locked, for any outputs | 1000 | spurious counterexample | 10 s |
+| | 1500 | spurious counterexample | 18 s |
+| | 2000 to 12000 | none | over 150 s; at 4000, over 7 min |
+
+The times are of `lake env lean` for every check, as the tactic ran before it used the language
+server.
+That command loads no plugin, so Lean interpreted Blaster's code. The server runs Blaster as the
+native library it is built as, and gets through the same work several times faster. Three of the
+rows, measured again with Blaster compiled:
+
+| Statement | Budget | Result | Time |
+|---|---|---|---|
+| `filter` does not lengthen a list | 400 | spurious counterexample | 20 s |
+| | 800 | none | over 2 min |
+| vesting: at least the unvested amount stays locked, for any outputs | 1600 | spurious counterexample | 8 s |
+| | 1610 to 1700 | proved | 8 to 12 s |
+| | 1800 | proved | 27 s |
+| | 1900 | proved | 62 s |
+| | 2000 | proved | 3 min |
+| | 2300 | none | over 3 min |
+| | 12000 | Lean's limit of work, at Lean's default of 200000 heartbeats | 17 s (159 s interpreted) |
+| | 12000 | none, at the tactic's default of 400000 | over 8 min |
+
+So a budget that was beyond reach is now within it, and the next one is not: the doubling of
+the paths is the same. A check that ends at Lean's limit is inconclusive like one that reaches
+its time limit.
+
+**The vesting statement is proved at the right budget.** It says that a withdrawal is rejected,
+and the rejection takes just over 1600 steps: the validator's check of the amount is its last
+before it reads the outputs. From there every 100 steps let the runs that pass the check read
+another output, and double the time. The budget of a whole accepted withdrawal, 12000, was the
+wrong one for it. A statement that a program fails wants the budget of the failing run, not of
+the program's longest. `VestingVerificationTest` proves it with `Budget.Auto`, which comes to
+1608 ([Finding the budget](blaster-budget-search.md)), and keeps the run at 12000 as a statement
+Lean does not finish.
+
+**The others cannot be proved at any budget.** Those of `UplcBlasterLimitsTest` are about runs
+that go through the whole list, or through every round of the recursion. Some input needs more
+steps than the budget, and there a conclusion, read strongly, is false. Lean's counterexample is
+that input, a long list for instance, and the replay finds the statement true on it:
+inconclusive. Proving them takes induction, which this tactic does not do.
+
+**Where the time goes.** There are two mechanisms. The reason of a check that is given up names
+the one it was in. They are also told apart with `set_option profiler true` in a check written
+by `writeCheck`, and by which process is busy.
+
+- **Paths in Lean.** `#prep_uplc_run` has Blaster run the CEK machine symbolically for the whole
+  budget, and every test of a symbolic value splits the run. `length` asks one question per
+  element, whether the list ends, and one answer ends the run: one path per length, and a cost
+  that hardly grows with the budget. `filter` also keeps or drops each element, and both runs go
+  on: the paths double with every element the budget reaches. At budget 400 each of its two
+  leaves takes 47 s in `#prep_uplc_run`, and the solver a few seconds.
+- **Arithmetic in the solver.** `gcd` splits once per round, like `length`, and Lean prepares it
+  in 5 s. But each path's condition nests one more remainder, which is nonlinear. Z3 does not
+  return, and holds 7 GB after 34 s.
+
+**The premise does not prune.** In the vesting statement the premise says that the withdrawal
+would leave too little, and under it the validator fails before it reads the outputs. But each
+leaf's program is prepared on its own, for all values of the variables, so Lean also follows the
+runs that pass the check. Those search the outputs for the beneficiary's: a list of unknown
+length, with a choice at every element. The cliff between budgets 1500 and 2000 is where the runs
+reach it. The budget does prune, where the premise does not: one that ends just after the
+rejection cuts those runs before they are far into the list (above).
+
+What that statement costs, by how much of the outputs is left open, at budget 12000:
+
+| Outputs | Result | Time |
+|---|---|---|
+| one output to the beneficiary, of any amount | proved | 43 s |
+| one output to an address that is any `Data`, in lovelace | proved | 89 s |
+| one output that is any `Data` | Lean's heartbeat limit, in `#prep_uplc_run` | 137 s |
+| any `Data` | none | over 7 min |
+
+An output that is any `Data` has a value that is a map of unknown size, which the validator sums.
+So a variable can be left open where the program only passes it on or compares it, and needs its
+shape written out where the program loops over it.
+
+What could change this:
+
+- **A budget for the runs the statement is about.** Done: `Budget.Auto` finds it from Lean's
+  counterexamples ([Finding the budget](blaster-budget-search.md)). It needs a program whose runs of
+  interest end before its loop starts.
+- **Prepare a conclusion under its premise.** For `p ==> fails(f(a))`, one program that tests
+  `p` first and runs `f(a)` only then. The runs that `p` excludes disappear only if the symbolic
+  run asks the solver whether a path is feasible, which Blaster's does not.
+- **Bound a list in the statement,** as the withdrawal statements do by hand: a quantifier over
+  lists of at most `n` elements, expanded into `n + 1` shapes.
+- **Induction,** in `lean-direct` (overview §6.3), for statements about every length.
