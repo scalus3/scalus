@@ -949,7 +949,9 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-examples"))
     .dependsOn(scalus, scalusTestkit)
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
-    .enablePlugins(ScalusSbtPlugin)
+    // The example blueprints come from the JVM project. The JS project has no Contract
+    // implementations, so the plugin only logged "No Contract implementations found" there.
+    .jvmConfigure(_.enablePlugins(ScalusSbtPlugin))
     .settings(
       crossScalaVersions := supportedScalaVersions,
       PluginDependency,
