@@ -141,9 +141,23 @@ object Timelock:
                     .write(5) // Tag for TimeExpire
                     .write(slot)
 
-    // Timelock decoder
+    /** Reads a definite- or indefinite-length array, as `decodeRecordSum` in cardano-ledger. The
+      * nested lists accept both too, as `decodeStrictSeq`. A definite-length array must hold
+      * exactly the fields of its constructor, tag included: 3 for `MOf`, 2 for the others, as
+      * `matchSize` checks.
+      */
     given Decoder[Timelock] = Decoder: r =>
-        r.readArrayHeader()
+        val unbounded = r.tryReadArrayStart()
+        val size = if unbounded then -1L else r.readArrayHeader()
+        val timelock = r.readArrayClose(unbounded, readFields(r))
+        val expected = timelock match
+            case _: Timelock.MOf => 3L
+            case _               => 2L
+        if !unbounded && size != expected then
+            r.validationFailure(s"Timelock array of size $size, expected $expected")
+        else timelock
+
+    private def readFields(r: Reader): Timelock =
         r.readInt() match
             case 0 => // Signature
                 Timelock.Signature(r.read[AddrKeyHash]())

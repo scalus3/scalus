@@ -96,4 +96,133 @@ class NativeScriptTest extends AnyFunSuite {
         assert(scripts.keySet == Set(hashOf(probeHex)))
         assert(Hex.bytesToHex(KeepRawCbor.encode(decoded.witnessSet)).contains("81" + probeHex))
     }
+
+    /** `RequireAllOf [RequireTimeAfter 10]` with every array of indefinite length. Haskell reads
+      * the sum (`decodeRecordSum`) and the list (`decodeStrictSeq`) with `decodeListLenOrIndef`.
+      */
+    private val indefiniteHex = "9f019f9f040affffff"
+    private val nestedCanonicalHex = "8201818204" + "0a"
+    private val nestedTimelock = Timelock.AllOf(IndexedSeq(Timelock.TimeStart(10)))
+
+    /** Tag 24 around a CBOR byte string shorter than 24 bytes. */
+    private def tag24(hex: String): String = f"d818${0x40 + hex.length / 2}%02x$hex"
+
+    test("a native script with indefinite-length arrays decodes and keeps its bytes") {
+        val script = Script.Native.fromCbor(Hex.hexToBytes(indefiniteHex))
+        assert(script.script == nestedTimelock)
+        assert(script.scriptHash == hashOf(indefiniteHex))
+        assert(Hex.bytesToHex(KeepRawCbor.encode(script)) == indefiniteHex)
+    }
+
+    test("an output with an indefinite-length native reference script re-encodes byte for byte") {
+        val output: TransactionOutput = TransactionOutput.Babbage(
+          address,
+          Value.ada(2),
+          None,
+          Some(ScriptRef(Script.Native(nestedTimelock)))
+        )
+        val canonical = Hex.bytesToHex(Cbor.encode(output).toByteArray)
+        val wrapped = tag24("8200" + nestedCanonicalHex)
+        assert(canonical.contains(wrapped))
+        val hex = canonical.replace(wrapped, tag24("8200" + indefiniteHex))
+        val decoded = decodeOutput(hex)
+        assert(Hex.bytesToHex(Cbor.encode(decoded).toByteArray) == hex)
+        assert(decoded.scriptRef.map(_.script.scriptHash).contains(hashOf(indefiniteHex)))
+    }
+
+    test("a witness set keeps an indefinite-length native script byte for byte") {
+        val tx = Transaction(
+          TransactionBody(
+            TaggedSortedSet(
+              TransactionInput(TransactionHash.fromByteString(ByteString.fromHex("1" * 64)), 0)
+            ),
+            IndexedSeq.empty,
+            Coin.zero
+          ),
+          TransactionWitnessSet(Seq(Script.Native(nestedTimelock)), None, Set.empty, Seq.empty)
+        )
+        val canonical = Hex.bytesToHex(tx.toCbor)
+        val wrapped = "81" + nestedCanonicalHex
+        assert(canonical.contains(wrapped))
+        val decoded =
+            Transaction.fromCbor(Hex.hexToBytes(canonical.replace(wrapped, "81" + indefiniteHex)))
+        assert(decoded.witnessSet.nativeScripts.toMap.keySet == Set(hashOf(indefiniteHex)))
+        assert(
+          Hex.bytesToHex(KeepRawCbor.encode(decoded.witnessSet)).contains("81" + indefiniteHex)
+        )
+    }
+
+    test("a transaction keeps the bytes of a non-canonical native script in its auxiliary data") {
+        // indefinite-length arrays and the slot in 5 bytes
+        val scriptHex = "9f019f9f041a0000000affffff"
+        // tag 259, a map of one entry: key 1 holds a one-element array of timelocks
+        val canonicalAuxHex = "d90103a10181" + nestedCanonicalHex
+        val rawAuxHex = "d90103a10181" + scriptHex
+        def auxHash(hex: String): AuxiliaryDataHash =
+            AuxiliaryDataHash.fromByteString(platform.blake2b_256(ByteString.fromHex(hex)))
+        val tx = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet(
+              TransactionInput(TransactionHash.fromByteString(ByteString.fromHex("1" * 64)), 0)
+            ),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = Some(auxHash(rawAuxHex))
+          ),
+          TransactionWitnessSet.empty,
+          AuxiliaryData.AlonzoFormat(None, IndexedSeq(nestedTimelock))
+        )
+        val canonical = Hex.bytesToHex(tx.toCbor)
+        assert(canonical.contains(canonicalAuxHex))
+        val hex = canonical.replace(canonicalAuxHex, rawAuxHex)
+        val decoded = Transaction.fromCbor(Hex.hexToBytes(hex))
+        assert(
+          decoded.auxiliaryData.map(_.value.getNativeScripts) == Some(IndexedSeq(nestedTimelock))
+        )
+        assert(Hex.bytesToHex(decoded.toCbor) == hex)
+        // the hash covers the bytes as sent, so it matches the body only for the raw bytes
+        val raw = decoded.auxiliaryData.map(aux => Hex.bytesToHex(aux.raw))
+        assert(raw == Some(rawAuxHex))
+        assert(raw.map(auxHash) == decoded.body.value.auxiliaryDataHash)
+        assert(auxHash(rawAuxHex) != auxHash(canonicalAuxHex))
+    }
+
+    test("an MOf script with indefinite-length arrays decodes and keeps its bytes") {
+        // `RequireMOf 1 [RequireSignature h]`, every array of indefinite length
+        val keyHash = "c" * 56
+        val hex = s"9f03019f9f00581c${keyHash}ffffff"
+        val script = Script.Native.fromCbor(Hex.hexToBytes(hex))
+        assert(
+          script.script == Timelock.MOf(
+            1,
+            IndexedSeq(Timelock.Signature(AddrKeyHash.fromHex(keyHash)))
+          )
+        )
+        assert(script.scriptHash == hashOf(hex))
+        assert(Hex.bytesToHex(KeepRawCbor.encode(script)) == hex)
+    }
+
+    test("a definite-length script holding an indefinite-length list decodes and keeps its bytes") {
+        val hex = "82019f82040aff"
+        val script = Script.Native.fromCbor(Hex.hexToBytes(hex))
+        assert(script.script == nestedTimelock)
+        assert(script.scriptHash == hashOf(hex))
+        assert(Hex.bytesToHex(KeepRawCbor.encode(script)) == hex)
+    }
+
+    test("a definite-length script whose array size does not fit its constructor is rejected") {
+        // `matchSize` in cardano-ledger's `decodeRecordSum`: 3 for MOf, 2 for the others
+        val malformed = Seq(
+          s"8300581c${"c" * 56}", // Signature with a size of 3
+          "83040a", // TimeStart with a size of 3
+          "82030180" // MOf with a size of 2
+        )
+        for hex <- malformed do
+            withClue(hex) {
+                val error = intercept[io.bullet.borer.Borer.Error[?]](
+                  Timelock.fromCbor(Hex.hexToBytes(hex))
+                )
+                assert(error.getMessage.contains("Timelock array of size"), error)
+            }
+    }
 }

@@ -98,14 +98,6 @@ Evolution provider needs.
 
 ### Fixed
 
-- The Emulator rejected a transaction that spends and references the same UTxO at protocol
-  version 8. The ledger's `disjointRefInputs` checks it only at versions 9 and 10, so the Emulator
-  now accepts such a transaction at version 8 too.
-- `TxBuilder` refused to spend a UTxO and reference it in one transaction, with
-  `InputAlreadyExists`. The ledger accepts this from protocol version 11, for example to spend a
-  script UTxO that carries its own validator as a reference script. A spend now checks only the
-  inputs and a reference only the reference inputs; at versions 9 and 10 the ledger rules still
-  reject the overlap.
 - The Emulator's value-conservation check added amounts as `Long`s, so a sum past `Long.MaxValue`
   wrapped around. A transaction could create ADA or tokens from nothing, for example two outputs of
   `Long.MaxValue` lovelace from a 10 ADA input, or make tokens vanish without a burn, and the
@@ -214,6 +206,18 @@ Evolution provider needs.
   order and passed the quorum as encoded, such as 6/10. The node lists the members scripts first,
   then by hash, and gives the quorum in lowest terms, 3/5. `LedgerToPlutusTranslation` now does
   the same, so a script that compares or hashes the action sees what it sees on chain.
+- The Emulator rejected a transaction that spends and references the same UTxO at protocol
+  version 8. The ledger's `disjointRefInputs` checks it only at versions 9 and 10, so the Emulator
+  now accepts such a transaction at version 8 too.
+- `TxBuilder` refused to spend a UTxO and reference it in one transaction, with
+  `InputAlreadyExists`. The ledger accepts this from protocol version 11, so a validator can find
+  the UTxO it guards in `txInfoReferenceInputs`, and an SDK can read from and collect from one
+  UTxO. A spend now checks only the inputs and a reference only the reference inputs; at versions
+  9 and 10 the ledger rules still reject the overlap.
+- A native script encoded with indefinite-length arrays failed to decode, in an output, a witness
+  set or auxiliary data, though the ledger accepts it. It now decodes and keeps its bytes, so its
+  hash and the transaction's bytes match the chain. A definite-length array of the wrong size, such
+  as a `Signature` of size 3, decoded too; it is now rejected, as by the ledger.
 
 
 ### Deprecated
