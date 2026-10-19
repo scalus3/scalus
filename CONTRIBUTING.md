@@ -85,6 +85,117 @@ This makes the compiler wait for a debugger to attach on port 5005.
 
 Run GitHub Actions "Deploy site" workflow.
 
+## Releasing Scalus
+
+A push of a `v<X.Y.Z>` tag starts the **Release** workflow (`.github/workflows/release.yml`). It
+runs `sbt ci-release` and publishes every artifact to Maven Central. Scalus uses `early-semver`: a
+patch release has only fixes, a minor release can add API and remove old deprecated API.
+
+Do the steps in order. Each step tells you which file or command to use.
+
+### Before the tag
+
+1. **Check the Cardano versions.** Use the latest *production* cardano-node release, not a
+   pre-release. Read its pins:
+
+   ```bash
+   NODE=11.1.3
+   gh release view $NODE -R IntersectMBO/cardano-node --json body --jq .body |
+     grep -E '^\| (plutus-core|plutus-ledger-api|cardano-ledger-conway|cardano-crypto-class) '
+   ```
+
+   - **Crypto libraries** (libsodium, libsecp256k1, blst): follow
+     [On each cardano-node release](#on-each-cardano-node-release). If a pin changed, release
+     `scalus-crypto-jni` first and bump it in `build.sbt`.
+   - **Plutus and the conformance corpus**: the `plutus` input in `flake.nix` gives the
+     `plutus-conformance` test cases. Set it to the node's `plutus-core` version, run
+     `nix flake update plutus`, then run the conformance tests. Read the Plutus CHANGELOG for new
+     builtins and cost model changes (`scalus-core/shared/src/main/resources/builtinCostModel*.json`).
+   - **cardano-ledger**: read the `cardano-ledger-conway` CHANGELOG for rule changes that the
+     Emulator and `scalus.cardano.ledger.rules` must follow.
+   - Update the [Current state](#current-state) table, even if nothing changed.
+
+2. **Remove old deprecated API** (minor releases only). Release `1.N.0` deletes every
+   `@deprecated` member whose version is `1.(N-2).x` or older. For example, 1.4.0 deletes the
+   members deprecated in 1.0.x, 1.1.x and 1.2.x. List them:
+
+   ```bash
+   git grep -nE '@deprecated\(.*"1\.[0-2]\.[0-9]+"\)' -- '*.scala'
+   ```
+
+   Each deletion breaks MiMa. Add a `mimaBinaryIssueFilters` entry with a comment for each one.
+   List each deletion in the CHANGELOG `Removed` section, in bold, as a migration hazard.
+
+3. **Write the CHANGELOG.** See "Changelog" in `CLAUDE.md`. Rename `## Unreleased` to
+   `## X.Y.Z (YYYY-MM-DD)`. Compare it with `git log v<last>..HEAD --oneline`, so that no
+   user-visible change is missing.
+
+4. **Update the skills.** Follow [When you release](#when-you-release), step 1.
+
+5. **Prepare the npm package.** Set `version` in
+   `scalus-cardano-ledger/js/src/main/npm/package.json` to `X.Y.Z`. You publish it after the tag,
+   see [Publishing Scalus JS library to NPM](#publishing-scalus-js-library-to-npm).
+
+6. **Run the full gate** in the nix devshell. Do not use `sbt ci`: it links the deliberately bad
+   `scalus-ts-exporter` fixtures and always fails.
+
+   ```bash
+   sbt --batch 'ci-jvm;ci-js;ci-native'   # format, all platforms, mima
+   sbt it                                 # integration tests, needs Docker
+   ```
+
+   `ci-jvm` runs only Scala 3.3.8. Make sure that the CI-JVM workflow is green for all Scala
+   versions on the commit that you tag. In `it`, Blockfrost tests fail with a preprod-only key.
+   That is not a release blocker.
+
+7. **Review the MiMa filters.** Each filter added since the last release must have a comment
+   that explains the break. Each break must be in the CHANGELOG.
+
+### Tag and publish
+
+1. Tag the commit and push the tag:
+
+   ```bash
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+
+2. Monitor the **Release** workflow. It can take up to 90 minutes. If you run it again and get
+   "component already exists", the first run already published the artifacts.
+3. Make sure that the artifacts are on Maven Central. This can take 30 minutes after the workflow
+   ends:
+
+   ```bash
+   curl -s https://repo1.maven.org/maven2/org/scalus/scalus_3/maven-metadata.xml | grep X.Y.Z
+   ```
+
+4. Publish the npm package. See [Publishing Scalus JS library to NPM](#publishing-scalus-js-library-to-npm).
+5. Create the GitHub release with the CHANGELOG section of this version as the notes:
+
+   ```bash
+   gh release create vX.Y.Z --title vX.Y.Z --notes-file <changelog-section.md>
+   ```
+
+### After the release
+
+1. **Move the MiMa baseline.** Set `scalusStableVersion` in `build.sbt` to `X.Y.Z`. Delete the
+   per-symbol `mimaBinaryIssueFilters` that the new baseline makes obsolete. Keep the wildcard
+   policy filters. Run `sbtn mima`. This value also sets the Scaladoc version and
+   `scalus.utils.BuildInfo.scalusVersion`.
+2. **Update the version in the docs.** Update the install snippets in `README.md` ("Use Scalus").
+   Search `scalus-site/content/` for the old version.
+3. **Update the g8 templates.** Bump the Scalus version in `hello.g8` and `validator.g8`:
+   `build.sbt`, `project/plugins.sbt`, `project.scala` and the `//> using` lines in the `.scala`
+   files.
+4. **Update scalus-starter** ([scalus3/scalus-starter](https://github.com/scalus3/scalus-starter)).
+   Bump the Scalus version in `build.sbt`, `project/plugins.sbt` and `CLAUDE.md`. Then run
+   `sbt "clean; test; integration/test"`. The integration tests need Docker. If they fail with
+   `container name "/scalus-yaci-devkit" is already in use`, remove the old container with
+   `docker rm -f scalus-yaci-devkit`. Fix the deprecation warnings, so that the starter shows the
+   current API.
+5. **Deploy the site.** Follow [When you release](#when-you-release), steps 2 and 3.
+6. **Open the next version.** Add an empty `## Unreleased` section to the top of `CHANGELOG.md`.
+
 ## Agent artifacts: plugin, skills, llms.txt
 
 AI coding agents get Scalus knowledge from three places. Each has its own update path.
@@ -286,24 +397,36 @@ This requires libsecp256k1 development headers installed on your system.
 
 ## Publishing Scalus JS library to NPM
 
-```sbt
-scalusCardanoLedgerJS / prepareNpmPackage
-```
+The npm `scalus` version is the same as the library version. The package is in
+`scalus-cardano-ledger/js/src/main/npm/`.
 
-This will create a `scalus-opt-bundle.js` package in the `scalus-cardano-ledger/js/src/main/npm`
-directory.
+1. Set `version` in `package.json` to the library version.
+2. Build the bundle and run the npm tests. This runs `prepareNpmPackage`, which regenerates
+   `scalus.js` and `scalus.d.ts`. Do not edit `scalus.d.ts` by hand:
 
-Login to NPM:
+   ```bash
+   sbtn scalusCardanoLedgerJS/runNpmTests
+   ```
 
-```bash
-npm login
-```
+3. Check the package contents. It must have exactly 4 files: `README.md`, `package.json`,
+   `scalus.d.ts` and `scalus.js`:
 
-Update the version in `scalus-cardano-ledger/js/src/main/npm/package.json` and publish it to NPM:
+   ```bash
+   npm pack --dry-run
+   ```
 
-```bash
-npm publish --access public
-```
+4. Publish. The account uses 2FA for writes, so use `npm login` and a one-time code, or an
+   Automation token:
+
+   ```bash
+   npm publish --access public
+   ```
+
+5. Check the registry, not the npmjs.com page, which shows old data for some time:
+
+   ```bash
+   npm view scalus dist-tags
+   ```
 
 ## Scala 3 Code Style
 
