@@ -365,4 +365,25 @@ class ImmutableEmulatorTest extends AnyFunSuite {
             ImmutableEmulator(state = state, env = env, binaryDatums = Map(hash -> KeepRaw(datum)))
         assert(withOldDatums(state, env, Map(hash -> datum)) == expected)
     }
+
+    test("withDatum stores the given bytes under their hash and leaves the original unchanged") {
+        // spec [SC-13k]: d879811a0000000a is valid CBOR for Constr 0 [10], but not minimal
+        val probe = ByteString.fromHex("d879811a0000000a")
+        val hash = DataHash.fromByteString(Builtins.blake2b_256(probe))
+        val original = ImmutableEmulator.empty
+
+        val next = original.withDatum(KeepRaw.unsafe(Data.fromCbor(probe.bytes), probe.bytes))
+
+        assert(next.binaryDatums.get(hash).map(d => ByteString.fromArray(d.raw)) == Some(probe))
+        assert(original.binaryDatums.isEmpty)
+    }
+
+    test("withDatum of a Data stores its canonical bytes") {
+        val data = Data.fromCbor(ByteString.fromHex("d879811a0000000a").bytes)
+        val canonical = KeepRaw(data)
+
+        val next = ImmutableEmulator.empty.withDatum(data)
+
+        assert(next.binaryDatums.get(canonical.dataHash) == Some(canonical))
+    }
 }

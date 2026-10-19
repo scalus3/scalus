@@ -705,7 +705,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // Scala.js only. Safe because these members exist to be called from JavaScript, and the
       // only way to call them is the `scalus` npm bundle, which is linked from this repo and
       // re-published with it, so no consumer can be holding the previous signatures. Per symbol
-      // rather than a wildcard: `scalus.cardano.ledger` is a MIXED package (CLAUDE.md), so a
+      // rather than a wildcard: `scalus.cardano.ledger` is a MIXED package (AGENTS.md), so a
       // wildcard there would also pre-authorise breaks in the ledger domain types.
       mimaBinaryIssueFilters ++= Seq(
         // `JsUtxo.withScriptRef` widened its parameter from `Uint8Array` to `js.Any` so it also
@@ -1343,7 +1343,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
           "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$8"
         ),
         // The streaming hub's internals churn while the provider implementations are built –
-        // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: CLAUDE.md
+        // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: AGENTS.md
         // reserves wildcards for wholly-internal packages, and a wildcard over the whole
         // `...node.stream` package would also silence a genuine break in the public facade
         // (`BlockchainStreamProvider`, `StreamCapabilities`, `SubscriptionOptions`, …).
@@ -1685,10 +1685,6 @@ addCommandAlias(
   "precommit",
   "clean;docs/clean;scalafmtAll;scalafmtSbt;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;jvm/test"
 )
-addCommandAlias(
-  "ci",
-  "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;Test/compile;scalusCardanoLedgerIt/Test/compile;Test/nativeLink;test;mima"
-)
 // Task list shared by every cross-version CI job. We must NOT use the `jvm` aggregate here:
 // modules that don't list the cross version (scalusUplcJitCompiler, scalusUtxoCell, bench) fall
 // back to the default LTS and then fail to read the cross-version TASTy of scalus-core they depend
@@ -1743,6 +1739,9 @@ addCommandAlias(
   "ci-native",
   "clean;native/Test/compile;native/test"
 )
+// The CI jobs for the default Scala version in one command. Do not build it on the root aggregate:
+// that links the deliberately bad scalusTsExporterFixtures and always fails.
+addCommandAlias("ci", "ci-jvm;ci-js;ci-native")
 addCommandAlias("benchmark", "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*")
 addCommandAlias(
   "benchmark-jit",

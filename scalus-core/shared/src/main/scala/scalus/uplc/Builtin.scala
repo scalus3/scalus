@@ -6,7 +6,7 @@ import scalus.cardano.ledger.ExUnits
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.Constant.given
 import scalus.uplc.Constant.asConstant
-import scalus.uplc.DefaultUni.{Bool, Integer, given}
+import scalus.uplc.DefaultUni.{Bool, Integer}
 import scalus.uplc.eval.CekValue.*
 import scalus.uplc.eval.*
 import scalus.utils.Macros

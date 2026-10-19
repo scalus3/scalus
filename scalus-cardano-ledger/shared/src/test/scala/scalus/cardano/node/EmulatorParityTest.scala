@@ -1,12 +1,14 @@
 package scalus.cardano.node
 
+import io.bullet.borer.Cbor
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.{Builtins, ByteString, Data}
-import scalus.cardano.address.Network
+import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
-import scalus.cardano.txbuilder.TxBuilder
+import scalus.cardano.txbuilder.{Datum, ScriptSource, ThreeArgumentPlutusScriptWitness, TxBuilder}
 import scalus.testing.kit.Party.{Alice, Bob}
+import scalus.uplc.PlutusV3
 
 import scala.collection.immutable.SortedMap
 
@@ -573,5 +575,73 @@ class EmulatorParityTest extends AnyFunSuite {
         )
 
         assert(storedBytes(emulator, hash).contains("d879811a0000000a"))
+    }
+
+    test("addDatum stores the given bytes and returns the hash of exactly those bytes") {
+        val emulator = emulatorOver(genesisUtxos(Value.ada(100)))
+        val expected = DataHash.fromByteString(
+          Builtins.blake2b_256(ByteString.unsafeFromArray(probeDatumBytes))
+        )
+
+        assert(emulator.addDatum(probeDatum) == expected)
+        assert(storedBytes(emulator, expected).contains("d879811a0000000a"))
+        assert(datumOf(emulator, expected).contains(Data.fromCbor(probeDatumBytes)))
+    }
+
+    test("addDatum of a Data stores its canonical bytes and returns their hash") {
+        val emulator = emulatorOver(genesisUtxos(Value.ada(100)))
+        val data = Data.fromCbor(probeDatumBytes)
+        val canonical = Cbor.encode(data).toByteArray
+        val expected = DataHash.fromByteString(
+          Builtins.blake2b_256(ByteString.unsafeFromArray(canonical))
+        )
+
+        val hash = emulator.addDatum(data)
+
+        assert(hash == expected)
+        assert(hash != probeDatum.dataHash, "the probe bytes are not canonical")
+        assert(storedBytes(emulator, hash).contains(ByteString.unsafeFromArray(canonical).toHex))
+    }
+
+    test("adding the same datum twice leaves the store as one addDatum left it") {
+        val emulator = emulatorOver(genesisUtxos(Value.ada(100)))
+        val first = emulator.addDatum(probeDatum)
+        val afterFirst = emulator.binaryDatums
+
+        assert(emulator.addDatum(probeDatum) == first)
+        assert(emulator.binaryDatums == afterFirst)
+        assert(storedBytes(emulator, first).contains("d879811a0000000a"))
+    }
+
+    test("a hash-datum UTxO added with addUtxo is spendable with the datum addDatum stored") {
+        val script = PlutusV3.alwaysOk.script
+        val scriptAddress = ShelleyAddress(
+          Network.Mainnet,
+          ShelleyPaymentPart.Script(script.scriptHash),
+          ShelleyDelegationPart.Null
+        )
+        val datum: Data = Data.I(42)
+        val hash = KeepRaw(datum).dataHash
+        val locked =
+            Input(genesisHash, 9) -> Output(scriptAddress, Value.ada(5), DatumOption.Hash(hash))
+        val emulator = emulatorOver(genesisUtxos(Value.ada(100)))
+        emulator.addUtxo(locked._1, locked._2)
+        emulator.addDatum(datum)
+
+        // the lookup a provider such as Lucid's makes before it attaches the datum
+        val found = datumOf(emulator, hash).getOrElse(fail("getDatum must find the added datum"))
+        val witness = ThreeArgumentPlutusScriptWitness(
+          ScriptSource.PlutusScriptValue(script),
+          Data.unit,
+          Datum.DatumValue(found)
+        )
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(locked), witness)
+            .payTo(alice, Value.ada(5))
+            .complete(emulator.utxos, alice)
+            .sign(Alice.signer)
+            .transaction
+
+        assert(emulator.submitSync(tx) == Right(tx.id))
     }
 }

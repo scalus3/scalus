@@ -1,1 +1,267 @@
-See [CLAUDE.md](CLAUDE.md) for all repository instructions. Read and follow that file before working in this repository.
+# Agent Guidelines for the Scalus Project
+
+## Project Overview
+
+Scalus is a platform for developing decentralized applications (DApps) on Cardano.
+It compiles a subset of Scala 3 to Scalus Intermediate Representation (SIR) and then
+lowers to Untyped Plutus Core (UPLC), the language of Cardano smart contracts.
+
+## Smart Contract Work: Use the Scalus Plugin Skills
+
+All guidance for writing, testing, optimizing and reviewing smart contracts lives in the
+`scalus` plugin (`/plugin install scalus@scalus`). Its source is `scalus-skills/`. At session
+start the plugin injects its routing table (`scalus:using-scalus`); follow it.
+
+- Put new contract knowledge in `scalus-skills/skills/`, not in this file.
+- When you change `scalus-skills/`, follow "Agent artifacts" in `CONTRIBUTING.md`
+  (version bump, local test, g8 templates).
+
+## Commands
+
+Prefer `sbtn` over `sbt`, when `sbtn` is aviable and not hangs.
+Exception: in a git worktree, prefer one-shot `sbt` and shut the server down when done. See
+[Working in a git worktree with sbt](#working-in-a-git-worktree-with-sbt).
+
+| Command          | Purpose                                              |
+|------------------|------------------------------------------------------|
+| `sbtn quick`     | Format, compile, jvm/testQuick (fast iteration)      |
+| `sbtn testQuick` | Run only tests affected by recent changes            |
+| `sbtn ci`        | Full CI (`ci-jvm;ci-js;ci-native`): format, mima, all platforms |
+| `sbtn it`        | Integration tests (requires Docker)                  |
+
+**Compilation:**
+
+- `sbtn jvm/Test/compile` - all JVM projects with tests
+- `sbtn scalusJVM/Test/compile` - scalus-core JVM with tests
+- `sbtn scalusCardanoLedgerJVM/compile` - cardano-ledger JVM without tests
+- `sbtn "clean; Test/compile"` - full clean compilation, useful for checking for warnings. Otherwise
+  incremental compilation could not show warnings in already compiled files
+
+**Testing:**
+
+- `sbtn jvm/test` - all JVM tests
+- `sbtn jvm/testQuick` - run only tests affected by recent changes (incremental)
+- `sbtn scalusJVM/test` - core tests
+- `sbtn scalusExamplesJVM/test` - example tests
+- `sbtn scalusCardanoLedgerIt/test` - integration tests
+
+**Note:** sbt uses incremental compilation - only changed files and their dependents are recompiled.
+Use `sbtn clean` to force full recompilation if you encounter stale class issues.
+
+### Working in a git worktree with sbt
+
+When the repo is checked out in a **git worktree** (`git worktree add ...`, e.g. `.claude/worktrees/<name>`),
+one one-time fix is needed inside the worktree:
+
+1. **The `plutus-conformance` corpus is not present in the worktree.** `scalusJVM/Test/compile` fails with
+   `Plutus conformance corpus not found at .../plutus-conformance/test-cases/uplc/evaluation` (it is a
+   symlink into the nix store that only exists in the primary checkout). Recreate the symlink in the
+   worktree, pointing at the same target as the primary checkout:
+
+   ```bash
+   ln -s "$(readlink /path/to/primary/checkout/plutus-conformance)" <worktree>/plutus-conformance
+   ```
+
+   It is git-ignored, so it won't show up in `git status`.
+
+2. **Shut the sbt server down when the task ends: `sbtn shutdown`.** Each server keeps its own heap
+   (`-Xmx8g`, from `.jvmopts`), so several worktrees at once can exhaust RAM. Divide the machine's
+   RAM by 8 GB, leave a few GB for the OS, and keep at most that many servers alive. In a throwaway
+   worktree, prefer a one-shot `sbt`, which returns its memory on exit; keep the long-lived `sbtn`
+   daemon for the primary checkout. Never start a second sbt in a checkout that already has one.
+
+## Architecture
+
+### Compilation Pipeline
+
+Scala Source → SIR (via compiler plugin) → UPLC (via SIR compiler) → Plutus Script (V1/V2/V3)
+
+### Module Structure
+
+**Cross-platform modules (JVM/JS, some with Native):**
+
+| Module                         | Purpose                           | sbt Project                                       |
+|--------------------------------|-----------------------------------|---------------------------------------------------|
+| `scalus-core/`                 | Plutus VM, UPLC, standard library | `scalusJVM`, `scalusJS`, `scalusNative`           |
+| `scalus-cardano-ledger/`       | Transaction building, ledger      | `scalusCardanoLedgerJVM`, `scalusCardanoLedgerJS` |
+| `scalus-testkit/`              | Testing utilities                 | `scalusTestkitJVM`, `scalusTestkitJS`             |
+| `scalus-examples/`             | Smart contract examples           | `scalusExamplesJVM`, `scalusExamplesJS`           |
+
+**JVM-only modules:**
+
+| Module                         | Purpose                           | sbt Project                         |
+|--------------------------------|-----------------------------------|-------------------------------------|
+| `scalus-plugin/`               | Scala 3 compiler plugin and its tests | `scalusPlugin`                  |
+| `scalus-uplc-jit-compiler/`    | Experimental UPLC JIT compiler    | `scalusUplcJitCompiler`             |
+| `scalus-design-patterns/`      | Design pattern examples           | `scalusDesignPatterns`              |
+| `bloxbean-cardano-client-lib/` | Bloxbean CCL integration          | `scalus-bloxbean-cardano-client-lib`|
+| `scalus-cardano-ledger-it/`    | Integration tests                 | `scalusCardanoLedgerIt`             |
+| `bench/`                       | JMH benchmarks                    | `bench`                             |
+| `scalus-docs/`                 | API documentation (Unidoc)        | `docs`                              |
+
+### Key Source Locations
+
+- SIR compiler: `scalus-core/shared/src/main/scala/scalus/compiler/sir/`
+- UPLC implementation: `scalus-core/shared/src/main/scala/scalus/uplc/`
+- Plutus VM (CEK): `scalus-core/shared/src/main/scala/scalus/uplc/eval/`
+- Standard library: `scalus-core/shared/src/main/scala/scalus/prelude/`
+- Compiler plugin: `scalus-plugin/src/main/scala/scalus/plugin/`
+- Transaction builder: `scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/`
+- Examples: `scalus-examples/shared/src/main/scala/scalus/examples/`
+
+## Development Guidelines
+
+### Before Completing Tasks
+
+Run `sbtn quick` to ensure formatting, compilation, and tests pass.
+If issues occur, try `sbtn clean` first.
+
+### Compiler warnings
+
+Keep the build at 0 warnings. Warnings do not fail the build, but a release needs 0 warnings.
+
+- Fix the warnings in the files you change, for example remove an unused import.
+- If a warning is intentional, for example in a test of deprecated API, suppress it at the use
+  site with `@nowarn("msg=...")` and a comment that explains why.
+- Incremental compilation shows warnings only for recompiled files. To see all warnings, run
+  `sbtn "clean; Test/compile"`.
+
+### Version control
+
+When creating files, make sure to run `git add` to add them to the version control system. 
+
+### Multi-Platform Architecture
+
+- Shared code goes in `shared/src/main/scala/`
+- Platform-specific code goes in `jvm/`, `js/`, `native/`
+- Tests mirror source structure in `shared/src/test/scala/`
+
+### Scala 3 Code Style
+
+Use `{}` for top-level definitions and multi-line function bodies.
+Use indentation-based syntax for `if`/`match`/`try`/`for`, unless it's too big (more than 20 lines).
+Use braces otherwise.
+Use `then` in `if` expressions and `do` in `while` loops.
+
+```scala
+object Example {
+    def exampleFunction(x: Int): Int = {
+        if x > 0 then x * 2
+        else
+            val y = -x
+            y * 2
+    }
+
+    def describe(x: Any): String = x match
+        case 1 => "one"
+        case _ => "other"
+}
+```
+
+## Cross-Language Interop Style
+
+New public code and refactorings in the **designated interop packages** (the
+ledger domain objects — `Transaction`, `TransactionOutput`, `Value`, … — plus
+`Data`/`ToData`/`FromData`, `TxBuilder`, `Emulator`, `PlutusVM`) must follow the
+cross-language interop guide so the API stays usable from Java/Kotlin/JavaScript.
+Full design: `docs/superpowers/specs/2026-07-11-cross-language-interop-style-guide-design.md`.
+
+**Decision rule:** if the interop-friendly form is equally good Scala, make it the
+only form (Tier 0). If it degrades Scala ergonomics, put it in a per-platform
+`<ClassName>Platform` trait instead.
+
+**Tier 0 — author directly into the shared public type (no Scala cost):**
+
+- No default parameters on public APIs — provide explicit overloads instead
+  (Java/Kotlin can't use `$default$`; Scala.js default-param export is buggy).
+- `@scala.annotation.varargs` on public vararg methods.
+- Keep symbolic operators (`+`, `unary_-`) but add named aliases (`def plus`,
+  `def negate`).
+- Public factories return concrete types (no `Product`/path-dependent/`IterableOnce`).
+- For every public `given` codec (`ToData`/`FromData`/`Encoder`/`Decoder`), also
+  expose a non-implicit entry (`Foo.toData(x)`, `Foo.fromData(d)`).
+- Public callback types are `@FunctionalInterface` single-method interfaces.
+- No `using`/context params on public entry points — take them as ordinary
+  parameters, with a Scala overload that supplies the `given` (see `fromCbor`).
+
+**Tier 1 — per-platform `<ClassName>Platform` mixin (only for divergent members):**
+
+`shared/` classes can't gain instance methods from platform-only files, so
+divergent Java/JS members go in a trait of the same FQN with a different body per
+platform (same idiom as `scalus.uplc.builtin.platform`):
+
+```scala
+case class Transaction(...) extends TransactionPlatform          // shared/
+// jvm/: full Java idiom (orNull getters, java.util.List, builders)
+// js/:  full JS idiom (@JSExport, js.Array, Long/BigInt -> String)
+// native/: empty
+private[ledger] trait TransactionPlatform extends InteropApi { self: Transaction => ... }
+```
+
+Every platform trait extends the shared marker `InteropApi` and must exist on
+every platform the class compiles to (empty is fine).
+
+**Stability:** interop packages are the MiMa-stable surface; route churn-prone
+additions into `*.internal` subpackages. (`InteropSurfaceTest` is planned for M2
+to mechanically enforce the rules; today the gate is MiMa.) Compiler-internal
+and tooling-internal packages are exempt from the MiMa check via wildcard
+filters in build.sbt: `scalus.compiler.sir.lowering`,
+`scalus.compiler.sir.linking`, `scalus.compiler.sir.transform`,
+`scalus.compiler.intrinsics`, `scalus.uplc.builtin.internal`,
+`scalus.uplc.internal`. MIXED packages
+(`scalus.uplc`, `scalus.uplc.eval`, `scalus.compiler.sir`,
+`scalus.serialization.flat`, `scalus.utils`, `scalus.cardano.ledger.rules`)
+take per-symbol filters only, never wildcards. Internal/compiler/prelude code
+is out of scope for interop style rules and stays fully idiomatic Scala.
+
+## Commit Guidelines
+
+- Use conventional commit style: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
+- Keep messages short: 1-2 paragraphs
+- Mention key changes
+- Never add "Co-authored by Claude Code" or similar
+- Run `sbtn scalafmtAll` before every commit: `ci-jvm` fails on a single unformatted file
+
+## Changelog
+
+To write a CHANGELOG.md entry for a version, find the last version in CHANGELOG.md and list the
+changes with `git log v<last_version>..HEAD --oneline`. Follow the existing style and put the most
+important features and fixes first. Use a neutral voice; use bold only for migration hazards.
+
+## Libraries in Tests
+
+- Use Scalus data types when appropriate
+- Use jsoniter-scala for JSON parsing
+- Use com.lihaoyi.pprint to display complex data types
+
+## Reference Projects
+
+- [Cardano Ledger](https://github.com/IntersectMBO/cardano-ledger)
+- [Plutus](https://github.com/IntersectMBO/plutus)
+- [Amaru](https://github.com/pragma-org/amaru)
+
+These can be obtained in sibling directories (`../`) or directly on GitHub.
+
+## Backwards Compatibility
+
+- Maintain backwards compatibility for public APIs
+- Use `sbtn mima` to verify compatibility
+- Use `@deprecated("use XYZ instead", "$version")` on deprecated APIs
+- Use latest git tag for deprecated $version (e.g., if tag is "v0.14.2", write `@deprecated("use XYZ instead", "0.14.2")`)
+
+## Crypto Library Parity with cardano-node
+
+Scalus must run the same crypto C libraries (libsodium, libsecp256k1, blst), at the same commits,
+as the latest production cardano-node release, and call them the same way. A different version can
+change a signature verdict. When cardano-node or Plutus releases, or when you touch crypto code or
+its dependencies, follow "Keeping crypto libraries in sync with cardano-node" in `CONTRIBUTING.md`
+and update its "Current state" table. Scala Native still links the system (nixpkgs) libraries, not
+the node's pins. This is a known gap, recorded in that table; the parity, conformance and property
+tests guard it.
+
+## Important Files
+
+- `build.sbt` - Build configuration
+- `.scalafmt.conf` - Code formatting
+- `CONTRIBUTING.md` - Contribution guidelines
+- `scalus-site/content/` - Documentation

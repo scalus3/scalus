@@ -13,6 +13,10 @@ Evolution provider needs.
 - `Emulator.addRewards` pays lovelace into a registered reward account. In JavaScript,
   `getAccount` reads its balance, deposit, pool and DRep back, and `stakeDistribution` entries
   carry `rewardAddress`.
+- `Emulator.addDatum` adds a datum to the store `getDatum` reads, so a UTxO added with `addUtxo`
+  that holds only a datum hash has its datum found too. It keeps the given bytes and returns their
+  hash: in Scala and Java from a `KeepRaw[Data]` or a `Data`, in JavaScript from CBOR as hex or
+  bytes. `ImmutableEmulator.withDatum` is the immutable form.
 - `Emulator.getTreasury()` in JavaScript, and `treasury` on the Scala Emulator. Donations move into
   the treasury at the next epoch boundary.
 - `Utxo.script` and `PlainUtxo.script` return the reference script as `{ type, script }`, the shape

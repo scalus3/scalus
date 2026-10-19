@@ -639,6 +639,24 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         emulator.binaryDatums.get(hash).map(_.raw.toUint8Array).orUndefined
     }
 
+    /** Adds a datum to the datum store `getDatum` reads. Use it for a UTxO added with `addUtxo`
+      * that holds only the hash of its datum, so `getDatum` finds the datum, as a node does once a
+      * transaction has carried it. The store keeps the bytes as given, and adding a datum it
+      * already holds changes nothing.
+      *
+      * @param datumCbor
+      *   The datum as CBOR, hex-encoded or as bytes.
+      * @return
+      *   The hex-encoded hash of exactly those bytes: the hash `getDatum` finds the datum under.
+      * @throws TypeError
+      *   if `datumCbor` is not the CBOR of one datum.
+      */
+    def addDatum(@TsType("string | Uint8Array") datumCbor: js.Any): String = {
+        val datum =
+            decodeOf(datumCbor, "datumCbor")(bytes => KeepRaw.unsafe(Data.fromCbor(bytes), bytes))
+        emulator.addDatum(datum).toHex
+    }
+
     /** Adds a UTxO to the ledger directly, bypassing transaction validation. Useful for seeding a
       * UTxO a later transaction will spend, without the ceremony of a genesis transaction for it.
       * Overwrites any UTxO already sitting at the same input.

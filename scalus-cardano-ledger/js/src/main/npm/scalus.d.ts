@@ -348,6 +348,17 @@ export class Emulator {
    */
   getDatum(datumHashHex: string): Uint8Array | undefined;
   /**
+   * Adds a datum to the datum store `getDatum` reads. Use it for a UTxO added with `addUtxo`
+   * that holds only the hash of its datum, so `getDatum` finds the datum, as a node does once a
+   * transaction has carried it. The store keeps the bytes as given, and adding a datum it
+   * already holds changes nothing.
+   *
+   * @param datumCbor The datum as CBOR, hex-encoded or as bytes.
+   * @returns The hex-encoded hash of exactly those bytes: the hash `getDatum` finds the datum under.
+   * @throws TypeError if `datumCbor` is not the CBOR of one datum.
+   */
+  addDatum(datumCbor: string | Uint8Array): string;
+  /**
    * Adds a UTxO to the ledger directly, bypassing transaction validation. Useful for seeding a
    * UTxO a later transaction will spend, without the ceremony of a genesis transaction for it.
    * Overwrites any UTxO already sitting at the same input.

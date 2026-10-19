@@ -6,8 +6,6 @@ import org.typelevel.paiges.Doc
 import scalus.uplc.builtin.Data
 import scalus.utils.{Pretty, Style}
 
-import scala.compiletime.asMatchable
-
 /** Represents a datum option in Cardano outputs */
 sealed trait DatumOption:
     import DatumOption.*
