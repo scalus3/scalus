@@ -206,6 +206,9 @@ Evolution provider needs.
   the account, so the ledger rejected the transaction with `ValueNotConserved`. It now refunds the
   current `stakeAddressDeposit` for such an account, the deposit the ledger recorded unless the
   parameter changed since.
+- JavaScript `balancer.balanceTx` priced only the signatures of key inputs, collateral and required
+  signers. A withdrawal, a certificate or a vote that a key must sign, such as a pool's operator and
+  owners, now adds its signature too, so the fee covers it.
 - Ed25519, secp256k1 and BLS12-381 give the Cardano node's verdicts on every platform. On the JVM
   they run the C libraries cardano-node 11.1.3 links (libsodium IOG fork, libsecp256k1 v0.3.2,
   blst v0.3.15) through the new `scalus-crypto-jni` 0.1.0, called as cardano-crypto-class calls

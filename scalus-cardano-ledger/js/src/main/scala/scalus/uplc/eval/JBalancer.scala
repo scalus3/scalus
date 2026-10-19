@@ -3,6 +3,7 @@ package scalus.uplc.eval
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.JsProtocolParams.underlying
+import scalus.cardano.ledger.utils.AllNeededKeyHashes
 import scalus.cardano.txbuilder.{Change, SomeBuildError, TransactionBuilder, TxBalancingError}
 import scalus.interop.{TsName, TsType}
 import scalus.utils.scalajs.internal.*
@@ -52,8 +53,9 @@ object JBalancer {
       * `extraSigners` is the keys that will sign but that the transaction does not name. Pass `[]`
       * when there are none, which is the usual case.
       *
-      * The signers are otherwise worked out for you: every input and collateral input paying to a
-      * key address needs that key's signature, and so does anything in the transaction's own
+      * The signers are otherwise worked out for you, as the ledger works them out: every input and
+      * collateral input paying to a key address, every key withdrawal, every certificate a key must
+      * sign (a pool's operator and owners included), every key voter, and the transaction's own
       * required-signers field. Reference inputs are read-only and need none. That matters because
       * each signature is about 101 bytes, so a fee priced for the wrong number of them is wrong by
       * roughly 4,400 lovelace each.
@@ -143,11 +145,17 @@ object JBalancer {
                     try AddrKeyHash.fromHex(value.asInstanceOf[String])
                     catch case e: IllegalArgumentException => typeError(s"$name: ${e.getMessage}")
                 }
+        // Withdrawals, certificates and voters name their keys; a witnessed input names its key
+        // only through the output it spends.
+        val named =
+            AllNeededKeyHashes.allNeededWithdrawalsKeyHashesView(transaction) ++
+                AllNeededKeyHashes.allNeededCertificatesKeyHashesView(transaction) ++
+                AllNeededKeyHashes.allNeededVotingProceduresKeyHashesView(transaction)
         val expectedSigners = witnessed.toSeq
             .flatMap(resolved.get)
             .map(_.address)
             .collect { case ShelleyAddress(_, ShelleyPaymentPart.Key(hash), _) => hash }
-            .toSet ++ body.requiredSigners.toSet ++ extras
+            .toSet ++ named.map(AddrKeyHash.fromByteString) ++ body.requiredSigners.toSet ++ extras
 
         // This overload sets initialBudget to maxTxExecutionUnits, as TxBuilder does, so the
         // transaction's scripts are limited together exactly as the ledger limits them.
