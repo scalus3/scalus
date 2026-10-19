@@ -198,6 +198,10 @@ Evolution provider needs.
   registration or update now expects its operator and owners, and a pool retirement its operator.
   So the fee of such a transaction rises: it now includes one vkey witness, about 100 bytes, for
   each distinct operator or owner key.
+- The Emulator accepted a proposal whose deposit differs from `govActionDeposit`, which the
+  ledger's GOV rule rejects. The new `ProposalDepositValidator`, one of the default validators,
+  rejects it with `ProposalDepositIncorrect`. **A test that submits a proposal with any other
+  deposit now fails.**
 - Ed25519, secp256k1 and BLS12-381 give the Cardano node's verdicts on every platform. On the JVM
   they run the C libraries cardano-node 11.1.3 links (libsodium IOG fork, libsecp256k1 v0.3.2,
   blst v0.3.15) through the new `scalus-crypto-jni` 0.1.0, called as cardano-crypto-class calls

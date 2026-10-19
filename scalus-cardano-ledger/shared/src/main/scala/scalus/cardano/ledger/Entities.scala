@@ -353,6 +353,15 @@ object TransactionException {
           s"Treasury value mismatch for transactionId $transactionId: supplied $supplied, expected $expected"
         )
 
+    // It's Conway.ProposalDepositIncorrect of the GOV rule in cardano-ledger
+    final case class ProposalDepositIncorrectException(
+        transactionId: TransactionHash,
+        supplied: Coin,
+        expected: Coin
+    ) extends TransactionException(
+          s"Proposal deposit incorrect for transactionId $transactionId: supplied $supplied, expected $expected"
+        )
+
     // It's Conway.ConwayTxRefScriptsSizeTooBig in cardano-ledger
     final case class TxRefScriptsSizeTooBigException(
         transactionId: TransactionHash,
@@ -542,6 +551,7 @@ object TransactionException {
         case _: WithdrawalsNotInRewardsException           => "WithdrawalsNotInRewards"
         case _: TreasuryValueMismatchException             => "TreasuryValueMismatch"
         case _: TxRefScriptsSizeTooBigException            => "TxRefScriptsSizeTooBig"
+        case _: ProposalDepositIncorrectException          => "ProposalDepositIncorrect"
         case _: WithdrawalsNotDelegatedToDRepException     => "WithdrawalsNotDelegatedToDRep"
         case _: ExUnitsExceedMaxException                  => "ExUnitsExceedMax"
         case _: TooManyCollateralInputsException           => "TooManyCollateralInputs"

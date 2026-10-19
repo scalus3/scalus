@@ -24,6 +24,7 @@ object DefaultValidators {
       OutputBootAddrAttrsSizeValidator,
       OutputsHaveNotEnoughCoinsValidator,
       OutputsHaveTooBigValueStorageSizeValidator,
+      ProposalDepositValidator,
       ProtocolParamsViewHashesMatchValidator,
       ScriptsWellFormedValidator,
       TooManyCollateralInputsValidator,
