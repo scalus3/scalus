@@ -854,6 +854,10 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       crossScalaVersions := supportedScalaVersions,
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for Arbitrary[Certificate] = autoDerived
+      // Testkit classes extend ScalaTest traits, so their pages inherit ScalaTest doc comments
+      // whose links (TestFailedException, NullArgumentException, ...) cannot resolve here.
+      // -Wconf does not reach Scaladoc link warnings, so this also hides testkit's own.
+      Compile / doc / scalacOptions += "-no-link-warnings",
 
       // Improve incremental compilation for cross-platform builds
       Compile / incOptions := {
@@ -1202,6 +1206,8 @@ lazy val scalusVerificationScalatest = project
       jvmReleaseTarget,
       crossScalaVersions := supportedScalaVersions,
       scalacOptions ++= commonScalacOptions,
+      // Suites here extend ScalaTest traits; see the same setting on scalusTestkit.
+      Compile / doc / scalacOptions += "-no-link-warnings",
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion
     )
 
