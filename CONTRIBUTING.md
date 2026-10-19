@@ -115,7 +115,20 @@ Do the steps in order. Each step tells you which file or command to use.
      Emulator and `scalus.cardano.ledger.rules` must follow.
    - Update the [Current state](#current-state) table, even if nothing changed.
 
-2. **Remove old deprecated API** (minor releases only). Release `1.N.0` deletes every
+2. **Update the dependencies.** Take only versions that were published at least 14 days ago. A
+   security fix can skip the wait. Scala Steward applies the same rule (`.scala-steward.conf`), so
+   its open PRs are the list for `build.sbt` and `project/plugins.sbt`:
+
+   ```bash
+   gh pr list --author scala-steward
+   ```
+
+   Apply the updates on master by hand, then close the PRs. Also check what Steward does not cover:
+   the actions in `.github/workflows/`, `package.json` in the root and in `scalus-site/`, and the
+   `nixpkgs` input in `flake.lock`. Step 1 already covers the `plutus` input. Do a breaking major,
+   such as a new `@noble/curves` major, in its own commit.
+
+3. **Remove old deprecated API** (minor releases only). Release `1.N.0` deletes every
    `@deprecated` member whose version is `1.(N-2).x` or older. For example, 1.4.0 deletes the
    members deprecated in 1.0.x, 1.1.x and 1.2.x. List them:
 
@@ -126,17 +139,26 @@ Do the steps in order. Each step tells you which file or command to use.
    Each deletion breaks MiMa. Add a `mimaBinaryIssueFilters` entry with a comment for each one.
    List each deletion in the CHANGELOG `Removed` section, in bold, as a migration hazard.
 
-3. **Write the CHANGELOG.** See "Changelog" in `AGENTS.md`. Rename `## Unreleased` to
+4. **Write the CHANGELOG.** See "Changelog" in `AGENTS.md`. Rename `## Unreleased` to
    `## X.Y.Z (YYYY-MM-DD)`. Compare it with `git log v<last>..HEAD --oneline`, so that no
    user-visible change is missing.
 
-4. **Update the skills.** Follow [When you release](#when-you-release), step 1.
+5. **Check and improve the skills** (`scalus-skills/`):
+   1. Read the new CHANGELOG section. For each added, deprecated or removed API, check if a skill
+      must name it, for example a new intrinsic that is cheaper than the old pattern.
+   2. Search the skills for each deprecated or removed name, for example
+      `git grep -n lovelaceAmount -- scalus-skills/`. Replace it, unless the skill names it as an API
+      to avoid.
+   3. Do [When you release](#when-you-release), step 1.
+   4. Test the working copy: create a project from `validator.g8`, run
+      `claude --plugin-dir <scalus>/scalus-skills` in it, and ask for a small validator with
+      tests. Make sure that the agent loads the skills and uses the current API.
 
-5. **Prepare the npm package.** Set `version` in
+6. **Prepare the npm package.** Set `version` in
    `scalus-cardano-ledger/js/src/main/npm/package.json` to `X.Y.Z`. You publish it after the tag,
    see [Publishing Scalus JS library to NPM](#publishing-scalus-js-library-to-npm).
 
-6. **Run the full gate** in the nix devshell:
+7. **Run the full gate** in the nix devshell:
 
    ```bash
    sbt --batch ci   # ci-jvm;ci-js;ci-native: format, mima, all platforms
@@ -147,7 +169,7 @@ Do the steps in order. Each step tells you which file or command to use.
    versions on the commit that you tag. In `it`, Blockfrost tests fail with a preprod-only key.
    That is not a release blocker.
 
-7. **Get to 0 compiler warnings.** Warnings do not fail CI, so they collect between releases.
+8. **Get to 0 compiler warnings.** Warnings do not fail CI, so they collect between releases.
    Count them in the logs of the CI runs on the commit that you tag, for all jobs:
 
    ```bash
@@ -156,7 +178,7 @@ Do the steps in order. Each step tells you which file or command to use.
 
    Fix each warning, or suppress an intentional one with `@nowarn("msg=...")` and a comment.
 
-8. **Review the MiMa filters.** Each filter added since the last release must have a comment
+9. **Review the MiMa filters.** Each filter added since the last release must have a comment
    that explains the break. Each break must be in the CHANGELOG.
 
 ### Tag and publish
