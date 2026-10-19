@@ -71,6 +71,8 @@ Out of scope:
 - For `outputData.asHash`, the output MUST carry the hash of that datum. `[CO-11]`
 - For `outputData.asHash`, ScalusEmulator MUST add that datum to the Scalus Emulator `datums`. `[CO-12]`
 
+*Revised 2026-10-19:* `[CO-12]` adds the datum with the Scalus Emulator `addDatum`, as `[RW-8]` does.
+
 **Why:** `[CO-9]` to `[CO-11]` copy the Lucid Emulator. `[CO-12]` is new: `getDatum` then finds the datum, as a chain indexer would. The Lucid Emulator returns `undefined` there.
 
 ### 4.3 Wall-clock factory
@@ -81,6 +83,9 @@ Out of scope:
 - `forNetwork` MUST start at the slot that contains `Date.now()`. `[CO-15]`
 - A wall-clock ScalusEmulator MUST NOT carry the emulator brand. `[CO-16]`
 - `protocolParameters(network)` MUST return the `CardanoInfo` preset of `network`, mapped by `[PP-4]`. `[CO-17]`
+- For each UTxO of `options.utxos` that carries a datum hash and its datum, `forNetwork` MUST add the datum as `[RW-8]` and `[RW-9]` state. `[CO-18]`
+
+*Revised 2026-10-19:* `[CO-18]` is new.
 
 **Why:** A test written for Blockfrost calls `Lucid(provider, "Preprod")`. Lucid then takes time from `Date.now()` and the static slot config of `"Preprod"`. `[CO-16]` keeps that path. With the brand, Lucid would read the emulator clock instead. `[CO-13a]`: here the network names the parameters, so the default is not hidden.
 
@@ -127,6 +132,8 @@ new ScalusEmulator(accounts, PROTOCOL_PARAMETERS_DEFAULT);    // what the Lucid 
 **Why:** In a Blockfrost-style test, Lucid builds validity intervals from `Date.now()`. The ledger slot must follow the wall clock, or a lower bound lands in the future. `[TM-9]`: if a test moved the clock ahead, Lucid would keep building intervals from the wall clock, and they would be in the past. Throwing is clearer than that silent mismatch.
 
 *Implementation status:* `[SC-12]` moves `[TM-6]` to `[TM-8]` into the Scalus Emulator. Until then, ScalusEmulator calls `setTime` itself.
+
+*Revised 2026-10-19:* `[TM-6]` to `[TM-8]` are implemented by the Scalus Emulator option `clock: "wall"` (`[SC-12]`). ScalusEmulator does not call `setTime`.
 
 ## 6. Provider methods
 
@@ -180,11 +187,15 @@ new ScalusEmulator(accounts, PROTOCOL_PARAMETERS_DEFAULT);    // what the Lucid 
 | `address` | `address` |
 | `assets.lovelace` | `value.coin` |
 | `assets[unit]` | `quantity` of each `value.assets` entry, keyed by its `unit` |
-| `datumHash` | `datumHash ?? null` |
-| `datum` | hex of `inlineDatum`, or `null` |
-| `scriptRef` | `script ?? null` |
+| `datumHash` | `datumHash`, or `undefined` |
+| `datum` | hex of `inlineDatum`, or `undefined` |
+| `scriptRef` | `script`, or `undefined` |
+
+*Revised 2026-10-19:* `[UM-2]` maps an absent field to `undefined`, not to `null`. Lucid's other providers do the same.
 
 *Implementation status:* before `[SC-11]` ships, `[UM-3]` decodes `scriptRef` with CML inside `withCMLScope`, and only when `scriptRef` is present.
+
+*Revised 2026-10-19:* `[UM-3]` is implemented with `Utxo.script`. The CML fallback is gone.
 
 **Why:** `toScalusUtxo` already maps a Lucid UTxO without CML, and `withScriptRef` takes Lucid's `{ type, script }` shape. One mapping in each direction keeps one place to fix.
 
@@ -210,6 +221,8 @@ new ScalusEmulator(accounts, PROTOCOL_PARAMETERS_DEFAULT);    // what the Lucid 
 | `priceMem` | `priceMemory` | `priceStep` | `priceSteps` |
 
 *Implementation status:* before `[SC-9]` ships, `[PP-1]` patches the preprod preset's `toBlockfrostJson()` and reads it back with `fromBlockfrostJson`. A probe confirmed this works with Lucid's cost models (166/175/297 entries).
+
+*Revised 2026-10-19:* `[PP-1]` is implemented with `EmulatorOptions.protocolParams`. The Blockfrost JSON patch is gone.
 
 **Why:** `[PP-3]` matches `DEFAULT_PROTOCOL_MAJOR_VERSION` in the Lucid Emulator. Parameters that Lucid does not carry (governance, pool, block limits) come from the preset, never from zero.
 
@@ -247,18 +260,25 @@ new ScalusEmulator(accounts, PROTOCOL_PARAMETERS_DEFAULT);    // what the Lucid 
 - `snapshot()` MUST return a new ScalusEmulator over the Scalus Emulator `snapshot()`. `[RW-5]`
 - `addUtxo(utxo: UTxO)` MUST add the UTxO through the Scalus Emulator `addUtxo`. `[RW-6]`
 - ScalusEmulator MUST NOT expose `ledger`, `mempool`, `chain`, `datumTable` or `transactionHistory`. `[RW-7]`
+- When `addUtxo` gets a UTxO with a datum hash and its datum, it MUST add the datum with the Scalus Emulator `addDatum`. `[RW-8]`
+- `addUtxo` MUST throw when that datum does not hash to the datum hash of the UTxO. `[RW-9]`
 
-**Why:** `[RW-1]` and `[RW-3]` copy the Lucid Emulator: registered and delegated accounts receive the rewards, then a block passes. `[RW-7]`: those fields are writable internals of the Lucid Emulator. Emulating them would mean a second ledger beside the Scalus one. Tests that write `emulator.ledger[...]` switch to `addUtxo`.
+*Revised 2026-10-19:* `[RW-8]` and `[RW-9]` are new.
+
+**Why:** `[RW-1]` and `[RW-3]` copy the Lucid Emulator: registered and delegated accounts receive the rewards, then a block passes. `[RW-7]`: those fields are writable internals of the Lucid Emulator. Emulating them would mean a second ledger beside the Scalus one. Tests that write `emulator.ledger[...]` switch to `addUtxo`. `[RW-8]`: `getDatum` then finds the datum of such a UTxO, as a chain indexer would. `[RW-9]`: a datum that does not match its hash cannot be on chain, so a silent store would hide a broken test.
 
 ## 11. Divergences
 
-- The suite run MUST record every divergence in the README, in one of two tables. `[DV-1]`
+- The suite run MUST record every divergence in the README, in one of three tables. `[DV-1]`
 - The "API surface" table MUST list tests that use members excluded by `[RW-7]`. `[DV-2]`
 - The "Ledger rules" table MUST list tests that the Scalus Emulator rejects by a ledger rule. `[DV-3]`
 - Each "Ledger rules" row MUST name the test, the `errorRule` and the real-ledger rule. `[DV-4]`
 - Each "Ledger rules" row MUST have a targeted test that asserts that `errorRule`. `[DV-5]`
 - A divergence MUST NOT be resolved by weakening a Scalus check. `[DV-6]`
 - A divergence MAY be resolved by fixing the test, when the test breaks a real-ledger rule. `[DV-7]`
+- The "Other" table MUST list tests that fail for a reason that is neither API surface nor a ledger rule. `[DV-8]`
+
+*Revised 2026-10-19:* `[DV-1]` names three tables, not two. `[DV-8]` is new. Its rows are tests that assert a rule name the Scalus Emulator spells differently, tests that spy on the Lucid evaluator, and a test that fails on a Scalus issue.
 
 Known divergences, from code reading and probes, before the suite run:
 
@@ -273,14 +293,19 @@ Known divergences, from code reading and probes, before the suite run:
 
 ## 12. Tests
 
-- A vitest project in `scalus-uplc` MUST run the emulator test files of `packages/lucid/test` and `packages/provider/test`. `[TS-1]`
+- A vitest project in `packages/lucid` MUST run the emulator test files of `packages/lucid/test` and `packages/provider/test`. `[TS-1]`
+- `pnpm test:scalus-emulator` MUST run that project. `[TS-1a]`
 - That project MUST replace the Lucid Emulator with ScalusEmulator through a `resolve.alias` shim. `[TS-2]`
 - The shim MUST pass `PROTOCOL_PARAMETERS_DEFAULT` when a test passes no parameters. `[TS-2a]`
-- The shim MUST also catch the relative import `../../../provider/src` in `service.ts`. `[TS-3]`
+- *Withdrawn.* The shim catches the relative import `../../../provider/src` in `service.ts`. `[TS-3]`
 - That project MUST pass `evaluator: emulator.evaluator` to every `Lucid(...)` call it controls. `[TS-4]`
 - The project MUST exclude `emulator-ledger-compat.test.ts` and `emulator-ledger-index.test.ts`. `[TS-5]`
 - The 7 test sites that write `emulator.ledger[...]` MUST switch to an `addUtxo` helper that works on both emulators. `[TS-6]`
 - Each mapping rule in section 7 MUST have a test that fails under the mutation named below. `[TS-7]`
+- The project MUST select as emulator test files every test file of `packages/lucid/test` and `packages/provider/test` that constructs an `Emulator`. `[TS-8]`
+- The project MUST throw when an exclusion of `[TS-5]` names a file that `[TS-8]` does not select. `[TS-9]`
+
+*Revised 2026-10-19:* `[TS-1]` puts the project in `packages/lucid`, not in `scalus-uplc`. `[TS-1a]`, `[TS-8]` and `[TS-9]` are new. `[TS-3]` is withdrawn: no test imports `service.ts`.
 
 | Rule | Mutation the test must catch |
 |---|---|
@@ -293,7 +318,7 @@ Known divergences, from code reading and probes, before the suite run:
 | `[SU-4]` | throw a plain `Error` |
 | `[TM-6]`, `[TM-8]` | no sync; sync backwards |
 
-**Why:** `[TS-2]` runs the existing tests unchanged, so a pass means drop-in. `[TS-2a]` gives the suite the parameters the Lucid Emulator uses, so a divergence comes from the rules, not from the parameters. `[TS-5]`: those files test only the internals of the Lucid Emulator. `[TS-4]` follows decision 2: the suite runs with the emulator's own evaluator.
+**Why:** `[TS-2]` runs the existing tests unchanged, so a pass means drop-in. `[TS-2a]` gives the suite the parameters the Lucid Emulator uses, so a divergence comes from the rules, not from the parameters. `[TS-5]`: those files test only the internals of the Lucid Emulator. `[TS-4]` follows decision 2: the suite runs with the emulator's own evaluator. `[TS-1]`: the tests import `@lucid-evolution/lucid`, so a project in `scalus-uplc` needs a `scalus-uplc` dependency on `lucid`, which is a cycle. `[TS-8]` keeps a new emulator test from escaping the suite. `[TS-9]` keeps a stale exclusion from hiding a renamed file.
 
 ## 13. Scalus changes
 
