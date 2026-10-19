@@ -705,7 +705,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // Scala.js only. Safe because these members exist to be called from JavaScript, and the
       // only way to call them is the `scalus` npm bundle, which is linked from this repo and
       // re-published with it, so no consumer can be holding the previous signatures. Per symbol
-      // rather than a wildcard: `scalus.cardano.ledger` is a MIXED package (CLAUDE.md), so a
+      // rather than a wildcard: `scalus.cardano.ledger` is a MIXED package (AGENTS.md), so a
       // wildcard there would also pre-authorise breaks in the ledger domain types.
       mimaBinaryIssueFilters ++= Seq(
         // `JsUtxo.withScriptRef` widened its parameter from `Uint8Array` to `js.Any` so it also
@@ -1328,7 +1328,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
           "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$8"
         ),
         // The streaming hub's internals churn while the provider implementations are built –
-        // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: CLAUDE.md
+        // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: AGENTS.md
         // reserves wildcards for wholly-internal packages, and a wildcard over the whole
         // `...node.stream` package would also silence a genuine break in the public facade
         // (`BlockchainStreamProvider`, `StreamCapabilities`, `SubscriptionOptions`, …).

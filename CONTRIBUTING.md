@@ -126,7 +126,7 @@ Do the steps in order. Each step tells you which file or command to use.
    Each deletion breaks MiMa. Add a `mimaBinaryIssueFilters` entry with a comment for each one.
    List each deletion in the CHANGELOG `Removed` section, in bold, as a migration hazard.
 
-3. **Write the CHANGELOG.** See "Changelog" in `CLAUDE.md`. Rename `## Unreleased` to
+3. **Write the CHANGELOG.** See "Changelog" in `AGENTS.md`. Rename `## Unreleased` to
    `## X.Y.Z (YYYY-MM-DD)`. Compare it with `git log v<last>..HEAD --oneline`, so that no
    user-visible change is missing.
 
@@ -219,7 +219,7 @@ retired: the templates enable the plugin instead (`.claude/settings.json`).
 
 ### When you change a skill
 
-1. Edit `scalus-skills/skills/<skill>/SKILL.md`. Put contract knowledge here, not in `Claude.md`.
+1. Edit `scalus-skills/skills/<skill>/SKILL.md`. Put contract knowledge here, not in `AGENTS.md`.
 2. Bump `version` in `scalus-skills/.claude-plugin/plugin.json` in the same commit: patch for
    wording, minor for a new rule, a new skill or a hook change. The `Skills` workflow
    (`scripts/check-skills-version.sh`) fails when `scalus-skills/` changes without a bump.
