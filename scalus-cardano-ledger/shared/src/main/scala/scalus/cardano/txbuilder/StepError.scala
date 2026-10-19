@@ -48,8 +48,8 @@ object StepError {
     case class InputAlreadyExists(input: TransactionInput, step: TransactionBuilderStep)
         extends StepError {
         override def explain: String =
-            s"The transaction input $input already exists in the transaction as " +
-                "either an input or reference input."
+            s"The transaction input $input is already in the transaction: a spend adds it to the " +
+                "inputs twice, or a reference adds it to the reference inputs twice."
     }
 
     case class ResolvedUtxosIncoherence(

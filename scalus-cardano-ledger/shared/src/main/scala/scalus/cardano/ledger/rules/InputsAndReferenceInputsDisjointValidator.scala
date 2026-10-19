@@ -1,7 +1,7 @@
 package scalus.cardano.ledger
 package rules
 
-// inputs and refInputs are disjoint, in Conway and later Eras
+// inputs and refInputs are disjoint at protocol versions 9 and 10
 // It's Babbage.disjointRefInputs in cardano-ledger
 // {- inputs ∩ refInputs = ∅ -}
 object InputsAndReferenceInputsDisjointValidator extends STS.Validator {
@@ -12,7 +12,7 @@ object InputsAndReferenceInputsDisjointValidator extends STS.Validator {
 //            && pvMajor (pp ^. ppProtocolVersionL) < natVersion @11
 //        )
         val protocolVersionMajor = context.env.params.protocolVersion.major
-        if protocolVersionMajor < babbageEraProtocolVersionMajor || protocolVersionMajor >= protocolVersionMajor11
+        if protocolVersionMajor <= babbageProtVerHigh || protocolVersionMajor >= protocolVersionMajor11
         then return success
 
         val transactionId = event.id
@@ -31,6 +31,7 @@ object InputsAndReferenceInputsDisjointValidator extends STS.Validator {
         success
     }
 
-    private val babbageEraProtocolVersionMajor = 8
+    // ProtVerHigh BabbageEra in cardano-ledger: the check starts at PV 9
+    private val babbageProtVerHigh = 8
     private val protocolVersionMajor11 = 11
 }

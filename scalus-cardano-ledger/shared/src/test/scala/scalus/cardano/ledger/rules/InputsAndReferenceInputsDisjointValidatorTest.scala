@@ -80,4 +80,29 @@ class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, Validat
         val result = InputsAndReferenceInputsDisjointValidator.validate(context, state, transaction)
         assert(result.isRight)
     }
+
+    test("overlap is rejected only at PV 9 and 10, as Babbage.disjointRefInputs") {
+        // cardano-ledger checks when ProtVerHigh BabbageEra (8) < PV major < 11
+        val inputs = genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
+        val transaction = {
+            val tx = randomTransactionWithIsValidField
+            tx.copy(
+              body = KeepRaw(
+                tx.body.value.copy(
+                  inputs = TaggedSortedSet.from(inputs),
+                  referenceInputs = TaggedSortedSet.from(inputs)
+                )
+              )
+            )
+        }
+        val expected = Seq(7 -> true, 8 -> true, 9 -> false, 10 -> false, 11 -> true)
+        for (major, accepted) <- expected do
+            val c = Context()
+            val context = c.copy(env =
+                c.env.copy(params = c.env.params.copy(protocolVersion = ProtocolVersion(major, 0)))
+            )
+            val result =
+                InputsAndReferenceInputsDisjointValidator.validate(context, State(), transaction)
+            assert(result.isRight == accepted, s"PV $major")
+    }
 }

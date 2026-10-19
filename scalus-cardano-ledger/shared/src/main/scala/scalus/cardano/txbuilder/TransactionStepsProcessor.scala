@@ -206,7 +206,11 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
         for {
             _ <- assertNetworkId(utxo.output.address, spend)
-            _ <- assertInputDoesNotAlreadyExist(utxo.input, spend)
+            _ <- assertInputDoesNotAlreadyExist(
+              utxo.input,
+              ctx.transaction.body.value.inputs,
+              spend
+            )
 
             // Add input
             _ = modify0(
@@ -513,7 +517,11 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def useReferenceOutput(referenceOutput: ReferenceOutput): Result[Unit] =
         for {
             _ <- assertNetworkId(referenceOutput.utxo.output.address, referenceOutput)
-            _ <- assertInputDoesNotAlreadyExist(referenceOutput.utxo.input, referenceOutput)
+            _ <- assertInputDoesNotAlreadyExist(
+              referenceOutput.utxo.input,
+              ctx.transaction.body.value.referenceInputs,
+              referenceOutput
+            )
 
             _ = modify0(
               // Add the referenced utxo id to the tx body
@@ -1164,14 +1172,17 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         }
     }
 
-    /** Returns Left if the input already exists in txBody.inputs or txBody.refInputs */
+    /** Returns Left if `input` is already in `existing`: the inputs for a spend, the reference
+      * inputs for a reference. A spent input may also be referenced: the ledger accepts that at
+      * every protocol version but 9 and 10, where `InputsAndReferenceInputsDisjointValidator`
+      * rejects it.
+      */
     private def assertInputDoesNotAlreadyExist(
         input: TransactionInput,
+        existing: TaggedSortedSet[TransactionInput],
         step: TransactionBuilderStep,
     ): Result[Unit] =
-        if (ctx.transaction.body.value.inputs.toSet ++ ctx.transaction.body.value.referenceInputs.toSet)
-                .contains(input)
-        then Left(InputAlreadyExists(input, step))
+        if existing.toSet.contains(input) then Left(InputAlreadyExists(input, step))
         else Ok
 
     private def useRequireSignature(

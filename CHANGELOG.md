@@ -98,6 +98,14 @@ Evolution provider needs.
 
 ### Fixed
 
+- The Emulator rejected a transaction that spends and references the same UTxO at protocol
+  version 8. The ledger's `disjointRefInputs` checks it only at versions 9 and 10, so the Emulator
+  now accepts such a transaction at version 8 too.
+- `TxBuilder` refused to spend a UTxO and reference it in one transaction, with
+  `InputAlreadyExists`. The ledger accepts this from protocol version 11, for example to spend a
+  script UTxO that carries its own validator as a reference script. A spend now checks only the
+  inputs and a reference only the reference inputs; at versions 9 and 10 the ledger rules still
+  reject the overlap.
 - The Emulator's value-conservation check added amounts as `Long`s, so a sum past `Long.MaxValue`
   wrapped around. A transaction could create ADA or tokens from nothing, for example two outputs of
   `Long.MaxValue` lovelace from a 10 ADA input, or make tokens vanish without a burn, and the
