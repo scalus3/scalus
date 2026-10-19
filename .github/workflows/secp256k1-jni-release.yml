@@ -26,7 +26,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -41,7 +41,7 @@ jobs:
           nix develop .#ci-secp --accept-flake-config --command bash -c "cd scalus-secp256k1-jni && make"
 
       - name: Upload native library
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: native-${{ matrix.platform }}
           path: scalus-secp256k1-jni/src/main/resources/natives/${{ matrix.platform }}/
@@ -54,7 +54,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -65,7 +65,7 @@ jobs:
           use-flakehub: false
 
       - name: Download all native libraries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: scalus-secp256k1-jni/src/main/resources/natives/
           pattern: native-*
