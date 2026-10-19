@@ -30,7 +30,7 @@ object YaciConfig {
     /** Default `bloxbean/yaci-cli` image tag.
       *
       * 0.12.0-beta5 is the newest multi-arch image and runs a protocol version 11 (van Rossem)
-      * devnet node, matching current mainnet. [[YaciContainer]] starts it in companion node mode,
+      * devnet node, matching current mainnet. `YaciContainer` starts it in companion node mode,
       * where the Yano bootstrap installs the full PV11 cost models, so PV11-compiled scripts run on
       * the devnet.
       */

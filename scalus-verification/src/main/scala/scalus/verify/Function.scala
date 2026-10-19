@@ -86,7 +86,8 @@ enum UplcSignature {
     case Backend(backend: TargetLoweringBackend)
 
     /** Whether two signatures are the same calling convention. Representations compare by
-      * [[LoweredValueRepresentation.stableKey]], which ignores the identity of type references.
+      * [[scalus.compiler.sir.lowering.LoweredValueRepresentation.stableKey]], which ignores the
+      * identity of type references.
       */
     def agrees(other: UplcSignature): Boolean = (this, other) match
         case (Represented(parameters, result), Represented(otherParameters, otherResult)) =>
@@ -236,7 +237,7 @@ object FunctionDef {
             )
 
     /** A one-parameter `@Compile` method, named after it and compiled with the module's pinned
-      * options ([[UplcBlaster.options]]): `FunctionDef(Helpers.double)`.
+      * options ([[scalus.verify.uplcblaster.UplcBlaster.options]]): `FunctionDef(Helpers.double)`.
       */
     inline def apply[A, R](inline f: A => R): FunctionDef[A, R] =
         fromCompiled(

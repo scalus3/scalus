@@ -18,7 +18,7 @@ object TxBalance {
 
     /** The value `tx` consumes, as Haskell `conwayConsumed`.
       *
-      * @throws ArithmeticException
+      * @throws java.lang.ArithmeticException
       *   when an amount does not fit in a `Long`
       */
     def consumed(
@@ -67,7 +67,7 @@ object TxBalance {
     /** The value `tx` produces, with a pool deposit for every pool registration, as no pool is
       * registered. Use the overload with a [[CertState]] for a tx that may re-register a pool.
       *
-      * @throws ArithmeticException
+      * @throws java.lang.ArithmeticException
       *   when an amount does not fit in a `Long`
       */
     def produced(tx: Transaction, protocolParams: ProtocolParams): Value =
@@ -76,7 +76,7 @@ object TxBalance {
     /** The value `tx` produces, as Haskell `conwayProducedValue`. A pool registration pays the pool
       * deposit only for a pool not in `certState` and not registered earlier in the tx.
       *
-      * @throws ArithmeticException
+      * @throws java.lang.ArithmeticException
       *   when an amount does not fit in a `Long`
       */
     def produced(tx: Transaction, certState: CertState, protocolParams: ProtocolParams): Value =

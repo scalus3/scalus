@@ -354,6 +354,10 @@ lazy val scalusPlugin = project
       // version gets its own published artifact – including the plugin-only 3.3.7.
       crossScalaVersions := pluginScalaVersions,
       scalacOptions ++= commonScalacOptions,
+      // The plugin compiles copies of some scalus-core files (src/main/shared), without the rest of
+      // scalus-core. Their Scaladoc links to the missing core types cannot resolve here, and the
+      // real documentation of those files is published with scalus-core.
+      Compile / doc / scalacOptions += "-no-link-warnings",
       // Plugin links scala3-compiler; the 3.8.x/3.9.x lines are JDK-17 bytecode, 3.3 LTS is JDK 11.
       jvmReleaseTarget,
 //      scalacOptions += "-Wunused:all",

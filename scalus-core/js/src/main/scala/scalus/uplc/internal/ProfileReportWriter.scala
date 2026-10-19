@@ -17,7 +17,7 @@ import scalus.uplc.eval.ProfilingData
 object ProfileReportWriter {
 
     /** Does nothing on JS; see the object note. The signature matches the JVM implementation so
-      * shared callers ([[scalus.cardano.ledger.PlutusScriptEvaluator]], `ScalusTest`) compile
+      * shared callers (`scalus.cardano.ledger.PlutusScriptEvaluator`, `ScalusTest`) compile
       * unchanged.
       */
     def write(

@@ -33,10 +33,10 @@ package object scalus {
       * `address`, and the Scalus tag applied per [[scalus.compiler.Options]].
       */
     extension (sir: SIR)
-        /** Pretty-prints the SIR as a plain-text [[Doc]]. */
+        /** Pretty-prints the SIR as a plain-text `Doc`. */
         def pretty: Doc = PrettyPrinter.pretty(sir, Style.Normal)
 
-        /** Pretty-prints the SIR as a [[Doc]] with XTerm color escape codes. */
+        /** Pretty-prints the SIR as a `Doc` with XTerm color escape codes. */
         def prettyXTerm: Doc = PrettyPrinter.pretty(sir, Style.XTerm)
 
         /** Renders [[pretty]] at 80 columns. */
@@ -48,7 +48,7 @@ package object scalus {
         /** First line of the rendered SIR, truncated to 60 characters - for log messages. */
         def showShort: String = truncateForDisplay(pretty.render(100), 60)
 
-        /** Lowers the SIR to a UPLC [[Term]] through the single
+        /** Lowers the SIR to a UPLC [[scalus.uplc.Term]] through the single
           * [[scalus.compiler.sir.lowering.UplcPipeline]] (the same pipeline
           * [[scalus.uplc.CompiledPlutus]] uses): removeTraces? -> mutual-recursion elimination ->
           * static-argument transformation? -> backend lowering -> optimization? -> source-position
@@ -58,8 +58,8 @@ package object scalus {
           * [[scalus.uplc.PlutusV3.compile]] instead - it also produces the versioned program,
           * serialized script, and script address.
           *
-          * Each parameter defaults to the corresponding field of the given [[Options]] and
-          * overrides it when passed explicitly.
+          * Each parameter defaults to the corresponding field of the given
+          * [[scalus.compiler.Options]] and overrides it when passed explicitly.
           *
           * @param generateErrorTraces
           *   emit `trace` calls with error details on failure paths (bigger, costlier script)
@@ -114,8 +114,9 @@ package object scalus {
 
         /** Exposes the V3 backend's intermediate lowering result.
           *
-          * [[LoweredValue]] is compiler-internal IR with no stability guarantees, and this method
-          * bypasses the unified pipeline (no trace removal, no SIR-level optimization).
+          * [[scalus.compiler.sir.lowering.LoweredValue]] is compiler-internal IR with no stability
+          * guarantees, and this method bypasses the unified pipeline (no trace removal, no
+          * SIR-level optimization).
           */
         @deprecated(
           "internal lowering IR; use SirToUplcV3Lowering.fromOptions(sir, options).toLoweredValue() " +
@@ -132,7 +133,7 @@ package object scalus {
             SirToUplcV3Lowering.fromOptions(sir, eff, eff.debug).toLoweredValue()
         }
 
-        /** Lowers with the given [[Options]] only (no parameter overrides). */
+        /** Lowers with the given [[scalus.compiler.Options]] only (no parameter overrides). */
         @deprecated("use toUplc instead", "1.0.0")
         def lowerToUplc(using options: Options = Options()): Term = toUplc(using options)()
 

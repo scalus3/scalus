@@ -17,8 +17,8 @@ def decode[A: Flat](dec: DecoderState): A = summon[Flat[A]].decode(dec)
   * programs and SIR modules are serialized with instances of this trait.
   */
 trait Flat[A]:
-    /** Exact size of the encoding of `a` in bits. Callers use it to size the [[EncoderState]]
-      * buffer, so it must never under-estimate.
+    /** Exact size of the encoding of `a` in bits. Callers use it to size the
+      * [[scalus.serialization.flat.EncoderState]] buffer, so it must never under-estimate.
       */
     def bitSize(a: A): Int
 
@@ -27,8 +27,8 @@ trait Flat[A]:
       * The buffer does not grow, so it must already have room for [[bitSize]] bits. Failing that is
       * a defect in this instance rather than a problem with `a`: an under-estimating `bitSize`
       * overruns the buffer with an `ArrayIndexOutOfBoundsException`, and a negative size is
-      * rejected by [[EncoderState]] with an `IllegalArgumentException`. Use
-      * [[FlatCodec.encode[A](value:A)*]] to get the sizing right.
+      * rejected by [[scalus.serialization.flat.EncoderState]] with an `IllegalArgumentException`.
+      * Use [[FlatCodec.encode[A](value:A)*]] to get the sizing right.
       */
     def encode(a: A, encode: EncoderState): Unit
 
@@ -37,7 +37,7 @@ trait Flat[A]:
       * Decoding stops as soon as it has an `A`; it does not check for trailing input, so a caller
       * that requires the whole buffer to be consumed must check that itself.
       *
-      * @throws FlatDecodingError
+      * @throws scalus.serialization.flat.FlatDecodingError
       *   if the input is truncated or is not a valid encoding of `A`. Bytes from an untrusted
       *   source are expected to fail this way; any other exception is a defect.
       */

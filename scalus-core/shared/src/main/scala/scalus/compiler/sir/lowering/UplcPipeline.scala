@@ -99,8 +99,9 @@ object UplcPipeline {
     }
 
     /** The optimizer `run` should use when the caller has no version-specific one: V1/V2 ->
-      * [[V1V2Optimizer]] (V3Optimizer's CaseConstrApply emits Case/Constr terms that are illegal
-      * before Plutus V3); otherwise [[V3Optimizer]] configured from the options.
+      * [[scalus.uplc.transform.V1V2Optimizer]] (V3Optimizer's CaseConstrApply emits Case/Constr
+      * terms that are illegal before Plutus V3); otherwise [[scalus.uplc.transform.V3Optimizer]]
+      * configured from the options.
       */
     def defaultOptimizer(language: Language, options: Options): Optimizer =
         language match

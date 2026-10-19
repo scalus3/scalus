@@ -119,9 +119,9 @@ object TxBuilderException {
     /** Sufficient collateral cannot be selected within the protocol's collateral input limit.
       *
       * Thrown when the required collateral cannot be covered by at most
-      * [[ProtocolParams.maxCollateralInputs]] UTxOs at the sponsor address (e.g. the wallet is
-      * fragmented into many small UTxOs). Consolidate UTxOs or provide explicit collateral via
-      * `collaterals(...)`.
+      * [[scalus.cardano.ledger.ProtocolParams.maxCollateralInputs]] UTxOs at the sponsor address
+      * (e.g. the wallet is fragmented into many small UTxOs). Consolidate UTxOs or provide explicit
+      * collateral via `collaterals(...)`.
       */
     final case class CollateralUnavailableException(
         required: Coin,

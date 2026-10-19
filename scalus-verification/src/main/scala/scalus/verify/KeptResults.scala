@@ -105,7 +105,8 @@ final class KeptResults private (
             used.getOrDefault(name, Set.empty) - ""
 
     /** Takes out what no test states any longer, and writes into each entry the tests that state
-      * it, where the run is one that keeps ([[Mode.Use]], [[Mode.Recalculate]]).
+      * it, where the run is one that keeps ([[KeptResults.Mode.Use]],
+      * [[KeptResults.Mode.Recalculate]]).
       *
       * Of the tests of an entry ([[testsOf]]), one goes that is among `completed`, the tests that
       * ran to their end, and did not use it: the test no longer states it. A test that failed, was

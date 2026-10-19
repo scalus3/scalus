@@ -25,7 +25,7 @@ object RefScriptFee {
 
     /** Fee for `sizeInBytes` total reference-script bytes at base price `costPerByte`.
       *
-      * @throws ArithmeticException
+      * @throws java.lang.ArithmeticException
       *   if the final fee exceeds the range of Coin.
       */
     @static

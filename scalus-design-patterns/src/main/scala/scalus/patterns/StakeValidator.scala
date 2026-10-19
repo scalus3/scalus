@@ -13,9 +13,9 @@ import scalus.cardano.onchain.plutus.v3.{Credential, Lovelace, Redeemer, ScriptP
   * more optimized script can be implemented.
   *
   * @see
-  *   [[scalus.examples.StakeValidatorPaymentSplitterExample]]
+  *   `scalus.examples.StakeValidatorPaymentSplitterExample`
   * @see
-  *   [[scalus.examples.MultiPoolDexExample]]
+  *   `scalus.examples.MultiPoolDexExample`
   * @see
   *   [[https://github.com/Anastasia-Labs/design-patterns/tree/main/stake-validator]]
   */

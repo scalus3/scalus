@@ -13,11 +13,11 @@ import scala.quoted.*
   *     call generated below. That call is the *outermost* node of the whole program, so its source
   *     position becomes the program's root position. The Scala→SIR→UPLC pipeline strips source
   *     positions from most of the generated `Apply`/`Case`/`Constr` spine, and the
-  *     post-optimization position-fill ([[scalus.uplc.Compiled.toUplc]]) back-fills those nodes
-  *     from their nearest positioned ancestor — which, for framework glue with no user code inside
-  *     it, is this root. So a large amount of compiler-generated glue used to be attributed to
-  *     whatever line this macro happened to sit on (it was `Macros.scala:589`), turning that line
-  *     into a fake profiling hot-spot and a call-graph hub.
+  *     post-optimization position-fill ([[scalus.uplc.CompiledPlutus.toUplc]]) back-fills those
+  *     nodes from their nearest positioned ancestor — which, for framework glue with no user code
+  *     inside it, is this root. So a large amount of compiler-generated glue used to be attributed
+  *     to whatever line this macro happened to sit on (it was `Macros.scala:589`), turning that
+  *     line into a fake profiling hot-spot and a call-graph hub.
   *   - Giving the macro its own file with a stable, descriptive name makes that attribution (a)
   *     self-documenting in profiles — it reads as `CompiledProgramRoot:N`, not a random
   *     `Macros:589` — and (b) immune to line drift when unrelated macros are edited.

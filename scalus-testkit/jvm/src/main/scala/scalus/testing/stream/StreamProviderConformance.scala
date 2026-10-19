@@ -11,19 +11,20 @@ import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success}
 
-/** What a [[BlockchainStreamProvider]] must do, whatever it is backed by.
+/** What a [[scalus.cardano.node.stream.BlockchainStreamProvider]] must do, whatever it is backed
+  * by.
   *
   * The point of the facade is that application code moves between an emulator, a REST-backed
   * provider and a full indexer by changing construction and nothing else. That promise needs a
   * test, not a paragraph: every implementation runs this suite, including implementations living
   * outside this repository.
   *
-  * The suite reads the provider's own [[StreamCapabilities]] and holds it to what it declared — so
-  * it does not merely check that a provider works, it checks that its self-description is
-  * **honest**. A provider claiming it never signals rollbacks must not emit one; a provider
-  * claiming it cannot replay must refuse `StartFrom.At`; a provider claiming a query kind is
-  * indexed must accept it without `allowUnindexedScan`. That is what makes capabilities safe to act
-  * on.
+  * The suite reads the provider's own [[scalus.cardano.node.stream.StreamCapabilities]] and holds
+  * it to what it declared — so it does not merely check that a provider works, it checks that its
+  * self-description is **honest**. A provider claiming it never signals rollbacks must not emit
+  * one; a provider claiming it cannot replay must refuse `StartFrom.At`; a provider claiming a
+  * query kind is indexed must accept it without `allowUnindexedScan`. That is what makes
+  * capabilities safe to act on.
   */
 abstract class StreamProviderConformance extends AnyFunSuite {
 

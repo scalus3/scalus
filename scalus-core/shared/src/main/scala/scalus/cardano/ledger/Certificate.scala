@@ -243,7 +243,7 @@ object Certificate {
       *   Certificates in the transaction
       * @return
       *   Total deposit amount
-      * @throws ArithmeticException
+      * @throws java.lang.ArithmeticException
       *   when the total does not fit in a `Long`
       */
     def shelleyTotalDeposits(
@@ -299,7 +299,7 @@ object Certificate {
       *   Certificates in the transaction
       * @return
       *   Total DRep deposit amount
-      * @throws ArithmeticException
+      * @throws java.lang.ArithmeticException
       *   when the total does not fit in a `Long`
       */
     def conwayDRepDeposits(

@@ -887,9 +887,10 @@ class BlockfrostProvider(
       */
     private val scriptRefCache = TrieMap.empty[ScriptHash, Future[ScriptRef]]
 
-    /** Resolve a script by hash into a [[ScriptRef]] via `GET /scripts/{hash}` plus
-      * `/scripts/{hash}/cbor` (Plutus) or `/scripts/{hash}/json` (timelock). The reconstructed
-      * script is verified to hash back to `scriptHash`. Results are cached per provider.
+    /** Resolve a script by hash into a [[scalus.cardano.ledger.ScriptRef]] via
+      * `GET /scripts/{hash}` plus `/scripts/{hash}/cbor` (Plutus) or `/scripts/{hash}/json`
+      * (timelock). The reconstructed script is verified to hash back to `scriptHash`. Results are
+      * cached per provider.
       */
     def resolveScriptRef(scriptHash: ScriptHash): Future[ScriptRef] =
         scriptRefCache.getOrElseUpdate(

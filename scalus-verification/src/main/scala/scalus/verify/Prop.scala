@@ -13,8 +13,8 @@ enum PropExpr[A] {
   *
   * See `docs/design/verification-overview.md`, §3. Statements are built with the combinators in
   * [[Props]] ([[Props.forAll]], [[Props.exists]], [[Props.existsLet]], [[Props.call]],
-  * [[Props.whenReturns]], [[Props.denotes]], [[equal]]) and the connectives below. Source lambdas
-  * are syntax sugar; the runtime form uses explicit [[PropExpr.Ident]] values.
+  * [[Props.whenReturns]], [[Props.denotes]], [[Props.equal]]) and the connectives below. Source
+  * lambdas are syntax sugar; the runtime form uses explicit [[PropExpr.Ident]] values.
   *
   * This is the runtime representation of a statement. The compiler captures source syntax into
   * explicit logical nodes and SIR terms; proving tactics consume those nodes directly.
@@ -23,9 +23,10 @@ enum PropExpr[A] {
   * compiler. A call names its function in a [[FunctionTable]].
   *
   * Semantics (§3.3): the `Bool` leaf contains Boolean code whose result is interpreted under
-  * on-chain semantics. An error is not `true`. [[denotes]] states separately that an expression
-  * terminates without an error. Connectives are classical. `!` on a `Prop` is logical negation; `!`
-  * inside a Boolean expression is part of the test. The two differ when the expression can fail.
+  * on-chain semantics. An error is not `true`. [[Props.denotes]] states separately that an
+  * expression terminates without an error. Connectives are classical. `!` on a `Prop` is logical
+  * negation; `!` inside a Boolean expression is part of the test. The two differ when the
+  * expression can fail.
   *
   * Precedence: Scala ranks an operator by its first character, so `==>` binds like `==` and `<=>`
   * like `<`, both tighter than `&&` and `||`. `p && q ==> r` therefore means `p && (q ==> r)`.

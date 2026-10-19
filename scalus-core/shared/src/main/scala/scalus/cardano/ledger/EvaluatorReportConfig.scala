@@ -40,7 +40,7 @@ enum ProfileDestination:
 /** One profile rendering: a format plus where it lands. */
 final case class ProfileOutput(format: ProfileFormat, destination: ProfileDestination)
 
-/** Controls all diagnostic output of [[PlutusScriptEvaluator]].
+/** Controls all diagnostic output of `PlutusScriptEvaluator`.
   *
   * Replaces the former lone `debugDumpFilesForTesting: Boolean`. Construct one directly, derive one
   * from the legacy boolean with [[EvaluatorReportConfig.fromLegacyBoolean]], or layer environment

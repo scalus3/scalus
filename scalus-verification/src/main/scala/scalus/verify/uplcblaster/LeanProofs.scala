@@ -575,10 +575,11 @@ object LeanProofs {
     }
 
     /** The Lean workspace of a project's own in `directory`, made ready
-      * ([[LeanWorkspaceTool.init]]): created where it is missing, with Scalus's Lean library where
-      * its lakefile requires it from. That needs neither Lean nor the network. So whoever states
-      * proofs has the workspace in a checkout that has run nothing else, and the results kept for
-      * them stand there: they rest on the library's sources, which are not committed.
+      * ([[scalus.verify.lean.LeanWorkspaceTool.init]]): created where it is missing, with Scalus's
+      * Lean library where its lakefile requires it from. That needs neither Lean nor the network.
+      * So whoever states proofs has the workspace in a checkout that has run nothing else, and the
+      * results kept for them stand there: they rest on the library's sources, which are not
+      * committed.
       *
       * It fails where the workspace does not agree with the library. Its checks would run with
       * another Lean, or other packages, than the library is for.

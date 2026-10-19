@@ -13,7 +13,7 @@ import scala.util.control.NonFatal
 /** Renders a CEK profile to the destinations an [[scalus.cardano.ledger.EvaluatorReportConfig]]
   * asks for and indexes the files it wrote in `profile-manifest.json`.
   *
-  * Extracted from [[scalus.cardano.ledger.PlutusScriptEvaluator]] so that profiles produced outside
+  * Extracted from `scalus.cardano.ledger.PlutusScriptEvaluator` so that profiles produced outside
   * the ledger — test suites that evaluate UPLC directly, via `ScalusTest.runWithProfileReport` —
   * land on disk in exactly the same shape, and tools such as the Scalus VS Code extension consume
   * both identically.
@@ -22,9 +22,9 @@ import scala.util.control.NonFatal
   * guarantees: the on-disk format is the contract, not this API.
   *
   * JVM implementation; the JS build substitutes a no-op stub of the same FQN, keeping
-  * [[ProfileFormatter]] (HTML/CSS/JS templates, Tarjan pass), the jsoniter manifest codec and the
-  * UPLC source-map renderer dead-code-eliminated from the published `scalus.js` bundle, which
-  * transaction builders depend on and which must stay small.
+  * [[scalus.uplc.eval.ProfileFormatter]] (HTML/CSS/JS templates, Tarjan pass), the jsoniter
+  * manifest codec and the UPLC source-map renderer dead-code-eliminated from the published
+  * `scalus.js` bundle, which transaction builders depend on and which must stay small.
   */
 object ProfileReportWriter {
 
@@ -68,9 +68,9 @@ object ProfileReportWriter {
       *   [[scalus.cardano.ledger.ProfileLevel.Full]], and only alongside at least one rendered
       *   profile file, it adds a `<key>.uplc.json` source map (the UPLC text plus text-range →
       *   Scala-source spans) to the report, indexed as format `"uplc"`. It is not a
-      *   [[scalus.cardano.ledger.ProfileFormat]] because those are rendered from [[ProfilingData]],
-      *   which carries no term. Terms decoded from CBOR carry no annotations, and nothing is
-      *   written for them.
+      *   [[scalus.cardano.ledger.ProfileFormat]] because those are rendered from
+      *   [[scalus.uplc.eval.ProfilingData]], which carries no term. Terms decoded from CBOR carry
+      *   no annotations, and nothing is written for them.
       */
     def write(
         data: ProfilingData,
