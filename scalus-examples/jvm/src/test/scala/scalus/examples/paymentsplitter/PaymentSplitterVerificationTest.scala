@@ -8,7 +8,7 @@ import scalus.cardano.onchain.plutus.v2.TxOut
 import scalus.cardano.onchain.plutus.v3.{ScriptContext, ScriptInfo, TxCert, TxId, TxInInfo, TxInfo, TxOutRef}
 import scalus.compiler.Compile
 import scalus.examples.vesting.VestingVerificationTest.{scriptContext, spendingInfo}
-import scalus.uplc.builtin.Builtins.{constrData, lengthOfByteString, mkCons, mkNilData, unConstrData}
+import scalus.uplc.builtin.Builtins.{constrData, mkCons, mkNilData, unConstrData}
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data

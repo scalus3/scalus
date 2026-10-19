@@ -3,7 +3,7 @@ package scalus.uplc.jit
 import scalus.uplc.eval.*
 import scalus.uplc.{DeBruijnedProgram, Term}
 
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.{Files, Paths}
 import scala.jdk.CollectionConverters.*
 import scala.quoted.staging
 import scala.util.Try
