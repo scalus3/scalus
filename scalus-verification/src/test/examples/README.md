@@ -4,24 +4,25 @@
 reports of verifying a Scala function after compilation to UPLC with `UplcBlaster`.
 
 The function computes `half(x) = ceil(|x| / 2)` using a sign branch and integer division.
-For example, `half(-5) = 3`, `half(0) = 0`, and `half(4) = 2`. `FunctionDef` captures
-the function and `call` inserts its compiled code into each property.
+For example, `half(-5) = 3`, `half(0) = 0`, and `half(4) = 2`. The properties call
+`half(x)` directly. The property macro captures these expressions, and UplcBlaster
+links the `@Compile` function into the UPLC predicates it verifies.
 
 | Case | Statement | Expected result |
 | --- | --- | --- |
-| [Proof](BigIntVerificationTest.scala#L31) | For every integer `x`, `abs(x) <= 2 * half(x) <= abs(x) + 1` | Proven |
-| [Counterexample](BigIntVerificationTest.scala#L44) | For every nonnegative integer `x`, `2 * half(x) == x` | Refuted; any nonnegative odd input, such as `1`, violates it |
-| [No solutions](BigIntVerificationTest.scala#L57) | There is no integer `x` for which `half(x) < 0` | Proven by showing `half(x) >= 0` for every input |
-| [Inconclusive](BigIntVerificationTest.scala#L62) | The same nonnegativity property, with only 3 Lean evaluation steps | Inconclusive; the candidate counterexample is spurious on CEK replay |
+| [Proof](BigIntVerificationTest.scala#L29) | For every integer `x`, `abs(x) <= 2 * half(x) <= abs(x) + 1` | Proven |
+| [Counterexample](BigIntVerificationTest.scala#L40) | For every nonnegative integer `x`, `2 * half(x) == x` | Refuted; any nonnegative odd input, such as `1`, violates it |
+| [No solutions](BigIntVerificationTest.scala#L52) | There is no integer `x` for which `half(x) < 0` | Proven by showing `half(x) >= 0` for every input |
+| [Inconclusive](BigIntVerificationTest.scala#L57) | The same nonnegativity property, with only 3 Lean evaluation steps | Inconclusive; the candidate counterexample is spurious on CEK replay |
 
 The counterexample test checks the input returned by the solver and prints it; the solver
 may choose a different odd integer on another run. `UplcBlaster` replays a counterexample
 on the Scalus CEK before reporting a refutation. An inconclusive result establishes
 neither truth nor falsity; here the deliberately small budget prevents a proof.
 
-In the initial run, all four tests passed with Lean: the counterexample was `x = 1`,
+In a run of this direct-call example, all four tests passed with Lean: the counterexample was `x = 1`,
 `half(x) = 1`. The inconclusive check produced the spurious candidate `x = 0`; Lean
-reported that the property holds there from 52 steps onward, exceeding the budget of 3.
+reported that the property holds there from 42 steps onward, exceeding the budget of 3.
 
 The step budgets bound symbolic evaluation on Lean's CEK model. They are not Cardano
 execution units. Successful checks use Blaster and its SMT solver, whose verdict Lean
