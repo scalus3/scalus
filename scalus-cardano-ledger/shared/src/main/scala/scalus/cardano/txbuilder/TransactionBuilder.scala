@@ -1064,13 +1064,10 @@ object TransactionBuilder {
         // transaction's own deregistration certificates. The ledger enforces these declared
         // amounts equal the actual deposits (GOVCERT `ConwayDRepIncorrectRefund`), so this yields
         // exactly the refund a node computes. Stake-key refunds don't need this when `UnregCert`
-        // carries its refund, which `TxBalance` uses. A legacy `UnregCert(cred, None)` balances
-        // with no refund unless `certState` holds the account, so the `TxBuilder.deregisterStake`
-        // overloads always state one.
-        val consumed = TxBalance
-            .consumedExact(tx, withDeclaredDRepRefunds(tx, certState), utxo, params)
-            .toTry
-            .get
+        // carries its refund, which `TxBalance` uses. A legacy `UnregCert(cred, None)` states
+        // none, so its account gets the current key deposit unless `certState` holds it.
+        val assumed = withAssumedStakeDeposits(tx, withDeclaredDRepRefunds(tx, certState), params)
+        val consumed = TxBalance.consumedExact(tx, assumed, utxo, params).toTry.get
         (consumed - produced).toValue
     }
 
@@ -1084,6 +1081,32 @@ object TransactionBuilder {
         }.toMap
         val vstate = certState.vstate
         certState.copy(vstate = vstate.copy(dreps = vstate.dreps ++ drepDeposits))
+    }
+
+    /** `certState` with an account for each legacy `UnregCert(cred, None)` of `tx` that `certState`
+      * does not hold, its deposit the current `stakeAddressDeposit`.
+      *
+      * The ledger refunds the deposit recorded when the key was registered. Without that record the
+      * current key deposit is the best estimate: it differs only if `stakeAddressDeposit` changed
+      * since, and then the ledger rejects the tx with `ValueNotConserved`.
+      */
+    private def withAssumedStakeDeposits(
+        tx: Transaction,
+        certState: CertState,
+        params: ProtocolParams
+    ): CertState = {
+        val accounts = certState.dstate.accounts
+        val assumed = tx.body.value.certificates.toSeq.collect {
+            case Certificate.UnregCert(cred, None) if !accounts.contains(cred) =>
+                cred -> ConwayAccountState(
+                  balance = Coin.zero,
+                  deposit = Coin(params.stakeAddressDeposit),
+                  stakePoolDelegation = None,
+                  dRepDelegation = None
+                )
+        }
+        if assumed.isEmpty then certState
+        else certState.copy(dstate = certState.dstate.copy(accounts = accounts ++ assumed))
     }
 
     // -------------------------------------------------------------------------

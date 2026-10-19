@@ -1323,6 +1323,37 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         )
     }
 
+    test("calculateChangeValue refunds a legacy stake deregistration") {
+        val params = CardanoInfo.mainnet.protocolParams
+        val credential = RewardAccount(Alice.account.stakeAddress(Mainnet)).address.credential
+        val input = Input(TransactionHash.fromHex("0" * 64), 0)
+        val utxos: Utxos = Map(input -> Output(Alice.address, Value.ada(1000)))
+        val tx = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet.from(utxos.keySet),
+            outputs = IndexedSeq.empty,
+            fee = Coin.ada(1),
+            certificates = TaggedOrderedStrictSet.from(Seq(Certificate.UnregCert(credential, None)))
+          )
+        )
+        val recorded = CertState(dstate =
+            DelegationState(accounts =
+                Map(credential -> ConwayAccountState(Coin.zero, Coin.ada(3), None, None))
+            )
+        )
+
+        // Without the account, the refund is the current key deposit
+        assert(
+          TransactionBuilder.calculateChangeValue(tx, utxos, params) ==
+              Value(Coin.ada(999) + Coin(params.stakeAddressDeposit))
+        )
+        // With the account, the refund is its recorded deposit, as in the ledger
+        assert(
+          TransactionBuilder.calculateChangeValue(tx, utxos, params, recorded) ==
+              Value.ada(1002)
+        )
+    }
+
     test("calculateChangeValue against a CertState takes the change of totals past Long.MaxValue") {
         import alicePool.*
         // Both sides hold 2 * (2^62 + 1) of the token, more than a Long holds; the change is ADA only
