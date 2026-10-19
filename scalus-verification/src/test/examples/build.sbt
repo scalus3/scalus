@@ -32,4 +32,8 @@ Test / scalacOptions ++= preparedLines(baseDirectory.value, "scalac-options")
     .filterNot(_ == "-Xsemanticdb")
 Test / fork := true
 Test / javaOptions += "-Xss64M"
+// Suppress sun.misc.Unsafe deprecation warnings from Scala 3.3.x lazy vals (Java 23+)
+Test / javaOptions ++= (if (sys.props("java.specification.version").toInt >= 23)
+                            Seq("--sun-misc-unsafe-memory-access=allow")
+                        else Nil)
 Test / envVars += "SCALUS_REQUIRE_LEAN" -> "1"
