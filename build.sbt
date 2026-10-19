@@ -1670,10 +1670,6 @@ addCommandAlias(
   "precommit",
   "clean;docs/clean;scalafmtAll;scalafmtSbt;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;jvm/test"
 )
-addCommandAlias(
-  "ci",
-  "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;Test/compile;scalusCardanoLedgerIt/Test/compile;Test/nativeLink;test;mima"
-)
 // Task list shared by every cross-version CI job. We must NOT use the `jvm` aggregate here:
 // modules that don't list the cross version (scalusUplcJitCompiler, scalusUtxoCell, bench) fall
 // back to the default LTS and then fail to read the cross-version TASTy of scalus-core they depend
@@ -1728,6 +1724,9 @@ addCommandAlias(
   "ci-native",
   "clean;native/Test/compile;native/test"
 )
+// The CI jobs for the default Scala version in one command. Do not build it on the root aggregate:
+// that links the deliberately bad scalusTsExporterFixtures and always fails.
+addCommandAlias("ci", "ci-jvm;ci-js;ci-native")
 addCommandAlias("benchmark", "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*")
 addCommandAlias(
   "benchmark-jit",

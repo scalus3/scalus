@@ -26,7 +26,7 @@ Exception: in a git worktree, prefer one-shot `sbt` and shut the server down whe
 |------------------|------------------------------------------------------|
 | `sbtn quick`     | Format, compile, jvm/testQuick (fast iteration)      |
 | `sbtn testQuick` | Run only tests affected by recent changes            |
-| `sbtn ci`        | Full CI: format check, all platforms, docs, mima     |
+| `sbtn ci`        | Full CI (`ci-jvm;ci-js;ci-native`): format, mima, all platforms |
 | `sbtn it`        | Integration tests (requires Docker)                  |
 
 **Compilation:**
@@ -115,6 +115,16 @@ Scala Source → SIR (via compiler plugin) → UPLC (via SIR compiler) → Plutu
 
 Run `sbtn quick` to ensure formatting, compilation, and tests pass.
 If issues occur, try `sbtn clean` first.
+
+### Compiler warnings
+
+Keep the build at 0 warnings. Warnings do not fail the build, but a release needs 0 warnings.
+
+- Fix the warnings in the files you change, for example remove an unused import.
+- If a warning is intentional, for example in a test of deprecated API, suppress it at the use
+  site with `@nowarn("msg=...")` and a comment that explains why.
+- Incremental compilation shows warnings only for recompiled files. To see all warnings, run
+  `sbtn "clean; Test/compile"`.
 
 ### Version control
 

@@ -136,19 +136,27 @@ Do the steps in order. Each step tells you which file or command to use.
    `scalus-cardano-ledger/js/src/main/npm/package.json` to `X.Y.Z`. You publish it after the tag,
    see [Publishing Scalus JS library to NPM](#publishing-scalus-js-library-to-npm).
 
-6. **Run the full gate** in the nix devshell. Do not use `sbt ci`: it links the deliberately bad
-   `scalus-ts-exporter` fixtures and always fails.
+6. **Run the full gate** in the nix devshell:
 
    ```bash
-   sbt --batch 'ci-jvm;ci-js;ci-native'   # format, all platforms, mima
-   sbt it                                 # integration tests, needs Docker
+   sbt --batch ci   # ci-jvm;ci-js;ci-native: format, mima, all platforms
+   sbt it           # integration tests, needs Docker
    ```
 
    `ci-jvm` runs only Scala 3.3.8. Make sure that the CI-JVM workflow is green for all Scala
    versions on the commit that you tag. In `it`, Blockfrost tests fail with a preprod-only key.
    That is not a release blocker.
 
-7. **Review the MiMa filters.** Each filter added since the last release must have a comment
+7. **Get to 0 compiler warnings.** Warnings do not fail CI, so they collect between releases.
+   Count them in the logs of the CI runs on the commit that you tag, for all jobs:
+
+   ```bash
+   gh run view <run-id> --log | perl -pe 's/\e\[[0-9;]*m//g' | grep -cE '\[warn\] -- .*Warning:'
+   ```
+
+   Fix each warning, or suppress an intentional one with `@nowarn("msg=...")` and a comment.
+
+8. **Review the MiMa filters.** Each filter added since the last release must have a comment
    that explains the break. Each break must be in the CHANGELOG.
 
 ### Tag and publish
