@@ -70,15 +70,30 @@ Once built, the tests start and close the Lean server automatically.
 Run all four tests, requiring Lean so a missing workspace cannot silently cancel them:
 
 ```sh
-SCALUS_REQUIRE_LEAN=1 sbt 'scalusVerification/testOnly *BigIntVerificationTest'
+# One-time setup from the repository root (also repeat after changing Scalus).
+sbt scalusVerification/prepareVerificationExamples
+
+# Independent build: compiles and runs only this directory's examples and the ScalaTest helper.
+cd scalus-verification/src/test/examples
+sbt test
 ```
+
+The standalone build reuses the compiled Scalus classes, dependency jars, compiler plugin,
+Scala version, and compiler options exported by the setup task. It has no project dependency
+on the main build, so subsequent `sbt test` runs cannot recompile Scalus. Editing an example
+recompiles only the example. Run setup again after changing Scalus or its build settings,
+switching Scala versions, or cleaning the main build. Keep the compiled artifacts in place.
+The standalone build sets `SCALUS_REQUIRE_LEAN=1` for its tests.
 
 To run a single case, filter by its test name, for example:
 
 ```sh
-SCALUS_REQUIRE_LEAN=1 sbt 'scalusVerification/testOnly *BigIntVerificationTest -- -z "counterexample:"'
+sbt 'testOnly *BigIntVerificationTest -- -z "counterexample:"'
 ```
 
 Successful execution reports four passed tests, including the expected refutation and
-inconclusive result. Without `SCALUS_REQUIRE_LEAN=1`, a missing Lean installation or
-unbuilt workspace cancels the tests instead of failing them.
+inconclusive result. You can also run the example through the main build from the repository
+root with `SCALUS_REQUIRE_LEAN=1 sbt 'scalusVerification/testOnly *BigIntVerificationTest'`,
+which uses the usual incremental compilation of Scalus. Without `SCALUS_REQUIRE_LEAN=1`
+in the main build, a missing Lean installation or unbuilt workspace cancels the tests
+instead of failing them.

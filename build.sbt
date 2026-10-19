@@ -1124,6 +1124,10 @@ generateLlmsApi := Def.taskDyn {
 // Formal verification of Scalus code; see docs/design/verification-overview.md and
 // scalus-verification/README.md. The UplcBlaster tactic runs Lean in the workspace at
 // scalus-verification/src/main/lean.
+lazy val prepareVerificationExamples = taskKey[Unit](
+  "Compile Scalus and export the classpath for the standalone verification examples build"
+)
+
 lazy val scalusVerification = project
     .in(file("scalus-verification"))
     .dependsOn(scalus.jvm)
@@ -1145,6 +1149,17 @@ lazy val scalusVerification = project
       // compiled with these tests.
       Test / unmanagedSourceDirectories +=
           (LocalRootProject / baseDirectory).value / "scalus-verification-scalatest" / "src" / "main" / "scala",
+      prepareVerificationExamples := {
+          val classpath = (Test / dependencyClasspath).value.map(_.data).distinct
+          val options = (Test / scalacOptions).value
+          val destination = baseDirectory.value / "target" / "verification-examples"
+          IO.writeLines(destination / "classpath", classpath.map(_.getAbsolutePath))
+          IO.writeLines(destination / "scalac-options", options)
+          IO.write(destination / "scala-version", scalaVersion.value)
+          streams.value.log.info(
+            "Examples ready: cd scalus-verification/src/test/examples && sbt test"
+          )
+      },
       // Scalus's Lean library goes into the jar, for the workspaces a project's proofs get
       // (scalus.verify.lean.LeanWorkspaceTool): its sources, and not what Lake builds beside
       // them in `.lake`. `index` names them, as a jar's resources cannot be listed.
