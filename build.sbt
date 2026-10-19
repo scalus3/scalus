@@ -1139,6 +1139,7 @@ lazy val scalusVerification = project
       // Statements Lean does not finish are left out of `test` and `testQuick`, and run by
       // `testOnly`.
       excludeFromTest("scalus.verify.uplcblaster.Unfinished"),
+      Test / unmanagedSourceDirectories += (Test / sourceDirectory).value / "examples",
       // The suites here extend LeanProofsSuite, which is scalus-verification-scalatest's. That
       // project depends on this one and cannot be depended on from here, so its sources are
       // compiled with these tests.

@@ -17,6 +17,8 @@ validator actually runs on chain.
 
 ## Layout
 
+- `src/test/examples/` - a [compact BigInt example](src/test/examples/README.md) for reports:
+  one compiled function, a proof, a counterexample, no solutions, and an inconclusive check.
 - `src/main/scala/scalus/verify/` - `Prop` and the `Props` syntax (`forAll`, `exists`,
   `existsLet`, `call`, `denotes`, `equal`), `Quantifiable`, the function table (`FunctionRef`,
   `FunctionDef`) and `Verifier`. `Prop` captures statements without evaluating them; `Verifier`
