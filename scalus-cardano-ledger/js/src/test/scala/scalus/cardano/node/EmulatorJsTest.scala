@@ -2,7 +2,7 @@ package scalus.cardano.node
 
 import io.bullet.borer.Cbor
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{Builtins, ByteString, Data}
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{ScriptSource, TwoArgumentPlutusScriptWitness, TxBuilder}
@@ -694,6 +694,29 @@ class EmulatorJsTest extends AnyFunSuite {
         )
         inline.addUtxo(JsUtxo.wrap(Input(TransactionHash.fromHex("0" * 64), 0), output))
         assert(bytesOf(inline).contains(probeHex), "an inline datum")
+    }
+
+    test("addDatum keeps the given bytes, as hex or Uint8Array, under the hash of those bytes") {
+        val probeHex = "d879811a0000000a"
+        val expected = Builtins.blake2b_256(ByteString.fromHex(probeHex)).toHex
+        def stored(emulator: JEmulator): Option[String] =
+            emulator.getDatum(expected).toOption.map(b => ByteString.fromArray(b.toByteArray).toHex)
+
+        val fromHex = JEmulator.create(JsCardanoInfo.mainnet())
+        assert(fromHex.addDatum(probeHex) == expected)
+        assert(stored(fromHex).contains(probeHex))
+
+        val fromBytes = JEmulator.create(JsCardanoInfo.mainnet())
+        assert(fromBytes.addDatum(ByteString.fromHex(probeHex).bytes.toUint8Array) == expected)
+        assert(fromBytes.addDatum(probeHex) == expected, "adding it again is harmless")
+        assert(stored(fromBytes).contains(probeHex))
+    }
+
+    test("addDatum rejects input that is not the CBOR of one Data with a TypeError") {
+        val emulator = JEmulator.create(JsCardanoInfo.mainnet())
+        for bad <- Seq("ff", "f5", "d879811a0000000a00", "zz") do
+            val thrown = intercept[js.JavaScriptException](emulator.addDatum(bad))
+            assert(thrown.exception.isInstanceOf[js.TypeError], s"$bad: $thrown")
     }
 
     test("time and slot move together") {

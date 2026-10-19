@@ -216,6 +216,33 @@ describe("Emulator treasury", () => {
     });
 });
 
+describe("Emulator.addDatum", () => {
+    // Constr 0 [10] with the 10 in 5 bytes: valid, but not the canonical encoding d8799f0aff
+    const probe = "d879811a0000000a";
+    // blake2b-256 of exactly the probe bytes; the canonical bytes hash to 5de14ff6...
+    const probeHash = "8b2149d03ddc6f10f9b0db0f9b4dc1d484d774eec327ff35ecf173bf3574c348";
+    const hexOf = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
+
+    it("keeps the given bytes and returns the hash of exactly those bytes", () => {
+        const emulator = Emulator.create(CardanoInfo.preview());
+        expect(emulator.addDatum(hexToBytes(probe))).toBe(probeHash);
+        expect(hexOf(emulator.getDatum(probeHash)!)).toBe(probe);
+    });
+
+    it("is harmless to call twice with the same datum", () => {
+        const emulator = Emulator.create(CardanoInfo.preview());
+        emulator.addDatum(probe);
+        expect(emulator.addDatum(probe)).toBe(probeHash);
+        expect(hexOf(emulator.getDatum(probeHash)!)).toBe(probe);
+    });
+
+    it("throws a TypeError for input that is not the CBOR of a datum", () => {
+        const emulator = Emulator.create(CardanoInfo.preview());
+        expect(() => emulator.addDatum("ff")).toThrow(TypeError);
+        expect(() => emulator.addDatum("not hex")).toThrow(TypeError);
+    });
+});
+
 describe("Emulator.create input errors", () => {
     // Every invalid option throws a TypeError, as the other input checks of the facade do.
     const create = (options: object) => () =>

@@ -89,6 +89,15 @@ case class ImmutableEmulator(
     /** Resolve a datum by its hash, or `None` if unknown. */
     def getDatum(datumHash: DataHash): Option[Data] = binaryDatums.get(datumHash).map(_.value)
 
+    /** A copy with `datum` in the datum store [[getDatum]] reads, keyed by the hash of its bytes.
+      * The immutable form of `EmulatorBase.addDatum`.
+      */
+    def withDatum(datum: KeepRaw[Data]): ImmutableEmulator =
+        copy(binaryDatums = binaryDatums + (datum.dataHash -> datum))
+
+    /** `withDatum` for a datum without its original bytes: the store keeps its canonical CBOR. */
+    def withDatum(data: Data): ImmutableEmulator = withDatum(KeepRaw(data))
+
     /** Clear the applied-transaction bookkeeping (log + index), keeping ledger state. */
     def clearAppliedTxs: ImmutableEmulator =
         copy(appliedTxLog = Vector.empty, appliedTxIndex = Map.empty)

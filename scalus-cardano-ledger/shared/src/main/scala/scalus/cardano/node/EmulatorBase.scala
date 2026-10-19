@@ -121,6 +121,26 @@ trait EmulatorBase extends BlockchainProvider {
       */
     def clearAppliedTxs(): Unit = updateState(_.withClearedAppliedTxs)
 
+    /** Adds a datum to the datum store [[getDatum]] reads, with the bytes it is given, so a UTxO
+      * added with [[addUtxo]] that holds only the hash of its datum can have the datum found too.
+      * Adding a datum the store already holds changes nothing.
+      *
+      * @return
+      *   the hash of the bytes of `datum`, which is the key [[getDatum]] finds it under
+      */
+    def addDatum(datum: KeepRaw[Data]): DataHash = {
+        val hash = datum.dataHash
+        updateState(_.withSeededDatums(Map(hash -> datum)))
+        hash
+    }
+
+    /** `addDatum` for a datum without its original bytes: the store keeps its canonical CBOR.
+      *
+      * @return
+      *   the hash of the canonical CBOR of `data`
+      */
+    def addDatum(data: Data): DataHash = addDatum(KeepRaw(data))
+
     /** Add `datums` to the datum store with their bytes, for a caller that has them. */
     private[scalus] def seedDatums(datums: Map[DataHash, KeepRaw[Data]]): Unit =
         updateState(_.withSeededDatums(datums))
