@@ -1,15 +1,21 @@
 package scalus.uplc.jit
 
+import scalus.uplc.eval.{BudgetSpender, Logger, MachineParams}
 import scalus.uplc.{DeBruijnedProgram, Term}
 
+import java.lang.management.ManagementFactory
 import java.nio.file.{Files, Paths}
-import scala.quoted.staging
+import javax.management.ObjectName
+import scala.quoted.{staging, Expr, Quotes}
 
 /** Times `genCodeFromTerm` alone on one script, `n` times, each with a fresh staging compiler.
   *
   * Usage: `JitCodegenProbe <script.flat> [n]`. For profiling the code generator.
   * `-Dprobe.checkMacros=true` compiles with `-Xcheck-macros`, which checks the owners of the
-  * generated trees. `-Dprobe.reuse=true` reuses one compiler for all runs.
+  * generated trees. `-Dprobe.reuse=true` reuses one compiler for all runs. `-Dprobe.jitUplc=true`
+  * compiles with `jitUplc` instead, with the compiler policy of the JITs. `-Dprobe.backend=mincont`
+  * probes the mincont JIT instead of nativestack (the default). `-Dprobe.histoAt=50,100` prints the
+  * live staging-compiler objects after those runs (a class histogram).
   */
 object JitCodegenProbe {
 
@@ -26,19 +32,66 @@ object JitCodegenProbe {
         )
         val shared = newCompiler()
         val reuse = sys.props.get("probe.reuse").contains("true")
+        val viaJitUplc = sys.props.get("probe.jitUplc").contains("true")
+        val backend = sys.props.getOrElse("probe.backend", "nativestack")
+        val genCode = JitCodegenProbe.genCode(backend)
+        val runner: JitRunner = if backend == "mincont" then mincont.JIT else nativestack.JIT
+        val histoAt =
+            sys.props.get("probe.histoAt").toList.flatMap(_.split(",")).map(_.trim.toInt).toSet
         for i <- 1 to n do
             given staging.Compiler = if reuse then shared else newCompiler()
             var codegenNs = 0L
             val start = System.nanoTime()
-            staging.run {
-                val t0 = System.nanoTime()
-                val expr = nativestack.JIT.genCodeFromTerm(term)
-                codegenNs = System.nanoTime() - t0
-                expr
-            }
+            if viaJitUplc then runner.jitUplc(term)
+            else
+                staging.run {
+                    val t0 = System.nanoTime()
+                    val expr = genCode(term)
+                    codegenNs = System.nanoTime() - t0
+                    expr
+                }
             val total = System.nanoTime() - start
             println(f"run $i: codegen ${codegenNs / 1e9}%.2f s, total ${total / 1e9}%.2f s")
+            if histoAt.contains(i) then printHistogram(i)
     }
+
+    /** Prints the live instances of the compiler symbol classes and the total live heap. A class
+      * histogram runs a full GC first, so it counts only reachable objects.
+      */
+    private def printHistogram(run: Int): Unit = {
+        val out = ManagementFactory.getPlatformMBeanServer
+            .invoke(
+              ObjectName("com.sun.management:type=DiagnosticCommand"),
+              "gcClassHistogram",
+              Array[AnyRef](Array.empty[String]),
+              Array("[Ljava.lang.String;")
+            )
+            .asInstanceOf[String]
+        val lines = out.linesIterator.map(_.trim.split("\\s+")).toList
+        def count(cls: String) = lines
+            .collect { case Array(_, n, _, c, _*) if c == cls => n }
+            .headOption
+            .getOrElse("0")
+        val total =
+            lines.collectFirst { case Array("Total", _, bytes) => bytes.toLong }.getOrElse(0L)
+        val prefix = "dotty.tools.dotc.core."
+        println(
+          s"histo run $run: SymDenotation=${count(prefix + "SymDenotations$SymDenotation")} " +
+              s"ClassDenotation=${count(prefix + "SymDenotations$ClassDenotation")} " +
+              s"Symbol=${count(prefix + "Symbols$Symbol")} " +
+              s"ClassSymbol=${count(prefix + "Symbols$ClassSymbol")} " +
+              f"live=${total / 1e6}%.0f MB"
+        )
+    }
+
+    /** The code generator of a JIT backend: `nativestack` or `mincont`. */
+    def genCode(
+        backend: String
+    ): Term => Quotes ?=> Expr[(Logger, BudgetSpender, MachineParams) => Any] =
+        backend match
+            case "nativestack" => t => nativestack.JIT.genCodeFromTerm(t)
+            case "mincont"     => t => mincont.JIT.genCodeFromTerm(t)
+            case other         => throw IllegalArgumentException(s"unknown backend $other")
 
     def nodes(t: Term): Long = t match
         case Term.LamAbs(_, b, _)  => 1 + nodes(b)

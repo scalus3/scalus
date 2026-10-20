@@ -25,8 +25,6 @@ import scala.quoted.*
   *   This is an experimental feature that requires scala3-staging and scala3-compiler dependencies.
   */
 object JIT extends JitRunner {
-    private given staging.Compiler = staging.Compiler.make(getClass.getClassLoader)
-
     private given ByteStringToExpr: ToExpr[ByteString] with {
         def apply(x: ByteString)(using Quotes): Expr[ByteString] =
             '{ ByteString.fromArray(${ Expr(x.bytes) }) }
@@ -91,10 +89,9 @@ object JIT extends JitRunner {
         case Lam(f: Any => Any)
         case Builtin(f: Any => Any)
 
-    private def genCodeFromTerm(
+    private[jit] def genCodeFromTerm(
         term: Term
     )(using Quotes): Expr[(Logger, BudgetSpender, MachineParams) => Any] = {
-        import quotes.reflect.asTerm
         import ContinuationJitRepr.{Apply, Force, Return}
 
         val debugMode = false // Set to true to enable exception tracking
@@ -102,7 +99,7 @@ object JIT extends JitRunner {
         def wrapWithDebug(
             code: Expr[ContinuationJitRepr],
             termDescription: String
-        ): Expr[ContinuationJitRepr] = {
+        )(using Quotes): Expr[ContinuationJitRepr] = {
             if debugMode then
                 val desc = Expr(termDescription)
                 '{
@@ -126,13 +123,27 @@ object JIT extends JitRunner {
             else code
         }
 
+        /** Generates code for `term`.
+          *
+          * Takes the `Quotes` of the splice it is called from, and every recursive call sits inside
+          * the splice of its result. So each piece of code is created with its final owner. A
+          * finished `Expr` spliced under a `val` or a lambda is copied to change its owner, which
+          * makes the generation quadratic in the nesting depth of the term.
+          */
         def genCode(
             term: Term,
-            env: List[(String, quotes.reflect.Term)],
+            env: List[(String, Expr[Any])],
             logger: Expr[Logger],
             budget: Expr[BudgetSpender],
             params: Expr[MachineParams]
-        ): Expr[ContinuationJitRepr] = {
+        )(using Quotes): Expr[ContinuationJitRepr] = {
+            def gen(t: Term)(using Quotes): Expr[ContinuationJitRepr] =
+                genCode(t, env, logger, budget, params)
+
+            /** The value of a simple (Return-producing) term. */
+            def genValue(t: Term)(using Quotes): Expr[Any] =
+                '{ ${ gen(t) }.asInstanceOf[Return].value }
+
             val termDesc = term.getClass.getSimpleName match {
                 case "Var"     => s"Var(${term.asInstanceOf[Term.Var].name})"
                 case "Builtin" => s"Builtin(${term.asInstanceOf[Term.Builtin].bn})"
@@ -140,16 +151,21 @@ object JIT extends JitRunner {
             }
             val result = term match
                 case Term.Var(name, _) =>
-                    val vr = env.find(_._1 == name.name).get._2.asExprOf[Any]
+                    val vr = env.find(_._1 == name.name).get._2
                     '{
                         $budget.spendBudget(Step(StepKind.Var), $params.machineCosts.varCost, Nil)
                         Return($vr)
                     }
 
-                case Term.LamAbs(name, term, _) =>
+                case Term.LamAbs(name, body, _) =>
                     '{
+                        $budget.spendBudget(
+                          Step(StepKind.LamAbs),
+                          $params.machineCosts.lamCost,
+                          Nil
+                        )
                         Return((arg: Any) =>
-                            ${ genCode(term, (name -> 'arg.asTerm) :: env, logger, budget, params) }
+                            ${ genCode(body, (name -> 'arg) :: env, logger, budget, params) }
                         )
                     }
 
@@ -158,15 +174,13 @@ object JIT extends JitRunner {
                     if UplcTermHelper.isApplyBuiltin1WithSimpleArg(term) then {
                         fun match
                             case Term.Builtin(bn, _) if BuiltinAppliedGenerator.isSupported1(bn) =>
-                                val argCode = genCode(arg, env, logger, budget, params)
                                 // Generate inline code for one-argument builtins
-                                val result = BuiltinEmitter.emitAppliedBuiltin1(
-                                  bn,
-                                  '{ ${ argCode }.asInstanceOf[Return].value },
-                                  budget,
-                                  params
-                                )
-                                '{ Return($result) }
+                                '{
+                                    Return(${
+                                        BuiltinEmitter
+                                            .emitAppliedBuiltin1(bn, genValue(arg), budget, params)
+                                    })
+                                }
                             case _ =>
                                 throw IllegalStateException(
                                   s"isApplyBuiltin1WithSimpleArg returned true but term has wrong shape"
@@ -176,8 +190,6 @@ object JIT extends JitRunner {
                     // generate direct application instead of Apply continuation
                     else if UplcTermHelper.isSimpleTerm(fun) && UplcTermHelper.isSimpleTerm(arg)
                     then {
-                        val funCode = genCode(fun, env, logger, budget, params)
-                        val argCode = genCode(arg, env, logger, budget, params)
                         '{
                             $budget.spendBudget(
                               Step(StepKind.Apply),
@@ -185,8 +197,8 @@ object JIT extends JitRunner {
                               Nil
                             )
                             // Both are Return values, apply directly
-                            val f = $funCode.asInstanceOf[Return].value.asInstanceOf[Any => Any]
-                            val a = $argCode.asInstanceOf[Return].value
+                            val f = ${ genValue(fun) }.asInstanceOf[Any => Any]
+                            val a = ${ genValue(arg) }
                             val result = f(a)
                             // Result might be continuation or value
                             result match {
@@ -195,17 +207,15 @@ object JIT extends JitRunner {
                             }
                         }
                     } else if UplcTermHelper.isApplyBuiltin2WithSimpleArgs(term) then {
-                        val argCode = genCode(arg, env, logger, budget, params)
                         fun match
                             case Term.Apply(Term.Builtin(bn, _), arg1, _)
                                 if BuiltinAppliedGenerator.isSupported(bn) =>
-                                val arg1Code = genCode(arg1, env, logger, budget, params)
                                 '{
                                     Return(${
                                         BuiltinEmitter.emitAppliedBuiltin2(
                                           bn,
-                                          '{ ${ arg1Code }.asInstanceOf[Return].value },
-                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          genValue(arg1),
+                                          genValue(arg),
                                           budget,
                                           params
                                         )
@@ -223,10 +233,7 @@ object JIT extends JitRunner {
                               $params.machineCosts.applyCost,
                               Nil
                             )
-                            Apply(
-                              ${ genCode(fun, env, logger, budget, params) },
-                              ${ genCode(arg, env, logger, budget, params) }
-                            )
+                            Apply(${ gen(fun) }, ${ gen(arg) })
                         }
                     }
 
@@ -237,7 +244,7 @@ object JIT extends JitRunner {
                           $params.machineCosts.forceCost,
                           Nil
                         )
-                        Force(${ genCode(term, env, logger, budget, params) })
+                        Force(${ gen(term) })
                     }
 
                 case Term.Delay(term, _) =>
@@ -247,7 +254,7 @@ object JIT extends JitRunner {
                           $params.machineCosts.delayCost,
                           Nil
                         )
-                        Return.delayed(${ genCode(term, env, logger, budget, params) })
+                        Return.delayed(${ gen(term) })
                     }
 
                 case Term.Const(const, _) =>
@@ -267,7 +274,6 @@ object JIT extends JitRunner {
                 case Term.Constr(tag, args, _) =>
                     // TODO: Implement Constr with continuation support
                     // For now, fall back to simple evaluation
-                    val argsExprs = args.map(a => genCode(a, env, logger, budget, params))
                     '{
                         $budget.spendBudget(
                           Step(StepKind.Constr),
@@ -276,20 +282,17 @@ object JIT extends JitRunner {
                         )
                         // Evaluate all args first, then construct
                         val evaluatedArgs = List(${
-                            Expr.ofSeq(argsExprs.map(e => '{ ContinuationJitRepr.eval($e) }))
+                            Expr.ofSeq(args.map(a => '{ ContinuationJitRepr.eval(${ gen(a) }) }))
                         }*)
                         Return((${ Expr(tag.value) }, evaluatedArgs))
                     }
                 case Term.Case(arg, cases, _) =>
-                    val scrutineeCont = genCode(arg, env, logger, budget, params)
-                    val branchExprs: List[Expr[ContinuationJitRepr]] =
-                        cases.map(c => genCode(c, env, logger, budget, params))
                     '{
                         $budget.spendBudget(Step(StepKind.Case), $params.machineCosts.caseCost, Nil)
                         ${
                             CaseHelper.genCaseDispatchCont(
-                              scrutineeCont,
-                              branchExprs
+                              gen(arg),
+                              cases.map(c => (q: Quotes) ?=> gen(c)(using q))
                             )
                         }
                     }
@@ -306,11 +309,7 @@ object JIT extends JitRunner {
     }
 
     override def jitUplc(term: Term): (Logger, BudgetSpender, MachineParams) => Any =
-        val result = staging.run { (quotes: Quotes) ?=>
-            val expr = genCodeFromTerm(term)
-            expr
-        }
-        result
+        StagingCompilerThread.run(term)(genCodeFromTerm(term))
 
     override def isStackSafe = true
 }

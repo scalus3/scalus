@@ -11,7 +11,8 @@ import scala.util.Try
 /** Compiles every script of a directory with the nativestack JIT and compares the result and the
   * spent budget with the CEK machine, both with the same machine parameters.
   *
-  * Usage: `JitVsCekCheck <dir with .flat files> [name filter]`.
+  * Usage: `JitVsCekCheck <dir with .flat files> [name filter]`. `-Dprobe.backend=mincont` checks
+  * the mincont JIT instead.
   */
 object JitVsCekCheck {
 
@@ -26,6 +27,7 @@ object JitVsCekCheck {
             .sortBy(_.toString)
         val vm = PlutusVM.makePlutusV3VM()
         val params = vm.machineParams
+        val genCode = JitCodegenProbe.genCode(sys.props.getOrElse("probe.backend", "nativestack"))
         var mismatches = 0
         for file <- files do
             val name = file.getFileName.toString.stripSuffix(".flat")
@@ -35,7 +37,7 @@ object JitVsCekCheck {
             val cek = Try(vm.evaluateDeBruijnedTerm(program.term, cekBudget, NoLogger))
             given staging.Compiler = staging.Compiler.make(getClass.getClassLoader)
             val start = System.nanoTime()
-            val fn = staging.run(nativestack.JIT.genCodeFromTerm(term))
+            val fn = staging.run(genCode(term))
             val compileS = (System.nanoTime() - start) / 1e9
             val jitBudget = CountingBudgetSpender()
             val jit = Try(fn(NoLogger, jitBudget, params))

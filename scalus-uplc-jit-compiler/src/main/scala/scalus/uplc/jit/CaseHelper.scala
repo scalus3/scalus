@@ -150,24 +150,26 @@ object CaseHelper {
       * IMPORTANT: Keep in sync with [[genCaseDispatch]] — both methods implement the same dispatch
       * logic but for different JIT backends (nativestack vs mincont).
       *
+      * Scrutinee and branches are generators, as in [[genCaseDispatch]].
+      *
       * @param scrutineeCont
-      *   Continuation expression that evaluates to the scrutinee value
+      *   generates the continuation expression that evaluates to the scrutinee value
       * @param branches
-      *   List of branch continuation expressions
+      *   generate the branch continuation expressions
       * @return
       *   Continuation expression that selects and processes the appropriate branch
       */
     def genCaseDispatchCont(
-        scrutineeCont: Expr[ContinuationJitRepr],
-        branches: List[Expr[ContinuationJitRepr]]
+        scrutineeCont: Quotes ?=> Expr[ContinuationJitRepr],
+        branches: List[Quotes ?=> Expr[ContinuationJitRepr]]
     )(using Quotes): Expr[ContinuationJitRepr] = {
         val branchCountExpr = Expr(branches.size)
 
         // Check primitives (Boolean, Unit) first to avoid Scala 3 erasure issues
         '{
-            val cases = ${ wrapInThunks(branches.map(b => (_: Quotes) ?=> b)) }
+            val cases = ${ wrapInThunks(branches) }
             val bc = $branchCountExpr
-            val scrutinee = ContinuationJitRepr.eval($scrutineeCont)
+            val scrutinee = ContinuationJitRepr.eval(${ scrutineeCont })
             if scrutinee.isInstanceOf[Boolean] then
                 // Bool case - False=0, True=1
                 val b = scrutinee.asInstanceOf[Boolean]

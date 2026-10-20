@@ -25,8 +25,6 @@ import scala.quoted.*
   *   This is an experimental feature that requires scala3-staging and scala3-compiler dependencies.
   */
 object JIT extends JitRunner {
-    private given staging.Compiler = staging.Compiler.make(getClass.getClassLoader)
-
     private given ByteStringToExpr: ToExpr[ByteString] with {
         def apply(x: ByteString)(using Quotes): Expr[ByteString] =
             '{ ByteString.fromArray(${ Expr(x.bytes) }) }
@@ -87,6 +85,19 @@ object JIT extends JitRunner {
                 '{ BuiltinValue.fromData($dataExpr) }
     }
 
+    /** Whether a constant is built once per compiled script instead of in place. Unit, booleans and
+      * strings are JVM literals and cost nothing to build in place.
+      */
+    private def isHoisted(const: Constant): Boolean = const match
+        case Constant.Unit | Constant.Bool(_) | Constant.String(_) => false
+        case _                                                     => true
+
+    /** Let-bindings are inlined into a JVM method while it has fewer generated terms than this.
+      * Small methods stay cheap for C2 to inline into their callers: with 150, guardrail-small
+      * evaluated 20% slower than with 20, and stablecoin_1-3 was not faster.
+      */
+    private val MaxInlinedLetTerms = 20
+
     enum FunType:
         case Lam(f: Any => Any)
         case Builtin(f: Any => Any)
@@ -94,6 +105,35 @@ object JIT extends JitRunner {
     private[jit] def genCodeFromTerm(
         term: Term
     )(using Quotes): Expr[(Logger, BudgetSpender, MachineParams) => Any] = {
+
+        // Constants are built once, when the compiled function is created, and shared by all
+        // evaluations, as the CEK machine shares the values of the term. Building them in the
+        // function would allocate them on every evaluation, and a large constant (the applied
+        // script context) makes the function body too big for HotSpot to compile.
+        val constIndex = collection.mutable.LinkedHashMap.empty[Constant, Int]
+        def collectConstants(t: Term): Unit = t match
+            case Term.Const(const, _) =>
+                if isHoisted(const) && !constIndex.contains(const) then
+                    constIndex(const) = constIndex.size
+            case Term.LamAbs(_, body, _) => collectConstants(body)
+            case Term.Apply(f, arg, _)   => collectConstants(f); collectConstants(arg)
+            case Term.Force(body, _)     => collectConstants(body)
+            case Term.Delay(body, _)     => collectConstants(body)
+            case Term.Constr(_, args, _) => args.foreach(collectConstants)
+            case Term.Case(arg, cases, _) =>
+                collectConstants(arg); cases.foreach(collectConstants)
+            case _ => ()
+        collectConstants(term)
+
+        // Number of terms generated so far into the JVM method being generated. Each LamAbs and
+        // Delay body is a method of its own; inlined let-bindings extend the current one.
+        var methodTerms = 0
+        def inNewMethod[A](body: => A): A = {
+            val saved = methodTerms
+            methodTerms = 0
+            try body
+            finally methodTerms = saved
+        }
 
         /** Generates code for `term`.
           *
@@ -108,11 +148,13 @@ object JIT extends JitRunner {
             logger: Expr[Logger],
             budget: Expr[BudgetSpender],
             params: Expr[MachineParams],
-            nativeStackContext: Expr[NativeStackContext]
+            nativeStackContext: Expr[NativeStackContext],
+            consts: Expr[Array[AnyRef]]
         )(using Quotes): Expr[Any] = {
             def gen(t: Term)(using Quotes): Expr[Any] =
-                genCode(t, env, logger, budget, params, nativeStackContext)
+                genCode(t, env, logger, budget, params, nativeStackContext, consts)
 
+            methodTerms += 1
             term match
                 case Term.Var(name, _) =>
                     val vr = env.find(_._1 == name.name).get._2
@@ -124,20 +166,52 @@ object JIT extends JitRunner {
                     '{
                         $budget.spendBudget(
                           Step(StepKind.LamAbs),
-                          $params.machineCosts.varCost,
+                          $params.machineCosts.lamCost,
                           Nil
                         )
                         (arg: Any) =>
                             ${
-                                genCode(
-                                  body,
-                                  (name -> 'arg) :: env,
-                                  logger,
-                                  budget,
-                                  params,
-                                  nativeStackContext
+                                inNewMethod(
+                                  genCode(
+                                    body,
+                                    (name -> 'arg) :: env,
+                                    logger,
+                                    budget,
+                                    params,
+                                    nativeStackContext,
+                                    consts
+                                  )
                                 )
                             }
+                    }
+                case Term.Apply(Term.LamAbs(name, body, _), arg, _)
+                    if methodTerms < MaxInlinedLetTerms =>
+                    // A let-binding `[(lam x body) arg]`: bind `arg` to a local value instead of
+                    // creating and calling a closure. Every closure is a JVM method and class for
+                    // HotSpot to compile, and large scripts take long to warm up.
+                    '{
+                        $budget.spendBudget(
+                          Step(StepKind.Apply),
+                          $params.machineCosts.applyCost,
+                          Nil
+                        )
+                        $budget.spendBudget(
+                          Step(StepKind.LamAbs),
+                          $params.machineCosts.lamCost,
+                          Nil
+                        )
+                        val x = ${ gen(arg) }
+                        ${
+                            genCode(
+                              body,
+                              (name -> 'x) :: env,
+                              logger,
+                              budget,
+                              params,
+                              nativeStackContext,
+                              consts
+                            )
+                        }
                     }
                 case Term.Apply(f, arg, _) =>
                     // Optimize: detect fully-applied 1-argument builtins with simple arg
@@ -207,10 +281,12 @@ object JIT extends JitRunner {
                           $params.machineCosts.delayCost,
                           Nil
                         )
-                        () => ${ gen(term) }
+                        () => ${ inNewMethod(gen(term)) }
                     }
                 case Term.Const(const, _) =>
-                    val expr = constantToExpr(const)
+                    val expr = constIndex.get(const) match
+                        case Some(i) => '{ $consts(${ Expr(i) }) }
+                        case None    => constantToExpr(const)
                     '{
                         $budget.spendBudget(
                           Step(StepKind.Const),
@@ -244,10 +320,16 @@ object JIT extends JitRunner {
                     }
         }
 
-        val retval = '{ (logger: Logger, budget: BudgetSpender, params: MachineParams) =>
-            val nativeStackContext = new NativeStackContext()
-            budget.spendBudget(Startup, params.machineCosts.startupCost, Nil)
-            ${ genCode(term, Nil, 'logger, 'budget, 'params, 'nativeStackContext) }
+        val retval = '{
+            val consts: Array[AnyRef] = Array[AnyRef](${
+                Varargs(
+                  constIndex.keys.toList.map(c => '{ ${ constantToExpr(c) }.asInstanceOf[AnyRef] })
+                )
+            }*)
+            (logger: Logger, budget: BudgetSpender, params: MachineParams) =>
+                val nativeStackContext = new NativeStackContext()
+                budget.spendBudget(Startup, params.machineCosts.startupCost, Nil)
+                ${ genCode(term, Nil, 'logger, 'budget, 'params, 'nativeStackContext, 'consts) }
         }
 
         // println(retval.show)
@@ -258,10 +340,7 @@ object JIT extends JitRunner {
     /** Compiles a UPLC term into an optimized JVM function using JIT compilation.
       */
     override def jitUplc(term: Term): (Logger, BudgetSpender, MachineParams) => Any =
-        staging.run { (quotes: Quotes) ?=>
-            val expr = genCodeFromTerm(term)
-            expr
-        }
+        StagingCompilerThread.run(term)(genCodeFromTerm(term))
 
     override def isStackSafe: Boolean = false
 

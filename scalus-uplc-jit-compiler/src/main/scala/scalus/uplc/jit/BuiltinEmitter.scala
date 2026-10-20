@@ -156,6 +156,10 @@ object BuiltinEmitter {
 
     /** Generates optimized code for a fully-applied 1-argument builtin with a simple argument.
       *
+      * The argument code runs exactly once, before the builtin. It spends the budget of its own
+      * term (`Var`, `Const`, ...), so it must not be duplicated or dropped: the generators use an
+      * argument more than once (cost and result), and some (`mkNilData`) not at all.
+      *
       * @param bn
       *   The builtin function
       * @param argCode
@@ -168,6 +172,17 @@ object BuiltinEmitter {
       *   The generated code expression for the applied builtin
       */
     def emitAppliedBuiltin1(
+        bn: DefaultFun,
+        argCode: Expr[Any],
+        budget: Expr[BudgetSpender],
+        params: Expr[MachineParams]
+    )(using Quotes): Expr[Any] =
+        '{
+            val arg = $argCode
+            ${ appliedBuiltin1(bn, 'arg, budget, params) }
+        }
+
+    private def appliedBuiltin1(
         bn: DefaultFun,
         argCode: Expr[Any],
         budget: Expr[BudgetSpender],
@@ -223,6 +238,8 @@ object BuiltinEmitter {
 
     /** Generates optimized code for a fully-applied 2-argument builtin with simple arguments.
       *
+      * The argument code runs exactly once each, in CEK order, as in [[emitAppliedBuiltin1]].
+      *
       * @param bn
       *   The builtin function
       * @param arg1Code
@@ -237,6 +254,19 @@ object BuiltinEmitter {
       *   The generated code expression for the applied builtin
       */
     def emitAppliedBuiltin2(
+        bn: DefaultFun,
+        arg1Code: Expr[Any],
+        arg2Code: Expr[Any],
+        budget: Expr[BudgetSpender],
+        params: Expr[MachineParams]
+    )(using Quotes): Expr[Any] =
+        '{
+            val arg1 = $arg1Code
+            val arg2 = $arg2Code
+            ${ appliedBuiltin2(bn, 'arg1, 'arg2, budget, params) }
+        }
+
+    private def appliedBuiltin2(
         bn: DefaultFun,
         arg1Code: Expr[Any],
         arg2Code: Expr[Any],

@@ -28,6 +28,8 @@ trait JitRunner {
       *   The compilation happens at runtime and may take some time for complex terms. The compiled
       *   function can then be cached and reused for better performance when evaluating the same
       *   term multiple times.
+      * @note
+      *   Safe to call from any thread. The compiles run one at a time on a dedicated thread.
       * @throws RuntimeException
       *   if the term contains unsupported constructs or if compilation fails
       */
