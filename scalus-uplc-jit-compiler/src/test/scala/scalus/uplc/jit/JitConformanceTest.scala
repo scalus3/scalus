@@ -35,6 +35,12 @@ class JitConformanceTest extends PlutusConformanceTest {
     override protected def ignoredCases: Map[String, String] =
         discoveredCases.filter(needsDijkstra).map(_ -> "the JIT has no case on Data (PV12)").toMap
 
+    /** The `.flat` cases test the flat decoder, which the JIT does not have: it compiles a term.
+      * [[PlutusConformanceTest.checkFlat]] proves that each `.flat` file decodes to the term its
+      * `.uplc` file parses to, and this suite already runs that term.
+      */
+    override protected def runsFlatCases: Boolean = false
+
     override protected def check(name: String): Unit = test(name) {
         val outcome = parseScoped(readFile(s"$path/$name.uplc")) match
             case None          => Outcome.ParseError

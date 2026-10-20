@@ -66,6 +66,15 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
         ${ scalus.utils.Macros.conformanceEvaluationCasesImpl }
     protected val discoveredCases: List[String] = discoveredCasesInline
 
+    // Since Plutus 1.67 most cases also have a `.flat` file: the same program, flat-encoded. They
+    // are discovered the same way (see Macros.conformanceFlatCasesImpl).
+    private inline def discoveredFlatCasesInline: List[String] =
+        ${ scalus.utils.Macros.conformanceFlatCasesImpl }
+    protected val discoveredFlatCases: List[String] = discoveredFlatCasesInline
+
+    /** Whether this suite also runs the `.flat` cases (see [[checkFlat]]). */
+    protected def runsFlatCases: Boolean = true
+
     /** Conformance cases this platform deliberately skips, each with the reason. Keys are corpus
       * case paths relative to `uplc/evaluation`, without the `.uplc` suffix.
       *
@@ -80,6 +89,25 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
             case Some(reason) => ignore(s"$name [ignored: $reason]")(())
             case None         => check(name)
     }
+
+    if runsFlatCases then
+        discoveredFlatCases.foreach { name =>
+            ignoredCases.get(name) match
+                case Some(reason) => ignore(s"$name.flat [ignored: $reason]")(())
+                case None         => checkFlat(name)
+        }
+
+        test("every case has a .flat file, except the cases of the textual parser") {
+            // Plutus's runner has the same rule (`dirsWithNoFlatFiles` in
+            // PlutusConformance/Common.hs).
+            def testsTextualParser(name: String) =
+                name.startsWith("builtin/parser/") || name.startsWith("term/parser/")
+            val expected = discoveredCases.filterNot(testsTextualParser)
+            val missing = expected.diff(discoveredFlatCases)
+            val unexpected = discoveredFlatCases.diff(expected)
+            assert(missing.isEmpty, s"cases without a .flat file: $missing")
+            assert(unexpected.isEmpty, s".flat files that are not expected: $unexpected")
+        }
 
     test("the cases that need Dijkstra fail at van Rossem (PV11)") {
         val dijkstraCases = discoveredCases.filter(needsDijkstra)
@@ -136,52 +164,141 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
 
     private val BudgetRegex = """\(\{cpu:\s(\d+)\n\|\smem:\s(\d+)\}\)""".r
 
+    private def vmFor(name: String): PlutusVM =
+        if needsDijkstra(name) then dijkstraVM else plutusVM
+
     protected def check(name: String): Unit =
         test(name) {
             val code = readFile(s"$path/$name.uplc")
             val expected = readFile(s"$path/$name.uplc.expected")
-            val expectedBudget =
-                val budget = Try(readFile(s"$path/$name.budget.expected"))
-                budget match
-                    case Success(BudgetRegex(cpu, mem)) =>
-                        Right(ExUnits(memory = mem.toLong, steps = cpu.toLong))
-                    case Success("parse/decode error") => Left("parse/decode error")
-                    case Success("evaluation failure") => Left("evaluation failure")
-                    case Failure(_)                    => Left("no file")
-                    case _ => fail(s"Unexpected budget format:\n$budget")
-
-            // println(eval(code).show)
-            (
-              eval(code, if needsDijkstra(name) then dijkstraVM else plutusVM),
-              parseExpected(expected),
-              expectedBudget
-            ) match
-                case (
-                      Right(Result.Success(actualTerm, budget, _, _)),
-                      Right(expectedTerm),
-                      expectedBudget
-                    ) =>
-                    assert(
-                      actualTerm α_== expectedTerm,
-                      s"Expected $expectedTerm but got $actualTerm"
-                    )
-                    expectedBudget match
-                        case Right(expectedBudget) =>
-                            assert(
-                              budget == expectedBudget,
-                              s"Expected $expectedBudget but got $budget"
-                            )
-                        case Left("no file") => // ignore
-                        case Left(e)         => fail(s"Expected $e but got $budget")
-                case (
-                      Right(Result.Failure(actualTerm, _, _, _)),
-                      Left("evaluation failure"),
-                      Left("evaluation failure")
-                    ) =>
-                    assert(true)
-                case (Left(e1), Left(e2), Left(_)) => assert(e1 == e2)
-                case (a, b, c)                     => fail(s"Expected $b but got $a and budget $c")
+            assertOutcome(eval(code, vmFor(name)), parseExpected(expected), expectedBudget(name))
         }
+
+    /** Decodes a flat-encoded program the way the Plutus conformance runner does (`getInputProg`
+      * and `decodeFlatProg` in plutus-conformance `PlutusConformance/Common.hs`).
+      *
+      * An empty file is a decode error without decoding. Otherwise Plutus's `unflat` must consume
+      * the whole input: the program, then the filler that pads it to a byte boundary, and nothing
+      * after it. A decoded program with a free variable is a decode error too, because the runner
+      * converts it to named variables, which fails on an index out of scope (also inside `constr`
+      * and `case`, unlike the ledger's scope check).
+      */
+    protected def decodeFlat(bytes: Array[Byte]): Option[DeBruijnedProgram] =
+        if bytes.isEmpty then None
+        else
+            Try {
+                val ProgramFlatCodec.DecodeResult(program, remainder) =
+                    ProgramFlatCodec.decodeFlatWithRemainingBytes(bytes)
+                require(remainder.isEmpty, s"${remainder.length} bytes after the program")
+                require(isClosed(program.term), "a variable is out of scope")
+                program
+            }.toOption
+
+    private def isClosed(term: Term): Boolean = {
+        import Term.*
+        def go(term: Term, level: Int): Boolean = term match
+            case Var(name, _)       => name.index > 0 && name.index <= level
+            case LamAbs(_, body, _) => go(body, level + 1)
+            case Apply(f, arg, _)   => go(f, level) && go(arg, level)
+            case Force(t, _)        => go(t, level)
+            case Delay(t, _)        => go(t, level)
+            case Constr(_, args, _) => args.forall(go(_, level))
+            case Case(arg, cases, _) =>
+                go(arg, level) && cases.forall(go(_, level))
+            case _: Const | _: Builtin | _: Term.Error => true
+        go(term, 0)
+    }
+
+    /** Runs the `.flat` input of a corpus case.
+      *
+      * Like Plutus's runner in its `--format=flat` mode, the result is compared with the
+      * `.flat.expected` file: a flat-encoded result program, or the text of a failure marker. The
+      * budget file is shared with the textual case. On top of that, the decoded program must be the
+      * program the `.uplc` file parses to, so a decoder bug that changes the program but not its
+      * result, or that the expectation decodes the same wrong way, still fails here.
+      */
+    protected def checkFlat(name: String): Unit =
+        test(s"$name.flat") {
+            val decoded = decodeFlat(platform.readFile(s"$path/$name.flat"))
+            (decoded, parseScoped(readFile(s"$path/$name.uplc"))) match
+                case (Some(fromFlat), Some(fromText)) =>
+                    assert(
+                      fromFlat.version == fromText.version,
+                      s"the .flat program has version ${fromFlat.version}, " +
+                          s"the .uplc one ${fromText.version}"
+                    )
+                    assert(
+                      fromFlat.term α_== DeBruijn.deBruijnTerm(fromText.term),
+                      s"the .flat program decodes to\n${fromFlat.show}\n" +
+                          s"but the .uplc program is\n${fromText.show}"
+                    )
+                case (None, None) =>
+                case (fromFlat, fromText) =>
+                    fail(
+                      s"decoded .flat: ${fromFlat.map(_.show)}, parsed .uplc: ${fromText.map(_.show)}"
+                    )
+            val actual: Either[Error, Result] = decoded match
+                case Some(program) => Right(program.toProgram.term.evaluateDebug(using vmFor(name)))
+                case None          => Left("parse/decode error")
+            assertOutcome(actual, flatExpected(name), expectedBudget(name))
+        }
+
+    /** Reads a `.flat.expected` file as Plutus's `decodeFlatExpected` does: the text of a failure
+      * marker, or else a flat-encoded program.
+      */
+    private def flatExpected(name: String): Either[Error, Term] = {
+        val bytes = platform.readFile(s"$path/$name.flat.expected")
+        new String(bytes, "UTF-8") match
+            case "evaluation failure" => Left("evaluation failure")
+            case "parse/decode error" => Left("parse/decode error")
+            case _ =>
+                decodeFlat(bytes) match
+                    case Some(program) => Right(program.term)
+                    case None          => fail(s"$name.flat.expected does not decode")
+    }
+
+    private def expectedBudget(name: String): Either[String, ExUnits] = {
+        val budget = Try(readFile(s"$path/$name.budget.expected"))
+        budget match
+            case Success(BudgetRegex(cpu, mem)) =>
+                Right(ExUnits(memory = mem.toLong, steps = cpu.toLong))
+            case Success("parse/decode error") => Left("parse/decode error")
+            case Success("evaluation failure") => Left("evaluation failure")
+            case Failure(_)                    => Left("no file")
+            case _                             => fail(s"Unexpected budget format:\n$budget")
+    }
+
+    private def assertOutcome(
+        actual: Either[Error, Result],
+        expected: Either[Error, Term],
+        expectedBudget: Either[String, ExUnits]
+    ): Unit =
+        (actual, expected, expectedBudget) match
+            case (
+                  Right(Result.Success(actualTerm, budget, _, _)),
+                  Right(expectedTerm),
+                  expectedBudget
+                ) =>
+                assert(
+                  actualTerm α_== expectedTerm,
+                  s"Expected $expectedTerm but got $actualTerm"
+                )
+                expectedBudget match
+                    case Right(expectedBudget) =>
+                        assert(
+                          budget == expectedBudget,
+                          s"Expected $expectedBudget but got $budget"
+                        )
+                    case Left("no file") => // ignore
+                    case Left(e)         => fail(s"Expected $e but got $budget")
+            case (
+                  Right(Result.Failure(actualTerm, _, _, _)),
+                  Left("evaluation failure"),
+                  Left("evaluation failure")
+                ) =>
+                assert(true)
+            case (Left(e1), Left(e2), Left(_)) => assert(e1 == e2)
+            case (a, b, c)                     => fail(s"Expected $b but got $a and budget $c")
 
     /** Which of [[check]]'s three outcomes the corpus asks of one case.
       *

@@ -503,7 +503,22 @@ object Macros {
       * does not also touch the calling source file requires a recompile (`sbtn
       * scalusJVM/clean`/`sbtn ci`).
       */
-    def conformanceEvaluationCasesImpl(using Quotes): Expr[List[String]] = {
+    def conformanceEvaluationCasesImpl(using Quotes): Expr[List[String]] =
+        Expr(conformanceCases(".uplc"))
+
+    /** Discovers the flat-encoded Plutus conformance evaluation cases at compile time.
+      *
+      * Like [[conformanceEvaluationCasesImpl]], but lists the `*.flat` files. Each one is the flat
+      * encoding of the program in the `.uplc` file next to it. The corpus has them since Plutus
+      * 1.67, for every case except the ones that test the textual parser.
+      */
+    def conformanceFlatCasesImpl(using Quotes): Expr[List[String]] =
+        Expr(conformanceCases(".flat"))
+
+    /** The conformance evaluation cases whose input file has the given extension, as sorted
+      * `/`-separated keys relative to the evaluation directory, without the extension.
+      */
+    private def conformanceCases(extension: String)(using Quotes): List[String] = {
         import scala.jdk.CollectionConverters.*
         val srcPath = quotes.reflect.SourceFile.current.path
         val marker = File.separator + "scalus-core" + File.separator
@@ -523,19 +538,19 @@ object Macros {
                 stream
                     .iterator()
                     .asScala
-                    .filter(p => Files.isRegularFile(p) && p.toString.endsWith(".uplc"))
+                    .filter(p => Files.isRegularFile(p) && p.toString.endsWith(extension))
                     .map(p =>
                         evalDir
                             .relativize(p)
                             .toString
-                            .stripSuffix(".uplc")
+                            .stripSuffix(extension)
                             .replace(File.separatorChar, '/')
                     )
                     .toList
                     .sorted
             finally stream.close()
-        require(cases.nonEmpty, s"No .uplc conformance cases found under $evalDir")
-        Expr(cases)
+        require(cases.nonEmpty, s"No $extension conformance cases found under $evalDir")
+        cases
     }
 
     /** Read a resource file from disk using the compile-time source root.
