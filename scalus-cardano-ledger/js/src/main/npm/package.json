@@ -1,6 +1,6 @@
 {
   "name": "scalus",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Scalus – Cardano on-chain / off-chain toolkit compiled with Scala.js",
   "type": "module",
   "files": [

@@ -31,6 +31,24 @@ success but disagrees on cost still produces transactions a node rejects.
 npm install scalus
 ```
 
+## Upgrading from 1.3.x
+
+The Emulator now follows more of the ledger rules, so a test that passed on 1.3 can fail:
+
+- **The factories and queries deprecated in 1.2.0 are removed.** Replace `Emulator.withState`
+  and `Emulator.withAddresses` with `Emulator.create`, and `getUtxosForAddress` and `getAllUtxos`
+  with `getUtxos`. `new Emulator(utxosCbor, slotConfig)` still works but stays deprecated; use
+  `Emulator.create`.
+- **`Emulator.create` throws a `TypeError` for every invalid option**, including a `datums` entry
+  whose `hash` is not the blake2b-256 hash of its `datum` bytes.
+- **The Emulator rejects transactions that a node rejects:** a delegation to an unregistered pool
+  or DRep, a `currentTreasuryValue` other than `getTreasury()`, a withdrawal from a key-hash reward
+  account with no DRep delegation (from protocol version 10), a proposal whose deposit is not
+  `govActionDeposit`, and reference scripts that total more than 200 KiB.
+- A withdrawal keeps the account registered, with balance 0.
+- An inline datum or a native script keeps the bytes it arrived in. A non-minimal encoding is no
+  longer re-encoded, so `inlineDatum`, `getDatum` and the script hash match the chain.
+
 ## Upgrading from 0.18.x
 
 The npm package now carries the same version number as the Scalus JVM libraries, so 0.18.1 is
@@ -42,7 +60,7 @@ followed by 1.1.1. Six changes affect existing code:
   `evalPlutusScripts` to select another version.
 - **`scalus.js` is an ES module.** Import it with `import` or with
   `<script type="module">`. `require("scalus")` still works from CommonJS on Node 22.12+ and
-  20.19+, which load an ES module from `require()` natively — there is no separate CommonJS
+  20.19+, which load an ES module from `require()` natively – there is no separate CommonJS
   build, so you get one module instance either way. On older Node it fails with
   `ERR_REQUIRE_ESM`; use `const scalus = await import("scalus")` there.
   The old CommonJS shim for browsers no longer works. See [Browser Usage](#browser-usage).
@@ -64,8 +82,8 @@ followed by 1.1.1. Six changes affect existing code:
   instead: `import { EvaluationResult, ExUnits, RedeemerBudget } from "scalus"`.
 - **`Emulator.withAddresses` funds 10 000 ada per address** when you omit
   `lovelacePerAddress`, that is `10_000_000_000n` lovelace. It funded 10 000 lovelace before,
-  which is below min-ada, so seeded outputs were unusable. (`withAddresses` is deprecated
-  since; see [Emulator](#emulator) for `Emulator.create`.)
+  which is below min-ada, so seeded outputs were unusable. (`withAddresses` is removed in
+  1.4.0; see [Emulator](#emulator) for `Emulator.create`.)
 
 ## Emulator
 
@@ -99,11 +117,8 @@ if (result.isSuccess) {
 
 `CardanoInfo.mainnet()`, `.preprod()`, `.preview()` and `.custom(network, slotConfig, params)`
 cover the networks. Every field of the options object is optional: `utxos`, `slot`,
-`stakeRegistrations`, `poolRegistrations`, `drepRegistrations` and `datums`.
-
-> `new Emulator(utxosCbor, slotConfig)`, `Emulator.withState` and `Emulator.withAddresses` are
-> deprecated. They take protocol parameters from the slot configuration alone, so a
-> `SlotConfig.preview` emulator validated transactions against mainnet's parameters.
+`stakeRegistrations`, `poolRegistrations`, `drepRegistrations`, `datums`, `treasury`,
+`protocolParams` and `clock`. An invalid option throws a `TypeError`.
 
 ### Querying UTxOs
 
@@ -128,8 +143,9 @@ utxo.address;       // bech32
 utxo.value.coin;    // bigint lovelace
 utxo.value.assets;  // Asset[], each with policyId, assetName, quantity and unit
 utxo.datumHash;     // string | undefined
-utxo.inlineDatum;   // Uint8Array | undefined
+utxo.inlineDatum;   // Uint8Array | undefined, the bytes it arrived in
 utxo.scriptRef;     // Uint8Array | undefined
+utxo.script;        // { type, script } | undefined, the shape withScriptRef takes
 ```
 
 Fields given are ANDed together. `outRefs` is the exception: it matches any of the references
@@ -191,7 +207,12 @@ emulator.setTime(Date.now());
 ```
 
 Use this to test validity-interval logic, time-locked scripts, and epoch transitions. No blocks
-are produced in between and no rewards are paid out.
+are produced in between and no rewards are paid out. Crossing an epoch boundary adds the
+donations of the epoch to the treasury.
+
+With `clock: "wall"` in the options of `Emulator.create`, the emulator moves to the slot that
+contains `Date.now()` before it validates or evaluates a transaction, so a validity interval built
+from the wall clock holds. The default, `"manual"`, moves the slot only when you move it.
 
 ### Transaction Lookup
 
@@ -210,17 +231,27 @@ told apart by the address itself:
 ```typescript
 emulator.getStakeReward("stake_test1...");   // bigint | undefined
 emulator.getDelegation("stake_test1...");    // { poolId?: string, rewards: bigint }
-emulator.getStakeDistribution();             // live stake per registered credential
+emulator.getAccount("stake_test1...");       // { balance, deposit, poolId?, drep? } | undefined
+emulator.addRewards("stake_test1...", 5_000_000n); // pay rewards into a registered account
+emulator.getStakeDistribution();             // live stake per credential, with its rewardAddress
+emulator.getTreasury();                      // bigint, the currentTreasuryValue a tx must state
 ```
+
+From protocol version 10, a withdrawal from a key-hash reward account needs a DRep delegation, as
+on chain. A delegation needs a registered pool or DRep: seed it with `poolRegistrations` or
+`drepRegistrations`, or register it in an earlier transaction.
 
 ### Datum Store
 
 ```typescript
-emulator.getDatum(datumHashHex);  // Uint8Array | undefined
+emulator.getDatum(datumHashHex);         // Uint8Array | undefined
+const hash = emulator.addDatum(datumCbor); // hex or bytes in, hex hash of those bytes out
 ```
 
 Datums witnessed by accepted transactions are indexed automatically. Pre-seed others with the
-`datums` option of `Emulator.create`.
+`datums` option of `Emulator.create`, or add them later with `addDatum`, for example for a UTxO
+added with `addUtxo` that holds only a datum hash. The store keeps the bytes as given, so the hash
+is the hash of exactly those bytes.
 
 ### Editing the Ledger Directly
 
@@ -247,11 +278,16 @@ const emulator = Emulator.create(CardanoInfo.preview(), {
     { credentialType: "key", credentialHash: "abcd…", rewards: 42_000_000n },
     { credentialType: "key", credentialHash: "1234…", rewards: 0n, delegatedTo: poolIdHex },
   ],
-  poolRegistrations: [{ params: poolRegCertCbor }],
+  poolRegistrations: [
+    { params: poolRegCertCbor },  // a full pool_registration certificate
+    { poolId: poolIdHex },        // or a pool whose parameters do not matter
+  ],
   drepRegistrations: [
     { credentialType: "key", credentialHash: "ef01…", deposit: 500_000_000n },
   ],
   datums: [{ hash: datumHashHex, datum: datumCborHex }],
+  treasury: 1_000_000_000n,                  // defaults to 0
+  protocolParams: { maxTxSize: 32_768 },     // replaces only the fields given
 });
 ```
 
@@ -347,8 +383,9 @@ scriptHash({ type: "Native", script: nativeScriptCbor });
 dataHash(datumCborHex);                                   // the datum hash, hex
 ```
 
-`scriptHash` takes the script in the shape `Utxo.withScriptRef` does, and a Plutus program in any
-CBOR wrapping gives the same hash. `dataHash` hashes the CBOR exactly as given, as the ledger does.
+`scriptHash` takes the script in the shape `Utxo.withScriptRef` does, with `type` one of
+`"Native"`, `"PlutusV1"` to `"PlutusV4"`, and a Plutus program in any CBOR wrapping gives the same
+hash. `dataHash` hashes the CBOR exactly as given, as the ledger does.
 
 ### Evaluation options
 
@@ -417,7 +454,7 @@ any result is accepted, as the ledger accepts it.
 
 The rule is checked *after* the machine stops, so a rejected result still carries the budget the
 program really spent and the traces it emitted. That is how you cost a pure on-chain function
-that returns something other than unit — read `error.code`, not `isSuccess`:
+that returns something other than unit – read `error.code`, not `isSuccess`:
 
 ```typescript
 const r = evaluator.evaluateScript(program, [], options);   // program returns (con integer 3)
@@ -489,7 +526,7 @@ work exactly as before. All four are deprecated; three have a replacement in the
 | --- | --- |
 | `applyDataArgToScript(script, json)` | `uplc.applyParamsToScript(script, [cbor])` |
 | `evaluateScript(script)` | `evaluator.evaluateScript(script, args, EvaluationOptions.mainnet("PlutusV3"))` |
-| `evaluateScriptProfile(script)` | no replacement — `evaluator` does not profile; keep using this, or profile from the JVM |
+| `evaluateScriptProfile(script)` | no replacement – `evaluator` does not profile; keep using this, or profile from the JVM |
 | `evalPlutusScripts(tx, utxoMap, slotConfig, [v1, v2, v3])` | `evaluator.evaluateTx(tx, utxoPairs, slotConfig, { PlutusV1: v1, PlutusV2: v2, PlutusV3: v3 }, 11)` |
 
 ### Evaluate All Scripts in a Transaction
@@ -588,6 +625,31 @@ In TypeScript the six fields are declared optional, because the two-argument con
 `new PlutusScriptEvaluationError(message, logs)` leaves them `undefined`. An error thrown by
 `evaluateTx` always carries them, so after the `instanceof` check `e.redeemer!` is safe.
 
+#### Many transactions under the same parameters
+
+`evaluator.evaluateTx` prepares the cost models on every call. An SDK that evaluates many
+transactions under the same parameters keeps one `TxEvaluator` instead, which prepares them once.
+Create a new one when the parameters change. A `ScriptCache` keeps decoded scripts across
+evaluations, so a script that many transactions carry or reference is hashed and decoded once.
+One cache can serve several evaluators. When it is full, it drops the least recently used script.
+
+```typescript
+import { ScriptCache, TxEvaluator } from "scalus";
+
+const scripts = new ScriptCache(64);
+const ev = new TxEvaluator({
+  slotConfig,                              // SlotConfigLike
+  costModels,                              // CostModelsLike
+  protocolMajorVersion: 11,
+  maxBudget: { memory: 14_000_000n, steps: 10_000_000_000n }, // optional
+  scriptCache: scripts,                    // optional
+});
+ev.evaluate(tx1, utxos1);                  // RedeemerBudget[], as evaluator.evaluateTx returns
+ev.evaluate(tx2, utxos2);
+```
+
+`evaluate` throws as `evaluator.evaluateTx` does.
+
 ### Plutus Data JSON Format
 
 The deprecated `applyDataArgToScript` takes its argument in the standard Plutus Data JSON
@@ -600,6 +662,34 @@ encoding. `uplc.applyParamsToScript` takes CBOR instead; convert before calling 
 { "map": [{ "k": { "int": 1 }, "v": { "bytes": "aa" } }] }
 { "constructor": 0, "fields": [{ "int": 42 }] }
 ```
+
+## Balancing a Transaction
+
+**Experimental:** `balancer.balanceTx` may change shape in any release.
+
+`balancer.balanceTx` takes a transaction you have built and sets every redeemer's execution
+units, the fee, and the lovelace of one change output, until the three agree. Coin selection and
+change placement stay with you.
+
+```typescript
+import { balancer, CardanoInfo } from "scalus";
+
+const info = CardanoInfo.preprod();
+const balanced: Uint8Array = balancer.balanceTx(
+  unbalancedTxCbor,     // hex or bytes
+  utxos,                // every UTxO the inputs, collateral and reference inputs name
+  info.slotConfig,
+  info.protocolParams,  // a ProtocolParams, or a plain record of the same fields
+  1,                    // index of the change output
+  [],                   // key hashes that will sign but that the transaction does not name
+);
+```
+
+The signers are found as the ledger finds them: key inputs and collateral, key withdrawals,
+certificates a key must sign (a pool's operator and owners too), key voters and required signers.
+Only the keys of a native script cannot be found; pass them in the last argument. A script that
+fails throws `PlutusScriptEvaluationError`. A transaction that cannot be balanced throws
+`TxBalancingError` with `code` `"INSUFFICIENT_FUNDS"` or `"NOT_CONVERGED"`.
 
 ## Slot Configuration
 
@@ -627,9 +717,10 @@ load it directly, with no bundler and no import map:
 
 ```html
 <script type="module">
-    import { evaluateScript, SlotConfig, Emulator } from "./scalus.js";
+    import { evaluator, EvaluationOptions } from "./scalus.js";
 
-    const result = evaluateScript(scriptDoubleCborHex);
+    const options = EvaluationOptions.mainnet("PlutusV3");
+    const result = evaluator.evaluateScript(scriptHex, [], options);
     console.log(result.isSuccess, result.budget.steps);
 </script>
 ```
