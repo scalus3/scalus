@@ -282,6 +282,11 @@ object ExportCollector {
                 ): Option[TsType] =
                     overrideTs match
                         case Some(t) =>
+                            // The verbatim text can name an interface that only this Scala type
+                            // reaches, as `EmulatorOptions.poolRegistrations` names
+                            // `PoolRegistration`. Map the Scala type anyway, for its chase side
+                            // effect only, so that interface is still emitted.
+                            mapper.map(tpe, ctx)
                             // A narrowed @TsType must not turn an optional JS field into a
                             // required one. Preserve UndefOr independently of its value type.
                             val optional = mapper.includesUndefined(tpe)
