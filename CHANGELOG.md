@@ -117,6 +117,10 @@ module proves properties of compiled validators with Lean.
 - The UPLC parser rejects a `value` constant that is not in canonical form: currency symbols or
   token names out of strictly ascending order, a zero quantity, or an empty token list. It used to
   sort, merge and drop them. Plutus 1.66 made the same change.
+- The flat decoder rejects a `value` constant that Plutus rejects: keys out of strictly ascending
+  order, an empty token list, a zero quantity, a key over 32 bytes or a quantity outside the
+  signed 128-bit range. It used to repair the value, so Scalus could accept a script that the
+  node fails to deserialise.
 - The Plutus conformance tests run on the Plutus 1.70.0.0 corpus, the version cardano-node 11.1.3
   uses: 1009 UPLC evaluation cases, none skipped on JVM, JavaScript and Native.
 

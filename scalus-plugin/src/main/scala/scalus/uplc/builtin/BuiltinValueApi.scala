@@ -45,4 +45,12 @@ private[builtin] trait BuiltinValueApi {
         throw new UnsupportedOperationException(
           "BuiltinValue.fromEntryList not available in plugin"
         )
+
+    /** Strict rebuild from entry list - stub, not used in plugin */
+    private[scalus] def fromCanonicalEntryList(
+        entries: List[(ByteString, List[(ByteString, BigInt)])]
+    ): Either[String, BuiltinValue] =
+        throw new UnsupportedOperationException(
+          "BuiltinValue.fromCanonicalEntryList not available in plugin"
+        )
 }

@@ -19,7 +19,6 @@ import scalus.uplc.Term.*
 import scalus.utils.Utils
 
 import scala.collection.immutable
-import scala.collection.immutable.SortedMap
 
 /** UPLC parsers.
   *
@@ -280,10 +279,6 @@ object UplcParser:
         }
 
     lazy val conValue: P[Constant] = {
-        val maxKeyLen = 32
-        val quantityMin = -BigInt(2).pow(127)
-        val quantityMax = BigInt(2).pow(127) - 1
-
         val innerPair: P[(builtin.ByteString, BigInt)] =
             inParens((lexeme(bytestring) <* symbol(",")) ~ lexeme(integer))
 
@@ -296,51 +291,13 @@ object UplcParser:
         val outerList: P[List[(builtin.ByteString, List[(builtin.ByteString, BigInt)])]] =
             symbol("[") *> outerPair.repSep0(symbol(",")) <* symbol("]")
 
-        // A value literal must already be in canonical form, as in Plutus >= 1.66 (the same rules
-        // as its flat decoder and `unValueData`): currency symbols and token names strictly
-        // ascending (so no duplicates), no empty token list, and no zero quantity. Nothing is
-        // sorted, merged or dropped here.
-        val keyOrdering = summon[Ordering[builtin.ByteString]]
-        def strictlyAscending(keys: List[builtin.ByteString]): Boolean =
-            keys.lazyZip(keys.drop(1)).forall((a, b) => keyOrdering.lt(a, b))
-
+        // A value literal must already be in canonical form, as in Plutus >= 1.66: the same rules
+        // as its flat decoder, so both use fromCanonicalEntryList. Nothing is sorted, merged or
+        // dropped.
         outerList.flatMap { entries =>
-            // Validate and build the value
-            var error: Option[String] = None
-            val builder =
-                SortedMap.newBuilder[builtin.ByteString, SortedMap[builtin.ByteString, BigInt]]
-
-            if !strictlyAscending(entries.map(_._1)) then
-                error = Some("Currency symbols are not in strictly ascending order")
-            for (currency, tokens) <- entries if error.isEmpty do
-                if currency.size > maxKeyLen then
-                    error = Some(s"Currency symbol exceeds max length of $maxKeyLen bytes")
-                else if tokens.isEmpty then error = Some(s"Currency symbol $currency has no tokens")
-                else if !strictlyAscending(tokens.map(_._1)) then
-                    error = Some(
-                      s"Token names of currency symbol $currency are not in strictly ascending order"
-                    )
-                else
-                    val innerBuilder = SortedMap.newBuilder[builtin.ByteString, BigInt]
-                    for (token, amount) <- tokens if error.isEmpty do
-                        if token.size > maxKeyLen then
-                            error = Some(s"Token name exceeds max length of $maxKeyLen bytes")
-                        else if amount < quantityMin || amount > quantityMax then
-                            error = Some(s"Quantity $amount out of signed 128-bit range")
-                        else if amount == BigInt(0) then
-                            error =
-                                Some(s"Token $token of currency symbol $currency has quantity 0")
-                        else innerBuilder += (token -> amount)
-                    if error.isEmpty then builder += (currency -> innerBuilder.result())
-
-            error match
-                case Some(msg) => P.failWith(msg)
-                case None =>
-                    P.pure(
-                      Constant.BuiltinValue(
-                        builtin.BuiltinValue.unsafeFromInner(builder.result())
-                      )
-                    )
+            builtin.BuiltinValue
+                .fromCanonicalEntryList(entries)
+                .fold(P.failWith, value => P.pure(Constant.BuiltinValue(value)))
         }
     }
 

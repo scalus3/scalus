@@ -122,7 +122,10 @@ object DefaultUni:
                 entriesFlat.encode(builtin.BuiltinValue.toEntryList(a), encoder)
 
             def decode(decoder: DecoderState): builtin.BuiltinValue =
-                builtin.BuiltinValue.fromEntryList(entriesFlat.decode(decoder))
+                builtin.BuiltinValue.fromCanonicalEntryList(entriesFlat.decode(decoder)) match
+                    case Right(value) => value
+                    case Left(reason) =>
+                        throw new FlatDecodingError(s"Invalid value constant: $reason")
 
     def encodeUni(uni: DefaultUni): List[Int] =
         uni match

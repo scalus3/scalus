@@ -71,6 +71,54 @@ private[builtin] trait BuiltinValueApi {
         unsafeFromInner(result)
     }
 
+    /** Builds a value from an entry list that must already be canonical, as Plutus's flat decoder
+      * requires (`buildValueWith` and the `K`/`Quantity` decoders in `PlutusCore/Value.hs`).
+      *
+      * Unlike [[fromEntryList]], nothing is sorted, merged or dropped. The result is `Left` with
+      * the reason for a key longer than 32 bytes, a quantity outside the signed 128-bit range,
+      * currency symbols or token names not in strictly ascending order, an empty token list, or a
+      * zero quantity. A script holding such a value must fail to deserialise, as it does on the
+      * node.
+      */
+    private[scalus] def fromCanonicalEntryList(
+        entries: List[(ByteString, List[(ByteString, BigInt)])]
+    ): Either[String, BuiltinValue] = {
+        import scalus.uplc.eval.BuiltinValueOps.{maxKeyLen, quantityMax, quantityMin}
+        val keyOrdering = summon[Ordering[ByteString]]
+        def keyError(key: ByteString, prev: Option[ByteString], what: String): Option[String] =
+            if key.size > maxKeyLen then Some(s"$what longer than $maxKeyLen bytes")
+            else if prev.exists(p => !keyOrdering.lt(p, key)) then
+                Some(s"${what}s not strictly ascending")
+            else None
+        def tokenError(token: ByteString, quantity: BigInt, prev: Option[ByteString]) =
+            keyError(token, prev, "token name").orElse {
+                if quantity < quantityMin || quantity > quantityMax then
+                    Some(s"quantity $quantity out of signed 128-bit range")
+                else if quantity == BigInt(0) then Some("zero quantity")
+                else None
+            }
+
+        val outer = SortedMap.newBuilder[ByteString, SortedMap[ByteString, BigInt]]
+        var error = Option.empty[String]
+        var prevCurrency = Option.empty[ByteString]
+        val it = entries.iterator
+        while error.isEmpty && it.hasNext do
+            val (currency, tokens) = it.next()
+            error = keyError(currency, prevCurrency, "currency symbol")
+                .orElse(Option.when(tokens.isEmpty)("empty token list"))
+            val inner = SortedMap.newBuilder[ByteString, BigInt]
+            var prevToken = Option.empty[ByteString]
+            val tokenIt = tokens.iterator
+            while error.isEmpty && tokenIt.hasNext do
+                val (token, quantity) = tokenIt.next()
+                error = tokenError(token, quantity, prevToken)
+                inner += (token -> quantity)
+                prevToken = Some(token)
+            outer += (currency -> inner.result())
+            prevCurrency = Some(currency)
+        error.toLeft(unsafeFromInner(outer.result()))
+    }
+
     /** Convert BuiltinValue to Data representation.
       *
       * Data encoding: Map ByteString (Map ByteString Integer)
