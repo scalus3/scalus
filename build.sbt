@@ -20,17 +20,17 @@ val scalusStableVersion = "1.2.0"
 val scalusCompatibleVersion = scalusStableVersion
 
 // Bloxbean Cardano Client Library versions
-val cardanoClientLibVersion = "0.7.2"
-val yaciVersion = "0.4.5"
+val cardanoClientLibVersion = "0.7.3"
+val yaciVersion = "0.4.6"
 val yaciCardanoTestVersion = "0.1.0"
 val scalatestVersion = "3.2.20"
 val scalatestPlusScalacheckVersion = "3.2.20.0"
 val borerVersion = "1.18.0"
-val slf4jVersion = "2.0.18"
-val magnoliaVersion = "1.3.23"
+val slf4jVersion = "2.0.20"
+val magnoliaVersion = "1.3.24"
 val pprintVersion = "0.9.6"
 val monocleVersion = "3.3.0"
-val jsoniterScalaVersion = "2.40.1"
+val jsoniterScalaVersion = "2.41.2"
 
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
 //ThisBuild / scalaVersion := "3.3.7-RC1-bin-SNAPSHOT"
@@ -163,7 +163,7 @@ val jvmReleaseTarget = Compile / scalacOptions ++= {
 // each supported version is a distinct artifact and all of them are published.
 val publishOnlyLts = publish / skip := (scalaVersion.value != scala3LtsVersion)
 
-val fs2Version = "3.12.2"
+val fs2Version = "3.14.0"
 
 // Compilation profiling options for analyzing compilation time
 lazy val profilingScalacOptions = Seq(
@@ -659,7 +659,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         s"-Dscalus.plugin.jar=${(scalusPlugin / Compile / packageBin).value.getAbsolutePath}",
         s"-Dscalus.test.classpath=${(Test / fullClasspath).value.files.map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}"
       ),
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.86",
       libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0",
       // BLS12-381 moved from blst-java to scalus-crypto-jni (the blst build cardano-node links), so
       // G1Element, G2Element and MLResult hold raw blst structs as Array[Byte] instead of blst-java's
@@ -920,7 +920,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
-      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.26",
+      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.27",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test
     )
     .jsSettings(jsModuleSettings *)
@@ -1101,7 +1101,7 @@ lazy val bench = project
       run / fork := true,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.22.2",
+      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.22.3",
       libraryDependencies += "io.bullet" %%% "borer-core" % borerVersion,
       libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion
     )
@@ -1382,7 +1382,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.26",
+      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.27",
       inConfig(Test)(PluginDependency),
       publishOnlyLts
     )
@@ -1638,7 +1638,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3" % "test",
       libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.3" % "test",
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2" % "test",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.86" % "test",
       libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       // Testcontainers for Yaci DevKit integration tests
@@ -1793,7 +1793,7 @@ usefulTasks := Seq(
   UsefulTask("~compile", "Compile with file-watch enabled"),
   UsefulTask("quick", "Format all, compile and quick test everything on JVM"),
   UsefulTask("precommit", "Format all, clean compile and test everything on JVM"),
-  UsefulTask("ci", "Clean compile, check formatting and test everything, build docs, run MiMa"),
+  UsefulTask("ci", "ci-jvm, ci-js, ci-native: format check, MiMa, tests on JVM, JS and Native"),
   UsefulTask("benchmark", "Run benchmarks"),
   UsefulTask("mima", "Check binary compatibility with the previous version using MiMa"),
 )
