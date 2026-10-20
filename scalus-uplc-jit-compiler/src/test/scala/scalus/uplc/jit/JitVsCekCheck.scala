@@ -1,55 +1,37 @@
 package scalus.uplc.jit
 
-import scalus.uplc.eval.*
-import scalus.uplc.{DeBruijnedProgram, Term}
-
-import java.nio.file.{Files, Paths}
-import scala.jdk.CollectionConverters.*
-import scala.quoted.staging
 import scala.util.Try
 
-/** Compiles every script of a directory with the nativestack JIT and compares the result and the
-  * spent budget with the CEK machine, both with the same machine parameters.
+/** Compiles every corpus script ([[JitCorpus]]) with the JIT and compares the result, success or
+  * failure, and the spent budget per category with the CEK machine, both with the machine
+  * parameters of [[JitCorpus.vm]] ([[JitCekDiff.same]]).
   *
-  * Usage: `JitVsCekCheck <dir with .flat files> [name filter]`. `-Dprobe.backend=mincont` checks
-  * the mincont JIT instead.
+  * Usage: `JitVsCekCheck [name filter]`. Prints one line per script and the number of mismatches.
   */
 object JitVsCekCheck {
 
     def main(args: Array[String]): Unit = {
-        val filter = args.lift(1).getOrElse("")
-        val files = Files
-            .list(Paths.get(args(0)))
-            .iterator()
-            .asScala
-            .filter(f => f.toString.endsWith(".flat") && f.getFileName.toString.contains(filter))
-            .toList
-            .sortBy(_.toString)
-        val vm = PlutusVM.makePlutusV3VM()
-        val params = vm.machineParams
-        val genCode = JitCodegenProbe.genCode(sys.props.getOrElse("probe.backend", "nativestack"))
+        val filter = args.headOption.getOrElse("")
+        val scripts = JitCorpus.all.filter(_.name.contains(filter))
+        val vm = JitCorpus.vm
         var mismatches = 0
-        for file <- files do
-            val name = file.getFileName.toString.stripSuffix(".flat")
-            val program = DeBruijnedProgram.fromFlatEncoded(Files.readAllBytes(file))
-            val term = program.toProgram.term
-            val cekBudget = CountingBudgetSpender()
-            val cek = Try(vm.evaluateDeBruijnedTerm(program.term, cekBudget, NoLogger))
-            given staging.Compiler = staging.Compiler.make(getClass.getClassLoader)
+        for script <- scripts do
+            val cek = JitCekDiff.runCek(vm, script.term)
             val start = System.nanoTime()
-            val fn = staging.run(genCode(term))
+            val compiled = Try(nativestack.JIT.jitUplc(script.term))
             val compileS = (System.nanoTime() - start) / 1e9
-            val jitBudget = CountingBudgetSpender()
-            val jit = Try(fn(NoLogger, jitBudget, params))
-            val same = cek.isSuccess == jit.isSuccess &&
-                cekBudget.getSpentBudget == jitBudget.getSpentBudget
+            val jit = compiled.map(fn => JitCekDiff.runJit(fn, vm.machineParams))
+            val same = jit.toOption.exists(JitCekDiff.same(cek, _))
             if !same then mismatches += 1
-            println(
-              f"${if same then "OK  " else "DIFF"} $name%-28s compile $compileS%6.2f s " +
-                  s"cek=${cek.map(short).getOrElse("FAIL")} ${cekBudget.getSpentBudget} " +
-                  s"jit=${jit.map(short).getOrElse("FAIL")} ${jitBudget.getSpentBudget}"
+            val jitDesc = jit.fold(
+              e => s"COMPILE FAILED $e",
+              j => s"${j.result.map(short).getOrElse("FAIL")} ${j.total}"
             )
-        println(s"scripts=${files.size} mismatches=$mismatches")
+            println(
+              f"${if same then "OK  " else "DIFF"} ${script.name}%-40s compile $compileS%6.2f s " +
+                  s"cek=${cek.result.map(short).getOrElse("FAIL")} ${cek.total} jit=$jitDesc"
+            )
+        println(s"scripts=${scripts.size} mismatches=$mismatches")
     }
 
     private def short(x: Any): String = x.toString.take(40)

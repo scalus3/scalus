@@ -1,16 +1,20 @@
 package scalus.uplc.eval
 
 import org.openjdk.jmh.annotations.*
-import scalus.*
-import scalus.uplc.jit.JITImplementation
-import scalus.uplc.{DeBruijnedProgram, DefaultFun, Program, Term}
+import scalus.cardano.ledger.MajorProtocolVersion
+import scalus.uplc.DeBruijnedProgram
+import scalus.uplc.jit.{CompiledTerm, UplcValue}
+import scalus.uplc.jit.nativestack.JIT
 
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.{Files, Paths}
 import java.util.concurrent.TimeUnit
 import scala.annotation.nowarn
 
+/** Evaluation time of JIT-compiled scripts, with the machine of the JIT's scope: PlutusV3, builtin
+  * semantics variant E, protocol version 11.
+  */
 @State(Scope.Thread)
-class JITMincontBenchmark:
+class JITBenchmark:
     @Param(
       Array(
         "auction_1-1.flat",
@@ -21,134 +25,20 @@ class JITMincontBenchmark:
     )
     @nowarn("msg=unset private variable")
     private var file: String = ""
-    private var program: DeBruijnedProgram | Null = null
-    private var jitted: (Logger, BudgetSpender, MachineParams) => Any | Null = null
-    private val params = MachineParams.defaultPlutusV2PostConwayParams
+    private var compiled: CompiledTerm | Null = null
+    private val params =
+        PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV).machineParams
 
     @Setup
     def setup(): Unit = {
-        val path = Paths.get(s"src/main/resources/data/$file")
-        val bytes = Files.readAllBytes(path)
-        program = DeBruijnedProgram.fromFlatEncoded(bytes)
-        jitted = Test.getJitted(program.toProgram, JITImplementation.Mincont)
+        val bytes = Files.readAllBytes(Paths.get(s"src/main/resources/data/$file"))
+        compiled = JIT.jitUplc(DeBruijnedProgram.fromFlatEncoded(bytes).toProgram.term)
     }
 
     @Benchmark
     @BenchmarkMode(Array(Mode.AverageTime))
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    def benchJIT_Mincont(): Unit = {
-        jitted(NoLogger, NoBudgetSpender, params)
+    def benchJIT(): UplcValue = {
+        // returned, so that JMH consumes the result and cannot drop the evaluation
+        compiled.nn(NoLogger, NoBudgetSpender, params)
     }
-
-@State(Scope.Thread)
-class JITNativeStackBenchmark:
-    @Param(
-      Array(
-        "auction_1-1.flat",
-        "auction_1-2.flat",
-        "auction_1-3.flat",
-        "auction_1-4.flat"
-      )
-    )
-    @nowarn("msg=unset private variable")
-    private var file: String = ""
-    private var program: DeBruijnedProgram | Null = null
-    private var jitted: (Logger, BudgetSpender, MachineParams) => Any | Null = null
-    private val params = MachineParams.defaultPlutusV2PostConwayParams
-
-    @Setup
-    def setup(): Unit = {
-        val path = Paths.get(s"src/main/resources/data/$file")
-        val bytes = Files.readAllBytes(path)
-        program = DeBruijnedProgram.fromFlatEncoded(bytes)
-        jitted = Test.getJitted(program.toProgram, JITImplementation.NativeStack)
-    }
-
-    @Benchmark
-    @BenchmarkMode(Array(Mode.AverageTime))
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    def benchJIT_NativeStack(): Unit = {
-        jitted(NoLogger, NoBudgetSpender, params)
-    }
-
-@State(Scope.Thread)
-class JITHybridBenchmark:
-    @Param(
-      Array(
-        "auction_1-1.flat",
-        "auction_1-2.flat",
-        "auction_1-3.flat",
-        "auction_1-4.flat"
-      )
-    )
-    @nowarn("msg=unset private variable")
-    private var file: String = ""
-    private var program: DeBruijnedProgram | Null = null
-    private var jitted: (Logger, BudgetSpender, MachineParams) => Any | Null = null
-    private val params = MachineParams.defaultPlutusV2PostConwayParams
-
-    @Setup
-    def setup(): Unit = {
-        val path = Paths.get(s"src/main/resources/data/$file")
-        val bytes = Files.readAllBytes(path)
-        program = DeBruijnedProgram.fromFlatEncoded(bytes)
-        jitted = Test.getJitted(program.toProgram, JITImplementation.Hybrid())
-    }
-
-    @Benchmark
-    @BenchmarkMode(Array(Mode.AverageTime))
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    def benchJIT_Hybrid(): Unit = {
-        jitted(NoLogger, NoBudgetSpender, params)
-    }
-
-private object Test {
-    private val path = Paths.get(s"src/main/resources/data/auction_1-1.flat")
-    private val bytes = Files.readAllBytes(path)
-    private val program = DeBruijnedProgram.fromFlatEncoded(bytes).toProgram
-
-    private def collect(t: Term): Set[DefaultFun] = t match
-        case Term.Var(_, _)           => Set()
-        case Term.LamAbs(_, term, _)  => collect(term)
-        case Term.Apply(f, arg, _)    => collect(f) ++ collect(arg)
-        case Term.Force(term, _)      => collect(term)
-        case Term.Delay(term, _)      => collect(term)
-        case Term.Const(_, _)         => Set()
-        case Term.Builtin(bn, _)      => Set(bn)
-        case _: Term.Error            => Set()
-        case Term.Constr(_, args, _)  => args.flatMap(collect).toSet
-        case Term.Case(arg, cases, _) => collect(arg) ++ cases.flatMap(collect)
-
-    private val builtins = collect(program.term).toSeq.sorted
-
-    def getJitted(
-        prog: Program,
-        impl: JITImplementation
-    ): (Logger, BudgetSpender, MachineParams) => Any = {
-        println(s"Starting JIT compilation (${impl.name}) at ${System.currentTimeMillis()}")
-        val start = System.currentTimeMillis()
-        println(s"Calling ${impl.name}.compile...")
-        val r = impl.compile(prog.term)
-        val end = System.currentTimeMillis()
-        println(s"JIT compilation (${impl.name}) completed in ${end - start} ms")
-        r
-    }
-
-    @main def run() = {
-        given PlutusVM = PlutusVM.makePlutusV2VM()
-        println("Builtins used:")
-        println(builtins)
-        println("\nProgram evaluation (CeK):")
-        println(program.evaluateDebug)
-
-        // Test all JIT implementations
-        for impl <- JITImplementation.standaloneImplementations do
-            println(s"\n=== Testing ${impl.name} JIT ===")
-            println(s"Stack-safe: ${impl.isStackSafe}")
-            val spender = CountingBudgetSpender()
-            val jitted = getJitted(program, impl)
-            val result = jitted(NoLogger, spender, MachineParams.defaultPlutusV2PostConwayParams)
-            println(s"Result: $result")
-            println(s"Budget: ${spender.getSpentBudget.showJson}")
-    }
-}

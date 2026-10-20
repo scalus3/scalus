@@ -781,6 +781,9 @@ lazy val scalusUplcJitCompiler = project
       scalaVersion := scalaVersion.value,
       scalacOptions ++= commonScalacOptions,
       Test / fork := true,
+      // Run forked tests from the project root: the conformance suites read the
+      // plutus-conformance corpus and the cost models by paths relative to it
+      Test / baseDirectory := (LocalRootProject / baseDirectory).value,
       Test / javaOptions ++= Seq(
         "-Xss64m", // Increase stack size to 64MB for JIT compilation of deeply nested UPLC terms
         "-Xmx4g" // Increase heap to 4GB for large compilations
@@ -1762,10 +1765,6 @@ addCommandAlias(
 addCommandAlias(
   "benchmark-cek",
   "bench/Jmh/run -i 3 -wi 3 -f 1 -t 1 .*CekJVMBenchmark"
-)
-addCommandAlias(
-  "benchmark-hybrid",
-  "bench/Jmh/run -i 3 -wi 3 -f 1 -t 1 .*JITHybridBenchmark"
 )
 addCommandAlias(
   "it",

@@ -1,21 +1,19 @@
 package scalus.uplc.jit
 
-import scalus.uplc.eval.{BudgetSpender, Logger, MachineParams}
 import scalus.uplc.{DeBruijnedProgram, Term}
 
 import java.lang.management.ManagementFactory
 import java.nio.file.{Files, Paths}
 import javax.management.ObjectName
-import scala.quoted.{staging, Expr, Quotes}
+import scala.quoted.staging
 
 /** Times `genCodeFromTerm` alone on one script, `n` times, each with a fresh staging compiler.
   *
   * Usage: `JitCodegenProbe <script.flat> [n]`. For profiling the code generator.
   * `-Dprobe.checkMacros=true` compiles with `-Xcheck-macros`, which checks the owners of the
   * generated trees. `-Dprobe.reuse=true` reuses one compiler for all runs. `-Dprobe.jitUplc=true`
-  * compiles with `jitUplc` instead, with the compiler policy of the JITs. `-Dprobe.backend=mincont`
-  * probes the mincont JIT instead of nativestack (the default). `-Dprobe.histoAt=50,100` prints the
-  * live staging-compiler objects after those runs (a class histogram).
+  * compiles with `jitUplc` instead, with the compiler policy of the JIT. `-Dprobe.histoAt=50,100`
+  * prints the live staging-compiler objects after those runs (a class histogram).
   */
 object JitCodegenProbe {
 
@@ -33,23 +31,25 @@ object JitCodegenProbe {
         val shared = newCompiler()
         val reuse = sys.props.get("probe.reuse").contains("true")
         val viaJitUplc = sys.props.get("probe.jitUplc").contains("true")
-        val backend = sys.props.getOrElse("probe.backend", "nativestack")
-        val genCode = JitCodegenProbe.genCode(backend)
-        val runner: JitRunner = if backend == "mincont" then mincont.JIT else nativestack.JIT
         val histoAt =
             sys.props.get("probe.histoAt").toList.flatMap(_.split(",")).map(_.trim.toInt).toSet
         for i <- 1 to n do
             given staging.Compiler = if reuse then shared else newCompiler()
             var codegenNs = 0L
             val start = System.nanoTime()
-            if viaJitUplc then runner.jitUplc(term)
+            if viaJitUplc then nativestack.JIT.jitUplc(term)
             else
+                val pool = ConstantPool(term)
                 staging.run {
                     val t0 = System.nanoTime()
-                    val expr = genCode(term)
+                    val expr = nativestack.JIT.genCodeFromTerm(
+                      term,
+                      pool,
+                      nativestack.NativeStackContext.DefaultMaxDepth
+                    )
                     codegenNs = System.nanoTime() - t0
                     expr
-                }
+                }(pool.values)
             val total = System.nanoTime() - start
             println(f"run $i: codegen ${codegenNs / 1e9}%.2f s, total ${total / 1e9}%.2f s")
             if histoAt.contains(i) then printHistogram(i)
@@ -84,23 +84,16 @@ object JitCodegenProbe {
         )
     }
 
-    /** The code generator of a JIT backend: `nativestack` or `mincont`. */
-    def genCode(
-        backend: String
-    ): Term => Quotes ?=> Expr[(Logger, BudgetSpender, MachineParams) => Any] =
-        backend match
-            case "nativestack" => t => nativestack.JIT.genCodeFromTerm(t)
-            case "mincont"     => t => mincont.JIT.genCodeFromTerm(t)
-            case other         => throw IllegalArgumentException(s"unknown backend $other")
+    /** Compiles `term` on the given compiler, as `jitUplc` does on its own. */
+    def compile(term: Term)(using staging.Compiler): CompiledTerm = {
+        val pool = ConstantPool(term)
+        staging.run(
+          nativestack.JIT
+              .genCodeFromTerm(term, pool, nativestack.NativeStackContext.DefaultMaxDepth)
+        )(pool.values)
+    }
 
-    def nodes(t: Term): Long = t match
-        case Term.LamAbs(_, b, _)  => 1 + nodes(b)
-        case Term.Apply(f, a, _)   => 1 + nodes(f) + nodes(a)
-        case Term.Force(b, _)      => 1 + nodes(b)
-        case Term.Delay(b, _)      => 1 + nodes(b)
-        case Term.Constr(_, as, _) => 1 + as.map(nodes).sum
-        case Term.Case(s, cs, _)   => 1 + nodes(s) + cs.map(nodes).sum
-        case _                     => 1
+    def nodes(t: Term): Long = StagingCompilerThread.nodeCount(t)
 
     /** Maximum number of nested LamAbs/Delay (closure) levels on any path. */
     def depth(t: Term): Int = t match

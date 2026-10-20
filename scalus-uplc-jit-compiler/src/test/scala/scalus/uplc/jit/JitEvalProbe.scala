@@ -6,7 +6,7 @@ import scalus.uplc.eval.*
 import java.nio.file.{Files, Paths}
 import scala.quoted.staging
 
-/** Times steady-state evaluation of one script: nativestack JIT vs CEK.
+/** Times steady-state evaluation of one script: JIT vs CEK.
   *
   * Usage: `JitEvalProbe <script.flat> [warmupSeconds] [runs]`. Compiles once, warms each side up
   * for `warmupSeconds` (default 20), then prints the median of `runs` (default 200) evaluations.
@@ -20,13 +20,13 @@ object JitEvalProbe {
         val warmupS = if args.length > 1 then args(1).toDouble else 20.0
         val runs = if args.length > 2 then args(2).toInt else 200
         val term = program.toProgram.term
-        val vm = PlutusVM.makePlutusV3VM()
+        val vm = JitCorpus.vm
         val params = vm.machineParams
         given staging.Compiler = staging.Compiler.make(getClass.getClassLoader)(using
           staging.Compiler.Settings.make(outDir = sys.props.get("probe.outDir"))
         )
         val t0 = System.nanoTime()
-        val fn = staging.run(nativestack.JIT.genCodeFromTerm(term))
+        val fn = JitCodegenProbe.compile(term)
         println(f"compile ${(System.nanoTime() - t0) / 1e9}%.2f s")
         val jit = median(warmupS, runs)(fn(NoLogger, NoBudgetSpender, params))
         val cek = median(warmupS, runs)(

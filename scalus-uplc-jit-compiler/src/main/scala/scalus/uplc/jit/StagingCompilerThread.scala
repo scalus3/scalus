@@ -5,7 +5,7 @@ import scalus.uplc.Term
 import java.util.concurrent.{Callable, ExecutionException, Executors}
 import scala.quoted.{staging, Expr, Quotes}
 
-/** Runs the staging compiles of all JIT backends, one at a time, on one dedicated thread.
+/** Runs the staging compiles of the JIT, one at a time, on one dedicated thread.
   *
   * A `staging.Compiler` may only be used from the thread that first ran it (the compiler asserts
   * "illegal multithreaded access to ContextBase"), so callers on several threads cannot share one
@@ -38,6 +38,13 @@ private[jit] object StagingCompilerThread {
         t
     }
 
+    /** `-Dscalus.jit.outDir=<dir>` writes the generated classes to `<dir>`, for `javap` and for the
+      * class sizes the bench records. Every compile writes `Generated$Code$From$Quoted.class`, so a
+      * file holds the last compile only.
+      */
+    private val settings =
+        staging.Compiler.Settings.make(outDir = sys.props.get("scalus.jit.outDir"))
+
     // Used only on the compiler thread.
     private var compiler: staging.Compiler | Null = null
     private var compiledNodes = 0L
@@ -46,21 +53,35 @@ private[jit] object StagingCompilerThread {
       */
     def run[T](term: Term)(code: Quotes ?=> Expr[T]): T =
         // a compile that calls back would wait for itself; the nested staging.run fails instead
-        if Thread.currentThread() eq thread then compile(term, code)
+        onThread(compile(term, code))
+
+    /** Runs `body` on the compiler thread and returns its value or rethrows its exception; on the
+      * compiler thread it runs in place. For work before a compile that recurses on the depth of
+      * the term (the constant pool), so that it gets the large stack too.
+      */
+    def onThread[T](body: => T): T =
+        if Thread.currentThread() eq thread then body
         else
-            val task: Callable[T] = () => compile(term, code)
+            val task: Callable[T] = () => body
             try executor.submit(task).get()
             catch case e: ExecutionException => throw e.getCause
 
     private def compile[T](term: Term, code: Quotes ?=> Expr[T]): T = {
         if compiler == null || compiledNodes >= NodesPerCompiler then
-            compiler = staging.Compiler.make(getClass.getClassLoader)
+            compiler = staging.Compiler.make(getClass.getClassLoader)(using settings)
             compiledNodes = 0
         compiledNodes += nodeCount(term)
-        staging.run(code)(using compiler.nn)
+        try staging.run(code)(using compiler.nn)
+        catch
+            case e: Throwable =>
+                // a failed compile (class too large, a generator error) can leave the compiler
+                // in a broken state; the next compile gets a new one
+                compiler = null
+                throw e
     }
 
-    private def nodeCount(t: Term): Long = t match
+    /** The number of term nodes in `t`: the size measure of a compile. */
+    private[jit] def nodeCount(t: Term): Long = t match
         case Term.LamAbs(_, b, _)  => 1 + nodeCount(b)
         case Term.Apply(f, a, _)   => 1 + nodeCount(f) + nodeCount(a)
         case Term.Force(b, _)      => 1 + nodeCount(b)
