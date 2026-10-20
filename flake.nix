@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     flake-utils.url = "github:numtide/flake-utils";
     plutus.url = "github:IntersectMBO/plutus/1.63.0.0";
     # The C crypto libraries exactly as cardano-node 11.1.3 links them: its root iohkNix input

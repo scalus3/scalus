@@ -305,7 +305,7 @@ cardano-node release**. Check this on every cardano-node release and every Plutu
 
 ### Current state
 
-Last checked against cardano-node 11.1.3 (plutus-core 1.70.0.0) on 2026-10-07.
+Last checked against cardano-node 11.1.3 (plutus-core 1.70.0.0) on 2026-10-20.
 
 | Library | cardano-node 11.1.3 | Scalus JVM | Scalus Native |
 |---|---|---|---|
