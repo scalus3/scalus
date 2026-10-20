@@ -50,8 +50,9 @@ case class ListConfig(
   * at runtime from the `ScriptContext`; it does **not** need to be stored in the configuration.
   *
   * The minting policy checks:
-  *   - `Init` / `Deinit` structural invariants via [[LinkedList.init]] / [[LinkedList.deinit]].
-  *   - All insert/remove/fold operations via the respective [[LinkedList]] helpers.
+  *   - `Init` / `Deinit` structural invariants via [[scalus.patterns.LinkedList.init]] /
+  *     [[scalus.patterns.LinkedList.deinit]].
+  *   - All insert/remove/fold operations via the respective [[scalus.patterns.LinkedList]] helpers.
   *
   * The spending script delegates to the minting policy by checking that list NFTs are being
   * minted/burnt (coupling pattern) – except for `SpendForUpdate` which verifies only data changes.

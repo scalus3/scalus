@@ -79,9 +79,10 @@ class UtxoCellDef[S: ToData: FromData, A: ToData](
         builder.mintCell(cellDef, initialState.toData, initialState, outputValue)
     }
 
-    /** Apply an action to the cell (deferred). Records a [[TransactionBuilderStep.Deferred]] step
-      * that resolves at `complete` time: finds cell UTxO by beacon, decodes state, runs transition,
-      * builds spend + continuing output (or burn) + context-accumulated steps.
+    /** Apply an action to the cell (deferred). Records a
+      * [[scalus.cardano.txbuilder.TransactionBuilderStep.Deferred]] step that resolves at
+      * `complete` time: finds cell UTxO by beacon, decodes state, runs transition, builds spend +
+      * continuing output (or burn) + context-accumulated steps.
       */
     def apply(action: A): TxBuilder => TxBuilder = { builder =>
         val env = builder.env

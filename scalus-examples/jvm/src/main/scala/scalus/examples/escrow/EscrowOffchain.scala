@@ -14,8 +14,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 /** Off-chain runner for the Escrow contract on the Cardano preview testnet.
   *
   * This runner uses the native Scalus TxBuilder stack (via [[EscrowTransactions]]) together with
-  * the [[BlockfrostProvider]] for UTxO querying and transaction submission. It replaces the
-  * previous bloxbean-based implementation.
+  * the [[scalus.cardano.node.BlockfrostProvider]] for UTxO querying and transaction submission. It
+  * replaces the previous bloxbean-based implementation.
   *
   * Flow:
   *   1. Seller initializes the escrow with the initialization amount.

@@ -15,7 +15,7 @@ import scalus.cardano.txbuilder.{NativeScriptWitness, TransactionSigner, TxBuild
 case class SimpleWalletTransactions(env: CardanoInfo) {
 
     /** Pay `amount` to `recipient`, returning change to `owner`. This is the EVM
-      * `createTransaction` + `executeTransaction` pair collapsed into a single step — the
+      * `createTransaction` + `executeTransaction` pair collapsed into a single step – the
       * transaction is fully specified off-chain and submitted directly.
       */
     def transfer(
@@ -32,7 +32,7 @@ case class SimpleWalletTransactions(env: CardanoInfo) {
             .transaction
 
     /** Withdraw the whole balance: spend every owner UTxO and send it all to `recipient`. The
-      * owner's signature is the only authorization — there is no contract withdrawal function.
+      * owner's signature is the only authorization – there is no contract withdrawal function.
       */
     def withdrawAll(
         ownerUtxos: Utxos,
@@ -48,9 +48,9 @@ case class SimpleWalletTransactions(env: CardanoInfo) {
 
 /** Going beyond the spec: an m-of-n multisig wallet using a Cardano native script (no Plutus).
   *
-  * A [[Timelock.MOf]] script defines the spending policy; any `required` of the `owners` must sign
-  * to authorize a transaction. The wallet address is derived from the script hash, so spending is
-  * just signature checking — no on-chain execution.
+  * A [[scalus.cardano.ledger.Timelock.MOf]] script defines the spending policy; any `required` of
+  * the `owners` must sign to authorize a transaction. The wallet address is derived from the script
+  * hash, so spending is just signature checking – no on-chain execution.
   */
 case class MultiSigWallet(env: CardanoInfo, owners: IndexedSeq[AddrKeyHash], required: Int) {
 

@@ -8,12 +8,12 @@ import scalus.cardano.onchain.plutus.prelude.*
 
 /** Validator base trait for UtxoCell state machines (non-parameterized).
   *
-  * Unlike [[Validator]], this trait passes `ScriptContext` through to `spendCell` and `mintCell`,
-  * enabling `@OnChainSubstitute` on [[CellContext]]. The transition function receives
-  * `ScriptContext` as `CellContext` via `asInstanceOf`.
+  * Unlike [[scalus.cardano.onchain.plutus.v3.Validator]], this trait passes `ScriptContext` through
+  * to `spendCell` and `mintCell`, enabling `@OnChainSubstitute` on [[CellContext]]. The transition
+  * function receives `ScriptContext` as `CellContext` via `asInstanceOf`.
   *
   * All methods are `inline` — Scala 3 expands them before the Scalus plugin runs. Same pattern as
-  * [[Validator]].
+  * [[scalus.cardano.onchain.plutus.v3.Validator]].
   *
   * Usage:
   * {{{

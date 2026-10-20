@@ -18,8 +18,8 @@ import scala.concurrent.Future
 
 /** Off-chain transaction builder for the linked-list example.
   *
-  * A single [[PlutusV3]] script serves as both minting policy and spending validator. `policyId`
-  * and `scriptAddress` are derived from the compiled, applied script.
+  * A single [[scalus.uplc.PlutusV3]] script serves as both minting policy and spending validator.
+  * `policyId` and `scriptAddress` are derived from the compiled, applied script.
   *
   * @param rootKey
   *   Asset name of the root NFT (max 32 bytes).
@@ -48,7 +48,7 @@ case class LinkedListOffchain(
     val policyId: PolicyId = appliedScript.script.scriptHash
     val scriptAddress: Address = appliedScript.address(env.network)
 
-    /** Decodes the [[Element]] datum from a UTxO's inline datum. */
+    /** Decodes the [[scalus.patterns.Element]] datum from a UTxO's inline datum. */
     def readElement(utxo: Utxo): Element =
         utxo.output.inlineDatum
             .getOrElse(throw new Exception(s"UTxO has no inline datum: $utxo"))

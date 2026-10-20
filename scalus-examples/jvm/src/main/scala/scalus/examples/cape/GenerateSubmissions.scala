@@ -6,12 +6,12 @@ import java.nio.file.{Files, Path}
 import java.time.Instant
 import scala.sys.process.*
 
-/** Writes `Scalus_<version>_nau` submission dirs for all [[CapeScenarios]] into a UPLC-CAPE clone.
+/** Writes `Scalus_<version>_nau` submission dirs for all `CapeScenarios` into a UPLC-CAPE clone.
   *
   * Usage: `runMain scalus.examples.cape.GenerateSubmissions <cape-repo-dir> [<version>]`
   *
-  * The version defaults to [[BuildInfo.version]]; pass an explicit version to override it (e.g.
-  * when running from a worktree whose build version is a `-SNAPSHOT`).
+  * The version defaults to `BuildInfo.version`; pass an explicit version to override it (e.g. when
+  * running from a worktree whose build version is a `-SNAPSHOT`).
   */
 @main def GenerateSubmissions(args: String*): Unit = {
     val capeRepo = Path.of(
