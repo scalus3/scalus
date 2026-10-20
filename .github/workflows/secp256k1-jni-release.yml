@@ -12,7 +12,7 @@ jobs:
       max-parallel: 4
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             platform: linux_64
           - os: ubuntu-24.04-arm
             platform: linux_arm64
@@ -48,7 +48,7 @@ jobs:
 
   publish:
     needs: build-native
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write

@@ -7,7 +7,9 @@ on:
       - '.github/workflows/**'
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pinned: on ubuntu-26.04 (the new ubuntu-latest) the runner shut down mid-test twice
+    # (2026-10-20). Move to 26.04 after that is understood.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
