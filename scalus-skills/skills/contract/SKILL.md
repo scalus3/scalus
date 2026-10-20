@@ -51,6 +51,9 @@ Study existing validators before creating new ones:
 - `require(condition, message)` - assertion with error message
 - `fail(message)` - explicit failure
 - `getOrFail(option, message)` - safe Option extraction
+- `Spec.expects(c)`, `Spec.ensures(c)` and `.ensuring(r => c)` (Scalus 1.4.0 or newer) are
+  specifications for `scalus-verification`, not checks: the compiler removes them, so the script
+  never runs them. Use `require` for every condition the script must enforce.
 
 **Safe API** (one rule per check; full table with rationale and costs:
 `https://scalus.org/docs/security/safe-api-cheatsheet`). Check the project's Scalus version first:
@@ -64,7 +67,8 @@ newer; on 1.1.1 or older, write the expansion the cheatsheet lists in its "Repla
   Never a credential-only finder (`findOutputsByCredential`, `findOutputsByScriptHash`): the
   staking part can be swapped and the rewards redirected.
 - Validity bounds: `tx.validFromOrFail(msg)` (inclusive) and `tx.validToOrFail(msg)` (exclusive).
-  Never `getValidityStartTime`: it returns `0` on an unbounded range and every deadline passes.
+  Never `getValidityStartTime` (removed in 1.4.0): it returns `0` on an unbounded range and every
+  deadline passes.
 - One element: `list.singleOrFail(msg)` for a size-one list, `list.findUniqueOrFail(p, msg)` for
   exactly one match. Never `.head` after `filter`, never `filter(p).length === BigInt(1)`.
 - Single own input: `tx.inputs.findUniqueOrFail(_.resolved.address.credential === ownCred, msg)`.

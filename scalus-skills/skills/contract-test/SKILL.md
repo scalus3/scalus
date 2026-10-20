@@ -76,8 +76,8 @@ class MyValidatorTest extends AnyFunSuite, ScalusTest {
   evaluation, then `provider.submit(tx).await()` and `assert(result.isLeft)`. Use it when the
   transaction must get past the builder (for example, to reach the ledger's own checks).
 - Unit path (`VestingValidatorTest`): build a `ScriptContext` by hand, run
-  `compiled.runScript(ctx)` and `assert(result.isFailure, "...")`. For an on-chain helper
-  evaluated directly, `assertEvalFailsWithMessage[OnchainError](msg)(expr)` checks the message.
+  `compiled.runScript(ctx)` (an extension from `ScalusTest`: mix it into the test class) and
+  `assert(result.isFailure, "...")`. For an on-chain helper evaluated directly, `assertEvalFailsWithMessage[OnchainError](msg)(expr)` checks the message.
 
 ```scala
 assertScriptFail(HtlcValidator.InvalidReceiverPreimage) {

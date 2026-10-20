@@ -136,3 +136,15 @@ TxBuilder(env, evaluator)
     .transaction
 // Then submit to the Emulator and assert Left(SubmitError.ScriptFailure(...))
 ```
+
+## Ledger rules the Emulator checks (Scalus 1.4.0 or newer)
+
+The Emulator rejects what a node rejects. A test that sets up stake or governance state hits these:
+
+- A withdrawal from a key-hash reward account needs a DRep delegation first, from protocol
+  version 10: `TxBuilder.delegateVoteToDRep(stakeAddress, DRep.AlwaysAbstain)`. Script-hash
+  accounts are exempt, so the withdraw-zero pattern needs no DRep.
+- A delegation needs a registered pool or DRep. Register it in an earlier transaction first.
+- A withdrawal subtracts from the balance; a drained account stays registered with balance 0.
+- A UTxO added with `provider.addUtxo(input, output)` that holds only a datum hash: call
+  `provider.addDatum(datum)` so the Emulator finds the datum.

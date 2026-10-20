@@ -1015,8 +1015,8 @@ Validators only see time intervals (validity ranges), not exact timestamps, and 
 **transaction author chooses the interval**. Two classes:
 
 - **TI-1, unbounded range read as "now"**. A bound may be infinite. Any helper that projects the
-  lower bound to a number must invent a value for the infinite case. The deprecated
-  `TxInfo.getValidityStartTime` returned `0` for an unbounded range, so a transaction with NO
+  lower bound to a number must invent a value for the infinite case. The old
+  `TxInfo.getValidityStartTime` (deprecated in 1.1.1, removed in 1.4.0) returned `0` for an unbounded range, so a transaction with NO
   lower bound was treated as happening at the Unix epoch and every "has the deadline passed?"
   comparison flipped. In the Scalus examples, Vesting and DecentralizedIdentity both read the
   lower bound through it; the migration replaced both with `validFromOrFail`, which fails the
@@ -1060,7 +1060,7 @@ Bounding the attacker's window: `validToOrFail(m) - validFromOrFail(m) <= maxWid
 
 ### Detection Patterns
 Search for:
-- `getValidityStartTime` (removed in 1.4.0; returned 0 on an unbounded range)
+- `getValidityStartTime` (removed in 1.4.0; on older Scalus it returns 0 on an unbounded range)
 - `IntervalBound.finite(` with a default value
 - `validRange.from` / `validRange.to` compared as raw bounds
 - A datum timestamp written from `validToOrFail` and later treated as an exact posting time (it can be late, never early)
@@ -1631,7 +1631,7 @@ Search for:
 ### Description
 `Value` is a two-level map, but the ergonomic accessor is `getLovelace`. A check written in
 lovelace passes while every native token in the UTxO is redirected to the attacker. The
-`Utils.getAdaFromOutputs` / `getAdaFromInputs` (removed in 1.4.0) were lovelace-only by construction;
+deprecated `Utils.getAdaFromOutputs` / `getAdaFromInputs` were lovelace-only by construction;
 `valuePaidTo` / `valueSpentFrom` sum the whole `Value` so a caller who wants only ADA projects it
 afterwards, and a caller who forgets gets the safe answer.
 
@@ -1668,7 +1668,7 @@ seller of an escrow, the beneficiary of a vesting), never for a script UTxO.
 ### Detection Patterns
 Search for:
 - `getLovelace` compared on a script's continuing output or on a value sum of script inputs/outputs
-- `getAdaFromOutputs` / `getAdaFromInputs` (removed in 1.4.0, lovelace-only)
+- `getAdaFromOutputs` / `getAdaFromInputs` (deprecated, lovelace-only)
 - `valuePaidTo(...).getLovelace` / `valueSpentFrom(...).getLovelace` on a script address
 
 ### False Positive Indicators
@@ -2101,7 +2101,7 @@ All validators implement these methods (check each for vulnerabilities):
 Any of these that a validator `object` does not define is completed by the compiler plugin with a
 body that fails (see V010). Check only the ones the object defines.
 
-### Safe API (prefer these; the deprecated spelling is in brackets)
+### Safe API (prefer these; the old spelling, deprecated or removed in 1.4.0, is in brackets)
 - Own input: `tx.findInputOrFail(ownRef, msg)` [`findOwnInputOrFail`]
 - Continuing output: `tx.findContinuingOutputOrFail(ownInput, msg)` (whole address); never a
   credential-only finder or `=== Address.fromScriptHash(h)` for it
