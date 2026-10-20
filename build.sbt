@@ -1074,6 +1074,9 @@ lazy val docs = project // documentation project
         scalusTestkit.jvm
       ),
       ScalaUnidoc / unidoc / target := (LocalRootProject / baseDirectory).value / "scalus-site" / "public" / "api",
+      // unidoc includes scalus-testkit, whose pages inherit ScalaTest doc comments with links that
+      // cannot resolve (see scalusTestkit). Per-module `doc` in CI still reports our own links.
+      ScalaUnidoc / unidoc / scalacOptions += "-no-link-warnings",
       PluginDependency
     )
 
@@ -1731,7 +1734,10 @@ addCommandAlias(
   // The default LTS, and the only build that publishes the `_3` library artifacts. Carries the
   // format and MiMa checks too: they are version-independent, so they run in this job only.
   "++3.3.8;clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;" +
-      "scalusCardanoLedgerIt/Test/compile;jvm/test;mima"
+      "scalusCardanoLedgerIt/Test/compile;jvm/test;mima;" +
+      // Scaladoc as Release publishes it (per module) and as the site publishes it (unidoc). Doc
+      // warnings do not fail the build, but a crash or an error does.
+      "jvm/doc;docs/unidoc"
 )
 addCommandAlias(
   "ci-jvm-3_3_7",
@@ -1748,7 +1754,7 @@ addCommandAlias("ci-jvm-3_9_0", s"++3.9.0;$crossVersionCiTasks")
 addCommandAlias("ci-jvm", "ci-jvm-3_3_8")
 addCommandAlias(
   "ci-js",
-  "clean;js/Test/compile;js/test;scalusTsExporter/test;scalusCardanoLedgerJS/checkDtsUpToDate;scalusCardanoLedgerJS/runNpmTests"
+  "clean;js/Test/compile;js/test;js/doc;scalusTsExporter/test;scalusCardanoLedgerJS/checkDtsUpToDate;scalusCardanoLedgerJS/runNpmTests"
 )
 addCommandAlias(
   "ci-native",
