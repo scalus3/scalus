@@ -339,6 +339,10 @@
               nodejs
               uplc
               llvm
+              # Scala Native must compile and link with the nixpkgs toolchain. Without it, sbt uses the
+              # runner's /usr/bin/clang and glibc, and the nixpkgs crypto libraries (built on a newer
+              # glibc) fail at load time: GLIBC_ABI_DT_X86_64_PLT not found.
+              clang
               libsodium
               secp256k1
               blst
