@@ -11,7 +11,7 @@ import scala.scalanative.build.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "1.3.0"
+val scalusStableVersion = "1.4.0"
 // The MiMa-checked stable surface is scalus-core, scalus-cardano-ledger and
 // scalus-bloxbean-cardano-client-lib (see docs/superpowers/specs/2026-07-28-1.0.0-m1-release-plan-design.md).
 // Re-baseline at each milestone: bump scalusStableVersion after the release artifacts are on
@@ -467,170 +467,6 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq(
-        // The machine's partly applied builtin value keeps its arguments instead of a copied
-        // BuiltinRuntime and a closure that rebuilds its term. Only the CEK machine builds or
-        // takes apart a VBuiltin.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.uplc.eval.CekValue#VBuiltin.this"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.uplc.eval.CekValue#VBuiltin.copy"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.uplc.eval.CekValue#VBuiltin.apply"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.uplc.eval.CekValue#VBuiltin.term"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.uplc.eval.CekValue#VBuiltin._2"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.uplc.eval.CekValue#VBuiltin.copy$default$2"
-        ),
-        // 1.4, spec [SC-13b]: `DatumOption.Inline` keeps the datum bytes as a `KeepRaw[Data]`, so
-        // `DatumOption` is a sealed trait instead of an enum (an enum case cannot define its own
-        // `apply` and `unapply`) and `Inline` is a case class over the bytes. Source compatible:
-        // `Inline(data)`, `Hash(hash)` and `case Inline(d)` with `d: Data` still compile, and both
-        // factories stay typed as `DatumOption`, as the enum cases were. Binary incompatible.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DatumOption#Hash.ordinal"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DatumOption#Inline.copy"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DatumOption#Inline.copy$default$1"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DatumOption#Inline.ordinal"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DatumOption.fromOrdinal"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.DatumOption#Inline.this"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.DatumOption#Hash.apply"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.DatumOption#Inline._1"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.DatumOption#Inline.apply"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.DatumOption#Inline.unapply"
-        ),
-        ProblemFilters.exclude[IncompatibleTemplateDefProblem]("scalus.cardano.ledger.DatumOption"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.DatumOption$Hash"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.DatumOption$Inline"),
-        // 1.4: `Script.Native` keeps the timelock bytes as a `KeepRaw[Timelock]` for its hash, size
-        // and encoding, so its constructor is private and `copy` is gone. `Native(timelock)`,
-        // `case Native(t)` with `t: Timelock` and `native.script` still compile. `Script`'s decoder
-        // needs the `OriginalCborByteArray`, so `Codec[Script]` splits into an encoder and a
-        // decoder; `Script.fromCbor` decodes standalone bytes. Binary incompatible.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.Script.given_Codec_Script"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.Script#Native.copy"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.Script#Native.copy$default$1"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.Script#Native.this"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.Script#Native._1"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.Script#Native.unapply"
-        ),
-        // 1.4: the V3 on-chain `Constitution` is a one-field case class, not an alias of
-        // `Option[ScriptHash]`. Plutus encodes it as `Constr 0 [Maybe ScriptHash]`, so the alias
-        // gave a `NewConstitution` the wrong Data. The field type of `NewConstitution` changes.
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution.this"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution.apply"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution.copy"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution.copy$default$2"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution.constitution"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution._2"
-        ),
-        // 1.4 removes the API deprecated in 1.2.0 or earlier. Each has a replacement, named in the
-        // CHANGELOG.
-        // `SIR.toLoweredValue` and `SIR.lowerToUplc` (1.0.0).
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.package.toLoweredValue"),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.package.toLoweredValue$default$2"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.package.toLoweredValue$default$3"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.package.toLoweredValue$default$4"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.package.lowerToUplc"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.package.lowerToUplc$default$2"),
-        // The total `Ordering[ExUnits]` (1.0.0): execution units are only partially ordered.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.ExUnits.given_Ordering_ExUnits"
-        ),
-        // The V3 `TxInfo.findOwn*` spellings, `getValidityStartTime` and the lovelace-only
-        // `Utils.getAdaFromOutputs` and `getAdaFromInputs` (1.1.1).
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnInput"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnDatum"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnScriptOutputs"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnInputsByCredential"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnOutputsByCredential"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnInputs"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnOutputs"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.onchain.plutus.v3.TxInfo.getValidityStartTime"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.onchain.plutus.v3.Utils.getAdaFromOutputs"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.onchain.plutus.v3.Utils.getAdaFromInputs"
-        ),
-        // The forwarders left at the old location of two SIR passes, which moved to
-        // `scalus.compiler.sir.transform` (1.1.1).
-        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.BooleanOptimizer"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.BooleanOptimizer$"),
-        ProblemFilters.exclude[MissingClassProblem](
-          "scalus.compiler.sir.StaticArgumentTransformation"
-        ),
-        ProblemFilters.exclude[MissingClassProblem](
-          "scalus.compiler.sir.StaticArgumentTransformation$"
-        ),
         // Compiler-internal packages: no supported external implementors or instantiators;
         // excluded from the binary-compat promise (README: "compiler internals carry no
         // compatibility promise"; interop style guide: SIR compiler out of scope). Everything
@@ -698,27 +534,6 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       ),
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.86",
       libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0",
-      // BLS12-381 moved from blst-java to scalus-crypto-jni (the blst build cardano-node links), so
-      // G1Element, G2Element and MLResult hold raw blst structs as Array[Byte] instead of blst-java's
-      // P1/P2/PT, and the apply overloads taking those types are gone.
-      mimaBinaryIssueFilters ++= Seq(
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.uplc.builtin.bls12_381.G1Element.this"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.uplc.builtin.bls12_381.G1Element.apply"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.uplc.builtin.bls12_381.G2Element.this"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.uplc.builtin.bls12_381.G2Element.apply"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.uplc.builtin.bls12_381.MLResult.this"
-        ),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.bls12_381.MLResult$")
-      ),
       // Ethereum KZG ceremony JSON is in scalus-ethereum-kzg-ceremony resources, needed for benchmark tests
       Test / unmanagedResourceDirectories += (LocalRootProject / baseDirectory).value / "scalus-ethereum-kzg-ceremony" / "src" / "main" / "resources"
     )
@@ -728,17 +543,6 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // Disable doc due to scaladoc NPE bug on JS platform
       Compile / doc / sources := Seq.empty,
       Test / doc / sources := Seq.empty,
-      // Scala.js only. Safe because these members exist to be called from JavaScript, and the
-      // only way to call them is the `scalus` npm bundle, which is linked from this repo and
-      // re-published with it, so no consumer can be holding the previous signatures. Per symbol
-      // rather than a wildcard: `scalus.cardano.ledger` is a MIXED package (AGENTS.md), so a
-      // wildcard there would also pre-authorise breaks in the ledger domain types.
-      mimaBinaryIssueFilters ++= Seq(
-        // 1.4, spec [SC-11b]: the `PlainUtxo` facade gained `script`, the reference script as
-        // `{ type, script }`. Only a Scala class implementing this JS-only trait would notice.
-        ProblemFilters
-            .exclude[ReversedMissingMethodProblem]("scalus.cardano.ledger.JsPlainUtxo.script")
-      )
     )
     .nativeSettings(
       // Scala Native 0.5.12 supports both 3.8.4 and 3.9.0 (`nscplugin_3.9.0` and
@@ -1228,54 +1032,6 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       name := "scalus-cardano-ledger",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq(
-        // 1.4, spec [SC-15], [SC-17]: `DelegationState` stores one `ConwayAccountState` per account
-        // instead of 4 maps. The old maps stay as deprecated views, and a deprecated constructor and
-        // `apply` take them, so only the constructor defaults, `copy` and the product accessors
-        // break. The deprecated `apply` has its own defaults, `apply$default$N`.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DelegationState.<init>$default$1"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DelegationState.<init>$default$2"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DelegationState.<init>$default$3"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DelegationState.<init>$default$4"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DelegationState._2"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DelegationState._3"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DelegationState._4"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DelegationState.copy"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DelegationState.copy$default$2"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DelegationState.copy$default$3"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DelegationState.copy$default$4"
-        ),
-        // 1.4, spec [SC-6]: `UtxoEnv` carries `treasury`. A deprecated 4-argument constructor and
-        // `apply` keep the old form; `copy` breaks.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.rules.UtxoEnv.copy"
-        ),
-        // 1.4, spec [SC-4], [SC-5]: `StakeCertificatesException` reports the unregistered pools and
-        // DReps a tx delegates to, in 2 new fields. A deprecated 6-argument constructor and `apply`
-        // keep the old form; `copy` breaks.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.TransactionException#StakeCertificatesException.copy"
-        ),
         // The streaming hub's internals churn while the provider implementations are built –
         // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: AGENTS.md
         // reserves wildcards for wholly-internal packages, and a wildcard over the whole
@@ -1315,69 +1071,6 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     )
     .jsSettings(jsModuleSettings *)
     .jsSettings(
-      // JS-only facade, so this belongs here and not in the shared settings. Safe for the same
-      // reason as the `scalus` project's JS filters: these members exist to be called from
-      // JavaScript, and the only way to call them is the `scalus` npm bundle, which is linked
-      // from this repo and re-published with it, so no consumer holds the previous signatures.
-      mimaBinaryIssueFilters ++= Seq(
-        // 1.4, spec [SC-7b], [SC-8], [SC-9], [SC-10b], [SC-12]: new optional fields of the JS
-        // option and result facades (`treasury`, `protocolParams`, `clock`, a pool registration by
-        // `poolId`, `rewardAddress`). `JPoolRegistration.params` became optional. A JS literal that
-        // linked before still links; only a Scala class implementing these traits would notice.
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.node.JPoolRegistration.params"
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.JPoolRegistration.params"
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.JPoolRegistration.poolId"
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.JPoolRegistration.scalus$cardano$node$JPoolRegistration$_setter_$params_="
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.JPoolRegistration.scalus$cardano$node$JPoolRegistration$_setter_$poolId_="
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.JsEmulatorOptions.clock"
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.JsEmulatorOptions.protocolParams"
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$clock_="
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$protocolParams_="
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$treasury_="
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.JsEmulatorOptions.treasury"
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.node.JsStakeDistributionEntry.rewardAddress"
-        ),
-        // 1.4 removes the JavaScript Emulator API deprecated in 1.2.0: `getUtxosForAddress`
-        // (use `getUtxos({ address })`), `getAllUtxos` (use `getUtxos()`), and `withState` and
-        // `withAddresses` with the `EmulatorInitialState` interface (use `Emulator.create`).
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.node.JEmulator.getUtxosForAddress"
-        ),
-        ProblemFilters
-            .exclude[DirectMissingMethodProblem]("scalus.cardano.node.JEmulator.getAllUtxos"),
-        ProblemFilters
-            .exclude[DirectMissingMethodProblem]("scalus.cardano.node.JEmulator.withState"),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.node.JEmulator.withAddresses"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.node.JEmulator.withAddresses$default$3"
-        ),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.cardano.node.JEmulatorInitialState")
-      ),
       // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).
       // The Scala.js linker emits standard ES modules; we run esbuild over the linker
       // output to collapse any internal chunks into one file and minify. @noble/* are
