@@ -7,11 +7,6 @@ import scalus.uplc.UplcAnnotation
 import scala.collection.mutable.Map as MutableMap
 
 class LoweringContext(
-    @deprecated(
-      "unused since the self-application recursion encoding; kept for binary compatibility",
-      "1.0.0"
-    )
-    var zCombinatorNeeded: Boolean = false,
     val decls: MutableMap[String, DataDecl] = MutableMap.empty,
     var varIdSeq: Int = 0,
     var scope: LocalScope = LocalScope.empty,

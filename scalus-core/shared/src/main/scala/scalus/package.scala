@@ -2,7 +2,7 @@ import org.typelevel.paiges.Doc
 import scalus.compiler.Options
 import scalus.compiler.sir.*
 import scalus.utils.Style
-import scalus.compiler.sir.lowering.{LoweredValue, SirToUplcV3Lowering, UplcPipeline}
+import scalus.compiler.sir.lowering.UplcPipeline
 import scalus.uplc.{Constant, DefaultUni, Term}
 
 package object scalus {
@@ -111,31 +111,6 @@ package object scalus {
               debug = debug
             )
         }
-
-        /** Exposes the V3 backend's intermediate lowering result.
-          *
-          * [[scalus.compiler.sir.lowering.LoweredValue]] is compiler-internal IR with no stability
-          * guarantees, and this method bypasses the unified pipeline (no trace removal, no
-          * SIR-level optimization).
-          */
-        @deprecated(
-          "internal lowering IR; use SirToUplcV3Lowering.fromOptions(sir, options).toLoweredValue() " +
-              "for lowering debugging, or PlutusV3.compile for compilation",
-          "1.0.0"
-        )
-        def toLoweredValue(using
-            options: Options = Options()
-        )(
-            generateErrorTraces: Boolean = options.generateErrorTraces,
-            debug: Boolean = options.debug
-        ): LoweredValue = {
-            val eff = options.copy(generateErrorTraces = generateErrorTraces, debug = debug)
-            SirToUplcV3Lowering.fromOptions(sir, eff, eff.debug).toLoweredValue()
-        }
-
-        /** Lowers with the given [[scalus.compiler.Options]] only (no parameter overrides). */
-        @deprecated("use toUplc instead", "1.0.0")
-        def lowerToUplc(using options: Options = Options()): Term = toUplc(using options)()
 
     /** Pretty-prints a UPLC builtin type tag. */
     extension (du: DefaultUni) def pretty: Doc = PrettyPrinter.pretty(du)

@@ -1060,7 +1060,7 @@ Bounding the attacker's window: `validToOrFail(m) - validFromOrFail(m) <= maxWid
 
 ### Detection Patterns
 Search for:
-- `getValidityStartTime` (deprecated; returns 0 on an unbounded range)
+- `getValidityStartTime` (removed in 1.4.0; returned 0 on an unbounded range)
 - `IntervalBound.finite(` with a default value
 - `validRange.from` / `validRange.to` compared as raw bounds
 - A datum timestamp written from `validToOrFail` and later treated as an exact posting time (it can be late, never early)
@@ -1631,7 +1631,7 @@ Search for:
 ### Description
 `Value` is a two-level map, but the ergonomic accessor is `getLovelace`. A check written in
 lovelace passes while every native token in the UTxO is redirected to the attacker. The
-deprecated `Utils.getAdaFromOutputs` / `getAdaFromInputs` were lovelace-only by construction;
+`Utils.getAdaFromOutputs` / `getAdaFromInputs` (removed in 1.4.0) were lovelace-only by construction;
 `valuePaidTo` / `valueSpentFrom` sum the whole `Value` so a caller who wants only ADA projects it
 afterwards, and a caller who forgets gets the safe answer.
 
@@ -1668,7 +1668,7 @@ seller of an escrow, the beneficiary of a vesting), never for a script UTxO.
 ### Detection Patterns
 Search for:
 - `getLovelace` compared on a script's continuing output or on a value sum of script inputs/outputs
-- `getAdaFromOutputs` / `getAdaFromInputs` (deprecated, lovelace-only)
+- `getAdaFromOutputs` / `getAdaFromInputs` (removed in 1.4.0, lovelace-only)
 - `valuePaidTo(...).getLovelace` / `valueSpentFrom(...).getLovelace` on a script address
 
 ### False Positive Indicators

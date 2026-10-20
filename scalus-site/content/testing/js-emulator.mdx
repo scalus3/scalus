@@ -99,10 +99,10 @@ const emulator = Emulator.create(CardanoInfo.preview(), {
 ```
 
 <Callout type="warning">
-  `new Emulator(utxosCbor, slotConfig)`, `Emulator.withState` and `Emulator.withAddresses` are
-  deprecated since 1.2.0. They take protocol parameters from the slot configuration alone, so a
-  `SlotConfig.preview` emulator validated transactions against mainnet's parameters.
-  `Emulator.create` is the fix.
+  `new Emulator(utxosCbor, slotConfig)` is deprecated since 1.2.0, and 1.4.0 removes
+  `Emulator.withState` and `Emulator.withAddresses`. They take protocol parameters from the slot
+  configuration alone, so a `SlotConfig.preview` emulator validated transactions against
+  mainnet's parameters. `Emulator.create` is the fix.
 </Callout>
 
 ## Querying UTxOs

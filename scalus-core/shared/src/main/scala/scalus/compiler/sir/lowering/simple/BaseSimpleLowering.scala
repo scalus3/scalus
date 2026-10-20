@@ -39,11 +39,6 @@ abstract class BaseSimpleLowering(
 
     protected def builtinTerms = Meaning.allBuiltins.forcedBuiltins
 
-    @deprecated(
-      "unused since the self-application recursion encoding; kept for binary compatibility",
-      "1.0.0"
-    )
-    protected var zCombinatorNeeded: Boolean = false
     protected val decls = mutable.HashMap.empty[String, DataDecl]
 
     /** Lower the SIR to UPLC Term */

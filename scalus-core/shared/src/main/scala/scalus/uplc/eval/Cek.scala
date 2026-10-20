@@ -403,7 +403,7 @@ class CaseListBranchError(
 
 @deprecated(
   "Case on Data selects a branch by the Data.Constr tag, see CaseDataNonConstrError and CaseIndexOutOfBounds",
-  "1.2.0"
+  "1.3.0"
 )
 class CaseDataBranchError(
     val branchCount: Int,
@@ -810,7 +810,7 @@ final class TallyingBudgetSpenderLogger(val budgetSpender: BudgetSpender)
     /** Every trace with the budget spent when it was emitted, in order. */
     def traces: Seq[TraceProfile] = _logs.map((msg, budget) => TraceProfile(msg, budget)).toSeq
 
-    @deprecated("use traces for the budgets, or getLogs for the bare text", "1.2.0")
+    @deprecated("use traces for the budgets, or getLogs for the bare text", "1.3.0")
     def getLogsWithBudget: Seq[String] =
         _logs.map((log, budget) => s"$log: ${budget.showJson}").toSeq
     def log(msg: String): Unit = _logs.append((msg, getSpentBudget))

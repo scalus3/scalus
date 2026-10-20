@@ -1059,51 +1059,6 @@ object TxInfo {
                 if input.resolved.address === addr then acc + input.resolved.value else acc
             }
 
-        /** Deprecated spelling of [[findInput]]. Keeps its original body so existing budgets do not
-          * move until callers migrate.
-          */
-        @deprecated("use findInput", "1.1.1")
-        def findOwnInput(outRef: TxOutRef): Option[TxInInfo] = Utils.findInput(self.inputs, outRef)
-
-        /** Deprecated spelling of [[findInputOrFail]]. Keeps its original `Option`-based body so
-          * the budgets of existing callers do not move until they migrate.
-          */
-        @deprecated("use findInputOrFail", "1.1.1")
-        inline def findOwnInputOrFail(
-            outRef: TxOutRef,
-            inline message: String = "Tx input not found"
-        ): TxInInfo = findInput(outRef).getOrFail(message)
-
-        /** Deprecated spelling of [[findDatum]]; original body kept. */
-        @deprecated("use findDatum", "1.1.1")
-        def findOwnDatum(datumHash: DatumHash): Option[Datum] =
-            Utils.findDatum(self.outputs, self.data, datumHash)
-
-        /** Deprecated spelling of [[findOutputsByScriptHash]]; original body kept. */
-        @deprecated("use findOutputsByScriptHash", "1.1.1")
-        def findOwnScriptOutputs(scriptHash: ValidatorHash): List[v2.TxOut] =
-            Utils.findScriptOutputs(self.outputs, scriptHash)
-
-        /** Deprecated spelling of [[findInputsByCredential]]; original body kept. */
-        @deprecated("use findInputsByCredential", "1.1.1")
-        def findOwnInputsByCredential(cred: Credential): List[TxInInfo] =
-            self.inputs.filter(_.resolved.address.credential === cred)
-
-        /** Deprecated spelling of [[findOutputsByCredential]]; original body kept. */
-        @deprecated("use findOutputsByCredential", "1.1.1")
-        def findOwnOutputsByCredential(cred: Credential): List[v2.TxOut] =
-            self.outputs.filter(_.address.credential === cred)
-
-        /** Same as `inputs.filter(pred)`. */
-        @deprecated("use inputs.filter", "1.1.1")
-        def findOwnInputs(pred: TxInInfo => Boolean): List[TxInInfo] =
-            self.inputs.filter(pred)
-
-        /** Same as `outputs.filter(pred)`. */
-        @deprecated("use outputs.filter", "1.1.1")
-        def findOwnOutputs(pred: v2.TxOut => Boolean): List[v2.TxOut] =
-            self.outputs.filter(pred)
-
         /** @return
           *   `true` if the transaction signatories list includes the given keyHash, `false`
           *   otherwise
@@ -1130,8 +1085,9 @@ object TxInfo {
           * at which the transaction can be included. It is the value to compare against a "not
           * before" deadline: `require(tx.validFromOrFail(msg) >= deadline, "too early")`.
           *
-          * Pairs with `TxBuilder.validFrom`. Replaces `getValidityStartTime`, which returned `0`
-          * for an unbounded range and let a transaction with no lower bound pass every deadline.
+          * Pairs with `TxBuilder.validFrom`. Replaces the removed `getValidityStartTime`, which
+          * returned `0` for an unbounded range and let a transaction with no lower bound pass every
+          * deadline.
           */
         inline def validFromOrFail(inline message: String): PosixTime =
             self.validRange.from.boundType match
@@ -1182,17 +1138,6 @@ object TxInfo {
                     else go(tail)
             go(self.outputs)
         }
-
-        /** Extracts the start time from the transaction's validity interval, or `0` if the range
-          * has no finite lower bound.
-          *
-          * A transaction with NO lower bound is then treated as happening at the Unix epoch, and
-          * every "has the deadline passed?" comparison flips. Use [[validFromOrFail]].
-          */
-        @deprecated("use validFromOrFail", "1.1.1")
-        def getValidityStartTime: BigInt = self.validRange.from.boundType match
-            case IntervalBoundType.Finite(t) => t
-            case _                           => BigInt(0)
     }
 }
 
@@ -1234,56 +1179,4 @@ object Utils {
     }
 
     export scalus.cardano.onchain.plutus.v2.Utils.{findDatum, findScriptOutputs}
-
-    /** Calculates the total amount of ADA (Lovelace) from a list of transaction outputs.
-      *
-      * LOVELACE ONLY: native tokens in the outputs are ignored, so a check built on this sum lets
-      * them be stripped. Use `TxInfo.valuePaidTo(addr)` and compare the whole `Value`.
-      *
-      * @param outputs
-      *   the list of transaction outputs to sum
-      * @return
-      *   the total Lovelace amount from all outputs
-      * @example
-      *   {{{
-      * val outputs = List(TxOut(...), TxOut(...))
-      * val totalAda = Utils.getAdaFromOutputs(outputs)
-      * // Returns the sum of Lovelace from all outputs
-      * // Returns BigInt(0) if the list is empty
-      *   }}}
-      */
-    @deprecated(
-      "lovelace-only; sum whole Values: TxInfo.valuePaidTo(addr) for a full address, or " +
-          "outputs.filter(_.address.credential === cred).foldLeft(Value.zero)(_ + _.value) for a key payee",
-      "1.1.1"
-    )
-    def getAdaFromOutputs(outputs: List[v2.TxOut]): Lovelace = {
-        outputs.map(_.value.getLovelace).foldLeft(BigInt(0))(_ + _)
-    }
-
-    /** Calculates the total amount of ADA (Lovelace) from a list of transaction inputs.
-      *
-      * LOVELACE ONLY: native tokens in the inputs are ignored. Use `TxInfo.valueSpentFrom(addr)`
-      * and compare the whole `Value`.
-      *
-      * @param inputs
-      *   the list of transaction inputs to sum
-      * @return
-      *   the total Lovelace amount from all resolved inputs
-      * @example
-      *   {{{
-      * val inputs = List(TxInInfo(...), TxInInfo(...))
-      * val totalAda = Utils.getAdaFromInputs(inputs)
-      * // Returns the sum of Lovelace from all resolved input outputs
-      * // Returns BigInt(0) if the list is empty
-      *   }}}
-      */
-    @deprecated(
-      "lovelace-only; sum whole Values: TxInfo.valueSpentFrom(addr) for a full address, or " +
-          "inputs.filter(_.resolved.address.credential === cred).foldLeft(Value.zero)(_ + _.resolved.value) for a key payee",
-      "1.1.1"
-    )
-    def getAdaFromInputs(inputs: List[TxInInfo]): Lovelace = {
-        inputs.map(_.resolved.value.getLovelace).foldLeft(BigInt(0))(_ + _)
-    }
 }

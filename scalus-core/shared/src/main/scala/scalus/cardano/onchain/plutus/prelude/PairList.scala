@@ -35,10 +35,6 @@ object PairList {
     /** Creates a `PairList` with a single key-value pair. */
     inline def singleton[A, B](a: A, b: B): PairList[A, B] = PairCons((a, b), PairNil)
 
-    /** Creates a `PairList` with a single key-value pair. Alias for [[singleton]]. */
-    @deprecated("use singleton", "1.1.1")
-    inline def single[A, B](a: A, b: B): PairList[A, B] = singleton(a, b)
-
     @Ignore
     def from[A, B](it: IterableOnce[(A, B)]): PairList[A, B] =
         it.iterator.foldRight(empty[A, B]) { case (pair, acc) => PairCons(pair, acc) }

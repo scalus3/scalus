@@ -1,18 +1,5 @@
 import {describe, it, expect} from "vitest";
 import {CardanoInfo, Emulator, SlotConfig} from "../scalus.js";
-import {Decoder} from "cbor-x";
-
-// need to decode utxos to then check them for correctness
-const decoder = new Decoder({mapsAsObjects: false});
-
-function extractLovelaceFromObject(utxo: unknown): bigint | undefined {
-    if (typeof utxo !== "object" || utxo === null) return undefined;
-    const lovelace = (utxo as { lovelace?: unknown }).lovelace;
-    if (typeof lovelace === "bigint" || typeof lovelace === "number") {
-        return BigInt(lovelace);
-    }
-    return undefined;
-}
 
 function hexToBytes(hex: string): Uint8Array {
     const bytes = new Uint8Array(hex.length / 2);
@@ -37,37 +24,16 @@ describe("Emulator", () => {
     const txCborHex =
         "84a300d90102818258200000000000000000000000000000000000000000000000000000000000000000000182a200581d604048ff89ca4f88e66598e620aa0c7128c2145d9a181ae9a4a81ca8e3011a017d784082581d60c8c47610a36034aac6fc58848bdae5c278d994ff502c05455e3b3ee81a0475e167021a00028759a100d90102818258206ea31d27d585439ea8fd9cd8e6664ed83e605c06aec24d32dfaba488e49287d958405c08a74aabe9d1d05bde60a0c00468762da45ade5c9fb6854ca007ef80bef8bfaeca178b36e09dfabaa12a582a9f2e4d0807c90c234fd702b07340bf7f6cfb05f5f6";
 
-    function getLovelaceFromUtxo(utxo: unknown): bigint {
-        const objectValue = extractLovelaceFromObject(utxo);
-        if (objectValue !== undefined) return objectValue;
-        const decoded = decoder.decode(utxo) as Map<unknown, unknown>;
-        for (const [, output] of decoded) {
-            let value: unknown;
-            if (output instanceof Map) {
-                value = output.get(1);
-            } else if (Array.isArray(output)) {
-                value = output[1];
-            } else {
-                continue;
-            }
-            if (typeof value === "number" || typeof value === "bigint") {
-                return BigInt(value);
-            } else if (Array.isArray(value)) {
-                return BigInt(value[0] as number);
-            }
-        }
-    }
-
     it("should submit transaction and update UTxO state", () => {
         const emulator = new Emulator(
             hexToBytes(initialUtxosCborHex),
             SlotConfig.preview
         );
 
-        const initialAliceUtxos = emulator.getUtxosForAddress(aliceAddress);
+        const initialAliceUtxos = emulator.getUtxos({address: aliceAddress});
         expect(initialAliceUtxos.length).toBe(2);
 
-        const initialBobUtxos = emulator.getUtxosForAddress(bobAddress);
+        const initialBobUtxos = emulator.getUtxos({address: bobAddress});
         expect(initialBobUtxos.length).toBe(0);
 
         const result = emulator.submitTx(hexToBytes(txCborHex));
@@ -78,19 +44,19 @@ describe("Emulator", () => {
         // After transaction:
         // - Alice should have 2 UTxOs: change from tx (~75 ADA) + untouched (10 ADA)
         // - Bob should have 1 UTxO: 25 ADA
-        const finalAliceUtxos = emulator.getUtxosForAddress(aliceAddress);
+        const finalAliceUtxos = emulator.getUtxos({address: aliceAddress});
         expect(finalAliceUtxos.length).toBe(2);
 
-        const finalBobUtxos = emulator.getUtxosForAddress(bobAddress);
+        const finalBobUtxos = emulator.getUtxos({address: bobAddress});
         expect(finalBobUtxos.length).toBe(1);
 
         // Bob should have exactly 25 ADA (25_000_000 lovelace)
-        const bobLovelace = getLovelaceFromUtxo(finalBobUtxos[0]);
+        const bobLovelace = finalBobUtxos[0].value.coin;
         expect(bobLovelace).toBe(BigInt(25_000_000));
 
         // Alice's total should be ~85 ADA (110 - 25 - fee)
         const aliceTotal = finalAliceUtxos.reduce(
-            (acc, utxo) => acc + getLovelaceFromUtxo(utxo),
+            (acc, utxo) => acc + utxo.value.coin,
             BigInt(0)
         );
         // Alice started with 110 ADA, sent 25 ADA to Bob, paid a fee
@@ -174,10 +140,10 @@ describe("Emulator", () => {
         expect(withdrawResult.isSuccess).toBe(true);
         expect(withdrawResult.txHash).toBeDefined();
 
-        const finalUtxos = emulator.getAllUtxos();
+        const finalUtxos = emulator.getUtxos();
         expect(finalUtxos.length).toBe(1);
 
-        const changeLovelace = getLovelaceFromUtxo(finalUtxos[0]);
+        const changeLovelace = finalUtxos[0].value.coin;
         // Alice started with 5k ADA, paid 2 ADA deposit + two tx fees
         expect(changeLovelace).toBeGreaterThan(BigInt(4_995_000_000));
         expect(changeLovelace).toBeLessThan(BigInt(4_998_000_000));

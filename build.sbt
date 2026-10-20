@@ -570,6 +570,67 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.onchain.plutus.v3.GovernanceAction#NewConstitution._2"
         ),
+        // 1.4 removes the API deprecated in 1.2.0 or earlier. Each has a replacement, named in the
+        // CHANGELOG.
+        // `SIR.toLoweredValue` and `SIR.lowerToUplc` (1.0.0).
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.package.toLoweredValue"),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.package.toLoweredValue$default$2"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.package.toLoweredValue$default$3"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.package.toLoweredValue$default$4"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.package.lowerToUplc"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.package.lowerToUplc$default$2"),
+        // The total `Ordering[ExUnits]` (1.0.0): execution units are only partially ordered.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.ExUnits.given_Ordering_ExUnits"
+        ),
+        // The V3 `TxInfo.findOwn*` spellings, `getValidityStartTime` and the lovelace-only
+        // `Utils.getAdaFromOutputs` and `getAdaFromInputs` (1.1.1).
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnInput"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnDatum"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnScriptOutputs"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnInputsByCredential"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnOutputsByCredential"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnInputs"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.findOwnOutputs"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.getValidityStartTime"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.onchain.plutus.v3.Utils.getAdaFromOutputs"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.onchain.plutus.v3.Utils.getAdaFromInputs"
+        ),
+        // The forwarders left at the old location of two SIR passes, which moved to
+        // `scalus.compiler.sir.transform` (1.1.1).
+        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.BooleanOptimizer"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.BooleanOptimizer$"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.compiler.sir.StaticArgumentTransformation"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.compiler.sir.StaticArgumentTransformation$"
+        ),
         // Compiler-internal packages: no supported external implementors or instantiators;
         // excluded from the binary-compat promise (README: "compiler internals carry no
         // compatibility promise"; interop style guide: SIR compiler out of scope). Everything
@@ -1298,7 +1359,24 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ),
         ProblemFilters.exclude[ReversedMissingMethodProblem](
           "scalus.cardano.node.JsStakeDistributionEntry.rewardAddress"
-        )
+        ),
+        // 1.4 removes the JavaScript Emulator API deprecated in 1.2.0: `getUtxosForAddress`
+        // (use `getUtxos({ address })`), `getAllUtxos` (use `getUtxos()`), and `withState` and
+        // `withAddresses` with the `EmulatorInitialState` interface (use `Emulator.create`).
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.node.JEmulator.getUtxosForAddress"
+        ),
+        ProblemFilters
+            .exclude[DirectMissingMethodProblem]("scalus.cardano.node.JEmulator.getAllUtxos"),
+        ProblemFilters
+            .exclude[DirectMissingMethodProblem]("scalus.cardano.node.JEmulator.withState"),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.node.JEmulator.withAddresses"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.node.JEmulator.withAddresses$default$3"
+        ),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.cardano.node.JEmulatorInitialState")
       ),
       // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).
       // The Scala.js linker emits standard ES modules; we run esbuild over the linker

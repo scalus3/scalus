@@ -40,10 +40,10 @@ import scala.scalajs.js.typedarray.Uint8Array
   * @param initialStakeRewards
   *   Stake credentials to register before the first transaction: a map from a hex-encoded 28-byte
   *   script hash to a reward balance in lovelace, written as a decimal string. Only script
-  *   credentials can be seeded here; use `Emulator.withState` to seed key credentials. A balance of
-  *   `"0"` is the usual case: a reward (staking) validator only runs when a transaction withdraws
-  *   from its address, and a withdrawal of zero lovelace is enough, but the address must already be
-  *   registered for the transaction to be valid.
+  *   credentials can be seeded here; use `Emulator.create` with `stakeRegistrations` to seed key
+  *   credentials. A balance of `"0"` is the usual case: a reward (staking) validator only runs when
+  *   a transaction withdraws from its address, and a withdrawal of zero lovelace is enough, but the
+  *   address must already be registered for the transaction to be valid.
   */
 @JSExportTopLevel("Emulator")
 class JEmulator @deprecated("use Emulator.create", "1.2.0") (
@@ -266,46 +266,10 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
 
     /** The whole UTxO set in a single CBOR map: keys are transaction inputs (a
       * `[transactionHash, outputIndex]` pair), values are transaction outputs, as in the Cardano
-      * ledger CDDL. `getAllUtxos` returns the same data instead as one small map per UTxO.
+      * ledger CDDL. `getUtxos` returns the same UTxOs as `Utxo` handles.
       */
     def getUtxosCbor(): Uint8Array = {
         JsCbor.encode(emulator.utxos)
-    }
-
-    /** The UTxOs that sit at one address.
-      *
-      * @param addressBech32
-      *   The address in bech32 form, for example `addr_test1...`.
-      * @return
-      *   One CBOR map per UTxO, each holding exactly one input-to-output entry, so a single UTxO
-      *   can be decoded and passed around on its own.
-      */
-    @deprecated("use getUtxos(filter) with an address filter", "1.2.0")
-    def getUtxosForAddress(addressBech32: String): js.Array[Uint8Array] = {
-        val address = Address.fromString(addressBech32)
-        val result = js.Array[Uint8Array]()
-        emulator.utxos.foreach { case (input, output) =>
-            if output.address == address then
-                val utxo: Map[Input, Output] = Map(input -> output)
-                result.push(JsCbor.encode(utxo))
-        }
-        result
-    }
-
-    /** Every UTxO in the ledger.
-      *
-      * @return
-      *   One CBOR map per UTxO, each holding exactly one input-to-output entry. Use `getUtxosCbor`
-      *   for the whole set in one map instead.
-      */
-    @deprecated("use getUtxos()", "1.2.0")
-    def getAllUtxos(): js.Array[Uint8Array] = {
-        val result = js.Array[Uint8Array]()
-        emulator.utxos.foreach { case (input, output) =>
-            val utxo: Map[Input, Output] = Map(input -> output)
-            result.push(JsCbor.encode(utxo))
-        }
-        result
     }
 
     /** Every UTxO in the ledger, as `Utxo` handles. */
@@ -805,36 +769,7 @@ trait JsStakeDistributionEntry extends js.Object {
     val rewards: js.BigInt
 }
 
-/** Ledger state to seed an emulator with, passed to `Emulator.withState`. Only `utxos` is required.
-  */
-@TsName("EmulatorInitialState")
-trait JEmulatorInitialState extends js.Object {
-
-    /** The starting UTxO set as CBOR: a map from transaction input (a
-      * `[transactionHash, outputIndex]` pair) to transaction output, as in the Cardano ledger CDDL.
-      */
-    val utxos: Uint8Array
-
-    /** Stake credentials that count as already registered, with their reward balances and, if you
-      * want, the pool each delegates to.
-      */
-    val stakeRegistrations: js.UndefOr[js.Array[JStakeRegistration]] = js.undefined
-
-    /** Stake pools that count as already registered, so transactions may delegate to them. */
-    val poolRegistrations: js.UndefOr[js.Array[JPoolRegistration]] = js.undefined
-
-    /** DReps that count as already registered, so transactions may delegate votes to them. */
-    val drepRegistrations: js.UndefOr[js.Array[JDRepRegistration]] = js.undefined
-
-    /** Datums to put in the emulator's datum store, where `getDatum` looks them up by hash. The
-      * store is only a lookup table: every accepted transaction adds the datums it witnesses to it,
-      * and validation still requires a transaction to carry the datums it needs. Each `hash` must
-      * be the blake2b-256 hash of its `datum` bytes.
-      */
-    val datums: js.UndefOr[js.Array[JDatumEntry]] = js.undefined
-}
-
-/** Stake registration entry for `EmulatorInitialState`. */
+/** Stake registration entry for `EmulatorOptions`. */
 @TsName("StakeRegistration")
 trait JStakeRegistration extends js.Object {
 
@@ -854,7 +789,7 @@ trait JStakeRegistration extends js.Object {
     val delegatedTo: js.UndefOr[String] = js.undefined
 }
 
-/** Pool registration entry for `EmulatorInitialState`. Give exactly one of `params` and `poolId`.
+/** Pool registration entry for `EmulatorOptions`. Give exactly one of `params` and `poolId`.
   */
 @TsName("PoolRegistration")
 trait JPoolRegistration extends js.Object {
@@ -873,7 +808,7 @@ trait JPoolRegistration extends js.Object {
     val poolId: js.UndefOr[String] = js.undefined
 }
 
-/** DRep registration entry for `EmulatorInitialState`. */
+/** DRep registration entry for `EmulatorOptions`. */
 @TsName("DRepRegistration")
 trait JDRepRegistration extends js.Object {
 
@@ -893,7 +828,7 @@ trait JDRepRegistration extends js.Object {
     val anchor: js.UndefOr[Uint8Array] = js.undefined
 }
 
-/** Datum entry for `EmulatorInitialState`. */
+/** Datum entry for `EmulatorOptions`. */
 @TsName("DatumEntry")
 trait JDatumEntry extends js.Object {
 
@@ -1208,63 +1143,5 @@ object JEmulator {
         val wrapper = wrapScalaEmulator(scalaEmulator, JsSlotConfig.wrap(cardanoInfo.slotConfig))
         if wall then wrapper.wallClock = Some(now)
         wrapper
-    }
-
-    /** Creates an emulator seeded with a full starting ledger state: UTxOs, and optionally stake
-      * credentials, stake pools, DReps and datums. Unlike the constructor, this takes both key and
-      * script stake credentials, and takes hashes as hex rather than CBOR.
-      *
-      * @param state
-      *   The starting state. Every field except `utxos` may be left out.
-      * @param slotConfig
-      *   Slot arithmetic for the emulated network.
-      */
-    @deprecated("use Emulator.create", "1.2.0")
-    @JSExportStatic
-    def withState(state: JEmulatorInitialState, slotConfig: JsSlotConfig): JEmulator = {
-        val utxos = JsCbor.decode(state.utxos)(using Utxos.mapOrPairsDecoder)
-        val env =
-            if slotConfig.underlying == SlotConfig.mainnet then UtxoEnv.testMainnet()
-            else UtxoEnv.default
-        val initState = EmulatorInitialState(
-          utxos = utxos,
-          stakeRegistrations = parseStakeRegistrations(state.stakeRegistrations),
-          poolRegistrations = parsePoolRegistrations(state.poolRegistrations, env),
-          drepRegistrations = parseDrepRegistrations(state.drepRegistrations),
-          datums = Map.empty
-        )
-        val context = new Context(env = env, slotConfig = slotConfig.underlying)
-        val scalaEmulator = Emulator.withState(initState, context)
-        scalaEmulator.seedDatums(parseDatums(state.datums))
-        wrapScalaEmulator(scalaEmulator, slotConfig)
-    }
-
-    /** Creates an emulator whose ledger holds one output per address, each carrying only ada. This
-      * is the quickest way to get a funded wallet or two for a test.
-      *
-      * @param addressesBech32
-      *   The addresses to fund, in bech32 form.
-      * @param slotConfig
-      *   Slot arithmetic for the emulated network.
-      * @param lovelacePerAddress
-      *   Lovelace in each output. Defaults to `10_000_000_000n`, that is 10 000 ada.
-      */
-    @deprecated("use Emulator.create", "1.2.0")
-    @JSExportStatic
-    @nowarn("cat=deprecation") // constructing the deprecated constructor's own JEmulator handle
-    def withAddresses(
-        addressesBech32: js.Array[String],
-        slotConfig: JsSlotConfig,
-        lovelacePerAddress: js.BigInt = js.BigInt(10_000_000_000L)
-    ): JEmulator = {
-        val addresses = addressesBech32.toSeq.map(Address.fromString)
-        val value = scalus.cardano.ledger.Value(
-          scalus.cardano.ledger.Coin(longOf(lovelacePerAddress, "lovelacePerAddress"))
-        )
-        val utxos = EmulatorBase.createInitialUtxos(addresses, value)
-        new JEmulator(
-          JsCbor.encode(utxos),
-          slotConfig
-        )
     }
 }

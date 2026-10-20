@@ -14,8 +14,6 @@ import scalus.uplc.builtin.Data.toData
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.testing.kit.EvalTestKit
 
-import scala.annotation.nowarn
-
 @Compile
 private object TxInfoTestFixtures {
     // Two addresses sharing a payment credential but not a staking part, and a third one.
@@ -54,7 +52,6 @@ private object TxInfoTestFixtures {
     )
 }
 
-@nowarn("cat=deprecation")
 class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
     import TxInfoTestFixtures.*
 
@@ -187,8 +184,6 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         val unbounded = TxInfo.placeholder // Interval.always
         assertThrows[OnchainError](unbounded.validFromOrFail("from"))
         assertThrows[OnchainError](unbounded.validToOrFail("to"))
-        // The deprecated accessor is the trap: 0, not a failure.
-        assert(unbounded.getValidityStartTime == BigInt(0))
 
         assertEvalEq(
           TxInfo.placeholder.copy(validRange = Interval.between(10, 20)).validFromOrFail("from"),
@@ -268,19 +263,19 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assert(ref0.deriveTokenName != ref1.deriveTokenName)
         assertEvalEq(TxOutRef(TxInfo.placeholder.id, BigInt(0)).deriveTokenName, ref0TokenName)
     }
-    test("findOwnInput") {
+    test("findInput") {
         checkEval { (txOutRef: TxOutRef) =>
-            TxInfo.placeholder.findOwnInput(txOutRef).isEmpty
+            TxInfo.placeholder.findInput(txOutRef).isEmpty
         }
 
         checkEval { (txInfo: TxInfo, txInInfo: TxInInfo) =>
             val newTxInfo = txInfo.copy(inputs = txInInfo +: txInfo.inputs)
-            newTxInfo.findOwnInput(txInInfo.outRef) === Option.Some(txInInfo)
+            newTxInfo.findInput(txInInfo.outRef) === Option.Some(txInInfo)
         }
 
         assertEval(
           TxInfo.placeholder
-              .findOwnInput(
+              .findInput(
                 TxOutRef(
                   TxInfo.placeholder.id,
                   BigInt(0)
@@ -305,7 +300,7 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                   )
                 )
               )
-              .findOwnInput(
+              .findInput(
                 TxOutRef(TxInfo.placeholder.id, BigInt(0))
               ),
           Option.Some(
@@ -323,9 +318,9 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
-    test("findOwnDatum") {
+    test("findDatum") {
         checkEval { (datumHash: DatumHash) =>
-            TxInfo.placeholder.findOwnDatum(datumHash).isEmpty
+            TxInfo.placeholder.findDatum(datumHash).isEmpty
         }
 
         checkEval { (txInfo: TxInfo, datum: Datum) =>
@@ -334,7 +329,7 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               outputs = List.empty
             )
 
-            newTxInfo.findOwnDatum(datum.dataHash) === Option.Some(datum)
+            newTxInfo.findDatum(datum.dataHash) === Option.Some(datum)
         }
 
         checkEval { (txInfo: TxInfo, datum: Datum) =>
@@ -352,11 +347,11 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               )
             )
 
-            newTxInfo.findOwnDatum(datum.dataHash) === Option.Some(datum)
+            newTxInfo.findDatum(datum.dataHash) === Option.Some(datum)
         }
 
         assertEval(
-          TxInfo.placeholder.findOwnDatum(constrData(BigInt(0), mkNilData()).dataHash).isEmpty
+          TxInfo.placeholder.findDatum(constrData(BigInt(0), mkNilData()).dataHash).isEmpty
         )
 
         assertEvalEq(
@@ -368,7 +363,7 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 ),
                 outputs = List.empty
               )
-              .findOwnDatum(constrData(BigInt(0), mkNilData()).dataHash),
+              .findDatum(constrData(BigInt(0), mkNilData()).dataHash),
           Option.Some(constrData(BigInt(0), mkNilData()))
         )
 
@@ -387,14 +382,14 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                   )
                 )
               )
-              .findOwnDatum(constrData(BigInt(0), mkNilData()).dataHash),
+              .findDatum(constrData(BigInt(0), mkNilData()).dataHash),
           Option.Some(constrData(BigInt(0), mkNilData()))
         )
     }
 
-    test("findOwnScriptOutputs") {
+    test("findOutputsByScriptHash") {
         checkEval { (validatorHash: ValidatorHash) =>
-            TxInfo.placeholder.findOwnScriptOutputs(validatorHash).isEmpty
+            TxInfo.placeholder.findOutputsByScriptHash(validatorHash).isEmpty
         }
 
         checkEval { (txInfo: TxInfo, validatorHash: ValidatorHash) =>
@@ -417,7 +412,7 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               )
             )
 
-            newTxInfo.findOwnScriptOutputs(validatorHash) === List(
+            newTxInfo.findOutputsByScriptHash(validatorHash) === List(
               TxOut(
                 Address(
                   Credential.ScriptCredential(validatorHash),
@@ -430,7 +425,7 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEval(
           TxInfo.placeholder
-              .findOwnScriptOutputs(ByteString.empty)
+              .findOutputsByScriptHash(ByteString.empty)
               .isEmpty
         )
 
@@ -454,7 +449,7 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                   )
                 )
               )
-              .findOwnScriptOutputs(ByteString.empty),
+              .findOutputsByScriptHash(ByteString.empty),
           List(
             TxOut(
               Address(

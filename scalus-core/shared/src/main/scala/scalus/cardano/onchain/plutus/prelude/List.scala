@@ -53,10 +53,6 @@ object List {
       */
     inline def singleton[A](a: A): List[A] = Cons(a, List.Nil)
 
-    /** Creates a list with a single element. Alias for [[singleton]]. */
-    @deprecated("use singleton", "1.1.1")
-    inline def single[A](a: A): List[A] = singleton(a)
-
     /** Creates a list from a variable number of arguments.
       *
       * This method allows creating a list by simply providing the elements. Works only offchain.

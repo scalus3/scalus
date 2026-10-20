@@ -124,7 +124,7 @@ object VaultValidator extends Validator {
         )
 
         // Derive the request time from the validity interval's *upper* bound, not the lower bound.
-        // The lower bound (getValidityStartTime) can be backdated arbitrarily, which would let an
+        // The lower bound (validFromOrFail) can be backdated arbitrarily, which would let an
         // attacker set finalizationDeadline in the past and finalize immediately, defeating the
         // wait. The ledger guarantees the upper bound is >= now, so deadline >= now + waitTime.
         val requestTime = tx.validToOrFail(NoFinalizationUpperBound)

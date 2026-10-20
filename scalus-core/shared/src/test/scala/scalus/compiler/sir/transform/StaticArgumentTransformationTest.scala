@@ -12,8 +12,6 @@ import scalus.compiler.sir.SirDSL.*
 import scalus.uplc.{Constant, Term}
 import scalus.uplc.eval.{PlutusVM, Result}
 
-import scala.annotation.nowarn
-
 class StaticArgumentTransformationTest extends AnyFunSuite {
     private given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
 
@@ -717,14 +715,5 @@ class StaticArgumentTransformationTest extends AnyFunSuite {
                             case other => fail(s"expected go$$sat letrec: $other")
                     case other => fail(s"expected 1-param wrapper: $other")
             case other => fail(s"expected go let: $other")
-    }
-
-    test("the deprecated alias at the old location forwards here") {
-        val viaAlias =
-            scalus.compiler.sir.StaticArgumentTransformation(program): @nowarn("cat=deprecation")
-        assert(viaAlias == StaticArgumentTransformation(program))
-        val suffixViaAlias =
-            scalus.compiler.sir.StaticArgumentTransformation.SatSuffix: @nowarn("cat=deprecation")
-        assert(suffixViaAlias == StaticArgumentTransformation.SatSuffix)
     }
 }

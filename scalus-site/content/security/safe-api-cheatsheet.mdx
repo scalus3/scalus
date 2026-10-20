@@ -128,12 +128,11 @@ takes a message, so the failure names the check.
 `findUniqueOrFail` finds the one element that satisfies a predicate among many, and keeps scanning
 to prove there is no second. `.head` after `filter` is the anti-idiom for both.
 
-## Deprecated members
+## Removed in 1.4.0
 
-Deprecated members still compile and delegate to their replacement. The design-pattern callback
-change in the last row is different: it is in place, with no deprecated overload.
+Scalus 1.4.0 removes these members. They were deprecated in 1.1.1. Use the replacement.
 
-| Deprecated | Replacement | Note |
+| Removed | Replacement | Note |
 |---|---|---|
 | `findOwnInput(ref)` | `findInput(ref)` | "Own" was a Plutus inheritance; these find *any* input |
 | `findOwnInputOrFail(ref, msg)` | `findInputOrFail(ref, msg)` | direct scan, no `Option` |
@@ -146,9 +145,17 @@ change in the last row is different: it is in place, with no deprecated overload
 | `getValidityStartTime` | `validFromOrFail(msg)` | returned `0` for an unbounded range (TI-1) |
 | `Utils.getAdaFromOutputs(outs)` | `valuePaidTo(addr).getLovelace` | summed lovelace only (VP-2); the replacement sums the whole `Value` |
 | `Utils.getAdaFromInputs(ins)` | `valueSpentFrom(addr).getLovelace` | same |
-| `value.lovelaceAmount` | `value.getLovelace` | `getLovelace` is one `lookupCoin` builtin at PV11; `lovelaceAmount` walks the `Data` map and returns another token's quantity when there is no lovelace |
 | `List.single(a)` | `List.singleton(a)` | one constructor name across all four collections |
 | `PairList.single(a, b)` | `PairList.singleton(a, b)` | same |
+
+## Deprecated members
+
+Deprecated members still compile and delegate to their replacement. The design-pattern callback
+change in the last row is different: it is in place, with no deprecated overload.
+
+| Deprecated | Replacement | Note |
+|---|---|---|
+| `value.lovelaceAmount` | `value.getLovelace` | `getLovelace` is one `lookupCoin` builtin at PV11; `lovelaceAmount` walks the `Data` map and returns another token's quantity when there is no lovelace |
 | Design-pattern `Boolean` callbacks (`UtxoIndexer`, `StakeValidator`, `TransactionLevelMinterValidator`) | `=> Unit` callbacks that `require` / `fail` with their own message | changed in place, no overload. **Hazard:** a `Boolean` lambda still compiles against the `Unit` parameter (value discard) and then checks nothing. Grep every callback and wrap its condition in `require(..., message)` |
 
 ## Worked example: the vesting validator

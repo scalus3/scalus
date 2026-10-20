@@ -18,7 +18,7 @@
 import {
     CardanoInfo,
     Emulator,
-    EmulatorInitialState,
+    EmulatorOptions,
     EvaluationOptions,
     EvaluationError,
     EvaluationResult,
@@ -34,6 +34,7 @@ import {
     CostModelsLike,
     SubmitResult,
     DelegationInfo,
+    Utxo,
     applyDataArgToScript,
     evalPlutusScripts,
     evaluateScript,
@@ -148,18 +149,13 @@ const firstSlot: number = SlotConfig.preview.firstSlotOfEpoch(epoch);
 const emulator: Emulator = new Emulator(bytes, SlotConfig.preprod);
 const seeded: Emulator = new Emulator(bytes, SlotConfig.preprod, {stakeHashHex: "0"});
 
-const initialState: EmulatorInitialState = {
-    utxos: bytes,
+const initialState: EmulatorOptions = {
     stakeRegistrations: [{credentialType: "script", credentialHash: "aa", rewards: 0n}],
     datums: [{hash: "bb", datum: "cc"}],
 };
-const fromState: Emulator = Emulator.withState(initialState, SlotConfig.preprod);
-const funded: Emulator = Emulator.withAddresses(["addr_test1..."], SlotConfig.preprod);
-const richlyFunded: Emulator = Emulator.withAddresses(
-    ["addr_test1..."],
-    SlotConfig.preprod,
-    100_000_000n,
-);
+const fromState: Emulator = Emulator.create(CardanoInfo.preprod(), initialState);
+const funded: Emulator = Emulator.create(CardanoInfo.preprod());
+const richlyFunded: Emulator = Emulator.create(CardanoInfo.preprod(), {treasury: 100_000_000n});
 
 // both submitTx overloads
 const submitted: SubmitResult = emulator.submitTx(bytes);
@@ -175,8 +171,8 @@ const rewards: bigint = delegation.rewards;
 
 const reward: bigint | undefined = funded.getStakeReward("stake_test1...");
 const datum: Uint8Array | undefined = richlyFunded.getDatum("bb");
-const utxos: Uint8Array[] = emulator.getAllUtxos();
-const addressUtxos: Uint8Array[] = emulator.getUtxosForAddress("addr_test1...");
+const utxos: Utxo[] = emulator.getUtxos();
+const addressUtxos: Utxo[] = emulator.getUtxos({address: "addr_test1..."});
 const allUtxosCbor: Uint8Array = emulator.getUtxosCbor();
 const snapshot: Emulator = emulator.snapshot();
 const seen: boolean = snapshot.hasTx("aa");

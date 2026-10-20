@@ -571,23 +571,6 @@ object ExUnits {
         exUnits
     }
 
-    /** Lexicographic, memory-first ordering.
-      *
-      * @deprecated
-      *   Execution units are only partially ordered, so this total ordering answers budget
-      *   questions incorrectly: `ExUnits(1, 999)` compares as less than `ExUnits(2, 1)` even though
-      *   it is far over on steps. Use [[ExUnits.fitsWithin]] or [[ExUnits.exceeds]] for budget
-      *   checks. Kept only for sorting and for binary compatibility.
-      */
-    @deprecated(
-      "ExUnits is only partially ordered; this ordering is wrong for budget checks. Use fitsWithin/exceeds instead",
-      "1.0.0"
-    )
-    given Ordering[ExUnits] = (x: ExUnits, y: ExUnits) => {
-        if x.memory != y.memory then x.memory.compareTo(y.memory)
-        else x.steps.compareTo(y.steps)
-    }
-
     /** Cats Group instance for ExUnits, allowing algebraic operations including negative values */
     given cats.kernel.Group[ExUnits] with
         def combine(x: ExUnits, y: ExUnits): ExUnits =

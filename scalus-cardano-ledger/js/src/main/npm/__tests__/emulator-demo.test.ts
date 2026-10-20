@@ -4,8 +4,7 @@ import {
   MeshWallet,
 } from "@meshsdk/core";
 import { DEFAULT_PROTOCOL_PARAMETERS } from "@meshsdk/common";
-import { Emulator, SlotConfig } from "../scalus.js";
-import { Decoder } from "cbor-x";
+import { CardanoInfo, Emulator, SlotConfig, Utxo, Value } from "../scalus.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -17,31 +16,6 @@ function hexToBytes(hex: string): Uint8Array {
     bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
   }
   return bytes;
-}
-
-const cborDecoder = new Decoder({ mapsAsObjects: false });
-
-/** Decode a CBOR UTxO entry returned by the emulator. */
-function decodeUtxoRef(utxoCbor: Uint8Array): {
-  txHash: string;
-  txIndex: number;
-  lovelace: bigint;
-} {
-  const decoded = cborDecoder.decode(utxoCbor) as Map<unknown, unknown>;
-  const [[txIn, txOut]] = decoded.entries();
-  const txHash = Buffer.from(txIn[0] as Uint8Array).toString("hex");
-  const txIndex = txIn[1] as number;
-  // TxOut is a CBOR map (key 1 = value) or could be decoded as object by cbor-x
-  let lovelace: bigint;
-  if (txOut instanceof Map) {
-    const value = txOut.get(1);
-    lovelace = typeof value === "bigint" ? value : BigInt(value as number);
-  } else {
-    // cbor-x may decode small integer-keyed maps as arrays
-    const value = (txOut as any)[1] ?? (txOut as any)["1"];
-    lovelace = typeof value === "bigint" ? value : BigInt(value as number);
-  }
-  return { txHash, txIndex, lovelace };
 }
 
 const MNEMONIC =
@@ -61,21 +35,25 @@ const BOB_ADDRESS =
 
 const TEN_K_ADA = "10000000000";
 
+/** A preview emulator in which Alice holds one output of 10 000 ada. */
+function aliceWithTenKAda(): Emulator {
+  const genesis = "00".repeat(32);
+  return Emulator.create(CardanoInfo.preview(), {
+    utxos: [new Utxo(genesis, 0, ALICE_ADDRESS, new Value(BigInt(TEN_K_ADA)))],
+  });
+}
+
 describe("", () => {
 
   it("Demo 1: Simple ADA transfer succeeds", async () => {
 
     // 1. Bootstrap emulator with Alice holding 10 000 ADA
-    const emulator = Emulator.withAddresses(
-      [ALICE_ADDRESS],
-      SlotConfig.preview,
-      BigInt(10_000_000_000)
-    );
+    const emulator = aliceWithTenKAda();
 
     // 2. Read Alice's UTxO from the emulator
-    const aliceUtxos = emulator.getUtxosForAddress(ALICE_ADDRESS);
+    const aliceUtxos = emulator.getUtxos({ address: ALICE_ADDRESS });
     expect(aliceUtxos.length).toBe(1);
-    const { txHash, txIndex } = decodeUtxoRef(aliceUtxos[0]);
+    const { txHash, outputIndex: txIndex } = aliceUtxos[0];
 
     // 3. Build tx offline: Alice → 25 ADA → Bob
     const txBuilder = new MeshTxBuilder({ params: DEFAULT_PROTOCOL_PARAMETERS });
@@ -95,14 +73,14 @@ describe("", () => {
     expect(result.txHash).toBeDefined();
 
     // 6. Verify UTxO state
-    const finalBobUtxos = emulator.getUtxosForAddress(BOB_ADDRESS);
+    const finalBobUtxos = emulator.getUtxos({ address: BOB_ADDRESS });
     expect(finalBobUtxos.length).toBe(1);
     console.log("Bob utxos:")
-    console.log(decodeUtxoRef(finalBobUtxos[0]))
-    const finalAliceUtxos = emulator.getUtxosForAddress(ALICE_ADDRESS);
+    console.log(finalBobUtxos[0].toObject())
+    const finalAliceUtxos = emulator.getUtxos({ address: ALICE_ADDRESS });
     expect(finalAliceUtxos.length).toBe(1); // change
     console.log("Alice utxos:")
-    console.log(decodeUtxoRef(finalAliceUtxos[0]))
+    console.log(finalAliceUtxos[0].toObject())
   });
 
   // -------------------------------------------------------------------------
@@ -110,15 +88,9 @@ describe("", () => {
   // -------------------------------------------------------------------------
 
   it("Demo 2: Double spend is rejected", async () => {
-    const emulator = Emulator.withAddresses(
-      [ALICE_ADDRESS],
-      SlotConfig.preview,
-      BigInt(10_000_000_000)
-    );
+    const emulator = aliceWithTenKAda();
 
-    const { txHash, txIndex } = decodeUtxoRef(
-      emulator.getUtxosForAddress(ALICE_ADDRESS)[0]
-    );
+    const { txHash, outputIndex: txIndex } = emulator.getUtxos({ address: ALICE_ADDRESS })[0];
 
     const txBuilder = new MeshTxBuilder({ params: DEFAULT_PROTOCOL_PARAMETERS });
     const unsignedTx = await txBuilder
@@ -175,15 +147,9 @@ describe("", () => {
   // -------------------------------------------------------------------------
 
   it("Demo 4: Transaction outside validity interval is rejected", async () => {
-    const emulator = Emulator.withAddresses(
-      [ALICE_ADDRESS],
-      SlotConfig.preview,
-      BigInt(10_000_000_000)
-    );
+    const emulator = aliceWithTenKAda();
 
-    const { txHash, txIndex } = decodeUtxoRef(
-      emulator.getUtxosForAddress(ALICE_ADDRESS)[0]
-    );
+    const { txHash, outputIndex: txIndex } = emulator.getUtxos({ address: ALICE_ADDRESS })[0];
 
     // Build tx valid only in slot range [100, 200]
     const txBuilder = new MeshTxBuilder({ params: DEFAULT_PROTOCOL_PARAMETERS });

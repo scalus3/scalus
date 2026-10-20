@@ -353,20 +353,6 @@ object CommonSubexpressionElimination {
         override def hashCode(): Int = hash
     }
 
-    // Preserve the emitted 1.1.0 methods for binary compatibility; these filters belong to CCE.
-    // For example, an already compiled call to CSE.isSkippable(t) still resolves, but forwards
-    // to CCE.isSkippable(t). The CSE collection algorithm above never calls these filters.
-    @deprecated("use CommonContextExtraction.referencesPartialBuiltin", "1.1.1")
-    private[transform] def referencesPartialBuiltin(t: Term): Boolean =
-        CommonContextExtraction.referencesPartialBuiltin(t)
-
-    @deprecated("use CommonContextExtraction.isSkippable", "1.1.1")
-    private[transform] def isSkippable(t: Term): Boolean = CommonContextExtraction.isSkippable(t)
-
-    @deprecated("use CommonContextExtraction.containsError", "1.1.1")
-    private[transform] def containsError(t: Term): Boolean =
-        CommonContextExtraction.containsError(t)
-
     /** Structural equality and hashing ignore annotations, so different source locations do not
       * prevent sharing. This is not alpha-equivalence: binder names still matter. The initial
       * unique-binder traversal prevents equal-looking variables from referring to different

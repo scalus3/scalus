@@ -73,7 +73,7 @@ closes the class; "design" means no operation can, review the design.
 
 | ID | Taxonomy | Name | Risk | Detection | Fixed by |
 |----|----------|------|------|-----------|----------|
-| V013 | TI-1 / TI-2 | Time Handling | Unbounded range read as time 0; wrong inclusivity | `getValidityStartTime` (deprecated, returns 0 when unbounded); raw bound compared | `validFromOrFail(msg)` (inclusive) / `validToOrFail(msg)` (exclusive); `isEntirelyAfter/Before` |
+| V013 | TI-1 / TI-2 | Time Handling | Unbounded range read as time 0; wrong inclusivity | `getValidityStartTime` (removed in 1.4.0, returned 0 when unbounded); raw bound compared | `validFromOrFail(msg)` (inclusive) / `validToOrFail(msg)` (exclusive); `isEntirelyAfter/Before` |
 | V014 | AU-2 | Missing Signature | Unauthorized actions; script owner cannot sign | No `isSignedBy` on a branch; `isSignedBy` on a script hash | `isSignedBy` / `isSignedByAny` for keys; for a script authority prove it ran (withdrawal or spent input) |
 | V015 | DT-1 | Datum Mutation | Unauthorized state change | Field-by-field comparison with a field missing | `out.hasInlineDatum(old.copy(...))` |
 | V016 | AU-4 | Insufficient Staking Control | Reward redirection (franken address) | `address.credential ===`, `=== Address.fromScriptHash(h)`, credential-only finders on the continuing output | `findContinuingOutputOrFail`; or `require(out.address === ownInput.resolved.address)` |

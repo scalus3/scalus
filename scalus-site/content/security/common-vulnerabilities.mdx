@@ -251,7 +251,7 @@ require(txInfo.onlyBurnsUnder(policyId), "Only burning is allowed (all amounts m
 ### TI-1: Unbounded validity range used as "now"
 
 **Problem:** A validity bound may be infinite, and any helper that turns it into a number must
-invent a value for that case. The deprecated `getValidityStartTime` returned `0`, so a transaction
+invent a value for that case. The `getValidityStartTime` accessor, removed in 1.4.0, returned `0`, so a transaction
 with **no** lower bound was treated as happening at the Unix epoch and every deadline comparison
 flipped. The transaction author picks the validity range, so a missing bound is an attacker
 capability, not an accident.

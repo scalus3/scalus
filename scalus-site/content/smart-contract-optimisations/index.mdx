@@ -108,10 +108,12 @@ SIR-level optimizations are applied automatically during the pipeline: `RemoveRe
 
 ### Lowered Value (V3 Backend intermediate form)
 
-The V3 Lowering Backend has an intermediate representation between SIR and UPLC. Inspect it with `sir.toLoweredValue().show`:
+The V3 Lowering Backend has an intermediate representation between SIR and UPLC. It is compiler-internal and has no stability promise. Inspect it with `SirToUplcV3Lowering`:
 
 ```scala mdoc:compile-only copy showLineNumbers
-val lowered = sir.toLoweredValue()
+import scalus.compiler.sir.lowering.SirToUplcV3Lowering
+
+val lowered = SirToUplcV3Lowering.fromOptions(sir, Options()).toLoweredValue()
 println(lowered.show)
 ```
 

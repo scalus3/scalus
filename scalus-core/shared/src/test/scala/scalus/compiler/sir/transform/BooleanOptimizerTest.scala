@@ -5,8 +5,6 @@ import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, SIR, SIRType
 import scalus.compiler.sir.transform.BooleanOptimizer.optimize
 import scalus.uplc.Constant
 
-import scala.annotation.nowarn
-
 /** Test suite for SIRBooleanOptimizer. Tests all implemented boolean optimization rules using
   * AnyFunSuite style.
   */
@@ -216,11 +214,4 @@ class BooleanOptimizerTest extends AnyFunSuite:
         assert(optimized == not(and(varA, varB)))
         assert(stats.hits("de-morgan-or") == 1)
         assert(stats.total == 1)
-    }
-
-    test("the deprecated alias at the old location forwards here") {
-        val expr = or(not(varA), not(varB))
-        val viaAlias =
-            scalus.compiler.sir.BooleanOptimizer.optimize(expr): @nowarn("cat=deprecation")
-        assert(viaAlias == optimize(expr))
     }

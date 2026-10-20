@@ -134,9 +134,12 @@ Do the steps in order. Each step tells you which file or command to use.
 
    ```bash
    git grep -nE '@deprecated\(.*"1\.[0-2]\.[0-9]+"\)' -- '*.scala'
+   git grep -nE -A3 '@deprecated\($' -- '*.scala' | grep -E '"1\.[0-2]\.[0-9]+"'  # multi-line
    ```
 
-   Each deletion breaks MiMa. Add a `mimaBinaryIssueFilters` entry with a comment for each one.
+   Keep the JavaScript `new Emulator(...)` constructor: Scala.js needs a public constructor on an
+   exported class. Ignore the deliberately bad fixtures in `scalus-ts-exporter`. Each deletion
+   breaks MiMa. Add a `mimaBinaryIssueFilters` entry with a comment for each one.
    List each deletion in the CHANGELOG `Removed` section, in bold, as a migration hazard.
 
 4. **Write the CHANGELOG.** See "Changelog" in `AGENTS.md`. Rename `## Unreleased` to

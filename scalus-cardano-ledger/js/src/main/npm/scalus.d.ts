@@ -111,7 +111,7 @@ export interface CostModelsLike {
   readonly PlutusV3?: readonly (number | bigint)[];
 }
 
-/** DRep registration entry for `EmulatorInitialState`. */
+/** DRep registration entry for `EmulatorOptions`. */
 export interface DRepRegistration {
   /** Credential type: "key" for pub key hash, "script" for script hash. */
   readonly credentialType: "key" | "script";
@@ -126,7 +126,7 @@ export interface DRepRegistration {
   readonly anchor?: Uint8Array;
 }
 
-/** Datum entry for `EmulatorInitialState`. */
+/** Datum entry for `EmulatorOptions`. */
 export interface DatumEntry {
   /** Hex-encoded 32-byte datum hash */
   readonly hash: string;
@@ -158,7 +158,7 @@ export interface DelegationInfo {
  *
  * @param initialUtxosCbor The UTxO set to start from, as CBOR: a map whose keys are transaction inputs (a `[transactionHash, outputIndex]` pair) and whose values are transaction outputs, as in the Cardano ledger CDDL. This is the same shape `getUtxosCbor` gives back. An array of `[input, output]` pairs, as `Utxo.toCbor` writes each, is read too.
  * @param slotConfig Slot arithmetic for the emulated network, for example `SlotConfig.preview`.
- * @param initialStakeRewards Stake credentials to register before the first transaction: a map from a hex-encoded 28-byte script hash to a reward balance in lovelace, written as a decimal string. Only script credentials can be seeded here; use `Emulator.withState` to seed key credentials. A balance of `"0"` is the usual case: a reward (staking) validator only runs when a transaction withdraws from its address, and a withdrawal of zero lovelace is enough, but the address must already be registered for the transaction to be valid.
+ * @param initialStakeRewards Stake credentials to register before the first transaction: a map from a hex-encoded 28-byte script hash to a reward balance in lovelace, written as a decimal string. Only script credentials can be seeded here; use `Emulator.create` with `stakeRegistrations` to seed key credentials. A balance of `"0"` is the usual case: a reward (staking) validator only runs when a transaction withdraws from its address, and a withdrawal of zero lovelace is enough, but the address must already be registered for the transaction to be valid.
  */
 export class Emulator {
   /** @deprecated use Emulator.create (since 1.2.0) */
@@ -221,24 +221,9 @@ export class Emulator {
   /**
    * The whole UTxO set in a single CBOR map: keys are transaction inputs (a
    * `[transactionHash, outputIndex]` pair), values are transaction outputs, as in the Cardano
-   * ledger CDDL. `getAllUtxos` returns the same data instead as one small map per UTxO.
+   * ledger CDDL. `getUtxos` returns the same UTxOs as `Utxo` handles.
    */
   getUtxosCbor(): Uint8Array;
-  /**
-   * The UTxOs that sit at one address.
-   *
-   * @param addressBech32 The address in bech32 form, for example `addr_test1...`.
-   * @returns One CBOR map per UTxO, each holding exactly one input-to-output entry, so a single UTxO can be decoded and passed around on its own.
-   * @deprecated use getUtxos(filter) with an address filter (since 1.2.0)
-   */
-  getUtxosForAddress(addressBech32: string): Uint8Array[];
-  /**
-   * Every UTxO in the ledger.
-   *
-   * @returns One CBOR map per UTxO, each holding exactly one input-to-output entry. Use `getUtxosCbor` for the whole set in one map instead.
-   * @deprecated use getUtxos() (since 1.2.0)
-   */
-  getAllUtxos(): Uint8Array[];
   /** Every UTxO in the ledger, as `Utxo` handles. */
   getUtxos(): Utxo[];
   /**
@@ -396,51 +381,6 @@ export class Emulator {
    * @throws TypeError if an option is invalid.
    */
   static create(info: CardanoInfo, options: EmulatorOptions): Emulator;
-  /**
-   * Creates an emulator seeded with a full starting ledger state: UTxOs, and optionally stake
-   * credentials, stake pools, DReps and datums. Unlike the constructor, this takes both key and
-   * script stake credentials, and takes hashes as hex rather than CBOR.
-   *
-   * @param state The starting state. Every field except `utxos` may be left out.
-   * @param slotConfig Slot arithmetic for the emulated network.
-   * @deprecated use Emulator.create (since 1.2.0)
-   */
-  static withState(state: EmulatorInitialState, slotConfig: SlotConfig): Emulator;
-  /**
-   * Creates an emulator whose ledger holds one output per address, each carrying only ada. This
-   * is the quickest way to get a funded wallet or two for a test.
-   *
-   * @param addressesBech32 The addresses to fund, in bech32 form.
-   * @param slotConfig Slot arithmetic for the emulated network.
-   * @param lovelacePerAddress Lovelace in each output. Defaults to `10_000_000_000n`, that is 10 000 ada.
-   * @deprecated use Emulator.create (since 1.2.0)
-   */
-  static withAddresses(addressesBech32: readonly string[], slotConfig: SlotConfig, lovelacePerAddress?: bigint): Emulator;
-}
-
-/** Ledger state to seed an emulator with, passed to `Emulator.withState`. Only `utxos` is required. */
-export interface EmulatorInitialState {
-  /**
-   * The starting UTxO set as CBOR: a map from transaction input (a
-   * `[transactionHash, outputIndex]` pair) to transaction output, as in the Cardano ledger CDDL.
-   */
-  readonly utxos: Uint8Array;
-  /**
-   * Stake credentials that count as already registered, with their reward balances and, if you
-   * want, the pool each delegates to.
-   */
-  readonly stakeRegistrations?: readonly StakeRegistration[];
-  /** Stake pools that count as already registered, so transactions may delegate to them. */
-  readonly poolRegistrations?: readonly PoolRegistration[];
-  /** DReps that count as already registered, so transactions may delegate votes to them. */
-  readonly drepRegistrations?: readonly DRepRegistration[];
-  /**
-   * Datums to put in the emulator's datum store, where `getDatum` looks them up by hash. The
-   * store is only a lookup table: every accepted transaction adds the datums it witnesses to it,
-   * and validation still requires a transaction to carry the datums it needs. Each `hash` must
-   * be the blake2b-256 hash of its `datum` bytes.
-   */
-  readonly datums?: readonly DatumEntry[];
 }
 
 /**
@@ -701,7 +641,7 @@ export class PlutusScriptEvaluationError extends Error {
   readonly name: string;
 }
 
-/** Pool registration entry for `EmulatorInitialState`. Give exactly one of `params` and `poolId`. */
+/** Pool registration entry for `EmulatorOptions`. Give exactly one of `params` and `poolId`. */
 export interface PoolRegistration {
   /**
    * The pool's parameters, as one CBOR-encoded Cardano certificate: the whole 10-element
@@ -990,7 +930,7 @@ export interface StakeDistributionEntry {
   readonly rewards: bigint;
 }
 
-/** Stake registration entry for `EmulatorInitialState`. */
+/** Stake registration entry for `EmulatorOptions`. */
 export interface StakeRegistration {
   /** Credential type: "key" for pub key hash, "script" for script hash. */
   readonly credentialType: "key" | "script";

@@ -254,6 +254,34 @@ Evolution provider needs.
   `lovelaceAmount` walks the `Data` map, and on a value without lovelace it returns another
   token's quantity.
 
+### Removed
+
+API deprecated in 1.2.0 or earlier is removed.
+
+- **V3 `TxInfo.findOwn*` is removed.** Use `findInput`, `findInputOrFail`, `findDatum`,
+  `findOutputsByScriptHash`, `findInputsByCredential` and `findOutputsByCredential`. For
+  `findOwnInputs(pred)` and `findOwnOutputs(pred)`, use `inputs.filter(pred)` and
+  `outputs.filter(pred)`.
+- **V3 `TxInfo.getValidityStartTime` is removed.** Use `validFromOrFail(message)`, which fails on
+  an unbounded range instead of returning `0`.
+- **V3 `Utils.getAdaFromOutputs` and `Utils.getAdaFromInputs` are removed.** Use
+  `TxInfo.valuePaidTo(addr)` and `TxInfo.valueSpentFrom(addr)`, which sum the whole `Value`; add
+  `.getLovelace` for ADA only.
+- **`List.single` and `PairList.single` are removed.** Use `List.singleton` and
+  `PairList.singleton`.
+- **The `SIR` extensions `toLoweredValue` and `lowerToUplc` are removed.** Use `toUplc`, or
+  `SirToUplcV3Lowering.fromOptions(sir, options).toLoweredValue()` to inspect the lowering.
+- **The `Ordering[ExUnits]` given is removed.** Execution units are only partially ordered. Use
+  `fitsWithin` or `exceeds` for budget checks. To sort, give an explicit ordering, for example
+  `sortBy(e => (e.memory, e.steps))`.
+- **`scalus.compiler.sir.BooleanOptimizer` and `scalus.compiler.sir.StaticArgumentTransformation`
+  are removed.** Use the passes in `scalus.compiler.sir.transform`.
+- **JavaScript `Emulator.getUtxosForAddress` and `Emulator.getAllUtxos` are removed.** Use
+  `getUtxos({ address })` and `getUtxos()`, which return `Utxo` handles instead of CBOR maps.
+- **JavaScript `Emulator.withState`, `Emulator.withAddresses` and the `EmulatorInitialState` type
+  are removed.** Use `Emulator.create(info, options)`; seed funds with `utxos`, and stake, pool,
+  DRep and datum state with the options of the same names.
+
 ## 1.3.0 (2026-09-28)
 
 Scalus 1.3 balances transactions from JavaScript, evaluates scripts two to three times faster from
