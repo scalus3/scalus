@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- The flat decoder kept the low 64 bits of a `constr` tag or variable index that does not fit in
+  64 bits, so it accepted a script with a `constr` tag of 2^64 that Plutus rejects. It now fails to
+  decode, as Plutus does. A variable index above `Int.MaxValue` kept its low 32 bits, so an index
+  of 2^32 + 1 became 1 and passed the scope check. It is now out of scope, as in Plutus.
+
 ## 1.4.0 (2026-10-20)
 
 Scalus 1.4 runs Ed25519, secp256k1 and BLS12-381 on the C libraries that cardano-node links, and

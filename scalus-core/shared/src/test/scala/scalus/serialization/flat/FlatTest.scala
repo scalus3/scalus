@@ -3,6 +3,7 @@ package scalus.serialization.flat
 import org.scalacheck.{Arbitrary, Gen, Shrink}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scalus.cardano.ledger.Word64
 import scalus.uplc.builtin
 import scalus.uplc.*
 import scalus.uplc.Constant.given
@@ -213,6 +214,33 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
                 if n.isValidLong then assert(word7Bytes(n).toList == word7Bytes(n.toLong).toList)
             }
         }
+    }
+
+    test("Word64 decodes every 64-bit value and rejects a larger one, as Plutus's dWord64 does") {
+        val flat = summon[Flat[Word64]]
+        def decode(bytes: Int*): Word64 = flat.decode(DecoderState(bytes.map(_.toByte).toArray))
+        forAll { (n: Long) => assert(decode(word7Bytes(n).map(_ & 0xff)*) == Word64(n)) }
+        val nineGroups = Seq.fill(9)(0xff)
+        assert(decode(nineGroups :+ 0x01*) == Word64.MaxValue) // 2^64 - 1
+        assert(decode(0x80, 0x00) == Word64(0)) // a redundant zero group is accepted
+        // 2^64, the corpus case term/constr/constr-08: the tenth group may only hold bit 63
+        intercept[FlatDecodingError](decode(Seq.fill(9)(0x80) :+ 0x02*))
+        // an eleventh group
+        intercept[FlatDecodingError](decode(Seq.fill(10)(0x80) :+ 0x00*))
+    }
+
+    test("a variable index above Int.MaxValue decodes out of scope, not to its low 32 bits") {
+        // (program 1.0.0 (lam x [var 2^32 + 1])): a lam (tag 2) over a var (tag 0)
+        val enc = EncoderState(16)
+        enc.bits(8, 1); enc.bits(8, 0); enc.bits(8, 0) // version 1.0.0
+        enc.bits(4, 2)
+        enc.bits(4, 0)
+        summon[Flat[Word64]].encode(Word64((1L << 32) + 1), enc)
+        enc.filler()
+        val program = DeBruijnedProgram.fromFlatEncoded(enc.result)
+        val Term.LamAbs(_, Term.Var(name, _), _) = program.term: @unchecked
+        assert(name.index == Int.MaxValue)
+        assert(DeBruijn.checkScope(program.term).contains(name))
     }
 
     test("EncoderState.result includes the trailing partial byte") {
