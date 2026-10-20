@@ -158,10 +158,18 @@ Do the steps in order. Each step tells you which file or command to use.
       tests. Make sure that the agent loads the skills and uses the current API.
 
 6. **Prepare the npm package.** Set `version` in
-   `scalus-cardano-ledger/js/src/main/npm/package.json` to `X.Y.Z`. You publish it after the tag,
-   see [Publishing Scalus JS library to NPM](#publishing-scalus-js-library-to-npm).
+   `scalus-cardano-ledger/js/src/main/npm/package.json` to `X.Y.Z`. Make `README.md` in the same
+   directory match `scalus.d.ts` and the JavaScript changes in the CHANGELOG: every example must
+   type-check against `scalus.d.ts`. You publish the package after the tag, see
+   [Publishing Scalus JS library to NPM](#publishing-scalus-js-library-to-npm).
 
-7. **Run the full gate** in the nix devshell:
+7. **Update the install snippets in `README.md`** ("Use Scalus"). Set the Scalus version to
+   `X.Y.Z` in the text, the sbt plugin and `scalusVersion`. Set `scalaVersion` to the newest Scala
+   line that has a `scalus-plugin` artifact: `scala3NextLtsVersion` in `build.sbt`, for example
+   `3.9.0`. Push this commit together with the tag, not before: until the artifacts are on Maven
+   Central, the snippets do not resolve.
+
+8. **Run the full gate** in the nix devshell:
 
    ```bash
    sbt --batch ci   # ci-jvm;ci-js;ci-native: format, mima, all platforms
@@ -172,7 +180,7 @@ Do the steps in order. Each step tells you which file or command to use.
    versions on the commit that you tag. In `it`, Blockfrost tests fail with a preprod-only key.
    That is not a release blocker.
 
-8. **Get to 0 compiler warnings.** Warnings do not fail CI, so they collect between releases.
+9. **Get to 0 compiler warnings.** Warnings do not fail CI, so they collect between releases.
    Count them in the logs of the CI runs on the commit that you tag, for all jobs:
 
    ```bash
@@ -181,7 +189,7 @@ Do the steps in order. Each step tells you which file or command to use.
 
    Fix each warning, or suppress an intentional one with `@nowarn("msg=...")` and a comment.
 
-9. **Review the MiMa filters.** Each filter added since the last release must have a comment
+10. **Review the MiMa filters.** Each filter added since the last release must have a comment
    that explains the break. Each break must be in the CHANGELOG.
 
 ### Tag and publish
@@ -215,8 +223,8 @@ Do the steps in order. Each step tells you which file or command to use.
    per-symbol `mimaBinaryIssueFilters` that the new baseline makes obsolete. Keep the wildcard
    policy filters. Run `sbtn mima`. This value also sets the Scaladoc version and
    `scalus.utils.BuildInfo.scalusVersion`.
-2. **Update the version in the docs.** Update the install snippets in `README.md` ("Use Scalus").
-   Search `scalus-site/content/` for the old version.
+2. **Update the version in the site.** Search `scalus-site/content/` for the old version. The
+   `README.md` snippets were updated before the tag (step 7).
 3. **Update the g8 templates.** Bump the Scalus version in `hello.g8` and `validator.g8`:
    `build.sbt`, `project/plugins.sbt`, `project.scala` and the `//> using` lines in the `.scala`
    files.
