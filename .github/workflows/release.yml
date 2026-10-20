@@ -32,7 +32,7 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
-      - run: nix develop .#ci --command bash -c "sbt ci-release"
+      - run: nix develop .#ci --accept-flake-config --command bash -c "sbt ci-release"
         env:
           PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
           PGP_SECRET: ${{ secrets.PGP_SECRET }}
