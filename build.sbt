@@ -11,7 +11,7 @@ import scala.scalanative.build.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "1.2.0"
+val scalusStableVersion = "1.3.0"
 // The MiMa-checked stable surface is scalus-core, scalus-cardano-ledger and
 // scalus-bloxbean-cardano-client-lib (see docs/superpowers/specs/2026-07-28-1.0.0-m1-release-plan-design.md).
 // Re-baseline at each milestone: bump scalusStableVersion after the release artifacts are on
@@ -467,16 +467,6 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq(
-        // `VanRossemNewBuiltinCosts` was the table a pre-PV11 cost model fell back to for the
-        // PV11 builtins. That fallback was the bug: a model missing a parameter silently ran on
-        // reference costs instead of refusing to run. An absent parameter is now `Long.MaxValue`,
-        // as in Plutus, so the table has no callers and is deleted.
-        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.VanRossemNewBuiltinCosts"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.VanRossemNewBuiltinCosts$"),
-        // ProfilingData gained `traces` (spec [TB-2]): constructor, apply and copy changed arity.
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.this"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.copy"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.ProfilingData.apply"),
         // The machine's partly applied builtin value keeps its arguments instead of a copied
         // BuiltinRuntime and a closure that rebuilds its term. Only the CEK machine builds or
         // takes apart a VBuiltin.
@@ -498,15 +488,6 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.uplc.eval.CekValue#VBuiltin.copy$default$2"
         ),
-        // `PlutusScript` caches the program it decodes straight from CBOR in a new private field;
-        // Scala emits its accessors as abstract trait methods. The trait is sealed, so no class
-        // outside this artifact implements it and none can miss the accessors.
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.ledger.PlutusScript.scalus$cardano$ledger$PlutusScript$$_cachedDeBruijned"
-        ),
-        ProblemFilters.exclude[ReversedMissingMethodProblem](
-          "scalus.cardano.ledger.PlutusScript.scalus$cardano$ledger$PlutusScript$$_cachedDeBruijned_="
-        ),
         // 1.4, spec [SC-13b]: `DatumOption.Inline` keeps the datum bytes as a `KeepRaw[Data]`, so
         // `DatumOption` is a sealed trait instead of an enum (an enum case cannot define its own
         // `apply` and `unapply`) and `Inline` is a case class over the bytes. Source compatible:
@@ -527,9 +508,6 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.cardano.ledger.DatumOption.fromOrdinal"
         ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.DatumOption.ordinal"
-        ),
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "scalus.cardano.ledger.DatumOption#Inline.this"
         ),
@@ -546,10 +524,8 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
           "scalus.cardano.ledger.DatumOption#Inline.unapply"
         ),
         ProblemFilters.exclude[IncompatibleTemplateDefProblem]("scalus.cardano.ledger.DatumOption"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.DatumOption$"),
         ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.DatumOption$Hash"),
         ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.DatumOption$Inline"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.DatumOption$Inline$"),
         // 1.4: `Script.Native` keeps the timelock bytes as a `KeepRaw[Timelock]` for its hash, size
         // and encoding, so its constructor is private and `copy` is gone. `Native(timelock)`,
         // `case Native(t)` with `t: Timelock` and `native.script` still compile. `Script`'s decoder
@@ -663,16 +639,10 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       libraryDependencies += "org.scalus" % "scalus-crypto-jni" % "0.1.0",
       // BLS12-381 moved from blst-java to scalus-crypto-jni (the blst build cardano-node links), so
       // G1Element, G2Element and MLResult hold raw blst structs as Array[Byte] instead of blst-java's
-      // P1/P2/PT, and the apply overloads taking those types are gone. PippengerMSM was
-      // private[builtin]: blst's own Pippenger, called as cardano-crypto-class does, replaces it.
+      // P1/P2/PT, and the apply overloads taking those types are gone.
       mimaBinaryIssueFilters ++= Seq(
-        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.PippengerMSM"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.PippengerMSM$"),
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "scalus.uplc.builtin.bls12_381.G1Element.this"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.uplc.builtin.bls12_381.G1Element.value"
         ),
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.uplc.builtin.bls12_381.G1Element.apply"
@@ -680,20 +650,11 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "scalus.uplc.builtin.bls12_381.G2Element.this"
         ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.uplc.builtin.bls12_381.G2Element.value"
-        ),
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.uplc.builtin.bls12_381.G2Element.apply"
         ),
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "scalus.uplc.builtin.bls12_381.MLResult.this"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.uplc.builtin.bls12_381.MLResult.value"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.uplc.builtin.bls12_381.MLResult.apply"
         ),
         ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.bls12_381.MLResult$")
       ),
@@ -712,25 +673,6 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // rather than a wildcard: `scalus.cardano.ledger` is a MIXED package (AGENTS.md), so a
       // wildcard there would also pre-authorise breaks in the ledger domain types.
       mimaBinaryIssueFilters ++= Seq(
-        // `JsUtxo.withScriptRef` widened its parameter from `Uint8Array` to `js.Any` so it also
-        // takes hex and Lucid's `{ type, script }`. A JS caller cannot tell: every argument that
-        // linked before still links. Only a Scala caller of this JS-only export would notice.
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.JsUtxo.withScriptRef"
-        ),
-        // The private @noble/curves facade for ed25519.verify is gone: Ed25519 verification now
-        // checks libsodium's rules on noble's point arithmetic (JsEd25519Verifier).
-        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.Ed25519"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.Ed25519Curves"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.builtin.Ed25519Curves$"),
-        // Ed25519MathPlatform's private copy of the @noble/curves/ed25519 facade is gone: it uses
-        // the one in JsEd25519Signer, which reads noble's `Point.Fn.ORDER`, not `CURVE.n`.
-        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.ExtendedPoint"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.ExtendedPointCompanion"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleCurveParams"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleEd25519Math"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleEd25519Math$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.crypto.ed25519.NobleEd25519Ops"),
         // 1.4, spec [SC-11b]: the `PlainUtxo` facade gained `script`, the reference script as
         // `{ type, script }`. Only a Scala class implementing this JS-only trait would notice.
         ProblemFilters
@@ -1225,32 +1167,6 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       name := "scalus-cardano-ledger",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq(
-        // Scala.js only: the result and error types of the JS facade moved out of the `JScalus`
-        // object to top-level classes. Their JavaScript names and shapes are unchanged.
-        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.JScalus$JSExUnits"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.JScalus$JSResult"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.JScalus$Redeemer"),
-        ProblemFilters.exclude[MissingClassProblem](
-          "scalus.uplc.eval.JScalus$JSPlutusScriptEvaluationError"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.JScalus.toJSExUnits"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.uplc.eval.JScalus.toJSResult"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.uplc.eval.JScalus.evaluateScript"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.uplc.eval.JScalus.evaluateScriptProfile"
-        ),
-        // DefaultImpl is a private nested class (MiMa still sees its members); the protected
-        // evalScript hook now takes the budget each script may spend, so EvaluateAndComputeCost
-        // mode enforces the transaction's initialBudget.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.evalScript"
-        ),
-        // Its constructor also takes the optional ScriptCache now; only the factories call it.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.this"
-        ),
         // 1.4, spec [SC-15], [SC-17]: `DelegationState` stores one `ConwayAccountState` per account
         // instead of 4 maps. The old maps stay as deprecated views, and a deprecated constructor and
         // `apply` take them, so only the constructor defaults, `copy` and the product accessors
@@ -1299,67 +1215,6 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.cardano.ledger.TransactionException#StakeCertificatesException.copy"
         ),
-        // 1.4, spec [SC-3], [SC-4], [SC-15]: the `ValidationState` of `CertsValidator` and
-        // `StakeCertificatesValidator` reads the accounts, the pools and the DReps. Both are private
-        // case classes, so no caller outside this artifact can reach them; MiMa sees their bytecode.
-        // Per symbol: `scalus.cardano.ledger.rules` is a MIXED package.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.rules.CertsValidator#ValidationState.rewards"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.<init>$default$4"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.apply"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.onChainDeposits"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.rewardAccounts"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.this"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.<init>$default$5"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.<init>$default$8"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState._2"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState._3"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState._4"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState._5"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState._8"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$2"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$3"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$4"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$5"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.rules.StakeCertificatesValidator#ValidationState.copy$default$8"
-        ),
         // The streaming hub's internals churn while the provider implementations are built –
         // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: AGENTS.md
         // reserves wildcards for wholly-internal packages, and a wildcard over the whole
@@ -1404,12 +1259,6 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       // JavaScript, and the only way to call them is the `scalus` npm bundle, which is linked
       // from this repo and re-published with it, so no consumer holds the previous signatures.
       mimaBinaryIssueFilters ++= Seq(
-        // `JEmulator.evaluateTx` widened its UTxO parameter from `js.Array` to `js.Any` so it
-        // also takes CBOR `[input, output]` pairs, matching `evaluator.evaluateTx`. As with
-        // `JsUtxo.withScriptRef`, no JS call that linked before stops linking.
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.node.JEmulator.evaluateTx"
-        ),
         // 1.4, spec [SC-7b], [SC-8], [SC-9], [SC-10b], [SC-12]: new optional fields of the JS
         // option and result facades (`treasury`, `protocolParams`, `clock`, a pool registration by
         // `poolId`, `rewardAddress`). `JPoolRegistration.params` became optional. A JS literal that
