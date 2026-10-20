@@ -18,8 +18,8 @@ start the plugin injects its routing table (`scalus:using-scalus`); follow it.
 
 ## Commands
 
-Prefer `sbtn` over `sbt`, when `sbtn` is aviable and not hangs.
-Exception: in a git worktree, prefer one-shot `sbt` and shut the server down when done. See
+Prefer `sbtn` over `sbt`, when `sbtn` is available and not hangs.
+This also applies in a git worktree. See
 [Working in a git worktree with sbt](#working-in-a-git-worktree-with-sbt).
 
 | Command          | Purpose                                              |
@@ -51,7 +51,7 @@ Use `sbtn clean` to force full recompilation if you encounter stale class issues
 ### Working in a git worktree with sbt
 
 When the repo is checked out in a **git worktree** (`git worktree add ...`, e.g. `.claude/worktrees/<name>`),
-one one-time fix is needed inside the worktree:
+these rules apply inside the worktree:
 
 1. **The `plutus-conformance` corpus is not present in the worktree.** `scalusJVM/Test/compile` fails with
    `Plutus conformance corpus not found at .../plutus-conformance/test-cases/uplc/evaluation` (it is a
@@ -64,11 +64,16 @@ one one-time fix is needed inside the worktree:
 
    It is git-ignored, so it won't show up in `git status`.
 
-2. **Shut the sbt server down when the task ends: `sbtn shutdown`.** Each server keeps its own heap
-   (`-Xmx8g`, from `.jvmopts`), so several worktrees at once can exhaust RAM. Divide the machine's
-   RAM by 8 GB, leave a few GB for the OS, and keep at most that many servers alive. In a throwaway
-   worktree, prefer a one-shot `sbt`, which returns its memory on exit; keep the long-lived `sbtn`
-   daemon for the primary checkout. Never start a second sbt in a checkout that already has one.
+2. **Use `sbtn` in the worktree. It starts a separate server for that worktree.** sbt names the
+   server socket from a hash of the build directory (see `project/target/active.json`). So the
+   worktree server never connects to the primary checkout's server, and it has its own `target/`.
+
+3. **Shut the server down when the task ends: `sbtn shutdown`.** Each server can grow to `-Xmx8g`
+   (from `.jvmopts`). Divide the machine's RAM by 8 GB, leave a few GB for the OS, and keep at most
+   that many servers alive. List them with `pgrep -fl xsbt.boot.Boot`.
+
+4. **Never run a one-shot `sbt` in a checkout that has a live `sbtn` server.** The two processes
+   share `project/target` and corrupt each other's build classes.
 
 ## Architecture
 
