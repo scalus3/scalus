@@ -2,7 +2,10 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     flake-utils.url = "github:numtide/flake-utils";
-    plutus.url = "github:IntersectMBO/plutus/1.63.0.0";
+    # Gives the `uplc` binary and the `plutus-conformance` test corpus. Keep it at the plutus-core
+    # version of the latest production cardano-node. IOG caches `uplc` for Linux only, so on macOS a
+    # bump compiles Plutus from source once (1-2 h).
+    plutus.url = "github:IntersectMBO/plutus/1.70.0.0";
     # The C crypto libraries exactly as cardano-node 11.1.3 links them: its root iohkNix input
     # (iohk-nix 74bae4f8). Keep in step with CONTRIBUTING.md "Keeping crypto libraries in sync".
     sodium = { url = "github:input-output-hk/libsodium/dbb48cce5429cb6585c9034f002568964f1ce567"; flake = false; };

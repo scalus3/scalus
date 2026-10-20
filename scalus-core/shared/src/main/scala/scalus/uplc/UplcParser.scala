@@ -296,32 +296,42 @@ object UplcParser:
         val outerList: P[List[(builtin.ByteString, List[(builtin.ByteString, BigInt)])]] =
             symbol("[") *> outerPair.repSep0(symbol(",")) <* symbol("]")
 
+        // A value literal must already be in canonical form, as in Plutus >= 1.66 (the same rules
+        // as its flat decoder and `unValueData`): currency symbols and token names strictly
+        // ascending (so no duplicates), no empty token list, and no zero quantity. Nothing is
+        // sorted, merged or dropped here.
+        val keyOrdering = summon[Ordering[builtin.ByteString]]
+        def strictlyAscending(keys: List[builtin.ByteString]): Boolean =
+            keys.lazyZip(keys.drop(1)).forall((a, b) => keyOrdering.lt(a, b))
+
         outerList.flatMap { entries =>
             // Validate and build the value
             var error: Option[String] = None
             val builder =
                 SortedMap.newBuilder[builtin.ByteString, SortedMap[builtin.ByteString, BigInt]]
 
+            if !strictlyAscending(entries.map(_._1)) then
+                error = Some("Currency symbols are not in strictly ascending order")
             for (currency, tokens) <- entries if error.isEmpty do
                 if currency.size > maxKeyLen then
                     error = Some(s"Currency symbol exceeds max length of $maxKeyLen bytes")
+                else if tokens.isEmpty then error = Some(s"Currency symbol $currency has no tokens")
+                else if !strictlyAscending(tokens.map(_._1)) then
+                    error = Some(
+                      s"Token names of currency symbol $currency are not in strictly ascending order"
+                    )
                 else
-                    var innerBuilder = SortedMap.empty[builtin.ByteString, BigInt]
+                    val innerBuilder = SortedMap.newBuilder[builtin.ByteString, BigInt]
                     for (token, amount) <- tokens if error.isEmpty do
                         if token.size > maxKeyLen then
                             error = Some(s"Token name exceeds max length of $maxKeyLen bytes")
                         else if amount < quantityMin || amount > quantityMax then
                             error = Some(s"Quantity $amount out of signed 128-bit range")
-                        else
-                            // Merge duplicates by summing
-                            val existing = innerBuilder.getOrElse(token, BigInt(0))
-                            val merged = existing + amount
-                            if merged != BigInt(0) then
-                                innerBuilder = innerBuilder.updated(token, merged)
-                            else innerBuilder = innerBuilder.removed(token)
-                    // Remove empty inner maps
-                    if error.isEmpty && innerBuilder.nonEmpty then
-                        builder += (currency -> innerBuilder)
+                        else if amount == BigInt(0) then
+                            error =
+                                Some(s"Token $token of currency symbol $currency has quantity 0")
+                        else innerBuilder += (token -> amount)
+                    if error.isEmpty then builder += (currency -> innerBuilder.result())
 
             error match
                 case Some(msg) => P.failWith(msg)

@@ -114,6 +114,11 @@ module proves properties of compiled validators with Lean.
 - Dependency updates: cardano-client-lib 0.7.3, Yaci DevKit 0.4.6, BouncyCastle 1.86,
   jsoniter-scala 2.41.2, sttp client4 4.0.27, fs2 3.14.0 with cats-effect 3.7.1, slf4j 2.0.20,
   jackson-databind 2.22.3, magnolia 1.3.24.
+- The UPLC parser rejects a `value` constant that is not in canonical form: currency symbols or
+  token names out of strictly ascending order, a zero quantity, or an empty token list. It used to
+  sort, merge and drop them. Plutus 1.66 made the same change.
+- The Plutus conformance tests run on the Plutus 1.70.0.0 corpus, the version cardano-node 11.1.3
+  uses: 1009 UPLC evaluation cases, none skipped on JVM, JavaScript and Native.
 
 ### Deprecated
 

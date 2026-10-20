@@ -10,17 +10,17 @@ most of the ledger rules to validate incoming transactions, as well ledger state
 
 The JavaScript build is checked against the
 [Plutus conformance test suite](https://github.com/IntersectMBO/plutus/tree/master/plutus-conformance)
-on every CI run, not only the JVM build. It passes **999 of 999** UPLC evaluation cases with none
+on every CI run, not only the JVM build. It passes **1009 of 1009** UPLC evaluation cases with none
 skipped.
 
-724 of those cases are programs the reference evaluates successfully, and each of the 724 asserts
+723 of those cases are programs the reference evaluates successfully, and each of the 723 asserts
 two things: that the resulting term is α-equivalent to the expected one, and that the **execution
 budget matches the reference exactly** – the same CPU and memory numbers a Cardano node would
 charge, under Plutus's reference variant-E builtin cost model and CEK machine costs.
 
-The other 275 are programs the reference rejects: 220 it fails to evaluate, and 55 it fails to
-parse. The corpus records no expected term or budget for those, so what is asserted is that Scalus
-rejects them the same way.
+The other 286 are programs the reference rejects: 222 it fails to evaluate, and 64 it fails to
+parse or decode. The corpus records no expected term or budget for those, so what is asserted is
+that Scalus rejects them the same way.
 
 Budget equality is the part that matters for a transaction builder. An evaluator that agrees on
 success but disagrees on cost still produces transactions a node rejects.

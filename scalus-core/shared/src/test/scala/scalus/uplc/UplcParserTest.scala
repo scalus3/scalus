@@ -104,6 +104,21 @@ class UplcParserTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbi
         assert(r.swap.getOrElse("").contains("'case' is not allowed before version 1.1.0"))
     }
 
+    test("A value literal must be canonical: ascending keys, no zero, no empty token list") {
+        def parse(value: String) = parser.parseProgram(s"(program 1.0.0 (con value $value))")
+        assert(parse("[(#, [(#, 1), (#bb, 2)]), (#ff, [(#aa, -1)])]").isRight)
+        assert(parse("[]").isRight)
+        // currency symbols out of order or repeated
+        assert(parse("[(#ff, [(#aa, 1)]), (#00, [(#aa, 1)])]").isLeft)
+        assert(parse("[(#00, [(#aa, 1)]), (#00, [(#bb, 1)])]").isLeft)
+        // token names out of order or repeated
+        assert(parse("[(#00, [(#bb, 1), (#aa, 1)])]").isLeft)
+        assert(parse("[(#00, [(#aa, 1), (#aa, 1)])]").isLeft)
+        // a zero quantity or an empty token list
+        assert(parse("[(#00, [(#aa, 0)])]").isLeft)
+        assert(parse("[(#00, [])]").isLeft)
+    }
+
     test("Parse constant types") {
         def p(input: String) = UplcParser.defaultUni.parse(input).map(_._2)
         assert(p("bool") == Right(DefaultUni.Bool))

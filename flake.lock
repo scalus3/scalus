@@ -3,11 +3,11 @@
     "CHaP": {
       "flake": false,
       "locked": {
-        "lastModified": 1775608993,
-        "narHash": "sha256-AHi1GtyIWNox83Hzwdt9lyaTCI2OK7DuztJtBVIzRsQ=",
+        "lastModified": 1785349054,
+        "narHash": "sha256-bwZcJeuaKz2zOn/yoedwYKNsabY+LLVJxk1WZBxpr1g=",
         "owner": "IntersectMBO",
         "repo": "cardano-haskell-packages",
-        "rev": "32b5f2ab66b36dd3acf57641ef14a192d1bb6f3b",
+        "rev": "dbc79e91172fb9c9a8cf7c5fdc885864452c6c3e",
         "type": "github"
       },
       "original": {
@@ -228,11 +228,11 @@
     "hackage": {
       "flake": false,
       "locked": {
-        "lastModified": 1775599289,
-        "narHash": "sha256-CSycYcriOiWWywqQJUeNzIsBtiHl7Uht3008GtB7gWk=",
+        "lastModified": 1785371851,
+        "narHash": "sha256-4KYPxBpcb+YfIyMyRIHUCRXztbb6///O4mdnXv+M6NY=",
         "owner": "input-output-hk",
         "repo": "hackage.nix",
-        "rev": "78c3f1a84bb6504483c7c0bc5acb6ea376077fee",
+        "rev": "394e52592d1e7cdc68a5903d7e09fec662977296",
         "type": "github"
       },
       "original": {
@@ -773,16 +773,16 @@
         "pre-commit-hooks": "pre-commit-hooks"
       },
       "locked": {
-        "lastModified": 1777680679,
-        "narHash": "sha256-hGNs11EctypSo+G/kAd9wuZqfFCV5Wqbgo+HeeN56Wk=",
+        "lastModified": 1790097653,
+        "narHash": "sha256-aQfFc8wYXBusMWlBiJxnmWkh6kwYl5yEm2fFrkiDU/Y=",
         "owner": "IntersectMBO",
         "repo": "plutus",
-        "rev": "ac40fae4dea9dcad51b38a9c5c48148655cb13a2",
+        "rev": "507cab8cf6192e5143f12be5b2d3005a2928dc6d",
         "type": "github"
       },
       "original": {
         "owner": "IntersectMBO",
-        "ref": "1.63.0.0",
+        "ref": "1.70.0.0",
         "repo": "plutus",
         "type": "github"
       }

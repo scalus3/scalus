@@ -10,8 +10,8 @@ class PlutusConformanceJsTest extends PlutusConformanceTest {
     /** Guards the numbers published in `scalus-cardano-ledger/js/src/main/npm/README.md` and on
       * scalus.org.
       *
-      * "999 of 999, none skipped" is the strongest claim Scalus makes to a JavaScript audience, and
-      * prose rots silently. The split matters as much as the total: only the term-bearing cases
+      * "1009 of 1009, none skipped" is the strongest claim Scalus makes to a JavaScript audience,
+      * and prose rots silently. The split matters as much as the total: only the term-bearing cases
       * have their execution budget compared with the reference, and the published wording says how
       * many those are. Pinning the total alone let two different wrong splits get published, so
       * every number the prose states is pinned here. If the corpus moves, this fails in the file
@@ -19,8 +19,8 @@ class PlutusConformanceJsTest extends PlutusConformanceTest {
       */
     test("published conformance counts are still accurate") {
         assert(
-          discoveredCases.size == 999,
-          s"corpus has ${discoveredCases.size} evaluation cases; the README and the site say 999"
+          discoveredCases.size == 1009,
+          s"corpus has ${discoveredCases.size} evaluation cases; the README and the site say 1009"
         )
         assert(
           ignoredCases.isEmpty,
@@ -30,19 +30,19 @@ class PlutusConformanceJsTest extends PlutusConformanceTest {
         val counts = discoveredCases.groupBy(expectationOf).view.mapValues(_.size).toMap
         def count(expectation: CaseExpectation): Int = counts.getOrElse(expectation, 0)
         assert(
-          count(CaseExpectation.TermAndBudget) == 724,
+          count(CaseExpectation.TermAndBudget) == 723,
           s"${count(CaseExpectation.TermAndBudget)} cases have their term and budget asserted; " +
-              s"the README and the site say 724"
+              s"the README and the site say 723"
         )
         assert(
-          count(CaseExpectation.EvaluationFailure) == 220,
+          count(CaseExpectation.EvaluationFailure) == 222,
           s"${count(CaseExpectation.EvaluationFailure)} cases expect 'evaluation failure'; the " +
-              s"README and the site say 220"
+              s"README and the site say 222"
         )
         assert(
-          count(CaseExpectation.ParseError) == 55,
-          s"${count(CaseExpectation.ParseError)} cases expect 'parse error'; the README and the " +
-              s"site say 55"
+          count(CaseExpectation.ParseError) == 64,
+          s"${count(CaseExpectation.ParseError)} cases expect 'parse/decode error'; the README and the " +
+              s"site say 64"
         )
     }
 }

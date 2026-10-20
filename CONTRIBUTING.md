@@ -107,10 +107,13 @@ Do the steps in order. Each step tells you which file or command to use.
    - **Crypto libraries** (libsodium, libsecp256k1, blst): follow
      [On each cardano-node release](#on-each-cardano-node-release). If a pin changed, release
      `scalus-crypto-jni` first and bump it in `build.sbt`.
-   - **Plutus and the conformance corpus**: the `plutus` input in `flake.nix` gives the
-     `plutus-conformance` test cases. Set it to the node's `plutus-core` version, run
-     `nix flake update plutus`, then run the conformance tests. Read the Plutus CHANGELOG for new
-     builtins and cost model changes (`scalus-core/shared/src/main/resources/builtinCostModel*.json`).
+   - **Plutus and the conformance corpus**: the `plutus` input in `flake.nix` gives the `uplc`
+     binary and the `plutus-conformance` test cases. Set it to the node's `plutus-core` version, run
+     `nix flake update plutus`, enter the devshell again so it relinks `plutus-conformance`, then
+     run the conformance tests on JVM, JS and Native. IOG caches `uplc` for Linux only, so on macOS
+     the first shell after a bump compiles Plutus from source for 1-2 hours. Read the Plutus CHANGELOG
+     for new builtins and cost model changes
+     (`scalus-core/shared/src/main/resources/builtinCostModel*.json`).
    - **cardano-ledger**: read the `cardano-ledger-conway` CHANGELOG for rule changes that the
      Emulator and `scalus.cardano.ledger.rules` must follow.
    - Update the [Current state](#current-state) table, even if nothing changed.
@@ -125,8 +128,8 @@ Do the steps in order. Each step tells you which file or command to use.
 
    Apply the updates on master by hand, then close the PRs. Also check what Steward does not cover:
    the actions in `.github/workflows/`, `package.json` in the root and in `scalus-site/`, and the
-   `nixpkgs` input in `flake.lock`. Step 1 already covers the `plutus` input. Do a breaking major,
-   such as a new `@noble/curves` major, in its own commit.
+   `nixpkgs` input in `flake.lock`. Step 1 already covers the `plutus` input. Do a breaking
+   major, such as a new `@noble/curves` major, in its own commit.
 
 3. **Remove old deprecated API** (minor releases only). Release `1.N.0` deletes every
    `@deprecated` member whose version is `1.(N-2).x` or older. For example, 1.4.0 deletes the
@@ -323,7 +326,7 @@ Last checked against cardano-node 11.1.3 (plutus-core 1.70.0.0) on 2026-10-20.
 | libsodium (Ed25519) | `input-output-hk/libsodium` `dbb48cce5429cb6585c9034f002568964f1ce567` (1.0.18 code) | same, via `scalus-crypto-jni` | system libsodium (nixpkgs) |
 | libsecp256k1 | v0.3.2 `acf5c55ae6a94e5ca847e07def40427547876101` | same, via `scalus-crypto-jni` | system libsecp256k1 (nixpkgs) |
 | blst | v0.3.15 `6d960cd05d6fe2b5bc9ba161edf0c1a131b87c4c` | same, via `scalus-crypto-jni` | system blst (nixpkgs) |
-| Plutus conformance corpus | plutus-core 1.70.0.0 | 1.63.0.0 (`plutus` input in `flake.nix`) | same |
+| Plutus conformance corpus | plutus-core 1.70.0.0 | 1.70.0.0 (`plutus` input in `flake.nix`) | same |
 
 The JVM needs `scalus-crypto-jni`'s native library: Linux with glibc 2.34+, macOS 11+ (arm64) or
 10.15+ (x64), or Windows x64. JavaScript uses `@noble/curves` and cannot link these libraries.

@@ -28,10 +28,17 @@ class JitConformanceTest extends PlutusConformanceTest {
         case EvaluationFailure(e: Throwable)
         case Success(value: UplcValue, budget: ExUnits)
 
+    /** The corpus cases that need Dijkstra (PV12): they case on `Data.Constr` (Plutus 1.69). The
+      * JIT targets PV11 and rejects every Data scrutinee (`JitRuntime.caseIndex`), so these cases
+      * cannot agree with the suite's PV12 CEK machine.
+      */
+    override protected def ignoredCases: Map[String, String] =
+        discoveredCases.filter(needsDijkstra).map(_ -> "the JIT has no case on Data (PV12)").toMap
+
     override protected def check(name: String): Unit = test(name) {
-        val outcome = Program.parseUplc(readFile(s"$path/$name.uplc")) match
-            case Left(_)        => Outcome.ParseError
-            case Right(program) => run(program.term)
+        val outcome = parseScoped(readFile(s"$path/$name.uplc")) match
+            case None          => Outcome.ParseError
+            case Some(program) => run(program.term)
         assert(matches(name, outcome), s"$name: $outcome")
     }
 
@@ -91,7 +98,7 @@ class JitConformanceTest extends PlutusConformanceTest {
     private val BudgetRegex = """\(\{cpu:\s(\d+)\n\|\smem:\s(\d+)\}\)""".r
 
     private def expectedBudget(name: String): ExUnits =
-        readFile(s"$path/$name.uplc.budget.expected") match
+        readFile(s"$path/$name.budget.expected") match
             case BudgetRegex(cpu, mem) => ExUnits(memory = mem.toLong, steps = cpu.toLong)
             case other                 => fail(s"$name: not a budget: $other")
 }

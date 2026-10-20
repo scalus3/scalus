@@ -12,13 +12,15 @@ import scala.util.Try
 
 /** Tests for the Plutus Conformance Test Suite. */
 abstract class PlutusConformanceTest extends AnyFunSuite:
-    protected lazy val plutusVM: PlutusVM = {
-        // The Plutus conformance corpus (>= 1.63 / van Rossem) is generated under semantics
-        // variant E: PV11 features (case-on-builtins), UTF-8-byte-length text costing,
-        // consByteString range checks, and Int64-bounded shift/rotate amounts. Build the VM from
-        // Plutus's reference variant-E builtin cost model AND reference variant-E CEK machine costs
-        // so produced budgets match the corpus exactly; makePlutusV3VM derives variant E from
-        // vanRossemPV.
+    /** Plutus's reference variant-E machine parameters.
+      *
+      * The Plutus conformance corpus (>= 1.63 / van Rossem) is generated under semantics variant E:
+      * PV11 features (case-on-builtins), UTF-8-byte-length text costing, consByteString range
+      * checks, and Int64-bounded shift/rotate amounts. Build the VM from Plutus's reference
+      * variant-E builtin cost model AND reference variant-E CEK machine costs so produced budgets
+      * match the corpus exactly.
+      */
+    private lazy val referenceParams: MachineParams = {
         def reference(name: String): String =
             new String(platform.readFile(s"scalus-core/shared/src/main/resources/$name"), "UTF-8")
         val builtinCostModel = BuiltinCostModel.fromJsonString(reference("builtinCostModelE.json"))
@@ -35,9 +37,25 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
               }
               .toMap
         )
-        val params = MachineParams(machineCosts, builtinCostModel)
-        PlutusVM.makePlutusV3VM(params, MajorProtocolVersion.vanRossemPV)
+        MachineParams(machineCosts, builtinCostModel)
     }
+
+    /** The VM at van Rossem (PV11), the protocol version mainnet runs. Every case uses it, except
+      * the ones that need Dijkstra (see [[needsDijkstra]]).
+      */
+    protected lazy val plutusVM: PlutusVM =
+        PlutusVM.makePlutusV3VM(referenceParams, MajorProtocolVersion.vanRossemPV)
+
+    /** The VM at Dijkstra (PV12). makePlutusV3VM derives the same variant E from it. */
+    protected lazy val dijkstraVM: PlutusVM =
+        PlutusVM.makePlutusV3VM(referenceParams, MajorProtocolVersion.dijkstraPV)
+
+    /** Since 1.69 the corpus cases on `Data.Constr` (term/constant-case/data), which Plutus enables
+      * only from Dijkstra (PV12). Only those cases run on [[dijkstraVM]], so the rest of the corpus
+      * checks the protocol version mainnet runs.
+      */
+    protected def needsDijkstra(name: String): Boolean =
+        name.startsWith("term/constant-case/data/")
 
     protected given PlutusVM = plutusVM
 
@@ -63,18 +81,27 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
             case None         => check(name)
     }
 
+    test("the cases that need Dijkstra fail at van Rossem (PV11)") {
+        val dijkstraCases = discoveredCases.filter(needsDijkstra)
+        assert(dijkstraCases.nonEmpty, "no corpus case needs Dijkstra; remove needsDijkstra")
+        for name <- dijkstraCases do
+            eval(readFile(s"$path/$name.uplc"), plutusVM) match
+                case Right(_: Result.Failure) =>
+                case other => fail(s"$name does not need Dijkstra: at PV11 it gives $other")
+    }
+
     test("ignoredCases has no stale entries (all present in the corpus)") {
         val stale = ignoredCases.keySet -- discoveredCases.toSet
         assert(stale.isEmpty, s"ignoredCases lists cases not in the corpus: ${stale.toList.sorted}")
     }
 
     private type EvalFailure = "evaluation failure"
-    private type ParseError = "parse error"
+    private type ParseError = "parse/decode error"
     private type Error = EvalFailure | ParseError
     private def parseExpected(code: String): Either[Error, Term] = {
         code match
             case "evaluation failure" => Left("evaluation failure")
-            case "parse error"        => Left("parse error")
+            case "parse/decode error" => Left("parse/decode error")
             case _ =>
                 Program.parseUplc(code) match
                     case Left(value) => fail(s"Unexpected parse error: $value")
@@ -83,12 +110,22 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
 
     }
 
-    private def eval(code: String): Either[Error, Result] = {
-        Program.parseUplc(code) match
-            case Right(program) =>
-                Right(program.term.evaluateDebug)
-            case Left(_) =>
-                Left("parse error")
+    /** Parses a corpus program the way the Plutus conformance runner does.
+      *
+      * The runner reports a free variable as `parse/decode error`, not as an evaluation failure: a
+      * `.flat` file cannot decode with one, and the textual case must agree with it (see
+      * `getInputProg` in plutus-conformance `PlutusConformance/Common.hs`). So a program that
+      * parses but does not convert to De Bruijn indices is a parse error here too.
+      */
+    protected def parseScoped(code: String): Option[Program] =
+        Program.parseUplc(code).toOption.filter { program =>
+            Try(DeBruijn.deBruijnTerm(program.term, throwOnFreeVariable = true)).isSuccess
+        }
+
+    private def eval(code: String, vm: PlutusVM): Either[Error, Result] = {
+        parseScoped(code) match
+            case Some(program) => Right(program.term.evaluateDebug(using vm))
+            case None          => Left("parse/decode error")
     }
 
     protected def readFile(path: String): String = {
@@ -104,17 +141,21 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
             val code = readFile(s"$path/$name.uplc")
             val expected = readFile(s"$path/$name.uplc.expected")
             val expectedBudget =
-                val budget = Try(readFile(s"$path/$name.uplc.budget.expected"))
+                val budget = Try(readFile(s"$path/$name.budget.expected"))
                 budget match
                     case Success(BudgetRegex(cpu, mem)) =>
                         Right(ExUnits(memory = mem.toLong, steps = cpu.toLong))
-                    case Success("parse error")        => Left("parse error")
+                    case Success("parse/decode error") => Left("parse/decode error")
                     case Success("evaluation failure") => Left("evaluation failure")
                     case Failure(_)                    => Left("no file")
                     case _ => fail(s"Unexpected budget format:\n$budget")
 
             // println(eval(code).show)
-            (eval(code), parseExpected(expected), expectedBudget) match
+            (
+              eval(code, if needsDijkstra(name) then dijkstraVM else plutusVM),
+              parseExpected(expected),
+              expectedBudget
+            ) match
                 case (
                       Right(Result.Success(actualTerm, budget, _, _)),
                       Right(expectedTerm),
@@ -160,8 +201,8 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
           */
         case EvaluationFailure
 
-        /** Both expectation files say `parse error`. [[check]] asserts only that the program is
-          * rejected at parse time here too.
+        /** Both expectation files say `parse/decode error`. [[check]] asserts only that the program
+          * is rejected at parse time here too.
           */
         case ParseError
 
@@ -173,12 +214,12 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
       */
     protected def expectationOf(name: String): CaseExpectation = {
         val expected = readFile(s"$path/$name.uplc.expected")
-        val budget = Try(readFile(s"$path/$name.uplc.budget.expected"))
+        val budget = Try(readFile(s"$path/$name.budget.expected"))
         (expected, budget) match
             case ("evaluation failure", Success("evaluation failure")) =>
                 CaseExpectation.EvaluationFailure
-            case ("parse error", Success("parse error")) => CaseExpectation.ParseError
-            case ("evaluation failure" | "parse error", other) =>
+            case ("parse/decode error", Success("parse/decode error")) => CaseExpectation.ParseError
+            case ("evaluation failure" | "parse/decode error", other) =>
                 fail(s"$name expects '$expected' but its budget file says $other")
             case (_, Success(BudgetRegex(_, _))) => CaseExpectation.TermAndBudget
             case (_, other) =>
