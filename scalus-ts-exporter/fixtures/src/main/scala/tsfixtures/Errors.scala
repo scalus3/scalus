@@ -1,9 +1,15 @@
 package tsfixtures
 
-import scalus.interop.TsName
+import scalus.interop.{TsName, TsType}
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.*
+
+/** `@TsType` text is emitted verbatim; a type name in it that nothing declares must be reported. */
+@JSExportTopLevel("BadVerbatimName")
+class BadVerbatimName extends js.Object {
+    def configure(@TsType("Partial<NoSuchType>") options: js.Object): Unit = ()
+}
 
 @JSExportTopLevel("BadLong")
 class BadLong extends js.Object {
