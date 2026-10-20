@@ -1071,6 +1071,9 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     )
     .jsSettings(jsModuleSettings *)
     .jsSettings(
+      // Scaladoc 3.3.8 resolves @throws targets such as TypeError without the Scala.js
+      // classpath, so they warn here. The tags go into scalus.d.ts verbatim, so keep them.
+      Compile / doc / scalacOptions += "-no-link-warnings",
       // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).
       // The Scala.js linker emits standard ES modules; we run esbuild over the linker
       // output to collapse any internal chunks into one file and minify. @noble/* are
