@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.4.0 (2026-10-20)
 
 Scalus 1.4 runs Ed25519, secp256k1 and BLS12-381 on the C libraries that cardano-node links, and
 brings the Emulator closer to the Cardano ledger: withdrawals, delegation targets, the treasury,
