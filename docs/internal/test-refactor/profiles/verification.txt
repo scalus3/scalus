@@ -1,0 +1,166 @@
+# Profile: verification
+
+project: scalusVerification; task: scalusVerification/test; sbt wall time (incl. startup): 47s; exit: 0
+commit: a026e6cef; date: 2026-10-20T23:27Z
+[info] Run completed in 4 seconds, 505 milliseconds.
+[info] Tests: succeeded 127, failed 0, canceled 66, ignored 0, pending 0
+
+## jfr view hot-methods
+
+
+                                                                                   Java Methods that Execute the Most
+
+Method                                                                                                                                                                                  Samples Percent
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ------- -------
+scala.runtime.Statics.anyHash(Object)                                                                                                                                                         5   7.04%
+scalus.compiler.sir.lowering.Lowering$.lowerSIR(SIR, Option, LoweringContext)                                                                                                                 3   4.23%
+scalus.compiler.sir.SIRUnify$.unifyTypeNoRec(SIRType, SIRType, SIRUnify$Env)                                                                                                                  2   2.82%
+scala.collection.immutable.Set$.from(IterableOnce)                                                                                                                                            1   1.41%
+java.lang.invoke.MethodHandles.insertArgumentsChecks(MethodHandle, int, int)                                                                                                                  1   1.41%
+scalus.compiler.sir.lowering.LoweredValue$.chooseCommonRepresentation(Seq, SIRType, ScalusSourcePos, LoweringContext)                                                                         1   1.41%
+scala.collection.immutable.List.prependedAll(IterableOnce)                                                                                                                                    1   1.41%
+scalus.uplc.DeBruijnedProgram$given_Flat_DeBruijnedProgram$.bitSize(DeBruijnedProgram)                                                                                                        1   1.41%
+java.lang.invoke.MethodType.checkPtypes(Class[])                                                                                                                                              1   1.41%
+java.lang.String.equals(Object)                                                                                                                                                               1   1.41%
+java.math.BigInteger.add(int[], int[])                                                                                                                                                        1   1.41%
+scalus.compiler.sir.lowering.LoweredValue$Builder$.lvApply(LoweredValue, LoweredValue, ScalusSourcePos, Option, Option, LoweringContext)                                                      1   1.41%
+scalus.uplc.transform.Inliner.shouldInline(Term, Inliner$OccurrenceInfo)                                                                                                                      1   1.41%
+scala.collection.IterableOnceOps.addString(StringBuilder, String, String, String)                                                                                                             1   1.41%
+scalus.compiler.sir.SIRUnify$.$anonfun$12(SIRUnify$Unify, SIRUnify$UnificationResult, Tuple2)                                                                                                 1   1.41%
+scalus.compiler.sir.lowering.ComplexLoweredValue.$init$(ComplexLoweredValue)                                                                                                                  1   1.41%
+java.lang.Class.copyMethods(Method[])                                                                                                                                                         1   1.41%
+scalus.compiler.sir.lowering.SumDispatch$.toRepresentation(LoweredValue, LoweredValueRepresentation, ScalusSourcePos, LoweringContext)                                                        1   1.41%
+jdk.internal.loader.URLClassPath$JarLoader$1.<init>(URLClassPath$JarLoader, String, URL, JarEntry)                                                                                            1   1.41%
+java.util.concurrent.ConcurrentLinkedDeque.offerLast(Object)                                                                                                                                  1   1.41%
+org.scalatest.Suite.run(Option, Args)                                                                                                                                                         1   1.41%
+scalus.compiler.sir.lowering.LoweredValue.maybeUpcast(SIRType, ScalusSourcePos, LoweringContext)                                                                                              1   1.41%
+sun.security.jca.GetInstance.getInstance(Provider$Service, Class)                                                                                                                             1   1.41%
+scalus.compiler.sir.lowering.VariableLoweredValue.toRepresentation(LoweredValueRepresentation, ScalusSourcePos, LoweringContext)                                                              1   1.41%
+scalus.compiler.sir.lowering.Lowering$.filterAndCountVars(Function1, Seq)                                                                                                                     1   1.41%
+
+## jfr view allocation-by-class
+
+
+                                                                                          Allocation by Class
+
+Object Type                                                                                                                                                                         Allocation Pressure
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------
+java.lang.Object[]                                                                                                                                                                               22.26%
+byte[]                                                                                                                                                                                           16.56%
+int[]                                                                                                                                                                                            11.47%
+long[]                                                                                                                                                                                            8.06%
+scala.collection.immutable.$colon$colon                                                                                                                                                           7.25%
+scalus.compiler.sir.SIRUnify$Env                                                                                                                                                                  4.13%
+scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator$$$Lambda.0x00007fe0012ec5f8                                                                                                            3.22%
+java.lang.String                                                                                                                                                                                  3.08%
+scala.collection.immutable.RedBlackTree$Tree                                                                                                                                                      2.93%
+scala.Tuple2                                                                                                                                                                                      2.87%
+short[]                                                                                                                                                                                           2.20%
+scala.collection.immutable.LazyList                                                                                                                                                               1.12%
+scala.collection.mutable.HashSet$Node[]                                                                                                                                                           1.00%
+scala.collection.immutable.Map$Map1                                                                                                                                                               0.77%
+scala.collection.immutable.LazyList$$Lambda.0x00007fe0012b5ca0                                                                                                                                    0.71%
+scala.collection.immutable.Map$Map2                                                                                                                                                               0.67%
+scala.collection.immutable.BitmapIndexedMapNode                                                                                                                                                   0.60%
+scalus.compiler.sir.SIRType[]                                                                                                                                                                     0.53%
+scala.collection.immutable.LazyList$$$Lambda.0x00007fe0012b5430                                                                                                                                   0.44%
+scalus.compiler.sir.SIRUnify$UnificationSuccess                                                                                                                                                   0.44%
+scala.collection.immutable.Set$Set1                                                                                                                                                               0.41%
+scala.collection.mutable.HashSet$Node                                                                                                                                                             0.37%
+java.lang.StringBuilder                                                                                                                                                                           0.37%
+scala.Some                                                                                                                                                                                        0.36%
+scala.collection.mutable.StringBuilder                                                                                                                                                            0.36%
+
+## jfr view allocation-by-site
+
+
+                                                                                           Allocation by Site
+
+Method                                                                                                                                                                              Allocation Pressure
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------
+java.lang.Throwable.fillInStackTrace(int)                                                                                                                                                        36.55%
+java.util.Arrays.copyOf(byte[], int)                                                                                                                                                              7.37%
+java.lang.invoke.DirectMethodHandle.allocateInstance(Object)                                                                                                                                      5.67%
+java.util.IdentityHashMap.init(int)                                                                                                                                                               4.44%
+java.util.Arrays.copyOfRange(byte[], int, int)                                                                                                                                                    3.30%
+scala.collection.IterableOnceOps.mkString(String, String, String)                                                                                                                                 2.96%
+scala.collection.immutable.List.$colon$colon(Object)                                                                                                                                              2.93%
+scala.collection.immutable.RedBlackTree$.RedTree(Object, Object, RedBlackTree$Tree, RedBlackTree$Tree)                                                                                            2.93%
+scalus.compiler.sir.SIRUnify$Env$.apply(List, Map, Map, Map, Set, Map, boolean, boolean, Option, boolean)                                                                                         2.63%
+scala.collection.immutable.List.flatMap(Function1)                                                                                                                                                2.26%
+scala.collection.immutable.RedBlackTree$EntriesIterator.nextResult(RedBlackTree$Tree)                                                                                                             1.94%
+java.lang.StringConcatHelper$Concat1.concat0(String)                                                                                                                                              1.89%
+jdk.internal.misc.Unsafe.allocateUninitializedArray(Class, int)                                                                                                                                   1.61%
+scalus.compiler.sir.SIRUnify$Env.copy(List, Map, Map, Map, Set, Map, boolean, boolean, Option, boolean)                                                                                           1.50%
+scala.collection.immutable.List.map(Function1)                                                                                                                                                    1.33%
+scala.collection.mutable.HashSet.<init>(int, double)                                                                                                                                              1.00%
+jdk.internal.classfile.impl.EntryMap.<init>(int, float)                                                                                                                                           0.88%
+scala.collection.immutable.Map$EmptyMap$.updated(Object, Object)                                                                                                                                  0.77%
+scala.collection.immutable.BitmapIndexedMapNode.copyAndInsertValue(int, Object, int, int, Object)                                                                                                 0.76%
+scala.collection.mutable.ArrayDeque$.alloc(int)                                                                                                                                                   0.74%
+java.io.ByteArrayOutputStream.<init>(int)                                                                                                                                                         0.71%
+scala.collection.immutable.Map$Map1.updated(Object, Object)                                                                                                                                       0.67%
+java.lang.StringBuilder.toString()                                                                                                                                                                0.58%
+scala.collection.immutable.Node.insertElement(int[], int, int)                                                                                                                                    0.54%
+jdk.internal.misc.Unsafe.allocateInstance(Class)                                                                                                                                                  0.54%
+
+## jfr view gc-pauses
+
+
+GC Pauses
+---------
+
+Total Pause Time: 36.1 ms
+
+Number of Pauses: 32
+
+Minimum Pause Time: 0.00521 ms
+
+Median Pause Time: 0.975 ms
+
+Average Pause Time: 1.13 ms
+
+P90 Pause Time: 2.05 ms
+
+P95 Pause Time: 3.42 ms
+
+P99 Pause Time: 3.57 ms
+
+P99.9% Pause Time: 3.57 ms
+
+Maximum Pause Time: 3.57 ms
+
+## jfr view gc-configuration
+
+
+GC Configuration
+----------------
+
+Young GC: G1New
+
+Old GC: G1Old
+
+Parallel GC Threads: 11
+
+Concurrent GC Threads: 3
+
+Dynamic GC Threads: true
+
+Concurrent Explicit GC: false
+
+Disable Explicit GC: false
+
+Pause Target: N/A
+
+GC Time Ratio: 12
+
+## jfr view cpu-load-samples
+
+
+                                                                                                 CPU Load
+
+Time                                                                                     JVM User                                         JVM System                                         Machine Total
+------------------------------------------------ ------------------------------------------------ -------------------------------------------------- -----------------------------------------------------
+01:27:11                                                                                   28.15%                                              0.71%                                                54.28%
+01:27:12                                                                                   17.79%                                              0.56%                                                48.19%
+01:27:13                                                                                   17.47%                                              0.35%                                                41.12%

@@ -1,0 +1,169 @@
+# Profile: ledger
+
+project: scalusCardanoLedgerJVM; task: scalusCardanoLedgerJVM/test; sbt wall time (incl. startup): 86s; exit: 0
+commit: a026e6cef; date: 2026-10-20T23:24Z
+[info] Run completed in 8 seconds, 63 milliseconds.
+[info] Tests: succeeded 1077, failed 0, canceled 0, ignored 0, pending 0
+
+## jfr view hot-methods
+
+
+                                                                                   Java Methods that Execute the Most
+
+Method                                                                                                                                                                                  Samples Percent
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ------- -------
+sun.security.provider.ByteArrayAccess.l2bBig(long[], int, byte[], int, int)                                                                                                                  23   8.30%
+org.bouncycastle.crypto.digests.Blake2bDigest.compress(byte[], int)                                                                                                                          10   3.61%
+scala.collection.mutable.Growable.addAll(IterableOnce)                                                                                                                                        7   2.53%
+scala.collection.View$ZipWithIndex.iterator()                                                                                                                                                 5   1.81%
+scalus.crypto.Hmac$.hmacSha512(byte[], byte[])                                                                                                                                                4   1.44%
+scala.collection.Iterator$$anon$10.hasNext()                                                                                                                                                  4   1.44%
+com.sun.crypto.provider.PBKDF2KeyImpl.deriveKey(Mac, byte[], byte[], int, int)                                                                                                                4   1.44%
+io.bullet.borer.output.ToByteArrayOutput$ToByteArray.inline$allocateBuffer()                                                                                                                  3   1.08%
+scala.collection.Iterator$$anon$16.hasNext()                                                                                                                                                  3   1.08%
+scalus.testing.conformance.GoldenTranslationVectors$Cbor$.read(byte[], int)                                                                                                                   3   1.08%
+scalus.cardano.txbuilder.Change$.changeOutputDiffHandler(Value, Transaction, ProtocolParams, int)                                                                                             3   1.08%
+scala.collection.immutable.LazyList.initState()                                                                                                                                               2   0.72%
+scala.collection.immutable.RedBlackTree$Tree.makeImmutableImpl$1()                                                                                                                            2   0.72%
+scala.collection.Iterator$$anon$9.hasNext()                                                                                                                                                   2   0.72%
+scalus.cardano.txbuilder.TransactionBuilder$.$anonfun$8$$anonfun$3(Function2, Tuple4)                                                                                                         2   0.72%
+scalus.cardano.ledger.RefScriptFee.fee(int, long)                                                                                                                                             2   0.72%
+scala.collection.SeqView$Id.length()                                                                                                                                                          2   0.72%
+org.scalacheck.Gen$Choose$.org$scalacheck$Gen$Choose$$$chLng(long, long, Gen$Parameters, Seed)                                                                                                2   0.72%
+java.util.Objects.equals(Object, Object)                                                                                                                                                      2   0.72%
+scala.collection.View$Concat.$anonfun$iterator$1(View$Concat)                                                                                                                                 2   0.72%
+java.util.regex.Pattern.compile()                                                                                                                                                             2   0.72%
+scala.collection.IterableOps.$anonfun$view$1(IterableOps)                                                                                                                                     2   0.72%
+scalus.utils.Utils$.sha2_512(byte[])                                                                                                                                                          2   0.72%
+scalus.cardano.ledger.utils.ExactValue.convert(Function1)                                                                                                                                     2   0.72%
+scala.collection.View$Concat.knownSize()                                                                                                                                                      2   0.72%
+
+## jfr view allocation-by-class
+
+
+                                                                                          Allocation by Class
+
+Object Type                                                                                                                                                                         Allocation Pressure
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------
+byte[]                                                                                                                                                                                           48.19%
+io.bullet.borer.output.ToByteArrayOutput$ToByteArray                                                                                                                                              7.45%
+java.lang.Object[]                                                                                                                                                                                6.90%
+int[]                                                                                                                                                                                             3.39%
+scalus.cardano.ledger.MultiAsset$$$Lambda.0x000003ff0138ee90                                                                                                                                      2.72%
+long[]                                                                                                                                                                                            2.59%
+scala.Tuple2                                                                                                                                                                                      1.68%
+org.scalacheck.rng.Seed$apply                                                                                                                                                                     1.35%
+java.lang.String                                                                                                                                                                                  1.20%
+scala.collection.mutable.HashMap$Node[]                                                                                                                                                           1.05%
+scala.collection.View$Concat                                                                                                                                                                      0.76%
+scala.collection.immutable.$colon$colon                                                                                                                                                           0.70%
+sun.security.provider.SHA5$SHA512                                                                                                                                                                 0.65%
+scala.Some                                                                                                                                                                                        0.58%
+scala.collection.immutable.RedBlackTree$KeysIterator                                                                                                                                              0.56%
+short[]                                                                                                                                                                                           0.54%
+scala.collection.Iterator$$anon$6                                                                                                                                                                 0.53%
+scala.collection.mutable.HashMap                                                                                                                                                                  0.49%
+scala.math.BigInt                                                                                                                                                                                 0.48%
+scala.collection.immutable.VectorBuilder                                                                                                                                                          0.43%
+scalus.cardano.ledger.Hashes$package$Hash$$anon$1                                                                                                                                                 0.43%
+org.scalacheck.Gen$$anon$6                                                                                                                                                                        0.41%
+scala.collection.immutable.RedBlackTree$Tree                                                                                                                                                      0.40%
+net.i2p.crypto.eddsa.math.ed25519.Ed25519FieldElement                                                                                                                                             0.39%
+scala.collection.View$ZipWithIndex                                                                                                                                                                0.39%
+
+## jfr view allocation-by-site
+
+
+                                                                                           Allocation by Site
+
+Method                                                                                                                                                                              Allocation Pressure
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------
+io.bullet.borer.internal.ByteArrayCache$.acquire(int)                                                                                                                                            15.24%
+io.bullet.borer.output.ToByteArrayOutput$ToByteArray.result()                                                                                                                                     9.11%
+scalus.serialization.cbor.Cbor$.encode(Object, Encoder)                                                                                                                                           7.45%
+scala.reflect.ManifestFactory$ByteManifest.newArray(int)                                                                                                                                          7.26%
+scalus.crypto.Hmac$.hmacSha512(byte[], byte[])                                                                                                                                                    6.62%
+java.lang.invoke.DirectMethodHandle.allocateInstance(Object)                                                                                                                                      4.69%
+java.lang.Throwable.fillInStackTrace(int)                                                                                                                                                         3.01%
+java.util.Arrays.copyOf(byte[], int)                                                                                                                                                              2.31%
+scala.collection.immutable.BitmapIndexedMapNode.copyAndMigrateFromInlineToNode(int, int, MapNode)                                                                                                 1.95%
+org.scalacheck.rng.Seed$apply$.apply(long, long, long, long)                                                                                                                                      1.35%
+sun.security.provider.DigestBase.<init>(String, int, int)                                                                                                                                         1.34%
+sun.security.provider.DigestBase.engineDigest()                                                                                                                                                   1.28%
+java.util.Arrays.copyOfRange(byte[], int, int)                                                                                                                                                    1.24%
+jdk.internal.classfile.impl.EntryMap.<init>(int, float)                                                                                                                                           1.14%
+scala.collection.mutable.HashMap.<init>(int, double)                                                                                                                                              1.05%
+scala.collection.immutable.VectorBuilder.<init>()                                                                                                                                                 1.03%
+net.i2p.crypto.eddsa.math.ed25519.Ed25519FieldElement.cmov(FieldElement, int)                                                                                                                     1.03%
+java.util.Arrays.copyOf(Object[], int, Class)                                                                                                                                                     0.93%
+org.apache.commons.io.IOUtils.byteArray(int)                                                                                                                                                      0.91%
+scala.Predef$ArrowAssoc$.$minus$greater$extension(Object, Object)                                                                                                                                 0.85%
+jdk.internal.misc.Unsafe.allocateInstance(Class)                                                                                                                                                  0.75%
+sun.security.provider.SHA5.<init>(String, int, long[])                                                                                                                                            0.70%
+jdk.internal.misc.Unsafe.allocateUninitializedArray(Class, int)                                                                                                                                   0.60%
+java.util.IdentityHashMap.init(int)                                                                                                                                                               0.56%
+scala.collection.immutable.TreeSet.iterator()                                                                                                                                                     0.56%
+
+## jfr view gc-pauses
+
+
+GC Pauses
+---------
+
+Total Pause Time: 99.8 ms
+
+Number of Pauses: 72
+
+Minimum Pause Time: 0.00492 ms
+
+Median Pause Time: 1.29 ms
+
+Average Pause Time: 1.39 ms
+
+P90 Pause Time: 2.51 ms
+
+P95 Pause Time: 3.40 ms
+
+P99 Pause Time: 6.14 ms
+
+P99.9% Pause Time: 6.14 ms
+
+Maximum Pause Time: 6.14 ms
+
+## jfr view gc-configuration
+
+
+GC Configuration
+----------------
+
+Young GC: G1New
+
+Old GC: G1Old
+
+Parallel GC Threads: 11
+
+Concurrent GC Threads: 3
+
+Dynamic GC Threads: true
+
+Concurrent Explicit GC: false
+
+Disable Explicit GC: false
+
+Pause Target: N/A
+
+GC Time Ratio: 12
+
+## jfr view cpu-load-samples
+
+
+                                                                                                 CPU Load
+
+Time                                                                                     JVM User                                         JVM System                                         Machine Total
+------------------------------------------------ ------------------------------------------------ -------------------------------------------------- -----------------------------------------------------
+01:24:53                                                                                   13.65%                                              1.13%                                                34.19%
+01:24:54                                                                                   23.55%                                              1.06%                                                50.99%
+01:24:55                                                                                   29.07%                                              0.92%                                                67.47%
+01:24:56                                                                                   24.16%                                              0.42%                                                53.22%
+01:24:57                                                                                   13.08%                                              0.42%                                                41.51%
+01:24:58                                                                                   21.64%                                              2.33%                                                49.68%

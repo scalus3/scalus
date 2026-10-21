@@ -1,0 +1,176 @@
+# Profile: jit
+
+project: scalusUplcJitCompiler; task: scalusUplcJitCompiler/test; sbt wall time (incl. startup): 83s; exit: 0
+commit: a026e6cef; date: 2026-10-20T23:26Z
+[info] Run completed in 15 seconds, 271 milliseconds.
+[info] Tests: succeeded 1119, failed 0, canceled 0, ignored 5, pending 0
+
+## jfr view hot-methods
+
+
+                                                                                   Java Methods that Execute the Most
+
+Method                                                                                                                                                                                  Samples Percent
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ------- -------
+dotty.tools.dotc.ast.Positioned.include$1(SourceFile, long, Object)                                                                                                                          35   4.84%
+java.util.Objects.equals(Object, Object)                                                                                                                                                     22   3.04%
+dotty.tools.dotc.core.SymDenotations$SymDenotation.isEmptyPackage(Contexts$Context)                                                                                                          15   2.07%
+java.util.IdentityHashMap.get(Object)                                                                                                                                                        15   2.07%
+dotty.tools.dotc.inlines.Inlines$Reposition$1.transform(Trees$Tree, Contexts$Context)                                                                                                        15   2.07%
+dotty.tools.dotc.ast.Trees$Instance$TreeMap.transform(Trees$Tree, Contexts$Context)                                                                                                          14   1.94%
+dotty.tools.dotc.util.Spans$Span$.start$extension(long)                                                                                                                                      13   1.80%
+dotty.tools.dotc.core.Symbols$Symbol.computeDenot(SymDenotations$SymDenotation, Contexts$Context)                                                                                            13   1.80%
+java.math.BigInteger.destructiveMulAdd(int[], int, int)                                                                                                                                      12   1.66%
+dotty.tools.dotc.ast.Positioned.withSpan(long)                                                                                                                                               10   1.38%
+dotty.tools.dotc.core.SymDenotations$SymDenotation.isTopLevelClass(Contexts$Context)                                                                                                         10   1.38%
+dotty.tools.dotc.inlines.Inlines$Reposition$1.fixSpan$1(Trees$Tree, Trees$Tree)                                                                                                               9   1.24%
+dotty.tools.dotc.ast.Positioned.cloneIn(SourceFile)                                                                                                                                           9   1.24%
+scala.runtime.BoxesRunTime.equals2(Object, Object)                                                                                                                                            8   1.11%
+dotty.tools.dotc.ast.Trees$Instance$TreeMap.transform$$anonfun$1(Contexts$Context, Trees$Tree)                                                                                                8   1.11%
+dotty.tools.dotc.core.Types$Type.isError(Contexts$Context)                                                                                                                                    8   1.11%
+dotty.tools.dotc.ast.Trees$.recur$1(List, ListBuffer, List)                                                                                                                                   8   1.11%
+java.math.BigInteger.getInt(int)                                                                                                                                                              7   0.97%
+dotty.tools.dotc.core.Symbols$Symbol.denot(Contexts$Context)                                                                                                                                  7   0.97%
+dotty.tools.dotc.core.SymDenotations$SymDenotation$$anon$2.hasNext()                                                                                                                          6   0.83%
+dotty.tools.dotc.ast.Positioned.envelope(SourceFile, long)                                                                                                                                    6   0.83%
+dotty.tools.dotc.ast.Trees$Instance.transformCtx(Trees$Tree, Contexts$Context)                                                                                                                6   0.83%
+dotty.tools.dotc.core.SymDenotations$BaseClassSet$.contains$extension(int[], Symbols$Symbol, int)                                                                                             5   0.69%
+java.lang.Class.copyMethods(Method[])                                                                                                                                                         5   0.69%
+dotty.tools.dotc.core.Symbols$Symbol.isTerm(Contexts$Context)                                                                                                                                 5   0.69%
+
+## jfr view allocation-by-class
+
+
+                                                                                          Allocation by Class
+
+Object Type                                                                                                                                                                         Allocation Pressure
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------
+int[]                                                                                                                                                                                            10.45%
+dotty.tools.dotc.ast.Trees$Ident                                                                                                                                                                 10.01%
+scala.collection.immutable.$colon$colon                                                                                                                                                           9.89%
+byte[]                                                                                                                                                                                            9.71%
+dotty.tools.dotc.core.Contexts$FreshContext                                                                                                                                                       7.40%
+dotty.tools.dotc.util.WeakHashSet$Entry[]                                                                                                                                                         6.70%
+java.lang.Object[]                                                                                                                                                                                4.17%
+dotty.tools.dotc.ast.Trees$ValDef                                                                                                                                                                 3.78%
+dotty.tools.dotc.ast.Trees$Select                                                                                                                                                                 3.52%
+dotty.tools.dotc.ast.Trees$Apply                                                                                                                                                                  3.38%
+dotty.tools.dotc.ast.Trees$Block                                                                                                                                                                  2.48%
+dotty.tools.dotc.ast.Trees$TypeTree                                                                                                                                                               2.43%
+dotty.tools.dotc.ast.Trees$TypeApply                                                                                                                                                              1.84%
+java.lang.reflect.Method                                                                                                                                                                          1.51%
+java.lang.String                                                                                                                                                                                  1.43%
+dotty.tools.dotc.core.Denotations$MultiDenotation                                                                                                                                                 1.25%
+scala.collection.immutable.BitmapIndexedMapNode                                                                                                                                                   1.14%
+scala.Tuple2                                                                                                                                                                                      0.99%
+java.lang.StringBuilder                                                                                                                                                                           0.68%
+dotty.tools.dotc.util.Property$Key                                                                                                                                                                0.51%
+dotty.tools.dotc.ast.Trees$Bind                                                                                                                                                                   0.50%
+char[]                                                                                                                                                                                            0.49%
+dotty.tools.backend.jvm.LabelNode1                                                                                                                                                                0.49%
+dotty.tools.dotc.ast.Trees$Return                                                                                                                                                                 0.48%
+dotty.tools.dotc.ast.Trees$DefDef                                                                                                                                                                 0.46%
+
+## jfr view allocation-by-site
+
+
+                                                                                           Allocation by Site
+
+Method                                                                                                                                                                              Allocation Pressure
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------
+dotty.tools.dotc.ast.untpd$.Ident(Names$Name, SourceFile)                                                                                                                                         9.99%
+dotty.tools.dotc.core.Contexts$Context.freshOver(Contexts$Context)                                                                                                                                7.40%
+dotty.tools.dotc.util.WeakHashSet.clear(boolean)                                                                                                                                                  6.60%
+java.math.BigInteger.shiftRightImpl(int)                                                                                                                                                          5.70%
+scala.collection.immutable.List.mapConserve(Function1)                                                                                                                                            4.89%
+dotty.tools.dotc.ast.untpd$.Select(Trees$Tree, Names$Name, SourceFile)                                                                                                                            3.49%
+java.util.Arrays.copyOfRange(byte[], int, int)                                                                                                                                                    3.47%
+dotty.tools.dotc.ast.untpd$.Apply(Trees$Tree, List, SourceFile)                                                                                                                                   3.22%
+java.util.Arrays.copyOf(byte[], int)                                                                                                                                                              2.85%
+dotty.tools.dotc.ast.Positioned.cloneIn(SourceFile)                                                                                                                                               2.63%
+dotty.tools.dotc.ast.untpd$.TypeTree(SourceFile)                                                                                                                                                  2.43%
+java.math.BigInteger.and(BigInteger)                                                                                                                                                              2.39%
+scala.collection.immutable.List.$colon$colon(Object)                                                                                                                                              2.39%
+dotty.tools.dotc.ast.untpd$.Block(List, Trees$Tree, SourceFile)                                                                                                                                   2.37%
+dotty.tools.dotc.ast.untpd$.ValDef(Names$TermName, Trees$Tree, Object, SourceFile)                                                                                                                2.04%
+scala.collection.immutable.BitmapIndexedMapNode.copyAndSetValue(int, Object, Object)                                                                                                              1.96%
+dotty.tools.dotc.ast.untpd$.TypeApply(Trees$Tree, List, SourceFile)                                                                                                                               1.83%
+java.lang.reflect.Method.copy()                                                                                                                                                                   1.50%
+java.lang.invoke.DirectMethodHandle.allocateInstance(Object)                                                                                                                                      1.38%
+dotty.tools.dotc.core.Denotations$MultiDenotation$.apply(Denotations$Denotation, Denotations$Denotation)                                                                                          1.25%
+scala.Array$.copyAs(Object, int, ClassTag)                                                                                                                                                        1.08%
+java.lang.AbstractStringBuilder.<init>(int)                                                                                                                                                       1.02%
+scala.Tuple2$.apply(Object, Object)                                                                                                                                                               0.90%
+dotty.tools.backend.jvm.BTypes$BType.toString()                                                                                                                                                   0.87%
+scala.collection.immutable.List.$colon$colon$colon(List)                                                                                                                                          0.82%
+
+## jfr view gc-pauses
+
+
+GC Pauses
+---------
+
+Total Pause Time: 336 ms
+
+Number of Pauses: 105
+
+Minimum Pause Time: 0.00779 ms
+
+Median Pause Time: 2.03 ms
+
+Average Pause Time: 3.20 ms
+
+P90 Pause Time: 7.87 ms
+
+P95 Pause Time: 9.66 ms
+
+P99 Pause Time: 14.7 ms
+
+P99.9% Pause Time: 14.7 ms
+
+Maximum Pause Time: 14.7 ms
+
+## jfr view gc-configuration
+
+
+GC Configuration
+----------------
+
+Young GC: G1New
+
+Old GC: G1Old
+
+Parallel GC Threads: 11
+
+Concurrent GC Threads: 3
+
+Dynamic GC Threads: true
+
+Concurrent Explicit GC: false
+
+Disable Explicit GC: false
+
+Pause Target: N/A
+
+GC Time Ratio: 12
+
+## jfr view cpu-load-samples
+
+
+                                                                                                 CPU Load
+
+Time                                                                                     JVM User                                         JVM System                                         Machine Total
+------------------------------------------------ ------------------------------------------------ -------------------------------------------------- -----------------------------------------------------
+01:26:10                                                                                   25.63%                                              0.84%                                                35.75%
+01:26:11                                                                                   18.65%                                              0.83%                                                38.67%
+01:26:12                                                                                   27.21%                                              0.79%                                                37.99%
+01:26:13                                                                                   24.54%                                              0.92%                                                47.23%
+01:26:14                                                                                   18.77%                                              0.84%                                                38.59%
+01:26:15                                                                                   17.82%                                              0.99%                                                34.28%
+01:26:16                                                                                   16.90%                                              1.06%                                                25.99%
+01:26:17                                                                                   25.21%                                              1.07%                                                34.24%
+01:26:18                                                                                   18.36%                                              0.36%                                                26.14%
+01:26:19                                                                                   16.46%                                              0.14%                                                28.18%
+01:26:20                                                                                   12.31%                                              0.21%                                                23.14%
+01:26:21                                                                                   11.46%                                              0.35%                                                32.20%
+01:26:22                                                                                   13.25%                                              0.65%                                                28.75%

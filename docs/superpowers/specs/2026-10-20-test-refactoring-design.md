@@ -61,12 +61,26 @@ replaces needs a reason, or it gets the `Slow` tag.
 | Phase | Actor | Output | Depends on |
 |---|---|---|---|
 | P0 Measure | scripts and sbt, no LLM | timings, coverage baseline, helper inventory, generator statistics | – |
+| P0b Profile | coordinator, JFR | CPU and allocation analysis of the slow modules and suites | P0 timings |
 | P1 CI-time wins | coordinator, one worktree | `Slow` tag, nightly job, moved benchmarks, split suites | P0 timings |
 | P2 Analyze | report agents and verify agents | one JSON report per cluster | P0 |
 | P3 Spec | Fable reviewer | style guide, helper catalog, backlog | P2 |
 | P4..N Implement | coordinator and edit agents | one branch per unit, fast-forward merged | P3 |
 
 All P0 to P3 artifacts go to `docs/internal/test-refactor/`.
+
+## Findings log
+
+- The coordinator MUST record every finding of every phase in
+  `docs/internal/test-refactor/findings.md`. `[FL-1]`
+- Each finding MUST have a stable ID `F-<n>`, its evidence, a conclusion and a status. `[FL-2]`
+- The status MUST be one of `open`, `backlog`, `fixed`, `rejected`. `[FL-3]`
+- A `rejected` finding MUST state the reason. `[FL-4]`
+- The coordinator MUST NOT renumber or delete a finding. `[FL-5]`
+
+**Why:** the program runs for weeks. A finding that lives only in a chat transcript is lost, and
+the next session repeats the measurement. A rejected finding with its reason stops the same idea
+from coming back.
 
 ## P0 – Measure
 
@@ -93,6 +107,10 @@ cannot fix that job.
   instrumentation. `[P0-6]`
 - The spike MUST record which packages run only through the CEK machine. The coverage
   gate MUST ignore those packages. `[P0-7]`
+
+  *Implementation status (2026-10-21):* there is no package list. `scripts/coverage-exclude.sh`
+  excludes 146 files (`@Compile` code and plugin intrinsics) from instrumentation, so their
+  statements never reach the reports or the gate. See finding F-9.
 - The coverage baseline MUST be stored per package in `docs/internal/test-refactor/baseline/`. `[P0-8]`
 - Coverage MUST be opt-in: `sbt coverage test coverageReport`. Push CI MUST NOT run it. `[P0-9]`
 
@@ -110,6 +128,10 @@ uncovered even when tests exercise it. Without `[P0-7]`, every on-chain gap read
 ### Generator statistics
 
 - A suite `GenStatsTest` MUST sample 10 000 values per `Arbitrary` instance. `[P0-12]`
+
+  *Implementation status (2026-10-21):* 34 of the 111 instances in the 6 `ArbitraryInstances`
+  files are measured (`gen-stats.md`). A P2 cluster that depends on an unmeasured instance adds
+  it to `GenStatsTest` first.
 - `GenStatsTest` MUST carry the tag `scalus.testing.Benchmark`, so CI does not run it. `[P0-13]`
 - For each instance, `GenStatsTest` MUST report the share of each constructor. `[P0-14]`
 - For each instance, `GenStatsTest` MUST report histograms of size and depth. `[P0-15]`
@@ -118,15 +140,78 @@ uncovered even when tests exercise it. Without `[P0-7]`, every on-chain gap read
 
 *Example, illustrative:* `Data: Constr 12%, Map 3%, List 8%, I 61%, B 16%; empty List 0.4%`.
 
+## P0b – Profile
+
+**Purpose:** find where the slow tests spend CPU and memory, in the test code and in the main
+code they call, so that the inefficiencies get fixed now or later.
+
+### Targets
+
+- The coordinator MUST profile each module whose test run takes more than 30 s. `[PR-1]`
+- The coordinator MUST profile each suite in the top 15 of `timings.csv`. `[PR-2]`
+- The coordinator MUST profile a module on its own, not inside a full `jvm/test`. `[PR-3]`
+
+**Why:** `[PR-3]`: inside `jvm/test`, all modules compete for CPU. A profile taken there shows the
+contention, not the code (F-5 in the findings log).
+
+### Method
+
+- The coordinator MUST record with Java Flight Recorder in the forked test JVM, with the
+  `profile` settings. `[PR-4]`
+- The coordinator MUST NOT change `build.sbt` to enable profiling. It MUST use a `set` command
+  or an opt-in system property. `[PR-5]`
+- For each recording, the coordinator MUST extract: hot methods, allocation by class, allocation
+  by site, GC pause time, and wall time. `[PR-6]`
+- The coordinator MUST store each extract as text in `docs/internal/test-refactor/profiles/`. `[PR-7]`
+- The coordinator MUST NOT commit the binary `.jfr` files. `[PR-8]`
+
+*Example, illustrative, for `[PR-4]` and `[PR-5]`:*
+
+```
+sbt 'set LocalProject("scalusExamplesJVM") / Test / javaOptions +=
+       "-XX:StartFlightRecording=filename=/tmp/prof/examples.jfr,settings=profile"' \
+    "scalusExamplesJVM/testOnly scalus.examples.linkedlist.LinkedListTest"
+jfr view hot-methods /tmp/prof/examples.jfr
+jfr view allocation-by-class /tmp/prof/examples.jfr
+```
+
+### Analysis
+
+- Each profile finding MUST name one cause class: `test-code`, `main-code`, `generator`,
+  `harness` or `jvm`. `[PR-9]`
+- Each profile finding MUST state the fix and the decision `fix-now` or `later`. `[PR-10]`
+- A `fix-now` decision MUST be limited to a change that touches one place and keeps the
+  behavior. `[PR-11]`
+- A fix of main code MUST go in its own `perf:` or `fix:` commit, never in a test refactor
+  commit. `[PR-12]`
+- The coordinator MUST record every profile finding in the findings log, `fix-now` or
+  not. `[PR-13]`
+
+*Example, illustrative:* `LinkedListTest` spends 60 % of CPU in `PlutusV3.compile` because every
+property case compiles the validator again. Cause `test-code`. Fix: compile once per suite.
+Decision `fix-now`. If instead the cost sits in the CEK machine's environment lookup, the cause is
+`main-code` and the decision is `later`, with the hot frames recorded.
+
+**Why:** `[PR-11]`: a large optimization in the middle of a measurement phase makes the next
+measurement incomparable. `[PR-12]`: a reviewer must see a behavior-relevant main-code change
+alone.
+
 ## P1 – CI-time wins
 
 **Purpose:** shorten the `ci-jvm` 3.3.8 job without loss of coverage. P1 does not wait for P2.
 
 - The build MUST define the tag `scalus.testing.Slow`. `[P1-1]`
+
+  *Implementation status (2026-10-21):* not added. No test meets `[P1-4]`: the slowest tests are
+  slow because they recompile per case (F-19), and `PipelineDeterminismCrossJvmTest` guards every
+  compiler change, so it must stay on push CI. The tag comes with its first user.
 - The build MUST exclude `Slow` from `test` and `testQuick` with the existing
   `excludeFromTest`. `[P1-2]`
 - A new workflow `nightly.yml` MUST run the tests tagged `Slow` and `Benchmark` on a
   schedule. `[P1-3]`
+
+  *Implementation status (2026-10-21):* `nightly.yml` runs the `Benchmark` tests (80 tests, 485 s
+  locally). Before it, CI never ran them.
 - A test SHOULD get the `Slow` tag when it takes more than 10 s and its code under test
   changes rarely. `[P1-4]`
 - A test that measures speed and asserts nothing MUST move to `bench/` as a JMH
@@ -166,7 +251,8 @@ tests, so it tests the schema well.
 ### Report agent input
 
 - The test files and the main code of the cluster.
-- The P0 data of the cluster: uncovered branches, timings, helper rows, generator statistics.
+- The P0 data of the cluster: uncovered branches, timings, helper rows, generator statistics,
+  and the profile findings of its suites.
 - The catalog of existing shared helpers, for example `EvalTestKit`, `ArbitraryInstances`,
   `ArbitraryDerivation`, `ScenarioTest`.
 
@@ -271,6 +357,9 @@ commit by commit.
 - A unit with a lost statement or a lost branch MUST NOT merge. `[CG-3]`
 - The gate MUST ignore the packages that `[P0-7]` lists. `[CG-4]`
 
+  *Implementation status (2026-10-21):* met by the file exclusion of `[P0-7]`. The gate also
+  ignores `baseline/flaky.tsv` (F-11, F-12).
+
 ### Rules for edit agents
 
 - An edit agent MUST change test sources only, unless the backlog item names main code. `[AG-1]`
@@ -293,6 +382,7 @@ hide it. `[AG-7]`: the owner can check each deletion against the coverage diff.
 2. P0: scoverage spike `[P0-4]` to `[P0-7]`.
 3. P1, in one worktree. It runs in parallel with the rest of P0.
 4. P0: coverage baseline, helper inventory, generator statistics.
+4b. P0b: profiling `[PR-1]` to `[PR-13]`. Its `fix-now` items go to P1 or to their own commits.
 5. P2 pilot, then owner review `[P2-4]`.
 6. P2 for the remaining clusters, after owner approval of the agent count `[P2-5]`.
 7. P3, then owner approval `[P3-7]`.

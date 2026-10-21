@@ -1,0 +1,212 @@
+# Profile: core
+
+project: scalusJVM; task: scalusJVM/test; sbt wall time (incl. startup): 114s; exit: 0
+commit: a026e6cef; date: 2026-10-20T23:19Z
+[info] Run completed in 51 seconds, 314 milliseconds.
+[info] Tests: succeeded 4070, failed 0, canceled 0, ignored 3, pending 5
+
+## jfr view hot-methods
+
+
+                                                                                   Java Methods that Execute the Most
+
+Method                                                                                                                                                                                  Samples Percent
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ------- -------
+scala.collection.Iterator$$anon$6.hasNext()                                                                                                                                                  77   5.58%
+scala.runtime.BoxesRunTime.equals2(Object, Object)                                                                                                                                           68   4.92%
+scala.runtime.Statics.anyHash(Object)                                                                                                                                                        35   2.53%
+scala.collection.immutable.RedBlackTree$MapHelper.mutableUpd(RedBlackTree$Tree, Object, Object)                                                                                              33   2.39%
+scala.collection.LinearSeqOps.foldLeft(Object, Function2)                                                                                                                                    30   2.17%
+scala.collection.mutable.Growable.addAll(IterableOnce)                                                                                                                                       29   2.10%
+org.scalacheck.Gen.<init>()                                                                                                                                                                  28   2.03%
+scalus.uplc.Term.$tilde$eq$tilde(Term)                                                                                                                                                       25   1.81%
+scala.collection.immutable.List.$colon$colon(Object)                                                                                                                                         22   1.59%
+org.typelevel.paiges.Doc.loop$5(Tuple2, List, List)                                                                                                                                          18   1.30%
+scala.collection.SeqOps.$plus$colon(Object)                                                                                                                                                  18   1.30%
+scala.collection.immutable.SetBuilderImpl.addOne(Object)                                                                                                                                     17   1.23%
+scala.collection.mutable.HashMap.put0(Object, Object, boolean, int, int)                                                                                                                     16   1.16%
+scala.collection.immutable.RedBlackTree$Helper.mutableBalanceRight(RedBlackTree$Tree, RedBlackTree$Tree)                                                                                     13   0.94%
+scala.collection.immutable.ArraySeq.appendedAll(IterableOnce)                                                                                                                                13   0.94%
+scala.collection.SetOps.concat(IterableOnce)                                                                                                                                                 13   0.94%
+scala.runtime.ScalaRunTime$.array_update(Object, int, Object)                                                                                                                                13   0.94%
+scala.collection.IterableOnceOps.addString(StringBuilder, String, String, String)                                                                                                            12   0.87%
+scalus.uplc.transform.CommonSubexpressionElimination$TermKey.equals(Object)                                                                                                                  12   0.87%
+scala.collection.View$Concat.knownSize()                                                                                                                                                     12   0.87%
+scalus.uplc.eval.CekMachine.spendBudget(ExBudgetCategory, ExUnits, Seq)                                                                                                                      11   0.80%
+scala.collection.Iterator$ConcatIterator.hasNext()                                                                                                                                           10   0.72%
+java.util.Objects.equals(Object, Object)                                                                                                                                                     10   0.72%
+scala.collection.Iterator$$anon$9.next()                                                                                                                                                     10   0.72%
+java.lang.invoke.DirectMethodHandle.allocateInstance(Object)                                                                                                                                 10   0.72%
+
+## jfr view allocation-by-class
+
+
+                                                                                          Allocation by Class
+
+Object Type                                                                                                                                                                         Allocation Pressure
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------
+java.lang.Object[]                                                                                                                                                                               17.00%
+byte[]                                                                                                                                                                                            9.05%
+scala.collection.immutable.$colon$colon                                                                                                                                                           7.86%
+scala.Tuple2                                                                                                                                                                                      6.72%
+long[]                                                                                                                                                                                            5.79%
+int[]                                                                                                                                                                                             5.23%
+org.scalacheck.Gen$$anon$7                                                                                                                                                                        5.14%
+org.scalacheck.Gen$RetryUntilException$                                                                                                                                                           3.65%
+scala.collection.immutable.RedBlackTree$Tree                                                                                                                                                      2.39%
+java.lang.String                                                                                                                                                                                  2.03%
+short[]                                                                                                                                                                                           1.97%
+scala.collection.immutable.ArraySeq$ofRef                                                                                                                                                         1.91%
+scala.Some                                                                                                                                                                                        1.36%
+scala.collection.immutable.NewVectorIterator                                                                                                                                                      1.20%
+scalus.compiler.sir.SIRUnify$Env                                                                                                                                                                  1.15%
+org.typelevel.paiges.Doc$Concat                                                                                                                                                                   1.13%
+scala.collection.immutable.VectorBuilder                                                                                                                                                          1.12%
+scala.collection.immutable.LazyList                                                                                                                                                               1.12%
+scala.collection.Iterator$$anon$6                                                                                                                                                                 1.08%
+scalus.compiler.sir.lowering.typegens.DataConstrEmitter$$$Lambda.0x00007e00013d6d50                                                                                                               1.04%
+org.scalacheck.Gen$$Lambda.0x00007e00013109a0                                                                                                                                                     0.93%
+scala.collection.immutable.ArraySeq$ofBoolean                                                                                                                                                     0.65%
+org.scalacheck.Gen$Choose$$anon$10$$Lambda.0x00007e000130c000                                                                                                                                     0.60%
+scala.collection.ArrayOps$ArrayIterator                                                                                                                                                           0.57%
+scala.collection.Iterator$$anon$9                                                                                                                                                                 0.51%
+
+## jfr view allocation-by-site
+
+
+                                                                                           Allocation by Site
+
+Method                                                                                                                                                                              Allocation Pressure
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- -------------------
+java.lang.Throwable.fillInStackTrace(int)                                                                                                                                                        14.51%
+scala.Tuple2$.apply(Object, Object)                                                                                                                                                               6.35%
+org.scalacheck.Gen$.gen(Function2)                                                                                                                                                                5.14%
+java.lang.invoke.DirectMethodHandle.allocateInstance(Object)                                                                                                                                      4.68%
+java.util.Arrays.copyOf(byte[], int)                                                                                                                                                              4.21%
+java.util.IdentityHashMap.init(int)                                                                                                                                                               3.91%
+org.scalacheck.Gen.<init>()                                                                                                                                                                       3.65%
+scala.collection.immutable.List.$colon$colon(Object)                                                                                                                                              3.65%
+jdk.internal.misc.Unsafe.allocateUninitializedArray(Class, int)                                                                                                                                   2.52%
+scala.reflect.ManifestFactory$AnyManifest.newArray(int)                                                                                                                                           2.49%
+scala.collection.immutable.RedBlackTree$MapHelper.mutableUpd(RedBlackTree$Tree, Object, Object)                                                                                                   2.27%
+scala.collection.immutable.List.prependedAll(IterableOnce)                                                                                                                                        1.87%
+scala.collection.immutable.VectorBuilder.<init>()                                                                                                                                                 1.86%
+java.util.Arrays.copyOfRange(byte[], int, int)                                                                                                                                                    1.51%
+scala.collection.immutable.ArraySeq$.unsafeWrapArray(Object)                                                                                                                                      1.42%
+scala.collection.immutable.Vector$.from(IterableOnce)                                                                                                                                             1.21%
+scala.collection.immutable.Vector.iterator()                                                                                                                                                      1.20%
+java.util.Arrays.copyOf(Object[], int)                                                                                                                                                            1.17%
+jdk.internal.misc.Unsafe.allocateInstance(Class)                                                                                                                                                  1.15%
+org.typelevel.paiges.Doc$Concat$.apply(Doc, Doc)                                                                                                                                                  1.13%
+scala.Array$.copyAs(Object, int, ClassTag)                                                                                                                                                        1.09%
+scala.collection.Iterator.filterImpl(Function1, boolean)                                                                                                                                          1.08%
+scalus.compiler.sir.SIRUnify$Env.copy(List, Map, Map, Map, Set, Map, boolean, boolean, Option, boolean)                                                                                           0.99%
+scalus.uplc.transform.EtaReduceCekConformanceTest.genTerm(int, List)                                                                                                                              0.95%
+scala.collection.immutable.BitmapIndexedMapNode.copyAndInsertValue(int, Object, int, int, Object)                                                                                                 0.94%
+
+## jfr view gc-pauses
+
+
+GC Pauses
+---------
+
+Total Pause Time: 516 ms
+
+Number of Pauses: 208
+
+Minimum Pause Time: 0.00467 ms
+
+Median Pause Time: 1.26 ms
+
+Average Pause Time: 2.48 ms
+
+P90 Pause Time: 4.15 ms
+
+P95 Pause Time: 15.0 ms
+
+P99 Pause Time: 18.5 ms
+
+P99.9% Pause Time: 22.6 ms
+
+Maximum Pause Time: 22.6 ms
+
+## jfr view gc-configuration
+
+
+GC Configuration
+----------------
+
+Young GC: G1New
+
+Old GC: G1Old
+
+Parallel GC Threads: 11
+
+Concurrent GC Threads: 3
+
+Dynamic GC Threads: true
+
+Concurrent Explicit GC: false
+
+Disable Explicit GC: false
+
+Pause Target: N/A
+
+GC Time Ratio: 12
+
+## jfr view cpu-load-samples
+
+
+                                                                                                 CPU Load
+
+Time                                                                                     JVM User                                         JVM System                                         Machine Total
+------------------------------------------------ ------------------------------------------------ -------------------------------------------------- -----------------------------------------------------
+01:18:28                                                                                   25.18%                                              0.78%                                                36.01%
+01:18:29                                                                                   27.16%                                              0.50%                                                38.87%
+01:18:30                                                                                   29.14%                                              0.35%                                                42.39%
+01:18:31                                                                                   22.56%                                              0.57%                                                34.07%
+01:18:32                                                                                   27.79%                                              1.06%                                                39.26%
+01:18:33                                                                                   24.71%                                              0.36%                                                43.15%
+01:18:34                                                                                   20.51%                                              0.28%                                                35.36%
+01:18:35                                                                                   19.24%                                              1.06%                                                40.87%
+01:18:37                                                                                   19.09%                                              0.35%                                                31.93%
+01:18:38                                                                                   17.33%                                              0.64%                                                28.13%
+01:18:39                                                                                    9.31%                                              0.07%                                                20.35%
+01:18:40                                                                                   19.59%                                              1.41%                                                29.33%
+01:18:41                                                                                   14.71%                                              0.64%                                                31.67%
+01:18:42                                                                                   15.06%                                              0.42%                                                31.77%
+01:18:43                                                                                    3.47%                                              0.21%                                                35.49%
+01:18:44                                                                                    9.79%                                              0.14%                                                25.64%
+01:18:45                                                                                    2.17%                                              0.00%                                                24.29%
+01:18:46                                                                                    0.07%                                              0.00%                                                37.38%
+01:18:47                                                                                    0.00%                                              0.07%                                                27.52%
+01:18:48                                                                                    0.07%                                              0.00%                                                43.26%
+01:18:49                                                                                    5.86%                                              0.07%                                                19.74%
+01:18:50                                                                                   12.04%                                              0.14%                                                27.90%
+01:18:51                                                                                    8.21%                                              0.20%                                                24.20%
+01:18:52                                                                                    8.06%                                              0.14%                                                23.48%
+01:18:53                                                                                    9.69%                                              0.07%                                                18.90%
+01:18:54                                                                                    8.13%                                              0.14%                                                17.16%
+01:18:55                                                                                    8.77%                                              0.35%                                                17.73%
+01:18:56                                                                                   10.68%                                              0.85%                                                19.44%
+01:18:57                                                                                   12.32%                                              0.21%                                                23.69%
+01:18:58                                                                                   10.78%                                              0.14%                                                25.84%
+01:18:59                                                                                   13.15%                                              0.71%                                                31.42%
+01:19:00                                                                                   10.68%                                              0.42%                                                26.97%
+01:19:01                                                                                    8.70%                                              0.64%                                                21.16%
+01:19:02                                                                                   10.96%                                              0.14%                                                20.82%
+01:19:03                                                                                   12.16%                                              0.14%                                                19.38%
+01:19:04                                                                                   13.72%                                              0.78%                                                24.75%
+01:19:05                                                                                   10.01%                                              0.07%                                                22.17%
+01:19:06                                                                                    7.57%                                              0.07%                                                24.59%
+01:19:07                                                                                   13.30%                                              0.42%                                                35.67%
+01:19:08                                                                                    9.57%                                              0.42%                                                25.81%
+01:19:09                                                                                    9.34%                                              0.07%                                                17.19%
+01:19:10                                                                                    8.42%                                              0.14%                                                22.13%
+01:19:11                                                                                    7.57%                                              0.07%                                                32.67%
+01:19:12                                                                                    7.91%                                              0.19%                                                18.95%
+01:19:13                                                                                    7.50%                                              0.07%                                                17.54%
+01:19:14                                                                                    8.84%                                              0.92%                                                26.99%
+01:19:15                                                                                    1.89%                                              0.28%                                                29.00%
+01:19:16                                                                                    7.71%                                              0.79%                                                30.02%
+01:19:17                                                                                   10.78%                                              0.70%                                                39.60%
