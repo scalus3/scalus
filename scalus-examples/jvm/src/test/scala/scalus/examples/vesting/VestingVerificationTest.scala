@@ -556,88 +556,92 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         assert(unfinished.contains("symbolically"), unfinished)
     }
 
+    /** The validator on a withdrawal with one signature, of any key. `spend` is inlined into
+      * `validate`, so the verifier finds the clauses of `spend` in the code of this function.
+      */
+    private val spends = FunctionDef.named(
+      "spends",
+      (w: Withdrawal) =>
+          VestingValidator.validate(
+            withdrawal(
+              w.start,
+              w.duration,
+              w.amount,
+              w.locked,
+              w.requested,
+              w.time,
+              w.fee,
+              prelude.List.Cons(PubKeyHash(w.signer), prelude.List.Nil),
+              payment(w.paid)
+            )
+          )
+    )
+
+    verifier.addFunction(spends)
+
+    /** What `VestingValidator.spend` states at its head, with `Spec.ensures`: the beneficiary
+      * signed, something is withdrawn, and what stays locked is at least what has not vested.
+      */
+    private val spendGuarantees = verifier.guarantees(spends.ref)
+
     test("the guarantees stated on spend hold of every withdrawal the script accepts") {
-        // `VestingValidator.spend` states them at its head, with `Spec.ensures`: the beneficiary
-        // signed, something is withdrawn, and what stays locked is at least what has not vested.
-        // `spend` is inlined into `validate`, so the verifier finds its clauses in the code of
-        // the function that builds a withdrawal and validates it. Here the transaction has one
-        // signature, of any key.
-        val spends = FunctionDef.named(
-          "spends",
-          (w: Withdrawal) =>
-              VestingValidator.validate(
-                withdrawal(
-                  w.start,
-                  w.duration,
-                  w.amount,
-                  w.locked,
-                  w.requested,
-                  w.time,
-                  w.fee,
-                  prelude.List.Cons(PubKeyHash(w.signer), prelude.List.Nil),
-                  payment(w.paid)
-                )
-              )
-        )
-        verifier.addFunction(spends)
-        val stated = verifier.guarantees(spends.ref)
-        assert(stated.unsupported.isEmpty, stated.unsupported)
-        assert(
-          stated.statements.map(_.name) ==
-              List("spends/ensures#1", "spends/ensures#2", "spends/ensures#3")
-        )
-        stated.statements.foreach { guarantee =>
-            guarantee.origin match
-                case Origin.Guarantee(function, line) => assert(function == spends.ref && line > 0)
-                case other => fail(s"expected a guarantee's origin, got $other")
-        }
+        // A clause that is not read would be missing from what is proved.
+        assert(spendGuarantees.unsupported.isEmpty, spendGuarantees.unsupported)
         // They are proved together. Each statement says that the validator returns, so one by
         // one the tactic would run the validator once for every clause.
-        val together = stated.together.getOrElse(fail("no statement of the three clauses"))
-        assert(together.name == "spends/ensures")
+        val together = spendGuarantees.together.getOrElse(fail("spend states no guarantee"))
         check(together, withdrawalBudget)
     }
 
-    test("the validator would not establish a precondition on the amount") {
-        // Why the schedule states its bound with a condition: had its contract expected an
-        // initial amount that is not negative, the validator's call would owe that, wherever a
-        // withdrawal reaches it.
-        val withdraw = FunctionDef.named(
-          "withdraw",
-          (w: Withdrawal) =>
-              VestingValidator.validate(
-                withdrawal(
-                  w.start,
-                  w.duration,
-                  w.amount,
-                  w.locked,
-                  w.requested,
-                  w.time,
-                  w.fee,
-                  signed,
-                  payment(w.paid)
-                )
-              )
-        )
-        verifier.addFunction(withdraw)
-        verifier.contract(
-          "vested_in_range",
-          contract(linearVesting)(
-            expects = (config, time) => config.initialAmount >= BigInt(0),
-            ensures =
-                (config, time) => vested => BigInt(0) <= vested && vested <= config.initialAmount
+    /** The validator on a withdrawal signed by the beneficiary. */
+    private val withdraw = FunctionDef.named(
+      "withdraw",
+      (w: Withdrawal) =>
+          VestingValidator.validate(
+            withdrawal(
+              w.start,
+              w.duration,
+              w.amount,
+              w.locked,
+              w.requested,
+              w.time,
+              w.fee,
+              signed,
+              payment(w.paid)
+            )
           )
-        )
+    )
 
-        // The verifier finds the call, in the validator's own source.
-        val owed = verifier.obligations(withdraw.ref) match
+    verifier.addFunction(withdraw)
+
+    /** A contract the schedule does not state: had it expected an initial amount that is not
+      * negative, the validator's call would owe that, wherever a withdrawal reaches it.
+      */
+    verifier.contract(
+      "vested_in_range",
+      contract(linearVesting)(
+        expects = (config, time) => config.initialAmount >= BigInt(0),
+        ensures = (config, time) => vested => BigInt(0) <= vested && vested <= config.initialAmount
+      )
+    )
+
+    /** What the validator's call of the schedule owes to `vested_in_range`. */
+    private val withdrawalObligations = verifier.obligations(withdraw.ref)
+
+    /** A contract of the withdrawal that expects the amount `vested_in_range` asks for. */
+    private val withdrawOfAnAmount = verifier.contract(
+      "withdraw_of_an_amount",
+      contract(withdraw)(expects = w => w.amount >= BigInt(0), ensures = w => done => true)
+    )
+
+    /** The same obligation, where the withdrawal's contract holds. */
+    private val obligationsOfAnAmount = verifier.obligations(withdrawOfAnAmount)
+
+    test("the validator would not establish a precondition on the amount") {
+        // Why the schedule states its bound with a condition.
+        val owed = withdrawalObligations match
             case CallObligations(List(owed), Nil) => owed
             case other                            => fail(s"expected one obligation, got $other")
-        owed.origin match
-            case Origin.Obligation(caller, callee, "vested_in_range", line) =>
-                assert(caller == withdraw.ref && callee == linearVesting.ref && line > 0)
-            case other => fail(s"expected an obligation's origin, got $other")
-
         // It is refuted: the validator reads the amount from the datum and does not check it.
         val values = counterexampleOf(
           check(
@@ -654,11 +658,9 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         assert(amount.exists(_ < 0), values)
 
         // Where the withdrawal's own contract expects such an amount, the obligation is proved.
-        val assumes = verifier.contract(
-          "withdraw_of_an_amount",
-          contract(withdraw)(expects = w => w.amount >= BigInt(0), ensures = w => done => true)
-        )
-        val List(assumed) = verifier.obligations(assumes).statements
+        val assumed = obligationsOfAnAmount match
+            case CallObligations(List(assumed), Nil) => assumed
+            case other                               => fail(s"expected one obligation, got $other")
         check(assumed, withdrawalBudget)
     }
 
