@@ -6,6 +6,8 @@ import scalus.uplc.eval.{Log, Logger}
 import scalus.uplc.transform.TermAnalysis.{freeVars, isPure, isValueForm}
 import scalus.uplc.{NamedDeBruijn, Term}
 
+import java.util.IdentityHashMap
+
 /** Optimizer that performs function inlining, beta-reduction, and dead code elimination.
   *
   * The Inliner performs several transformations:
@@ -54,10 +56,40 @@ import scalus.uplc.{NamedDeBruijn, Term}
 class Inliner(logger: Logger = new Log()) extends Optimizer:
     private var sizeOf = CommonSubexpressionElimination.cachedTermBits()
 
+    /** Free variables per term node, for one pass. `tryPartialEval` asks for the free variables of
+      * each `Apply`, `Force` and `Case` that `go` rebuilds; without the cache, each query walks the
+      * whole subterm, which is quadratic for deep terms. The rebuilt node is new, but its children
+      * are mostly subterms already seen, so they hit the cache. Keyed by identity: two equal
+      * subterms at different places are different nodes.
+      */
+    private var freeVarsCache = new IdentityHashMap[Term, Set[String]]()
+
     def apply(term: Term): Term = {
         sizeOf = CommonSubexpressionElimination.cachedTermBits()
+        freeVarsCache = new IdentityHashMap[Term, Set[String]]()
         try go(term)
-        finally sizeOf = CommonSubexpressionElimination.cachedTermBits()
+        finally
+            sizeOf = CommonSubexpressionElimination.cachedTermBits()
+            freeVarsCache = new IdentityHashMap[Term, Set[String]]()
+    }
+
+    /** Same result as [[TermAnalysis.freeVars]], memoized per node in [[freeVarsCache]]. */
+    private def cachedFreeVars(term: Term): Set[String] = {
+        val cached = freeVarsCache.get(term)
+        if cached != null then cached
+        else
+            val result = term match
+                case Var(NamedDeBruijn(n, _), _) => Set(n)
+                case LamAbs(n, body, _)          => cachedFreeVars(body) - n
+                case Apply(f, a, _)              => cachedFreeVars(f) ++ cachedFreeVars(a)
+                case Force(t, _)                 => cachedFreeVars(t)
+                case Delay(t, _)                 => cachedFreeVars(t)
+                case Constr(_, args, _) => args.foldLeft(Set.empty[String])(_ ++ cachedFreeVars(_))
+                case Case(scrut, cases, _) =>
+                    cases.foldLeft(cachedFreeVars(scrut))(_ ++ cachedFreeVars(_))
+                case _: Const | _: Builtin | _: Error => Set.empty[String]
+            freeVarsCache.put(term, result)
+            result
     }
 
     def logs: Seq[String] = logger.getLogs.toSeq
@@ -193,7 +225,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
     private def tryPartialEval(term: Term, constants: Map[String, Const]): Term =
         // Substitute known constants only into a candidate for evaluation. If evaluation fails,
         // retain the original term and its shared variables instead of duplicating constants.
-        val free = term.freeVars
+        val free = cachedFreeVars(term)
         if !free.forall(constants.contains) then return term
         val candidate = free.foldLeft(term) { (t, name) =>
             substitute(t, name, constants(name))
