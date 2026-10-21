@@ -1313,16 +1313,20 @@ def copyFiles(files: Seq[String], baseDir: File, targetDir: File, log: ManagedLo
 // scalus-bloxbean-cardano-client-lib, checked against scalusCompatibleVersion.
 // Both cross-projects declare mimaPreviousArtifacts with %%%, so their Scala.js artifacts are
 // part of that stable surface as well, and JS-only code (scalus.cardano.node.JEmulator) can
-// break on its own. The JS variants are therefore checked here too. That makes ci-jvm compile
-// the Scala.js classes; there is no linking and no Node run involved.
+// break on its own. The JS variants are therefore checked too: `mima` runs both halves.
+// CI splits them: ci-jvm runs mima-jvm, and ci-js runs mima-js, because ci-js compiles the
+// Scala.js classes anyway (in ci-jvm that compile cost ~1.5 min of the longest job).
 addCommandAlias(
-  "mima",
+  "mima-jvm",
   "scalusJVM/mimaReportBinaryIssues;" +
-      "scalusJS/mimaReportBinaryIssues;" +
       "scalusCardanoLedgerJVM/mimaReportBinaryIssues;" +
-      "scalusCardanoLedgerJS/mimaReportBinaryIssues;" +
       "scalus-bloxbean-cardano-client-lib/mimaReportBinaryIssues"
 )
+addCommandAlias(
+  "mima-js",
+  "scalusJS/mimaReportBinaryIssues;scalusCardanoLedgerJS/mimaReportBinaryIssues"
+)
+addCommandAlias("mima", "mima-jvm;mima-js")
 addCommandAlias(
   "quick",
   "scalafmtAll;scalafmtSbt;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;jvm/testQuick"
@@ -1364,9 +1368,10 @@ val crossVersionCiTasks = {
 addCommandAlias(
   "ci-jvm-3_3_8",
   // The default LTS, and the only build that publishes the `_3` library artifacts. Carries the
-  // format and MiMa checks too: they are version-independent, so they run in this job only.
+  // format and MiMa checks too: they are version-independent, so they run in this job only
+  // (the Scala.js half of MiMa runs in ci-js, see `mima-js`).
   "++3.3.8;clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;" +
-      "scalusCardanoLedgerIt/Test/compile;jvm/test;mima;" +
+      "scalusCardanoLedgerIt/Test/compile;jvm/test;mima-jvm;" +
       // Scaladoc as Release publishes it (per module) and as the site publishes it (unidoc). Doc
       // warnings do not fail the build, but a crash or an error does.
       "jvm/doc;docs/unidoc"
@@ -1386,7 +1391,7 @@ addCommandAlias("ci-jvm-3_9_0", s"++3.9.0;$crossVersionCiTasks")
 addCommandAlias("ci-jvm", "ci-jvm-3_3_8")
 addCommandAlias(
   "ci-js",
-  "clean;js/Test/compile;js/test;js/doc;scalusTsExporter/test;scalusCardanoLedgerJS/checkDtsUpToDate;scalusCardanoLedgerJS/runNpmTests"
+  "clean;js/Test/compile;js/test;js/doc;mima-js;scalusTsExporter/test;scalusCardanoLedgerJS/checkDtsUpToDate;scalusCardanoLedgerJS/runNpmTests"
 )
 addCommandAlias(
   "ci-native",
