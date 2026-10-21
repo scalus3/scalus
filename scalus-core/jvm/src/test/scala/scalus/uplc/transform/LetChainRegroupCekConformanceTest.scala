@@ -142,7 +142,10 @@ class LetChainRegroupCekConformanceTest extends AnyFunSuite with ScalaCheckPrope
               s <- leaf
               t <- leaf
               f <- leaf
-          yield Force(IfThenElse $ s $ Delay(t) $ Delay(f)),
+          // ifThenElse is polymorphic: it takes one type force before its term arguments. Without
+          // it this shape always failed and never tested if-then-else (finding F-28). It succeeds
+          // when `s` is a Bool; other leaves give an ill-typed failure, which is also wanted here.
+          yield Force(Force(Builtin(IfThenElse)) $ s $ Delay(t) $ Delay(f)),
           for
               a <- leaf
               n <- genName
