@@ -16,8 +16,9 @@ import scalus.verify.Props.*
   * These restate the former hand-written Lean suite (`Math.lean`, `Data.lean`). A call is total and
   * its conclusion is read strongly (design doc §6.2), so every property also claims that the
   * function returns; the separate totality theorems of the Lean files are implied. Every function
-  * has a negative control, declared with `refute`, which must be refuted. Its samples are checked
-  * on the Scalus CEK, and proved through Lean on the Lean model, so the two machines are checked
+  * with a property also has a negative control, declared with `refute`, which must be refuted;
+  * `gcd`, its unoptimized form and `sqrt` have samples only. A function's samples are checked on
+  * the Scalus CEK, and proved through Lean on the Lean model, so the two machines are checked
   * against each other.
   */
 class PreludeProofsTest extends AnyFunSuite with LeanProofsSuite {
@@ -76,11 +77,11 @@ class PreludeProofsTest extends AnyFunSuite with LeanProofsSuite {
     /** One function's samples: a conjunction of closed calls, each with its expected result,
       * declared as the statement `prelude.<name>.samples`.
       */
-    private final case class Samples(
+    private final class Samples(
         name: String,
-        function: FunctionDef[?, ?],
-        prop: Prop,
-        budget: Int
+        val function: FunctionDef[?, ?],
+        val prop: Prop,
+        val budget: Int
     ) {
         val statement: Statement = verifier.statement(s"prelude.$name.samples", prop)
     }
@@ -267,9 +268,9 @@ class PreludeProofsTest extends AnyFunSuite with LeanProofsSuite {
       forAll[BigInt, BigInt]((a, b) => callRef(listSum2.ref, (a, b))(r => r == a * b))
     )
 
-    samples.foreach { case sample @ Samples(_, function, prop, budget) =>
-        test(s"the samples of ${function.name} hold on the Scalus CEK") {
-            val lowered = UplcBlaster.lower(prop, FunctionTable(function)) match
+    samples.foreach { sample =>
+        test(s"the samples of ${sample.function.name} hold on the Scalus CEK") {
+            val lowered = UplcBlaster.lower(sample.prop, FunctionTable(sample.function)) match
                 case Right(lowered) => lowered
                 case Left(reason)   => fail(reason)
             lowered.leaves.foreach { leaf =>
@@ -279,9 +280,9 @@ class PreludeProofsTest extends AnyFunSuite with LeanProofsSuite {
                     case failure: Result.Failure => fail(failure.exception)
             }
         }
-        test(s"the samples of ${function.name} hold on the Lean model") {
+        test(s"the samples of ${sample.function.name} hold on the Lean model") {
             // A closed statement: Lean decides it by running the programs.
-            assert(artifactOf(check(sample.statement, budget)).kind == ProofKind.LeanNative)
+            assert(artifactOf(check(sample.statement, sample.budget)).kind == ProofKind.LeanNative)
         }
     }
 

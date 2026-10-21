@@ -241,15 +241,25 @@ final class LeanProofs private (
       *   the result: a proof where the request expects one, and a refutation, whose counterexample
       *   was replayed on the Scalus CEK, where it expects that
       */
-    def check(request: VerificationRequest): VerificationResult = {
-        val name = request.statement.name
-        val result = run(verifier, request.statement, request.tactic)
+    def check(request: VerificationRequest): VerificationResult = checked(verifier, request)
+
+    /** Runs `request` in `verifier`, and holds its result to the one the request expects: every
+      * expectation of these proofs is held so. A proof is to be among the verifier's theorems, and
+      * a refuted statement is not to be.
+      */
+    private def checked(verifier: Verifier, request: VerificationRequest): VerificationResult = {
+        val statement = request.statement
+        val name = statement.name
+        val result = run(verifier, statement, request.tactic)
+        def isTheorem = verifier.theorems.exists(_.statement eq statement)
         (request.expected, result) match
             case (ExpectedOutcome.Valid, VerificationResult.Proven(proof)) =>
                 proof.artifact match
                     case artifact: UplcBlaster.Artifact => checkedProof(artifact)
                     case _                              =>
+                if !isTheorem then failed(s"$name: proved, and not among the verifier's theorems")
             case (ExpectedOutcome.Falsified, VerificationResult.Refuted(_)) =>
+                if isTheorem then failed(s"$name: refuted, and the verifier has a theorem of it")
             case (ExpectedOutcome.Valid, other) =>
                 failed(s"$name: expected a proof, got ${LeanProofs.describe(other)}")
             case (ExpectedOutcome.Falsified, other) =>
@@ -299,9 +309,16 @@ final class LeanProofs private (
             case result => result
     }
 
-    /** Why `tactic` is inconclusive about `statement`, declared in [[verifier]]. */
-    def inconclusive(statement: Statement, tactic: UplcBlaster): String =
-        inconclusive(verifier, statement, tactic)
+    /** Why `tactic` is inconclusive about `statement`, declared in [[verifier]]. The check runs in
+      * a verifier of its own, with the functions of [[verifier]], which keeps nothing: an
+      * inconclusive result is never kept, and a statement that unexpectedly gets a result here is
+      * to fail its test, not to stand on that result from then on.
+      */
+    def inconclusive(statement: Statement, tactic: UplcBlaster): String = {
+        val own = Verifier.empty
+        own.addFunctions(verifier.functions)
+        inconclusive(own, own.statement(statement.name, statement.prop), tactic)
+    }
 
     /** What [[UplcBlaster]] reported with the proof or the refutation that a check returned. */
     def artifactOf(result: VerificationResult): UplcBlaster.Artifact = {
@@ -362,8 +379,7 @@ final class LeanProofs private (
         budget: Budget,
         functions: Seq[FunctionDef[?, ?]]
     ): (Verifier, Statement, VerificationResult) = {
-        val verifier = results.fold(Verifier.empty)(Verifier.keeping)
-        functions.foreach(verifier.addFunction)
+        val verifier = verifierOf(functions)
         val statement = verifier.statement(prop)
         (verifier, statement, run(verifier, statement, UplcBlaster(budget, lean)))
     }
@@ -389,15 +405,15 @@ final class LeanProofs private (
         prop: Prop,
         budget: Budget,
         functions: FunctionDef[?, ?]*
-    ): UplcBlaster.Artifact =
-        check(prop, budget, functions) match
-            case (verifier, statement, VerificationResult.Proven(proof)) =>
-                val artifact = proof.artifact.asInstanceOf[UplcBlaster.Artifact]
-                checkedProof(artifact)
-                if !verifier.theorems.exists(_.statement eq statement) then
-                    failed("the statement was proved, and is not among the verifier's theorems")
-                artifact
-            case (_, _, other) => failed(s"expected a proof, got ${LeanProofs.describe(other)}")
+    ): UplcBlaster.Artifact = {
+        val verifier = verifierOf(functions)
+        artifactOf(
+          checked(
+            verifier,
+            VerificationRequest(verifier.statement(prop), UplcBlaster(budget, lean))
+          )
+        )
+    }
 
     /** The replayed counterexample of a statement that is refuted at a budget of `budget` steps.
       */
@@ -413,14 +429,21 @@ final class LeanProofs private (
         prop: Prop,
         budget: Budget,
         functions: FunctionDef[?, ?]*
-    ): Map[String, Constant] =
-        check(prop, budget, functions) match
-            case (verifier, _, VerificationResult.Refuted(proof)) =>
-                if verifier.theorems.nonEmpty then
-                    failed("the statement was refuted, and the verifier has a theorem")
-                proof.artifact.asInstanceOf[UplcBlaster.Artifact].counterexample.toMap
-            case (_, _, other) =>
-                failed(s"expected a refutation, got ${LeanProofs.describe(other)}")
+    ): Map[String, Constant] = {
+        val verifier = verifierOf(functions)
+        counterexampleOf(
+          checked(verifier, VerificationRequest(verifier.refute(prop), UplcBlaster(budget, lean)))
+        )
+    }
+
+    /** A verifier of its own for a statement without a name, with `functions`, keeping its results
+      * where these proofs keep them.
+      */
+    private def verifierOf(functions: Seq[FunctionDef[?, ?]]): Verifier = {
+        val verifier = results.fold(Verifier.empty)(Verifier.keeping)
+        functions.foreach(verifier.addFunction)
+        verifier
+    }
 
     /** Why [[UplcBlaster]] is inconclusive about `prop`, with its check given up after `timeout`.
       */
@@ -451,9 +474,13 @@ final class LeanProofs private (
         run(verifier, statement, tactic) match
             case VerificationResult.Inconclusive(reason) =>
                 if verifier.theorems.exists(_.statement eq statement) then
-                    failed("the statement is inconclusive, and the verifier has a theorem of it")
+                    failed(s"${statement.name}: inconclusive, and the verifier has a theorem of it")
                 reason
-            case other => failed(s"expected an inconclusive result, got $other")
+            case other =>
+                failed(
+                  s"${statement.name}: expected an inconclusive result, got " +
+                      LeanProofs.describe(other)
+                )
 
     /** The integer `value` is, as a variable of a counterexample. */
     def integer(value: Constant): BigInt = value match

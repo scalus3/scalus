@@ -56,8 +56,9 @@ object Withdrawal
   *     validator walks the inputs and the outputs, and the tactic cannot follow a loop over a list
   *     of unknown length.
   *
-  * The tests need Lean: without `lake` and a built workspace they are canceled (see
-  * [[LeanProofs]]).
+  * Without Lean, that is without `lake` and a built workspace, the tests pass on the results kept
+  * beside this file (see [[LeanProofs]]). The test tagged `Unfinished` is about what Lean does not
+  * finish, and keeps nothing: it needs Lean.
   */
 class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*

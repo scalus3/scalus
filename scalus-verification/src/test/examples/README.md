@@ -8,15 +8,15 @@ For example, `half(-5) = 3`, `half(0) = 0`, and `half(4) = 2`. The properties ca
 `half(x)` directly. The property macro captures these expressions, and UplcBlaster
 links the `@Compile` function into the UPLC predicates it verifies. Each property is declared
 by name in the suite's verifier, `verifier.statement` or `verifier.refute` for a negative
-control, and a test checks it with `check`, which holds the result to what the statement was
-declared to be.
+control. A test checks it with `check`, which holds the result to what the statement was
+declared to be, or, for the check given too few steps, with `inconclusive`.
 
 | Case | Statement | Expected result |
 | --- | --- | --- |
 | [Proof](BigIntVerificationTest.scala#L30) | For every integer `x`, `abs(x) <= 2 * half(x) <= abs(x) + 1` | Proven |
 | [Counterexample](BigIntVerificationTest.scala#L40) | For every nonnegative integer `x`, `2 * half(x) == x` | Refuted; any nonnegative odd input, such as `1`, violates it |
 | [No solutions](BigIntVerificationTest.scala#L45) | There is no integer `x` for which `half(x) < 0` | Proven by showing `half(x) >= 0` for every input |
-| [Inconclusive](BigIntVerificationTest.scala#L71) | The same nonnegativity property, with only 3 Lean evaluation steps | Inconclusive; the candidate counterexample is spurious on CEK replay |
+| [Inconclusive](BigIntVerificationTest.scala#L49) | The same nonnegativity property, with only 3 Lean evaluation steps | Inconclusive; the candidate counterexample is spurious on CEK replay |
 
 The counterexample test checks the input returned by the solver and prints it; the solver
 may choose a different odd integer on another run. `UplcBlaster` replays a counterexample
