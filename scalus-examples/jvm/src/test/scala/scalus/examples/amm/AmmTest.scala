@@ -407,12 +407,6 @@ object AmmTest extends ScalusTest {
     def createSetup(
         evaluatorMode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost
     ): (Emulator, AmmOffchain) = {
-        val evaluator = evaluatorMode match
-            case EvaluatorMode.EvaluateAndComputeCost =>
-                PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
-            case _ =>
-                PlutusScriptEvaluator.constMaxBudget(env)
-
         val provider = Emulator(
           initialUtxos = aliceTokenUtxos,
           initialContext =
@@ -420,15 +414,29 @@ object AmmTest extends ScalusTest {
           mutators = Set(PlutusScriptsTransactionMutator)
         )
 
-        val txCreator = AmmOffchain(
+        val txCreator = evaluatorMode match
+            case EvaluatorMode.EvaluateAndComputeCost => costingTxCreator
+            case _                                    => maxBudgetTxCreator
+
+        (provider, txCreator)
+    }
+
+    // Built once per suite, not per test or property case: the constructor applies the
+    // parameters to the contract and compiles the whole script again (finding F-19), and the
+    // parameters never change. Both classes are immutable, so the tests can share them; each
+    // test still gets a fresh Emulator.
+    private lazy val costingTxCreator: AmmOffchain =
+        newTxCreator(PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost))
+    private lazy val maxBudgetTxCreator: AmmOffchain =
+        newTxCreator(PlutusScriptEvaluator.constMaxBudget(env))
+
+    private def newTxCreator(evaluator: PlutusScriptEvaluator): AmmOffchain =
+        AmmOffchain(
           env = env,
           evaluator = evaluator,
           contract = compiledContract,
           params = ammParams
         )
-
-        (provider, txCreator)
-    }
 
     // creates an empty pool and immediately makes a deposit tx with x0 and x1
     def initPoolWith(provider: Emulator, txCreator: AmmOffchain, x0: Long, x1: Long): Utxo = {

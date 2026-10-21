@@ -1013,12 +1013,6 @@ object LinkedListTest extends ScalusTest {
     def createSetup(
         evaluatorMode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost
     ): (Emulator, LinkedListOffchain) = {
-        val evaluator = evaluatorMode match
-            case EvaluatorMode.EvaluateAndComputeCost =>
-                PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
-            case _ =>
-                PlutusScriptEvaluator.constMaxBudget(env)
-
         val provider = Emulator(
           initialUtxos = Map(
             Input(genesisHash, 0) -> Output(Alice.address, Value.ada(10_000)),
@@ -1031,16 +1025,30 @@ object LinkedListTest extends ScalusTest {
           mutators = Set(PlutusScriptsTransactionMutator)
         )
 
-        val txCreator = LinkedListOffchain(
+        val txCreator = evaluatorMode match
+            case EvaluatorMode.EvaluateAndComputeCost => costingTxCreator
+            case _                                    => maxBudgetTxCreator
+
+        (provider, txCreator)
+    }
+
+    // Built once per suite, not per test or property case: the constructor applies the
+    // parameters to the contract and compiles the whole script again (finding F-19), and the
+    // parameters never change. Both classes are immutable, so the tests can share them; each
+    // test still gets a fresh Emulator.
+    private lazy val costingTxCreator: LinkedListOffchain =
+        newTxCreator(PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost))
+    private lazy val maxBudgetTxCreator: LinkedListOffchain =
+        newTxCreator(PlutusScriptEvaluator.constMaxBudget(env))
+
+    private def newTxCreator(evaluator: PlutusScriptEvaluator): LinkedListOffchain =
+        LinkedListOffchain(
           env = env,
           evaluator = evaluator,
           mintingContract = compiledContract,
           rootKey = rootKeyBytes,
           prefix = prefixBytes
         )
-
-        (provider, txCreator)
-    }
 
     def assertSubmitFails(provider: Emulator, tx: Transaction): Unit =
         provider.submit(tx).await() match {
