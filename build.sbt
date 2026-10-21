@@ -1309,6 +1309,18 @@ def copyFiles(files: Seq[String], baseDir: File, targetDir: File, log: ManagedLo
 // COMMAND ALIASES
 // =============================================================================
 
+/** A command that runs `steps` in order, like `addCommandAlias(name, steps.mkString(";"))`.
+  *
+  * Why not an alias: sbt parses a `;`-joined alias in full before it runs the first step, with the
+  * key parser of all 30 projects. For an unscoped key such as `clean`, or a key of the `docs`
+  * project, that parse takes tens of seconds: `sbt "++3.3.8;clean"` took 124 s locally versus 27 s
+  * for `sbt "++3.3.8" "clean"`, and the ci-jvm-3_3_8 alias waited 4m38s before its first step
+  * (2m20s on CI). This command queues the steps instead, and sbt parses each one only when it runs.
+  * Finding F-2 in docs/internal/test-refactor/findings.md.
+  */
+def commandSequence(name: String, steps: String*): Def.Setting[?] =
+    commands += Command.command(name)(state => steps.toList ::: state)
+
 // ABI compatibility gate for the stable surface: scalus-core, scalus-cardano-ledger and
 // scalus-bloxbean-cardano-client-lib, checked against scalusCompatibleVersion.
 // Both cross-projects declare mimaPreviousArtifacts with %%%, so their Scala.js artifacts are
@@ -1316,28 +1328,35 @@ def copyFiles(files: Seq[String], baseDir: File, targetDir: File, log: ManagedLo
 // break on its own. The JS variants are therefore checked too: `mima` runs both halves.
 // CI splits them: ci-jvm runs mima-jvm, and ci-js runs mima-js, because ci-js compiles the
 // Scala.js classes anyway (in ci-jvm that compile cost ~1.5 min of the longest job).
-addCommandAlias(
+commandSequence(
   "mima-jvm",
-  "scalusJVM/mimaReportBinaryIssues;" +
-      "scalusCardanoLedgerJVM/mimaReportBinaryIssues;" +
-      "scalus-bloxbean-cardano-client-lib/mimaReportBinaryIssues"
+  "scalusJVM/mimaReportBinaryIssues",
+  "scalusCardanoLedgerJVM/mimaReportBinaryIssues",
+  "scalus-bloxbean-cardano-client-lib/mimaReportBinaryIssues"
 )
-addCommandAlias(
+commandSequence(
   "mima-js",
-  "scalusJS/mimaReportBinaryIssues;scalusCardanoLedgerJS/mimaReportBinaryIssues"
+  "scalusJS/mimaReportBinaryIssues",
+  "scalusCardanoLedgerJS/mimaReportBinaryIssues"
 )
-addCommandAlias("mima", "mima-jvm;mima-js")
-addCommandAlias(
+commandSequence("mima", "mima-jvm", "mima-js")
+commandSequence(
   "quick",
-  "scalafmtAll;scalafmtSbt;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;jvm/testQuick"
+  "scalafmtAll",
+  "scalafmtSbt",
+  "jvm/Test/compile",
+  "scalusCardanoLedgerIt/Test/compile",
+  "jvm/testQuick"
 )
-addCommandAlias(
-  "cleanpile",
-  "clean;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile"
-)
-addCommandAlias(
+commandSequence(
   "precommit",
-  "clean;docs/clean;scalafmtAll;scalafmtSbt;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;jvm/test"
+  "clean",
+  "docs/clean",
+  "scalafmtAll",
+  "scalafmtSbt",
+  "jvm/Test/compile",
+  "scalusCardanoLedgerIt/Test/compile",
+  "jvm/test"
 )
 // Task list shared by every cross-version CI job. We must NOT use the `jvm` aggregate here:
 // modules that don't list the cross version (scalusUplcJitCompiler, scalusUtxoCell, bench) fall
@@ -1356,50 +1375,73 @@ val crossVersionCiTasks = {
               s"pluginScalaVersions is ${pluginScalaVersions.mkString(", ")}. Rename the aliases " +
               "in build.sbt and the matrix entries in .github/workflows/ci-jvm.yml to match."
         )
-    "clean;scalusPlugin/Test/compile;scalusJVM/Test/compile;scalusCardanoLedgerJVM/Test/compile;" +
-        "scalusTestkitJVM/Test/compile;scalusExamplesJVM/Test/compile;scalusDesignPatterns/Test/compile;" +
-        "scalus-bloxbean-cardano-client-lib/Test/compile;scalusEthereumKzgCeremony/Test/compile;" +
-        "scalusJVM/test;scalusExamplesJVM/test"
+    Seq(
+      "clean",
+      "scalusPlugin/Test/compile",
+      "scalusJVM/Test/compile",
+      "scalusCardanoLedgerJVM/Test/compile",
+      "scalusTestkitJVM/Test/compile",
+      "scalusExamplesJVM/Test/compile",
+      "scalusDesignPatterns/Test/compile",
+      "scalus-bloxbean-cardano-client-lib/Test/compile",
+      "scalusEthereumKzgCeremony/Test/compile",
+      "scalusJVM/test",
+      "scalusExamplesJVM/test"
+    )
 }
 
 // One CI job per supported compiler version; the alias name carries the version, so a version bump
 // renames the alias here and its matrix entry in .github/workflows/ci-jvm.yml. Keep the `++`
 // arguments in sync with scala3LtsVersion / scala3NextVersion / scala3NextLtsVersion above.
-addCommandAlias(
+// The default LTS, and the only build that publishes the `_3` library artifacts. Carries the
+// format and MiMa checks too: they are version-independent, so they run in this job only
+// (the Scala.js half of MiMa runs in ci-js, see `mima-js`). The last two steps build Scaladoc as
+// Release publishes it (per module) and as the site publishes it (unidoc). Doc warnings do not
+// fail the build, but a crash or an error does.
+commandSequence(
   "ci-jvm-3_3_8",
-  // The default LTS, and the only build that publishes the `_3` library artifacts. Carries the
-  // format and MiMa checks too: they are version-independent, so they run in this job only
-  // (the Scala.js half of MiMa runs in ci-js, see `mima-js`).
-  "++3.3.8;clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;" +
-      "scalusCardanoLedgerIt/Test/compile;jvm/test;mima-jvm;" +
-      // Scaladoc as Release publishes it (per module) and as the site publishes it (unidoc). Doc
-      // warnings do not fail the build, but a crash or an error does.
-      "jvm/doc;docs/unidoc"
+  "++3.3.8",
+  "clean",
+  "docs/clean",
+  "scalafmtCheckAll",
+  "scalafmtSbtCheck",
+  "jvm/Test/compile",
+  "scalusCardanoLedgerIt/Test/compile",
+  "jvm/test",
+  "mima-jvm",
+  "jvm/doc",
+  "docs/unidoc"
 )
-addCommandAlias(
+// Plugin-only version: prove the plugin builds against the 3.3.7 compiler and still emits correct
+// contracts, via the scalus.compiler.* compile-and-evaluate suite. Cheaper than a full re-test –
+// 3.3.7 and 3.3.8 share the `pre38` desugaring generation (verified byte-identical).
+// `testOnly` runs benchmark-tagged tests, which `test` leaves out, so they are excluded here.
+commandSequence(
   "ci-jvm-3_3_7",
-  // Plugin-only version: prove the plugin builds against the 3.3.7 compiler and still emits correct
-  // contracts, via the scalus.compiler.* compile-and-evaluate suite. Cheaper than a full re-test –
-  // 3.3.7 and 3.3.8 share the `pre38` desugaring generation (verified byte-identical).
-  // `testOnly` runs benchmark-tagged tests, which `test` leaves out, so they are excluded here.
-  "++3.3.7;clean;scalusPlugin/Test/compile;" +
-      "scalusJVM/testOnly scalus.compiler.* -- -l scalus.testing.Benchmark"
+  "++3.3.7",
+  "clean",
+  "scalusPlugin/Test/compile",
+  "scalusJVM/testOnly scalus.compiler.* -- -l scalus.testing.Benchmark"
 )
-addCommandAlias("ci-jvm-3_8_4", s"++3.8.4;$crossVersionCiTasks")
-addCommandAlias("ci-jvm-3_9_0", s"++3.9.0;$crossVersionCiTasks")
+commandSequence("ci-jvm-3_8_4", ("++3.8.4" +: crossVersionCiTasks) *)
+commandSequence("ci-jvm-3_9_0", ("++3.9.0" +: crossVersionCiTasks) *)
 // Convenience name for the default-version job.
 addCommandAlias("ci-jvm", "ci-jvm-3_3_8")
-addCommandAlias(
+commandSequence(
   "ci-js",
-  "clean;js/Test/compile;js/test;js/doc;mima-js;scalusTsExporter/test;scalusCardanoLedgerJS/checkDtsUpToDate;scalusCardanoLedgerJS/runNpmTests"
+  "clean",
+  "js/Test/compile",
+  "js/test",
+  "js/doc",
+  "mima-js",
+  "scalusTsExporter/test",
+  "scalusCardanoLedgerJS/checkDtsUpToDate",
+  "scalusCardanoLedgerJS/runNpmTests"
 )
-addCommandAlias(
-  "ci-native",
-  "clean;native/Test/compile;native/test"
-)
+commandSequence("ci-native", "clean", "native/Test/compile", "native/test")
 // The CI jobs for the default Scala version in one command. Do not build it on the root aggregate:
 // that links the deliberately bad scalusTsExporterFixtures and always fails.
-addCommandAlias("ci", "ci-jvm;ci-js;ci-native")
+commandSequence("ci", "ci-jvm", "ci-js", "ci-native")
 addCommandAlias("benchmark", "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*")
 addCommandAlias(
   "benchmark-jit",
@@ -1409,9 +1451,12 @@ addCommandAlias(
   "benchmark-cek",
   "bench/Jmh/run -i 3 -wi 3 -f 1 -t 1 .*CekJVMBenchmark"
 )
-addCommandAlias(
+commandSequence(
   "it",
-  "clean;scalusCardanoLedgerIt/clean;scalusCardanoLedgerIt/Test/compile;scalusCardanoLedgerIt/test"
+  "clean",
+  "scalusCardanoLedgerIt/clean",
+  "scalusCardanoLedgerIt/Test/compile",
+  "scalusCardanoLedgerIt/test"
 )
 
 // =============================================================================
