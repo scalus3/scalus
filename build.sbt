@@ -121,6 +121,12 @@ ThisBuild / parallelExecution := true
 // `Tags.limitAll(SystemProcessors) :: Nil` when parallelExecution is true
 // (EvaluateTask.defaultRestrictions), so restating it here bought nothing.
 
+// Projects with `Test / fork := true` run their suites in one forked JVM, and without this flag
+// sbt runs those suites one after another. With it, the forked JVM runs them in parallel:
+// `jvm/test` took 220-230 s instead of 299 s locally (3 green runs, 2026-10-21), and
+// scalusJVM/test alone 59 s instead of 108 s. Finding F-4 in docs/internal/test-refactor.
+ThisBuild / Test / testForkedParallel := true
+
 Compile / doc / scalacOptions ++= Seq(
   "-groups",
   "-project-version",
@@ -1256,6 +1262,9 @@ lazy val scalusCardanoLedgerIt = project
       scalacOptions ++= commonScalacOptions,
       publish / skip := true,
       Test / fork := true,
+      // These suites start Docker devnets and call external services; parallel runs were never
+      // tested, so they keep running one after another.
+      Test / testForkedParallel := false,
       Test / testOptions += Tests.Argument("-oF"),
       // Forward SCALUS_TEST_ENV to forked test JVM
       Test / envVars ++= sys.env.get("SCALUS_TEST_ENV").map("SCALUS_TEST_ENV" -> _).toMap,
