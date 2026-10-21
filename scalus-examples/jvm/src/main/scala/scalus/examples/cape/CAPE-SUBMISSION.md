@@ -127,8 +127,10 @@ This runs the whole submission in one shot:
 1. Generates `submissions/<scenario>/Scalus_<version>_nau/` (`.uplc`, `metadata.json`,
    `README.md`) for all 8 `CapeScenarios.all` entries in the target clone
    (`GenerateSubmissions`).
-2. Runs `cape submission verify` and `cape submission measure` on each of the 8 dirs.
-3. Prints a leaderboard ranking every submission per scenario by total fee (CAPE's
+2. Formats the 8 `.uplc` files with the clone's `treefmt` (`pretty-uplc`). The clone's
+   pre-commit hook rejects any other layout.
+3. Runs `cape submission verify` and `cape submission measure` on each of the 8 dirs.
+4. Prints a leaderboard ranking every submission per scenario by total fee (CAPE's
    execution fee + Conway reference-script fee) (`CompareWithLeaderboard`).
 
 **Protocol version**: `Options.release` targets van Rossem (protocol version 11), so every

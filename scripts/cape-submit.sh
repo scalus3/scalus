@@ -38,6 +38,14 @@ shopt -s nullglob
 DIRS=(submissions/*/"$SUB_NAME")
 [[ ${#DIRS[@]} -eq 8 ]] || { echo "expected 8 submission dirs matching $SUB_NAME, found ${#DIRS[@]}: ${DIRS[*]}"; exit 1; }
 
+# The clone's pre-commit hook rejects any .uplc file that is not in its
+# canonical pretty-uplc layout, and the generator does not emit that layout.
+# Formatting changes only whitespace, never the program or its measurements.
+UPLC_FILES=()
+for d in "${DIRS[@]}"; do UPLC_FILES+=("$d"/*.uplc); done
+echo "==> Formatting ${#UPLC_FILES[@]} .uplc files with treefmt"
+nix develop --command treefmt "${UPLC_FILES[@]}"
+
 for d in "${DIRS[@]}"; do
   echo "==> verify $d"
   nix develop --command ./scripts/cape.sh submission verify "$d"
