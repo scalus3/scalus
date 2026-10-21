@@ -1,4 +1,61 @@
-# CAPE competitive standings at Scalus 1.1.0
+# CAPE competitive standings
+
+## Current: Scalus 1.4.0 (2026-10-21)
+
+Submitted as IntersectMBO/UPLC-CAPE#262, generated from scalus3/scalus `67b076ce2`. The compiler is
+the `v1.4.0` release; the commits after the tag change no code generation. All 8 rows pass
+`cape submission verify` and are measured on CAPE's production evaluator (plutus-core 1.63). CAPE
+retired its preview track (#244), so `metadata.json` carries `min_protocol_version: 11` and no
+`min_plutus_version`.
+
+Ranking by total fee (execution fee + Conway reference-script fee), against upstream main `48a0a1d7`
+with the corrections of #261 applied:
+
+| Scenario | Mode | Scalus 1.4.0 | Best other row | Result |
+|---|---|---:|---:|---|
+| factorial | open | 3,091 | Scalus 0.16.0 (Unisay): 11,398 | #1, -72.9% |
+| fibonacci | open | 3,787 | Scalus 0.18.2 (Unisay): 4,123 | #1, -8.1% |
+| htlc | open | 22,994 | Plinth 1.65: 23,901 | #1, -3.8% |
+| linear_vesting | open | 37,244 | Scalus 1.3.0 (Unisay): 48,286 | #1, -22.9% |
+| two_party_escrow | open | 55,560 | Plinth 1.65: 62,787 | #1, -11.5% |
+| ecd | fixed | 7,886 | Plinth 1.71: 7,886 | tie for #1 |
+| factorial_naive_recursion | fixed | 8,718 | Pebble 0.4.4: 8,374 | #2, +4.1% |
+| fibonacci_naive_recursion | fixed | 37,092,004 | Pebble 0.4.4: 29,729,144 | #2, +24.8% |
+
+Compared with 1.1.0, htlc moved from #2 to #1 and the validators got cheaper from compiler work
+alone (htlc 25,325 -> 22,994, linear_vesting 40,232 -> 37,244). The fixture changes of upstream
+PRs #247 and #253 cost nothing: two_party_escrow got 17 bytes smaller without the closure branch.
+
+### Spec compliance of the fixed-mode rows
+
+A fixed-mode row must implement the prescribed algorithm. An extra base case returns the same value
+for every input, so no `cape-tests.json` case can catch it; only review of the source can.
+
+- Pebble 0.4.4 and 0.1.2 `factorial_naive_recursion` stopped at `n <= 1` instead of `n <= 0`.
+  #261 points both rows at a fixed source (Unisay/pebble-cape-submissions#2 proposes the same fix
+  upstream). Pebble 0.4.4 goes from 7,349 to 8,374 and still leads.
+- Every Scalus `fibonacci_naive_recursion` row by Unisay (0.12.1 to 1.3.0) adds `n == 2 -> 1`.
+  #261 removes them. Scalus 1.3.0 ranked first at 28,979,283 with it.
+- Plinth, Plutarch, Aiken and OpShin rows match the spec. Aiken unrolls one level of fib, which is
+  a compiler optimization; its base case is still `n <= 1`.
+
+### Why Pebble still leads both naive scenarios
+
+Pebble binds constant-argument builtin partial applications once, outside the recursion:
+`[addInteger -1]`, `[addInteger -2]`, `[lessThanInteger 1]`. Each call then applies a variable
+instead of building the partial application again, which saves two CEK steps per use. Hand-written
+UPLC with only that change measures exactly Pebble's numbers: 29,729,144 on fib, 8,374 on factorial.
+CSE cannot do it: it needs two occurrences and never moves a binding out of a lambda.
+
+The pass is designed in `docs/superpowers/specs/2026-10-21-t4-builtin-partials-hoisting-design.md`
+on the profile-guided pipeline branch `worktree-unrolling-fee-tradeoff` (T4), postponed. It would
+tie Pebble, not beat it; beating it needs recursion unrolling (T15).
+
+## History: Scalus 1.1.0 (2026-08-24 to 2026-08-26)
+
+Everything below is the 1.1.0 record and is kept as written. Two parts are out of date: CAPE no
+longer has a preview track or a `min_plutus_version` gate, and #246 and #247 are merged.
+
 
 Date: 2026-08-24 (Task 12d final consistency sweep – see below). Scalus version: 1.1.0. Worktree
 commit: `5d28bd0fc` (Task 12d regenerated all 8 submissions from a fully clean slate at this commit –
@@ -242,7 +299,7 @@ follows three fix rounds after the initial dry run found real bugs:
   the session) or a new regression was not root-caused; it reproduced on the very first gated scenario of
   this task's first end-to-end run and did not reproduce at all after the fix.
 
-## Mainnet PV11 vs CAPE tooling lag
+### Mainnet PV11 vs CAPE tooling lag
 
 Scalus's `Options.release` targets Plutus V3 protocol version 11 (vanRossem): flexible case-on-builtins
 and CIP-153 `Value` builtins. CAPE's pinned *production* evaluator is `plutus-core-1.45.0.0`, which
@@ -264,7 +321,7 @@ of every submission (any language) using post-1.45.0.0 Plutus Core features; sev
 submissions from other contributors are in the same position, which is also why most current
 leaderboard leaders are themselves `_preview` entries (see per-scenario table below).
 
-## linear_vesting: canonical Value ordering (RESOLVED 2026-08-25)
+### linear_vesting: canonical Value ordering (RESOLVED 2026-08-25)
 
 `linear_vesting` calls `unValueData` on the input's and output's `Value` (via `Value.quantityOf`).
 CAPE's upstream Haskell test-fixture builder (`buildValue` in `lib/Cape/Tests.hs`, not
@@ -301,7 +358,7 @@ exercises a "multiple continuing outputs" attack. This matches fixture behavior,
 "unique output" reading of the spec text; treat this scenario's cost figures as benchmark-only, not a
 production-ready validator pattern.
 
-## Per-scenario standings
+### Per-scenario standings
 
 CPU/mem in cost units (steps/8-byte words), summed over `included_in_aggregates` evaluations, from each
 submission's `metrics.json`. Size in bytes. Delta is ours vs the row-1 leader; negative means we're
@@ -614,7 +671,7 @@ Notes on the table:
   builds. Compare like-for-like against the `_preview` row, not the non-`_preview` mainnet row further
   down each ranking.
 
-## Known caveat: .uplc cosmetic name drift across JVM runs
+### Known caveat: .uplc cosmetic name drift across JVM runs
 
 Regenerating submissions in separate `sbtn`/JVM invocations can produce a *different* `.uplc` text for
 the same source and options (confirmed for `two_party_escrow`: two regenerations days apart had
@@ -627,7 +684,7 @@ directly against both `.uplc` variants produced a byte-identical `measurements` 
 submission-reproducibility cosmetic caveat, not a correctness or cost regression: re-running the driver
 may regenerate byte-different (but behaviorally identical) `.uplc` files for `@Compile`'d scenarios.
 
-## Comparator output (verbatim)
+### Comparator output (verbatim)
 
 ```
 == ecd
@@ -760,7 +817,7 @@ may regenerate byte-different (but behaviorally identical) `.uplc` files for `@C
   -> Scalus is BEHIND Plinth_1.65.0.0_Unisay_preview by 17.7% CPU
 ```
 
-## Next steps
+### Next steps
 
 1. **(done 2026-08-25, PR pending user submission)** The `linear_vesting` fixture-builder bug is
    root-caused and fixed on the clone's `fix/canonical-value-ordering` branch (builder fix +
@@ -834,7 +891,7 @@ may regenerate byte-different (but behaviorally identical) `.uplc` files for `@C
    **-72.8%** vs. the leader `Scalus_0.18.2_Unisay_preview` (14,567,412 CPU), nowhere near losing the #1
    spot, now correct for every input instead of just the 11 fixture cases.
 
-## Submission checklist
+### Submission checklist
 
 What is done, automated, and reproducible as of this snapshot: source, tests, docs, and all 8 CAPE
 submission artifacts in the clone (`/Users/nau/projects/lantr/UPLC-CAPE/submissions/*/Scalus_1.1.0_nau/`,
