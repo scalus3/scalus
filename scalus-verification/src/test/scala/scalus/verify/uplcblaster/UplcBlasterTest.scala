@@ -472,7 +472,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         assert(lowered.left.exists(_.contains("SumOfProductsLowering")), lowered)
     }
 
-    test("a function with only a UPLC program is called with BigInt, Boolean and Data only") {
+    test("a function with only a UPLC program is called with values of one form only") {
         // Without SIR there is no declared type, so the tests cannot know how its program takes a
         // case class: `Circle(r)` alone would be passed as a list of fields, not as the enum.
         val areaProgram = FunctionDef
@@ -483,6 +483,24 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           FunctionTable(areaProgram)
         )
         assert(shaped.left.exists(_.contains("has no SIR")), shaped)
+        assert(shaped.left.exists(_.contains("BigInt, Boolean, ByteString, String and Data")))
+
+        // A string has one form, whatever its static type.
+        val exclaimProgram = FunctionDef
+            .synthetic[String, String]("exclaimProgram")
+            .withRepresentation(
+              Representation.Uplc,
+              PlutusV3
+                  .compile((s: String) => Builtins.appendString(s, "!"))(using
+                    UplcBlaster.options
+                  )
+                  .program
+            )
+        val exclaimed = UplcBlaster.lower(
+          forAll[String](s => callRef(exclaimProgram.ref, s)(r => r != s)),
+          FunctionTable(exclaimProgram)
+        )
+        assert(exclaimed.isRight, exclaimed)
 
         val incrementProgram = FunctionDef
             .synthetic[BigInt, BigInt]("incrementProgram")
@@ -563,6 +581,58 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             case other                      => fail(s"expected a byte string, got $other")
     }
 
+    test("quantifies over strings, and reads a string counterexample back") {
+        proven(forAll[String](s => Builtins.appendString(s, "") == s), budget = 40)
+        proven(
+          forAll[String, String, String]((a, b, c) =>
+              Builtins.appendString(Builtins.appendString(a, b), c) ==
+                  Builtins.appendString(a, Builtins.appendString(b, c))
+          ),
+          budget = 60
+        )
+        // negative control: appending strings does not commute
+        val commutes = forAll[String, String]((a, b) =>
+            Builtins.appendString(a, b) == Builtins.appendString(b, a)
+        )
+        val (a, b, _) = split2(commutes)
+        val counterexample = refuted(commutes, budget = 40)
+        (counterexample(a.name), counterexample(b.name)) match
+            case (Constant.String(x), Constant.String(y)) => assert(x + y != y + x, counterexample)
+            case other => fail(s"expected two strings, got $other")
+    }
+
+    test("a statement that applies the UTF-8 builtins to values of variables is refused") {
+        // No Lean here. Blaster cannot translate them today (`BitVec`), and where it can, the
+        // solver's characters would decide the statement (input-output-hk/Lean-blaster#389).
+        UplcBlaster.lower(
+          forAll[String](s => Builtins.decodeUtf8(Builtins.encodeUtf8(s)) == s),
+          FunctionTable.empty
+        ) match
+            case Left(reason) =>
+                assert(reason.contains("encodeUtf8 and decodeUtf8"), reason)
+                assert(reason.contains("Lean-blaster#389"), reason)
+            case Right(goal) => fail(s"expected the statement to be refused, got $goal")
+        // A closed statement is evaluated by Lean, and may apply them.
+        assert(
+          UplcBlaster
+              .lower(
+                Prop(Builtins.lengthOfByteString(Builtins.encodeUtf8("\u00e9")) == BigInt(2)),
+                FunctionTable.empty
+              )
+              .isRight
+        )
+    }
+
+    test("equal compares byte strings and strings") {
+        proven(
+          forAll[ByteString](b => equal(Builtins.appendByteString(b, ByteString.empty), b)),
+          budget = 40
+        )
+        proven(forAll[String](s => equal(Builtins.appendString("", s), s)), budget = 40)
+        // negative control: two strings need not be equal
+        refuted(forAll[String, String]((a, b) => equal(a, b)), budget = 40)
+    }
+
     test("Blaster's valid verdict in a document with an error is no proof") {
         // No Lean here. Lean's server goes on after a failed command, so the document can hold
         // an error next to Blaster's verdict on a goal the failed command left wrong.
@@ -582,7 +652,13 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             case other => fail(s"expected a failed result, got $other")
     }
 
-    test("a counterexample that is no value of its variable's type is inconclusive") {
+    /** The values of a refutation's counterexample, in binder order. */
+    private def refutedWith(result: VerificationResult): List[Constant] = result match
+        case VerificationResult.Refuted(proof) =>
+            proof.artifact.asInstanceOf[UplcBlaster.Artifact].counterexample.map(_._2)
+        case other => fail(s"expected a refutation, got $other")
+
+    test("a byte string's characters above 255 in a counterexample are read as unused bytes") {
         // No Lean here: what the tactic makes of Lean's output, on the Scalus CEK.
         val goal = lowered(
           forAll[ByteString](b => Builtins.lengthOfByteString(b) == BigInt(0)),
@@ -597,10 +673,42 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             )
         val bytes = "PlutusCore.ByteString.ByteString.mk"
         // a byte string, replayed
-        assert(falsified(s"""($bytes "A")""").isInstanceOf[VerificationResult.Refuted])
-        // Lean's model stores a byte string as a string: one with a character above 255 is a
-        // value of the model only, and shows nothing about byte strings
-        falsified(s"""($bytes "\\u{100}")""") match
+        assert(
+          refutedWith(falsified(s"""($bytes "A")""")) ==
+              List(Constant.ByteString(ByteString.fromString("A")))
+        )
+        // Lean's model stores a byte string as a string, so the solver's byte strings have
+        // characters above 255. Each is read as one of the highest bytes the counterexample does
+        // not use, in the order of the characters, the same one wherever it is, and the replay
+        // decides.
+        assert(
+          refutedWith(falsified(s"""($bytes "A\\u{100}\\u{100}\\u{101}")""")) ==
+              List(Constant.ByteString(ByteString.fromArray(Array[Byte](0x41, -2, -2, -1))))
+        )
+        // So a byte read so stays above the bytes in use, as the solver's character is, and
+        // ordering byte strings sees what the solver saw: here `a` is above `b`.
+        val ordered = lowered(
+          forAll[ByteString, ByteString]((a, b) =>
+              b == ByteString.empty || Builtins.lessThanByteString(a, b)
+          ),
+          FunctionTable.empty
+        )
+        val pair = UplcBlaster.verdict(
+          ordered,
+          40,
+          errors = true,
+          s"❌ Falsified\nCounterexample:\n - x0: ($bytes \"\\u{100}\")\n - x1: ($bytes \"A\")"
+        )
+        assert(
+          refutedWith(pair) == List(
+            Constant.ByteString(ByteString.fromArray(Array[Byte](-1))),
+            Constant.ByteString(ByteString.fromString("A"))
+          )
+        )
+        // With more of them than there are unused bytes, none is renamed: the value is one of the
+        // model only, and shows nothing about byte strings.
+        val crowded = (0x100 to 0x200).map(codePoint => f"\\u{$codePoint%x}").mkString
+        falsified(s"""($bytes "$crowded")""") match
             case VerificationResult.Inconclusive(reason) =>
                 assert(reason.contains("no value of its variable's type"), reason)
                 assert(reason.contains("U+100"), reason)
@@ -610,6 +718,124 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             case VerificationResult.Failed(reason) =>
                 assert(reason.contains("cannot read Lean's counterexample"), reason)
             case other => fail(s"expected a failed result, got $other")
+    }
+
+    test("a string counterexample's surrogates are read as unused characters, and it is kept") {
+        // No Lean here. The solver's strings have the code points of surrogates, which are no
+        // characters of a Plutus string: two of them are two such characters, not one pair.
+        val goal = lowered(forAll[String](s => s == "" || s == "\uE000"), FunctionTable.empty)
+        def falsified(value: String): VerificationResult =
+            UplcBlaster.verdict(
+              goal,
+              40,
+              errors = true,
+              s"❌ Falsified\nCounterexample:\n - x0: $value"
+            )
+        val text = "A\u00e9\"\uD83D\uDE00"
+        val refutation = falsified("\"A\\u{e9}\"\"\\u{1f600}\"") match
+            case refuted @ VerificationResult.Refuted(proof) =>
+                val artifact = proof.artifact.asInstanceOf[UplcBlaster.Artifact]
+                assert(artifact.counterexample.map(_._2) == List(Constant.String(text)), artifact)
+                refuted
+            case other => fail(s"expected a refutation, got $other")
+        // What is kept of the refutation is the string, and is a refutation again when taken.
+        val kept = UplcBlaster.kept(goal, refutation).getOrElse(fail("nothing is kept"))
+        assert(kept.counterexample.values.toList == List("\"A\u00e9\\\"\uD83D\uDE00\""), kept)
+        UplcBlaster.restored(goal, kept) match
+            case Right(VerificationResult.Refuted(_)) =>
+            case other                                => fail(s"expected a refutation, got $other")
+        // A kept value that is no string, as `null`, is no kept result: the entry no longer
+        // stands, the statement is asked again, and the reason says what is wrong.
+        val damaged =
+            kept.copy(counterexample = kept.counterexample.map((name, _) => name -> "null"))
+        UplcBlaster.restored(goal, damaged) match
+            case Left(reason) => assert(reason.contains(", null, is no string"), reason)
+            case other        => fail(s"expected a reason, got $other")
+        // So is a note of a kind that is none, as after an edit.
+        UplcBlaster.restored(goal, kept.copy(notes = kept.notes.updated("kind", "blaster"))) match
+            case Left(reason) => assert(reason.contains("is no kind of proof"), reason)
+            case other        => fail(s"expected a reason, got $other")
+        // A surrogate is read as a character used nowhere, from U+E000 on: not U+E000 itself,
+        // which the program compares with, so the value stays different from it, as in the
+        // solver's model. Two surrogates are two characters.
+        def characters(codePoints: Int*): Constant =
+            Constant.String(codePoints.map(Character.toString).mkString)
+        assert(refutedWith(falsified("\"\\u{d800}\"")) == List(characters(0xe001)))
+        falsified("\"\\u{d800}\"") match
+            case VerificationResult.Refuted(proof) =>
+                val read = proof.artifact.asInstanceOf[UplcBlaster.Artifact].read
+                assert(
+                  read == "reading the solver's U+D800 as U+E001, which no value of the type has",
+                  read
+                )
+            case other => fail(s"expected a refutation, got $other")
+        // What is kept says so too, and the refutation it is taken for.
+        val renamed = UplcBlaster
+            .kept(goal, falsified("\"\\u{d800}\"").asInstanceOf[VerificationResult.Refuted])
+            .getOrElse(fail("nothing is kept"))
+        UplcBlaster.restored(goal, renamed) match
+            case Right(VerificationResult.Refuted(proof)) =>
+                val read = proof.artifact.asInstanceOf[UplcBlaster.Artifact].read
+                assert(read.startsWith("reading the solver's U+D800 as U+E001"), read)
+            case other => fail(s"expected a refutation, got $other")
+        assert(
+          refutedWith(falsified("\"\\u{d83d}\\u{de00}\"")) == List(characters(0xe001, 0xe002))
+        )
+        // The replay decides what renamed values refute. On these the statement holds, and the
+        // reason says how they were read.
+        val always = lowered(forAll[String](s => s == s), FunctionTable.empty)
+        UplcBlaster.verdict(
+          always,
+          40,
+          errors = true,
+          "❌ Falsified\nCounterexample:\n - x0: \"\\u{d800}\""
+        ) match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(reason.contains("reading the solver's U+D800 as U+E000"), reason)
+                assert(reason.contains("is spurious"), reason)
+                assert(reason.contains("values that are not Lean's say nothing of the budget"))
+            case other => fail(s"expected an inconclusive result, got $other")
+    }
+
+    test("a kept value that is no value of its variable's type is no kept result") {
+        // No Lean here. In a file that was edited, the entry no longer stands, and the statement
+        // is asked again.
+        def restoredWith(prop: Prop, json: String): Either[String, ExecutionResult] = {
+            val goal = lowered(prop, FunctionTable.empty)
+            val name = UplcBlaster.keptNames(goal.binders).head
+            val notes = Map(UplcBlaster.budgetNote -> "40", "kind" -> "Blaster")
+            UplcBlaster.restored(goal, Kept(Kept.Result.Refuted, notes, Map(name -> json)))
+        }
+        def refutes(result: Either[String, ExecutionResult]): Boolean =
+            result.exists(_.isInstanceOf[VerificationResult.Refuted])
+        val negative = forAll[BigInt](x => x < BigInt(0))
+        assert(refutes(restoredWith(negative, "5")))
+        for damaged <- List("\"5\"", "5.0", "null", "{}") do
+            assert(restoredWith(negative, damaged).isLeft, damaged)
+        val empty = forAll[ByteString](b => Builtins.lengthOfByteString(b) == BigInt(0))
+        assert(refutes(restoredWith(empty, "\"41\"")))
+        for damaged <- List("\"4\"", "\"zz\"", "41", "null") do
+            assert(restoredWith(empty, damaged).isLeft, damaged)
+        val zero = forAll[Data](d => Builtins.equalsData(d, Builtins.iData(BigInt(0))))
+        assert(refutes(restoredWith(zero, """{"int":1}""")))
+        for damaged <- List("""{"bytes":"zz"}""", """{"nope":1}""", "1", "null") do
+            assert(restoredWith(zero, damaged).isLeft, damaged)
+        assert(restoredWith(negative, "5.0") == Left("its value of x, 5.0, is no integer"))
+        // One counterexample refutes no statement that asks for a witness.
+        assert(
+          restoredWith(exists[BigInt](x => x < BigInt(0)), "5") ==
+              Left("one counterexample refutes no statement that asks for a witness")
+        )
+    }
+
+    test("a string constant above U+2FFFF is not translated, so it proves nothing") {
+        // The solver's strings have no character above U+2FFFF, and Blaster refuses such a
+        // literal (input-output-hk/Lean-blaster#389): the check fails, and is no proof.
+        check(forAll[String](s => s != "\uD880\uDC00"), 40, Seq.empty) match
+            case (verifier, _, VerificationResult.Failed(reason)) =>
+                assert(reason.contains("above the Smt string alphabet bound"), reason)
+                assert(verifier.theorems.isEmpty)
+            case (_, _, other) => fail(s"expected a failed result, got $other")
     }
 
     test("a variable of a case class is one variable per field, and built in each test") {
@@ -996,6 +1222,16 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           UplcBlaster.leanValue(Constant.ByteString(ByteString.fromArray(Array[Byte](0x11, -1)))) ==
               """Const.ByteString (ByteString.mk "\x11\xff")"""
         )
+        // A character above 0xFFFF has no escape in Lean, and is written as it is.
+        assert(
+          UplcBlaster.leanValue(Constant.String("a\"\\\n\u00e9\u20ac\uD83D\uDE00")) ==
+              "Const.String \"a\\\"\\\\\\x0a\\xe9\\u20ac\uD83D\uDE00\""
+        )
+        // A surrogate is no character, and Lean would read its escape as another one.
+        val surrogate = intercept[IllegalArgumentException](
+          UplcBlaster.leanValue(Constant.String("a\uD800"))
+        )
+        assert(surrogate.getMessage.contains("U+d800"), surrogate.getMessage)
         val tree = Data.Constr(
           BigInt(2).pow(70),
           scalus.cardano.onchain.plutus.prelude.List(
@@ -1047,6 +1283,33 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
               goal,
               flats.toVector,
               List(Constant.ByteString(bytes), Constant.Data(tree)),
+              UplcBlaster.defaultMaxHeartbeats
+            )
+            server.check(text, Some(2.minutes)) match
+                case LeanServer.Result.Finished(messages) =>
+                    assert(!messages.exists(_.severity == LeanServer.Severity.Error), messages)
+                    assert(messages.exists(_.text.trim.matches("\"?\\d+ true\"?")), messages)
+                case other => fail(s"expected Lean's count, got $other")
+        finally Directories.remove(directory)
+    }
+
+    test("Lean reads a string as the tactic writes it, and as the program carries it") {
+        // The program compares its string with a constant, so Lean's answer shows that both came
+        // through: a quote, a backslash, a control character, and characters of two, three and
+        // four bytes in UTF-8.
+        val goal = lowered(
+          forAll[String](s => s == "a\"\\\n\u00e9\u20ac\uD83D\uDE00"),
+          FunctionTable.empty
+        )
+        val server = leanServer
+        val directory = Files.createTempDirectory("scalus-count-")
+        try
+            UplcBlaster.writeCheck(goal, 40, directory)
+            val flats = goal.leaves.indices.map(index => directory.resolve(s"Leaf$index.flat"))
+            val text = UplcBlaster.measureSource(
+              goal,
+              flats.toVector,
+              List(Constant.String("a\"\\\n\u00e9\u20ac\uD83D\uDE00")),
               UplcBlaster.defaultMaxHeartbeats
             )
             server.check(text, Some(2.minutes)) match

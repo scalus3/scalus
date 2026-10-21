@@ -30,8 +30,9 @@ Prop ──lower──► Lowered(binders, body: LeafFormula, leaves: Vector[Pro
 
 Preparation accepts statements built with:
 
-- universal and existential quantifiers over `BigInt`, `Boolean`, `ByteString`, `Data`, and case
-  classes whose fields are of these types or such case classes, at any proposition position;
+- universal and existential quantifiers over `BigInt`, `Boolean`, `ByteString`, `String`,
+  `Data`, and case classes whose fields are of these types or such case classes, at any
+  proposition position;
 - `existsLet(w)(x => p)`, which is lowered as the strict binding `let x = w in p` and introduces
   no SMT quantifier;
 - `&&`, `||`, `!`, `==>` and `<=>` over these leaves:
@@ -39,10 +40,10 @@ Preparation accepts statements built with:
   - a total `call` whose continuation is a test or another total call;
   - a partial call, `whenReturns(f, a)(r => p)`, whose continuation is the same;
   - `denotes(e)`, where `e` has any type;
-  - `equal(a, b)` over `BigInt`, `Boolean` or `Data`.
+  - `equal(a, b)` over `BigInt`, `Boolean`, `ByteString`, `String` or `Data`.
 
 Only quantified variables are limited, because Lean builds their values, and it builds only
-`BigInt`, `Boolean`, `ByteString` and `Data` constants. A call's arguments and result, and the
+`BigInt`, `Boolean`, `ByteString`, `String` and `Data` constants. A call's arguments and result, and the
 operand of `denotes`, can have any type: they live inside a test's program, and the compiler passes
 them.
 
@@ -54,8 +55,8 @@ field that is a case class is expanded in turn. Each test that uses the variable
 `let variable = Constructor(fields…)`, which the compiler lowers to the class's own
 representation, as it does for a constructor written in the test. An enum is not expanded: it has
 several constructors. `Quantifiable` has an instance for every case class whose fields have one. The exception is a function registered
-without SIR, which has no declared type: a call to it can pass only `BigInt`, `Boolean` and `Data`
-values (see "The calling convention").
+without SIR, which has no declared type: a call to it can pass only `BigInt`, `Boolean`,
+`ByteString`, `String` and `Data` values (see "The calling convention").
 
 `<=>` becomes two implications, because each of its operands occurs in both polarities. Each leaf
 program takes only the binders in scope at that leaf. Anything else produces a
@@ -154,9 +155,9 @@ function's own program agree when both are lowered with the same options:
   `UplcBlaster.options`, and returns `Left` on a mismatch, such as a program lowered by another
   backend. Both sides come from one type, so they differ only where the options do;
 - a function registered with a UPLC program but no SIR has no declared type and no signature.
-  A call to it takes its type from the values, which fixes the form only of `BigInt`, `Boolean`
-  and `Data`, so other values are refused: an enum constructor would otherwise be passed as a
-  list of its fields.
+  A call to it takes its type from the values, which fixes the form only of `BigInt`, `Boolean`,
+  `ByteString`, `String` and `Data`, so other values are refused: an enum constructor would
+  otherwise be passed as a list of its fields.
 
 ## Reading leaves by polarity
 
@@ -428,14 +429,43 @@ is canceled.
 
 ## Limits
 
-- **Types.** A quantified variable is a `BigInt`, a `Boolean`, a `ByteString`, a `Data`, or a
-  case class of them. An enum, a `List` or an `Option` cannot be quantified over yet; quantify
-  over `Data` with `denotes(d.to[A]) ==> …`. Nor can one constructor of `Data`, such as
-  `Data.I`: Lean's variable for it would be any `Data`. Quantify over its field. The operands of `equal` must be `BigInt`, `Boolean`
-  or `Data`. Call arguments and results can have any type.
+- **Types.** A quantified variable is a `BigInt`, a `Boolean`, a `ByteString`, a `String`, a
+  `Data`, or a case class of them. An enum, a `List` or an `Option` cannot be quantified over
+  yet; quantify over `Data` with `denotes(d.to[A]) ==> …`. Nor can one constructor of `Data`,
+  such as `Data.I`: Lean's variable for it would be any `Data`. Quantify over its field. The
+  operands of `equal` must be `BigInt`, `Boolean`, `ByteString`, `String` or `Data`. Call
+  arguments and results can have any type.
 - **Byte strings.** Lean's model stores a byte string as a `String`, so a `ByteString` variable
-  ranges over more than byte strings. A proof holds of them all the same; a counterexample with
-  a character above 255 cannot be read, and is inconclusive.
+  ranges over more than byte strings. A proof holds of them all the same. A counterexample can
+  have characters above 255: each is read as one of the highest bytes that neither the
+  counterexample nor a constant of the programs uses, in the order of the characters, the same
+  one wherever it is, so equality, length and order see what the solver saw where the bytes in
+  use are all below them. The replay decides (`UplcBlaster.renaming`). A renamed counterexample
+  under which the statement holds says nothing of the budget: the search doubles it, as for a
+  falsification without values. Where more such characters than unused bytes are left, the value
+  is outside its type, and the result is inconclusive.
+- **Strings.** A Plutus string, like Lean's, is a sequence of Unicode scalar values, up to
+  `0x10FFFF` without the surrogates. Blaster gives a `String` variable the solver's string sort,
+  whose characters are the code points up to `0x2FFFF`, surrogates among them. `SmtValues` reads
+  each `\u{…}` escape as one character, so two surrogates are not taken for the pair that would
+  make one character. A counterexample's surrogates are read as characters that are used nowhere,
+  from U+E000 on, and the replay decides; its reason says how the values were read. Appending and
+  comparing strings translate. Renaming characters one to one keeps both, so a statement over
+  them whose variables are all universal, or all existential, has the same truth over the
+  solver's characters as over Plutus's. `encodeUtf8` and `decodeUtf8` see which characters a
+  string has. A statement with variables whose programs apply them is refused when it is lowered.
+  Blaster cannot translate them today, because they go through a character's `UInt32` value, a
+  `BitVec 32`. Once it can, the solver's characters would decide such a statement. A closed
+  statement, which Lean evaluates, may apply them.
+- **Blaster's strings are unsound where characters matter.** The solver has no character above
+  `0x2FFFF`, and Lean has no surrogate. So `blaster` proves Lean statements that are false, and
+  derives `False` from one, through its `blasterProven` axiom: "every one-character string is at
+  most U+2FFFF". It also falsifies true ones with a surrogate (Blaster `6c27ff9`, 2026-10-21;
+  reported as [input-output-hk/Lean-blaster#389](https://github.com/input-output-hk/Lean-blaster/issues/389)).
+  The statements of this tactic do not reach that. Of the string builtins, only `appendString` and
+  `equalsString` translate, and neither depends on which characters there are. `encodeUtf8` and
+  `decodeUtf8`, which do, are refused on values of variables. A real byte string, ordered or
+  measured, has only characters below 256, which the solver has all of.
 - **Byte-level builtins.** Blaster cannot translate `BitVec`, whose width is a value index rather
   than a type parameter. The model stores a byte string as a `String`, so comparing, appending
   and measuring byte strings translate, but reading one byte (`indexByteString`) goes through a

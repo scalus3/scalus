@@ -91,7 +91,7 @@ the steps of Lean's machine a check lets each test's program run, or `Budget.Aut
 the tactic finds them ("The budget rule").
 
 `UplcBlaster` proves statements with universal and existential quantifiers over `BigInt`,
-`Boolean`, `ByteString`, `Data` and case classes of them: Boolean tests, calls, `denotes` and
+`Boolean`, `ByteString`, `String`, `Data` and case classes of them: Boolean tests, calls, `denotes` and
 `equal`, combined with `&&`, `||`, `!`, `==>` and `<=>`. `existsLet` supplies and eliminates an
 explicit witness, avoiding an SMT quantifier; ordinary `exists` is emitted to Blaster as the
 classically equivalent `¬∀¬`. A variable of a case class, as in
@@ -209,7 +209,7 @@ verifier.verify(inRange, UplcBlaster(Budget.LeanSteps(120), lean)) // Proven
 so a call that fails satisfies it. `totalContract` also claims that the function returns where
 `expects` holds. `verifier.contract` registers the statement as the function's contract, and
 `verifier.contracts(clamp.ref)` lists them. The function's parameters must be quantifiable:
-`BigInt`, `Boolean` or `Data`.
+`BigInt`, `Boolean`, `ByteString`, `String`, `Data` or case classes of them.
 
 A contract can also state when its function returns and when it fails:
 
@@ -558,7 +558,11 @@ checks. The proof's `Artifact.budget` is the budget found. It is a result, as th
 so it is not written in the code: where results are kept, it is kept with the proof, and a later
 search starts at it. A statement that has not changed is then taken as it was kept, or, in a run
 that recalculates, decided in one check at its budget. Only a statement whose programs changed is
-searched for again. `proofs.check(statement)` is the search; a fixed `Budget.LeanSteps` is for
+searched for again. An update of Blaster or of the library makes every kept result stale, and the
+search of each statement then starts at the budget kept with the old revision, so a statement
+still decided there takes one check. A kept refutation is replayed on the Scalus CEK, without
+Lean, and stands as it was. The old entries stay in the file as `former` results until each
+statement is kept again, so a run of a few tests after an update loses no budget of the others. `proofs.check(statement)` is the search; a fixed `Budget.LeanSteps` is for
 the tactic's own tests, and for a run without kept results that is to be saved the search. A
 statement no budget proves, such as one about a loop over a whole list, gets a longer
 counterexample from every check, and ends at the time limit.
@@ -604,4 +608,20 @@ for the reasons.
    whose CEK trace reaches `indexByteString`, `shiftByteString`, `integerToByteString` or
    `byteStringToInteger` fails to translate, at every budget. Comparing, appending and measuring
    byte strings, as `Data` values need, translate. This is why `Math.exp2` is proved only on its
-   `exp < 0` early return.
+   `exp < 0` early return. `encodeUtf8` and `decodeUtf8` go through a character's `UInt32`
+   value too. A statement with variables whose programs apply them is refused when it is
+   lowered (see 6). Appending and comparing strings translate.
+6. **The solver's strings are not Plutus's.** A `String` variable ranges over the solver's
+   strings, whose characters are the code points up to `0x2FFFF`, surrogates included; a Plutus
+   string has the Unicode scalar values up to `0x10FFFF`. Byte strings are stored as strings, so
+   the solver's have characters above 255. A counterexample's characters that are none of its
+   type (a surrogate, or a byte above 255) are read as unused ones before the replay, which then
+   decides. Appending and comparing do not depend on which characters there are, so a statement
+   over them whose variables are all universal, or all existential, has the same truth for
+   either set of characters. Blaster itself is unsound where characters do matter: through
+   `blasterProven` it proves "every one-character string is at most U+2FFFF", and from it
+   `False` ([input-output-hk/Lean-blaster#389](https://github.com/input-output-hk/Lean-blaster/issues/389)).
+   Of the string builtins only `appendString` and `equalsString` translate, which do not depend
+   on the characters. A statement with variables whose programs apply `encodeUtf8` or
+   `decodeUtf8` is refused, and real byte strings have only characters below 256, so the
+   statements here do not reach that.

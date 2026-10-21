@@ -13,7 +13,7 @@ class VerifierTest extends AnyFunSuite {
         type Prepared = Goal
         val name = "stub"
         def prepare(goal: Goal): Either[CompatibilityReport, Prepared] = Right(goal)
-        def run(prepared: Prepared): ExecutionResult = execute(prepared)
+        def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult = execute(prepared)
     }
 
     test("a proved statement becomes a lemma and carries its dependencies") {
@@ -85,7 +85,7 @@ class VerifierTest extends AnyFunSuite {
                 assert(goal.functions.definitions.isEmpty)
                 Left(report)
             }
-            def run(prepared: Prepared): ExecutionResult = prepared
+            def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult = prepared
         }
         assert(verifier.prepare(callStatement, unresolved) == Left(report))
         assert(

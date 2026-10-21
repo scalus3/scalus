@@ -38,6 +38,7 @@ case class Action(amount: Lovelace) derives FromData, ToData
   */
 @Compile
 object VestingValidator extends Validator {
+
     inline override def spend(
         datum: Option[Data],
         redeemer: Data,

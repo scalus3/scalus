@@ -1,5 +1,7 @@
 package scalus.verify.uplcblaster
 
+import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString, JsonReaderException, JsonValueCodec}
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import scalus.*
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.Options
@@ -40,10 +42,10 @@ enum Budget {
 /** Proves [[scalus.verify.Prop]] statements about their compiled UPLC with Lean Blaster.
   *
   * The supported fragment has universal and existential quantifiers over `BigInt`, `Boolean`,
-  * `ByteString`, `Data` and case classes of them, with tests, calls, `denotes`, `equal` and the
-  * connectives. An `existsLet` is eliminated by applying its body to the supplied witness. Every
-  * test is compiled to its own closed UPLC predicate over the quantified values in its scope (see
-  * [[UplcBlaster.lower]]). The Lean CEK model runs each predicate for at most `budget` steps,
+  * `ByteString`, `String`, `Data` and case classes of them, with tests, calls, `denotes`, `equal`
+  * and the connectives. An `existsLet` is eliminated by applying its body to the supplied witness.
+  * Every test is compiled to its own closed UPLC predicate over the quantified values in its scope
+  * (see [[UplcBlaster.lower]]). The Lean CEK model runs each predicate for at most `budget` steps,
   * keeping a failing program apart from an exhausted budget, and Blaster decides the resulting
   * proposition. Each test is read according to its polarity (design doc §6.2), so a proof at any
   * budget holds without the budget, and a statement that a program fails can be proved. A closed
@@ -168,11 +170,18 @@ final class UplcBlaster private (
                 )
             )
 
-    override def run(prepared: Prepared): ExecutionResult = run(prepared, None)
+    /** A search starts at the budget that was kept, also with another revision of Blaster or of the
+      * library: where the statement is still decided there, that is one check.
+      */
+    override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult =
+        checkOrSearch(
+          prepared,
+          earlier.flatMap(_.notes.get(UplcBlaster.budgetNote)).flatMap(_.toIntOption)
+        )
 
     /** Runs the check, or the search for its budget, which starts at `first` where that is given.
       */
-    private def run(prepared: Prepared, first: Option[Int]): ExecutionResult = {
+    private def checkOrSearch(prepared: Prepared, first: Option[Int]): ExecutionResult = {
         val kept = keptChecks
         if lastChecksOnly then kept.foreach(Directories.remove)
         budget match
@@ -207,14 +216,8 @@ final class UplcBlaster private (
     override def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] =
         UplcBlaster.kept(prepared, result)
 
-    override def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult] =
+    override def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] =
         UplcBlaster.restored(prepared, kept)
-
-    /** A search starts at the budget that was kept: where the statement is still decided there,
-      * that is one check.
-      */
-    override def run(prepared: Prepared, earlier: Kept): ExecutionResult =
-        run(prepared, earlier.notes.get(UplcBlaster.budgetNote).flatMap(_.toIntOption))
 }
 
 object UplcBlaster {
@@ -229,6 +232,9 @@ object UplcBlaster {
       * @param counterexample
       *   for a refutation, the value of each quantified variable, by name, as replayed on the
       *   Scalus CEK; empty otherwise
+      * @param read
+      *   how the counterexample was read from `output`, where the solver's values had characters
+      *   that are none of their type (`UplcBlaster.renaming`); empty otherwise
       * @param kind
       *   [[ProofKind.Blaster]] for a statement with quantified variables, and
       *   [[ProofKind.LeanNative]] for a closed statement, which Lean decides by evaluation
@@ -242,6 +248,7 @@ object UplcBlaster {
         budget: Int,
         output: String,
         counterexample: List[(String, Constant)],
+        read: String,
         kind: ProofKind,
         kept: Boolean
     ) extends ProofArtifact
@@ -372,15 +379,15 @@ object UplcBlaster {
     /** Lowers a statement in the supported fragment, or explains why it is outside it.
       *
       * The fragment has universal and existential quantifiers over `BigInt`, `Boolean`,
-      * `ByteString`, `Data` and case classes of them. A variable of a case class becomes one
-      * variable per field in [[Lowered.binders]], and each test builds it from them. `existsLet`
-      * applies its body to the supplied witness and introduces no Lean quantifier. Leaves are
-      * Boolean tests, calls whose continuation is a test or another total call, `denotes`, and
-      * `equal` over `BigInt`, `Boolean` and `Data`. A call's arguments and result, and the operand
-      * of `denotes`, can have any type. Its connectives are `&&`, `||`, `!`, `==>` and `<=>`. `<=>`
-      * becomes two implications, because its operands occur in both polarities. A partial call,
-      * `whenReturns(f, a)(r => p)`, becomes `denotes(f(a)) ==> call(f, a)(r => p)`: its two leaves
-      * run the function's program each.
+      * `ByteString`, `String`, `Data` and case classes of them. A variable of a case class becomes
+      * one variable per field in [[Lowered.binders]], and each test builds it from them.
+      * `existsLet` applies its body to the supplied witness and introduces no Lean quantifier.
+      * Leaves are Boolean tests, calls whose continuation is a test or another total call,
+      * `denotes`, and `equal` over `BigInt`, `Boolean`, `ByteString`, `String` and `Data`. A call's
+      * arguments and result, and the operand of `denotes`, can have any type. Its connectives are
+      * `&&`, `||`, `!`, `==>` and `<=>`. `<=>` becomes two implications, because its operands occur
+      * in both polarities. A partial call, `whenReturns(f, a)(r => p)`, becomes
+      * `denotes(f(a)) ==> call(f, a)(r => p)`: its two leaves run the function's program each.
       *
       * A call of a function in `functions` is linked to that function's compiled program, so the
       * function's bytes appear unchanged in the predicate. A function of several parameters is
@@ -495,17 +502,39 @@ object UplcBlaster {
                     loop(instantiate(body, ident, witness), scope, built)
             }
 
-            loop(prop, Nil, Nil).map(formula =>
-                Lowered(binders.toList, formula, leaves.toVector, leafBinders.toVector)
-            )
+            loop(prop, Nil, Nil).flatMap { formula =>
+                val utf8 =
+                    leaves.flatMap(_.term.collectBuiltins).filter(utf8Builtins).distinct.sorted
+                if binders.nonEmpty && utf8.nonEmpty then
+                    Left(
+                      s"the programs apply ${utf8.map(builtinName).mkString(" and ")} to values " +
+                          "of the statement's variables. These builtins see which characters a " +
+                          "string has, and the solver's strings have other characters than " +
+                          "Plutus's (input-output-hk/Lean-blaster#389), so a proof would not hold. " +
+                          "A closed statement, which Lean evaluates, may apply them"
+                    )
+                else Right(Lowered(binders.toList, formula, leaves.toVector, leafBinders.toVector))
+            }
         }
+
+    /** The builtins that see the characters of a string: Blaster cannot translate them today, and
+      * where it can, the solver's characters would decide a statement about them.
+      */
+    private val utf8Builtins: Set[DefaultFun] = Set(DefaultFun.EncodeUtf8, DefaultFun.DecodeUtf8)
+
+    /** A builtin's name as UPLC writes it, as `encodeUtf8`. */
+    private def builtinName(builtin: DefaultFun): String = {
+        val name = builtin.toString
+        s"${name.head.toLower}${name.tail}"
+    }
 
     /** A type a call can pass to a function that has no SIR, and take back from it: one whose
       * values have one form whatever their static type. It says nothing of quantified variables:
       * [[leanVariable]] does, and differs for one constructor of `Data`.
       */
     private def quantifiable(tp: SIRType): Boolean =
-        tp == SIRType.Integer || tp == SIRType.Boolean || tp == SIRType.ByteString || isData(tp)
+        tp == SIRType.Integer || tp == SIRType.Boolean || tp == SIRType.ByteString ||
+            tp == SIRType.String || isData(tp)
 
     /** `Data`, or one of its constructors, such as the type of `Data.I(x)`. */
     private def isData(tp: SIRType): Boolean = tp match
@@ -519,8 +548,8 @@ object UplcBlaster {
       * an `exists` proved by one.
       */
     private def leanVariable(tp: SIRType): Boolean = tp match
-        case SIRType.Integer | SIRType.Boolean | SIRType.ByteString => true
-        case other                                                  => isWholeData(other)
+        case SIRType.Integer | SIRType.Boolean | SIRType.ByteString | SIRType.String => true
+        case other => isWholeData(other)
 
     /** `Data` itself, and not one of its constructors. */
     private def isWholeData(tp: SIRType): Boolean = tp match
@@ -577,8 +606,8 @@ object UplcBlaster {
                     )
         case other =>
             Left(
-              s"a ${other.show} binder is not supported, only BigInt, Boolean, ByteString, Data " +
-                  "and case classes of them"
+              s"a ${other.show} binder is not supported, only BigInt, Boolean, ByteString, " +
+                  "String, Data and case classes of them"
             )
 
     /** `sir` with the variables in `built` that it uses bound to their values, inside its data
@@ -731,8 +760,8 @@ object UplcBlaster {
       * The variable has the function's declared type, from its SIR, so the lowering passes each
       * value as the function's program takes it: an enum's constructor, such as `Circle(r)`, is
       * passed as the enum. A function without SIR has no declared type, so its type comes from the
-      * values and the result. Only `BigInt`, `Boolean` and `Data` have one form whatever their
-      * static type, so only those can be passed to it.
+      * values and the result. Only `BigInt`, `Boolean`, `ByteString`, `String` and `Data` have one
+      * form whatever their static type ([[quantifiable]]), so only those can be passed to it.
       */
     private def application(
         fn: FunctionRef[?, ?],
@@ -749,7 +778,7 @@ object UplcBlaster {
                     case Some(tp) =>
                         Left(
                           s"${fn.displayName} has no SIR, so a call cannot pass a ${tp.show}: " +
-                              "only BigInt, Boolean and Data"
+                              "only BigInt, Boolean, ByteString, String and Data"
                         )
                     case None =>
                         val declared = valueTypes
@@ -832,30 +861,23 @@ object UplcBlaster {
     /** `left` and `right` evaluate to equal values. */
     private def equality(left: SIR, right: SIR): Either[String, SIR] = {
         val annotations = AnnotationsDecl.empty
-        if isData(left.tp) && isData(right.tp) then
-            Right(withExpressions(left, right) { (l, r) =>
-                val partial = SIR.Apply(
-                  SIRBuiltins.equalsData,
-                  l,
-                  SIRType.Fun(SIRType.Data.tp, SIRType.Boolean),
-                  annotations
-                )
+        // `left` and `right` applied to the builtin `equals` over values of type `tp`.
+        def applied(equals: SIR.Builtin, tp: SIRType): SIR =
+            withExpressions(left, right) { (l, r) =>
+                val partial =
+                    SIR.Apply(equals, l, SIRType.Fun(tp, SIRType.Boolean), annotations)
                 SIR.Apply(partial, r, SIRType.Boolean, annotations)
-            })
+            }
+        if isData(left.tp) && isData(right.tp) then
+            Right(applied(SIRBuiltins.equalsData, SIRType.Data.tp))
         else if left.tp != right.tp then
             Left(s"cannot compare ${left.tp.show} with ${right.tp.show}")
         else
             left.tp match
-                case SIRType.Integer =>
-                    Right(withExpressions(left, right) { (l, r) =>
-                        val partial = SIR.Apply(
-                          SIRBuiltins.equalsInteger,
-                          l,
-                          SIRType.Fun(SIRType.Integer, SIRType.Boolean),
-                          annotations
-                        )
-                        SIR.Apply(partial, r, SIRType.Boolean, annotations)
-                    })
+                case SIRType.Integer => Right(applied(SIRBuiltins.equalsInteger, SIRType.Integer))
+                case SIRType.ByteString =>
+                    Right(applied(SIRBuiltins.equalsByteString, SIRType.ByteString))
+                case SIRType.String => Right(applied(SIRBuiltins.equalsString, SIRType.String))
                 case SIRType.Boolean =>
                     Right(withExpressions(left, right) { (l, r) =>
                         SIR.IfThenElse(l, r, SIR.Not(r, annotations), SIRType.Boolean, annotations)
@@ -1587,6 +1609,7 @@ object UplcBlaster {
             case Constant.Integer(number)    => s"Const.Integer ${integer(number)}"
             case Constant.Bool(truth)        => s"Const.Bool $truth"
             case Constant.ByteString(string) => s"Const.ByteString ${bytes(string)}"
+            case Constant.String(string)     => s"Const.String \"${leanString(string)}\""
             case Constant.Data(tree)         => s"Const.Data ${data(tree)}"
             case other =>
                 throw new IllegalArgumentException(
@@ -1710,6 +1733,7 @@ object UplcBlaster {
           budget,
           output.trim,
           Nil,
+          "",
           if closed then ProofKind.LeanNative else ProofKind.Blaster,
           kept = false
         )
@@ -1761,7 +1785,7 @@ object UplcBlaster {
       * without the budget is a refutation.
       */
     private def replay(goal: Lowered, artifact: Artifact): Probe =
-        counterexample(goal.binders, artifact.output) match
+        counterexample(goal, artifact.output) match
             case Left(SmtValues.Unreadable.Malformed(error)) =>
                 Probe.Decided(
                   VerificationResult.Failed(s"cannot read Lean's counterexample: $error")
@@ -1772,19 +1796,32 @@ object UplcBlaster {
                 Probe.Unreplayed(
                   s"Lean's counterexample is no value of its variable's type: $error"
                 )
-            case Right(values) => replayValues(goal, artifact, values)
+            case Right((values, renaming)) => replayValues(goal, artifact, values, renaming)
 
+    /** Replays `values` on the Scalus CEK. They were read from Lean's counterexample with
+      * `renaming` for the characters that are none of their type.
+      */
     private def replayValues(
         goal: Lowered,
         artifact: Artifact,
-        values: List[Constant]
+        values: List[Constant],
+        renaming: SmtValues.Renaming
     ): Probe = {
+        val read =
+            if renaming.isEmpty then ""
+            else
+                val renamed = renaming.bytes.toList.sorted.map((from, to) =>
+                    f"U+$from%04X as the byte 0x$to%02x"
+                ) ++ renaming.text.toList.sorted.map((from, to) => f"U+$from%04X as U+$to%04X")
+                s"reading the solver's ${renamed.mkString(", ")}, which no value of the type has"
         val shown = goal.binders
             .zip(values)
             .map((binder, value) => s"${binder.name} = ${display(value)}")
             .mkString(", ")
         val falsification =
-            if shown.isEmpty then "Lean's falsification" else s"Lean's counterexample ($shown)"
+            if shown.isEmpty then "Lean's falsification"
+            else if read.isEmpty then s"Lean's counterexample ($shown)"
+            else s"Lean's counterexample ($shown, $read)"
         val outcomes = goal.leaves.zip(goal.leafBinders).map { (program, scope) =>
             evaluate(program, scope.map(values))
         }
@@ -1792,8 +1829,21 @@ object UplcBlaster {
             case Some(false) =>
                 Probe.Decided(
                   VerificationResult.Refuted(
-                    Proof(artifact.copy(counterexample = goal.binders.map(_.name).zip(values)))
+                    Proof(
+                      // A kept refutation says how its values were read when they were found.
+                      artifact.copy(
+                        counterexample = goal.binders.map(_.name).zip(values),
+                        read = if renaming.isEmpty then artifact.read else read
+                      )
+                    )
                   )
+                )
+            // Renamed values are not those Lean ran, so what Lean's machine does on them says
+            // nothing of the budget: the search goes on as for a falsification without values.
+            case Some(true) if !renaming.isEmpty =>
+                Probe.Unreplayed(
+                  s"$falsification is spurious: the statement holds there on the Scalus CEK, " +
+                      "and values that are not Lean's say nothing of the budget"
                 )
             case Some(true) =>
                 Probe.Spurious(
@@ -1810,18 +1860,20 @@ object UplcBlaster {
 
     private val counterexampleLine = """-\s+x(\d+):\s+(.+?)\s*$""".r.unanchored
 
-    /** The values of Blaster's counterexample, in binder order, or why they cannot be read. A
-      * binder the model leaves unconstrained, which Blaster omits or Z3 names instead of valuing,
-      * takes `0`, `false` or `I 0`; the replay checks the completed assignment.
+    /** The values of Blaster's counterexample to `goal`, in binder order, with the renaming of the
+      * characters that are none of their type ([[renaming]]), or why they cannot be read. A binder
+      * the model leaves unconstrained, which Blaster omits or Z3 names instead of valuing, takes
+      * `0`, `false` or `I 0`; the replay checks the completed assignment.
       *
       * A value can span several lines: a `Data` value is printed as a term over the lines after
       * `- xN:`, up to the one that closes its parentheses. They are not all indented: Z3 starts a
       * nested `let` of a large value on a new line.
       */
     private def counterexample(
-        binders: List[PropExpr.Ident[?]],
+        goal: Lowered,
         output: String
-    ): Either[SmtValues.Unreadable, List[Constant]] = {
+    ): Either[SmtValues.Unreadable, (List[Constant], SmtValues.Renaming)] = {
+        val binders = goal.binders
         // The values found so far; the last one goes on while its term is not whole.
         val found = output.linesIterator.foldLeft(List.empty[(Int, String)]) { (found, line) =>
             line match
@@ -1833,41 +1885,128 @@ object UplcBlaster {
                         case _ => found
         }
         val reported = found.toMap
-        binders.zipWithIndex.foldRight[Either[SmtValues.Unreadable, List[Constant]]](Right(Nil)) {
-            case ((binder, index), rest) =>
-                val text = reported.get(index)
-                val value: Either[SmtValues.Unreadable, Constant] = binder.tp match
-                    case SIRType.Integer =>
-                        text.fold(Right(BigInt(0)))(SmtValues.integer).map(Constant.Integer(_))
-                    case SIRType.Boolean =>
-                        text.fold(Right(false))(SmtValues.boolean).map(Constant.Bool(_))
-                    case SIRType.ByteString =>
-                        text.fold(Right(ByteString.empty))(SmtValues.bytes)
-                            .map(Constant.ByteString(_))
-                    case tp if isWholeData(tp) =>
-                        text.fold(Right(Data.I(0)))(SmtValues.data).map(Constant.Data(_))
-                    case other =>
-                        Left(
-                          SmtValues.Unreadable.Malformed(
-                            s"a ${other.show} binder has no counterexample value"
-                          )
-                        )
-                // The variable the value is of, in the reason.
-                val named = value.left.map {
-                    case SmtValues.Unreadable.Malformed(reason) =>
-                        SmtValues.Unreadable.Malformed(s"${binder.name}: $reason")
-                    case SmtValues.Unreadable.OutsideType(reason) =>
-                        SmtValues.Unreadable.OutsideType(s"${binder.name}: $reason")
-                }
-                for v <- named; r <- rest yield v :: r
-        }
+        // A value that is no term is reported as such when it is read. The programs' constants
+        // are walked only where a character is to be renamed, which is seldom.
+        val inValues = reported.values
+            .flatMap(SmtValues.characters(_).toOption)
+            .foldLeft(SmtValues.Characters.none)(_ ++ _)
+        val renamed =
+            if inValues.bytes.exists(_ > 255) || inValues.text.exists(SmtValues.isSurrogate) then
+                renaming(inValues ++ constantCharacters(goal))
+            else SmtValues.Renaming.none
+        val read = binders.zipWithIndex
+            .foldRight[Either[SmtValues.Unreadable, List[Constant]]](Right(Nil)) {
+                case ((binder, index), rest) =>
+                    val text = reported.get(index)
+                    val value: Either[SmtValues.Unreadable, Constant] = binder.tp match
+                        case SIRType.Integer =>
+                            text.fold(Right(BigInt(0)))(SmtValues.integer).map(Constant.Integer(_))
+                        case SIRType.Boolean =>
+                            text.fold(Right(false))(SmtValues.boolean).map(Constant.Bool(_))
+                        case SIRType.ByteString =>
+                            text.fold(Right(ByteString.empty))(SmtValues.bytes(_, renamed))
+                                .map(Constant.ByteString(_))
+                        case SIRType.String =>
+                            text.fold(Right(""))(SmtValues.string(_, renamed))
+                                .map(Constant.String(_))
+                        case tp if isWholeData(tp) =>
+                            text.fold(Right(Data.I(0)))(SmtValues.data(_, renamed))
+                                .map(Constant.Data(_))
+                        case other =>
+                            Left(
+                              SmtValues.Unreadable.Malformed(
+                                s"a ${other.show} binder has no counterexample value"
+                              )
+                            )
+                    // The variable the value is of, in the reason.
+                    val named = value.left.map {
+                        case SmtValues.Unreadable.Malformed(reason) =>
+                            SmtValues.Unreadable.Malformed(s"${binder.name}: $reason")
+                        case SmtValues.Unreadable.OutsideType(reason) =>
+                            SmtValues.Unreadable.OutsideType(s"${binder.name}: $reason")
+                    }
+                    for v <- named; r <- rest yield v :: r
+            }
+        read.map(_ -> renamed)
+    }
+
+    /** Reads each character of a counterexample that is none of its value's type as one that is
+      * used nowhere: neither in the counterexample nor in a constant of the programs (`used`).
+      * Characters that are equal stay equal, and characters that differ, among the values and from
+      * the constants, stay different: that is what appending and comparing for equality see.
+      *
+      * A character above 255 in a byte string is read as one of the highest unused bytes, in the
+      * order of the characters: as the solver's character is above every byte, the byte is above
+      * those in use, where they are all below it, so ordering byte strings sees the same too. A
+      * byte string has 256 characters: where fewer are unused than there are to rename, none is
+      * renamed, and the value stays outside its type. A surrogate in a string is read as an unused
+      * character from U+E000 on; no builtin orders strings.
+      *
+      * The replay decides what the values refute.
+      */
+    private def renaming(used: SmtValues.Characters): SmtValues.Renaming = {
+        val bytes = used.bytes.filter(_ > 255).toList.sorted
+        val unusedBytes = (0 until 256).filterNot(used.bytes)
+        val surrogates = used.text.filter(SmtValues.isSurrogate).toList.sorted
+        val unusedCharacters = Iterator.range(0xe000, 0x110000).filterNot(used.text)
+        SmtValues.Renaming(
+          if unusedBytes.sizeIs < bytes.size then Map.empty
+          else bytes.zip(unusedBytes.takeRight(bytes.size)).toMap,
+          surrogates.zip(unusedCharacters.take(surrogates.size).toList).toMap
+        )
+    }
+
+    /** The characters of the byte strings and strings that `goal`'s programs hold as constants. */
+    private def constantCharacters(goal: Lowered): SmtValues.Characters = {
+        import SmtValues.Characters
+        def all(parts: Iterable[Characters]): Characters = parts.foldLeft(Characters.none)(_ ++ _)
+        def bytes(value: ByteString): Characters =
+            Characters(value.bytes.map(_ & 0xff).toSet, Set.empty)
+        def data(value: Data): Characters = value match
+            case Data.B(string)         => bytes(string)
+            case Data.I(_)              => Characters.none
+            case Data.Constr(_, fields) => all(fields.toScalaList.map(data))
+            case Data.List(items)       => all(items.toScalaList.map(data))
+            case Data.Map(entries) =>
+                all(entries.toScalaList.flatMap((key, item) => List(data(key), data(item))))
+        def constant(value: Constant): Characters = value match
+            case Constant.ByteString(string) => bytes(string)
+            case Constant.String(string) =>
+                Characters(Set.empty, string.codePoints().toArray.toSet)
+            case Constant.Data(tree)          => data(tree)
+            case Constant.List(_, items)      => all(items.map(constant))
+            case Constant.Array(_, items)     => all(items.map(constant))
+            case Constant.Pair(first, second) => constant(first) ++ constant(second)
+            case _                            => Characters.none
+        def term(value: Term): Characters = value match
+            case Term.Const(held, _)      => constant(held)
+            case Term.LamAbs(_, body, _)  => term(body)
+            case Term.Force(body, _)      => term(body)
+            case Term.Delay(body, _)      => term(body)
+            case Term.Apply(f, arg, _)    => term(f) ++ term(arg)
+            case Term.Constr(_, args, _)  => all(args.map(term))
+            case Term.Case(arg, cases, _) => all((arg :: cases).map(term))
+            case _                        => Characters.none
+        all(goal.leaves.map(program => term(program.term)))
     }
 
     private def display(value: Constant): String = value match
         case Constant.Integer(integer) => integer.toString
         case Constant.Bool(boolean)    => boolean.toString
+        case Constant.String(string)   => quoted(string)
         case Constant.Data(data)       => data.toString
         case other                     => other.toString
+
+    /** A string as a Scala literal, with a quote, a backslash and a control character escaped. */
+    private def quoted(value: String): String = {
+        val escaped = value.flatMap {
+            case '\\'                         => "\\\\"
+            case '"'                          => "\\\""
+            case control if control.isControl => f"\\u${control.toInt}%04x"
+            case other                        => other.toString
+        }
+        s"\"$escaped\""
+    }
 
     private def evaluate(program: Program, values: List[Constant]): Outcome = {
         val applied = values.foldLeft(program)((applied, value) => applied $ Term.Const(value))
@@ -1931,17 +2070,35 @@ object UplcBlaster {
         if normalized.length <= 500 then normalized else normalized.take(497) + "..."
     }
 
-    private def leanString(value: String): String =
-        value.flatMap {
-            case '\\' => "\\\\"
-            case '"'  => "\\\""
-            case c    => c.toString
-        }
+    /** `value` as the text of a Lean string literal, between its quotes: a value of a variable, or
+      * the path of a program. Lean reads `\xHH` and `\uHHHH` for a character by its code, and has
+      * no escape for one above `0xFFFF`: such a character is written as it is. A surrogate is no
+      * character: Lean would read its escape as another one.
+      */
+    private def leanString(value: String): String = {
+        value
+            .codePoints()
+            .toArray
+            .map {
+                case '\\'                                               => "\\\\"
+                case '"'                                                => "\\\""
+                case printable if printable >= 0x20 && printable < 0x7f => printable.toChar.toString
+                case surrogate if SmtValues.isSurrogate(surrogate) =>
+                    throw new IllegalArgumentException(
+                      s"the string has the surrogate U+${surrogate.toHexString}, no character"
+                    )
+                case byte if byte <= 0xff     => f"\\x$byte%02x"
+                case basic if basic <= 0xffff => f"\\u$basic%04x"
+                case other                    => Character.toString(other)
+            }
+            .mkString
+    }
 
     private def leanType(tp: SIRType): String = tp match
         case SIRType.Integer       => "Integer"
         case SIRType.Boolean       => "Bool"
         case SIRType.ByteString    => "ByteString"
+        case SIRType.String        => "String"
         case tp if isWholeData(tp) => "Data"
         case other => throw new IllegalStateException(s"unexpected ${other.show} binder")
 
@@ -2064,12 +2221,14 @@ object UplcBlaster {
       */
     private[uplcblaster] val budgetNote = "budget"
     private val kindNote = "kind"
+    private val readNote = "read"
 
     /** What is kept of a result: a proof, or a refutation with the values of its counterexample.
       */
     private[uplcblaster] def kept(goal: Lowered, result: ExecutionResult): Option[Kept] = {
         def notes(artifact: Artifact) =
-            Map(budgetNote -> artifact.budget.toString, kindNote -> artifact.kind.toString)
+            Map(budgetNote -> artifact.budget.toString, kindNote -> artifact.kind.toString) ++
+                Option.when(artifact.read.nonEmpty)(readNote -> artifact.read)
         result match
             case VerificationResult.Proven(proof) =>
                 proof.artifact match
@@ -2086,37 +2245,62 @@ object UplcBlaster {
             case _ => None
     }
 
-    /** The result that `kept` stands for, for the statement `goal`. A proof is taken as it was
-      * kept. A refutation is replayed on the Scalus CEK, as one that Lean has just given, and is a
-      * result only where the statement is false on its values.
+    /** The result that `kept` stands for, for the statement `goal`, or why it no longer stands. A
+      * proof is taken as it was kept. A refutation is replayed on the Scalus CEK, as one that Lean
+      * has just given, and is a result only where the statement is false on its values.
       */
-    private[uplcblaster] def restored(goal: Lowered, kept: Kept): Option[ExecutionResult] =
+    private[uplcblaster] def restored(goal: Lowered, kept: Kept): Either[String, ExecutionResult] =
         for
-            budget <- kept.notes.get(budgetNote).flatMap(_.toIntOption)
-            kind <- kept.notes.get(kindNote)
+            budget <- kept.notes
+                .get(budgetNote)
+                .flatMap(_.toIntOption)
+                .toRight(s"its budget note, ${kept.notes.get(budgetNote)}, is no number of steps")
+            kind <- kept.notes
+                .get(kindNote)
+                .flatMap(word => ProofKind.values.find(_.toString == word))
+                .toRight(s"its kind note, ${kept.notes.get(kindNote)}, is no kind of proof")
             artifact = Artifact(
               goal.programHashes,
               budget,
               "",
               Nil,
-              ProofKind.valueOf(kind),
+              kept.notes.getOrElse(readNote, ""),
+              kind,
               kept = true
             )
             result <- restored(goal, kept, artifact)
         yield result
 
-    private def restored(goal: Lowered, kept: Kept, artifact: Artifact): Option[ExecutionResult] =
+    private def restored(
+        goal: Lowered,
+        kept: Kept,
+        artifact: Artifact
+    ): Either[String, ExecutionResult] =
         kept.result match
-            case Kept.Result.Proved => Some(VerificationResult.Proven(Proof(artifact)))
+            case Kept.Result.Proved => Right(VerificationResult.Proven(Proof(artifact)))
+            // As where Lean falsifies such a statement ([[probed]]), one assignment refutes nothing.
+            case Kept.Result.Refuted if goal.hasExistential =>
+                Left("one counterexample refutes no statement that asks for a witness")
             case Kept.Result.Refuted =>
-                val values = keptNames(goal.binders).zip(goal.binders).map { (name, binder) =>
-                    kept.counterexample.get(name).map(constant(binder.tp, _))
+                val read = keptNames(goal.binders)
+                    .zip(goal.binders)
+                    .foldRight[Either[String, List[Constant]]](Right(Nil)) {
+                        case ((name, binder), rest) =>
+                            for
+                                json <- kept.counterexample.get(name).toRight(s"it keeps no $name")
+                                value <- constant(binder.tp, json).left
+                                    .map(why => s"its value of $name, $json, is $why")
+                                others <- rest
+                            yield value :: others
+                    }
+                read.flatMap { values =>
+                    replayValues(goal, artifact, values, SmtValues.Renaming.none) match
+                        case Probe.Decided(refuted: VerificationResult.Refuted) => Right(refuted)
+                        case Probe.Decided(VerificationResult.Inconclusive(reason)) => Left(reason)
+                        case Probe.Spurious(_, _) =>
+                            Left("the statement holds on its counterexample")
+                        case other => Left(s"its counterexample gives $other")
                 }
-                if values.contains(None) then None
-                else
-                    replayValues(goal, artifact, values.flatten) match
-                        case Probe.Decided(refuted: VerificationResult.Refuted) => Some(refuted)
-                        case _                                                  => None
 
     /** The names a counterexample's values are kept under: those of the variables as their
       * statement has them, without the number the compiler made each unique with, which is another
@@ -2130,24 +2314,66 @@ object UplcBlaster {
         }
     }
 
+    private given JsonValueCodec[String] = JsonCodecMaker.make
+
     /** A value of a variable as JSON, for a file a reader opens: a number, `true` or `false`, the
-      * bytes in hexadecimal, and `Data` as Plutus writes it in JSON.
+      * bytes in hexadecimal, a string as a JSON string, and `Data` as Plutus writes it in JSON.
       */
     private def json(value: Constant): String = value match
         case Constant.Integer(number)    => number.toString
         case Constant.Bool(truth)        => truth.toString
         case Constant.ByteString(string) => s"\"${string.toHex}\""
+        case Constant.String(string)     => writeToString(string)
         case Constant.Data(tree)         => Data.toJson(tree)
         case other =>
             throw new IllegalArgumentException(s"no variable of a statement has the value $other")
 
-    /** The value of a variable of type `tp` that [[json]] wrote. */
-    private def constant(tp: SIRType, json: String): Constant = tp match
-        case SIRType.Integer => Constant.Integer(BigInt(json.trim))
-        case SIRType.Boolean => Constant.Bool(json.trim.toBoolean)
-        case SIRType.ByteString =>
-            Constant.ByteString(ByteString.fromHex(json.trim.stripPrefix("\"").stripSuffix("\"")))
-        case _ => Constant.Data(Data.fromJson(json))
+    /** The value of a variable of type `tp` that [[json]] wrote, or what is wrong with `json` where
+      * it is no value [[json]] writes for the type, as in a file that was edited: what is kept then
+      * no longer stands ([[scalus.verify.Tactic.restore]]). `json` is a JSON value, as the file was
+      * read as JSON.
+      */
+    private def constant(tp: SIRType, json: String): Either[String, Constant] = {
+        val value = json.trim
+        // The first line of a codec's message: it goes on with a dump of what it read.
+        def told(error: Exception): String = error.getMessage.linesIterator.nextOption().mkString
+        tp match
+            case SIRType.Integer =>
+                Either.cond(
+                  integerJson.matches(value),
+                  Constant.Integer(BigInt(value)),
+                  "no integer"
+                )
+            case SIRType.Boolean =>
+                value match
+                    case "true"  => Right(Constant.Bool(true))
+                    case "false" => Right(Constant.Bool(false))
+                    case _       => Left("no Boolean")
+            case SIRType.ByteString =>
+                Either.cond(
+                  hexJson.matches(value),
+                  Constant.ByteString(
+                    ByteString.fromHex(value.stripPrefix("\"").stripSuffix("\""))
+                  ),
+                  "no byte string in hexadecimal"
+                )
+            // No reader of a JSON string or of `Data` says without throwing whether a value is
+            // one: the codec's exception for one that is not is the answer here.
+            case SIRType.String =>
+                try Right(Constant.String(readFromString[String](value)))
+                catch
+                    case error: JsonReaderException => Left(s"no string: ${told(error)}")
+            // `Data` is a JSON object; its codec reads `null` as a null value.
+            case _ if !value.startsWith("{") => Left("no Data value, which is a JSON object")
+            case _ =>
+                try Right(Constant.Data(Data.fromJson(value)))
+                catch
+                    case error: JsonReaderException      => Left(s"no Data value: ${told(error)}")
+                    case error: IllegalArgumentException => Left(s"no Data value: ${told(error)}")
+    }
+
+    private val integerJson = """-?\d+""".r
+    private val hexJson = """"([0-9a-fA-F]{2})*"""".r
 
     /** The text of a check: the library, the limit of Lean's work, the programs in `flats` as
       * `leaf<n>`, and the commands of `body`. The lines up to the programs are the same in every

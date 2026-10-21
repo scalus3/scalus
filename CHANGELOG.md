@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Added
+
+- `UplcBlaster` quantifies over `String`, and `equal` compares `ByteString` and `String` values.
+  Blaster's SMT strings have other characters than Lean's
+  ([input-output-hk/Lean-blaster#389](https://github.com/input-output-hk/Lean-blaster/issues/389)),
+  so a counterexample's characters that are none of their type are read as unused ones before the
+  CEK replay decides. A statement with variables whose programs apply `encodeUtf8` or
+  `decodeUtf8` is refused.
+- Kept results survive an update of Blaster or of the Lean library. Their entries move to a
+  `former` section of the `*.proofs.json` file. A budget search starts at the old budget, also in
+  a later run, and a kept refutation is replayed on the Scalus CEK without Lean. A kept entry that
+  no longer stands, such as an edited one, is stale with a reason, and no longer fails the suite.
+
+### Changed
+
+- `scalus-verification` pins Lean-blaster to `main` at `6c27ff9`.
+- **Breaking (experimental `scalus-verification`): `Tactic.run(prepared)` and
+  `Tactic.run(prepared, earlier: Kept)` are one method, `run(prepared, earlier: Option[Kept] =
+  None)`, and `Tactic.restore` returns `Either[String, ExecutionResult]` instead of an `Option`. A
+  tactic implemented against 1.4.0 must override the new signatures. `UplcBlaster.Artifact` has a
+  new field `read`, so positional constructions and patterns of it need one more argument.**
+
 ### Fixed
 
 - The flat decoder kept the low 64 bits of a `constr` tag or variable index that does not fit in

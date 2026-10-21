@@ -138,7 +138,14 @@ trait Tactic {
 
     def name: String
     def prepare(goal: Goal): Either[CompatibilityReport, Prepared]
-    def run(prepared: Prepared): ExecutionResult
+
+    /** Runs the tactic on `prepared`, starting from `earlier`: what was kept of an earlier result,
+      * where results are kept and there is one, as a budget that was found. It was kept for the
+      * same fingerprint, or for the same statement and programs with another side of the backend
+      * ([[KeptResults.keptOnAnotherSide]]), so it is a start, and stands for no result. A tactic
+      * that has no use for it ignores it.
+      */
+    def run(prepared: Prepared, earlier: Option[Kept] = None): ExecutionResult
 
     /** The hashes of everything a result for `prepared` rests on, part by part. Nothing where the
       * results of the tactic are not kept ([[KeptResults]]). It is read without the backend.
@@ -148,16 +155,13 @@ trait Tactic {
     /** What is kept of `result`, where it is one that is kept: a proof or a refutation. */
     def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] = None
 
-    /** The result that `kept` stands for, made without the backend. A refutation is replayed here,
-      * so it is no more than the tactic can check again. A proof is the word of the run that kept
-      * it. Nothing where `kept` no longer stands.
+    /** The result that `kept` stands for, made without the backend, or why it no longer stands. A
+      * refutation is replayed here, so it is no more than the tactic can check again, and it is
+      * also asked of a refutation kept with another side of the backend
+      * ([[KeptResults.keptOnAnotherSide]]). A proof is the word of the run that kept it.
       */
-    def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult] = None
-
-    /** [[run]], with what was kept of an earlier result for the same fingerprint, to start from: a
-      * budget that was found, for instance.
-      */
-    def run(prepared: Prepared, earlier: Kept): ExecutionResult = run(prepared)
+    def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] =
+        Left(s"$name takes no result that was kept")
 }
 
 /** One reason a tactic cannot prepare a goal in its input language. */
@@ -544,9 +548,20 @@ final class Verifier private (results: Option[KeptResults]) {
             case None => tactic.run(prepared)
             case Some((kept, fingerprint)) =>
                 val earlier = kept.lookup(name, tactic.name, fingerprint)
-                def restored: Option[ExecutionResult] = earlier.flatMap(tactic.restore(prepared, _))
-                def asked: ExecutionResult =
-                    earlier.fold(tactic.run(prepared))(tactic.run(prepared, _))
+                // Where nothing is kept for the statement as it is now, what was kept for it with
+                // the backend's old side, as before an update of its library, is no result, but a
+                // start. A refutation there is one the tactic checks again without the backend.
+                lazy val former =
+                    if earlier.isDefined then None
+                    else kept.keptOnAnotherSide(name, tactic.name, fingerprint)
+                // What the tactic takes of what is kept, or why it does not take it.
+                lazy val restored: Option[Either[String, ExecutionResult]] =
+                    earlier.map(tactic.restore(prepared, _))
+                lazy val formerRefutation: Option[Either[String, ExecutionResult]] =
+                    former.filter(_.result == Kept.Result.Refuted).map(tactic.restore(prepared, _))
+                def taken: Option[ExecutionResult] =
+                    restored.flatMap(_.toOption).orElse(formerRefutation.flatMap(_.toOption))
+                def asked: ExecutionResult = tactic.run(prepared, earlier.orElse(former))
                 def keeping(result: ExecutionResult): ExecutionResult = {
                     tactic
                         .keep(prepared, result)
@@ -554,11 +569,22 @@ final class Verifier private (results: Option[KeptResults]) {
                     result
                 }
                 kept.mode match
-                    case KeptResults.Mode.Use => restored.getOrElse(keeping(asked))
+                    case KeptResults.Mode.Use =>
+                        restored.flatMap(_.toOption).getOrElse {
+                            formerRefutation
+                                .flatMap(_.toOption)
+                                .map(keeping)
+                                .getOrElse(keeping(asked))
+                        }
                     case KeptResults.Mode.Frozen =>
-                        restored.getOrElse {
+                        taken.getOrElse {
                             val why = kept.stale(name, tactic.name, fingerprint)
-                            VerificationResult.Inconclusive(s"${KeptResults.stale}: $why")
+                            val untaken = restored.orElse(formerRefutation).flatMap(_.left.toOption)
+                            VerificationResult.Inconclusive(
+                              s"${KeptResults.stale}: $why" + untaken.fold("")(reason =>
+                                  s": $reason"
+                              )
+                            )
                         }
                     case KeptResults.Mode.Recalculate =>
                         val result = asked

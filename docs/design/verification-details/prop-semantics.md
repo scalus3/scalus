@@ -15,7 +15,7 @@ A quantifier ranges over the values of its type **as a Scalus program sees them*
 
 | Type | Domain |
 |---|---|
-| `BigInt`, `Boolean`, `ByteString`, `Data` | every value |
+| `BigInt`, `Boolean`, `ByteString`, `String`, `Data` | every value |
 | a case class or enum | every value built from its constructors, with fields in their domains |
 | `List[A]`, `Option[A]` | every list or option of values of `A` |
 | a function type | not quantifiable yet (§8.4) |

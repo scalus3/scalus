@@ -31,13 +31,10 @@ class KeptResultsTest extends AnyFunSuite {
 
         override val name: String = "counting"
         override def prepare(goal: Goal): Either[CompatibilityReport, Prepared] = Right(goal)
-        override def run(prepared: Prepared): ExecutionResult = {
+        override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult = {
+            started = earlier.toList ++ started
             runs += 1
             answer()
-        }
-        override def run(prepared: Prepared, earlier: Kept): ExecutionResult = {
-            started = earlier :: started
-            run(prepared)
         }
         override def fingerprint(prepared: Prepared): Option[Fingerprint] =
             Some(Fingerprint(Map("backend" -> backend, "library" -> "7"), text, programs))
@@ -49,11 +46,15 @@ class KeptResultsTest extends AnyFunSuite {
                   Kept(Kept.Result.Refuted, Map.empty, Map("x" -> found, "d" -> """{"int":3}"""))
                 )
             case _ => None
-        override def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult] =
+        override def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] =
             kept.result match
-                case Kept.Result.Proved => Some(proved)
+                case Kept.Result.Proved => Right(proved)
                 case Kept.Result.Refuted =>
-                    Option.when(stands && kept.counterexample.contains("x"))(refuted)
+                    Either.cond(
+                      stands && kept.counterexample.contains("x"),
+                      refuted,
+                      "the counterexample is none of the statement"
+                    )
     }
 
     /** A test with a file for the results, which is not there at its start. */
@@ -243,7 +244,14 @@ class KeptResultsTest extends AnyFunSuite {
         verify(file, KeptResults.Mode.Frozen, tactic) match
             case VerificationResult.Inconclusive(reason) =>
                 assert(reason.startsWith(KeptResults.stale), reason)
-                assert(reason.endsWith("does not stand for the statement as it is now"), reason)
+                // The tactic says why it does not take it.
+                assert(
+                  reason.endsWith(
+                    "does not stand for the statement as it is now: the counterexample is none " +
+                        "of the statement"
+                  ),
+                  reason
+                )
             case other => fail(s"expected a stale statement, got $other")
         // With a backend it is asked again.
         assert(
@@ -261,8 +269,96 @@ class KeptResultsTest extends AnyFunSuite {
         val text = Files.readString(file)
         assert(text.contains("\"backend\": \"2.0\"") && !text.contains("\"1.0\""), text)
         // The other statement was proved with the old backend, and is not said to be proved
-        // with this one.
-        assert(text.contains("\"first\"") && !text.contains("\"second\""), text)
+        // with this one: it is among the former results, which are none.
+        val (results, former) = text.splitAt(text.indexOf("\"former\""))
+        assert(results.contains("\"first\"") && !results.contains("\"second\""), text)
+        assert(former.contains("\"second\""), text)
+        verify(file, KeptResults.Mode.Frozen, tactic, "second") match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(reason.startsWith(KeptResults.stale), reason)
+                assert(reason.endsWith("was proved with an earlier side of the backend"), reason)
+            case other => fail(s"expected a stale statement, got $other")
+        // A former result whose statement changed too says so.
+        tactic.text = "s-2"
+        verify(file, KeptResults.Mode.Frozen, tactic, "second") match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(
+                  reason.endsWith("with an earlier side of the backend, and another the statement"),
+                  reason
+                )
+            case other => fail(s"expected a stale statement, got $other")
+        tactic.text = "s-1"
+        // Kept again for the new side, it is no former result any more.
+        verify(file, KeptResults.Mode.Use, tactic, "second")
+        assert(!Files.readString(file).contains("\"former\""))
+    }
+
+    kept("an entry whose result is no word of one, as after an edit, stands for nothing") { file =>
+        val tactic = new Counting
+        verify(file, KeptResults.Mode.Use, tactic)
+        Files.writeString(
+          file,
+          Files.readString(file).replace("\"result\": \"proved\"", "\"result\": \"Proved\"")
+        )
+        verify(file, KeptResults.Mode.Frozen, tactic) match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(reason.endsWith("has the result \"Proved\", which is none"), reason)
+            case other => fail(s"expected a stale statement, got $other")
+        // With a backend it is asked again, and kept as it should be.
+        assert(proved(verify(file, KeptResults.Mode.Use, tactic)))
+        assert(tactic.runs == 2)
+        assert(Files.readString(file).contains("\"result\": \"proved\""))
+    }
+
+    kept("a statement kept with the old side of the backend starts from what it was kept with") {
+        file =>
+            val tactic = new Counting
+            verify(file, KeptResults.Mode.Use, tactic, "first")
+            verify(file, KeptResults.Mode.Use, tactic, "second")
+            tactic.backend = "2.0"
+            // A run that states the first statement only keeps it for the new side, and takes the
+            // other one out of the results. A later run still starts it from what it was kept
+            // with: the former results keep it.
+            assert(proved(verify(file, KeptResults.Mode.Use, tactic, "first")))
+            assert(proved(verify(file, KeptResults.Mode.Use, tactic, "second")))
+            assert(tactic.runs == 4)
+            assert(tactic.started.map(_.notes) == List.fill(2)(Map("budget" -> "160")))
+            // Kept for the new side, a result is taken as it is.
+            assert(proved(verify(file, KeptResults.Mode.Use, tactic, "second")))
+            assert(tactic.runs == 4)
+            // What was kept for other programs is no start, whatever the side.
+            tactic.backend = "3.0"
+            tactic.programs = List("p-1", "p-9")
+            assert(proved(verify(file, KeptResults.Mode.Use, tactic, "first")))
+            assert(tactic.runs == 5)
+            assert(tactic.started.size == 2)
+    }
+
+    kept("a refutation kept with the old side of the backend is checked again without it") { file =>
+        val tactic = new Counting
+        tactic.answer = () => tactic.refuted
+        verify(file, KeptResults.Mode.Use, tactic)
+        tactic.backend = "2.0"
+        // The tactic replays the refutation without its backend, as in a run without Lean,
+        // and the refutation stands.
+        assert(
+          verify(file, KeptResults.Mode.Frozen, tactic).isInstanceOf[VerificationResult.Refuted]
+        )
+        assert(tactic.runs == 1)
+        // A run that keeps results keeps it for the new side, still without asking.
+        assert(
+          verify(file, KeptResults.Mode.Use, tactic).isInstanceOf[VerificationResult.Refuted]
+        )
+        assert(tactic.runs == 1)
+        assert(Files.readString(file).contains("\"backend\": \"2.0\""))
+        // A proof kept with the old side is no result for the new one.
+        tactic.answer = () => tactic.proved
+        verify(file, KeptResults.Mode.Use, tactic, "proved")
+        tactic.backend = "3.0"
+        verify(file, KeptResults.Mode.Frozen, tactic, "proved") match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(reason.startsWith(KeptResults.stale), reason)
+            case other => fail(s"expected a stale statement, got $other")
     }
 
     kept("an entry says the tests that state it, and goes when none is left") { file =>
@@ -350,7 +446,7 @@ class KeptResultsTest extends AnyFunSuite {
             override type Prepared = Goal
             override val name: String = "plain"
             override def prepare(goal: Goal): Either[CompatibilityReport, Prepared] = Right(goal)
-            override def run(prepared: Prepared): ExecutionResult = {
+            override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult = {
                 runs += 1
                 VerificationResult.Proven(Proof(Evidence, Nil))
             }
