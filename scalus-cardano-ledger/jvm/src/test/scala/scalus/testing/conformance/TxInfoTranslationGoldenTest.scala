@@ -151,11 +151,15 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
       * `cell` catches translator and corpus-parsing failures alike, so without a floor the whole
       * oracle could degrade to a one-sample check - or to nothing - and still report green. These
       * are minimums, not equalities: a corpus bump may legitimately raise them.
+      *
+      * The V3 floors are one lower than first recorded: instance #23 proposes a hard fork to major
+      * 13, which node 11.1.3 (cardano-ledger-conway 1.23.0.0) fails to decode, and so does Scalus.
+      * The 1.22.1.0 corpus predates that ledger check.
       */
     private val minCompared = Map(
-      "V3 withdrawals" -> 15,
-      "V3 votes" -> 17,
-      "V3 data" -> 18,
+      "V3 withdrawals" -> 14,
+      "V3 votes" -> 16,
+      "V3 data" -> 17,
       "V2 withdrawals" -> 19,
       "V2 data" -> 20,
       "V1 withdrawals" -> 39
@@ -217,8 +221,9 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
     }
 
     /** Decode coverage. The corpus is QuickCheck output, so some instances carry values no real
-      * transaction can hold (uints above 2^63, a negative protocol major version). Those are
-      * skipped, but the count is asserted so that silent erosion of coverage fails the build.
+      * transaction can hold (uints above 2^63, a negative protocol major version, a hard fork to
+      * major 13). Those are skipped, but the count is asserted so that silent erosion of coverage
+      * fails the build.
       */
     test("corpus decode coverage") {
         val decoded = Golden.instances.count(i => Try(i.transaction).isSuccess)
@@ -226,8 +231,20 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
         info(s"transactions decoded: $decoded/100 ; utxo sets decoded: $utxoDecoded/100")
         assert(utxoDecoded == 100, "every UTxO set must decode")
         assert(
-          decoded >= 83,
-          s"only $decoded/100 transactions decode, down from 83 - a decoder regressed"
+          decoded >= 82,
+          s"only $decoded/100 transactions decode, down from 82 - a decoder regressed"
+        )
+    }
+
+    /** The 1.22.1.0 corpus predates the ledger's `decodeProtVer` check. Instance #23 proposes a
+      * hard fork to major 13, which node 11.1.3 (cardano-ledger-conway 1.23.0.0) fails to decode.
+      */
+    test("a corpus transaction proposing a hard fork to major 13 does not decode") {
+        val failure = Try(Golden.instances.find(_.index == 23).get.transaction).failed
+        assert(failure.isSuccess, "instance #23 decoded")
+        assert(
+          String.valueOf(failure.get.getMessage).contains("Protocol version 13 exceeds"),
+          failure.get
         )
     }
 

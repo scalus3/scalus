@@ -26,6 +26,9 @@
 
 ### Fixed
 
+- Scalus decoded a `HardForkInitiation` governance action whose major protocol version exceeds
+  12, the Conway maximum, so it accepted a transaction that the node (11.1.3) fails to
+  deserialise. Such an action now fails to decode, as in the ledger's `decodeProtVer`.
 - The flat decoder kept the low 64 bits of a `constr` tag or variable index that does not fit in
   64 bits, so it accepted a script with a `constr` tag of 2^64 that Plutus rejects. It now fails to
   decode, as Plutus does. A variable index above `Int.MaxValue` kept its low 32 bits, so an index

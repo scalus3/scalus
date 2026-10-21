@@ -173,6 +173,20 @@ object GovAction {
         }
     }
 
+    /** The highest major protocol version a `HardForkInitiation` may name, as the node decodes it.
+      *
+      * The ledger reads that version with `decodeProtVer @ConwayEra`
+      * (Conway/Governance/Procedures.hs), which fails above `succVersion (natVersion @(ProtVerHigh
+      * era))` (cardano-ledger-core BaseTypes.hs). `ProtVerHigh ConwayEra = 11`
+      * (Internal/Definition/Era.hs), so the bound is 12, as in `major_protocol_version = 0 .. 12`
+      * (conway.cddl). Only the major is checked. Raise it when Scalus decodes Dijkstra-era
+      * transactions.
+      *
+      * Other `ProtocolVersion`s, in a block header or in protocol parameters, keep the unchecked
+      * codec: the ledger decodes them with plain `decCBOR`.
+      */
+    private[ledger] val MaxHardForkMajor: Int = MajorProtocolVersion.vanRossemPV.version + 1
+
     /** CBOR Decoder for GovAction. Decodes from a tagged structure based on the action type.
       */
     given Decoder[GovAction] = new Decoder[GovAction] {
@@ -191,6 +205,11 @@ object GovAction {
                 case 1 => // HardForkInitiation
                     val prevActionId = r.read[Option[GovActionId]]()
                     val protocolVersion = r.read[ProtocolVersion]()
+                    if protocolVersion.major > MaxHardForkMajor then
+                        r.validationFailure(
+                          s"Protocol version ${protocolVersion.major} exceeds the maximum " +
+                              s"expected version of $MaxHardForkMajor"
+                        )
                     GovAction.HardForkInitiation(prevActionId, protocolVersion)
 
                 case 2 => // TreasuryWithdrawals
