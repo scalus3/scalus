@@ -5,6 +5,7 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, STS, State, UtxoEnv}
 import scalus.cardano.ledger.*
+import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -109,7 +110,12 @@ trait EmulatorBase extends BlockchainProvider {
     def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] =
         submitWith(transaction, identity)
 
-    def setSlot(slot: SlotNo): Unit = updateState(_.withSlot(slot))
+    /** Move the current slot to `slot`, then revalidate the mempool, spec section 10.
+      *
+      * @throws IllegalArgumentException
+      *   in the `Manual` preset, for a slot below the slot of the tip block, spec [RV-8]
+      */
+    def setSlot(slot: SlotNo): Unit = edit(_.withSlot(slot))
 
     /** An independent emulator starting from this one's state, taken as a single read — the copy
       * and the original share no mutable cell and evolve separately from here on. The copy starts
@@ -137,7 +143,7 @@ trait EmulatorBase extends BlockchainProvider {
       */
     def addDatum(datum: KeepRaw[Data]): DataHash = {
         val hash = datum.dataHash
-        updateState(_.withSeededDatums(Map(hash -> datum)))
+        edit(_.withSeededDatums(Map(hash -> datum)))
         hash
     }
 
@@ -150,7 +156,11 @@ trait EmulatorBase extends BlockchainProvider {
 
     /** Add `datums` to the datum store with their bytes, for a caller that has them. */
     private[scalus] def seedDatums(datums: Map[DataHash, KeepRaw[Data]]): Unit =
-        updateState(_.withSeededDatums(datums))
+        edit(_.withSeededDatums(datums))
+
+    /** Apply the direct edit or tick `f`, then revalidate the mempool, spec [DE-3], section 10. */
+    private def edit(f: EmulatorState => EmulatorState): Unit =
+        updateState(state => f(state).revalidated(processTransaction))
 
     /** Submit `transaction`, validated under a context derived by `validationContext`. See
       * [[EmulatorState]] for the snapshot it is validated on and when it lands in a block.
@@ -275,7 +285,7 @@ trait EmulatorBase extends BlockchainProvider {
       * seeded this way exactly as it does for one produced by a transaction.
       */
     def addUtxo(input: TransactionInput, output: TransactionOutput): Unit =
-        updateState(_.withUtxo(input, output))
+        edit(_.withUtxo(input, output))
 
     /** Pays `amount` into the reward balance of a registered account, as the epoch boundary pays
       * rewards in the Haskell ledger. Nothing else changes: no deposit, no pot, no slot.
@@ -284,7 +294,7 @@ trait EmulatorBase extends BlockchainProvider {
       *   if `credential` is not registered, or `amount` is negative
       */
     def addRewards(credential: Credential, amount: Coin): Unit =
-        updateState(_.withRewards(credential, amount))
+        edit(_.withRewards(credential, amount))
 
     /** Removes a UTxO from the ledger directly, bypassing transaction validation. A no-op if no
       * UTxO sits at that input.
@@ -293,7 +303,33 @@ trait EmulatorBase extends BlockchainProvider {
       * a datum it has seen after the output holding it is spent, and so does this.
       */
     def removeUtxo(input: TransactionInput): Unit =
-        updateState(_.withoutUtxo(input))
+        edit(_.withoutUtxo(input))
+
+    /** Forge a block from the mempool, and return its point, spec section 8.1.
+      *
+      * In the `Manual` preset this is the only way a block appears: at slot `max(current slot, tip
+      * slot + 1)`, with the longest prefix of the mempool that fits the block limits, after the
+      * current slot moves there and the mempool is revalidated, spec [FG-1], [FG-3], [FG-4]. An
+      * empty mempool forges an empty block, spec [FG-8].
+      */
+    def produceBlock(): ChainPoint = modifyState(_.produceBlock(processTransaction))
+
+    /** The status of the tx `txHash`, spec [TS-1]. */
+    def txStatus(txHash: TransactionHash): TxStatus = readState.txStatus(txHash)
+
+    /** The pending txs, oldest first. */
+    def mempoolTxs: Seq[Transaction] = readState.mempool.map(_.applied.tx)
+
+    /** The tip of the selected chain, or [[ChainTip.origin]] before the first block. */
+    def tip: ChainTip = readState.tip
+
+    /** The UTxOs that match `query` in the ledger state `view` reads, spec [VW-3]. */
+    def findUtxosSync(query: UtxoQuery, view: ChainView): Either[ChainViewError, Utxos] =
+        readState.snapshotOf(view).map(s => EmulatorBase.evalQuery(s.ledger.utxos, query))
+
+    /** [[findUtxosSync]] with a view, in a `Future`, spec [VW-3]. */
+    def findUtxos(query: UtxoQuery, view: ChainView): Future[Either[ChainViewError, Utxos]] =
+        Future.successful(findUtxosSync(query, view))
 
     /** [[findUtxos]] without the `Future`. The emulator's state is in memory and its query
       * evaluation is pure, so the effect wrapper is an interface formality — JavaScript and Java
@@ -304,17 +340,42 @@ trait EmulatorBase extends BlockchainProvider {
     override def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] =
         Future.successful(Right(findUtxosSync(query)))
 
-    /** Whether this emulator has applied the transaction.
+    /** Where the transaction stands, from [[txStatus]]: `Pending` and `Confirmed` map to
+      * themselves, every other status to `NotFound`, spec [TS-3], [TS-4]. A tx of the imported log,
+      * which has no block, is `Confirmed`, as before.
       *
       * Authoritative, unlike the inherited default, which infers status from the UTxOs a
       * transaction produced: `findUtxos` here answers `Right(empty)` for a transaction it has never
       * seen, and an emulator that has applied a transaction whose outputs are all since spent
-      * produces none either. The applied-transaction index knows the answer outright.
+      * produces none either.
       */
-    override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
-        Future.successful(
-          if hasTx(txHash) then TransactionStatus.Confirmed else TransactionStatus.NotFound
-        )
+    override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] = {
+        val state = readState
+        val status = state.txStatus(txHash) match
+            case TxStatus.Pending                           => TransactionStatus.Pending
+            case _: TxStatus.Confirmed                      => TransactionStatus.Confirmed
+            case _ if state.appliedTxIndex.contains(txHash) => TransactionStatus.Confirmed
+            case _                                          => TransactionStatus.NotFound
+        Future.successful(status)
+    }
+
+    /** Wait for the transaction to leave the mempool, without sleeping, spec [SF-2]: with
+      * [[AwaitTxPolicy.ProduceBlock]], forge a block while it is `Pending`, at most `maxAttempts`
+      * blocks, spec [SF-3]; with [[AwaitTxPolicy.WaitOnly]], report the status as it is, spec
+      * [SF-4]. `delayMs` is ignored: the emulator has virtual time.
+      */
+    override def pollForConfirmation(
+        txHash: TransactionHash,
+        maxAttempts: Int,
+        delayMs: Long
+    ): Future[TransactionStatus] = {
+        if readState.config.awaitTx == AwaitTxPolicy.ProduceBlock then
+            var attempts = 0
+            while attempts < maxAttempts && txStatus(txHash) == TxStatus.Pending do
+                produceBlock()
+                attempts += 1
+        checkTransaction(txHash)
+    }
 
     protected def processTransaction(
         context: Context,

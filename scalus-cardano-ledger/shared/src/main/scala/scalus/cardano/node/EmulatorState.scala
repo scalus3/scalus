@@ -2,6 +2,7 @@ package scalus.cardano.node
 
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, State}
+import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.uplc.builtin.Data
 
 /** The entire mutable state of an [[EmulatorBase]], as one immutable value: a chain of real blocks,
@@ -49,6 +50,9 @@ import scalus.uplc.builtin.Data
   *   derived: `appliedTxLog` keyed by transaction hash, holding the latest application of each
   * @param appliedTxs
   *   derived: the distinct hashes in `appliedTxLog`
+  * @param dropped
+  *   the txs revalidation removed from the mempool, and why, spec [RV-3]. Kept, since the mempool
+  *   entry is gone.
   */
 case class EmulatorState private (
     config: ChainConfig,
@@ -60,7 +64,8 @@ case class EmulatorState private (
     private[node] val logStart: Long,
     appliedTxLog: Vector[AppliedTx],
     appliedTxIndex: Map[TransactionHash, AppliedTx],
-    appliedTxs: Set[TransactionHash]
+    appliedTxs: Set[TransactionHash],
+    private[node] val dropped: Map[TransactionHash, DropReason]
 ) {
 
     /** The blocks of the selected chain, oldest first. */
@@ -103,7 +108,7 @@ case class EmulatorState private (
     private[node] def submit(
         tx: Transaction,
         validationContext: Context => Context,
-        validate: (Context, State, Transaction) => Either[TransactionException, State]
+        validate: EmulatorState.Validate
     ): (EmulatorState, Either[SubmitError, TransactionHash]) = {
         val base = validationBase
         validate(validationContext(base.context), base.ledger, tx) match
@@ -135,27 +140,57 @@ case class EmulatorState private (
             case BlockProduction.Manual  => pending
     }
 
-    /** The state after the forge of every mempool tx into one block, spec section 8.1.
+    /** The state after the `Instant` forge, spec section 8.1: blocks on the tip until the mempool
+      * is empty, spec [FG-9], each at `max(current slot, tip slot)`, spec [FG-2]. The current slot
+      * stays, spec [FG-3a]. An empty mempool forges nothing, spec [FG-10].
       *
-      * There are no block limits yet, so one block takes the whole mempool and the `Instant` repeat
-      * of [FG-9] ends after one block. An empty mempool forges nothing, spec [FG-10].
+      * The entries after a prefix were validated on top of it at the current slot, so the new tip
+      * changes nothing for them, and the forge does not revalidate them.
       */
     private def forgeMempool: EmulatorState =
         if mempool.isEmpty then this
-        else forge(mempool).copy(mempool = Vector.empty) // spec [FG-7]
+        else forgePrefix(math.max(currentSlot, tip.slot)).forgeMempool
 
-    /** The state with a block of `entries` on the tip. `entries` are already validated in order on
-      * the tip snapshot, so the snapshot of the last one is the block snapshot, spec [FG-6].
+    /** The state after an explicit forge from the mempool, and the point of the new block, spec
+      * section 8.1.
+      *
+      * In the `Manual` preset the forge slot is `max(current slot, tip slot + 1)`, spec [FG-1]. The
+      * current slot moves there first, and the mempool is revalidated at it, spec [FG-3]. In the
+      * `Instant` preset the mempool is empty here, and the slot is that of [FG-2]. An empty mempool
+      * forges an empty block, spec [FG-8].
       */
-    private def forge(entries: Vector[MempoolEntry]): EmulatorState = {
-        val snapshot = entries.last.snapshot
-        // genesis is at slot 0, the slot of ChainPoint.origin
-        val tipSlot = chain.lastOption.fold(0L)(blocks(_).block.slot)
-        val height = chain.size + 1L
+    private[node] def produceBlock(
+        validate: EmulatorState.Validate
+    ): (EmulatorState, ChainPoint) = {
+        val forged = config.blockProduction match
+            case BlockProduction.Manual =>
+                val slot = math.max(currentSlot, tip.slot + 1)
+                // the mempool is valid at the current slot already, spec [TE-2]
+                val ready =
+                    if slot == currentSlot then this else withSlot(slot).revalidated(validate)
+                ready.forgePrefix(slot)
+            case BlockProduction.Instant => forgePrefix(math.max(currentSlot, tip.slot))
+        (forged, forged.tip.point)
+    }
+
+    /** The state with a block of the mempool txs at `slot` on the tip; they leave the mempool, spec
+      * [FG-7].
+      */
+    private def forgePrefix(slot: SlotNo): EmulatorState = {
+        val (prefix, rest) = mempool.splitAt(mempool.size)
+        forge(prefix, slot).copy(mempool = rest)
+    }
+
+    /** The state with a block of `entries` at `slot` on the tip. `entries` are already validated in
+      * order on the tip snapshot, so the snapshot of the last one is the block snapshot, spec
+      * [FG-6]. With no entries, it is the tip snapshot.
+      */
+    private def forge(entries: Vector[MempoolEntry], slot: SlotNo): EmulatorState = {
+        val snapshot = entries.lastOption.fold(tipSnapshot)(_.snapshot)
         val block = BlockForge.forge(
           parent = chain.lastOption,
-          height = height,
-          slot = math.max(currentSlot, tipSlot), // spec [FG-2], the current slot stays [FG-3a]
+          height = chain.size + 1L,
+          slot = slot,
           txs = entries.map(_.applied.tx),
           protocolVersion = snapshot.context.env.params.protocolVersion
         )
@@ -169,6 +204,43 @@ case class EmulatorState private (
           appliedTxs = appliedTxs ++ txs.map(_.txHash)
         ).withoutSnapshotBelowK
     }
+
+    /** The tip of the selected chain, or [[ChainTip.origin]] at genesis. */
+    private[node] def tip: ChainTip =
+        chain.lastOption.fold(ChainTip.origin) { id =>
+            val node = blocks(id)
+            ChainTip(ChainPoint(node.block.slot, id), node.height)
+        }
+
+    /** The status of the tx `hash`, spec [TS-1]: `Pending` in the mempool; `Confirmed` in a block
+      * of the selected chain, with the depth of that block now, spec [TS-2], [TS-7]; else the drop
+      * revalidation recorded; else `NotFound`.
+      */
+    private[node] def txStatus(hash: TransactionHash): TxStatus =
+        if mempool.exists(_.applied.txHash == hash) then TxStatus.Pending
+        else
+            // ceiling: a scan from the tip back. Add a tx index if long chains make it slow.
+            chain.indices.reverseIterator.find(i =>
+                blocks(chain(i)).txs.exists(_.txHash == hash)
+            ) match
+                case Some(i) =>
+                    val node = blocks(chain(i))
+                    TxStatus.Confirmed(chain.size - i, ChainPoint(node.block.slot, node.id))
+                case None => dropped.get(hash).fold(TxStatus.NotFound)(TxStatus.Dropped(_))
+
+    /** The snapshot `view` reads, spec section 9. */
+    private[node] def snapshotOf(view: ChainView): Either[ChainViewError, LedgerSnapshot] =
+        view match
+            case ChainView.Tip     => Right(tipSnapshot)
+            case ChainView.Mempool => Right(mempool.lastOption.fold(tipSnapshot)(_.snapshot))
+            case ChainView.Stable(depth) =>
+                if depth < 1 || depth > chain.size + 1 then
+                    Left(ChainViewError.DepthOutOfRange(depth, chain.size.toLong)) // spec [VW-6]
+                else
+                    val snapshot =
+                        if depth == chain.size + 1 then genesisSnapshot // spec [VW-8]
+                        else blocks(chain(chain.size - depth)).snapshot // spec [VW-5]
+                    snapshot.toRight(ChainViewError.SnapshotDropped(depth)) // spec [VW-7]
 
     /** The state without the one snapshot the last forge moved to depth k + 1, spec [ST-4]. The
       * block itself stays, spec [ST-5].
@@ -193,6 +265,34 @@ case class EmulatorState private (
                 copy(blocks = blocks.updated(id, blocks(id).copy(snapshot = Some(snapshot))))
     }
 
+    /** The state after revalidation, spec section 10: every mempool tx is applied again, in order,
+      * on the tip snapshot at the current slot, spec [RV-1]. A tx on the selected chain leaves
+      * quietly, spec [RV-2]. A tx that fails leaves with its drop reason, spec [RV-3] .. [RV-6].
+      * Each kept tx gets a new snapshot and its new validation slot, spec [RV-7], [TS-6].
+      *
+      * With an empty mempool, as always in the `Instant` preset, this is the same state.
+      */
+    private[node] def revalidated(validate: EmulatorState.Validate): EmulatorState =
+        if mempool.isEmpty then this
+        else
+            // ceiling: a scan of the selected chain. Add a tx index if long chains make it slow.
+            val onChain = selectedChain.iterator.flatMap(_.txs.map(_.txHash)).toSet
+            var base = tipSnapshot
+            val kept = Vector.newBuilder[MempoolEntry]
+            var drops = dropped
+            for entry <- mempool if !onChain.contains(entry.applied.txHash) do
+                val tx = entry.applied.tx
+                validate(base.context, base.ledger, tx) match
+                    case Left(error) =>
+                        drops =
+                            drops.updated(tx.id, DropReason.of(SubmitError.fromException(error)))
+                    case Right(newLedger) =>
+                        val spent = EmulatorBase.resolveSpent(base.ledger.utxos, tx)
+                        val next = base.after(newLedger, tx)
+                        kept += MempoolEntry(AppliedTx(tx, currentSlot, spent), next)
+                        base = next
+            copy(mempool = kept.result(), dropped = drops)
+
     /** The state after `applied` moved the ledger to `newLedger`, as after a submit that passed
       * validation: the tx joins the mempool, and in the `Instant` preset it is forged into a block
       * at once, spec [MP-6], [MP-8]. `newLedger` must follow the snapshot a submit validates on,
@@ -210,8 +310,17 @@ case class EmulatorState private (
     /** The state at a different slot, the tick of spec [NL-2]: the tip snapshot moves in place, so
       * the slot the tip snapshot carries can be later than the slot of the tip block. Crossing an
       * epoch boundary moves the donations into the treasury, see [[EmulatorBase.atSlot]].
+      *
+      * @throws IllegalArgumentException
+      *   in the `Manual` preset, for a slot below the slot of the tip block, spec [RV-8]
       */
-    def withSlot(slot: SlotNo): EmulatorState = withTipSnapshot(_.atSlot(slot))
+    def withSlot(slot: SlotNo): EmulatorState = {
+        require(
+          config.blockProduction == BlockProduction.Instant || slot >= tip.slot,
+          s"slot $slot is below the tip slot ${tip.slot}"
+        )
+        withTipSnapshot(_.atSlot(slot))
+    }
 
     /** The state with one UTxO added, or replaced if one already sits at `input`, for the direct
       * ledger edits that bypass validation.
@@ -271,6 +380,10 @@ case class EmulatorState private (
 }
 
 object EmulatorState {
+
+    /** How a transition validates a tx: the overridable `EmulatorBase.processTransaction`. */
+    private[node] type Validate =
+        (Context, State, Transaction) => Either[TransactionException, State]
 
     /** The state an emulator starts from — the only public way to build one — in the `Instant`
       * preset, spec [CF-4].
@@ -338,7 +451,8 @@ object EmulatorState {
           logStart = 0L,
           appliedTxLog = Vector.empty,
           appliedTxIndex = Map.empty,
-          appliedTxs = Set.empty
+          appliedTxs = Set.empty,
+          dropped = Map.empty
         )
         withLog(empty, appliedTxLog, 0L)
     }
