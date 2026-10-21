@@ -482,7 +482,7 @@ Capture works over Scala's typed tree, in the macros behind the combinators (§4
 
 ### 4.3 Capture: macros for statements, the plugin for contracts
 
-All three Scala versions the build supports, 3.3.8 (the default), 3.8.4 and 3.9.0, run the relevant
+The Scala versions the build supports, 3.3.8 (the default) and 3.9.0, run the relevant
 phases in this order (checked with `-Xshow-phases`):
 
 ```

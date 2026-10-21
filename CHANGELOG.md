@@ -24,6 +24,13 @@
   tactic implemented against 1.4.0 must override the new signatures. `UplcBlaster.Artifact` has a
   new field `read`, so positional constructions and patterns of it need one more argument.**
 
+### Removed
+
+- **Scala 3.8.4 is no longer supported: no `scalus-plugin_3.8.4` is published for this release,
+  and CI no longer tests it. A project on Scala 3.8.x moves to 3.9.0 (the LTS that supersedes
+  it) or 3.3.8.** The `_3` libraries are unchanged. The sbt 2 build of `scalus-sbt-plugin` still
+  uses Scala 3.8.4, because sbt 2.0.x requires it.
+
 ### Fixed
 
 - `Transaction.fromCbor` accepts a transaction without the `isValid` flag, `[body, witnesses,
