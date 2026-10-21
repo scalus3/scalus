@@ -34,15 +34,17 @@ class EmulatorStateInvariantTest extends AnyFunSuite {
     }
 
     test("a state cannot be assembled field by field, bypassing the derivations in initial") {
-        assertDoesNotCompile(
-          "EmulatorState(state.ledger, state.context, state.binaryDatums, state.appliedTxLog, state.appliedTxIndex, state.appliedTxs)"
-        )
+        // A reference to `apply` rather than a call, so the snippet does not depend on the number
+        // of fields: a call with the wrong arity would fail to compile for that reason alone.
+        assertDoesNotCompile("EmulatorState.apply")
     }
 
     test("reading the same surface still compiles, so the two assertions above are not vacuous") {
         // Without this, a typo in either snippet above would make it fail to compile for an
         // unrelated reason, and the assertion would pass while checking nothing.
         assertCompiles("state.appliedTxLog")
+        // The same `apply` reference compiles for a public case class of this package.
+        assertCompiles("LedgerSnapshot.apply")
     }
 
     test("initial derives both caches from the log it is given") {

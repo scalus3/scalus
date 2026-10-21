@@ -1059,7 +1059,34 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // The proposal does declare the public facade unfrozen for a release or two as well; when
         // a break there is actually needed, it gets its own filter naming the symbol, so the thing
         // being broken is visible in review rather than pre-authorised in bulk.
-        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*")
+        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*"),
+        // EmulatorState holds a block tree and a mempool now (emulator-chain spec [CP-2]), so its
+        // case-class product accessors return the new fields. Its constructor is private, so
+        // only a pattern match on its product elements can see the change.
+        // _1 was the ledger, now the ChainConfig:
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.node.EmulatorState._1"
+        ),
+        // _2 was the context, now the block tree:
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.node.EmulatorState._2"
+        ),
+        // _3 was the datum store, now the selected chain:
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.node.EmulatorState._3"
+        ),
+        // _4 was the applied-tx log, now the genesis snapshot:
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.node.EmulatorState._4"
+        ),
+        // _5 was the applied-tx index, now the mempool:
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.node.EmulatorState._5"
+        ),
+        // _6 was the applied-tx hash set, now the imported log:
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.node.EmulatorState._6"
+        )
       ),
       crossScalaVersions := supportedScalaVersions,
       scalacOptions ++= commonScalacOptions,

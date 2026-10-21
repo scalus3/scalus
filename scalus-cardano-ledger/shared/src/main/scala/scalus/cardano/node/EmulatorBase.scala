@@ -86,16 +86,17 @@ trait EmulatorBase extends BlockchainProvider {
     /** Index of applied transactions by hash, for O(1) lookup. */
     def appliedTxIndex: Map[TransactionHash, AppliedTx] = readState.appliedTxIndex
 
-    /** Ordered log of transactions applied to this emulator, in submission order (oldest first).
+    /** Ordered log of transactions applied to this emulator, oldest first: the log the emulator was
+      * built with, then the txs of the blocks of the selected chain, spec [TS-5].
       *
       * Unlike [[appliedTxs]] (hashes only), each entry retains the full transaction together with
       * the slot it was applied at and the inputs it consumed (resolved against the pre-application
       * UTxO set). This lets callers reconstruct chain history — e.g. walk the continuing outputs of
       * an asset — without keeping their own submitted-transaction bookkeeping.
       *
-      * Ordering reflects submission order. Under concurrent submission the log entry and the ledger
-      * state transition it describes are published together, so a reader never sees a UTxO set that
-      * has moved past the log.
+      * In the `Instant` preset the order is the submission order. Under concurrent submission the
+      * log entry and the ledger state transition it describes are published together, so a reader
+      * never sees a UTxO set that has moved past the log.
       */
     def appliedTxLog: Seq[AppliedTx] = readState.appliedTxLog
 
@@ -118,7 +119,13 @@ trait EmulatorBase extends BlockchainProvider {
 
     /** Clear the applied-transaction bookkeeping ([[appliedTxLog]] and [[appliedTxIndex]]), leaving
       * the ledger state (`utxos`, `certState`, `datums`) untouched.
+      *
+      * The blocks stay: the log drops the imported log and then starts above the tip, spec [DE-4].
       */
+    @deprecated(
+      "the selected chain is the applied-tx log; start a new Emulator for an empty log",
+      "1.4.1"
+    )
     def clearAppliedTxs(): Unit = updateState(_.withClearedAppliedTxs)
 
     /** Adds a datum to the datum store [[getDatum]] reads, with the bytes it is given, so a UTxO
@@ -145,8 +152,8 @@ trait EmulatorBase extends BlockchainProvider {
     private[scalus] def seedDatums(datums: Map[DataHash, KeepRaw[Data]]): Unit =
         updateState(_.withSeededDatums(datums))
 
-    /** Validate `transaction` against the current state under a context derived by
-      * `validationContext`, and apply it if it passes.
+    /** Submit `transaction`, validated under a context derived by `validationContext`. See
+      * [[EmulatorState]] for the snapshot it is validated on and when it lands in a block.
       *
       * The derived context is used for validation only; the state keeps the context it had, so a
       * per-submission concern such as debug scripts cannot leak into later submissions.
@@ -154,18 +161,8 @@ trait EmulatorBase extends BlockchainProvider {
     private def submitWith(
         transaction: Transaction,
         validationContext: Context => Context
-    ): Either[SubmitError, TransactionHash] = modifyState { state =>
-        processTransaction(validationContext(state.context), state.ledger, transaction) match
-            case Right(newLedger) =>
-                val applied = AppliedTx(
-                  transaction,
-                  state.context.env.slot,
-                  EmulatorBase.resolveSpent(state.ledger.utxos, transaction)
-                )
-                (state.withApplied(newLedger, applied), Right(transaction.id))
-            case Left(t: TransactionException) =>
-                (state, Left(SubmitError.fromException(t)))
-    }
+    ): Either[SubmitError, TransactionHash] =
+        modifyState(_.submit(transaction, validationContext, processTransaction))
 
     /** Evaluator mode the emulator runs Plutus scripts in (e.g. `Validate` vs
       * `EvaluateAndComputeCost`). Exposed so snapshots such as `ImmutableEmulator.fromEmulator` can
@@ -337,183 +334,13 @@ trait EmulatorBase extends BlockchainProvider {
   * @param tx
   *   the applied transaction
   * @param slot
-  *   the emulator slot at the time of application
+  *   the slot at which the ledger last validated `tx`, spec [TS-6]. It can be earlier than the slot
+  *   of the block that holds `tx`.
   * @param spent
   *   the UTxOs consumed by `tx`, resolved against the pre-application UTxO set
   */
 case class AppliedTx(tx: Transaction, slot: SlotNo, spent: Utxos) {
     def txHash: TransactionHash = tx.id
-}
-
-/** The entire mutable state of an [[EmulatorBase]], as one immutable value.
-  *
-  * Aggregating it is what lets one state machine serve both platforms, and it is also what makes a
-  * transaction land atomically: the ledger state and the bookkeeping that describes it are swapped
-  * together, so no reader — and on the JVM no other submitting thread — can observe a UTxO set that
-  * has moved on while the applied-transaction log has not caught up.
-  *
-  * `appliedTxIndex` and `appliedTxs` are derived from `appliedTxLog`, kept for O(1) lookup. Nothing
-  * outside this class writes them: the constructor is private, so [[EmulatorState.initial]] and the
-  * transitions below are the only way to build one, and no caller can hand back a state whose log
-  * and caches disagree (`EmulatorStateInvariantTest` pins it).
-  *
-  * The log records one entry per *application*, while the two derived views are keyed by hash, so
-  * they are not always the same size. Applying one transaction twice needs the direct ledger edits
-  * ([[EmulatorBase.addUtxo]]) to put its inputs back — the ledger rules reject the second
-  * submission otherwise — but it is reachable, and then the log holds both applications while the
-  * index holds the later one and `appliedTxs` holds the hash once. Every hash in the log is in both
-  * derived views and vice versa; only the multiplicity differs.
-  *
-  * @param ledger
-  *   the ledger state proper — the UTxO set and the certificate state
-  * @param context
-  *   the validation context, carrying the current slot, protocol parameters and evaluator mode
-  * @param binaryDatums
-  *   every datum this emulator has seen, by hash, with its original bytes, spec [SC-13k]
-  * @param appliedTxLog
-  *   applied transactions in application order, oldest first — one entry per application
-  * @param appliedTxIndex
-  *   derived: `appliedTxLog` keyed by transaction hash, holding the latest application of each
-  * @param appliedTxs
-  *   derived: the distinct hashes in `appliedTxLog`
-  */
-case class EmulatorState private (
-    ledger: State,
-    context: Context,
-    binaryDatums: Map[DataHash, KeepRaw[Data]],
-    appliedTxLog: Vector[AppliedTx],
-    appliedTxIndex: Map[TransactionHash, AppliedTx],
-    appliedTxs: Set[TransactionHash]
-) {
-
-    /** Every datum this state has seen, decoded. */
-    @deprecated("use binaryDatums, which keeps the datum bytes", "1.3.0")
-    def datums: Map[DataHash, Data] = binaryDatums.view.mapValues(_.value).toMap
-
-    /** The state after `applied` moved the ledger to `newLedger`: the log gains an entry, both
-      * derived views follow it, and the transaction's datums join the store.
-      *
-      * The log entry is appended unconditionally, so re-applying a transaction the emulator has
-      * already applied — only reachable by putting its inputs back with [[EmulatorBase.addUtxo]] —
-      * records both applications, while the index moves to the later one and `appliedTxs` is
-      * unchanged.
-      */
-    def withApplied(newLedger: State, applied: AppliedTx): EmulatorState = copy(
-      ledger = newLedger,
-      binaryDatums = binaryDatums ++ EmulatorBase.binaryDatumsOf(applied.tx),
-      appliedTxLog = appliedTxLog :+ applied,
-      appliedTxIndex = appliedTxIndex + (applied.txHash -> applied),
-      appliedTxs = appliedTxs + applied.txHash
-    )
-
-    /** The state with the applied-transaction bookkeeping dropped. The ledger, the context and the
-      * datum store are deliberately kept: see [[EmulatorBase.clearAppliedTxs]].
-      */
-    def withClearedAppliedTxs: EmulatorState = copy(
-      appliedTxLog = Vector.empty,
-      appliedTxIndex = Map.empty,
-      appliedTxs = Set.empty
-    )
-
-    /** The state at a different slot. A `copy` rather than a fresh `Context`, which would drop the
-      * evaluator mode and any debug scripts. Crossing an epoch boundary moves the donations into
-      * the treasury, see [[EmulatorBase.atSlot]].
-      */
-    def withSlot(slot: SlotNo): EmulatorState = {
-        val (newLedger, newEnv) = EmulatorBase.atSlot(ledger, context.env, context.slotConfig, slot)
-        copy(ledger = newLedger, context = context.copy(env = newEnv))
-    }
-
-    /** The state with one UTxO added, or replaced if one already sits at `input`, for the direct
-      * ledger edits that bypass validation.
-      *
-      * An inline datum on `output` joins the datum store, which is how a script UTxO seeded with
-      * [[EmulatorBase.addUtxo]] answers [[EmulatorBase.getDatum]] — a real node and Blockfrost both
-      * index the datums held in the UTxO set, not only those a transaction carried in its witness
-      * set. Only `output` is indexed, never the whole set: every other UTxO was indexed when it
-      * arrived, so seeding N UTxOs costs O(N) rather than O(N²). Nothing is removed: the store is
-      * everything the emulator has seen.
-      */
-    def withUtxo(input: TransactionInput, output: TransactionOutput): EmulatorState = copy(
-      ledger = ledger.copy(utxos = ledger.utxos + (input -> output)),
-      binaryDatums = EmulatorBase.inlineBinaryDatumOf(output).fold(binaryDatums)(binaryDatums + _)
-    )
-
-    /** The state with `seeded` added to the datum store, for a caller that has the datum bytes. A
-      * datum already in the store wins, as in [[EmulatorState.initial]].
-      */
-    private[scalus] def withSeededDatums(seeded: Map[DataHash, KeepRaw[Data]]): EmulatorState =
-        copy(binaryDatums = seeded ++ binaryDatums)
-
-    /** The state with `amount` added to the reward balance of the account of `credential`. */
-    def withRewards(credential: Credential, amount: Coin): EmulatorState = {
-        require(amount.value >= 0, s"rewards must not be negative, got ${amount.value}")
-        val dstate = ledger.certState.dstate
-        val account = dstate.accounts.getOrElse(
-          credential,
-          throw new IllegalArgumentException(s"no registered account for $credential")
-        )
-        val accounts =
-            dstate.accounts.updated(credential, account.copy(balance = account.balance + amount))
-        copy(ledger =
-            ledger.copy(certState =
-                ledger.certState.copy(dstate = dstate.copy(accounts = accounts))
-            )
-        )
-    }
-
-    /** The state with the UTxO at `input` dropped, for the direct ledger edits that bypass
-      * validation. A no-op if none sits there.
-      *
-      * The datum store is deliberately left alone: a node keeps answering for a datum it has seen
-      * after the output holding it is spent, and so does this.
-      */
-    def withoutUtxo(input: TransactionInput): EmulatorState =
-        copy(ledger = ledger.copy(utxos = ledger.utxos - input))
-}
-
-object EmulatorState {
-
-    /** The state an emulator starts from — the only public way to build one.
-      *
-      * Both derived views and the datum store are computed here rather than passed in, so an
-      * emulator restored from a log — a snapshot, say — cannot disagree with the one the log came
-      * from. The datum store also picks up the inline datums of the seeded `utxos`, so seeding a
-      * script UTxO with its datum inline is enough for `getDatum` to answer.
-      */
-    def initial(
-        utxos: Utxos,
-        certState: CertState,
-        context: Context,
-        datums: Map[DataHash, Data],
-        appliedTxLog: Vector[AppliedTx]
-    ): EmulatorState =
-        initial(
-          State(utxos, certState = certState),
-          context,
-          datums.view.mapValues(KeepRaw(_)).toMap,
-          appliedTxLog
-        )
-
-    /** The state an emulator starts from, with the whole ledger state given: its fees and donations
-      * too, not only the UTxOs and the certificate state. `datums` keep their bytes.
-      */
-    def initial(
-        ledger: State,
-        context: Context,
-        datums: Map[DataHash, KeepRaw[Data]],
-        appliedTxLog: Vector[AppliedTx]
-    ): EmulatorState = new EmulatorState(
-      ledger = ledger,
-      context = context,
-      binaryDatums = appliedTxLog.foldLeft(
-        datums ++
-            ledger.utxos.valuesIterator.flatMap(EmulatorBase.inlineBinaryDatumOf)
-      )((acc, a) => acc ++ EmulatorBase.binaryDatumsOf(a.tx)),
-      appliedTxLog = appliedTxLog,
-      appliedTxIndex = EmulatorBase.indexAppliedTxs(appliedTxLog),
-      appliedTxs = appliedTxLog.map(_.txHash).toSet
-    )
 }
 
 case class DelegationInfo(poolId: Option[PoolKeyHash], rewards: Coin)

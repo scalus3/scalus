@@ -28,9 +28,30 @@ class Emulator(
     val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
     initialCertState: CertState = CertState.empty,
     initialDatums: Map[DataHash, Data] = Map.empty,
-    initialAppliedTxLog: Vector[AppliedTx] = Vector.empty
+    initialAppliedTxLog: Vector[AppliedTx] = Vector.empty,
+    chainConfig: ChainConfig = ChainConfig.instant
 ) extends EmulatorBase
     with EmulatorJavaApi {
+
+    /** The 1.4 constructor, in the `Instant` preset, spec [CF-4]. */
+    def this(
+        initialUtxos: Utxos,
+        initialContext: Context,
+        validators: Iterable[STS.Validator],
+        mutators: Iterable[STS.Mutator],
+        initialCertState: CertState,
+        initialDatums: Map[DataHash, Data],
+        initialAppliedTxLog: Vector[AppliedTx]
+    ) = this(
+      initialUtxos,
+      initialContext,
+      validators,
+      mutators,
+      initialCertState,
+      initialDatums,
+      initialAppliedTxLog,
+      ChainConfig.instant
+    )
 
     /** The whole emulator state in one atomically swapped cell, so a transaction and the log entry
       * describing it become visible together.
@@ -41,7 +62,8 @@ class Emulator(
         certState = initialCertState,
         context = initialContext,
         datums = initialDatums,
-        appliedTxLog = initialAppliedTxLog
+        appliedTxLog = initialAppliedTxLog,
+        config = chainConfig
       )
     )
 
@@ -84,11 +106,20 @@ object Emulator {
       * @return
       *   An Emulator instance with the addresses funded
       */
-    def withAddresses(addresses: Seq[Address], initialValue: Value): Emulator = {
+    def withAddresses(addresses: Seq[Address], initialValue: Value): Emulator =
+        withAddresses(addresses, initialValue, ChainConfig.instant)
+
+    /** [[withAddresses]] with a [[ChainConfig]], spec [CF-5]. */
+    def withAddresses(
+        addresses: Seq[Address],
+        initialValue: Value,
+        chainConfig: ChainConfig
+    ): Emulator = {
         Emulator(
           initialUtxos = EmulatorBase.createInitialUtxos(addresses, initialValue),
           initialContext = Context.testMainnet(),
-          mutators = defaultMutators
+          mutators = defaultMutators,
+          chainConfig = chainConfig
         )
     }
 
@@ -99,21 +130,38 @@ object Emulator {
     }
 
     /** Java-friendly overload of [[withAddresses]]. */
-    def withAddresses(addresses: java.util.List[Address], initialValue: Value): Emulator = {
+    def withAddresses(addresses: java.util.List[Address], initialValue: Value): Emulator =
+        withAddresses(addresses, initialValue, ChainConfig.instant)
+
+    /** Java-friendly overload of [[withAddresses]] with a [[ChainConfig]], spec [CF-5]. */
+    def withAddresses(
+        addresses: java.util.List[Address],
+        initialValue: Value,
+        chainConfig: ChainConfig
+    ): Emulator = {
         import scala.jdk.CollectionConverters.*
-        withAddresses(addresses.asScala.toSeq, initialValue)
+        withAddresses(addresses.asScala.toSeq, initialValue, chainConfig)
     }
 
     def withState(initState: EmulatorInitialState): Emulator =
         withState(initState, Context.testMainnet())
 
-    def withState(initState: EmulatorInitialState, context: Context): Emulator = {
+    def withState(initState: EmulatorInitialState, context: Context): Emulator =
+        withState(initState, context, ChainConfig.instant)
+
+    /** [[withState]] with a [[ChainConfig]], spec [CF-5]. */
+    def withState(
+        initState: EmulatorInitialState,
+        context: Context,
+        chainConfig: ChainConfig
+    ): Emulator = {
         val (certState, datums) = EmulatorBase.buildInitialState(initState, context)
         Emulator(
           initialUtxos = initState.utxos,
           initialContext = context,
           initialCertState = certState,
-          initialDatums = datums
+          initialDatums = datums,
+          chainConfig = chainConfig
         )
     }
 
@@ -142,6 +190,20 @@ object Emulator {
         initialUtxos: Utxos,
         initialStakeRewards: Map[Credential, Coin],
         initialContext: Context
+    ): Emulator =
+        withRegisteredStakeCredentials(
+          initialUtxos,
+          initialStakeRewards,
+          initialContext,
+          ChainConfig.instant
+        )
+
+    /** [[withRegisteredStakeCredentials]] with a [[ChainConfig]], spec [CF-5]. */
+    def withRegisteredStakeCredentials(
+        initialUtxos: Utxos,
+        initialStakeRewards: Map[Credential, Coin],
+        initialContext: Context,
+        chainConfig: ChainConfig
     ): Emulator = {
         Emulator(
           initialUtxos = initialUtxos,
@@ -149,7 +211,8 @@ object Emulator {
           initialCertState = EmulatorBase.certStateWithRegisteredCredentials(
             initialStakeRewards,
             initialContext
-          )
+          ),
+          chainConfig = chainConfig
         )
     }
 }

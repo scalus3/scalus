@@ -73,6 +73,8 @@ The public API maps to the local mini-protocols of a node:
 - The `tick` transition MUST do what `EmulatorBase.atSlot` does today, and nothing more. `[NL-2]`
 - A transition MUST NOT write `Context.fee`. `[NL-3]`
 
+*Implementation status (M1):* `[NL-2]` `setSlot` and `tick` tick the tip snapshot in place, like a direct edit. The current slot is the slot of the tip snapshot (the "ticked tip"), so `treasury` and `donation` change at once, as today. So the stored snapshot of a block can carry a later slot than the block, after ticks. M2 and M3 must tick a snapshot they roll back to, or revalidate on, to the current slot.
+
 **Why:** `[NL-2]`: `tick` is where the epoch transition plugs in later (section 18). `[NL-3]`: a snapshot shares its `Context` with later snapshots, so one write would leak into every snapshot. Today no rule writes `fee`.
 
 ## 4. Block identity
@@ -143,6 +145,8 @@ The direct edits are `addUtxo`, `removeUtxo`, `addDatum` and `addRewards`. They 
 - `clearAppliedTxs` MUST clear only the imported log of `[TS-5]`. `[DE-4]`
 - `clearAppliedTxs` MUST be deprecated. `[DE-5]`
 
+*Implementation status (M1):* `[DE-4]` `clearAppliedTxs` empties the imported log and moves a log-start cursor to the tip. `appliedTxLog`, `appliedTxIndex`, `appliedTxs`, `hasTx` and `getAppliedTx` see the imported log (now empty), then the txs of the selected-chain blocks above the cursor. No block is removed. This keeps `[CP-1]`: two existing tests assert an empty log and `!hasTx` after `clearAppliedTxs`.
+
 *Consequence:* a rollback past the tip block also removes the direct edits made on it. `[TE-1]` holds only for a chain without direct edits.
 
 **Why:** `[DE-1]`: a direct edit seeds a test state. It is not a chain event, so it gets no block. `[DE-3]`: a `removeUtxo` can make a pending tx invalid. `[DE-4]`, `[DE-5]`: with `[TS-5]` the selected chain is the log, so the Emulator cannot forget it without forgetting blocks. `StreamingEmulator` already throws after `clearAppliedTxs`.
@@ -168,6 +172,9 @@ Checks enforced here:
 - On success, `submit` MUST set the tx status to `Pending`. `[MP-7]`
 - In the `Instant` preset, `submit` MUST then forge as section 8 says. `[MP-8]`
 - `submit` MUST be one atomic transition, including the forge of `[MP-8]`. `[MP-9]`
+
+
+*Implementation status (M1):* `[MP-5]` is enforced by the ledger rules, with no membership check of its own. By `[MP-1]` a tx is validated on the mempool tail or the tip, where the inputs of a pending or confirmed duplicate are spent, so the ledger rejects it with `UtxoNotAvailable`. A tx whose inputs a direct edit put back is accepted again, as today (`EmulatorParityTest`, "re-applying a transaction").
 
 *Example, illustrative,* for `[MP-4]`. Block limit 90 112 bytes, so the mempool capacity is 180 224 bytes. Each tx is 16 000 bytes:
 
@@ -203,6 +210,9 @@ Checks enforced here:
 - `produceBlock()` with an empty mempool MUST forge an empty block. `[FG-8]`
 - In the `Instant` preset, the forge MUST repeat until the mempool is empty. `[FG-9]`
 - In the `Instant` preset, the automatic forge of `[MP-8]` and `[FG-9]` MUST NOT forge an empty block. An explicit `produceBlock()` follows `[FG-8]`. `[FG-10]`
+
+
+*Implementation status (M1):* the block limits of `[FG-4]` and `[FG-5]` come in M2. Until then one block takes the whole mempool, so the repeat of `[FG-9]` ends after one block.
 
 *Example, illustrative,* for `[FG-4]`. Block limit 90 112 bytes. Mempool txs, oldest first: 40 000, 40 000, 16 000, 5 000 bytes:
 

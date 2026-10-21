@@ -10,6 +10,7 @@ import scalus.cardano.txbuilder.{Datum, ScriptSource, ThreeArgumentPlutusScriptW
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
 
+import scala.annotation.nowarn
 import scala.collection.immutable.SortedMap
 
 /** The JVM and the JavaScript `Emulator` are two source files claiming to run the same ledger rules
@@ -158,7 +159,8 @@ class EmulatorParityTest extends AnyFunSuite {
         val utxosBefore = emulator.utxos
         val datumsBefore = emulator.datums
 
-        emulator.clearAppliedTxs()
+        // clearAppliedTxs is deprecated (emulator-chain spec [DE-5]); this test pins what it does.
+        emulator.clearAppliedTxs(): @nowarn("msg=clearAppliedTxs")
 
         // Bookkeeping is cleared...
         assert(emulator.appliedTxLog.isEmpty)

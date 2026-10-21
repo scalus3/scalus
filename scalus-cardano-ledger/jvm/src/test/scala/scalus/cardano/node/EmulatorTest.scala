@@ -13,6 +13,8 @@ import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.uplc.PlutusV3
 import scalus.utils.await
 
+import scala.annotation.nowarn
+
 class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
     given testEnv: CardanoInfo = CardanoInfo.mainnet
@@ -173,7 +175,8 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(provider.appliedTxLog.nonEmpty, "precondition: a tx was applied")
         assert(provider.datums.nonEmpty, "precondition: the tx carried an inline datum")
 
-        provider.clearAppliedTxs()
+        // clearAppliedTxs is deprecated (emulator-chain spec [DE-5]); this test pins what it does.
+        provider.clearAppliedTxs(): @nowarn("msg=clearAppliedTxs")
 
         // bookkeeping cleared
         assert(provider.appliedTxLog.isEmpty)
