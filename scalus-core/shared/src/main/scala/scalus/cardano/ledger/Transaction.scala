@@ -45,7 +45,13 @@ case class Transaction(
             TransactionInput(id, idx) -> output.value
         }.toMap
 
-    /** Returns the CBOR encoding of this transaction */
+    /** Returns the CBOR encoding of this transaction.
+      *
+      * A transaction decoded with [[Transaction.fromCbor]] and not changed since encodes to the
+      * bytes it was decoded from, so a 3-element transaction without the `isValid` flag stays 3
+      * elements. Any other transaction, including one returned by `copy`, `withBody` or
+      * `withWitness`, encodes as `[body, witnesses, isValid, auxiliary data]`.
+      */
     def toCbor: Array[Byte] = Cbor.encode(this)
 
     /** Returns CBOR encoding for transaction size/fee calculation.
@@ -109,6 +115,12 @@ object Transaction {
       TransactionWitnessSet.empty,
     )
 
+    /** Decodes a transaction, `[body, witnesses, isValid, auxiliary data]` or, without the flag,
+      * `[body, witnesses, auxiliary data]`.
+      *
+      * The result keeps `bytes`, so [[Transaction.toCbor]] returns them until the transaction is
+      * changed.
+      */
     def fromCbor(
         bytes: Array[Byte]
     )(using pv: ProtocolVersion = ProtocolVersion.conwayPV): Transaction = {
@@ -116,10 +128,68 @@ object Transaction {
         Cbor.decode[Transaction](bytes)
     }
 
+    /** A decoded transaction, which encodes back to the bytes it was decoded from.
+      *
+      * `copy` builds a plain [[Transaction]], so a changed transaction drops these bytes and is
+      * encoded again from its parts.
+      */
+    private final class Decoded(
+        body: KeepRaw[TransactionBody],
+        witnessSetRaw: KeepRaw[TransactionWitnessSet],
+        isValid: Boolean,
+        auxiliaryData: Option[KeepRaw[AuxiliaryData]],
+        val bytes: Array[Byte]
+    ) extends Transaction(body, witnessSetRaw, isValid, auxiliaryData)
+
+    private val partsEncoder: Encoder[Transaction] = Encoder.derived
+
     /** CBOR codec for Transaction */
-    given Encoder[Transaction] = Encoder.derived
+    given Encoder[Transaction] = Encoder { (w, tx) =>
+        tx match
+            case decoded: Decoded =>
+                w.output.writeBytes(decoded.bytes)
+                w
+            case _ => partsEncoder.write(w, tx)
+    }
+
+    /** Decodes a transaction as cardano-ledger's `AlonzoTx` decoder does (Alonzo to Conway).
+      *
+      * Since cardano-ledger-alonzo 1.16.0.0 (cardano-node 11.1.3) the `isValid` flag is optional,
+      * so that a transaction built for an era before Alonzo can be submitted later: when the
+      * element after the witnesses is a CBOR bool it is the flag, otherwise it is the auxiliary
+      * data, `isValid` is true, and the record has 3 elements instead of 4. As in the ledger, the
+      * length is checked after the elements are read.
+      */
     given decoder(using OriginalCborByteArray, ProtocolVersion): Decoder[Transaction] =
-        Decoder.derived[Transaction]
+        Decoder { r =>
+            // `dataItem()` updates the cursor, see the `KeepRaw` decoder
+            r.dataItem()
+            val start = r.cursor
+            val length: Long =
+                if r.hasArrayHeader then r.readArrayHeader()
+                else if r.hasArrayStart then
+                    r.readArrayStart()
+                    -1L
+                else r.unexpectedDataItem("Array for decoding an instance of `Transaction`")
+            val body = r.read[KeepRaw[TransactionBody]]()
+            val witnessSet = r.read[KeepRaw[TransactionWitnessSet]]()
+            val flagSupplied = r.hasBoolean
+            val isValid = if flagSupplied then r.readBoolean() else true
+            val auxiliaryData = r.read[Option[KeepRaw[AuxiliaryData]]]()
+            val expected = if flagSupplied then 4L else 3L
+            if length < 0 then
+                if !r.tryReadBreak() then
+                    r.validationFailure("Excess terms in the array of a `Transaction`")
+            else if length != expected then
+                r.validationFailure(
+                  s"A `Transaction` with${if flagSupplied then "" else "out"} the isValid flag " +
+                      s"has $expected elements, got $length"
+                )
+            val di = r.dataItem()
+            val end = if di == DataItem.EndOfInput then r.input.cursor else r.cursor
+            val bytes = summon[OriginalCborByteArray].slice(start.toInt, end.toInt)
+            Decoded(body, witnessSet, isValid, auxiliaryData, bytes)
+        }
 
     /** Encoder for fee calculation (omits isValid field for Mary-era compatibility) */
     private def feeCalculationEncoder: Encoder[Transaction] = Encoder { (w, tx) =>

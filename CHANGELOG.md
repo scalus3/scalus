@@ -26,6 +26,11 @@
 
 ### Fixed
 
+- `Transaction.fromCbor` accepts a transaction without the `isValid` flag, `[body, witnesses,
+  auxiliary data]`, as cardano-node 11.1.3 does, with `isValid = true`. A decoded transaction
+  encodes back to its original bytes until it is changed. The Emulator's `maxTxSize` check counts
+  the size without the flag, as the ledger does, so a transaction of exactly `maxTxSize` bytes is no
+  longer rejected.
 - Scalus decoded a `HardForkInitiation` governance action whose major protocol version exceeds
   12, the Conway maximum, so it accepted a transaction that the node (11.1.3) fails to
   deserialise. Such an action now fails to decode, as in the ledger's `decodeProtVer`.
