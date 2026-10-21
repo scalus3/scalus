@@ -102,71 +102,90 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val linearVesting = FunctionDef(VestingValidator.linearVesting)
 
+    verifier.addFunction(linearVesting)
+
     /** The steps Lean's CEK may make per test of a statement about the schedule. It has no loop, so
       * its step count does not depend on its input.
       */
     private val scheduleBudget = 400
 
+    private val zeroBeforeStart = verifier.statement(
+      "vesting.schedule.zero_before_start",
+      forAll[Config, BigInt]((config, time) =>
+          (time < config.startTimestamp) ==>
+              call(linearVesting, (config, time))(vested => vested == BigInt(0))
+      )
+    )
+
     test("nothing is vested before the start") {
-        proven(
-          forAll[Config, BigInt]((config, time) =>
-              (time < config.startTimestamp) ==>
-                  call(linearVesting, (config, time))(vested => vested == BigInt(0))
-          ),
-          scheduleBudget,
-          linearVesting
-        )
+        check(zeroBeforeStart, scheduleBudget)
     }
 
+    private val everythingFromTheEnd = verifier.statement(
+      "vesting.schedule.everything_from_the_end",
+      forAll[Config, BigInt]((config, time) =>
+          (config.startTimestamp <= time
+              && config.startTimestamp + config.duration <= time) ==>
+              call(linearVesting, (config, time))(vested => vested == config.initialAmount)
+      )
+    )
+
     test("everything is vested from the end of the period on") {
-        proven(
-          forAll[Config, BigInt]((config, time) =>
-              (config.startTimestamp <= time
-                  && config.startTimestamp + config.duration <= time) ==>
-                  call(linearVesting, (config, time))(vested => vested == config.initialAmount)
-          ),
-          scheduleBudget,
-          linearVesting
-        )
+        check(everythingFromTheEnd, scheduleBudget)
     }
+
+    private val scheduleReturns = verifier.statement(
+      "vesting.schedule.returns",
+      forAll[Config, BigInt]((config, time) => succeeds(linearVesting, (config, time)))
+    )
 
     test("the schedule returns for every datum and time") {
         // Whatever the datum's numbers are: it does not divide by a zero duration.
-        proven(
-          forAll[Config, BigInt]((config, time) => succeeds(linearVesting, (config, time))),
-          scheduleBudget,
-          linearVesting
-        )
+        check(scheduleReturns, scheduleBudget)
     }
+
+    /** The contract `linearVesting` states in its body, and that it returns: none where it states
+      * no contract.
+      */
+    private val statedContractHolds = FunctionContract
+        .inSource(linearVesting)
+        .map(stated =>
+            verifier.statement(
+              "vesting.schedule.stated_contract_holds",
+              stated.returnsWhen((config, time) => true).prop
+            )
+        )
+
+    private val vestedBelowTheAmount = verifier.refute(
+      "vesting.schedule.vested_below_the_amount",
+      contract(linearVesting)(
+        expects = (config, time) => config.initialAmount >= BigInt(0),
+        ensures = (config, time) => vested => vested < config.initialAmount
+      ).prop
+    )
+
+    private val boundedWithoutCondition = verifier.refute(
+      "vesting.schedule.bounded_without_condition",
+      contract(linearVesting)(
+        expects = (config, time) => true,
+        ensures = (config, time) => vested => vested <= config.initialAmount
+      ).prop
+    )
 
     test("the schedule's contract, stated in its body, holds of its compiled program") {
         // `linearVesting` ends in `.ensuring(vested => ...)`: for an initial amount that is not
         // negative, what is vested lies between nothing and that amount. The verifier reads the
         // clause from the function's SIR. It owes its callers nothing, and here it is also shown
         // to return.
-        val stated = FunctionContract
-            .inSource(linearVesting)
-            .getOrElse(fail("linearVesting states no contract"))
-        proven(stated.returnsWhen((config, time) => true).prop, scheduleBudget, linearVesting)
-        // negative control: a wrong postcondition. From the end on, everything is vested.
-        refuted(
-          contract(linearVesting)(
-            expects = (config, time) => config.initialAmount >= BigInt(0),
-            ensures = (config, time) => vested => vested < config.initialAmount
-          ).prop,
-          scheduleBudget,
-          linearVesting
+        check(
+          statedContractHolds.getOrElse(fail("linearVesting states no contract")),
+          scheduleBudget
         )
+        // negative control: a wrong postcondition. From the end on, everything is vested.
+        check(vestedBelowTheAmount, scheduleBudget)
         // negative control: the bound needs its condition. A negative initial amount is below
         // what is vested before the start.
-        refuted(
-          contract(linearVesting)(
-            expects = (config, time) => true,
-            ensures = (config, time) => vested => vested <= config.initialAmount
-          ).prop,
-          scheduleBudget,
-          linearVesting
-        )
+        check(boundedWithoutCondition, scheduleBudget)
     }
 
     test("the specification is not part of the script") {
@@ -191,28 +210,30 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         assert(!script.contains("postcondition"))
     }
 
+    private val doesNotDecrease = verifier.statement(
+      "vesting.schedule.does_not_decrease",
+      forAll[Config, BigInt, BigInt]((config, earlier, later) =>
+          (config.initialAmount >= BigInt(0) && earlier <= later) ==>
+              call(linearVesting, (config, earlier))(before =>
+                  call(linearVesting, (config, later))(after => before <= after)
+              )
+      )
+    )
+
+    private val doesNotDecreaseForAnyAmount = verifier.refute(
+      "vesting.schedule.does_not_decrease_for_any_amount",
+      forAll[Config, BigInt, BigInt]((config, earlier, later) =>
+          (earlier <= later) ==>
+              call(linearVesting, (config, earlier))(before =>
+                  call(linearVesting, (config, later))(after => before <= after)
+              )
+      )
+    )
+
     test("the vested amount does not decrease with time") {
-        proven(
-          forAll[Config, BigInt, BigInt]((config, earlier, later) =>
-              (config.initialAmount >= BigInt(0) && earlier <= later) ==>
-                  call(linearVesting, (config, earlier))(before =>
-                      call(linearVesting, (config, later))(after => before <= after)
-                  )
-          ),
-          scheduleBudget,
-          linearVesting
-        )
+        check(doesNotDecrease, scheduleBudget)
         // negative control: a negative initial amount is taken away over time
-        refuted(
-          forAll[Config, BigInt, BigInt]((config, earlier, later) =>
-              (earlier <= later) ==>
-                  call(linearVesting, (config, earlier))(before =>
-                      call(linearVesting, (config, later))(after => before <= after)
-                  )
-          ),
-          scheduleBudget,
-          linearVesting
-        )
+        check(doesNotDecreaseForAnyAmount, scheduleBudget)
     }
 
     // The validator, on every script context
@@ -220,6 +241,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     /** The validator's entry point, compiled with the tactic's options. */
     private val validator =
         FunctionDef.named("vesting", (context: Data) => VestingValidator.validate(context))
+
+    verifier.addFunction(validator)
 
     /** The steps for a context the validator rejects before it reads the transaction. */
     private val rejectionBudget = 600
@@ -242,46 +265,49 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         assert(built(someDatum(datum)) == expected(prelude.Option.Some(datum)))
     }
 
+    private val noDatumIsRejected = verifier.statement(
+      "vesting.validator.no_datum_is_rejected",
+      forAll[Data, Data, Data]((txInfo, redeemer, ref) =>
+          fails(validator, scriptContext(txInfo, redeemer, spendingInfo(ref, noDatum)))
+      )
+    )
+
     test("an output without a datum cannot be spent") {
-        proven(
-          forAll[Data, Data, Data]((txInfo, redeemer, ref) =>
-              fails(validator, scriptContext(txInfo, redeemer, spendingInfo(ref, noDatum)))
-          ),
-          rejectionBudget,
-          validator
-        )
+        check(noDatumIsRejected, rejectionBudget)
     }
 
-    test("a withdrawal of a non-positive amount is rejected") {
-        proven(
-          forAll[Data, Data]((txInfo, ref) =>
-              forAll[Data, BigInt]((datum, requested) =>
-                  (requested <= BigInt(0)) ==> fails(
-                    validator,
-                    scriptContext(
-                      txInfo,
-                      Action(requested).toData,
-                      spendingInfo(ref, someDatum(datum))
-                    )
-                  )
+    private val nonPositiveAmountIsRejected = verifier.statement(
+      "vesting.validator.non_positive_amount_is_rejected",
+      forAll[Data, Data]((txInfo, ref) =>
+          forAll[Data, BigInt]((datum, requested) =>
+              (requested <= BigInt(0)) ==> fails(
+                validator,
+                scriptContext(
+                  txInfo,
+                  Action(requested).toData,
+                  spendingInfo(ref, someDatum(datum))
+                )
               )
-          ),
-          rejectionBudget,
-          validator
-        )
+          )
+      )
+    )
+
+    test("a withdrawal of a non-positive amount is rejected") {
+        check(nonPositiveAmountIsRejected, rejectionBudget)
     }
+
+    private val onlySpending = verifier.statement(
+      "vesting.validator.only_spending",
+      forAll[Data, Data, Data]((txInfo, redeemer, scriptInfo) =>
+          !Prop(unConstrData(scriptInfo).fst == BigInt(1)) ==>
+              fails(validator, scriptContext(txInfo, redeemer, scriptInfo))
+      )
+    )
 
     test("the script validates nothing but spending") {
         // Spending is the script info of tag 1. For a script info that is not a constructor the
         // premise's test fails, so its negation holds, and the validator fails as well.
-        proven(
-          forAll[Data, Data, Data]((txInfo, redeemer, scriptInfo) =>
-              !Prop(unConstrData(scriptInfo).fst == BigInt(1)) ==>
-                  fails(validator, scriptContext(txInfo, redeemer, scriptInfo))
-          ),
-          rejectionBudget,
-          validator
-        )
+        check(onlySpending, rejectionBudget)
     }
 
     // Withdrawals
@@ -289,153 +315,163 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     /** The steps for a withdrawal: the validator runs to its end on one that it accepts. */
     private val withdrawalBudget = 12000
 
+    private val sampleAccepted = verifier.statement(
+      "vesting.withdrawal.sample_is_accepted",
+      succeeds(
+        validator,
+        withdrawal(
+          BigInt(1000),
+          BigInt(1000),
+          BigInt(20_000_000),
+          BigInt(20_000_000),
+          BigInt(20_000_000),
+          BigInt(2000),
+          BigInt(200_000),
+          signed,
+          payment(BigInt(19_800_000))
+        )
+      )
+    )
+
+    private val sampleUnsigned = verifier.statement(
+      "vesting.withdrawal.sample_unsigned_is_rejected",
+      fails(
+        validator,
+        withdrawal(
+          BigInt(1000),
+          BigInt(1000),
+          BigInt(20_000_000),
+          BigInt(20_000_000),
+          BigInt(20_000_000),
+          BigInt(2000),
+          BigInt(200_000),
+          prelude.List.Nil,
+          payment(BigInt(19_800_000))
+        )
+      )
+    )
+
     test("a sample withdrawal is accepted on the Lean machine, and rejected unsigned") {
         // Closed statements: Lean decides them by running the validator.
-        val accepted = succeeds(
-          validator,
-          withdrawal(
-            BigInt(1000),
-            BigInt(1000),
-            BigInt(20_000_000),
-            BigInt(20_000_000),
-            BigInt(20_000_000),
-            BigInt(2000),
-            BigInt(200_000),
-            signed,
-            payment(BigInt(19_800_000))
-          )
-        )
-        assert(proven(accepted, withdrawalBudget, validator) == ProofKind.LeanNative)
-        val unsigned = fails(
-          validator,
-          withdrawal(
-            BigInt(1000),
-            BigInt(1000),
-            BigInt(20_000_000),
-            BigInt(20_000_000),
-            BigInt(20_000_000),
-            BigInt(2000),
-            BigInt(200_000),
-            prelude.List.Nil,
-            payment(BigInt(19_800_000))
-          )
-        )
-        assert(proven(unsigned, withdrawalBudget, validator) == ProofKind.LeanNative)
+        assert(artifactOf(check(sampleAccepted, withdrawalBudget)).kind == ProofKind.LeanNative)
+        assert(artifactOf(check(sampleUnsigned, withdrawalBudget)).kind == ProofKind.LeanNative)
     }
+
+    private val unsignedIsRejected = verifier.statement(
+      "vesting.withdrawal.unsigned_is_rejected",
+      forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
+          forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
+              forAll[BigInt, Data]((fee, outputs) =>
+                  fails(
+                    validator,
+                    withdrawal(
+                      start,
+                      duration,
+                      amount,
+                      locked,
+                      requested,
+                      time,
+                      fee,
+                      prelude.List.Nil,
+                      outputs.to[prelude.List[TxOut]]
+                    )
+                  )
+              )
+          )
+      )
+    )
+
+    private val signedIsRejected = verifier.refute(
+      "vesting.withdrawal.signed_is_rejected",
+      forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
+          forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
+              forAll[BigInt, BigInt]((fee, paid) =>
+                  fails(
+                    validator,
+                    withdrawal(
+                      start,
+                      duration,
+                      amount,
+                      locked,
+                      requested,
+                      time,
+                      fee,
+                      signed,
+                      payment(paid)
+                    )
+                  )
+              )
+          )
+      )
+    )
 
     test("nobody withdraws without the beneficiary's signature") {
         // For every datum, amount and time, and whatever the outputs are. The validator fails
         // before it reads the outputs, so they can be any Data.
-        proven(
-          forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
-              forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
-                  forAll[BigInt, Data]((fee, outputs) =>
-                      fails(
-                        validator,
-                        withdrawal(
-                          start,
-                          duration,
-                          amount,
-                          locked,
-                          requested,
-                          time,
-                          fee,
-                          prelude.List.Nil,
-                          outputs.to[prelude.List[TxOut]]
-                        )
-                      )
-                  )
-              )
-          ),
-          withdrawalBudget,
-          validator
-        )
+        check(unsignedIsRejected, withdrawalBudget)
         // negative control: with the signature, the solver finds a withdrawal that is accepted
-        refuted(
-          forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
-              forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
-                  forAll[BigInt, BigInt]((fee, paid) =>
-                      fails(
-                        validator,
-                        withdrawal(
-                          start,
-                          duration,
-                          amount,
-                          locked,
-                          requested,
-                          time,
-                          fee,
-                          signed,
-                          payment(paid)
-                        )
-                      )
+        check(signedIsRejected, withdrawalBudget)
+    }
+
+    private val lockedAtLeastUnvested = verifier.statement(
+      "vesting.withdrawal.locked_at_least_unvested",
+      forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
+          forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
+              forAll[BigInt, BigInt]((fee, paid) =>
+                  (locked - requested < amount - VestingValidator.linearVesting(
+                    config(start, duration, amount),
+                    time
+                  )) ==> fails(
+                    validator,
+                    withdrawal(
+                      start,
+                      duration,
+                      amount,
+                      locked,
+                      requested,
+                      time,
+                      fee,
+                      signed,
+                      payment(paid)
+                    )
                   )
               )
-          ),
-          withdrawalBudget,
-          validator
-        )
-    }
+          )
+      )
+    )
+
+    private val lockedMoreThanUnvested = verifier.refute(
+      "vesting.withdrawal.locked_more_than_unvested",
+      forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
+          forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
+              forAll[BigInt, BigInt]((fee, paid) =>
+                  (locked - requested <= amount - VestingValidator.linearVesting(
+                    config(start, duration, amount),
+                    time
+                  )) ==> fails(
+                    validator,
+                    withdrawal(
+                      start,
+                      duration,
+                      amount,
+                      locked,
+                      requested,
+                      time,
+                      fee,
+                      signed,
+                      payment(paid)
+                    )
+                  )
+              )
+          )
+      )
+    )
 
     test("what stays locked is at least what has not vested yet") {
         // A withdrawal that would leave less is rejected, even when the beneficiary signs it.
-        proven(
-          forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
-              forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
-                  forAll[BigInt, BigInt]((fee, paid) =>
-                      (locked - requested < amount - VestingValidator.linearVesting(
-                        config(start, duration, amount),
-                        time
-                      )) ==> fails(
-                        validator,
-                        withdrawal(
-                          start,
-                          duration,
-                          amount,
-                          locked,
-                          requested,
-                          time,
-                          fee,
-                          signed,
-                          payment(paid)
-                        )
-                      )
-                  )
-              )
-          ),
-          withdrawalBudget,
-          validator,
-          linearVesting
-        )
+        check(lockedAtLeastUnvested, withdrawalBudget)
         // negative control: leaving exactly what has not vested is accepted
-        refuted(
-          forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
-              forAll[BigInt, BigInt, BigInt]((locked, requested, time) =>
-                  forAll[BigInt, BigInt]((fee, paid) =>
-                      (locked - requested <= amount - VestingValidator.linearVesting(
-                        config(start, duration, amount),
-                        time
-                      )) ==> fails(
-                        validator,
-                        withdrawal(
-                          start,
-                          duration,
-                          amount,
-                          locked,
-                          requested,
-                          time,
-                          fee,
-                          signed,
-                          payment(paid)
-                        )
-                      )
-                  )
-              )
-          ),
-          withdrawalBudget,
-          validator,
-          linearVesting
-        )
+        check(lockedMoreThanUnvested, withdrawalBudget)
     }
 
     /** What stays locked is at least what has not vested yet, whatever the outputs are: the
@@ -466,6 +502,19 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
             )
         )
 
+    private val lockedForAnyOutputsAtFoundBudget = verifier.statement(
+      "vesting.withdrawal.locked_for_any_outputs",
+      lockedForAnyOutputs
+    )
+
+    /** The same statement, checked at the budget of a whole withdrawal, which Lean does not finish.
+      * It is a statement of its own: one that is proved cannot also be inconclusive.
+      */
+    private val lockedForAnyOutputsAtWithdrawalBudget = verifier.statement(
+      "vesting.withdrawal.locked_for_any_outputs.at_withdrawal_budget",
+      lockedForAnyOutputs
+    )
+
     test("the same holds whatever the outputs are, at a budget that ends before they are read") {
         // The validator rejects such a withdrawal at its check of the amount, before it reads the
         // outputs, so they can be any Data, as for an unsigned withdrawal. But Lean runs each
@@ -482,7 +531,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // The tactic finds that budget, from the counterexamples that smaller ones give: about
         // 1610 steps where this was written. So the proof does not hang on a number that
         // follows the validator's code.
-        val found = provenAt(lockedForAnyOutputs, validator, linearVesting)
+        val found = artifactOf(check(lockedForAnyOutputsAtFoundBudget)).budget
         assert(found < withdrawalBudget / 4, found)
     }
 
@@ -493,16 +542,13 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // other.
         val leansLimit = UplcBlaster(Budget.LeanSteps(withdrawalBudget), lean, 5.minutes)
             .withMaxHeartbeats(UplcBlaster.leanMaxHeartbeats)
-        val givenUp = inconclusive(lockedForAnyOutputs, leansLimit, validator, linearVesting)
+        val givenUp = inconclusive(lockedForAnyOutputsAtWithdrawalBudget, leansLimit)
         assert(givenUp.contains("maximum number of heartbeats"), givenUp)
         // Under the tactic's limit, twice that, the run gets past that point and goes on: it
         // gave no result in 8 minutes. The time limit ends it.
         val unfinished = inconclusive(
-          lockedForAnyOutputs,
-          withdrawalBudget,
-          30.seconds,
-          validator,
-          linearVesting
+          lockedForAnyOutputsAtWithdrawalBudget,
+          UplcBlaster(Budget.LeanSteps(withdrawalBudget), lean, 30.seconds)
         )
         assert(unfinished.contains("did not finish"), unfinished)
         // It is the symbolic run of the validator that does not end, before the solver is asked.
@@ -515,7 +561,6 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // `spend` is inlined into `validate`, so the verifier finds its clauses in the code of
         // the function that builds a withdrawal and validates it. Here the transaction has one
         // signature, of any key.
-        requireLean()
         val spends = FunctionDef.named(
           "spends",
           (w: Withdrawal) =>
@@ -533,8 +578,6 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
                 )
               )
         )
-        val verifier = Verifier.empty
-        verifier.addFunction(linearVesting)
         verifier.addFunction(spends)
         val stated = verifier.guarantees(spends.ref)
         assert(stated.unsupported.isEmpty, stated.unsupported)
@@ -551,16 +594,13 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // one the tactic would run the validator once for every clause.
         val together = stated.together.getOrElse(fail("no statement of the three clauses"))
         assert(together.name == "spends/ensures")
-        verifier.verify(together, UplcBlaster(Budget.LeanSteps(withdrawalBudget), lean)) match
-            case VerificationResult.Proven(_) =>
-            case other => fail(s"expected a proof of ${together.name}, got $other")
+        check(together, withdrawalBudget)
     }
 
     test("the validator would not establish a precondition on the amount") {
         // Why the schedule states its bound with a condition: had its contract expected an
         // initial amount that is not negative, the validator's call would owe that, wherever a
         // withdrawal reaches it.
-        requireLean()
         val withdraw = FunctionDef.named(
           "withdraw",
           (w: Withdrawal) =>
@@ -578,8 +618,6 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
                 )
               )
         )
-        val verifier = Verifier.empty
-        verifier.addFunction(linearVesting)
         verifier.addFunction(withdraw)
         verifier.contract(
           "vested_in_range",
@@ -589,7 +627,6 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
                 (config, time) => vested => BigInt(0) <= vested && vested <= config.initialAmount
           )
         )
-        val tactic = UplcBlaster(Budget.LeanSteps(withdrawalBudget), lean)
 
         // The verifier finds the call, in the validator's own source.
         val owed = verifier.obligations(withdraw.ref) match
@@ -601,14 +638,19 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
             case other => fail(s"expected an obligation's origin, got $other")
 
         // It is refuted: the validator reads the amount from the datum and does not check it.
-        verifier.verify(owed, tactic) match
-            case VerificationResult.Refuted(proof) =>
-                val values = proof.artifact.asInstanceOf[UplcBlaster.Artifact].counterexample.toMap
-                val amount = values.collectFirst {
-                    case (name, value) if name.endsWith(".amount") => integer(value)
-                }
-                assert(amount.exists(_ < 0), values)
-            case other => fail(s"expected a refutation, got $other")
+        val values = counterexampleOf(
+          check(
+            VerificationRequest(
+              owed,
+              UplcBlaster(Budget.LeanSteps(withdrawalBudget), lean),
+              ExpectedOutcome.Falsified
+            )
+          )
+        )
+        val amount = values.collectFirst {
+            case (name, value) if name.endsWith(".amount") => integer(value)
+        }
+        assert(amount.exists(_ < 0), values)
 
         // Where the withdrawal's own contract expects such an amount, the obligation is proved.
         val assumes = verifier.contract(
@@ -616,59 +658,59 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
           contract(withdraw)(expects = w => w.amount >= BigInt(0), ensures = w => done => true)
         )
         val List(assumed) = verifier.obligations(assumes).statements
-        verifier.verify(assumed, tactic) match
-            case VerificationResult.Proven(_) =>
-            case other                        => fail(s"expected a proof, got $other")
+        check(assumed, withdrawalBudget)
     }
+
+    private val everythingAfterTheEnd = verifier.statement(
+      "vesting.withdrawal.everything_after_the_end",
+      forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
+          forAll[BigInt, BigInt, BigInt]((locked, time, fee) =>
+              (duration >= BigInt(0) && start + duration <= time && locked > BigInt(0)
+                  && locked <= amount) ==> succeeds(
+                validator,
+                withdrawal(
+                  start,
+                  duration,
+                  amount,
+                  locked,
+                  locked,
+                  time,
+                  fee,
+                  signed,
+                  payment(locked - fee)
+                )
+              )
+          )
+      )
+    )
+
+    private val everythingAtAnyTime = verifier.refute(
+      "vesting.withdrawal.everything_at_any_time",
+      forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
+          forAll[BigInt, BigInt, BigInt]((locked, time, fee) =>
+              (duration >= BigInt(0) && locked > BigInt(0) && locked <= amount) ==> succeeds(
+                validator,
+                withdrawal(
+                  start,
+                  duration,
+                  amount,
+                  locked,
+                  locked,
+                  time,
+                  fee,
+                  signed,
+                  payment(locked - fee)
+                )
+              )
+          )
+      )
+    )
 
     test("after the end of the period the beneficiary withdraws everything that is locked") {
         // The funds are not stuck: such a withdrawal, paid out less the fee, is always accepted.
-        proven(
-          forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
-              forAll[BigInt, BigInt, BigInt]((locked, time, fee) =>
-                  (duration >= BigInt(0) && start + duration <= time && locked > BigInt(0)
-                      && locked <= amount) ==> succeeds(
-                    validator,
-                    withdrawal(
-                      start,
-                      duration,
-                      amount,
-                      locked,
-                      locked,
-                      time,
-                      fee,
-                      signed,
-                      payment(locked - fee)
-                    )
-                  )
-              )
-          ),
-          withdrawalBudget,
-          validator
-        )
+        check(everythingAfterTheEnd, withdrawalBudget)
         // negative control: before the end of the period not everything has vested
-        refuted(
-          forAll[BigInt, BigInt, BigInt]((start, duration, amount) =>
-              forAll[BigInt, BigInt, BigInt]((locked, time, fee) =>
-                  (duration >= BigInt(0) && locked > BigInt(0) && locked <= amount) ==> succeeds(
-                    validator,
-                    withdrawal(
-                      start,
-                      duration,
-                      amount,
-                      locked,
-                      locked,
-                      time,
-                      fee,
-                      signed,
-                      payment(locked - fee)
-                    )
-                  )
-              )
-          ),
-          withdrawalBudget,
-          validator
-        )
+        check(everythingAtAnyTime, withdrawalBudget)
     }
 }
 

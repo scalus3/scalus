@@ -9,155 +9,25 @@
     }
   },
   "results": {
-    "#1b4867e16e8e6d88": {
+    "spends/ensures": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "e121d366325ced83",
+      "statement": "057edec0bd7340d8",
       "programs": [
-        "1a02b353d6639bbb"
-      ],
-      "notes": {
-        "budget": "400",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the schedule returns for every datum and time"
-      ]
-    },
-    "#246115d29bba87a1": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "d7d35bcf2ded662a",
-      "programs": [
-        "dd259a1f1235ed04",
-        "ad69a1d00edaa251"
+        "48aa3a1595befeb7",
+        "53c869ef90e5b602",
+        "62a582c7cb31cbfb",
+        "a9a9375e5ae2a66c"
       ],
       "notes": {
         "budget": "12000",
         "kind": "Blaster"
       },
       "tests": [
-        "what stays locked is at least what has not vested yet"
+        "the guarantees stated on spend hold of every withdrawal the script accepts"
       ]
     },
-    "#3ebd32aa82352726": {
-      "tactic": "uplc-blaster",
-      "result": "refuted",
-      "statement": "48db2e9a3a68bcde",
-      "programs": [
-        "4a0d6db9e431a08e",
-        "c761d7b2b6f3888c",
-        "b0b68c98588bda12"
-      ],
-      "notes": {
-        "budget": "400",
-        "kind": "Blaster"
-      },
-      "counterexample": {
-        "config.beneficiary.hash": "",
-        "config.duration": 0,
-        "config.initialAmount": 1,
-        "config.startTimestamp": -1,
-        "time": 0
-      },
-      "tests": [
-        "the schedule's contract, stated in its body, holds of its compiled program"
-      ]
-    },
-    "#46d63335833345ab": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "1c207e4e5e5ea831",
-      "programs": [
-        "a2a8e059fdd76a7a"
-      ],
-      "notes": {
-        "budget": "600",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "an output without a datum cannot be spent"
-      ]
-    },
-    "#5033e4635f2fb19e": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "0127eb16b379b16e",
-      "programs": [
-        "d2a643a94d9ac501",
-        "7dc0c63ece5f2d1a"
-      ],
-      "notes": {
-        "budget": "600",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the script validates nothing but spending"
-      ]
-    },
-    "#5f5b206820a7e069": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "cb8aa581c9abc2ac",
-      "programs": [
-        "2d836507fba7b7c3",
-        "c31d8c26d1e64064"
-      ],
-      "notes": {
-        "budget": "600",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "a withdrawal of a non-positive amount is rejected"
-      ]
-    },
-    "#6b65cde1860f5502": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "318cc4c423632e0e",
-      "programs": [
-        "6ff97ca2f7903ef7",
-        "a520a7adccc409e9"
-      ],
-      "notes": {
-        "budget": "400",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "nothing is vested before the start"
-      ]
-    },
-    "#764f2a16a582d567": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "2d3cb18e20f505f4",
-      "programs": [
-        "cdfbaa5d75a38ed9"
-      ],
-      "notes": {
-        "budget": "12000",
-        "kind": "LeanNative"
-      },
-      "tests": [
-        "a sample withdrawal is accepted on the Lean machine, and rejected unsigned"
-      ]
-    },
-    "#7aa4eaa1992fcbab": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "e281ad1f61b49d8a",
-      "programs": [
-        "e05f299f12b359b2"
-      ],
-      "notes": {
-        "budget": "12000",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "nobody withdraws without the beneficiary's signature"
-      ]
-    },
-    "#80b0ce398e702f27": {
+    "vesting.schedule.bounded_without_condition": {
       "tactic": "uplc-blaster",
       "result": "refuted",
       "statement": "48db2e9a3a68bcde",
@@ -181,7 +51,311 @@
         "the schedule's contract, stated in its body, holds of its compiled program"
       ]
     },
-    "#8680a73b2769f418": {
+    "vesting.schedule.does_not_decrease": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "1ac3cc3bac313300",
+      "programs": [
+        "1a72b1e091801333",
+        "81ebb2fdf61f999e"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the vested amount does not decrease with time"
+      ]
+    },
+    "vesting.schedule.does_not_decrease_for_any_amount": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "1ac3cc3bac313300",
+      "programs": [
+        "4233d166e3119bbd",
+        "81ebb2fdf61f999e"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "config.beneficiary.hash": "",
+        "config.duration": 0,
+        "config.initialAmount": -1,
+        "config.startTimestamp": -2,
+        "earlier": -4,
+        "later": -1
+      },
+      "tests": [
+        "the vested amount does not decrease with time"
+      ]
+    },
+    "vesting.schedule.everything_from_the_end": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "318cc4c423632e0e",
+      "programs": [
+        "cd650d3a1fc3f07a",
+        "113d3a4e2d70942f"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "everything is vested from the end of the period on"
+      ]
+    },
+    "vesting.schedule.returns": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "e121d366325ced83",
+      "programs": [
+        "1a02b353d6639bbb"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the schedule returns for every datum and time"
+      ]
+    },
+    "vesting.schedule.stated_contract_holds": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2e67634cb9bbebf9",
+      "programs": [
+        "5c653021f0f6dce1",
+        "1a02b353d6639bbb",
+        "c761d7b2b6f3888c",
+        "c7cf963a7d7378f2"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the schedule's contract, stated in its body, holds of its compiled program"
+      ]
+    },
+    "vesting.schedule.vested_below_the_amount": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "48db2e9a3a68bcde",
+      "programs": [
+        "4a0d6db9e431a08e",
+        "c761d7b2b6f3888c",
+        "b0b68c98588bda12"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "config.beneficiary.hash": "",
+        "config.duration": 0,
+        "config.initialAmount": 1,
+        "config.startTimestamp": -1,
+        "time": 0
+      },
+      "tests": [
+        "the schedule's contract, stated in its body, holds of its compiled program"
+      ]
+    },
+    "vesting.schedule.zero_before_start": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "318cc4c423632e0e",
+      "programs": [
+        "6ff97ca2f7903ef7",
+        "a520a7adccc409e9"
+      ],
+      "notes": {
+        "budget": "400",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "nothing is vested before the start"
+      ]
+    },
+    "vesting.validator.no_datum_is_rejected": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "1c207e4e5e5ea831",
+      "programs": [
+        "a2a8e059fdd76a7a"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "an output without a datum cannot be spent"
+      ]
+    },
+    "vesting.validator.non_positive_amount_is_rejected": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "cb8aa581c9abc2ac",
+      "programs": [
+        "2d836507fba7b7c3",
+        "c31d8c26d1e64064"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "a withdrawal of a non-positive amount is rejected"
+      ]
+    },
+    "vesting.validator.only_spending": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "0127eb16b379b16e",
+      "programs": [
+        "d2a643a94d9ac501",
+        "7dc0c63ece5f2d1a"
+      ],
+      "notes": {
+        "budget": "600",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the script validates nothing but spending"
+      ]
+    },
+    "vesting.withdrawal.everything_after_the_end": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "27fb46cb7b334b13",
+      "programs": [
+        "d033e2da9a098c33",
+        "d22c85ae6b26ad0a"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "after the end of the period the beneficiary withdraws everything that is locked"
+      ]
+    },
+    "vesting.withdrawal.everything_at_any_time": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "27fb46cb7b334b13",
+      "programs": [
+        "49aeb66f9d34555b",
+        "d22c85ae6b26ad0a"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "amount": 1,
+        "duration": 3,
+        "fee": 0,
+        "locked": 1,
+        "start": -1,
+        "time": -2
+      },
+      "tests": [
+        "after the end of the period the beneficiary withdraws everything that is locked"
+      ]
+    },
+    "vesting.withdrawal.locked_at_least_unvested": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "d7d35bcf2ded662a",
+      "programs": [
+        "dd259a1f1235ed04",
+        "ad69a1d00edaa251"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "what stays locked is at least what has not vested yet"
+      ]
+    },
+    "vesting.withdrawal.locked_for_any_outputs": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "72003b9c14b54091",
+      "programs": [
+        "dd259a1f1235ed04",
+        "5c409699b2b32a23"
+      ],
+      "notes": {
+        "budget": "1608",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the same holds whatever the outputs are, at a budget that ends before they are read"
+      ]
+    },
+    "vesting.withdrawal.locked_more_than_unvested": {
+      "tactic": "uplc-blaster",
+      "result": "refuted",
+      "statement": "d7d35bcf2ded662a",
+      "programs": [
+        "df2ea761551afc0a",
+        "ad69a1d00edaa251"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "Blaster"
+      },
+      "counterexample": {
+        "amount": 0,
+        "duration": 1,
+        "fee": 0,
+        "locked": 1,
+        "paid": 1,
+        "requested": 1,
+        "start": 1,
+        "time": 0
+      },
+      "tests": [
+        "what stays locked is at least what has not vested yet"
+      ]
+    },
+    "vesting.withdrawal.sample_is_accepted": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2d3cb18e20f505f4",
+      "programs": [
+        "cdfbaa5d75a38ed9"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "a sample withdrawal is accepted on the Lean machine, and rejected unsigned"
+      ]
+    },
+    "vesting.withdrawal.sample_unsigned_is_rejected": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "87acb769a9c0ddb7",
+      "programs": [
+        "67fea25543682765"
+      ],
+      "notes": {
+        "budget": "12000",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "a sample withdrawal is accepted on the Lean machine, and rejected unsigned"
+      ]
+    },
+    "vesting.withdrawal.signed_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "refuted",
       "statement": "afb97d43bd33715b",
@@ -206,175 +380,63 @@
         "nobody withdraws without the beneficiary's signature"
       ]
     },
-    "#89b4f1be9c5d6a35": {
+    "vesting.withdrawal.unsigned_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "1ac3cc3bac313300",
+      "statement": "e281ad1f61b49d8a",
       "programs": [
-        "1a72b1e091801333",
-        "81ebb2fdf61f999e"
+        "e05f299f12b359b2"
       ],
       "notes": {
-        "budget": "400",
+        "budget": "12000",
         "kind": "Blaster"
       },
       "tests": [
-        "the vested amount does not decrease with time"
+        "nobody withdraws without the beneficiary's signature"
       ]
     },
-    "#89da6a4afb047c5e": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "2e67634cb9bbebf9",
-      "programs": [
-        "5c653021f0f6dce1",
-        "1a02b353d6639bbb",
-        "c761d7b2b6f3888c",
-        "c7cf963a7d7378f2"
-      ],
-      "notes": {
-        "budget": "400",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the schedule's contract, stated in its body, holds of its compiled program"
-      ]
-    },
-    "#9c164479316347f3": {
+    "withdraw/vested_in_range#1": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "27fb46cb7b334b13",
+      "statement": "018e2bd9f23851b6",
       "programs": [
-        "49aeb66f9d34555b",
-        "d22c85ae6b26ad0a"
+        "3bfdb0325e0d17c1",
+        "b88822cf7b1edf13"
       ],
       "notes": {
         "budget": "12000",
         "kind": "Blaster"
       },
       "counterexample": {
-        "amount": 1,
-        "duration": 3,
-        "fee": 0,
-        "locked": 1,
-        "start": -1,
-        "time": -2
+        "w.amount": -1,
+        "w.duration": 0,
+        "w.fee": 0,
+        "w.locked": 0,
+        "w.paid": 0,
+        "w.requested": 1,
+        "w.signer": "",
+        "w.start": 0,
+        "w.time": 0
       },
       "tests": [
-        "after the end of the period the beneficiary withdraws everything that is locked"
+        "the validator would not establish a precondition on the amount"
       ]
     },
-    "#a201be90ad504679": {
+    "withdraw_of_an_amount/vested_in_range#1": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "87acb769a9c0ddb7",
+      "statement": "ba7daab2463b05a7",
       "programs": [
-        "67fea25543682765"
-      ],
-      "notes": {
-        "budget": "12000",
-        "kind": "LeanNative"
-      },
-      "tests": [
-        "a sample withdrawal is accepted on the Lean machine, and rejected unsigned"
-      ]
-    },
-    "#afb40906c4709071": {
-      "tactic": "uplc-blaster",
-      "result": "refuted",
-      "statement": "1ac3cc3bac313300",
-      "programs": [
-        "4233d166e3119bbd",
-        "81ebb2fdf61f999e"
-      ],
-      "notes": {
-        "budget": "400",
-        "kind": "Blaster"
-      },
-      "counterexample": {
-        "config.beneficiary.hash": "",
-        "config.duration": 0,
-        "config.initialAmount": -1,
-        "config.startTimestamp": -2,
-        "earlier": -4,
-        "later": -1
-      },
-      "tests": [
-        "the vested amount does not decrease with time"
-      ]
-    },
-    "#c2e54f6dba532144": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "318cc4c423632e0e",
-      "programs": [
-        "cd650d3a1fc3f07a",
-        "113d3a4e2d70942f"
-      ],
-      "notes": {
-        "budget": "400",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "everything is vested from the end of the period on"
-      ]
-    },
-    "#d12232ef2254e910": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "27fb46cb7b334b13",
-      "programs": [
-        "d033e2da9a098c33",
-        "d22c85ae6b26ad0a"
+        "1eabacc8665bc7c8",
+        "3bfdb0325e0d17c1",
+        "b88822cf7b1edf13"
       ],
       "notes": {
         "budget": "12000",
         "kind": "Blaster"
       },
       "tests": [
-        "after the end of the period the beneficiary withdraws everything that is locked"
-      ]
-    },
-    "#d5fb291868c332d4": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "72003b9c14b54091",
-      "programs": [
-        "dd259a1f1235ed04",
-        "5c409699b2b32a23"
-      ],
-      "notes": {
-        "budget": "1608",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the same holds whatever the outputs are, at a budget that ends before they are read"
-      ]
-    },
-    "#e0344a12d799bbe9": {
-      "tactic": "uplc-blaster",
-      "result": "refuted",
-      "statement": "d7d35bcf2ded662a",
-      "programs": [
-        "df2ea761551afc0a",
-        "ad69a1d00edaa251"
-      ],
-      "notes": {
-        "budget": "12000",
-        "kind": "Blaster"
-      },
-      "counterexample": {
-        "amount": 0,
-        "duration": 1,
-        "fee": 0,
-        "locked": 1,
-        "paid": 1,
-        "requested": 1,
-        "start": 1,
-        "time": 0
-      },
-      "tests": [
-        "what stays locked is at least what has not vested yet"
+        "the validator would not establish a precondition on the amount"
       ]
     }
   }
