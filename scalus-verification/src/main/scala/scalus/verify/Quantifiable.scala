@@ -16,6 +16,7 @@ object Quantifiable {
     given Quantifiable[BigInt] = new Quantifiable[BigInt] {}
     given Quantifiable[Boolean] = new Quantifiable[Boolean] {}
     given Quantifiable[ByteString] = new Quantifiable[ByteString] {}
+    given Quantifiable[String] = new Quantifiable[String] {}
     given Quantifiable[Data] = new Quantifiable[Data] {}
 
     /** A case class whose fields can be quantified over. Its values are those of its constructor,

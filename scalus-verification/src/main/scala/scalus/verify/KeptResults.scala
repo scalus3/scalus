@@ -101,8 +101,10 @@ final class KeptResults private (
       * this run.
       */
     private def testsOf(name: String, stored: Stored): Set[String] =
-        stored.results.get(name).fold(Set.empty[String])(_.tests.toSet) ++
-            used.getOrDefault(name, Set.empty) - ""
+        stored.results
+            .get(name)
+            .orElse(stored.former.get(name))
+            .fold(Set.empty[String])(_.tests.toSet) ++ used.getOrDefault(name, Set.empty) - ""
 
     /** Takes out what no test states any longer, and writes into each entry the tests that state
       * it, where the run is one that keeps ([[KeptResults.Mode.Use]],
@@ -122,18 +124,23 @@ final class KeptResults private (
             lock.synchronized {
                 if Files.isRegularFile(file) then
                     val stored = read()
-                    val results = stored.results.flatMap { (name, entry) =>
-                        val now = used.getOrDefault(name, Set.empty)
-                        val had = testsOf(name, stored)
-                        val tests = had.filter(test =>
-                            (now.contains(test) || !completed.contains(test)) &&
-                                existing.forall(_.contains(test))
-                        )
-                        val of = had.nonEmpty || existing.isDefined
-                        if of && tests.isEmpty && !now.contains("") then None
-                        else Some(name -> entry.copy(tests = tests.toList.sorted))
-                    }
-                    if results != stored.results then write(stored.copy(results = results))
+                    // The former results go as the results do: with the tests that state them.
+                    def pruned(entries: TreeMap[String, Entry]): TreeMap[String, Entry] =
+                        entries.flatMap { (name, entry) =>
+                            val now = used.getOrDefault(name, Set.empty)
+                            val had = entry.tests.toSet ++ now - ""
+                            val tests = had.filter(test =>
+                                (now.contains(test) || !completed.contains(test)) &&
+                                    existing.forall(_.contains(test))
+                            )
+                            val of = had.nonEmpty || existing.isDefined
+                            if of && tests.isEmpty && !now.contains("") then None
+                            else Some(name -> entry.copy(tests = tests.toList.sorted))
+                        }
+                    val results = pruned(stored.results)
+                    val former = pruned(stored.former)
+                    if results != stored.results || former != stored.former then
+                        write(stored.copy(results = results, former = former))
             }
     }
 
@@ -166,10 +173,37 @@ final class KeptResults private (
         }.map(entry => Kept(result(entry.result), entry.notes, raw(entry.counterexample)))
     }
 
+    /** What was kept for the statement `name` as it is now, with its statement and programs, but
+      * with another side of the backend, as before the backend's library was updated: a result of
+      * the file kept for its old side, or a former result ([[keep]]). It is no result, but what the
+      * tactic came to there is a start for it ([[Tactic.run]]), as the budget a search found, and a
+      * refutation is one the tactic checks again without the backend ([[Tactic.restore]]).
+      */
+    private[verify] def keptOnAnotherSide(
+        name: String,
+        tactic: String,
+        fingerprint: Fingerprint
+    ): Option[Kept] = {
+        lock.synchronized {
+            val stored = read()
+            val onOldSide = stored.results
+                .get(name)
+                .filter(_ =>
+                    !stored.environment.get(tactic).contains(sorted(fingerprint.environment))
+                )
+            onOldSide.orElse(stored.former.get(name)).filter { entry =>
+                entry.tactic == tactic && entry.statement == fingerprint.statement &&
+                entry.programs == fingerprint.programs
+            }
+        }.map(entry => Kept(result(entry.result), entry.notes, raw(entry.counterexample)))
+    }
+
     /** Keeps `kept` for the statement `name`, in place of what was kept for it.
       *
       * A tactic's side is said once for the file. Where it is another than the file has, every
-      * other result of the tactic in the file was kept for a side that is gone, and goes with it.
+      * other result of the tactic in the file was kept for a side that is gone. It goes from the
+      * results to the former results, which are none, but a start for their statements, until each
+      * is kept again or no test states it ([[keptOnAnotherSide]], [[prune]]).
       */
     private[verify] def keep(
         name: String,
@@ -181,9 +215,10 @@ final class KeptResults private (
         lock.synchronized {
             val stored = read()
             val environment = sorted(fingerprint.environment)
-            val current =
-                if stored.environment.get(tactic).contains(environment) then stored.results
-                else stored.results.filter((_, entry) => entry.tactic != tactic)
+            val (current, gone) =
+                if stored.environment.get(tactic).contains(environment) then
+                    stored.results -> TreeMap.empty[String, Entry]
+                else stored.results.partition((_, entry) => entry.tactic != tactic)
             val entry = Entry(
               tactic,
               word(kept.result),
@@ -196,7 +231,8 @@ final class KeptResults private (
             write(
               Stored(
                 stored.environment.updated(tactic, environment),
-                current.updated(name, entry)
+                current.updated(name, entry),
+                (stored.former ++ gone).removed(name)
               )
             )
         }
@@ -210,7 +246,12 @@ final class KeptResults private (
         lock.synchronized {
             val stored = read()
             stored.results.get(name).filter(_.tactic == tactic) match
-                case None => s"no result of $tactic is kept for it in $file"
+                case None =>
+                    stored.former.get(name).filter(_.tactic == tactic) match
+                        case Some(entry) =>
+                            s"what is kept for it in $file was ${entry.result} with an earlier " +
+                                "side of the backend"
+                        case None => s"no result of $tactic is kept for it in $file"
                 case Some(entry) =>
                     val before = stored.environment.getOrElse(tactic, TreeMap.empty[String, String])
                     val side = (before.keySet ++ fingerprint.environment.keySet).toList.sorted
@@ -325,12 +366,14 @@ object KeptResults {
         tests: List[String] = Nil
     )
 
-    /** The file: the side of each tactic's backend, by the tactic's name, and the entries by the
-      * names of their statements.
+    /** The file: the side of each tactic's backend, by the tactic's name, the entries by the names
+      * of their statements, and the former entries, kept with an earlier side ([[keep]]). A file
+      * without former entries does not say them.
       */
     private final case class Stored(
         environment: TreeMap[String, TreeMap[String, String]],
-        results: TreeMap[String, Entry]
+        results: TreeMap[String, Entry],
+        former: TreeMap[String, Entry] = TreeMap.empty
     )
 
     // A file has an entry for every statement of a suite, and the reader's own limit on the

@@ -261,8 +261,69 @@ class KeptResultsTest extends AnyFunSuite {
         val text = Files.readString(file)
         assert(text.contains("\"backend\": \"2.0\"") && !text.contains("\"1.0\""), text)
         // The other statement was proved with the old backend, and is not said to be proved
-        // with this one.
-        assert(text.contains("\"first\"") && !text.contains("\"second\""), text)
+        // with this one: it is among the former results, which are none.
+        val (results, former) = text.splitAt(text.indexOf("\"former\""))
+        assert(results.contains("\"first\"") && !results.contains("\"second\""), text)
+        assert(former.contains("\"second\""), text)
+        verify(file, KeptResults.Mode.Frozen, tactic, "second") match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(reason.startsWith(KeptResults.stale), reason)
+                assert(reason.endsWith("was proved with an earlier side of the backend"), reason)
+            case other => fail(s"expected a stale statement, got $other")
+        // Kept again for the new side, it is no former result any more.
+        verify(file, KeptResults.Mode.Use, tactic, "second")
+        assert(!Files.readString(file).contains("\"former\""))
+    }
+
+    kept("a statement kept with the old side of the backend starts from what it was kept with") {
+        file =>
+            val tactic = new Counting
+            verify(file, KeptResults.Mode.Use, tactic, "first")
+            verify(file, KeptResults.Mode.Use, tactic, "second")
+            tactic.backend = "2.0"
+            // A run that states the first statement only keeps it for the new side, and takes the
+            // other one out of the results. A later run still starts it from what it was kept
+            // with: the former results keep it.
+            assert(proved(verify(file, KeptResults.Mode.Use, tactic, "first")))
+            assert(proved(verify(file, KeptResults.Mode.Use, tactic, "second")))
+            assert(tactic.runs == 4)
+            assert(tactic.started.map(_.notes) == List.fill(2)(Map("budget" -> "160")))
+            // Kept for the new side, a result is taken as it is.
+            assert(proved(verify(file, KeptResults.Mode.Use, tactic, "second")))
+            assert(tactic.runs == 4)
+            // What was kept for other programs is no start, whatever the side.
+            tactic.backend = "3.0"
+            tactic.programs = List("p-1", "p-9")
+            assert(proved(verify(file, KeptResults.Mode.Use, tactic, "first")))
+            assert(tactic.runs == 5)
+            assert(tactic.started.size == 2)
+    }
+
+    kept("a refutation kept with the old side of the backend is checked again without it") { file =>
+        val tactic = new Counting
+        tactic.answer = () => tactic.refuted
+        verify(file, KeptResults.Mode.Use, tactic)
+        tactic.backend = "2.0"
+        // The tactic replays the refutation without its backend, as in a run without Lean,
+        // and the refutation stands.
+        assert(
+          verify(file, KeptResults.Mode.Frozen, tactic).isInstanceOf[VerificationResult.Refuted]
+        )
+        assert(tactic.runs == 1)
+        // A run that keeps results keeps it for the new side, still without asking.
+        assert(
+          verify(file, KeptResults.Mode.Use, tactic).isInstanceOf[VerificationResult.Refuted]
+        )
+        assert(tactic.runs == 1)
+        assert(Files.readString(file).contains("\"backend\": \"2.0\""))
+        // A proof kept with the old side is no result for the new one.
+        tactic.answer = () => tactic.proved
+        verify(file, KeptResults.Mode.Use, tactic, "proved")
+        tactic.backend = "3.0"
+        verify(file, KeptResults.Mode.Frozen, tactic, "proved") match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(reason.startsWith(KeptResults.stale), reason)
+            case other => fail(s"expected a stale statement, got $other")
     }
 
     kept("an entry says the tests that state it, and goes when none is left") { file =>

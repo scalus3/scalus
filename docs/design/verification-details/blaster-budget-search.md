@@ -160,8 +160,12 @@ result, and any run of a statement whose result was not kept.
 
 1. **Start from the old budget.** Where the fingerprint changed, the old budget is likely near
    the new one. Starting the search there would save checks after a small change, and cost one
-   that is given up where the programs became shorter. Not proposed: a change is rare, and a
-   search from the start is always right.
+   that is given up where the programs became shorter. Built only for a change of the backend's
+   side, with the statement and its programs as they were: after an update of Blaster every
+   entry is stale at once, and searching each statement from the start went over the time limit
+   for one of the payment splitter's (budget 5168; 2026-10-20). A search starts at the budget
+   kept with the old side (`KeptResults.keptOnAnotherSide`). A change of the programs still
+   searches from the start.
 2. **A step over the least.** The search ends at the least budget, and so makes a check for
    every place the validator can stop. A budget a few percent above each counterexample's
    would skip some of them, and could step over a narrow window.
@@ -173,4 +177,5 @@ result, and any run of a statement whose result was not kept.
 - A statement whose runs go through a loop for its whole length has no budget, and the search
   ends at a time limit.
 - The counts are of Lean's machine as the workspace has it. A change of that machine changes
-  them, and a kept budget then costs a search.
+  them: a kept budget is then where the search starts, and costs a search where it no longer
+  decides the statement.

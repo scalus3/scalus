@@ -149,13 +149,16 @@ trait Tactic {
     def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] = None
 
     /** The result that `kept` stands for, made without the backend. A refutation is replayed here,
-      * so it is no more than the tactic can check again. A proof is the word of the run that kept
-      * it. Nothing where `kept` no longer stands.
+      * so it is no more than the tactic can check again, and it is also asked of a refutation kept
+      * with another side of the backend ([[KeptResults.keptOnAnotherSide]]). A proof is the word of
+      * the run that kept it. Nothing where `kept` no longer stands.
       */
     def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult] = None
 
-    /** [[run]], with what was kept of an earlier result for the same fingerprint, to start from: a
-      * budget that was found, for instance.
+    /** [[run]], with what was kept of an earlier result to start from: a budget that was found, for
+      * instance. It was kept for the same fingerprint, or for the same statement and programs with
+      * another side of the backend ([[KeptResults.keptOnAnotherSide]]), so it is a start, and
+      * stands for no result.
       */
     def run(prepared: Prepared, earlier: Kept): ExecutionResult = run(prepared)
 }
@@ -544,9 +547,19 @@ final class Verifier private (results: Option[KeptResults]) {
             case None => tactic.run(prepared)
             case Some((kept, fingerprint)) =>
                 val earlier = kept.lookup(name, tactic.name, fingerprint)
+                // Where nothing is kept for the statement as it is now, what was kept for it with
+                // the backend's old side, as before an update of its library, is no result, but a
+                // start. A refutation there is one the tactic checks again without the backend.
+                lazy val former =
+                    if earlier.isDefined then None
+                    else kept.keptOnAnotherSide(name, tactic.name, fingerprint)
                 def restored: Option[ExecutionResult] = earlier.flatMap(tactic.restore(prepared, _))
+                def formerRefutation: Option[ExecutionResult] =
+                    former
+                        .filter(_.result == Kept.Result.Refuted)
+                        .flatMap(tactic.restore(prepared, _))
                 def asked: ExecutionResult =
-                    earlier.fold(tactic.run(prepared))(tactic.run(prepared, _))
+                    earlier.orElse(former).fold(tactic.run(prepared))(tactic.run(prepared, _))
                 def keeping(result: ExecutionResult): ExecutionResult = {
                     tactic
                         .keep(prepared, result)
@@ -554,9 +567,10 @@ final class Verifier private (results: Option[KeptResults]) {
                     result
                 }
                 kept.mode match
-                    case KeptResults.Mode.Use => restored.getOrElse(keeping(asked))
+                    case KeptResults.Mode.Use =>
+                        restored.orElse(formerRefutation.map(keeping)).getOrElse(keeping(asked))
                     case KeptResults.Mode.Frozen =>
-                        restored.getOrElse {
+                        restored.orElse(formerRefutation).getOrElse {
                             val why = kept.stale(name, tactic.name, fingerprint)
                             VerificationResult.Inconclusive(s"${KeptResults.stale}: $why")
                         }
