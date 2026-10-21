@@ -285,7 +285,8 @@ object ExportCollector {
                             // The verbatim text can name an interface that only this Scala type
                             // reaches, as `EmulatorOptions.poolRegistrations` names
                             // `PoolRegistration`. Map the Scala type anyway, for its chase side
-                            // effect only, so that interface is still emitted.
+                            // effect only, so that interface is still emitted. A name that is
+                            // still undeclared at the end is reported by `VerbatimNames.check`.
                             mapper.map(tpe, ctx)
                             // A narrowed @TsType must not turn an optional JS field into a
                             // required one. Preserve UndefOr independently of its value type.
@@ -792,7 +793,11 @@ object ExportCollector {
             .distinct
             .sorted
             .map(n => ExportError(n, s"duplicate top-level TypeScript declaration name '$n'"))
-        Result(TsModule(decls.toList), inspectionErrors ++ errors.toList ++ collisionErrors)
+        val module = TsModule(decls.toList)
+        Result(
+          module,
+          inspectionErrors ++ errors.toList ++ collisionErrors ++ VerbatimNames.check(module)
+        )
     }
 
     private def walkTasty(root: String): List[String] = {

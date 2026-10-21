@@ -583,7 +583,14 @@ object Term {
             val tag = decoder.bits8(termTagWidth)
             tag match
                 case 0 =>
-                    val index = summon[Flat[Word64]].decode(decoder).value.toInt
+                    // Plutus decodes any 64-bit index; one out of scope fails only at the scope
+                    // check. An index above Int.MaxValue can never be in scope, so it becomes
+                    // Int.MaxValue, which the scope check rejects too. Keeping the low 32 bits
+                    // (`toInt`) turned 2^32 + 1 into 1, an index in scope under one binder.
+                    val index64 = summon[Flat[Word64]].decode(decoder).value
+                    val index =
+                        if index64 < 0 || index64 > Int.MaxValue then Int.MaxValue
+                        else index64.toInt
                     val name = s"i$index"
                     Term.Var(NamedDeBruijn(name, index))
                 case 1 =>

@@ -7,9 +7,7 @@ on:
       - '.github/workflows/**'
 jobs:
   test:
-    # Pinned: on ubuntu-26.04 (the new ubuntu-latest) the runner shut down mid-test twice
-    # (2026-10-20). Move to 26.04 after that is understood.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
@@ -24,12 +22,26 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
+      - name: Show runner memory
+        run: |
+          nproc
+          free -m
+          swapon --show
+      # The runner VM has 16 GB. js/test runs the six Scala.js test modules at once: up to four
+      # linker jobs in the sbt JVM (-Xmx8g from .jvmopts) and four Node test processes
+      # (--max-old-space-size=2048 each). About one run in five died there with "The runner
+      # has received a shutdown signal", on ubuntu-24.04 and ubuntu-26.04 alike. Two links
+      # and two test runs at a time keep the peak inside the machine. The sampler prints
+      # used memory every 20 s, so a run that still dies shows how close it came.
       - name: Build and test in Nix devshell
         run: |
+          (while sleep 20; do free -m | awk '/^Mem:/ {m=$3} /^Swap:/ {s=$3} END {print "[mem] used " m " MB, swap " s " MB"}'; done) &
+          sampler=$!
           nix develop .#ci --accept-flake-config --command bash -c '
-            sbt ci-js &&
+            sbt "set Global / concurrentRestrictions ++= Seq(Tags.limit(Tags.Test, 2), Tags.limit(ScalaJSTags.Link, 2))" ci-js &&
             npm --prefix scalus-cardano-ledger/js/src/main/npm run test:browser
           '
+          kill $sampler
       - name: Report test results
         uses: sarisia/actions-status-discord@v1
         if: failure()

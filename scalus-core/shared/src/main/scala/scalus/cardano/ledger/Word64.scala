@@ -1,7 +1,7 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
-import scalus.serialization.flat.{word7Bytes, DecoderState, EncoderState, Flat}
+import scalus.serialization.flat.{word7Bytes, DecoderState, EncoderState, Flat, FlatDecodingError}
 
 import java.math.BigInteger
 
@@ -318,15 +318,28 @@ object Word64 {
                 encode.bits(8, vs(i))
                 i += 1
 
+        /** Decodes like Plutus's `dWord64`: at most ten 7-bit groups, least significant first.
+          *
+          * The tenth group holds bit 63 only, so it must be 0 or 1 and must not continue. Anything
+          * else is a number above 2^64 - 1, which Plutus rejects (for example a `constr` tag of
+          * 2^64), so this throws rather than keep the low 64 bits.
+          *
+          * @throws scalus.serialization.flat.FlatDecodingError
+          *   if the number does not fit in 64 bits
+          */
         def decode(decode: DecoderState): Word64 = {
-            var bs = List.empty[Byte]
-            while
-                val b = decode.bits8(8)
-                bs = b :: bs
-                (b & 0x80) != 0
-            do ()
-            val r = bs.foldLeft(0L): (a, b) =>
-                (a << 7) + (b & 0x7f)
+            var r = 0L
+            var shift = 0
+            var b = decode.bits8(8)
+            while (b & 0x80) != 0 && shift < 63 do
+                r |= (b & 0x7fL) << shift
+                shift += 7
+                b = decode.bits8(8)
+            if shift == 63 && (b & 0xff) > 1 then
+                throw new FlatDecodingError(
+                  s"Word64 does not fit in 64 bits: its tenth 7-bit group is ${b & 0xff}"
+                )
+            r |= (b & 0x7fL) << shift
             Word64(r)
         }
     }

@@ -233,10 +233,11 @@ Do the steps in order. Each step tells you which file or command to use.
    files.
 4. **Update scalus-starter** ([scalus3/scalus-starter](https://github.com/scalus3/scalus-starter)).
    Bump the Scalus version in `build.sbt`, `project/plugins.sbt` and `CLAUDE.md`. Then run
-   `sbt "clean; test; integration/test"`. The integration tests need Docker. If they fail with
-   `container name "/scalus-yaci-devkit" is already in use`, remove the old container with
-   `docker rm -f scalus-yaci-devkit`. Fix the deprecation warnings, so that the starter shows the
-   current API.
+   `sbt "clean; test; integration/test"`. The integration tests need Docker. They leave the
+   `scalus-yaci-devkit` container running and reuse it, so start with a new devnet:
+   `docker rm -f scalus-yaci-devkit`. An old devnet fails a transaction with
+   `TimeTranslationPastHorizon`, and a stopped one with `container name ... is already in use`.
+   Fix the deprecation warnings, so that the starter shows the current API.
 5. **Deploy the site.** Follow [When you release](#when-you-release), steps 2 and 3.
 6. **Open the next version.** Add an empty `## Unreleased` section to the top of `CHANGELOG.md`.
 

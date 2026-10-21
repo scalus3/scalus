@@ -360,6 +360,14 @@ class ExportCollectorTest extends AnyFunSuite {
         assert(msgs.exists(m => m.contains("BadOpaque")))
     }
 
+    test("a @TsType text naming an undeclared type is reported with its member") {
+        val verbatim = result.errors.filter(_.message.contains("neither declared"))
+        assert(verbatim.map(_.member) == List("BadVerbatimName.configure"))
+        assert(verbatim.head.message.contains("'NoSuchType'"))
+        // `Partial` is a TypeScript global, so it is not reported
+        assert(!verbatim.head.message.contains("'Partial'"))
+    }
+
     test("an interface and its factory object can share a top-level name") {
         val shared = result.module.decls.filter(_.name == "EvaluationOptions")
         assert(shared.count(_.isInstanceOf[TsDecl.Iface]) == 1)

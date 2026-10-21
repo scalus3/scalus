@@ -55,16 +55,25 @@ class JRedeemerBudget(
   *   script the script context alone, for a `PlutusV1` or `PlutusV2` spend the datum, the redeemer
   *   and the script context.
   */
+// The optional parameters are spelled `A | Unit`, not `js.UndefOr[A]`. Under `-scalajs` both are
+// the same type. But Scaladoc 3.3 reads TASTy without `-scalajs`: its copy of TastyInspector builds
+// a fresh driver from `-from-tasty -Yretain-trees -classpath` only. There `js.UndefOr` stays the
+// Scala 2 class `js.|`, so the erased signature of this constructor differs from the pickled one.
+// With two constructors every `<init>` reference is resolved by that signature, and Scaladoc
+// reported "undefined: this # -1" for `this(...)` and `new JPlutusScriptEvaluationError(...)`. A
+// Scala 3 union erases to `Object` in both modes. Scaladoc 3.8 passes its context and is not
+// affected. The TS exporter met the same mechanism: see `ScalaJsTastyInspector` and the
+// `OptionalCtor` fixture.
 @JSExportTopLevel("PlutusScriptEvaluationError")
 class JPlutusScriptEvaluationError @TsIgnore() (
     message: String,
     val logs: js.Array[String],
-    @TsType("RedeemerBudget") val redeemer: js.UndefOr[JRedeemerBudget],
-    @TsType("string") val scriptHash: js.UndefOr[String],
+    @TsType("RedeemerBudget") val redeemer: JRedeemerBudget | Unit,
+    @TsType("string") val scriptHash: String | Unit,
     @TsType(
       "\"SCRIPT_FAILURE\" | \"BUILTIN_FAILURE\" | \"INVALID_RETURN_VALUE\" | \"OUT_OF_BUDGET\" | \"INTERNAL_ERROR\""
-    ) val code: js.UndefOr[String],
-    @TsType("readonly string[]") val args: js.UndefOr[js.Array[String]]
+    ) val code: String | Unit,
+    @TsType("readonly string[]") val args: js.Array[String] | Unit
 ) extends js.Error(message) {
 
     js.Object.defineProperty(

@@ -20,6 +20,8 @@ on:
         default: false
 
 jobs:
+  # Pinned to ubuntu-24.04 on purpose: these jobs build and test the released native library,
+  # so the build image must not change under a release. Move it in its own reviewed commit.
   build-native:
     strategy:
       matrix:
