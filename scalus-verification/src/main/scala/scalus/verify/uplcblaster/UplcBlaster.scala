@@ -170,11 +170,18 @@ final class UplcBlaster private (
                 )
             )
 
-    override def run(prepared: Prepared): ExecutionResult = run(prepared, None)
+    /** A search starts at the budget that was kept, also with another revision of Blaster or of the
+      * library: where the statement is still decided there, that is one check.
+      */
+    override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult =
+        checkOrSearch(
+          prepared,
+          earlier.flatMap(_.notes.get(UplcBlaster.budgetNote)).flatMap(_.toIntOption)
+        )
 
     /** Runs the check, or the search for its budget, which starts at `first` where that is given.
       */
-    private def run(prepared: Prepared, first: Option[Int]): ExecutionResult = {
+    private def checkOrSearch(prepared: Prepared, first: Option[Int]): ExecutionResult = {
         val kept = keptChecks
         if lastChecksOnly then kept.foreach(Directories.remove)
         budget match
@@ -211,12 +218,6 @@ final class UplcBlaster private (
 
     override def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult] =
         UplcBlaster.restored(prepared, kept)
-
-    /** A search starts at the budget that was kept, also with another revision of Blaster or of the
-      * library: where the statement is still decided there, that is one check.
-      */
-    override def run(prepared: Prepared, earlier: Kept): ExecutionResult =
-        run(prepared, earlier.notes.get(UplcBlaster.budgetNote).flatMap(_.toIntOption))
 }
 
 object UplcBlaster {

@@ -31,13 +31,10 @@ class KeptResultsTest extends AnyFunSuite {
 
         override val name: String = "counting"
         override def prepare(goal: Goal): Either[CompatibilityReport, Prepared] = Right(goal)
-        override def run(prepared: Prepared): ExecutionResult = {
+        override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult = {
+            started = earlier.toList ++ started
             runs += 1
             answer()
-        }
-        override def run(prepared: Prepared, earlier: Kept): ExecutionResult = {
-            started = earlier :: started
-            run(prepared)
         }
         override def fingerprint(prepared: Prepared): Option[Fingerprint] =
             Some(Fingerprint(Map("backend" -> backend, "library" -> "7"), text, programs))
@@ -411,7 +408,7 @@ class KeptResultsTest extends AnyFunSuite {
             override type Prepared = Goal
             override val name: String = "plain"
             override def prepare(goal: Goal): Either[CompatibilityReport, Prepared] = Right(goal)
-            override def run(prepared: Prepared): ExecutionResult = {
+            override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult = {
                 runs += 1
                 VerificationResult.Proven(Proof(Evidence, Nil))
             }

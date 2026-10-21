@@ -138,7 +138,14 @@ trait Tactic {
 
     def name: String
     def prepare(goal: Goal): Either[CompatibilityReport, Prepared]
-    def run(prepared: Prepared): ExecutionResult
+
+    /** Runs the tactic on `prepared`, starting from `earlier`: what was kept of an earlier result,
+      * where results are kept and there is one, as a budget that was found. It was kept for the
+      * same fingerprint, or for the same statement and programs with another side of the backend
+      * ([[KeptResults.keptOnAnotherSide]]), so it is a start, and stands for no result. A tactic
+      * that has no use for it ignores it.
+      */
+    def run(prepared: Prepared, earlier: Option[Kept] = None): ExecutionResult
 
     /** The hashes of everything a result for `prepared` rests on, part by part. Nothing where the
       * results of the tactic are not kept ([[KeptResults]]). It is read without the backend.
@@ -154,13 +161,6 @@ trait Tactic {
       * the run that kept it. Nothing where `kept` no longer stands.
       */
     def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult] = None
-
-    /** [[run]], with what was kept of an earlier result to start from: a budget that was found, for
-      * instance. It was kept for the same fingerprint, or for the same statement and programs with
-      * another side of the backend ([[KeptResults.keptOnAnotherSide]]), so it is a start, and
-      * stands for no result.
-      */
-    def run(prepared: Prepared, earlier: Kept): ExecutionResult = run(prepared)
 }
 
 /** One reason a tactic cannot prepare a goal in its input language. */
@@ -558,8 +558,7 @@ final class Verifier private (results: Option[KeptResults]) {
                     former
                         .filter(_.result == Kept.Result.Refuted)
                         .flatMap(tactic.restore(prepared, _))
-                def asked: ExecutionResult =
-                    earlier.orElse(former).fold(tactic.run(prepared))(tactic.run(prepared, _))
+                def asked: ExecutionResult = tactic.run(prepared, earlier.orElse(former))
                 def keeping(result: ExecutionResult): ExecutionResult = {
                     tactic
                         .keep(prepared, result)

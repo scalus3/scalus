@@ -780,7 +780,7 @@ enum VerificationResult:
 trait Tactic:
     type Prepared
     def prepare(goal: Goal): Either[CompatibilityReport, Prepared]
-    def run(prepared: Prepared): ExecutionResult
+    def run(prepared: Prepared, earlier: Option[Kept] = None): ExecutionResult
 
 trait ProofArtifact:
     def kind: ProofKind
@@ -901,11 +901,10 @@ trait Tactic:
     def keep(prepared: Prepared, result: ExecutionResult): Option[Kept]
     /** The result that `kept` stands for, made without the backend. */
     def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult]
-    /** `run`, starting from what was kept of an earlier result. */
-    def run(prepared: Prepared, earlier: Kept): ExecutionResult
 ```
 
-A tactic that defines none of them runs as before. A hash is the first 16 hexadecimal digits of
+`run` gets what was kept of an earlier result, where there is one, to start from: a budget that
+was found, for instance. A tactic that defines none of these runs as before. A hash is the first 16 hexadecimal digits of
 a SHA-256: the file is guarded against a change, not against a hand, and the whole hash would
 say no more and read worse.
 
@@ -1058,7 +1057,7 @@ trait Tactic {
     type Prepared
     def name: String
     def prepare(goal: Goal): Either[CompatibilityReport, Prepared]
-    def run(prepared: Prepared): ExecutionResult
+    def run(prepared: Prepared, earlier: Option[Kept] = None): ExecutionResult
 }
 
 final case class Goal(statement: Statement, functions: FunctionTable, lemmas: List[Theorem])
