@@ -17,6 +17,7 @@ import org.scalacheck.Gen
 
 import scala.language.implicitConversions
 import scala.util.Try
+import scalus.uplc.test.TermGen.{arithOp, smallInt}
 
 class CommonContextExtractionTest
     extends AnyFunSuite
@@ -708,30 +709,18 @@ class CommonContextExtractionTest
     // ========================================================================
 
     /** Generator for closed evaluable terms with common contexts (different leaves). */
-    private val genClosedTermWithCommonContext: Gen[Term] = {
-        val genInt: Gen[Term] = Gen.choose(-100, 100).map(n => Const(Constant.Integer(n)))
-
-        def genBinOp(depth: Int): Gen[Term] =
-            if depth <= 0 then genInt
-            else
-                for
-                    a <- genBinOp(depth - 1)
-                    b <- genBinOp(depth - 1)
-                    op <- Gen.oneOf(AddInteger, MultiplyInteger, SubtractInteger)
-                yield op $ a $ b
-
+    private val genClosedTermWithCommonContext: Gen[Term] =
         // Generate term with same context applied to different leaves:
-        // op2(op1(a, b), op1(c, d)) where a!=c or b!=d
+        // op2(op1(a, b), op1(c, b)) – the common context is op1(HOLE, b)
         for
-            a <- genInt
-            b <- genInt
-            c <- genInt
-            op1 <- Gen.oneOf(AddInteger, MultiplyInteger, SubtractInteger)
-            op2 <- Gen.oneOf(AddInteger, MultiplyInteger, SubtractInteger)
+            a <- smallInt
+            b <- smallInt
+            c <- smallInt
+            op1 <- arithOp
+            op2 <- arithOp
             sub1 = op1 $ a $ b
-            sub2 = op1 $ c $ b // same op1 and b, different a/c — common context op1(HOLE, b)
+            sub2 = op1 $ c $ b
         yield op2 $ sub1 $ sub2
-    }
 
     test("property: CCE preserves semantics on closed evaluable terms") {
         forAll(genClosedTermWithCommonContext) { term =>

@@ -16,6 +16,7 @@ import scalus.uplc.test.ArbitraryInstances
 
 import scala.language.implicitConversions
 import scala.util.Try
+import scalus.uplc.test.TermGen.{arithOp, arithTree, smallInt}
 
 class CommonSubexpressionEliminationTest
     extends AnyFunSuite
@@ -495,38 +496,25 @@ class CommonSubexpressionEliminationTest
       * from saturated builtin applications on constants.
       */
     private val genClosedEvaluableTerm: Gen[Term] = {
-        val genInt: Gen[Term] = Gen.choose(-100, 100).map(n => Const(Constant.Integer(n)))
-
-        def genBinOp(depth: Int): Gen[Term] =
-            if depth <= 0 then genInt
-            else
-                for
-                    a <- genBinOp(depth - 1)
-                    b <- genBinOp(depth - 1)
-                    op <- Gen.oneOf(AddInteger, MultiplyInteger, SubtractInteger)
-                yield op $ a $ b
-
         // Generate a term with intentional duplicates
-        def genWithDuplicates: Gen[Term] =
+        val genWithDuplicates: Gen[Term] =
             for
-                sub <- genBinOp(1)
-                op <- Gen.oneOf(AddInteger, MultiplyInteger, SubtractInteger)
+                sub <- arithTree(1)
+                op <- arithOp
             yield op $ sub $ sub
 
-        Gen.oneOf(genBinOp(2), genWithDuplicates)
+        Gen.oneOf(arithTree(2), genWithDuplicates)
     }
 
     /** Generator for terms with guaranteed duplicate subexpressions. */
-    private val genTermWithDuplicateSubexpr: Gen[Term] = {
-        val genInt: Gen[Term] = Gen.choose(-100, 100).map(n => Const(Constant.Integer(n)))
+    private val genTermWithDuplicateSubexpr: Gen[Term] =
         for
-            a <- genInt
-            b <- genInt
-            op1 <- Gen.oneOf(AddInteger, MultiplyInteger, SubtractInteger)
-            op2 <- Gen.oneOf(AddInteger, MultiplyInteger, SubtractInteger)
+            a <- smallInt
+            b <- smallInt
+            op1 <- arithOp
+            op2 <- arithOp
             sub = op1 $ a $ b
         yield op2 $ sub $ sub
-    }
 
     test("property: CSE preserves semantics on closed evaluable terms") {
         forAll(genClosedEvaluableTerm) { term =>

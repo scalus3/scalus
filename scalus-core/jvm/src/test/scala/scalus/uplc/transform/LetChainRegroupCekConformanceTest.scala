@@ -11,6 +11,7 @@ import scalus.uplc.DefaultFun.*
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.{Log, MachineError, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
+import scalus.uplc.test.TermGen.smallConst
 
 import scala.language.implicitConversions
 
@@ -111,11 +112,7 @@ class LetChainRegroupCekConformanceTest extends AnyFunSuite with ScalaCheckPrope
 
     private def genName: Gen[String] = Gen.oneOf(binderPool)
 
-    private def genConst: Gen[Term] = Gen.oneOf(
-      Gen.chooseNum(-3L, 12L).map(i => Const(Constant.Integer(BigInt(i)))),
-      Gen.oneOf(true, false).map(b => Const(Constant.Bool(b))),
-      Gen.const(Const(Constant.Unit))
-    )
+    private val genConst: Gen[Term] = smallConst(-3, 12)
 
     /** Constants are favoured over in-scope variables so that independent runs — the case the pass
       * acts on — occur often enough to measure; variables still appear often enough to split runs.

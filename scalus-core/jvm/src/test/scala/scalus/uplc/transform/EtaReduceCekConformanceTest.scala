@@ -11,6 +11,7 @@ import scalus.uplc.DefaultFun.*
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.{OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
+import scalus.uplc.test.TermGen.{branch, smallConst}
 import scalus.uplc.transform.TermAnalysis.{freeVars, isPure}
 
 import scala.collection.mutable.ListBuffer
@@ -154,11 +155,7 @@ class EtaReduceCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     private def genName: Gen[String] = Gen.oneOf(binderPool)
 
-    private def genConst: Gen[Term] = Gen.oneOf(
-      Gen.chooseNum(-3L, 12L).map(i => Const(Constant.Integer(BigInt(i)))),
-      Gen.oneOf(true, false).map(b => Const(Constant.Bool(b))),
-      Gen.const(Const(Constant.Unit))
-    )
+    private val genConst: Gen[Term] = smallConst(-3, 12)
 
     /** A lambda chain of the given arity with a ground body. */
     private def genLambdaOfArity(n: Int): Gen[Term] =
@@ -255,13 +252,6 @@ class EtaReduceCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChe
             }
         yield result
 
-    /** A weighted branch for `Gen.frequency`, built only when the branch is chosen. Without
-      * `Gen.lzy` every call of `genTerm` built all recursive branches at once, and each of them
-      * called `genTerm(depth - 1)` again: about 15^depth `Gen` objects per sample, which made
-      * generation, not the CEK checks, the main cost of this suite (finding F-16).
-      */
-    private def rec(weight: Int)(gen: => Gen[Term]): (Int, Gen[Term]) = (weight, Gen.lzy(gen))
-
     private def genTerm(depth: Int, env: List[String]): Gen[Term] =
         val leaves: List[(Int, Gen[Term])] = List(
           (4, genConst),
@@ -273,52 +263,52 @@ class EtaReduceCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChe
         if depth <= 0 then Gen.frequency(leaves*)
         else
             val recursive: List[(Int, Gen[Term])] = List(
-              rec(3)(
+              branch(3)(
                 for
                     n <- genName
                     body <- genTerm(depth - 1, n :: env)
                 yield LamAbs(n, body)
               ),
-              rec(3)(
+              branch(3)(
                 for
                     f <- genTerm(depth - 1, env)
                     a <- genTerm(depth - 1, env)
                 yield Apply(f, a)
               ),
-              rec(1)(genTerm(depth - 1, env).map(Force(_))),
-              rec(2)(genTerm(depth - 1, env).map(Delay(_))),
-              rec(1)(genTerm(depth - 1, env).map(t => Force(Delay(t)))),
+              branch(1)(genTerm(depth - 1, env).map(Force(_))),
+              branch(2)(genTerm(depth - 1, env).map(Delay(_))),
+              branch(1)(genTerm(depth - 1, env).map(t => Force(Delay(t)))),
               // let-binding
-              rec(3)(
+              branch(3)(
                 for
                     n <- genName
                     rhs <- genTerm(depth - 1, env)
                     body <- genTerm(depth - 1, n :: env)
                 yield LamAbs(n, body) $ rhs
               ),
-              rec(1)(
+              branch(1)(
                 for
                     a <- genTerm(depth - 1, env)
                     b <- genTerm(depth - 1, env)
                 yield AddInteger $ a $ b
               ),
-              rec(1)(
+              branch(1)(
                 for
                     tag <- Gen.chooseNum(0, 2)
                     args <- Gen.listOfN(2, genTerm(depth - 1, env))
                 yield Constr(Word64(tag), args)
               ),
-              rec(1)(
+              branch(1)(
                 for
                     scrut <- genTerm(depth - 1, env)
                     branches <- Gen.listOfN(2, genTerm(depth - 1, env))
                 yield Case(scrut, branches)
               ),
               // targeted eta shapes
-              rec(5)(genPlainWrapperLet(env)),
-              rec(5)(genCaseConstrWrapperLet(env)),
+              branch(5)(genPlainWrapperLet(env)),
+              branch(5)(genCaseConstrWrapperLet(env)),
               // targeted shapes applied to arguments
-              rec(3)(
+              branch(3)(
                 for
                     wrapped <- Gen.oneOf(genPlainWrapperLet(env), genCaseConstrWrapperLet(env))
                     k <- Gen.chooseNum(0, 3)
