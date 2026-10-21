@@ -10,7 +10,7 @@ import scalus.uplc.Constant.given
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
-import scalus.uplc.eval.{OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
+import scalus.uplc.eval.{MachineError, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.uplc.test.TermGen.{branch, smallConst}
 import scalus.uplc.transform.TermAnalysis.{freeVars, isPure}
 
@@ -66,8 +66,10 @@ class EtaReduceCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChe
             val r = vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(t), spender)
             (Outcome.Ok(normalized(r)), spender.getSpentBudget)
         catch
-            case _: OutOfExBudgetError          => (Outcome.OutOfBudget, spender.getSpentBudget)
-            case scala.util.control.NonFatal(_) => (Outcome.Failed, spender.getSpentBudget)
+            case _: OutOfExBudgetError => (Outcome.OutOfBudget, spender.getSpentBudget)
+            // Only a UPLC failure counts as Failed. A host exception (a bug in the pass or the
+            // machine) must fail the test instead of matching a failure on the other side.
+            case _: MachineError => (Outcome.Failed, spender.getSpentBudget)
 
     /** Term with no residual computation and no function values inside: must compare equal. */
     private def isGround(t: Term): Boolean = t match
