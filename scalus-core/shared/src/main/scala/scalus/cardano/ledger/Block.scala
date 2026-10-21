@@ -2,6 +2,10 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
+import scalus.serialization.cbor.Cbor as ScalusCbor
+import scalus.uplc.builtin.{platform, ByteString}
+
+import scala.collection.immutable.TreeMap
 
 /** Represents a complete block in the Cardano blockchain
   *
@@ -46,8 +50,9 @@ case class Block(
     /** Get the slot number */
     def slot: Long = header.slot
 
-    /** Get the block hash */
-    def hash: BlockHash = header.headerBody.blockBodyHash
+    /** The block hash, see [[BlockHeader.hash]]. The body hash is a different value, in the header.
+      */
+    def hash: BlockHash = header.hash
 
     /** Get the number of transactions in the block */
     def txCount: Int = transactionBodies.size
@@ -72,6 +77,25 @@ case class Block(
         }
 
 object Block:
+
+    /** The block body hash of the Alonzo and later eras: the hash of the four segment hashes.
+      *
+      * Each segment is hashed as the block encodes it: the tx bodies, the witness sets, the
+      * auxiliary data map with tx indices in ascending order, and the invalid tx indices.
+      */
+    def bodyHash(
+        transactionBodies: IndexedSeq[KeepRaw[TransactionBody]],
+        transactionWitnessSets: IndexedSeq[KeepRaw[TransactionWitnessSet]],
+        auxiliaryDataSet: Map[Int, KeepRaw[AuxiliaryData]],
+        invalidTransactions: IndexedSeq[Int]
+    ): BlockHash = {
+        def segment[A: Encoder](a: A): Array[Byte] =
+            platform.blake2b_256(ScalusCbor.encodeToByteString(a)).bytes
+        val segments = segment(transactionBodies) ++ segment(transactionWitnessSets) ++
+            segment(TreeMap.from(auxiliaryDataSet)) ++ segment(invalidTransactions)
+        BlockHash.fromByteString(platform.blake2b_256(ByteString.unsafeFromArray(segments)))
+    }
+
     /** CBOR encoder for Block */
     given Encoder[Block] = Encoder.derived
     given decoder(using OriginalCborByteArray): Decoder[Block] =
