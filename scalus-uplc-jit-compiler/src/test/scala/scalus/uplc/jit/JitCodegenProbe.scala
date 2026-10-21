@@ -1,5 +1,6 @@
 package scalus.uplc.jit
 
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.uplc.{DeBruijnedProgram, Term}
 
 import java.lang.management.ManagementFactory
@@ -45,7 +46,8 @@ object JitCodegenProbe {
                     val expr = nativestack.JIT.genCodeFromTerm(
                       term,
                       pool,
-                      nativestack.NativeStackContext.DefaultMaxDepth
+                      nativestack.NativeStackContext.DefaultMaxDepth,
+                      MajorProtocolVersion.vanRossemPV
                     )
                     codegenNs = System.nanoTime() - t0
                     expr
@@ -89,7 +91,12 @@ object JitCodegenProbe {
         val pool = ConstantPool(term)
         staging.run(
           nativestack.JIT
-              .genCodeFromTerm(term, pool, nativestack.NativeStackContext.DefaultMaxDepth)
+              .genCodeFromTerm(
+                term,
+                pool,
+                nativestack.NativeStackContext.DefaultMaxDepth,
+                MajorProtocolVersion.vanRossemPV
+              )
         )(pool.values)
     }
 

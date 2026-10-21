@@ -164,7 +164,8 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
 
     private val BudgetRegex = """\(\{cpu:\s(\d+)\n\|\smem:\s(\d+)\}\)""".r
 
-    private def vmFor(name: String): PlutusVM =
+    /** The VM a case runs on: [[dijkstraVM]] if it [[needsDijkstra]], else [[plutusVM]]. */
+    protected def vmFor(name: String): PlutusVM =
         if needsDijkstra(name) then dijkstraVM else plutusVM
 
     protected def check(name: String): Unit =

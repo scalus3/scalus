@@ -1,19 +1,20 @@
 package scalus.uplc.jit
 
 import scalus.cardano.ledger.ExUnits
-import scalus.uplc.eval.PlutusConformanceTest
+import scalus.uplc.eval.{PlutusConformanceTest, PlutusVM}
 import scalus.uplc.{Program, Term}
 
 import scala.util.control.NonFatal
 
 /** The Plutus conformance corpus, evaluated with the JIT instead of the CEK machine.
   *
-  * The corpus is generated under builtin semantics variant E (PlutusV3 at PV11), which is the scope
-  * of the JIT, and [[PlutusConformanceTest]] builds its machine parameters from the variant-E
-  * reference cost models. This class reuses its case discovery, file reading and machine
-  * parameters, and replaces only [[check]]: the JIT compiles the term, runs it with those
-  * parameters, and its result and budget are compared with the expectation files. Every case must
-  * pass: a difference from the CEK machine is a defect (spec [SC-5]).
+  * The corpus is generated under builtin semantics variant E (PlutusV3 at PV11, and at PV12 for the
+  * cases that case on `Data`), which is the scope of the JIT, and [[PlutusConformanceTest]] builds
+  * its machine parameters from the variant-E reference cost models. This class reuses its case
+  * discovery, file reading, machine parameters and machine per case ([[vmFor]]), and replaces only
+  * [[check]]: the JIT compiles the term for the protocol version of that machine, runs it with its
+  * machine parameters, and its result and budget are compared with the expectation files. Every
+  * case must pass: a difference from the CEK machine is a defect (spec [SC-5]).
   *
   * The JIT returns a [[UplcValue]], not a term. A `con` or `constr` result is compared by value
   * (see [[JitCekDiff.matches]]); any other expected term (a `lam`, a `delay`, a partly applied
@@ -28,23 +29,21 @@ class JitConformanceTest extends PlutusConformanceTest {
         case EvaluationFailure(e: Throwable)
         case Success(value: UplcValue, budget: ExUnits)
 
-    /** The corpus cases that need Dijkstra (PV12): they case on `Data.Constr` (Plutus 1.69). The
-      * JIT targets PV11 and rejects every Data scrutinee (`JitRuntime.caseIndex`), so these cases
-      * cannot agree with the suite's PV12 CEK machine.
-      */
-    override protected def ignoredCases: Map[String, String] =
-        discoveredCases.filter(needsDijkstra).map(_ -> "the JIT has no case on Data (PV12)").toMap
-
     /** The `.flat` cases test the flat decoder, which the JIT does not have: it compiles a term.
       * [[PlutusConformanceTest.checkFlat]] proves that each `.flat` file decodes to the term its
       * `.uplc` file parses to, and this suite already runs that term.
       */
     override protected def runsFlatCases: Boolean = false
 
+    /** Runs each case on the machine the shared suite runs it on ([[vmFor]]): the cases that case
+      * on `Data` (`term/constant-case/data`) compiled for and run at Dijkstra (PV12), all others at
+      * van Rossem (PV11). The JIT generates code for one protocol version, so the version is chosen
+      * when the case is compiled.
+      */
     override protected def check(name: String): Unit = test(name) {
         val outcome = parseScoped(readFile(s"$path/$name.uplc")) match
             case None          => Outcome.ParseError
-            case Some(program) => run(program.term)
+            case Some(program) => run(program.term, vmFor(name))
         assert(matches(name, outcome), s"$name: $outcome")
     }
 
@@ -56,13 +55,18 @@ class JitConformanceTest extends PlutusConformanceTest {
         info(s"$functionLike of ${discoveredCases.size} cases expect a function result")
     }
 
-    private def run(term: Term): Outcome = {
+    private def run(term: Term, vm: PlutusVM): Outcome = {
         // A compile failure is never an evaluation failure: a builtin the JIT cannot compile must
         // not pass the `evaluation failure` cases by accident.
         val compiled =
-            try nativestack.JIT.jitUplc(term)
+            try
+                nativestack.JIT.jitUplc(
+                  term,
+                  nativestack.NativeStackContext.DefaultMaxDepth,
+                  vm.protocolVersion
+                )
             catch case NonFatal(e) => return Outcome.CompileError(e)
-        val result = JitCekDiff.runJit(compiled, plutusVM.machineParams)
+        val result = JitCekDiff.runJit(compiled, vm.machineParams)
         result.result match
             case scala.util.Success(value) => Outcome.Success(value, result.total)
             case scala.util.Failure(e)     => Outcome.EvaluationFailure(e)
@@ -88,7 +92,7 @@ class JitConformanceTest extends PlutusConformanceTest {
         Program.parseUplc(readFile(s"$path/$name.uplc")) match
             case Right(program) =>
                 JitCekDiff
-                    .runCek(plutusVM, program.term)
+                    .runCek(vmFor(name), program.term)
                     .result
                     .failed
                     .getOrElse(

@@ -195,7 +195,10 @@ class UplcCompilerTest extends AnyFunSuite {
         for other <- List(
               PlutusVM.makePlutusV2VM(),
               PlutusVM.makePlutusV3VM(MajorProtocolVersion.changPV),
+              // compiled for PV11: the code rejects case on Data, which this machine allows
               PlutusVM.makePlutusV3VM(MajorProtocolVersion.dijkstraPV),
+              // a protocol version after Dijkstra may change the machine again
+              PlutusVM.makePlutusV3VM(MajorProtocolVersion(13)),
               // variant E at PV11, but a PlutusV1 machine: its scripts may return a function
               PlutusVM(
                 Language.PlutusV1,
@@ -209,5 +212,64 @@ class UplcCompilerTest extends AnyFunSuite {
             assertThrows[IllegalArgumentException](
               compiled.evaluate(NoBudgetSpender, NoLogger)(using other)
             )
+    }
+
+    private val dijkstra = PlutusVM.makePlutusV3VM(MajorProtocolVersion.dijkstraPV)
+
+    /** Selects the branch of tag 1, which returns the fields: `(con (list data) [I 7])` at PV12. */
+    private val dataCase = Term
+        .parseUplc("(case (con data (Constr 1 [I 7])) (con integer 0) (lam fs fs))")
+        .toOption
+        .get
+
+    test("compiled for PV12, case on Data gives the result and budget of the PV12 CEK [SC-3]") {
+        val compiled =
+            UplcCompiler.compile(dataCase, MaxDepth, MajorProtocolVersion.dijkstraPV)
+        assert(compiled.protocolVersion == MajorProtocolVersion.dijkstraPV)
+        val expected = track(budget)((s, l) =>
+            dijkstra.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(dataCase), s, l)
+        )
+        assert(expected.result.isSuccess) // not vacuous: the CEK machine of PV12 cases on Data
+        assertSame(track(budget)((s, l) => compiled.evaluate(s, l)(using dijkstra)), expected)
+        val fallback = compiled.withFallback()
+        assertSame(track(budget)((s, l) => fallback.evaluate(s, l)(using dijkstra)), expected)
+    }
+
+    test("compiled for PV11 (the default), case on Data fails as on the PV11 CEK [SC-3]") {
+        val compiled = UplcCompiler.compile(dataCase, MaxDepth)
+        assert(compiled.protocolVersion == MajorProtocolVersion.vanRossemPV)
+        val expected = cek(dataCase)
+        assert(
+          expected.result.failed.toOption.exists(_.isInstanceOf[CaseDataNotSupportedError]),
+          expected
+        )
+        assertSame(jit(dataCase), expected)
+    }
+
+    test(
+      "rejects a vm of another protocol version than the compile, before it runs [EV-2, EV-13]"
+    ) {
+        val forPV11 = UplcCompiler.compile(dataCase, MaxDepth)
+        val forPV12 = UplcCompiler.compile(dataCase, MaxDepth, MajorProtocolVersion.dijkstraPV)
+        for (compiled, other) <- List(forPV11 -> dijkstra, forPV12 -> vm) do
+            for evaluator <- List(compiled, compiled.withFallback()) do
+                val run = track(budget)((s, l) => evaluator.evaluate(s, l)(using other))
+                val error = run.result.failed.get
+                assert(error.isInstanceOf[IllegalArgumentException], error)
+                assert(
+                  error.getMessage.contains(
+                    s"compiled for protocol version ${compiled.protocolVersion.version}"
+                  ) && error.getMessage.contains(
+                    s"protocol version ${other.protocolVersion.version}"
+                  ),
+                  error.getMessage
+                )
+                // no spender and no logger asked for: neither the JIT nor the CEK machine ran
+                assert(run.spenders.isEmpty && run.logs.isEmpty)
+    }
+
+    test("compiles only for protocol versions 11 and 12 [SC-2, EV-12]") {
+        for pv <- List(MajorProtocolVersion.changPV, MajorProtocolVersion(13)) do
+            assertThrows[IllegalArgumentException](UplcCompiler.compile(dataCase, MaxDepth, pv))
     }
 }

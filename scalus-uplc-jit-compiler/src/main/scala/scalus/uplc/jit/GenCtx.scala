@@ -5,7 +5,8 @@ import scalus.uplc.eval.*
 
 import scala.quoted.*
 
-/** What the code generators need: references in generated code, and the constant pool.
+/** What the code generators need: references in generated code, the constant pool, and the machine
+  * the code is generated for.
   *
   * The `Expr` fields are references, in generated code, to a parameter of the compiled function
   * `(logger, budget, params) => ...`. They are not values: the generator runs at JIT-compile time
@@ -26,13 +27,19 @@ import scala.quoted.*
   * @param pool
   *   the constant pool of the script, a JIT-compile-time value: which constant sits in which slot
   *   of `consts`
+  * @param caseOnData
+  *   a JIT-compile-time value, not a reference: whether the machine the code is generated for cases
+  *   on a `Data` scrutinee. Derived once from the protocol version of the compile, with the rule of
+  *   `PlutusVM` (`protocolVersion >= dijkstraPV`), see `JIT.genCodeFromTerm`. It chooses which code
+  *   `JIT.genCaseDispatch` generates; generated code never tests it.
   */
 final case class GenCtx(
     logger: Expr[Logger],
     budget: Expr[BudgetSpender],
     params: Expr[MachineParams],
     consts: Expr[Array[UplcValue]],
-    pool: ConstantPool
+    pool: ConstantPool,
+    caseOnData: Boolean
 ) {
 
     /** Generates the code that gives the value of `(con c)`: `consts(3)`, a read of the constant

@@ -64,6 +64,11 @@ trait BuiltinDelayValue extends DelayValue
 /** A JIT-compiled term: evaluates the term with the given logger, budget spender and machine
   * parameters.
   *
+  * The code implements the machine of one protocol version, chosen when it was compiled
+  * (`JIT.jitUplc`, `UplcCompiler.compile`): code for van Rossem (PV11) rejects `case` on `Data`,
+  * code for Dijkstra (PV12) cases on it. Pass the machine parameters of a `PlutusVM` of that
+  * version; `UplcCompiler.Compiled.evaluate` checks the version, a direct call does not.
+  *
   * One `CompiledTerm` is safe to call from many threads at once: all state of an evaluation, the
   * call-depth counter included, is local to the call. It throws
   * [[nativestack.StackThresholdException]] when the call depth reaches its limit, and never falls

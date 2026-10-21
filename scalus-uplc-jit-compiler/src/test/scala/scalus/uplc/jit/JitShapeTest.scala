@@ -2,7 +2,8 @@ package scalus.uplc.jit
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
-import scalus.uplc.{DeBruijn, Term}
+import scalus.uplc.{Constant, DeBruijn, DefaultUni, Term}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.*
 
 /** The JIT returns the result of the CEK machine and spends the same budget, per budget category,
@@ -40,9 +41,22 @@ class JitShapeTest extends AnyFunSuite {
     // Variant E (PlutusV3 at PV11), the scope of the JIT.
     private val vm = PlutusVM.makePlutusV3VM(params, MajorProtocolVersion.vanRossemPV)
 
-    private def assertSameAsCek(term: Term): Unit = {
+    // Dijkstra (PV12): the CEK machine of the same variant, plus case on Data.
+    private val dijkstraVM = PlutusVM.makePlutusV3VM(params, MajorProtocolVersion.dijkstraPV)
+
+    /** Compiles `term` for the protocol version of `vm` and runs it with its machine parameters:
+      * the JIT generates code for one protocol version.
+      */
+    private def runJit(term: Term, vm: PlutusVM): JitCekDiff.Run[UplcValue] =
+        JitCekDiff.runJit(
+          nativestack.JIT
+              .jitUplc(term, nativestack.NativeStackContext.DefaultMaxDepth, vm.protocolVersion),
+          vm.machineParams
+        )
+
+    private def assertSameAsCek(term: Term, vm: PlutusVM = vm): Unit = {
         val cek = JitCekDiff.runCek(vm, term)
-        val jitted = JitCekDiff.runJit(nativestack.JIT.jitUplc(term), params)
+        val jitted = runJit(term, vm)
         // also a failed evaluation must stop at the same point and spend the same budget
         assert(
           JitCekDiff.same(cek, jitted),
@@ -197,6 +211,56 @@ class JitShapeTest extends AnyFunSuite {
         test(s"$name, as the CEK machine") {
             assertSameAsCek(parse(uplc))
         }
+
+    // Case on Data (Plutus `caseBuiltinData`): a Data.Constr selects the branch of its tag, and
+    // the branch gets one argument, the fields as a `(list data)`. Every other Data fails. Each
+    // branch returns something different, so a wrong branch or wrong fields change the result.
+    private def dataCase(data: String): String =
+        s"(case (con data ($data)) (lam fs (con integer 10)) (lam fs fs) (lam fs [(force (builtin headList)) fs]))"
+
+    private val dataCaseTerms = List(
+      "Constr 0 selects the first branch" -> dataCase("Constr 0 [I 7]"),
+      "Constr 1 passes the fields as one list" -> dataCase("Constr 1 [I 7, B #00]"),
+      "Constr 2 with no fields" -> dataCase("Constr 2 []"),
+      "Constr 2, the head of the fields" -> dataCase("Constr 2 [I 7, B #00]"),
+      "Constr with a tag past the last branch" -> dataCase("Constr 3 [I 7]"),
+      "Constr with a huge tag" -> dataCase("Constr 18446744073709551616 []"),
+      "Map" -> dataCase("Map [(I 1, I 2)]"),
+      "List" -> dataCase("List [I 1]"),
+      "I" -> dataCase("I 1"),
+      "B" -> dataCase("B #00"),
+      "Constr with no branches" -> "(case (con data (Constr 0 [])))",
+      "Constr, branch applied to too many fields" ->
+          "(case (con data (Constr 0 [I 1])) (lam a (lam b a)))",
+      "Constr, branch not a function" -> "(case (con data (Constr 0 [I 1])) (con integer 5))"
+    )
+
+    for (name, uplc) <- dataCaseTerms do
+        // the same term compiled twice, once per protocol version
+        test(s"case on Data at PV12, $name, as the CEK machine") {
+            assertSameAsCek(parse(uplc), dijkstraVM)
+        }
+        test(s"case on Data at PV11, $name, fails as the CEK machine") {
+            val term = parse(uplc)
+            assertSameAsCek(term)
+            // also not vacuous: both machines reject it, with the PV11 error
+            runJit(term, vm).result.failed.get match
+                case _: CaseDataNotSupportedError =>
+                case other => fail(s"expected CaseDataNotSupportedError, got $other")
+        }
+
+    test("case on Data at PV12 gives the values of Plutus caseBuiltinData") {
+        // what the comparison with the CEK machine above does not show on its own
+        def jit(data: String): UplcValue = runJit(parse(dataCase(data)), dijkstraVM).result.get
+        assert(jit("Constr 0 [I 7]") == Constant.Integer(10))
+        assert(
+          jit("Constr 1 [I 7, B #00]") == Constant.List(
+            DefaultUni.Data,
+            List(Constant.Data(Data.I(7)), Constant.Data(Data.B(ByteString.fromHex("00"))))
+          )
+        )
+        assert(jit("Constr 2 [I 7]") == Constant.Data(Data.I(7)))
+    }
 
     /** Records the category of every spend, in order. */
     private final class OrderSpender extends BudgetSpender {

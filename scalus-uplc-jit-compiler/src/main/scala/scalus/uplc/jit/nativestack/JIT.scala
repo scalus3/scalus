@@ -1,5 +1,6 @@
 package scalus.uplc.jit.nativestack
 
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.uplc.eval.*
 import scalus.uplc.jit.*
 import scalus.uplc.Term
@@ -14,7 +15,11 @@ import scala.quoted.*
   * Generated code counts the depth of these calls and throws [[StackThresholdException]] at its
   * `maxDepth`; `UplcCompiler.Compiled.withFallback` then evaluates the term with the CEK machine.
   *
-  * Scope: builtin semantics variant E and the machine of protocol version 11; see [[UplcCompiler]].
+  * Scope: builtin semantics variant E and the machine of protocol version 11 (van Rossem) or 12
+  * (Dijkstra); see [[UplcCompiler]]. One compile generates code for one of them, chosen by the
+  * `protocolVersion` of [[jitUplc]]: the two machines differ only in `case` on `Data`, and the
+  * generator emits the code of that version only (see [[genCaseDispatch]]). The generated code
+  * never reads a protocol version.
   */
 object JIT {
 
@@ -45,10 +50,22 @@ object JIT {
       * ): CompiledTerm
       * }}}
       * The startup cost is spent first, as `Cek.scala` `evaluateTerm` does.
+      *
+      * `protocolVersion` is the machine the code is for, 11 or 12 (checked by [[jitUplc]]). It is a
+      * JIT-compile-time input: the generator reads it once, here, and no generated code depends on
+      * it except the `case` dispatch, which differs per version ([[genCaseDispatch]]).
       */
-    private[jit] def genCodeFromTerm(term: Term, pool: ConstantPool, maxDepth: Int)(using
-        Quotes
-    ): Expr[Array[UplcValue] => CompiledTerm] = {
+    private[jit] def genCodeFromTerm(
+        term: Term,
+        pool: ConstantPool,
+        maxDepth: Int,
+        protocolVersion: MajorProtocolVersion
+    )(using Quotes): Expr[Array[UplcValue] => CompiledTerm] = {
+
+        // compile time: the one decision that depends on the protocol version, made once per
+        // script with the rule of `PlutusVM` for the CEK machine (`caseOnDataEnabled`, after
+        // Plutus `defaultCaserBuiltinFor`): case on Data from Dijkstra (PV12) on.
+        val caseOnData = protocolVersion >= MajorProtocolVersion.dijkstraPV
 
         // Number of terms generated so far into the JVM method being generated. Each LamAbs and
         // Delay body is a method of its own; inlined let-bindings extend the current one.
@@ -211,7 +228,9 @@ object JIT {
                     val nativeStackContext = new NativeStackContext(${ Expr(maxDepth) })
                     JitBudget.spendStartup(budget, params)
                     ${
-                        given GenCtx = GenCtx('logger, 'budget, 'params, 'consts, pool)
+                        // compile time: the context of the whole generation, see GenCtx
+                        given GenCtx =
+                            GenCtx('logger, 'budget, 'params, 'consts, pool, caseOnData)
                         given NativeCtx = NativeCtx('nativeStackContext)
                         genCode(term, Map.empty)
                     }
@@ -223,13 +242,30 @@ object JIT {
       * branch, compute it, and apply it to the fields of the scrutinee.
       *
       * For `(case (constr 1 (con integer 2)) (lam a a) (lam b b))` it generates (the scrutinee and
-      * branch code abbreviated, see [[genCodeFromTerm]]):
+      * branch code abbreviated, see [[genCodeFromTerm]]), for protocol version 11 (van Rossem):
       * {{{
       * val s = <(constr 1 (con integer 2))>             // ConstrValue(1, List(Constant.Integer(2)))
-      * val i = JitRuntime.caseIndex(s, 2)               // 1; fails if s selects no branch
+      * val i = JitRuntime.caseIndex(s, 2)               // 1; fails if s selects no branch,
+      *                                                  // and on every Data scrutinee
       * if i == 0 then JitRuntime.applyFields(stack, <(lam a a)>, s)
       * else JitRuntime.applyFields(stack, <(lam b b)>, s) // the last branch needs no test
       * }}}
+      * and for protocol version 12 (Dijkstra), where only the call that selects the branch differs:
+      * {{{
+      * val s = <(constr 1 (con integer 2))>
+      * val i = JitRuntime.caseIndexOnData(s, 2)         // as caseIndex, and a Data.Constr selects
+      *                                                  // the branch of its tag
+      * if i == 0 then JitRuntime.applyFields(stack, <(lam a a)>, s)
+      * else JitRuntime.applyFields(stack, <(lam b b)>, s) // a Data.Constr: its fields as one
+      *                                                    // (list data) argument
+      * }}}
+      * The version is chosen at JIT-compile time (`ctx.caseOnData`, from the `protocolVersion` of
+      * [[genCodeFromTerm]]): a JIT generates code for one language version, so the generated code
+      * has no test of a flag, and code for PV11 is exactly the code from before PV12 existed. The
+      * CEK machines of the two versions differ in the same place (`Cek.scala`,
+      * `caseOnDataEnabled`), and the selection spends nothing in either, so the budget is the CEK
+      * machine's in both.
+      *
       * Only the selected branch runs, as in the CEK machine. No budget is spent here: the caller
       * spends the Case step (`Cek.scala` `computeCek`) before it, the scrutinee and the branch
       * spend their own steps, and applying the branch to the fields spends nothing, as the CEK
@@ -247,7 +283,7 @@ object JIT {
     private def genCaseDispatch(
         scrutinee: Quotes ?=> Expr[UplcValue],
         branches: List[Quotes ?=> Expr[UplcValue]]
-    )(using nctx: NativeCtx, q: Quotes): Expr[UplcValue] = {
+    )(using ctx: GenCtx, nctx: NativeCtx, q: Quotes): Expr[UplcValue] = {
         val n = branches.size
         def chain(
             k: Int,
@@ -262,28 +298,57 @@ object JIT {
                     if $i == ${ Expr(k) } then JitRuntime.applyFields(${ nctx.stack }, ${ b }, $s)
                     else ${ chain(k + 1, more, i, s) }
                 }
+        // compile time: the branch selection of the machine the code is for. The `if` runs in the
+        // generator, outside the quotes, so the generated code holds one of the two calls and no
+        // test of the protocol version.
+        def select(s: Expr[UplcValue])(using Quotes): Expr[Int] =
+            if ctx.caseOnData then '{ JitRuntime.caseIndexOnData($s, ${ Expr(n) }) } // PV12
+            else '{ JitRuntime.caseIndex($s, ${ Expr(n) }) } // PV11
+        // generated
         '{
             val s = ${ scrutinee }
-            val i = JitRuntime.caseIndex(s, ${ Expr(n) })
+            val i = ${ select('s) }
             ${ chain(0, branches, 'i, 's) }
         }
     }
 
-    /** Compiles a UPLC term (with named variables, not De Bruijn indices) into a [[CompiledTerm]].
+    /** The protocol versions the JIT can generate code for: van Rossem (11) and Dijkstra (12). */
+    val SupportedProtocolVersions: Set[MajorProtocolVersion] =
+        Set(MajorProtocolVersion.vanRossemPV, MajorProtocolVersion.dijkstraPV)
+
+    /** Compiles a UPLC term (with named variables, not De Bruijn indices) into a [[CompiledTerm]]
+      * for the machine of `protocolVersion`.
       *
       * `maxDepth` is the call-depth limit of the compiled code, a constant in it: at that depth it
       * throws [[StackThresholdException]]. Choose it for the stack of the threads that run it.
       *
+      * `protocolVersion` must be 11 or 12 ([[SupportedProtocolVersions]]), else this throws
+      * `IllegalArgumentException`. Code for 11 rejects `case` on `Data`, code for 12 cases on it.
+      * Run the result with the machine parameters of a `PlutusVM` of the same version.
+      *
       * Safe to call from any thread: the staging compiles run one at a time on a dedicated thread
       * ([[StagingCompilerThread]]).
       */
-    def jitUplc(term: Term, maxDepth: Int): CompiledTerm =
+    def jitUplc(term: Term, maxDepth: Int, protocolVersion: MajorProtocolVersion): CompiledTerm = {
+        require(
+          SupportedProtocolVersions.contains(protocolVersion),
+          s"the JIT implements protocol versions 11 and 12, not ${protocolVersion.version}"
+        )
         // the pool walks the term recursively: on the compiler thread, with its large stack
         StagingCompilerThread.onThread {
             val pool = ConstantPool(term)
-            ConstantPool.compile(term, pool)(genCodeFromTerm(term, pool, maxDepth))
+            ConstantPool.compile(term, pool)(
+              genCodeFromTerm(term, pool, maxDepth, protocolVersion)
+            )
         }
+    }
 
-    /** [[jitUplc]] with [[NativeStackContext.DefaultMaxDepth]], for a thread with a 64 MB stack. */
+    /** [[jitUplc]] for van Rossem (PV11), the protocol version mainnet runs. */
+    def jitUplc(term: Term, maxDepth: Int): CompiledTerm =
+        jitUplc(term, maxDepth, MajorProtocolVersion.vanRossemPV)
+
+    /** [[jitUplc]] for van Rossem (PV11) with [[NativeStackContext.DefaultMaxDepth]], for a thread
+      * with a 64 MB stack.
+      */
     def jitUplc(term: Term): CompiledTerm = jitUplc(term, NativeStackContext.DefaultMaxDepth)
 }

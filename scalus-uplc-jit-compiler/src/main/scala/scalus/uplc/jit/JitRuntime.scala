@@ -1,8 +1,9 @@
 package scalus.uplc.jit
 
 import scalus.cardano.ledger.Word64
+import scalus.uplc.builtin.Data
 import scalus.uplc.eval.*
-import scalus.uplc.{Constant, Term}
+import scalus.uplc.{Constant, DefaultUni, Term}
 
 /** Precompiled code that generated code calls: the failures of applying and forcing, and casing on
   * values.
@@ -40,7 +41,8 @@ object JitRuntime {
     private val MaxIndexableTag = Int.MaxValue.toLong
 
     /** The branch of `(case s b0 .. b(n-1))` that `s` selects, with the checks and in the order of
-      * `Cek.scala` `returnCek` for `FrameCases`, at PV11 (case on builtins on, case on `Data` off):
+      * `Cek.scala` `returnCek` for `FrameCases`, at van Rossem (PV11: case on builtins on, case on
+      * `Data` off):
       *   - `ConstrValue`: its tag, if below `n` (the tag is unsigned);
       *   - integer `i`: `i`, if `0 <= i < n`;
       *   - bool: `False` is 0, `True` is 1, with 1 or 2 branches;
@@ -49,9 +51,12 @@ object JitRuntime {
       *     branches;
       *   - pair constant: 0, with exactly 1 branch.
       *
-      * Anything else fails: a `Data` constant (case on `Data` is a PV12 feature), any other
-      * constant, a `ListValue` (the CEK machine does not case on a `VList`) and a function. The
-      * fields that the branch takes are applied by [[applyFields]].
+      * Anything else fails: a `Data` constant (case on `Data` is a PV12 feature, see
+      * [[caseIndexOnData]]), any other constant, a `ListValue` (the CEK machine does not case on a
+      * `VList`) and a function. The fields that the branch takes are applied by [[applyFields]].
+      *
+      * Code compiled for PV11 calls this method; code compiled for PV12 calls [[caseIndexOnData]]
+      * (`JIT.genCaseDispatch` chooses at JIT-compile time).
       */
     def caseIndex(s: UplcValue, n: Int): Int = s match
         case ConstrValue(tag, _) =>
@@ -77,16 +82,47 @@ object JitRuntime {
             if n != 1 then throw new CasePairBranchError(n, Nil)
             0
         case Constant.Data(_) =>
-            // Case on Data is allowed from Dijkstra (PV12); at PV11 the CEK machine rejects it
-            // (`Cek.scala`, `CaseDataNotSupportedError`).
+            // Case on Data is allowed from Dijkstra (PV12); at PV11 the CEK machine rejects every
+            // Data scrutinee, a Data.Constr and a Data.I alike (`Cek.scala`,
+            // `CaseDataNotSupportedError`).
             throw new CaseDataNotSupportedError(Nil)
         case other =>
             throw new NonConstrScrutinized(toCekValue(other), Nil)
 
-    /** Applies `branch`, the value of the branch [[caseIndex]] chose, to the fields of `s`, as the
-      * CEK machine pushes them (`FrameAwaitFunValue`): the arguments of a `ConstrValue` in order;
-      * the head and the tail of a non-empty list constant; both elements of a pair. Other
-      * scrutinees have no fields. Applying a field spends nothing, as in the CEK machine.
+    /** [[caseIndex]] at Dijkstra (PV12), where `case` also scrutinizes a `Data` constant (Plutus
+      * `caseBuiltinData`, `Cek.scala` with `caseOnDataEnabled`): a `Data.Constr` selects the branch
+      * of its tag, if `0 <= tag < n`, else it fails with `CaseIndexOutOfBounds`; a `Map`, `List`,
+      * `I` or `B` fails with `CaseDataNonConstrError`. Every other scrutinee selects as in
+      * [[caseIndex]]. The branch gets the fields as one `(list data)`, see [[applyFields]].
+      *
+      * Only code compiled for PV12 calls this method: the JIT generates code for one protocol
+      * version, so no flag is checked at evaluation time.
+      * {{{
+      * caseIndexOnData(Constant.Data(Data.Constr(1, Nil)), 2)   // 1
+      * caseIndexOnData(Constant.Data(Data.Constr(2, Nil)), 2)   // CaseIndexOutOfBounds
+      * caseIndexOnData(Constant.Data(Data.I(5)), 2)             // CaseDataNonConstrError
+      * caseIndexOnData(Constant.Integer(1), 2)                  // 1, as caseIndex
+      * }}}
+      */
+    def caseIndexOnData(s: UplcValue, n: Int): Int = s match
+        case Constant.Data(Data.Constr(tag, _)) =>
+            // the tag is a BigInt: compared before `toInt`, as in `Cek.scala`
+            if tag >= 0 && tag < n then tag.toInt
+            else throw new CaseIndexOutOfBounds(tag, n, Nil)
+        case Constant.Data(other) => throw new CaseDataNonConstrError(other, Nil)
+        case other                => caseIndex(other, n)
+
+    /** Applies `branch`, the value of the branch [[caseIndex]] or [[caseIndexOnData]] chose, to the
+      * fields of `s`, as the CEK machine pushes them (`FrameAwaitFunValue`): the arguments of a
+      * `ConstrValue` in order; the head and the tail of a non-empty list constant; both elements of
+      * a pair; for a `Data.Constr`, one argument: its fields as one `(list data)` constant (Plutus
+      * `caseBuiltinData`, not one argument per field). Other scrutinees have no fields. Applying a
+      * field spends nothing, as in the CEK machine.
+      *
+      * For `(case (con data (Constr 0 [I 1, B #00])) (lam fs fs))` the branch gets one argument:
+      * {{{
+      * call(stack, branch, Constant.List(DefaultUni.Data, List(Constant.Data(I(1)), Constant.Data(B(#00)))))
+      * }}}
       *
       * Every call is depth-counted in `stack`, like an application: a loop through `case` alone
       * recurses through these calls, and an uncounted one overflowed the JVM stack. The calls stay
@@ -108,8 +144,13 @@ object JitRuntime {
             f
         case Constant.List(elemType, head :: tail) =>
             call(stack, call(stack, branch, head), Constant.List(elemType, tail))
-        case Constant.Pair(a, b) => call(stack, call(stack, branch, a), b)
-        case _                   => branch
+        case Constant.Pair(a, b)                   => call(stack, call(stack, branch, a), b)
+        case Constant.Data(Data.Constr(_, fields)) =>
+            // reached only from code compiled for PV12: caseIndex, which code compiled for PV11
+            // calls, rejects every Data scrutinee before the branch is applied
+            val list = Constant.List(DefaultUni.Data, fields.toScalaList.map(Constant.Data(_)))
+            call(stack, branch, list)
+        case _ => branch
 
     /** One depth-counted call of a field, for [[applyFields]]. */
     private def call(

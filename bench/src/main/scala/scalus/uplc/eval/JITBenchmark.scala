@@ -4,7 +4,7 @@ import org.openjdk.jmh.annotations.*
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.uplc.DeBruijnedProgram
 import scalus.uplc.jit.{CompiledTerm, UplcValue}
-import scalus.uplc.jit.nativestack.JIT
+import scalus.uplc.jit.nativestack.{JIT, NativeStackContext}
 
 import java.nio.file.{Files, Paths}
 import java.util.concurrent.TimeUnit
@@ -26,13 +26,15 @@ class JITBenchmark:
     @nowarn("msg=unset private variable")
     private var file: String = ""
     private var compiled: CompiledTerm | Null = null
-    private val params =
-        PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV).machineParams
+    // the code is generated for one protocol version: compile and run with the same one
+    private val protocolVersion = MajorProtocolVersion.vanRossemPV
+    private val params = PlutusVM.makePlutusV3VM(protocolVersion).machineParams
 
     @Setup
     def setup(): Unit = {
         val bytes = Files.readAllBytes(Paths.get(s"src/main/resources/data/$file"))
-        compiled = JIT.jitUplc(DeBruijnedProgram.fromFlatEncoded(bytes).toProgram.term)
+        val term = DeBruijnedProgram.fromFlatEncoded(bytes).toProgram.term
+        compiled = JIT.jitUplc(term, NativeStackContext.DefaultMaxDepth, protocolVersion)
     }
 
     @Benchmark

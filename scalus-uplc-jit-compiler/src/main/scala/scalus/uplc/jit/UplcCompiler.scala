@@ -46,12 +46,15 @@ final class FunctionResultError(value: String)
   * A staged JIT: it compiles a UPLC script to JVM bytecode with Scala 3 staging when the script is
   * loaded, and the JVM's JIT compiles that bytecode to machine code.
   *
-  * Scope: builtin semantics variant E at protocol version 11 (spec [SC-1], [SC-2]). Every
-  * evaluation checks that its `vm` is such a machine ([EV-1], [EV-2]).
+  * Scope: builtin semantics variant E at protocol version 11 or 12 (spec [SC-1], [SC-2]). A compile
+  * generates code for one protocol version, 11 by default ([SC-3], [EV-12]); every evaluation
+  * checks that its `vm` is a variant-E machine of that version ([EV-1], [EV-2]).
   *
   * {{{
   * given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
   * val evaluator = UplcCompiler.compile(term).withFallback()   // a staging compile; maxDepth 25 000
+  * // for Dijkstra: UplcCompiler.compile(term, protocolVersion = MajorProtocolVersion.dijkstraPV),
+  * // evaluated with a vm of PV12
   * var spender: RestrictingBudgetSpender = null
   * evaluator.evaluateScript(
   *   { spender = RestrictingBudgetSpender(budget); spender },  // the last one holds the budget
@@ -69,15 +72,22 @@ object UplcCompiler {
       * limit the stack cannot hold lets the JVM stack overflow first, with a `StackOverflowError`,
       * which no evaluator catches.
       *
-      * Needs no machine: the compiled code reads the step and builtin costs from the machine
-      * parameters of each evaluation. Safe to call from any thread: the staging compiles run one at
-      * a time on a dedicated thread ([[StagingCompilerThread]]).
+      * `protocolVersion` is the machine the code is generated for: van Rossem (11, the default) or
+      * Dijkstra (12); any other throws `IllegalArgumentException` ([SC-2]). The two differ only in
+      * `case` on `Data`, which code for 11 rejects and code for 12 performs ([SC-3]). The default
+      * is 11 because mainnet runs it and `PlutusVM` takes it as its own default. The result
+      * evaluates only with a `vm` of the same protocol version ([EV-2]).
+      *
+      * Needs no machine (no `PlutusVM`, [EV-11]): the compiled code reads the step and builtin
+      * costs from the machine parameters of each evaluation. Safe to call from any thread: the
+      * staging compiles run one at a time on a dedicated thread ([[StagingCompilerThread]]).
       */
     def compile(
         term: Term,
-        maxDepth: Int = nativestack.NativeStackContext.DefaultMaxDepth
+        maxDepth: Int = nativestack.NativeStackContext.DefaultMaxDepth,
+        protocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV
     ): Compiled =
-        Compiled(term, nativestack.JIT.jitUplc(term, maxDepth))
+        Compiled(term, nativestack.JIT.jitUplc(term, maxDepth, protocolVersion), protocolVersion)
 
     /** A compiled term: evaluates it with the compiled code only. Safe to evaluate from many
       * threads at once.
@@ -85,19 +95,25 @@ object UplcCompiler {
       * @param code
       *   the compiled code itself, without the scope check: for benchmarks and tests that pass
       *   their own spender, logger and machine parameters
+      * @param protocolVersion
+      *   the protocol version the code was generated for: every evaluation needs a `vm` of it
       */
-    final class Compiled private[UplcCompiler] (term: Term, val code: CompiledTerm)
-        extends UplcEvaluator {
+    final class Compiled private[UplcCompiler] (
+        term: Term,
+        val code: CompiledTerm,
+        val protocolVersion: MajorProtocolVersion
+    ) extends UplcEvaluator {
 
         /** Evaluates with the compiled code; `budgetSpender` and `logger` are evaluated once. A
           * script deeper than `maxDepth` throws `StackThresholdException` ([[withFallback]]
           * evaluates it with the CEK machine instead). A function result throws
-          * [[FunctionResultError]].
+          * [[FunctionResultError]]. A `vm` of another protocol version than [[protocolVersion]]
+          * throws `IllegalArgumentException` before anything runs ([EV-2]).
           */
         def evaluate(budgetSpender: => BudgetSpender, logger: => Logger)(using
             vm: PlutusVM
         ): Term = {
-            checkScope(vm)
+            checkScope(vm, protocolVersion)
             val value = code(logger, budgetSpender, vm.machineParams)
             toTerm(value).getOrElse(throw new FunctionResultError(JitRuntime.describe(value)))
         }
@@ -122,16 +138,22 @@ object UplcCompiler {
         def evaluate(budgetSpender: => BudgetSpender, logger: => Logger)(using
             vm: PlutusVM
         ): Term =
+            // compiled.evaluate checks `vm` first ([EV-1], [EV-2]): a vm of another protocol
+            // version fails there, with IllegalArgumentException, and never reaches the CEK
+            // machine below. That is deliberate ([EV-13]): the fallback stands in for the compiled
+            // code, so it accepts exactly the machines the compiled code accepts.
             try compiled.evaluate(budgetSpender, logger)
             catch
                 case _: StackThresholdException =>
                     vm.evaluateDeBruijnedTerm(deBruijned, budgetSpender, logger)
     }
 
-    /** Rejects a machine other than the one the JIT implements ([EV-1], [EV-2]): PlutusV3 or V4,
-      * builtin semantics variant E, protocol version 11.
+    /** Rejects a machine other than the one the code was compiled for ([EV-1], [EV-2]): PlutusV3 or
+      * V4, builtin semantics variant E, and the protocol version `compiledFor` of the compile. Code
+      * for PV11 rejects `case` on `Data` and code for PV12 performs it, so running either with a
+      * machine of the other version would give the result of the wrong machine.
       */
-    private def checkScope(vm: PlutusVM): Unit = {
+    private def checkScope(vm: PlutusVM, compiledFor: MajorProtocolVersion): Unit = {
         require(
           vm.language == Language.PlutusV3 || vm.language == Language.PlutusV4,
           s"the JIT implements PlutusV3 and V4, not ${vm.language}"
@@ -141,8 +163,9 @@ object UplcCompiler {
           s"the JIT implements builtin semantics variant E, not ${vm.semanticVariant}"
         )
         require(
-          vm.protocolVersion == MajorProtocolVersion.vanRossemPV,
-          s"the JIT implements protocol version 11, not ${vm.protocolVersion}"
+          vm.protocolVersion == compiledFor,
+          s"the script was JIT-compiled for protocol version ${compiledFor.version}, " +
+              s"but the vm has protocol version ${vm.protocolVersion.version}"
         )
     }
 

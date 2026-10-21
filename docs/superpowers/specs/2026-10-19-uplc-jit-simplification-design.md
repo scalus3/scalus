@@ -41,8 +41,11 @@ their complexity.
 ## Scope
 
 - The JIT MUST implement builtin semantics variant E. `[SC-1]`
-- The JIT MUST implement the machine of protocol version 11 (van Rossem). `[SC-2]`
-- The JIT MUST reject `case` on a `Data` scrutinee. `[SC-3]`
+- The JIT MUST implement the machines of protocol versions 11 (van Rossem) and 12 (Dijkstra). One
+  compile MUST generate the code of one of them, the one chosen by its `protocolVersion`
+  (`[EV-12]`). `[SC-2]`
+- Code compiled for protocol version 11 MUST reject `case` on a `Data` scrutinee. Code compiled for
+  12 MUST case on it as the CEK machine does at 12. `[SC-3]`
 - The JIT MUST give CEK semantics for every term in scope. `[SC-4]`
 - A difference from CEK semantics in result, error or budget is a defect. It MUST NOT be accepted as
   a known failure in a committed state. `[SC-5]`
@@ -50,11 +53,20 @@ their complexity.
   throw `BuiltinError` with the cause the CEK machine wraps. `[SC-6]`
 
 **Why:** `[SC-3]` follows from `[SC-2]`: the CEK machine allows case on `Data` only from
-Dijkstra (PV12) (`Cek.scala`, `CaseDataNotSupportedError`). `[SC-5]` is the reason for this design:
-a JIT that accepts a script the chain rejects is wrong, however fast it is.
+Dijkstra (PV12) (`Cek.scala`, `CaseDataNotSupportedError`). The two machines differ only there. A
+JIT generates code for one language version, so the protocol version is a compile-time input:
+the generator emits the `case` dispatch of that version only (`JitRuntime.caseIndex` for 11,
+`JitRuntime.caseIndexOnData` for 12), and the generated code never tests a flag. A run-time flag
+would put a test of the protocol version in every `case` of every script, and keep code for both
+machines in each. `[SC-5]` is the reason for this design: a JIT that accepts a script the chain
+rejects is wrong, however fast it is.
 
-Out of scope: renaming the module or package (`jit` to, for example, `staged`); PV12 features;
-a shared term walk (`Term.foreachSubterm`).
+*Example, illustrative.* `(case (con data (Constr 1 [I 7])) (con integer 0) (lam fs fs))`
+compiled for 12 returns `(con (list data) [I 7])`; compiled for 11 it throws
+`CaseDataNotSupportedError`, as the CEK machine of each version does.
+
+Out of scope: renaming the module or package (`jit` to, for example, `staged`); PV12 features
+other than case on `Data`; a shared term walk (`Term.foreachSubterm`).
 
 ## 1. Values
 
@@ -182,21 +194,37 @@ trait UplcEvaluator {
     final def evaluateScript(budgetSpender: => BudgetSpender, logger: => Logger)(using vm: PlutusVM): Unit
 }
 object UplcCompiler {
-    def compile(term: Term, maxDepth: Int = 25_000): Compiled
+    def compile(
+        term: Term,
+        maxDepth: Int = 25_000,
+        protocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV
+    ): Compiled
     final class Compiled extends UplcEvaluator {   // the compiled code only
         val code: CompiledTerm
+        val protocolVersion: MajorProtocolVersion   // the machine the code is for
         def withFallback(): UplcEvaluator           // the CEK machine on the call-depth limit
     }
 }
 ```
 
-*Example, illustrative.* `UplcCompiler.compile(term).withFallback().evaluateScript(spender, log)`.
+*Example, illustrative.* `UplcCompiler.compile(term).withFallback().evaluateScript(spender, log)`
+with a `PlutusVM` of PV11; for Dijkstra,
+`UplcCompiler.compile(term, protocolVersion = MajorProtocolVersion.dijkstraPV)` with a `PlutusVM`
+of PV12.
 
 - `UplcCompiler.compile` MUST NOT need a `PlutusVM`. `[EV-11]`
 - `UplcCompiler.compile` MUST take the call-depth limit `maxDepth` as a parameter, 25 000 by
   default. The compiled code MUST throw `StackThresholdException` at that depth. `[EV-10]`
+- `UplcCompiler.compile` MUST take the protocol version as a parameter `protocolVersion` of type
+  `MajorProtocolVersion`, 11 (van Rossem) by default. It MUST throw `IllegalArgumentException` for
+  a version other than 11 or 12. The generated code MUST be the code of that version only, and
+  MUST NOT read a protocol version when it runs. `[EV-12]`
 - Every `evaluate` MUST reject a `PlutusVM` whose `semanticVariant` is not `E`. `[EV-1]`
-- Every `evaluate` MUST reject a `PlutusVM` whose `protocolVersion` is not 11. `[EV-2]`
+- Every `evaluate` MUST reject a `PlutusVM` whose `protocolVersion` is not the `protocolVersion`
+  the script was compiled for, with an `IllegalArgumentException` that names both versions.
+  `[EV-2]`
+- The check of `[EV-2]` MUST come before `budgetSpender` and `logger` are evaluated. The evaluator
+  of `withFallback` MUST NOT run the CEK machine for a `PlutusVM` that `[EV-2]` rejects. `[EV-13]`
 - `Compiled.evaluate` MUST run the `CompiledTerm` on the calling thread, with `budgetSpender` and
   `logger` evaluated once. `[EV-3]`
 - On `StackThresholdException`, the evaluator of `withFallback` MUST drop that spender and that
@@ -217,7 +245,12 @@ alone gets it, and the fallback rule lives in one place. A spent budget and writ
 undone, so the fallback needs a new spender and a new logger; by-name parameters let the caller
 make them and keep the last one, which holds the budget and the logs of the result. The CEK
 fallback of the old `HybridJIT` used the same spender, which counted the JIT's steps twice.
-`[EV-2]` follows from `[SC-2]`. The depth limit is the caller's, because the caller owns the
+`[EV-2]` follows from `[SC-2]`: code for one version run with the machine of the other gives the
+result of the wrong machine, for example a case on `Data` that the chain rejects. `[EV-13]`: the
+fallback stands in for the compiled code, so it accepts only the machines the compiled code
+accepts, and a rejected call spends no budget and writes no log. The default of `[EV-12]` is 11
+because mainnet runs it and `PlutusVM` takes it as its own default; the other callers of the JIT
+(tests, benchmarks) evaluate at 11. The depth limit is the caller's, because the caller owns the
 threads and their stacks: about 25 000 fits a 64 MB stack. An evaluator that moved work to its own
 large-stack threads cost a hand-off of 13-16 us per call. A function result has no term without the
 environment the CEK machine keeps; scripts return unit, a bool or `Data`, and for a V3 script both
