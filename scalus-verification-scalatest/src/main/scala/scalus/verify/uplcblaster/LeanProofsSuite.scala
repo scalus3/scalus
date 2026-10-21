@@ -30,7 +30,10 @@ object Unfinished extends Tag("scalus.verify.uplcblaster.Unfinished")
   * class HtlcProofsTest extends AnyFunSuite with LeanProofsSuite {
   *     import proofs.*
   *
-  *     test("x + 0 is x") { proven(forAll[BigInt](x => x + BigInt(0) == x), 40) }
+  *     private val plusZero =
+  *         verifier.statement("plus_zero", forAll[BigInt](x => x + BigInt(0) == x))
+  *
+  *     test("x + 0 is x") { check(plusZero, 40) }
   * }
   * }}}
   */
