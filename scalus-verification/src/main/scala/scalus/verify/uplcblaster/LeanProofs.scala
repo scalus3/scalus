@@ -267,13 +267,14 @@ final class LeanProofs private (
         result
     }
 
-    /** [[check]] with [[UplcBlaster]] at a budget it finds ([[Budget.Auto]]), expecting what
-      * `statement` was declared to be. The budget is a result, not a part of the statement: where
-      * results are kept, it is kept with the proof, and a later search starts at it, so a statement
-      * that has not changed is decided in one check, or taken as it was kept.
+    /** [[check]] with [[UplcBlaster]] at `budget`, expecting what `statement` was declared to be.
+      * By default the tactic finds the budget ([[Budget.Auto]]). The budget is then a result, not a
+      * part of the statement: where results are kept, it is kept with the proof, and a later search
+      * starts at it, so a statement that has not changed is decided in one check, or taken as it
+      * was kept.
       */
-    def check(statement: Statement): VerificationResult = {
-        check(statement, Budget.Auto)
+    def check(statement: Statement, budget: Budget = Budget.Auto): VerificationResult = {
+        check(VerificationRequest(statement, UplcBlaster(budget, lean)))
     }
 
     /** [[check]] with [[UplcBlaster]] at a budget of `budget` steps of Lean's machine, expecting
@@ -281,13 +282,6 @@ final class LeanProofs private (
       */
     def check(statement: Statement, budget: Int): VerificationResult = {
         check(statement, Budget.LeanSteps(budget))
-    }
-
-    /** [[check]] with [[UplcBlaster]] at `budget`, which the tactic may find ([[Budget.Auto]]),
-      * expecting what `statement` was declared to be.
-      */
-    def check(statement: Statement, budget: Budget): VerificationResult = {
-        check(VerificationRequest(statement, UplcBlaster(budget, lean)))
     }
 
     /** Runs `tactic` on `statement` in `verifier`: every check of these proofs runs so. An
