@@ -9,6 +9,7 @@ import scalus.uplc.transform.V3Optimizer
 import scalus.cardano.ledger.{ExUnitPrices, NonNegativeInterval}
 import scalus.examples.auction.AuctionValidator
 import scalus.examples.paymentsplitter.{NaivePaymentSplitterValidator, OptimizedPaymentSplitterValidator}
+import scalus.testing.Benchmark
 
 /** Measures the impact of Common Context Extraction (CCE) and Common Subexpression Elimination
   * (CSE) on code size and execution budget for representative smart contracts.
@@ -19,6 +20,9 @@ import scalus.examples.paymentsplitter.{NaivePaymentSplitterValidator, Optimized
   *   1. Report flat-encoded size (bytes) for each
   *
   * CCE's primary goal is reducing code **size** (CBOR bytes), not execution budget.
+  *
+  * A report, not a check: it asserts nothing, so it is tagged `scalus.testing.Benchmark` and runs
+  * in the nightly workflow, not on push CI.
   */
 class CceImpactMeasurementTest extends AnyFunSuite {
 
@@ -110,28 +114,28 @@ class CceImpactMeasurementTest extends AnyFunSuite {
         sir.toUplc(optimizeUplc = false)
     }
 
-    test("CCE impact: HelloCardano") {
+    test("CCE impact: HelloCardano", Benchmark) {
         given Options = Options.release
         val compiled = PlutusV3.compile(HelloCardano.validate)
         val rawUplc = compileBaseline(compiled)
         measureAndReport("HelloCardano", rawUplc)
     }
 
-    test("CCE impact: AuctionValidator") {
+    test("CCE impact: AuctionValidator", Benchmark) {
         given Options = Options.release
         val compiled = PlutusV3.compile(AuctionValidator.validate)
         val rawUplc = compileBaseline(compiled)
         measureAndReport("AuctionValidator", rawUplc)
     }
 
-    test("CCE impact: NaivePaymentSplitter") {
+    test("CCE impact: NaivePaymentSplitter", Benchmark) {
         given Options = Options.release
         val compiled = PlutusV3.compile(NaivePaymentSplitterValidator.validate)
         val rawUplc = compileBaseline(compiled)
         measureAndReport("NaivePaymentSplitter", rawUplc)
     }
 
-    test("CCE impact: OptimizedPaymentSplitter") {
+    test("CCE impact: OptimizedPaymentSplitter", Benchmark) {
         given Options = Options.release
         val compiled = PlutusV3.compile(OptimizedPaymentSplitterValidator.validate)
         val rawUplc = compileBaseline(compiled)

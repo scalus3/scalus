@@ -1,0 +1,40 @@
+name: Nightly
+# Tests that push CI leaves out: everything tagged scalus.testing.Benchmark (budget tables,
+# optimizer impact reports, crypto benchmarks). `test` excludes the tag (excludeFromTest in
+# build.sbt); `testOnly -- -n <tag>` selects only the tagged tests.
+# Measured locally on 2026-10-21: 80 tests, 485 s wall including compilation.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 05 * * *'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: coursier/cache-action@v7
+      - uses: nixbuild/nix-quick-install-action@v34
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          use-flakehub: false
+      - name: Run tagged tests in Nix devshell
+        run: nix develop .#ci --accept-flake-config --command bash -c 'sbt "jvm/testOnly -- -n scalus.testing.Benchmark"'
+      - name: Report test results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "Nightly ${{ job.status == 'success' && '✅' || '❌' }} - ${{ github.ref_name }}"
+          description: "[${{ github.event_name }}] - (${{ github.sha }})"
+          url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          username: "GitHub Actions"
+          avatar_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+          nodetail: true
+          notimestamp: true
