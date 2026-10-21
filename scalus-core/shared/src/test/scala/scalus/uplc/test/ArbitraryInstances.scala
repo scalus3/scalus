@@ -276,14 +276,17 @@ trait ArbitraryInstances:
             )
             if sz <= 0 then simple
             else
+                // Gen.lzy builds a branch only when oneOf picks it. Built eagerly, every call
+                // constructed all six recursive branches, and each of them called sizedTermGen
+                // again: thousands of Gen objects per sample. Same values for the same seed.
                 Gen.oneOf(
                   simple,
-                  forceGen(sz, env),
-                  delayGen(sz, env),
-                  lamGen(sz, env),
-                  appGen(sz, env),
-                  constrGen(sz, env),
-                  caseGen(sz, env)
+                  Gen.lzy(forceGen(sz, env)),
+                  Gen.lzy(delayGen(sz, env)),
+                  Gen.lzy(lamGen(sz, env)),
+                  Gen.lzy(appGen(sz, env)),
+                  Gen.lzy(constrGen(sz, env)),
+                  Gen.lzy(caseGen(sz, env))
                 )
 
         def forceGen(sz: Int, env: immutable.List[String]): Gen[Term] =
