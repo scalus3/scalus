@@ -302,9 +302,9 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
 
     /** Which of [[check]]'s three outcomes the corpus asks of one case.
       *
-      * The conformance numbers published in the npm README and on scalus.org are a count of these,
-      * so the guard that pins them classifies cases through the same expectation files [[check]]
-      * reads, rather than through a second copy of the rules that could drift away from it.
+      * The JS guard of the published conformance claims and the JIT suite classify cases through
+      * the same expectation files [[check]] reads, rather than through a second copy of the rules
+      * that could drift away from it.
       */
     protected enum CaseExpectation:
         /** The expectation file holds a term and the budget file holds `({cpu: … | mem: …})`, so

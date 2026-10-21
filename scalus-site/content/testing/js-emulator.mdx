@@ -456,12 +456,13 @@ if (result.profileJson) {
 
 ## Conformance
 
-Scalus's JavaScript build runs the Plutus conformance suite in CI: **1009 of 1009** UPLC evaluation
-cases, none skipped. For the 723 the reference evaluates successfully, both the resulting term and
-the exact CPU and memory budget are asserted against the reference implementation. The other 286
-are programs the reference rejects – 222 it fails to evaluate and 64 it fails to parse – and since
-the corpus records no term or budget for those, the assertion there is that Scalus rejects them the
-same way.
+Scalus's JavaScript build runs the Plutus conformance suite in CI, with the corpus of the
+plutus-core version that the latest production cardano-node runs: **every** UPLC evaluation case,
+in both its textual and flat-encoded form, none skipped. For each program the reference evaluates
+successfully, both the resulting term and the exact CPU and memory budget are asserted against the
+reference implementation. For the programs the reference rejects – it fails to evaluate, parse or
+decode them – the corpus records no term or budget, so the assertion there is that Scalus rejects
+them the same way.
 
 The evaluator that prices your transaction here is the same code the emulator runs in phase 2, so
 `evaluateTx` and `submitTx` cannot disagree about cost – which is not true of a setup that pairs a

@@ -7,42 +7,27 @@ package scalus.uplc.eval
   */
 class PlutusConformanceJsTest extends PlutusConformanceTest {
 
-    /** Guards the numbers published in `scalus-cardano-ledger/js/src/main/npm/README.md` and on
-      * scalus.org.
+    /** Guards the conformance claims published in `scalus-cardano-ledger/js/src/main/npm/README.md`
+      * and on scalus.org.
       *
-      * "1009 of 1009, none skipped" is the strongest claim Scalus makes to a JavaScript audience,
-      * and prose rots silently. The split matters as much as the total: only the term-bearing cases
-      * have their execution budget compared with the reference, and the published wording says how
-      * many those are. Pinning the total alone let two different wrong splits get published, so
-      * every number the prose states is pinned here. If the corpus moves, this fails in the file
-      * whose author is best placed to update the README and the site in the same commit.
+      * The prose names no counts, so a corpus update does not make it wrong. It claims three
+      * things, and this test pins each of them: every case runs (none skipped), the flat-encoded
+      * form runs too, and every case the reference evaluates successfully has a budget to compare
+      * exactly.
       */
-    test("published conformance counts are still accurate") {
-        assert(
-          discoveredCases.size == 1009,
-          s"corpus has ${discoveredCases.size} evaluation cases; the README and the site say 1009"
-        )
+    test("published conformance claims are still accurate") {
         assert(
           ignoredCases.isEmpty,
           s"the JS build now skips ${ignoredCases.size} case(s), but the README says none are " +
               s"skipped: ${ignoredCases.keys.mkString(", ")}"
         )
-        val counts = discoveredCases.groupBy(expectationOf).view.mapValues(_.size).toMap
-        def count(expectation: CaseExpectation): Int = counts.getOrElse(expectation, 0)
         assert(
-          count(CaseExpectation.TermAndBudget) == 723,
-          s"${count(CaseExpectation.TermAndBudget)} cases have their term and budget asserted; " +
-              s"the README and the site say 723"
+          runsFlatCases && discoveredFlatCases.nonEmpty,
+          "the README and the site say the flat-encoded cases run too"
         )
-        assert(
-          count(CaseExpectation.EvaluationFailure) == 222,
-          s"${count(CaseExpectation.EvaluationFailure)} cases expect 'evaluation failure'; the " +
-              s"README and the site say 222"
-        )
-        assert(
-          count(CaseExpectation.ParseError) == 64,
-          s"${count(CaseExpectation.ParseError)} cases expect 'parse/decode error'; the README and the " +
-              s"site say 64"
-        )
+        // expectationOf fails the test for a case that expects a term but has no budget file, which
+        // would break the claim that every successful case has its budget compared exactly.
+        val termCases = discoveredCases.count(expectationOf(_) == CaseExpectation.TermAndBudget)
+        assert(termCases > 0, "no case has a term and budget to compare")
     }
 }
