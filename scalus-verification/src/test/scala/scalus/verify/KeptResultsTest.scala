@@ -46,11 +46,15 @@ class KeptResultsTest extends AnyFunSuite {
                   Kept(Kept.Result.Refuted, Map.empty, Map("x" -> found, "d" -> """{"int":3}"""))
                 )
             case _ => None
-        override def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult] =
+        override def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] =
             kept.result match
-                case Kept.Result.Proved => Some(proved)
+                case Kept.Result.Proved => Right(proved)
                 case Kept.Result.Refuted =>
-                    Option.when(stands && kept.counterexample.contains("x"))(refuted)
+                    Either.cond(
+                      stands && kept.counterexample.contains("x"),
+                      refuted,
+                      "the counterexample is none of the statement"
+                    )
     }
 
     /** A test with a file for the results, which is not there at its start. */
@@ -240,7 +244,14 @@ class KeptResultsTest extends AnyFunSuite {
         verify(file, KeptResults.Mode.Frozen, tactic) match
             case VerificationResult.Inconclusive(reason) =>
                 assert(reason.startsWith(KeptResults.stale), reason)
-                assert(reason.endsWith("does not stand for the statement as it is now"), reason)
+                // The tactic says why it does not take it.
+                assert(
+                  reason.endsWith(
+                    "does not stand for the statement as it is now: the counterexample is none " +
+                        "of the statement"
+                  ),
+                  reason
+                )
             case other => fail(s"expected a stale statement, got $other")
         // With a backend it is asked again.
         assert(
@@ -267,9 +278,36 @@ class KeptResultsTest extends AnyFunSuite {
                 assert(reason.startsWith(KeptResults.stale), reason)
                 assert(reason.endsWith("was proved with an earlier side of the backend"), reason)
             case other => fail(s"expected a stale statement, got $other")
+        // A former result whose statement changed too says so.
+        tactic.text = "s-2"
+        verify(file, KeptResults.Mode.Frozen, tactic, "second") match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(
+                  reason.endsWith("with an earlier side of the backend, and another the statement"),
+                  reason
+                )
+            case other => fail(s"expected a stale statement, got $other")
+        tactic.text = "s-1"
         // Kept again for the new side, it is no former result any more.
         verify(file, KeptResults.Mode.Use, tactic, "second")
         assert(!Files.readString(file).contains("\"former\""))
+    }
+
+    kept("an entry whose result is no word of one, as after an edit, stands for nothing") { file =>
+        val tactic = new Counting
+        verify(file, KeptResults.Mode.Use, tactic)
+        Files.writeString(
+          file,
+          Files.readString(file).replace("\"result\": \"proved\"", "\"result\": \"Proved\"")
+        )
+        verify(file, KeptResults.Mode.Frozen, tactic) match
+            case VerificationResult.Inconclusive(reason) =>
+                assert(reason.endsWith("has the result \"Proved\", which is none"), reason)
+            case other => fail(s"expected a stale statement, got $other")
+        // With a backend it is asked again, and kept as it should be.
+        assert(proved(verify(file, KeptResults.Mode.Use, tactic)))
+        assert(tactic.runs == 2)
+        assert(Files.readString(file).contains("\"result\": \"proved\""))
     }
 
     kept("a statement kept with the old side of the backend starts from what it was kept with") {

@@ -170,7 +170,7 @@ final class KeptResults private (
                 entry.programs == fingerprint.programs &&
                 stored.environment.get(tactic).contains(sorted(fingerprint.environment))
             }
-        }.map(entry => Kept(result(entry.result), entry.notes, raw(entry.counterexample)))
+        }.flatMap(kept)
     }
 
     /** What was kept for the statement `name` as it is now, with its statement and programs, but
@@ -195,7 +195,7 @@ final class KeptResults private (
                 entry.tactic == tactic && entry.statement == fingerprint.statement &&
                 entry.programs == fingerprint.programs
             }
-        }.map(entry => Kept(result(entry.result), entry.notes, raw(entry.counterexample)))
+        }.flatMap(kept)
     }
 
     /** Keeps `kept` for the statement `name`, in place of what was kept for it.
@@ -245,29 +245,37 @@ final class KeptResults private (
         use(name)
         lock.synchronized {
             val stored = read()
+            // What of `entry` is another than the statement and its programs are now.
+            def changedOf(entry: Entry): List[String] = {
+                val programs =
+                    if entry.programs.sizeIs != fingerprint.programs.size then
+                        List("the number of its tests")
+                    else
+                        entry.programs.zip(fingerprint.programs).zipWithIndex.collect {
+                            case ((was, is), index) if was != is =>
+                                s"the program of test ${index + 1}"
+                        }
+                val statement =
+                    if entry.statement != fingerprint.statement then List("the statement") else Nil
+                statement ++ programs
+            }
             stored.results.get(name).filter(_.tactic == tactic) match
                 case None =>
                     stored.former.get(name).filter(_.tactic == tactic) match
                         case Some(entry) =>
+                            val changed = changedOf(entry)
                             s"what is kept for it in $file was ${entry.result} with an earlier " +
-                                "side of the backend"
+                                "side of the backend" +
+                                (if changed.isEmpty then ""
+                                 else s", and another ${changed.mkString(", ")}")
                         case None => s"no result of $tactic is kept for it in $file"
+                case Some(entry) if result(entry.result).isEmpty =>
+                    s"what is kept for it in $file has the result \"${entry.result}\", which is none"
                 case Some(entry) =>
                     val before = stored.environment.getOrElse(tactic, TreeMap.empty[String, String])
                     val side = (before.keySet ++ fingerprint.environment.keySet).toList.sorted
                         .filter(part => before.get(part) != fingerprint.environment.get(part))
-                    val programs =
-                        if entry.programs.sizeIs != fingerprint.programs.size then
-                            List("the number of its tests")
-                        else
-                            entry.programs.zip(fingerprint.programs).zipWithIndex.collect {
-                                case ((was, is), index) if was != is =>
-                                    s"the program of test ${index + 1}"
-                            }
-                    val statement =
-                        if entry.statement != fingerprint.statement then List("the statement")
-                        else Nil
-                    val changed = statement ++ programs ++ side.map(part => s"$part of the backend")
+                    val changed = changedOf(entry) ++ side.map(part => s"$part of the backend")
                     // With every part as it was, it is what was kept that the tactic does not
                     // stand for: a counterexample that is none of the statement as it is now.
                     if changed.isEmpty then
@@ -392,8 +400,13 @@ object KeptResults {
         case Kept.Result.Proved  => "proved"
         case Kept.Result.Refuted => "refuted"
 
-    private def result(word: String): Kept.Result = word match
-        case "proved"  => Kept.Result.Proved
-        case "refuted" => Kept.Result.Refuted
-        case other     => throw new IllegalArgumentException(s"no result of a statement: $other")
+    /** The result `word` says, or none for a word that says none, as in a file that was edited. */
+    private def result(word: String): Option[Kept.Result] = word match
+        case "proved"  => Some(Kept.Result.Proved)
+        case "refuted" => Some(Kept.Result.Refuted)
+        case _         => None
+
+    /** What `entry` keeps, where its result is one. */
+    private def kept(entry: Entry): Option[Kept] =
+        result(entry.result).map(Kept(_, entry.notes, raw(entry.counterexample)))
 }

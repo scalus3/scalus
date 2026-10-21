@@ -452,18 +452,20 @@ is canceled.
   from U+E000 on, and the replay decides; its reason says how the values were read. Appending and
   comparing strings translate. Renaming characters one to one keeps both, so a statement over
   them whose variables are all universal, or all existential, has the same truth over the
-  solver's characters as over Plutus's. Encoding and decoding go through a character's `UInt32`
-  value, a `BitVec 32`: a statement whose programs reach `encodeUtf8` or `decodeUtf8` on a
-  symbolic value fails to translate, at every budget.
+  solver's characters as over Plutus's. `encodeUtf8` and `decodeUtf8` see which characters a
+  string has. A statement with variables whose programs apply them is refused when it is lowered.
+  Blaster cannot translate them today, because they go through a character's `UInt32` value, a
+  `BitVec 32`. Once it can, the solver's characters would decide such a statement. A closed
+  statement, which Lean evaluates, may apply them.
 - **Blaster's strings are unsound where characters matter.** The solver has no character above
   `0x2FFFF`, and Lean has no surrogate. So `blaster` proves Lean statements that are false, and
   derives `False` from one, through its `blasterProven` axiom: "every one-character string is at
   most U+2FFFF". It also falsifies true ones with a surrogate (Blaster `6c27ff9`, 2026-10-21;
   reported as [input-output-hk/Lean-blaster#389](https://github.com/input-output-hk/Lean-blaster/issues/389)).
   The statements of this tactic do not reach that. Of the string builtins, only `appendString` and
-  `equalsString` translate, and neither depends on which characters there are; `encodeUtf8` and
-  `decodeUtf8`, which do, fail to translate. Once they translate, this needs another look. A real
-  byte string, ordered or measured, has only characters below 256, which the solver has all of.
+  `equalsString` translate, and neither depends on which characters there are. `encodeUtf8` and
+  `decodeUtf8`, which do, are refused on values of variables. A real byte string, ordered or
+  measured, has only characters below 256, which the solver has all of.
 - **Byte-level builtins.** Blaster cannot translate `BitVec`, whose width is a value index rather
   than a type parameter. The model stores a byte string as a `String`, so comparing, appending
   and measuring byte strings translate, but reading one byte (`indexByteString`) goes through a

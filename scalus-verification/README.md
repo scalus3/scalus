@@ -609,8 +609,8 @@ for the reasons.
    `byteStringToInteger` fails to translate, at every budget. Comparing, appending and measuring
    byte strings, as `Data` values need, translate. This is why `Math.exp2` is proved only on its
    `exp < 0` early return. `encodeUtf8` and `decodeUtf8` go through a character's `UInt32`
-   value too, so they fail to translate on a symbolic string; appending and comparing strings
-   translate.
+   value too. A statement with variables whose programs apply them is refused when it is
+   lowered (see 6). Appending and comparing strings translate.
 6. **The solver's strings are not Plutus's.** A `String` variable ranges over the solver's
    strings, whose characters are the code points up to `0x2FFFF`, surrogates included; a Plutus
    string has the Unicode scalar values up to `0x10FFFF`. Byte strings are stored as strings, so
@@ -622,5 +622,6 @@ for the reasons.
    `blasterProven` it proves "every one-character string is at most U+2FFFF", and from it
    `False` ([input-output-hk/Lean-blaster#389](https://github.com/input-output-hk/Lean-blaster/issues/389)).
    Of the string builtins only `appendString` and `equalsString` translate, which do not depend
-   on the characters (`encodeUtf8` and `decodeUtf8` do not translate), and real byte strings have
-   only characters below 256, so the statements here do not reach that.
+   on the characters. A statement with variables whose programs apply `encodeUtf8` or
+   `decodeUtf8` is refused, and real byte strings have only characters below 256, so the
+   statements here do not reach that.

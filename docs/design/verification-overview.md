@@ -899,8 +899,8 @@ trait Tactic:
     def fingerprint(prepared: Prepared): Option[Fingerprint]
     /** What is kept of a result: a proof, or a refutation with its counterexample. */
     def keep(prepared: Prepared, result: ExecutionResult): Option[Kept]
-    /** The result that `kept` stands for, made without the backend. */
-    def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult]
+    /** The result that `kept` stands for, made without the backend, or why it no longer stands. */
+    def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult]
 ```
 
 `run` gets what was kept of an earlier result, where there is one, to start from: a budget that

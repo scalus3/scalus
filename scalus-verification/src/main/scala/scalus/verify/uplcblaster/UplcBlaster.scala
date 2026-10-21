@@ -216,7 +216,7 @@ final class UplcBlaster private (
     override def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] =
         UplcBlaster.kept(prepared, result)
 
-    override def restore(prepared: Prepared, kept: Kept): Option[ExecutionResult] =
+    override def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] =
         UplcBlaster.restored(prepared, kept)
 }
 
@@ -502,10 +502,31 @@ object UplcBlaster {
                     loop(instantiate(body, ident, witness), scope, built)
             }
 
-            loop(prop, Nil, Nil).map(formula =>
-                Lowered(binders.toList, formula, leaves.toVector, leafBinders.toVector)
-            )
+            loop(prop, Nil, Nil).flatMap { formula =>
+                val utf8 =
+                    leaves.flatMap(_.term.collectBuiltins).filter(utf8Builtins).distinct.sorted
+                if binders.nonEmpty && utf8.nonEmpty then
+                    Left(
+                      s"the programs apply ${utf8.map(builtinName).mkString(" and ")} to values " +
+                          "of the statement's variables. These builtins see which characters a " +
+                          "string has, and the solver's strings have other characters than " +
+                          "Plutus's (input-output-hk/Lean-blaster#389), so a proof would not hold. " +
+                          "A closed statement, which Lean evaluates, may apply them"
+                    )
+                else Right(Lowered(binders.toList, formula, leaves.toVector, leafBinders.toVector))
+            }
         }
+
+    /** The builtins that see the characters of a string: Blaster cannot translate them today, and
+      * where it can, the solver's characters would decide a statement about them.
+      */
+    private val utf8Builtins: Set[DefaultFun] = Set(DefaultFun.EncodeUtf8, DefaultFun.DecodeUtf8)
+
+    /** A builtin's name as UPLC writes it, as `encodeUtf8`. */
+    private def builtinName(builtin: DefaultFun): String = {
+        val name = builtin.toString
+        s"${name.head.toLower}${name.tail}"
+    }
 
     /** A type a call can pass to a function that has no SIR, and take back from it: one whose
       * values have one form whatever their static type. It says nothing of quantified variables:
@@ -1809,9 +1830,10 @@ object UplcBlaster {
                 Probe.Decided(
                   VerificationResult.Refuted(
                     Proof(
+                      // A kept refutation says how its values were read when they were found.
                       artifact.copy(
                         counterexample = goal.binders.map(_.name).zip(values),
-                        read = read
+                        read = if renaming.isEmpty then artifact.read else read
                       )
                     )
                   )
@@ -2199,12 +2221,14 @@ object UplcBlaster {
       */
     private[uplcblaster] val budgetNote = "budget"
     private val kindNote = "kind"
+    private val readNote = "read"
 
     /** What is kept of a result: a proof, or a refutation with the values of its counterexample.
       */
     private[uplcblaster] def kept(goal: Lowered, result: ExecutionResult): Option[Kept] = {
         def notes(artifact: Artifact) =
-            Map(budgetNote -> artifact.budget.toString, kindNote -> artifact.kind.toString)
+            Map(budgetNote -> artifact.budget.toString, kindNote -> artifact.kind.toString) ++
+                Option.when(artifact.read.nonEmpty)(readNote -> artifact.read)
         result match
             case VerificationResult.Proven(proof) =>
                 proof.artifact match
@@ -2221,38 +2245,62 @@ object UplcBlaster {
             case _ => None
     }
 
-    /** The result that `kept` stands for, for the statement `goal`. A proof is taken as it was
-      * kept. A refutation is replayed on the Scalus CEK, as one that Lean has just given, and is a
-      * result only where the statement is false on its values.
+    /** The result that `kept` stands for, for the statement `goal`, or why it no longer stands. A
+      * proof is taken as it was kept. A refutation is replayed on the Scalus CEK, as one that Lean
+      * has just given, and is a result only where the statement is false on its values.
       */
-    private[uplcblaster] def restored(goal: Lowered, kept: Kept): Option[ExecutionResult] =
+    private[uplcblaster] def restored(goal: Lowered, kept: Kept): Either[String, ExecutionResult] =
         for
-            budget <- kept.notes.get(budgetNote).flatMap(_.toIntOption)
-            kind <- kept.notes.get(kindNote)
+            budget <- kept.notes
+                .get(budgetNote)
+                .flatMap(_.toIntOption)
+                .toRight(s"its budget note, ${kept.notes.get(budgetNote)}, is no number of steps")
+            kind <- kept.notes
+                .get(kindNote)
+                .flatMap(word => ProofKind.values.find(_.toString == word))
+                .toRight(s"its kind note, ${kept.notes.get(kindNote)}, is no kind of proof")
             artifact = Artifact(
               goal.programHashes,
               budget,
               "",
               Nil,
-              "",
-              ProofKind.valueOf(kind),
+              kept.notes.getOrElse(readNote, ""),
+              kind,
               kept = true
             )
             result <- restored(goal, kept, artifact)
         yield result
 
-    private def restored(goal: Lowered, kept: Kept, artifact: Artifact): Option[ExecutionResult] =
+    private def restored(
+        goal: Lowered,
+        kept: Kept,
+        artifact: Artifact
+    ): Either[String, ExecutionResult] =
         kept.result match
-            case Kept.Result.Proved => Some(VerificationResult.Proven(Proof(artifact)))
+            case Kept.Result.Proved => Right(VerificationResult.Proven(Proof(artifact)))
+            // As where Lean falsifies such a statement ([[probed]]), one assignment refutes nothing.
+            case Kept.Result.Refuted if goal.hasExistential =>
+                Left("one counterexample refutes no statement that asks for a witness")
             case Kept.Result.Refuted =>
-                val values = keptNames(goal.binders).zip(goal.binders).map { (name, binder) =>
-                    kept.counterexample.get(name).flatMap(constant(binder.tp, _))
+                val read = keptNames(goal.binders)
+                    .zip(goal.binders)
+                    .foldRight[Either[String, List[Constant]]](Right(Nil)) {
+                        case ((name, binder), rest) =>
+                            for
+                                json <- kept.counterexample.get(name).toRight(s"it keeps no $name")
+                                value <- constant(binder.tp, json).left
+                                    .map(why => s"its value of $name, $json, is $why")
+                                others <- rest
+                            yield value :: others
+                    }
+                read.flatMap { values =>
+                    replayValues(goal, artifact, values, SmtValues.Renaming.none) match
+                        case Probe.Decided(refuted: VerificationResult.Refuted) => Right(refuted)
+                        case Probe.Decided(VerificationResult.Inconclusive(reason)) => Left(reason)
+                        case Probe.Spurious(_, _) =>
+                            Left("the statement holds on its counterexample")
+                        case other => Left(s"its counterexample gives $other")
                 }
-                if values.contains(None) then None
-                else
-                    replayValues(goal, artifact, values.flatten, SmtValues.Renaming.none) match
-                        case Probe.Decided(refuted: VerificationResult.Refuted) => Some(refuted)
-                        case _                                                  => None
 
     /** The names a counterexample's values are kept under: those of the variables as their
       * statement has them, without the number the compiler made each unique with, which is another
@@ -2280,42 +2328,52 @@ object UplcBlaster {
         case other =>
             throw new IllegalArgumentException(s"no variable of a statement has the value $other")
 
-    /** The value of a variable of type `tp` that [[json]] wrote, or none where `json` is no value
-      * [[json]] writes for the type, as in a file that was edited: what is kept no longer stands
-      * ([[scalus.verify.Tactic.restore]]). `json` is a JSON value, as the file was read as JSON.
+    /** The value of a variable of type `tp` that [[json]] wrote, or what is wrong with `json` where
+      * it is no value [[json]] writes for the type, as in a file that was edited: what is kept then
+      * no longer stands ([[scalus.verify.Tactic.restore]]). `json` is a JSON value, as the file was
+      * read as JSON.
       */
-    private def constant(tp: SIRType, json: String): Option[Constant] = {
+    private def constant(tp: SIRType, json: String): Either[String, Constant] = {
         val value = json.trim
+        // The first line of a codec's message: it goes on with a dump of what it read.
+        def told(error: Exception): String = error.getMessage.linesIterator.nextOption().mkString
         tp match
             case SIRType.Integer =>
-                Option.when(integerJson.matches(value))(Constant.Integer(BigInt(value)))
+                Either.cond(
+                  integerJson.matches(value),
+                  Constant.Integer(BigInt(value)),
+                  "no integer"
+                )
             case SIRType.Boolean =>
                 value match
-                    case "true"  => Some(Constant.Bool(true))
-                    case "false" => Some(Constant.Bool(false))
-                    case _       => None
+                    case "true"  => Right(Constant.Bool(true))
+                    case "false" => Right(Constant.Bool(false))
+                    case _       => Left("no Boolean")
             case SIRType.ByteString =>
-                Option.when(hexJson.matches(value))(
-                  Constant.ByteString(ByteString.fromHex(value.stripPrefix("\"").stripSuffix("\"")))
+                Either.cond(
+                  hexJson.matches(value),
+                  Constant.ByteString(
+                    ByteString.fromHex(value.stripPrefix("\"").stripSuffix("\""))
+                  ),
+                  "no byte string in hexadecimal"
                 )
-            // A JSON value that starts with a quote is a string. Its codec rejects an escaped
-            // surrogate, which no string [[json]] writes holds.
+            // No reader of a JSON string or of `Data` says without throwing whether a value is
+            // one: the codec's exception for one that is not is the answer here.
             case SIRType.String =>
-                Option.when(value.startsWith("\"") && escapedSurrogate.findFirstIn(value).isEmpty)(
-                  Constant.String(readFromString[String](value))
-                )
-            // `Data` is a JSON object. No reader of it says without throwing whether an object is
-            // one: its codec's exceptions for one that is not, a wrong key and bytes that are not
-            // hexadecimal, are the answer here.
-            case _ if !value.startsWith("{") => None
+                try Right(Constant.String(readFromString[String](value)))
+                catch
+                    case error: JsonReaderException => Left(s"no string: ${told(error)}")
+            // `Data` is a JSON object; its codec reads `null` as a null value.
+            case _ if !value.startsWith("{") => Left("no Data value, which is a JSON object")
             case _ =>
-                try Some(Constant.Data(Data.fromJson(value)))
-                catch case _: JsonReaderException | _: IllegalArgumentException => None
+                try Right(Constant.Data(Data.fromJson(value)))
+                catch
+                    case error: JsonReaderException      => Left(s"no Data value: ${told(error)}")
+                    case error: IllegalArgumentException => Left(s"no Data value: ${told(error)}")
     }
 
     private val integerJson = """-?\d+""".r
     private val hexJson = """"([0-9a-fA-F]{2})*"""".r
-    private val escapedSurrogate = """\\u[dD][89a-fA-F][0-9a-fA-F]{2}""".r
 
     /** The text of a check: the library, the limit of Lean's work, the programs in `flats` as
       * `leaf<n>`, and the commands of `body`. The lines up to the programs are the same in every
