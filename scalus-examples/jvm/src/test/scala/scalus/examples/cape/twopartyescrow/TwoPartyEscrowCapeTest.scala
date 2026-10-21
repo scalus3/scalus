@@ -18,7 +18,7 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     private val suite = CapeTestSuite.load("/cape/two_party_escrow/cape-tests.json")
 
     test(s"Script size: ${compiled.script.script.size} bytes") {
-        assert(compiled.script.script.size == 1007)
+        assert(compiled.script.script.size == 990)
     }
 
     for c <- suite.cases do
@@ -37,7 +37,7 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
 
     // Expected execution budgets for measurement cases only
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "deposit_successful" -> ExUnits(memory = 33790, steps = 14_104_304),
+      "deposit_successful" -> ExUnits(memory = 32162, steps = 13_533_008),
       "accept_successful" -> ExUnits(memory = 41130, steps = 17_004_511),
       "accept_with_multiple_inputs" -> ExUnits(memory = 41130, steps = 17_004_511),
       "accept_with_datum_attached" -> ExUnits(memory = 41130, steps = 17_004_511),
@@ -50,7 +50,7 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     )
 
     private val expectedFees: Map[String, Coin] = Map(
-      "deposit_successful" -> Coin(2967),
+      "deposit_successful" -> Coin(2832),
       "accept_successful" -> Coin(3600),
       "accept_with_multiple_inputs" -> Coin(3600),
       "accept_with_datum_attached" -> Coin(3600),

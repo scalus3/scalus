@@ -16,15 +16,15 @@
     },
     "deposited_escrow_datum": {
       "type": "builtin_data",
-      "value": "Constr 0 [Constr 0 [], I 1000]"
+      "value": "Constr 0 [Constr 0 [], I 1000000]"
     },
     "accepted_escrow_datum": {
       "type": "builtin_data",
-      "value": "Constr 0 [Constr 1 [], I 1000]"
+      "value": "Constr 0 [Constr 1 [], I 1000000]"
     },
     "refunded_escrow_datum": {
       "type": "builtin_data",
-      "value": "Constr 0 [Constr 2 [], I 1000]"
+      "value": "Constr 0 [Constr 2 [], I 1000000]"
     },
     "successful_deposit": {
       "type": "script_context",
@@ -41,8 +41,8 @@
           },
           {
             "op": "set_valid_range",
-            "from_time": 1000,
-            "to_time": 1000
+            "from_time": 1000000,
+            "to_time": 1000001
           },
           {
             "op": "add_input_utxo",
@@ -124,7 +124,7 @@
           },
           {
             "op": "set_valid_range",
-            "from_time": 2801
+            "from_time": 2801000
           },
           {
             "op": "add_input_utxo",
@@ -376,7 +376,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 3000
+                "from_time": 3000000
               },
               {
                 "op": "add_input_utxo",
@@ -436,7 +436,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 3600
+                "from_time": 3600000
               },
               {
                 "op": "add_input_utxo",
@@ -488,7 +488,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 5000
+                "from_time": 5000000
               },
               {
                 "op": "add_input_utxo",
@@ -1041,7 +1041,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 2000
+                "from_time": 2000000
               },
               {
                 "op": "add_input_utxo",
@@ -1088,7 +1088,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 2000
+                "from_time": 2000000
               },
               {
                 "op": "add_input_utxo",
@@ -1135,7 +1135,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 900
+                "from_time": 900000
               },
               {
                 "op": "add_input_utxo",
@@ -1182,7 +1182,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 1800
+                "from_time": 1800000
               },
               {
                 "op": "add_input_utxo",
@@ -1272,7 +1272,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 2000
+                "from_time": 2000000
               },
               {
                 "op": "add_input_utxo",
@@ -1319,7 +1319,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 2000
+                "from_time": 2000000
               },
               {
                 "op": "add_input_utxo",
@@ -1366,7 +1366,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 2000
+                "from_time": 2000000
               },
               {
                 "op": "add_input_utxo",
@@ -1413,7 +1413,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 2000
+                "from_time": 2000000
               },
               {
                 "op": "add_input_utxo",
@@ -1460,7 +1460,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 2000
+                "from_time": 2000000
               },
               {
                 "op": "add_input_utxo",
@@ -1517,7 +1517,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 2000
+                "from_time": 2000000
               },
               {
                 "op": "add_output_utxo",
@@ -1556,7 +1556,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 2000
+                "from_time": 2000000
               },
               {
                 "op": "set_script_datum",
@@ -1654,7 +1654,7 @@
               },
               {
                 "op": "set_valid_range",
-                "from_time": 2000
+                "from_time": 2000000
               },
               {
                 "op": "set_script_datum",
@@ -1744,7 +1744,7 @@
             "patches": [
               {
                 "op": "set_valid_range",
-                "from_time": 1000
+                "from_time": 1000000
               }
             ]
           }
@@ -1765,7 +1765,7 @@
             "patches": [
               {
                 "op": "set_valid_range",
-                "to_time": 3000
+                "to_time": 3000001
               }
             ]
           }

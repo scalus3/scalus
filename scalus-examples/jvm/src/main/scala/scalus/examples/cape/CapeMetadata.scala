@@ -13,15 +13,16 @@ object CapeMetadata {
         compilerCommit: String,
         date: String,
         sourceCommit: String,
-        notes: String,
-        minPlutusVersion: Option[String] = None
+        notes: String
     ): String = {
         val compilationConfig = ujson.Obj(
           "optimization_level" -> "release",
           "target" -> "uplc",
-          "flags" -> ujson.Arr("Options.release")
+          "flags" -> ujson.Arr("Options.release"),
+          // Options.release targets van Rossem: every scenario uses builtin casing or batch-6
+          // builtins, which need protocol version 11.
+          "min_protocol_version" -> 11
         )
-        minPlutusVersion.foreach(v => compilationConfig("min_plutus_version") = v)
         ujson.write(
           ujson.Obj(
             "compiler" -> ujson.Obj(

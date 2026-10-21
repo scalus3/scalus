@@ -127,20 +127,14 @@ This runs the whole submission in one shot:
 1. Generates `submissions/<scenario>/Scalus_<version>_nau/` (`.uplc`, `metadata.json`,
    `README.md`) for all 8 `CapeScenarios.all` entries in the target clone
    (`GenerateSubmissions`).
-2. Runs `cape submission verify` and `cape submission measure` on each of the 8 dirs, routing
-   `min_plutus_version`-gated dirs through CAPE's preview measure path (see below).
+2. Runs `cape submission verify` and `cape submission measure` on each of the 8 dirs.
 3. Prints a leaderboard ranking every submission per scenario by total fee (CAPE's
    execution fee + Conway reference-script fee) (`CompareWithLeaderboard`).
 
-**The `min_plutus_version` gate**: 7 of the 8 scenarios (all except `factorial` (open)) carry
-`min_plutus_version: 1.60.0.0` in their `metadata.json`, because they use PV11/vanRossem-only
-features (CIP-153 `Value` builtins and/or case-on-builtins) that CAPE's production evaluator,
-pinned to `plutus-core-1.45.0.0`, predates and can't even parse. `cape submission verify`/`measure`
-treat that field as a request to route the submission through CAPE's **preview** track instead of
-refusing it outright. The driver follows that routing automatically, so those 7 dirs measure and
-verify against the preview evaluator, and appear in CAPE's preview report rather than its
-production report, until upstream promotes its production evaluator past vanRossem. Only
-`factorial` (open) stays PV9-compatible and is measured on the current/production track.
+**Protocol version**: `Options.release` targets van Rossem (protocol version 11), so every
+`metadata.json` carries `compilation_config.min_protocol_version: 11`. CAPE's production
+evaluator (plutus-core 1.63) runs PV11 programs, so no submission needs `min_plutus_version`,
+the knob that routes a submission to the preview evaluator.
 
 ### 3. Review
 
@@ -187,9 +181,6 @@ When CAPE adds a new scenario (e.g. `streaming_payments`):
 4. **Register the scenario** in `CapeScenarios.all` (`CapeScenarios.scala`): add a
    `CapeScenario` with the scenario `name`, `program`, `implementationNotes`,
    `readmeApproach`, and `sourceSubdir`.
-   - Decide `minPlutusVersion` (`Some("1.60.0.0")` if the compiled output uses PV11 features -
-     CIP-153 `Value` builtins and/or case-on-builtins; `None` if it's PV9-compatible), and update
-     `CapeMetadataTest`'s gated/ungated sets to match.
 5. Run `sbtn scalusExamplesJVM/test`, capture budgets, and update the expected `ExUnits`
    in the new test.
 6. Follow the submission workflow above.

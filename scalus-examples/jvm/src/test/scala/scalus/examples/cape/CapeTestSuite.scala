@@ -154,15 +154,20 @@ class CapeTestSuite(json: ujson.Value) {
             val pkh = resolveBytes(p("pubkey_hash"))
             b.copy(signatories = b.signatories.filterNot(_.hash == pkh))
         case "set_valid_range" =>
-            def bound(key: String, inf: IntervalBoundType): IntervalBound =
+            // As the ledger translates a validity interval (Conway `transValidityInterval`): a
+            // finite lower bound is inclusive, a finite upper bound exclusive, an omitted bound
+            // infinite.
+            def bound(key: String, inf: IntervalBoundType, inclusive: Boolean): IntervalBound =
                 p.obj
                     .get(key)
-                    .map(t => IntervalBound(IntervalBoundType.Finite(BigInt(t.num.toLong)), true))
+                    .map(t =>
+                        IntervalBound(IntervalBoundType.Finite(BigInt(t.num.toLong)), inclusive)
+                    )
                     .getOrElse(IntervalBound(inf, true))
             b.copy(validRange =
                 Interval(
-                  bound("from_time", IntervalBoundType.NegInf),
-                  bound("to_time", IntervalBoundType.PosInf)
+                  bound("from_time", IntervalBoundType.NegInf, inclusive = true),
+                  bound("to_time", IntervalBoundType.PosInf, inclusive = false)
                 )
             )
         case "add_input_utxo" =>

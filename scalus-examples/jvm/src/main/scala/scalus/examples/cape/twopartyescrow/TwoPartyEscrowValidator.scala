@@ -20,18 +20,19 @@ case class EscrowDatum(state: EscrowState, depositTime: BigInt) derives FromData
 /** UPLC-CAPE Two-Party Escrow validator: deposit, then accept or refund.
   *
   * Parameters baked in (per CAPE spec): buyer key hash (64 a's), seller key hash (64 b's), price 75
-  * ADA, refund deadline 1800 seconds after the deposit. The redeemer is a bare integer: 0 =
-  * Deposit, 1 = Accept, 2 = Refund; anything else fails.
+  * ADA, refund deadline 30 minutes (1,800,000 ms of `POSIXTime`) after the deposit. The redeemer is
+  * a bare integer: 0 = Deposit, 1 = Accept, 2 = Refund; anything else fails.
   *
   *   - `Deposit` creates the escrow UTxO, so there is no own input to match against: the escrow
   *     output is the unique output at a script credential, it must carry exactly the price and an
   *     inline `EscrowDatum(Deposited, depositTime)`, where `depositTime` is the upper bound of the
-  *     transaction's validity range (finite, `t - 1` when exclusive, per the CAPE convention).
+  *     transaction's validity range: finite, and `t - 1` for the bound `t`, which the ledger always
+  *     makes exclusive.
   *   - `Accept` and `Refund` spend the escrow UTxO: the datum must be `Deposited`, the party must
   *     sign, the party must be paid exactly the price (across any number of outputs, datum or not),
   *     and nothing may stay at the script's own credential. `Refund` additionally requires the
-  *     validity range to lie entirely after `depositTime + 1800`, which also rejects an unbounded
-  *     lower bound.
+  *     validity range to lie entirely after `depositTime + 1800000`, which also rejects an
+  *     unbounded lower bound.
   *
   * Spending several escrow UTxOs in one transaction is allowed by the CAPE fixtures
   * (`accept_with_multiple_inputs`), so there is deliberately no single-own-input guard here.
@@ -54,7 +55,7 @@ object TwoPartyEscrowValidator extends Validator {
     private inline def sellerKeyHash: PubKeyHash =
         PubKeyHash(hex"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
     private inline def escrowPrice: Lovelace = BigInt(75_000_000)
-    private inline def deadlineSeconds: BigInt = BigInt(1800)
+    private inline def deadline: PosixTime = BigInt(1_800_000)
 
     inline override def spend(
         datum: Option[Data],
@@ -71,11 +72,9 @@ object TwoPartyEscrowValidator extends Validator {
 
     def deposit(txInfo: TxInfo): Unit = {
         require(txInfo.isSignedBy(buyerKeyHash), BuyerMustSignDeposit)
-        // The deposit time is the validity range's upper bound. The ledger makes a finite upper
-        // bound exclusive, and the CAPE convention records an exclusive bound `t` as `t - 1`.
-        val depositTime =
-            txInfo.validToOrFail(UpperBoundMustBeFinite) -
-                (if txInfo.validRange.to.isInclusive then BigInt(0) else BigInt(1))
+        // The deposit time is the last instant of the validity range. The ledger always makes a
+        // finite upper bound `t` exclusive, so that instant is `t - 1`.
+        val depositTime = txInfo.validToOrFail(UpperBoundMustBeFinite) - 1
         // No own input exists yet (the escrow UTxO is being created), so the escrow output is the
         // unique output locked by a script credential.
         val output = txInfo.outputs.findUniqueOrFail(
@@ -100,7 +99,7 @@ object TwoPartyEscrowValidator extends Validator {
         val d = requireDeposited(datum)
         require(txInfo.isSignedBy(buyerKeyHash), BuyerMustSignRefund)
         require(
-          txInfo.validRange.isEntirelyAfter(d.depositTime + deadlineSeconds),
+          txInfo.validRange.isEntirelyAfter(d.depositTime + deadline),
           DeadlineNotPassed
         )
         settle(txInfo, txOutRef, buyerKeyHash, BuyerMustReceiveEscrowPrice)

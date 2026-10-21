@@ -24,8 +24,8 @@ class HtlcCapeTest extends AnyFunSuite with ScalusTest {
     }
 
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "claim_well_before_timeout" -> ExUnits(memory = 43317, steps = 17950963),
-      "claim_just_before_timeout" -> ExUnits(memory = 43317, steps = 17950963),
+      "claim_well_before_timeout" -> ExUnits(memory = 43317, steps = 17949510),
+      "claim_just_before_timeout" -> ExUnits(memory = 43317, steps = 17949510),
       "refund_just_after_timeout" -> ExUnits(memory = 40384, steps = 16564141),
       "refund_well_after_timeout" -> ExUnits(memory = 40384, steps = 16564141)
     )

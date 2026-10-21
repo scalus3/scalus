@@ -5,6 +5,7 @@ import scalus.utils.BuildInfo
 import java.nio.file.{Files, Path}
 import java.time.Instant
 import scala.sys.process.*
+import scala.util.Try
 
 /** Writes `Scalus_<version>_nau` submission dirs for all `CapeScenarios` into a UPLC-CAPE clone.
   *
@@ -24,6 +25,11 @@ import scala.sys.process.*
     val version = args.lift(1).getOrElse(BuildInfo.version)
     val commit = "git rev-parse HEAD".!!.trim
     require(commit.matches("^[a-f0-9]{40}$"), s"bad git commit: $commit")
+    // The compiler is the release tagged `v<version>` when that tag exists; the scenario sources
+    // may live in a later commit.
+    val compilerCommit = Try(
+      Seq("git", "rev-list", "-n", "1", s"v$version").!!(ProcessLogger(_ => ())).trim
+    ).getOrElse(commit)
     val date = Instant.now().toString
 
     for s <- CapeScenarios.all do {
@@ -35,11 +41,10 @@ import scala.sys.process.*
           dir.resolve("metadata.json"),
           CapeMetadata.render(
             version,
-            commit,
+            compilerCommit,
             date,
             commit,
-            s.implementationNotes,
-            s.minPlutusVersion
+            s.implementationNotes
           )
         )
         Files.writeString(dir.resolve("README.md"), readme(s, version, commit))

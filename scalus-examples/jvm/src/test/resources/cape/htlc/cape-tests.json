@@ -95,7 +95,7 @@
           {
             "op": "set_valid_range",
             "from_time": 50,
-            "to_time": 50
+            "to_time": 51
           },
           {
             "op": "add_input_utxo",
@@ -180,7 +180,7 @@
               {
                 "op": "set_valid_range",
                 "from_time": 99,
-                "to_time": 99
+                "to_time": 100
               }
             ]
           }
@@ -464,7 +464,7 @@
               {
                 "op": "set_valid_range",
                 "from_time": 100,
-                "to_time": 100
+                "to_time": 101
               }
             ]
           }
@@ -486,7 +486,7 @@
               {
                 "op": "set_valid_range",
                 "from_time": 150,
-                "to_time": 150
+                "to_time": 151
               }
             ]
           }
@@ -667,7 +667,7 @@
             "patches": [
               {
                 "op": "set_valid_range",
-                "to_time": 200
+                "to_time": 201
               }
             ]
           }
