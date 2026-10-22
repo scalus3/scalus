@@ -1,0 +1,615 @@
+{
+  "cluster": "ledger.rules.witnesses-certs",
+  "summary": "The cluster tests the Conway witness, network and certificate rules (MissingKeyHashes, VerifiedSignaturesInWitnesses, three WrongNetwork validators, Certs/StakeCertificates/StakePoolCertificates validators, CertsMutator, ProposalDeposit, WithdrawalsDelegated): 16 files, 2.8k lines, 0.64 s per run (MissingKeyHashesValidatorTest 0.41 s, mostly Arbitrary[Transaction] and key-pair warm-up), so there is no ci-time finding. The certificate suites written for spec [SC-*] are good: fixed fixtures, tables over certificate kinds, in-tx ordering cases; the older witness and network suites are copy-paste (MissingKeyHashes 805 lines for 13 tests, WrongNetwork 271 lines for 10) on random Arbitrary fixtures with isLeft-only assertions, and the MissingKeyHashes certificate test cannot detect a dropped Certificate.keyHashes branch. Coverage gaps that matter: BadInputs/BadCollateral UTxO errors, StakeVoteDelegCert application, UpdateDRep of an unknown DRep, double deregistration in one tx, the retirement-epoch upper boundary, and the deprecated pool/voting mutator filter. Duplicates are few (CertsMutatorTest vs WithdrawalsTest, four phase-2 mutator tests); AccountRegistrationTest is not a duplicate of StakeCertificates/CertsValidator tests because it pins the zero-deposit and zero-amount dimensions. C8: the cluster has no generators; it samples Arbitrary values for one-off fixtures. No main-code defect was found.",
+  "behaviors": [
+    {
+      "pass": "MissingKeyHashesValidator",
+      "name": "a tx that needs no key hashes passes",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:12-32"
+      ]
+    },
+    {
+      "pass": "MissingKeyHashesValidator",
+      "name": "spent-input key hashes need a witness",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:34-159"
+      ]
+    },
+    {
+      "pass": "MissingKeyHashesValidator",
+      "name": "collateral-input key hashes need a witness",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:161-287"
+      ]
+    },
+    {
+      "pass": "MissingKeyHashesValidator",
+      "name": "key-hash voters need a witness, script voters do not",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:289-404"
+      ]
+    },
+    {
+      "pass": "MissingKeyHashesValidator",
+      "name": "key-hash withdrawals need a witness",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:406-531"
+      ]
+    },
+    {
+      "pass": "MissingKeyHashesValidator",
+      "name": "certificate key hashes need a witness (all kinds in one tx)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:533-721"
+      ]
+    },
+    {
+      "pass": "Certificate.keyHashes",
+      "name": "each certificate kind needs its own key (operator+owners, pool id, cold credential, ...)",
+      "tests": []
+    },
+    {
+      "pass": "Certificate.keyHashes",
+      "name": "RegCert without a deposit needs no witness (Conway transition)",
+      "tests": []
+    },
+    {
+      "pass": "MissingKeyHashesValidator",
+      "name": "required signers need a witness",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:723-804"
+      ]
+    },
+    {
+      "pass": "MissingKeyHashesValidator",
+      "name": "each missing key is reported in the field of its source",
+      "tests": []
+    },
+    {
+      "pass": "MissingKeyHashesValidator",
+      "name": "a bootstrap witness satisfies a Byron-address input",
+      "tests": []
+    },
+    {
+      "pass": "MissingKeyHashesValidator",
+      "name": "an input or collateral input not in the UTxO gives BadInputsUTxO / BadCollateralInputsUTxO",
+      "tests": []
+    },
+    {
+      "pass": "VerifiedSignaturesInWitnessesValidator",
+      "name": "valid vkey witnesses pass",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/VerifiedSignaturesInWitnessesValidatorTest.scala:8-30"
+      ]
+    },
+    {
+      "pass": "VerifiedSignaturesInWitnessesValidator",
+      "name": "a corrupt vkey signature fails",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/VerifiedSignaturesInWitnessesValidatorTest.scala:32-61"
+      ]
+    },
+    {
+      "pass": "VerifiedSignaturesInWitnessesValidator",
+      "name": "valid bootstrap witnesses pass",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/VerifiedSignaturesInWitnessesValidatorTest.scala:63-100"
+      ]
+    },
+    {
+      "pass": "VerifiedSignaturesInWitnessesValidator",
+      "name": "a corrupt bootstrap signature fails",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/VerifiedSignaturesInWitnessesValidatorTest.scala:102-143"
+      ]
+    },
+    {
+      "pass": "VerifiedSignaturesInWitnessesValidator",
+      "name": "the exception lists exactly the invalid witnesses, per kind",
+      "tests": []
+    },
+    {
+      "pass": "VerifiedSignaturesInWitnessesValidator.verifyWitnessSignature",
+      "name": "wrong key/signature length is invalid; a missing native library throws",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/VerifiedSignaturesInWitnessesPlatformTest.scala:10-36"
+      ]
+    },
+    {
+      "pass": "WrongNetworkInTxBodyValidator",
+      "name": "networkId equal or absent passes, different fails",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WrongNetworkInTxBodyValidatorTest.scala:9-34"
+      ]
+    },
+    {
+      "pass": "WrongNetworkValidator",
+      "name": "output addresses (Shelley, stake, Byron) of another network fail",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WrongNetworkValidatorTest.scala:11-136"
+      ]
+    },
+    {
+      "pass": "WrongNetworkValidator",
+      "name": "collateral-return address of another network fails",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WrongNetworkValidatorTest.scala:138-270"
+      ]
+    },
+    {
+      "pass": "WrongNetworkValidator",
+      "name": "a Byron address of the expected network passes",
+      "tests": []
+    },
+    {
+      "pass": "WrongNetworkWithdrawalValidator",
+      "name": "reward accounts of another network fail; none passes",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WrongNetworkWithdrawalValidatorTest.scala:12-74"
+      ]
+    },
+    {
+      "pass": "CertsValidator",
+      "name": "a withdrawal that drains a registered account passes",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/CertsValidatorTest.scala:58-67",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AccountRegistrationTest.scala:62-64"
+      ]
+    },
+    {
+      "pass": "CertsValidator",
+      "name": "a withdrawal from an unregistered account fails (missingRewardAccounts)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/CertsValidatorTest.scala:69-72",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AccountRegistrationTest.scala:71-73"
+      ]
+    },
+    {
+      "pass": "CertsValidator",
+      "name": "a withdrawal that does not drain fails (nonDrainingWithdrawals)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/CertsValidatorTest.scala:74-84",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:109-114"
+      ]
+    },
+    {
+      "pass": "CertsValidator",
+      "name": "certificates are ignored; phase-2-invalid tx skips the check",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/CertsValidatorTest.scala:86-99",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:159-164"
+      ]
+    },
+    {
+      "pass": "CertsValidator.applyWithdrawals",
+      "name": "subtracts a partial amount and keeps the account",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:184-189"
+      ]
+    },
+    {
+      "pass": "CertsMutator",
+      "name": "a full withdrawal keeps the account with balance 0",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/CertsMutatorTest.scala:58-74",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:83-88",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:99-107"
+      ]
+    },
+    {
+      "pass": "CertsMutator",
+      "name": "registration, reg+deleg, delegation update, deregistration change the account",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesMutatorTest.scala:79-121",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:90-97"
+      ]
+    },
+    {
+      "pass": "CertsMutator",
+      "name": "StakeVoteDelegCert sets both delegations on an existing account",
+      "tests": []
+    },
+    {
+      "pass": "CertsMutator",
+      "name": "a certificate error of the validator is returned",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesMutatorTest.scala:123-134"
+      ]
+    },
+    {
+      "pass": "CertsMutator",
+      "name": "a phase-2-failed tx applies nothing",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:127-157"
+      ]
+    },
+    {
+      "pass": "CertsMutator",
+      "name": "DRep deregistration clears vote delegations (key and script)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:203-270"
+      ]
+    },
+    {
+      "pass": "CertsMutator",
+      "name": "pool certificates apply in tx order (register then retire, retire keeps pool until epoch)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:272-312"
+      ]
+    },
+    {
+      "pass": "CertsMutator",
+      "name": "UpdateDRepCert of an unregistered DRep fails",
+      "tests": []
+    },
+    {
+      "pass": "STS.Mutator.transit",
+      "name": "default mutator order; deprecated per-kind mutators are dropped next to CertsMutator",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:116-119",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:331-351"
+      ]
+    },
+    {
+      "pass": "StakeCertificatesValidator",
+      "name": "register new / already registered (incl. zero balance and deposit)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesValidatorTest.scala:112-128",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AccountRegistrationTest.scala:57-60"
+      ]
+    },
+    {
+      "pass": "StakeCertificatesValidator",
+      "name": "deregistration needs zero rewards, the right refund, and a registration",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesValidatorTest.scala:130-157",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AccountRegistrationTest.scala:66-69"
+      ]
+    },
+    {
+      "pass": "StakeCertificatesValidator",
+      "name": "delegation needs a registered account, pool and DRep; wrong deposit fails",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesValidatorTest.scala:159-216"
+      ]
+    },
+    {
+      "pass": "StakeCertificatesValidator",
+      "name": "pools and DReps registered/deregistered earlier in the tx count",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesValidatorTest.scala:218-248"
+      ]
+    },
+    {
+      "pass": "StakeCertificatesValidator",
+      "name": "a credential deregistered earlier in the tx is not registered",
+      "tests": []
+    },
+    {
+      "pass": "StakeCertificatesValidator",
+      "name": "phase-2-invalid tx skips the check",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:166-173"
+      ]
+    },
+    {
+      "pass": "StakeCertificatesException",
+      "name": "the deprecated 6-argument constructor",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesValidatorTest.scala:273-286"
+      ]
+    },
+    {
+      "pass": "StakePoolCertificatesValidator",
+      "name": "registration: new, re-registration, reward-account network, min cost",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakePoolCertificatesValidatorTest.scala:66-98"
+      ]
+    },
+    {
+      "pass": "StakePoolCertificatesValidator",
+      "name": "retirement: unregistered pool, epoch window current < e <= current+eMax",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakePoolCertificatesValidatorTest.scala:100-153"
+      ]
+    },
+    {
+      "pass": "StakePoolCertificatesValidator",
+      "name": "retirement at exactly current+poolRetireMaxEpoch passes",
+      "tests": []
+    },
+    {
+      "pass": "ProposalDepositValidator",
+      "name": "deposit equals govActionDeposit; skips phase-2-invalid tx; default; rule name",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ProposalDepositValidatorTest.scala:44-82"
+      ]
+    },
+    {
+      "pass": "WithdrawalsDelegatedValidator",
+      "name": "key-account withdrawals need a DRep delegation; script accounts, PV9, phase-2-invalid exempt",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsDelegatedValidatorTest.scala:60-121"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C29-1",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:34-159",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:161-287",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:289-404",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:406-531",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:723-804",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/utils/MissingKeyHashes.scala:40-57"
+      ],
+      "claim": "The 10 success/failure tests for inputs, collateral, voters, withdrawals and required signers are five copies of one law: the result is Right iff every needed key hash has a witness, else a MissingKeyHashesException whose six fields are exactly the per-source differences. Each copy is 60-130 lines because it starts from Arbitrary[Transaction], generates real Ed25519 key pairs and signs, although the validator never checks signatures (it only compares blake2b_224(vkey)). The failure tests assert only isLeft, so a mutation that files a missing key under the wrong source (e.g. swap missingInputs/missingCollateral at MissingKeyHashes.scala:50-51) survives.",
+      "action": "Replace 34-531 and 723-804 with one forAll: draw 0-3 random 32-byte vkeys per source (inputs at ShelleyAddress(payment = Key(blake2b_224(vkey))) in State.utxos, collateral the same, Voter.DRepKey/StakingPoolKey/CCHotKey plus one script voter, key reward accounts, requiredSigners) and a random subset of vkeys as VKeyWitness(vkey, 64 zero bytes); build Transaction(TransactionBody(...), TransactionWitnessSet(...)) directly. Oracle: Left(MissingKeyHashesException(tx.id, <missing per source>...)) when any is missing, else Right(()). Keep the empty-tx example 12-32. Certificates are C29-2.",
+      "coverageRisk": "low: the property covers every source and also pins the field per source. Lost: UTxOs at a StakeAddress (an address that cannot hold a UTxO); the realistic ShelleyAddress payment-key path replaces it.",
+      "ciSavingSec": 0.25,
+      "linesRemoved": 470,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "The validator never checks signatures. MissingKeyHashesValidator.validate passes AllWitnessesKeyHashes (vkeyWitnesses.map(_.vkeyHash) = blake2b_224(vkey), VKeyWitness.scala:20, plus bootstrap addrKeyHash) to MissingKeyHashes.validateAllMissingKeyHashes. VKeyWitness only requires 32-byte vkey and 64-byte signature lengths (VKeyWitness.scala:17-18), so 64 zero bytes work. Each source is a plain set difference: inputs/collateral via output.address.keyHashOption (AllNeededKeyHashes.scala:135; ShelleyAddress payment Key -> Some, Address.scala:448), voters via Voter.keyHashOption (CC hot key, DRep key and pool key -> Some, scripts -> None, Voter.scala:76), withdrawals via RewardAccount.keyHashOption, required signers via .diff. The validator ignores isValid. So 'Left(MissingKeyHashesException(tx.id, per-source diffs)) iff any diff is non-empty, else Right(())' holds for every generated input, if the oracle computes each source's diff independently (a shared vkey missing from two sources shows up in both fields). MissingKeyHashesException is a final case class (Entities.scala:65), so whole-value equality works. The 10 tests are at test lines 34-531 and 723-804 (inputs, collateral, voting, withdrawals and required signers; success+failure each). Every failure test asserts only result.isLeft (lines 158, 286, 403, 530, 803), so swapping the fields at MissingKeyHashes.scala:50-51 survives today. Inputs at a StakeAddress are lost: StakeAddress.keyHashOption is a separate branch at Address.scala:548. That is unrealistic for a UTxO, so the coverage loss is acceptable as the report states. The Byron/bootstrap path is untested both before and after."
+    },
+    {
+      "id": "C29-2",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:533-721",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Certificate.scala:74-98"
+      ],
+      "claim": "Both Certificates tests put all 15 certificate kinds, keyed by one credential, in one tx. Dropping any single branch of Certificate.keyHashes (e.g. 'case StakeDelegation => Set.empty' at Certificate.scala:75) leaves the success test Right and the failure test Left through the other 14 certificates. RegCert's deposit is Arbitrary[Option[Coin]], so the Conway rule 'RegCert without a deposit needs no witness' (Certificate.scala:80-83) runs by chance and is never asserted. AuthCommitteeHotCert/ResignCommitteeColdCert (cold credential) and PoolRegistration (operator + owners) are not checked separately.",
+      "action": "Replace 533-721 with one table over the certificate kinds: a tx with only that certificate and no witnesses must give Left with missingCertificatesKeyHashes == the expected set (credential key; operator + owners for PoolRegistration; pool id for PoolRetirement; cold credential for the committee certificates); RegCert(cred, None) and every kind with Credential.ScriptHash give Right(()). Use fixed hashes, not Arbitrary samples.",
+      "coverageRisk": "none: each kind keeps a case and gains an exact expected set.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": 110,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C29-3",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/utils/MissingKeyHashes.scala:17-26",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/utils/AllNeededKeyHashes.scala:131-139",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingKeyHashesValidatorTest.scala:67-90"
+      ],
+      "claim": "The error paths of MissingKeyHashesValidator are never run in the module (baseline uncovered: MissingKeyHashes.scala:20 and 26): an input or collateral input missing from the UTxO gives BadInputsUTxOException / BadCollateralInputsUTxOException. The input tests put their UTxOs at StakeAddress outputs (67-90), and no test spends a Byron-address input, so the bootstrap-witness side of AllWitnessesKeyHashes (addrKeyHash vs ByronAddress.keyHashOption = addrRoot) is never matched against a needed key.",
+      "action": "Add three tests: an input not in State.utxos -> Left(BadInputsUTxOException(tx.id)); a collateral input not in State.utxos -> Left(BadCollateralInputsUTxOException(tx.id)); an input at ByronAddress.create(addrRoot = w.addrKeyHash, ...) witnessed only by BootstrapWitness w -> Right(()) and without w -> Left with that hash in missingInputsKeyHashes.",
+      "coverageRisk": "none: adds tests.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": -35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C29-4",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/VerifiedSignaturesInWitnessesValidatorTest.scala:8-143",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValidatorRulesTestKit.scala:63-67"
+      ],
+      "claim": "The four tests (144 lines) start from randomTransactionWithIsValidField (Arbitrary[Transaction], 0.7-1.5 % of ledger test CPU in profiles/ledger-analysis.md) although the validator needs only tx.id, generate three real key pairs per test, sample chainCode/attributes from a generator, and corrupt a signature by writing into ByteString.bytes in place. The vkey and bootstrap tests are the same test with a different witness constructor.",
+      "action": "Build one fixed Transaction(TransactionBody(inputs = empty, outputs = empty, fee = 0)); sign with Party.Alice/Bob/Charles (C02-17); corrupt a copy via ByteString.fromArray(bytes.updated(0, ...)); write one table over (vkey | bootstrap) x (valid | corrupt). Use fixed 32-byte chainCode/attributes.",
+      "coverageRisk": "none: same witnesses, same validator calls.",
+      "ciSavingSec": 0.03,
+      "linesRemoved": 90,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C29-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/VerifiedSignaturesInWitnessesValidatorTest.scala:59-60",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/VerifiedSignaturesInWitnessesValidatorTest.scala:141-142",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/VerifiedSignaturesInWitnessesValidator.scala:14-25"
+      ],
+      "claim": "The failure tests assert only result.isLeft. A mutation that reports every witness, the wrong witness, or puts a bad vkey witness in invalidBootstrapWitnesses (swap the two sets at VerifiedSignaturesInWitnessesValidator.scala:22-23) survives. No test has an invalid vkey and an invalid bootstrap witness together, and none has an empty witness set.",
+      "action": "Assert Left(InvalidSignaturesInWitnessesException(tx.id, Set(badVkey), Set.empty)) and Left(...(tx.id, Set.empty, Set(badBootstrap))); add a mixed row with one bad of each kind (both sets filled) and an empty-witness row -> Right(()). Fold into the C29-4 table.",
+      "coverageRisk": "none.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C29-6",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WrongNetworkValidatorTest.scala:11-270",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WrongNetworkWithdrawalValidatorTest.scala:12-74",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WrongNetworkInTxBodyValidatorTest.scala:9-34",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValidatorRulesTestKit.scala:13-61"
+      ],
+      "claim": "WrongNetworkValidatorTest is 10 copies (271 lines) of one 25-line tx builder that differ in (outputs | collateralReturnOutput) x (Shelley | Stake | Byron) x (Testnet | Mainnet); WrongNetworkWithdrawalValidatorTest repeats the pattern. WrongNetworkInTxBodyValidatorTest builds a random Arbitrary[Transaction] and calls withNetwork (ValidatorRulesTestKit:13-61), which also rewrites outputs and withdrawals with Arbitrary samples; the validator reads only body.networkId. withNetwork has no other user (shared-helpers.csv: 1 use).",
+      "action": "Merge the three suites into one WrongNetworkValidatorsTest with tables: rows of (address, where = output | collateralReturn, network) for WrongNetworkValidator, rows of reward-account network for WrongNetworkWithdrawalValidator, rows of networkId (Some(0), Some(1), None) for WrongNetworkInTxBodyValidator, each on Transaction(TransactionBody(...)) with fixed addresses (Party.Alice.address(network), a fixed StakeAddress). Delete withNetwork from ValidatorRulesTestKit.",
+      "coverageRisk": "none: every (field, address kind, network) case stays as a row.",
+      "ciSavingSec": 0.01,
+      "linesRemoved": 270,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C29-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WrongNetworkValidatorTest.scala:59-60",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WrongNetworkValidatorTest.scala:111-136",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WrongNetworkValidatorTest.scala:244-270",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WrongNetworkWithdrawalValidatorTest.scala:58-59",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/WrongNetworkValidator.scala:16-29"
+      ],
+      "claim": "Every WrongNetworkValidator and WrongNetworkWithdrawalValidator failure asserts only isLeft. A mutation that reports a collateral-return address under invalidOutputAddresses, or lists all outputs instead of the bad ones, survives. The Byron cases only test a mainnet Byron address on a testnet context; a mutation that makes every Byron address wrong-network (WrongNetworkValidator.scala:43) survives, because no Byron address ever passes.",
+      "action": "In the C29-6 tables assert the exact Left(WrongNetworkAddress(tx.id, badOutputs, badCollateralReturn)) and Left(WrongNetworkWithdrawal(tx.id, Seq(account -> coin))); add a row with one good and one bad output (only the bad one listed), and a Byron row with a testnet network magic that passes on the testnet context.",
+      "coverageRisk": "none.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C29-8",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/CertsMutatorTest.scala:58-74",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:99-107",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:83-88",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesMutatorTest.scala:9"
+      ],
+      "claim": "CertsMutatorTest's only test (a 4 ADA full withdrawal through CertsMutator.transit keeps the account with balance 0) runs the same path as WithdrawalsTest:101, which drains 7 ADA through DefaultMutators.all (= CertsMutator first) and then relies on the drained account at 104-106; 83-88 checks the same 'stays registered with balance 0' for a zero withdrawal. StakeCertificatesMutatorTest tests CertsMutator too, not the deprecated StakeCertificatesMutator its name says.",
+      "action": "Delete CertsMutatorTest.scala; after WithdrawalsTest:101 add 'account(drained) shouldBe Some(ConwayAccountState(Coin.zero, keyDeposit, None, None))'. Rename StakeCertificatesMutatorTest to CertsMutatorTest.",
+      "coverageRisk": "none: the added assertion pins the exact post-withdrawal account state that CertsMutatorTest pinned.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": 70,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "CertsMutatorTest.scala:58-74 has one assertion: after a 4 ADA withdrawal of a 4 ADA balance through CertsMutator.transit, the account equals ConwayAccountState(Coin.zero, keyDeposit, None, None). WithdrawalsTest.scala:101 drains 7 ADA from a 7 ADA balance through step = validators + DefaultMutators.all. Line 118 pins DefaultMutators.all.toList == List(CertsMutator, PlutusScriptsTransactionMutator), so CertsMutator.transit runs on the same path. The only extra state is vstate and pstate, which the withdrawal path does not read (CertsMutator.scala:15-30). Both files are in shared/. Today, line 104 checks the drained state only indirectly, after a delegation. The proposed assertion account(drained) shouldBe Some(ConwayAccountState(Coin.zero, keyDeposit, None, None)) pins exactly what CertsMutatorTest pinned. StakeCertificatesMutatorTest calls CertsMutator.transit (line 73), not the deprecated StakeCertificatesMutator. So the rename to CertsMutatorTest is correct, and the name is free once the old file is deleted."
+    },
+    {
+      "id": "C29-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:127-157",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/CertsMutator.scala:15"
+      ],
+      "claim": "The four 'a phase-2-failed tx does not apply its withdrawals / stake / pool / DRep certificates' tests call CertsMutator.transit, which returns success(state) on its first line for any tx with isValid = false (CertsMutator.scala:15). They assert one behavior with four inputs.",
+      "action": "Replace 127-157 with one test that loops over the four phase2Failed txs (withClue per tx) and asserts the state is unchanged.",
+      "coverageRisk": "none: all four txs stay, so a later per-kind branch is still caught.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "All four tests at WithdrawalsTest.scala:127-157 call CertsMutator.transit directly with tx.copy(isValid = false) and assert that the result equals the input state. CertsMutator.scala:15 returns success(state) before it reads the withdrawals or the certificates, so all four hit the same branch. One test that loops over the four phase2Failed txs with withClue keeps every input and the exact same assertion. The deprecated per-kind mutators are not involved. Coverage does not change."
+    },
+    {
+      "id": "C29-10",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/CertsMutatorTest.scala:25-35",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/CertsValidatorTest.scala:25-35",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesMutatorTest.scala:47-57",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesValidatorTest.scala:82-92",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakePoolCertificatesValidatorTest.scala:37-47",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AccountRegistrationTest.scala:25-41",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:52-68",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsDelegatedValidatorTest.scala:33-55",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ProposalDepositValidatorTest.scala:13-39",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesMutatorTest.scala:19-31",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesValidatorTest.scala:23-35",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakePoolCertificatesValidatorTest.scala:22-33",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:26-36"
+      ],
+      "claim": "Nine certificate/withdrawal suites each define the same fixtures: an identical 11-line mkContext(certState) (5 copies, repeated-defs.csv 'mkContext') or context(...) (4 more), a tx builder with empty inputs/outputs, fee 0, certificates and withdrawals (repeated-defs.csv 'tx' / 'runValidator', 9 copies), cardanoInfo/keyDeposit/rewardAccount vals, and a 12-line PoolRegistration fixture (4 copies).",
+      "action": "Add a CertsTestKit trait next to ValidatorRulesTestKit (or extend it, with C02-18) with: params, keyDeposit, context(certState = CertState.empty, epoch = 0, protocolMajor = 10), certTx(certs: Certificate*)(withdrawals: (RewardAccount, Coin)*), poolRegistration(operator, cost = minPoolCost, rewardAccount), accountState(balance, pool = None, drep = None) and certState(accounts, pools, dreps). Rewrite the nine suites on it.",
+      "coverageRisk": "none: fixtures only.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": 130,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C29-11",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/CertsMutator.scala:90-91",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/CertsMutator.scala:197-199",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/StakeCertificatesValidator.scala:41-45",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesMutatorTest.scala:97-108",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakeCertificatesValidatorTest.scala:218-248"
+      ],
+      "claim": "Baseline coverage shows untested certificate paths: CertsMutator never applies StakeVoteDelegCert (90-91 uncovered; dropping its delegateVote survives), UpdateDRepCert for an unregistered DRep (199, DRepException notRegistered) never fails, and StakeCertificatesValidator.depositFor for a credential deregistered earlier in the same tx (43) never runs, so 'UnregCert twice in one tx' and 'UnregCert then RegCert' orderings are untested although the suite tests in-tx ordering for pools and DReps (218-248).",
+      "action": "Add to the CertsMutator suite: StakeVoteDelegCert on a registered account -> both delegations set; UpdateDRepCert for an unknown DRep -> Left(DRepException(tx.id, Set.empty, Set(c), Map.empty, Map.empty)). Add to StakeCertificatesValidatorTest: UnregCert twice -> missingRegistrations == Set(credential); UnregCert then RegCert -> Right; RegCert then UnregCert(Some(keyDeposit)) of a new credential -> Right.",
+      "coverageRisk": "none: adds tests.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": -45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C29-12",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:331-351",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/Entities.scala:204-205,231-232",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/StakePoolCertificatesMutator.scala:15-28",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/VotingCertificatesMutator.scala:17-36"
+      ],
+      "claim": "The 1.3 compatibility filter drops three deprecated mutators next to CertsMutator, but only StakeCertificatesMutator is tested. Removing StakePoolCertificatesMutator or VotingCertificatesMutator from perKindCertMutators survives; the effect would be real: a new pool registration applied twice becomes a re-registration that writes futureStakePoolParams, and a RegDRepCert applied twice fails with alreadyRegistered. StakePoolCertificatesMutator and VotingCertificatesMutator are 0 % covered.",
+      "action": "Turn 335-340 into a loop over the three deprecated mutators, each with a certificate of its kind (RegCert, PoolRegistration, RegDRepCert): ListSet(CertsMutator, deprecated, PlutusScriptsTransactionMutator) must give the same state as step. Extend 345-351 the same way: each deprecated mutator alone applies its certificate.",
+      "coverageRisk": "none: adds tests.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": -25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C29-13",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/StakePoolCertificatesValidatorTest.scala:105-153",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/StakePoolCertificatesValidator.scala:51-67"
+      ],
+      "claim": "The three retirement-epoch tests are instances of one law: a retirement of a registered pool passes iff current < e <= current + poolRetireMaxEpoch, else invalidRetirementEpochs == Map(poolId -> (e, current, max)). The upper boundary e == current + poolRetireMaxEpoch is not tested, so the mutation 'epochNo >= maxRetirementEpoch' at StakePoolCertificatesValidator.scala:60 survives. Each test repeats the 4-line registered-pool state.",
+      "action": "Replace 105-153 with forAll(Gen.choose(current - 2, max + 2)) (or a table: current, current + 1, max, max + 1) on one registered-pool state; assert Right(()) inside the window and the exact invalidRetirementEpochs entry outside it.",
+      "coverageRisk": "none: the old three epochs are in the range; adds the max boundary.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "StakePoolCertificatesValidator.scala:51-67: for a registered pool, the check fails when epochNo <= currentEpoch (line 53) or epochNo > maxRetirementEpoch (line 60), with maxRetirementEpoch = currentEpoch + poolRetireMaxEpoch (line 101). Otherwise it is this. On failure, invalidRetirementEpochs gets poolId -> (epochNo, currentEpoch, maxRetirementEpoch). This matches the Haskell POOL check cEpoch < e <= cEpoch + maxEpoch. The tests at StakePoolCertificatesValidatorTest.scala:105-153 use current = 100 and e = 101, 100 and max+1. They assert only isRight or 'contain key poolId', and they never test e == max. So the mutation of line 60 to '>=' survives today. Each of the 3 tests repeats the registered-pool certState. A table or generator over current-2..max+2 at fixed current = 100 (well above preprod zeroEpoch, so firstSlotOfEpoch/epochOf round-trip) covers the old epochs and adds the boundary."
+    },
+    {
+      "id": "C29-14",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/CertsValidatorTest.scala:69-84",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AccountRegistrationTest.scala:71-73",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:109-114",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsTest.scala:282-288",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/WithdrawalsDelegatedValidatorTest.scala:70-75",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/CertsValidator.scala:21-30"
+      ],
+      "claim": "These failure tests assert only the exception type or isLeft. WithdrawalsNotInRewardsException carries two maps (missingRewardAccounts, nonDrainingWithdrawals); a mutation that treats a missing account as balance 0 (CertsValidator.scala:21, '.getOrElse(Coin.zero)') moves CertsValidatorTest:69-72 from the first map to the second and the test still passes. WithdrawalsTest:282-288 accepts any StakePoolException, so a notRegistered vs invalidRetirementEpochs swap survives.",
+      "action": "Assert exact values: CertsValidatorTest:70 -> Left(WithdrawalsNotInRewardsException(tx.id, Map(rewardAccount -> 3 ADA), Map.empty)); :81 -> (Map.empty, Map(rewardAccount -> (5 ADA, 3 ADA))); AccountRegistrationTest:72 and WithdrawalsTest:112 the same way; WithdrawalsTest:286 -> notRegistered == Set(newPoolId); WithdrawalsDelegatedValidatorTest:72 -> the exact Left as at 62-67.",
+      "coverageRisk": "none.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 4 findings of scope merge-duplicate-tests, to-property or main-bug; 4 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

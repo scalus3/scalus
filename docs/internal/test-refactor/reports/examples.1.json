@@ -1,0 +1,723 @@
+{
+  "cluster": "examples.1",
+  "summary": "The cluster mixes small example contracts (HelloCardano, MembershipToken, PubKey, Preimage, MintingPolicy, Groth16, AMM, AnonymousData, AtomicTransactions, an Aiken-compiled payment splitter) with whole-corpus compiler guards and reports (BooleanOptimizer impact, CCE, CSE tie order, cross-JVM pipeline determinism, source positions). Push-CI cost is dominated by PipelineDeterminismCrossJvmTest (23 s, 100 % in PipelineDeterminismChild.render, F-6/F-23) and the 22 assertion-free BooleanOptimizerImpactTest report tests (7.5 s); AmmTest's 18.5 s in timings.csv is pre-P1 and is already 4.6 s after F-19. Reading found two main-code defects: PubKeyValidator's recursive signer search ignores its argument and never terminates when the key is not the first signatory (C25-5), and Groth16.grothVerify ignores nPublic and any public inputs past vkIC (C25-6). Negative coverage is thin: most AmmValidator, MembershipTokenValidator and HelloCardano rejections have no test, and the existing failure tests accept any failure. No real to-property candidate exists (C4): the only law, AnonymousDataTransactions.open, is three lines and already covered by examples; the AMM k-invariant property is already a property but wraps pure math in Emulator setup (C25-3). The @Compile files are excluded from coverage (F-9); the only real uncovered lines are AmmOffchain.findPool and the resolveSeed failure branch.",
+  "behaviors": [
+    {
+      "pass": "HelloCardano.spend",
+      "name": "accepts owner-signed tx with redeemer 'Hello, World!' (budget pinned)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/HelloCardanoTest.scala:26-49"
+      ]
+    },
+    {
+      "pass": "HelloCardano.spend",
+      "name": "rejections: 'Datum not found', 'Must be signed', 'Invalid redeemer'",
+      "tests": []
+    },
+    {
+      "pass": "HelloCardanoContract",
+      "name": "compiled script size is pinned (395 bytes)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/HelloCardanoTest.scala:22-24"
+      ]
+    },
+    {
+      "pass": "MembershipTokenValidator.mint",
+      "name": "Mint with a valid Merkle proof, one token, 2 ADA deposit with the signer datum",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/MembershipTokenTest.scala:40-61",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/MembershipTokenTest.scala:63-92"
+      ]
+    },
+    {
+      "pass": "MembershipTokenValidator.mint",
+      "name": "Mint rejects a non-member proof",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/MembershipTokenTest.scala:125-152"
+      ]
+    },
+    {
+      "pass": "MembershipTokenValidator.mint",
+      "name": "Mint rejections: two signatories, more than one token, deposit < 2 ADA, wrong deposit datum, no deposit output",
+      "tests": []
+    },
+    {
+      "pass": "MembershipTokenValidator.mint+spend",
+      "name": "Burn: burn exactly one token and release the deposit",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/MembershipTokenTest.scala:100-123"
+      ]
+    },
+    {
+      "pass": "MembershipTokenValidator.mint+spend",
+      "name": "Burn rejections: quantity != -1, spend with Mint redeemer, spend without burning the depositor's token",
+      "tests": []
+    },
+    {
+      "pass": "PubKeyValidator.validator",
+      "name": "accepts when deadbeef is the only/first signatory (V1, budget and size pinned)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PubKeyValidatorTest.scala:27-63"
+      ]
+    },
+    {
+      "pass": "PubKeyValidator.validator",
+      "name": "key present but not first; key absent ('Signature not found')",
+      "tests": []
+    },
+    {
+      "pass": "PubKeyValidator.validatorV2/V3",
+      "name": "evaluated by PlutusScriptEvaluator with one required signer (bloxbean copy)",
+      "tests": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:22-130"
+      ]
+    },
+    {
+      "pass": "PreimageValidator / OptimizedPreimageValidator",
+      "name": "success, wrong hash fails, missing signer fails (V2 and Scott variant)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PreimageExampleTest.scala:37-115"
+      ]
+    },
+    {
+      "pass": "Preimage low-level variants (V4 dropList, ListMatch, SigIndex, Direct UPLC)",
+      "name": "each variant succeeds on the happy path; budgets reported, not pinned",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PreimageBudgetComparisonTest.scala:244-414"
+      ]
+    },
+    {
+      "pass": "MintingPolicy (V1, V2, Scott)",
+      "name": "mint when the TxOutRef is spent, burn, and five rejections; flat size pinned",
+      "tests": [
+        "scalus-examples/shared/src/test/scala/scalus/examples/MintingPolicyExampleTest.scala:83-228"
+      ]
+    },
+    {
+      "pass": "Groth16.grothVerify",
+      "name": "valid factorial and mastermind proofs verify; tampered proof/state/salt fail; on-chain == off-chain",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/Groth16Test.scala:57-285"
+      ]
+    },
+    {
+      "pass": "Groth16.grothVerify",
+      "name": "public input list length != nPublic; public shorter than vkIC tail ('Invalid input'); empty vkIC",
+      "tests": []
+    },
+    {
+      "pass": "AmmValidator.mint Init + AmmOffchain.createEmptyPool",
+      "name": "create an empty pool with the NFT and a zero datum",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:38-46"
+      ]
+    },
+    {
+      "pass": "AmmValidator.mint Init",
+      "name": "Init rejections: seed not spent, extra tokens, non-empty initial datum, NFT not in the pool",
+      "tests": []
+    },
+    {
+      "pass": "AmmValidator.spend Deposit + mint ChangeLiquidity",
+      "name": "first deposit mints isqrt(x0*x1); proportional deposit; budget pinned",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:48-83",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:163-178"
+      ]
+    },
+    {
+      "pass": "AmmValidator.spend Deposit",
+      "name": "rejects a wrong ratio",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:253-268"
+      ]
+    },
+    {
+      "pass": "AmmValidator.spend Deposit + mint ChangeLiquidity",
+      "name": "rejections: non-positive amounts, zero LP minted, output datum mismatch, LP delta mismatch (extra LP minted)",
+      "tests": []
+    },
+    {
+      "pass": "AmmValidator.spend Redeem",
+      "name": "redeem burns LP and pays proportional reserves; budget pinned; deposit-then-redeem never returns more than deposited",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:85-109",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:180-196",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:335-369"
+      ]
+    },
+    {
+      "pass": "AmmValidator.spend Redeem",
+      "name": "rejections: lp <= 0, lp > supply, output datum mismatch",
+      "tests": []
+    },
+    {
+      "pass": "AmmValidator.spend Swap",
+      "name": "swap both directions updates the datum and keeps k",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:198-251"
+      ]
+    },
+    {
+      "pass": "AmmValidator.spend Swap",
+      "name": "rejects slippage; rejects a drained continuation output (reserve binding)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:270-317"
+      ]
+    },
+    {
+      "pass": "AmmValidator.spend Close + mint Close",
+      "name": "close an empty pool and burn the NFT",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:111-144"
+      ]
+    },
+    {
+      "pass": "AmmValidator.spend Close + reserve binding",
+      "name": "rejections: close a non-empty pool, close without burning the NFT, continuation without the pool NFT",
+      "tests": []
+    },
+    {
+      "pass": "AmmMath.swapResult",
+      "name": "k-invariant over generated reserves (pure math, wrapped in Emulator setup)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:319-333"
+      ]
+    },
+    {
+      "pass": "AmmOffchain",
+      "name": "different seeds give different LP policy ids",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:146-158"
+      ]
+    },
+    {
+      "pass": "AmmOffchain.findPool / resolveSeed failure",
+      "name": "pool lookup and missing-seed error",
+      "tests": []
+    },
+    {
+      "pass": "AnonymousDataTransactions",
+      "name": "store commits by datum hash; open accepts only the right (nonce, data); nonce changes the hash",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/anonymousdata/AnonymousDataTest.scala:44-101"
+      ]
+    },
+    {
+      "pass": "AtomicTransactions.batchPay",
+      "name": "spends every sender UTxO in one tx and pays the recipient",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/atomictransactions/AtomicTransactionsTest.scala:27-53"
+      ]
+    },
+    {
+      "pass": "Plutus VM on an Aiken-compiled script",
+      "name": "Aiken payment splitter accepts two valid payouts",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CompatibilityWithAikenTest.scala:39-84"
+      ]
+    },
+    {
+      "pass": "BooleanOptimizer in UplcPipeline",
+      "name": "the pass changes Betting; optimizeUplc switches it on; no-op where no rule fires",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/BooleanOptimizerImpactTest.scala:182-223"
+      ]
+    },
+    {
+      "pass": "V3Optimizer with CCE",
+      "name": "no CSE opportunity survives CCE; CCE does not grow the script",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CcePipelineTest.scala:74-86"
+      ]
+    },
+    {
+      "pass": "CommonSubexpressionElimination",
+      "name": "tied same-scope candidates compile to one pinned script",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CseTieOrderDeterminismTest.scala:33-43"
+      ]
+    },
+    {
+      "pass": "UplcPipeline (all lowerings and optimizers)",
+      "name": "the example corpus compiles to the same bytes under -XX:hashCode=2",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PipelineDeterminismCrossJvmTest.scala:30-64"
+      ]
+    },
+    {
+      "pass": "CompiledPlutus.toUplc position fill",
+      "name": "> 90 % of HelloCardano UPLC nodes carry a source position",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/SourcePositionCoverageTest.scala:36-42"
+      ]
+    },
+    {
+      "pass": "SIR compile of small programs",
+      "name": "packed-ByteString Fibonacci lookup (size and budget pinned); tail-recursive fib(100)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/FibonacciTest.scala:31-98"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C25-1",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PipelineDeterminismCrossJvmTest.scala:30-64",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PipelineDeterminismCrossJvmTest.scala:99-146",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PipelineDeterminismCrossJvmTest.scala:179-192",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CseTieOrderDeterminismTest.scala:33-43",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseDeterminismCrossJvmTest.scala:1",
+        ".github/workflows/nightly.yml:2-4"
+      ],
+      "claim": "The slowest test of the module (23.0 s in timings.csv, F-6) compiles 24 programs under 2-4 configurations twice: once in-process and once in a cold child JVM with -XX:hashCode=2 (100 % in PipelineDeterminismChild.render, F-23). It guards against identity-hash drift anywhere in the pipeline. The bug it was written for (CSE tie order) is also pinned on push by CseTieOrderDeterminismTest (exact hex of SameScopeFieldChains, which is also in this corpus at :144) and by the synthetic core CseDeterminismCrossJvmTest.",
+      "action": "Tag the test scalus.testing.Benchmark so it runs in nightly.yml, not on push (the repo has no Slow tag; Benchmark is the nightly tag). Alternative if the owner wants it on push: run the child JVM and the in-process render only for the 'release' config (drop 'cce', 'v2' and the legacy configs at :151-169), which roughly halves the time.",
+      "coverageRisk": "medium: a determinism regression in a non-CSE pass (linker, BooleanOptimizer, MutualRecursionElimination, legacy lowerings) shows up in the nightly run instead of on the push that caused it. The CSE tie-order bug stays guarded on push by CseTieOrderDeterminismTest and CseDeterminismCrossJvmTest.",
+      "ciSavingSec": 20,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-2",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/BooleanOptimizerImpactTest.scala:92-129",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/BooleanOptimizerImpactTest.scala:133-180",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/BooleanOptimizerImpactTest.scala:225-274",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CceImpactMeasurementTest.scala:24-26",
+        ".github/workflows/nightly.yml:2-4"
+      ],
+      "claim": "The 22 'BooleanOptimizer impact: <contract>' tests lower each contract four times and only call info(); they assert nothing and take 7.5 of the suite's 8.3 s (90 % in UplcPipeline.run, F-23). 'report where the rewrites happen' and 'ZZ summary' also only print. nightly.yml lists 'optimizer impact reports' as the nightly category, and the sibling CceImpactMeasurementTest is already tagged Benchmark for the same reason.",
+      "action": "Pass scalus.testing.Benchmark to the test(...) call in contract() (:128-129) and to 'report where the rewrites happen' (:225) and 'ZZ summary' (:241). ZZ summary reads the rows the contract tests fill, so it must move with them. Keep the three asserting tests (:182-223) on push.",
+      "coverageRisk": "none: the moved tests have no assertions; the three guards stay on push",
+      "ciSavingSec": 7,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-3",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:319-333",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmOffchain.scala:188-197",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:60",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:84-97",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:259-263"
+      ],
+      "claim": "'property: k-invariant holds for all valid swaps' creates an Emulator and submits two transactions (create pool, deposit) per case, but never submits a swap: swapQuote is AmmMath.swapResult on the JVM, and the test recomputes the new reserves itself. The validator is not exercised, so the Emulator setup is pure cost. timings.csv shows 5.8 s, but that is pre-P1 (F-19 cut AmmTest from 18.5 to 4.6 s); the remaining cost is the two submitted, script-evaluated txs per case.",
+      "action": "Rewrite as a property over AmmMath.swapResult(AmmDatum(r0, r1, lp), 997, 1000, t0In, amountIn) with no provider: assert newDatum.r0 * newDatum.r1 >= r0 * r1, 0 <= amountOut < reserveOut, and that the returned datum matches the direction. Keep the same generator and the default minSuccessful: this removes the Emulator, not cases.",
+      "coverageRisk": "none: the validator's invariant check (AmmValidator.scala:260-263) calls the same AmmMath code, and the submitted swaps at AmmTest.scala:198-251 still run it on-chain",
+      "ciSavingSec": 1,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-4",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:460-466",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:326"
+      ],
+      "claim": "swapGen bounds amountIn by r0 / 10 even when t0In = false (the input reserve is then r1), so it never produces amountIn >= reserveIn (large-swap edge) and almost never the dust case amountOut == 0, which whenever(amountOut > 0) drops anyway. The integer-division edges of swapResult are therefore not exercised.",
+      "action": "After C25-3 makes the property pure, draw amountIn from the input reserve of the chosen direction, with Gen.frequency over 1 (dust), small, and up to 10x reserveIn; assert amountOut >= 0 for all cases instead of filtering out amountOut == 0.",
+      "coverageRisk": "none: widens the input space",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-5",
+      "check": "C6",
+      "scope": "main-bug",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/PubKeyValidator.scala:17-23",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/PubKeyValidator.scala:31-36",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/PubKeyValidator.scala:46-51",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/examples/PubKeyValidator.scala:18-22,32-37,47-52",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PubKeyValidatorTest.scala:38",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:61,116"
+      ],
+      "claim": "In all three validators, findSignatureOrFail(sigs) ignores its parameter: it tests signatories.isEmpty and signatories.head (the closure value) and recurses with signatories.tail, so every call sees the same list. With signatories [other, deadbeef] the first call recurses into an identical call forever: on-chain the script runs until the budget is exhausted, and the JVM call PubKeyValidator.validator(...) throws StackOverflowError. 'Signature not found' is unreachable unless the list is empty. Both tests use a single signatory, so the loop never runs. The bloxbean test tree holds a copy of the same file with the same defect.",
+      "action": "Main code: use sigs in the body of all three findSignatureOrFail (sigs.isEmpty, sigs.head, findSignatureOrFail(sigs.tail)), in both copies. Tests: add to PubKeyValidatorTest a case with signatories [other, deadbeef] (must succeed) and one with [other] (must fail with 'Signature not found'). Optionally drop the unused validator def from the bloxbean copy (only validatorV2/V3 are used there).",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "findingsLog": "F-46",
+      "verification": "The defect is real in all three defs and in both copies. scalus-examples/jvm/src/main/scala/scalus/examples/PubKeyValidator.scala:17-21, 31-36 and 46-51, and bloxbean-cardano-client-lib/src/test/scala/scalus/examples/PubKeyValidator.scala:18-22, 32-37 and 47-52, test and recurse on the closure `signatories`, never on `sigs`. Each call passes `signatories.tail`, but the next call reads `signatories` again. So with a non-empty list whose head is not the key, the recursion never ends. On-chain the script runs until the budget is exhausted. 'Signature not found' is reachable only for an empty list. Current tests use a single matching signatory, so they cannot catch it: PubKeyValidatorTest.scala:38 and bloxbean PlutusScriptEvaluatorTest.scala:32 and :87 use V2/V3. One correction to the JVM symptom: in `validator` (V1) the recursive call is in tail position in a local def, and scalac's tailcalls phase turns it into a loop without @tailrec. So the JVM call hangs forever instead of throwing StackOverflowError. In V2/V3 the call is inside the `trace(\"nope\")(...)` argument, which is not a tail position, so those throw StackOverflowError. Corrected action: use `sigs` in all six bodies. Add the [other, deadbeef] success case and the [other] failure case. Re-pin `flatBytesLen == 120` (PubKeyValidatorTest.scala:53), because the fix changes the V1 script size. Run the JVM-side negative case with a timeout or use the on-chain evaluator, because the unfixed V1 JVM call hangs."
+    },
+    {
+      "id": "C25-6",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/Groth16.scala:49-57",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/Groth16.scala:108-118",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/Groth16.scala:138-158",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/Groth16.scala:176-178",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/Groth16Test.scala:57-69"
+      ],
+      "claim": "SnarkVerificationKey.nPublic is never read, and derive returns as soon as vk_ic is Nil, ignoring any remaining public inputs. So grothVerify(factorialVK, <the valid 3! proof>, List(561, 3, 999)) returns true: derive([ic1, ic2], [561, 3, 999], ic0) -> derive([ic2], [3, 999], ...) -> derive([], [999], ...) = result. A contract that reads public inputs from a redeemer can be given trailing values that the proof does not bind. Standard Groth16 verifiers reject a public-input list whose length is not nPublic. Parity with the ak-381 source could not be checked offline.",
+      "action": "Main code: in grothVerify require public.length == vk.nPublic and vkIC.length == nPublic + 1 (or make derive fail when vk_ic is Nil and public is not). Tests: add to Groth16Test a case with one extra public input (must fail both on- and off-chain) and one with a short list ('Invalid input').",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-47",
+      "verification": "`nPublic` is declared at Groth16.scala:50, and no code reads it. The only references to it are the test fixtures Groth16Test.scala:20 and :115. `grothVerify` drops it with the `_` pattern at Groth16.scala:144. `derive` (Groth16.scala:108-118) returns `result` when `vk_ic` is Nil, whatever `public` still holds, and it fails ('Invalid input') only when `public` runs out first. So for factorialVK, which has 3 IC points (2 after the head), List(561, 3, 999) reduces to the same G1 point as List(561, 3), and the valid 3! proof (Groth16Test.scala:57-68) is accepted. Any contract that passes redeemer-supplied public inputs to grothVerify and then reads input index >= nPublic gets a value the proof does not bind. I could not check parity with ak-381 offline. Even if ak-381 behaves the same way, the length check is a missing guard in the Scalus example. The proposed tests are valid additions."
+    },
+    {
+      "id": "C25-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:253-317",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:442-458",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockchainProvider.scala:444-451",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:218",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:259",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:276-283"
+      ],
+      "claim": "The three FAIL tests pass on any Left from submit: assertSubmitFails ignores the error. A ledger-rule failure (fees, collateral, a missing input) makes them pass without the intended validator check running. initPoolWith also drops both submit results (:445, :450), so a failed pool init would leave the FAIL tests spending a UTxO that does not exist, which also fails, and the tests stay green.",
+      "action": "Assert the reason: match Left(ScriptFailure(_, logs, _, _)) and require logs to contain 'Deposit: ratio mismatch' (:253-268), 'Swap: slippage exceeded' (:270-286) and 'Pool output must hold r0 of token0' (:288-317); use the helper from C25-8. In initPoolWith assert both submits are Right.",
+      "coverageRisk": "none: tightens existing tests",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-8",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:454-458",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:1054-1058",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/kit/ScalusTest.scala:42-57"
+      ],
+      "claim": "assertSubmitFails is byte-identical in AmmTest and LinkedListTest. ScalusTest has assertScriptFail for build-time failures but nothing for submit-time failures.",
+      "action": "Add to ScalusTest: assertSubmitFails(provider, tx) and assertSubmitFails(provider, tx, expectedLog: String), the second matching SubmitError.ScriptFailure.logs (or message) like assertScriptFail does. Replace both local copies.",
+      "coverageRisk": "none: same behavior, one place",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-9",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/MembershipTokenTest.scala:138-151",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/kit/ScalusTest.scala:42-57",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/crypto/tree/MerkleTree.scala:35"
+      ],
+      "claim": "'non-member cannot mint' asserts only Try{...}.isFailure around the builder. Any exception passes it: insufficient funds for Faith, a builder error, or a failure of an unrelated check. The suite extends ScalusTest, which has assertScriptFail and reads the script logs.",
+      "action": "Replace the Try with assertScriptFail(\"MerkleTree: not a member\") { ...complete(...).transaction }.",
+      "coverageRisk": "none: tightens the test",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-10",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/MembershipTokenTest.scala:40-61",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/MembershipTokenTest.scala:63-92"
+      ],
+      "claim": "'Alice can mint membership token with valid Merkle proof' is a strict prefix of 'Alice can burn membership token and reclaim deposit': the same fresh Emulator, the same proof, redeemer, token name, datum and tx shape, and the second test asserts the mint succeeds (:88-92) before burning.",
+      "action": "Delete the first test (40-61) and rename the second 'Alice mints with a valid proof, then burns and reclaims the deposit'. If the separate mint test is wanted for readability, extract a mintTx(emulator) helper used by both instead.",
+      "coverageRisk": "none: the mint assertion stays in the second test",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "The test to delete (MembershipTokenTest.scala:40-61) has exactly one assertion: `result.isRight` for the mint tx (:59-60). The surviving test (:63-121) builds the same tx from the same state: a fresh `Emulator.withAddresses(Seq(Party.Alice.address))`, the same `tree.proveMembership(alicePkh)`, the same `MembershipRedeemer.Mint(Data.B(proof))` redeemer, the same tokenName and datum, and the same mint/requireSignatures/payTo/payTo/complete/sign chain against the same `applied` script and env (:64-86). It then asserts `mintResult.isRight` (:88-92) before it burns. Both tests are in jvm/ sources and use the same entry point and config, so no assertion is lost."
+    },
+    {
+      "id": "C25-11",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:68-83",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:163-178",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:85-109",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:180-196"
+      ],
+      "claim": "'budget: deposit' repeats the flow of 'deposit to a non-empty pool' (initPoolWith 1000/4000, then deposit 1000/4000, assert success) and adds only assertScriptBudget. 'budget: redeem' repeats 'redeem: burns LP' (initPoolWith 1000/4000, redeem half the LP, assert success) and adds only assertScriptBudget.",
+      "action": "Call assertScriptBudget(depositTx, ...) at the end of the deposit test and assertScriptBudget(redeemTx, ...) at the end of the redeem test, keeping the dual baselines and their comment; delete the two budget tests.",
+      "coverageRisk": "none: same txs, same pins; the behavior tests already assert the datum",
+      "ciSavingSec": 0.5,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "'budget: deposit' (AmmTest.scala:163-178) and 'deposit to a non-empty pool' (:68-83) run the same steps: createSetup, `initPoolWith(1000, 4000)`, findUtxos for Alice, `deposit(x0=1000, x1=4000)` and an `isRight` submit assertion. The budget test adds only assertScriptBudget (:170-177). 'budget: redeem' (:180-196) and 'redeem: burns LP' (:85-109) both use createSetup, `initPoolWith(1000, 4000)`, readPoolDatum and `redeem(halfLp)`, then assert `isRight`. The budget test adds only assertScriptBudget (:188-195). assertScriptBudget (:26-32) reads only the built tx (redeemers ExUnits and fee), so moving it into the behavior tests checks the same tx with the same pins. All tests are in the same jvm/ file. No script or CI config references the 'budget:' test names (grep of sh/py/sbt/yml found none). Keep the dual-baseline comment (:160-162) when moving the pins."
+    },
+    {
+      "id": "C25-12",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:135",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:172",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:199-202",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:221-224",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:236",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala:285-288",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:253-317"
+      ],
+      "claim": "Only three AmmValidator rejections have tests (ratio, slippage, drained reserves). Untested: 'Mint: LP delta mismatch' (minting extra LP for free and then redeeming it drains the pool, so this is the most important check), Init without spending the seed, 'Close: pool must be empty', 'Pool output must retain the pool NFT', plus 'Redeem: LP amount exceeds supply' and 'Deposit: zero LP minted'. The last two are not reachable with a balanced Emulator tx: all LP in circulation equals lpSupply, and the ratio check at :218 runs before the zero-LP check for any pool built by deposits.",
+      "action": "Add one Emulator FAIL test per reachable check, built like the drain test (:288-317, TxBuilder with constMaxBudget, then submit) and asserted by message with C25-8: a deposit that mints lpDelta + 1; a createEmptyPool variant without the seed input; close on a funded pool; a swap whose continuation keeps the reserves but not the NFT. For 'Redeem: LP amount exceeds supply' and 'Deposit: zero LP minted', either skip them or evaluate the script directly on a hand-built ScriptContext, as PreimageExampleTest does.",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": -1,
+      "linesRemoved": -90,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-13",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/MembershipToken.scala:76",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/MembershipToken.scala:82-100",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/MembershipToken.scala:102-106",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/MembershipToken.scala:116-129",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/MembershipTokenTest.scala:125-152"
+      ],
+      "claim": "Besides the non-member case, no MembershipTokenValidator rejection has a test: two required signers (:76), minting 2 tokens or another name (:82-85), deposit below 2 ADA (:93-96), deposit datum for another key (:97-100), burning quantity != 1 (:106), spending the deposit with a Mint redeemer (:129), and spending another member's deposit (the quantityOf check at :125-128).",
+      "action": "Add one assertScriptFail test per check with the expected message; build each from a mintTx/burnTx helper that takes the variation (signers, quantity, deposit value, datum, redeemer). Bob spending Alice's deposit while burning his own token is the security case.",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -100,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-14",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/HelloCardano.scala:21-25",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/HelloCardanoTest.scala:26-49",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/kit/ScalusTest.scala:170-173"
+      ],
+      "claim": "HelloCardanoTest checks only the success path. The three rejections ('Datum not found', 'Must be signed', 'Invalid redeemer') of the module's hello-world example have no test; deleting either require keeps the suite green.",
+      "action": "Add three cases next to 'Hello Cardano'. Use makeSpendingScriptContext (already used at :29) for signatories = List() -> 'Must be signed' and redeemer \"Hello\" -> 'Invalid redeemer'. That helper always sets datum = Option.Some (ScalusTest.scala:170-173), so build the 'Datum not found' context by hand with ScriptInfo.SpendingScript(txOutRef, Option.None). Check result.isFailure and that result.logs contains the message (or use checkResult).",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-15",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CompatibilityWithAikenTest.scala:123-220",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/kit/ScalusTest.scala:222-265",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CompatibilityWithAikenTest.scala:27-33",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CompatibilityWithAikenTest.scala:148-152"
+      ],
+      "claim": "assertCase re-implements ScalusTest.checkResult (failure-with-message, success, optional budget) and adds printStackTrace/println noise; both callers pass Right(Option.None), so the Left and Some branches are dead. PaymentSplitterDatum (:27-33) is never used, and :148-152 is commented-out code.",
+      "action": "Change the expected parameter to (String | Unit, Option[ExUnits]) and call checkResult(expected, result) with success from ScalusTest; delete the hand-written match, PaymentSplitterDatum and the commented lines.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-16",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/BooleanOptimizerImpactTest.scala:133-180",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PipelineDeterminismCrossJvmTest.scala:96-146",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/BooleanOptimizerImpactTest.scala:24-34",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CceImpactMeasurementTest.scala:79-89",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CcePipelineTest.scala:17-27",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CceImpactMeasurementTest.scala:104-115",
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/CommonSubexpressionElimination.scala:507-514"
+      ],
+      "claim": "Three copies in one package: the 22-contract SIR corpus (BooleanOptimizerImpactTest and PipelineDeterminismChild; the comment at :96-98 says 'The same list as BooleanOptimizerImpactTest', the latter adds SameScopeFieldChains and LegacyBackendSample); countNodes (identical in two files; CommonSubexpressionElimination.termSize is private[transform], so tests cannot use it); and the 'baseline UPLC, no CSE/CCE' compile (CcePipelineTest.rawUplc == CceImpactMeasurementTest.compileBaseline, Options equal to Options.releaseUntagged.copy(cseIterations = 0)).",
+      "action": "Add a test-side object scalus.examples.ExampleCorpus in scalus-examples/jvm/src/test: def validators(using Options): Seq[(String, SIR)] (the 22 shared entries; PipelineDeterminismChild appends its two extras), def countNodes(t: Term): Int, and def baselineUplc(c: PlutusV3[?]): Term. Use it in the four files.",
+      "coverageRisk": "none: same programs and metrics; keep the corpus order so PipelineDeterminism output lines stay comparable",
+      "ciSavingSec": 0,
+      "linesRemoved": 50,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-17",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/anonymousdata/AnonymousDataTest.scala:34-42",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/anonymousdata/AnonymousDataTest.scala:60-65",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/anonymousdata/AnonymousDataTest.scala:80",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/anonymousdata/AnonymousDataTest.scala:99-100",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/TransactionWitnessSet.scala:31"
+      ],
+      "claim": "Three assertions cannot fail: :62-64 re-checks the datum hash that storedUtxo (:34-42) already filtered on, and :65 follows from it (a Hash datum is never inline); :100 compares a pure function call with itself. :80 ignores the submit result. The test title ('the data itself is not on-chain') is never checked: nothing asserts that the tx witness set does not carry the preimage.",
+      "action": "Delete :62-64 and :100. Assert provider.submit(tx) is Right at :80. Add a check that the witness set does not carry the preimage: tx.witnessSet.plutusData is KeepRaw[TaggedSortedMap[DataHash, KeepRaw[Data]]] (TransactionWitnessSet.scala:31), so assert that its values (unwrapped) do not contain txs.commitment(nonce, data), or that it has no entry for txs.commitmentHash(nonce, data). A builder change that attaches the datum then fails the test.",
+      "coverageRisk": "none: replaces tautologies with a real check",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-18",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:34-36",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:43",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:48-66",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:113-130",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:257",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:274"
+      ],
+      "claim": "AmmTest repeats Utxo(tx.utxos.find(_._2.address == txCreator.scriptAddress).get) 13 times and provider.findUtxos(Alice.address).await().toOption.get about 15 times; :48-66 and :113-130 re-inline initPoolWith; 'AmmValidator size' (:34-36) asserts nothing; createSetup(EvaluatorMode.Validate) at :257 and :274 builds an Emulator only to discard it.",
+      "action": "Add poolOut(tx) and aliceUtxos(provider) helpers in the AmmTest object; use initPoolWith in the close test; either pin the script size with assert or delete the size test; replace createSetup(Validate)._2 with a direct reference to the max-budget creator.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-19",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PreimageBudgetComparisonTest.scala:161-182",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PreimageBudgetComparisonTest.scala:219-240",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PreimageBudgetComparisonTest.scala:244-414",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PreimageExampleTest.scala:18-35",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PreimageExampleTest.scala:91-113"
+      ],
+      "claim": "The V2 ScriptContext for the preimage tests is written three times (two in PreimageBudgetComparisonTest that differ only in signatories, one in PreimageExampleTest). PreimageBudgetComparisonTest has nine locally blocks that differ only in name, validator, Options (three distinct values) and redeemer/context, and prints two full UPLC dumps (:311, :394). PreimageExampleTest has an unused flatSize (:112) and commented-out asserts and printlns (:93-103, :113).",
+      "action": "In PreimageBudgetComparisonTest define ctx(signatories) and a table of (name, Options, SIR or Term, redeemer, context) evaluated by one loop; drop the UPLC dumps. Reuse ctx in PreimageExampleTest (or put it in a small shared test object). Delete the dead lines in PreimageExampleTest.",
+      "coverageRisk": "none: same evaluations and success checks",
+      "ciSavingSec": 0,
+      "linesRemoved": 140,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-20",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/shared/src/test/scala/scalus/examples/MintingPolicyExampleTest.scala:93-172",
+        "scalus-examples/shared/src/test/scala/scalus/examples/MintingPolicyExampleTest.scala:224-226",
+        "scalus-examples/shared/src/test/scala/scalus/examples/MintingPolicyExampleTest.scala:175-178",
+        "scalus-examples/shared/src/test/scala/scalus/examples/MintingPolicyExampleTest.scala:211-214"
+      ],
+      "claim": "The policy id hex a0028f35... appears nine times and the token name 484f534b59 eight times in performMintingPolicyValidatorChecks; the comment at :224-225 says '687 (was 672...)' while the assert at :226 pins 653; evaledTokens and evaledTokensScott repeat the same compile-and-evaluate body with different givens.",
+      "action": "Introduce val policyId and val hosky (token name) and a mintValue(qty) helper; fix the stale comment to match 653; make evaledTokens a def taking the Options.",
+      "coverageRisk": "none: same cases",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-21",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/FibonacciTest.scala:87-89",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/FibonacciTest.scala:97",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/FibonacciTest.scala:100-105",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/FibonacciTest.scala:116-124"
+      ],
+      "claim": "'fibonacci broken' has been ignore()d since it was added (62cbdc612, 2025-10-22) with no comment saying what is broken, and BrokenFib exists only for it. 'fibonacci packed' evaluates fib(25) again at :87-89 after the loop already checked it. 'fibonacci unfold' compares a Term by its toString (:97).",
+      "action": "Coordinator: run the ignored test once. If it shows a compiler defect, log it in findings.md and keep the test as ignore with that reference in a comment; otherwise enable it or delete it with BrokenFib. Fold the size and budget pins into the loop's fib(25) case and compare terms with == Term.Const(Constant.Integer(...)) instead of strings.",
+      "coverageRisk": "low: deleting the ignored test loses nothing today; it may hide a known compiler issue, hence run it first",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-22",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/Groth16Test.scala:46-55",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/Groth16Test.scala:141-161",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/Groth16Test.scala:167-187",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/Groth16Test.scala:202-238"
+      ],
+      "claim": "Groth16Test repeats the first mastermind proof (:141-148 and :167-174), the second one (:194-200 and :220-226, with piA/piC swapped in the tampered test), and the salt BigInt four times; :50-54 is commented-out debug printing.",
+      "action": "Define mastermindProof1, mastermindProof2 and salt once; build the tampered proofs with copy(piA = p.piC, piC = p.piA); delete the commented lines.",
+      "coverageRisk": "none: same inputs",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C25-23",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CceImpactMeasurementTest.scala:29-33",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/CceImpactMeasurementTest.scala:91-101",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PubKeyValidatorTest.scala:18-25",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PubKeyValidatorTest.scala:47-56",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/MembershipTokenTest.scala:110-112"
+      ],
+      "claim": "Small dead code: CceImpactMeasurementTest.exPrices (:30-33) and compileRaw (:92-101) are never used. PubKeyValidatorTest mixes in ScalaCheckPropertyChecks without using it, spells out an Options value equal to Options.debug (:20-25) and keeps commented printlns (:47-56). MembershipTokenTest calls requireSignatures(Set(Alice)) twice in the burn tx (:110 and :112).",
+      "action": "Delete exPrices and compileRaw; in PubKeyValidatorTest drop ScalaCheckPropertyChecks, use given Options = Options.debug and delete the comments; drop the second requireSignatures.",
+      "coverageRisk": "none: no assertion changes",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 4 findings of scope merge-duplicate-tests, to-property or main-bug; 3 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

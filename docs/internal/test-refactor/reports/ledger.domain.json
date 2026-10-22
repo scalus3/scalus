@@ -1,0 +1,598 @@
+{
+  "cluster": "ledger.domain",
+  "summary": "The cluster is cheap: 35 suites, none above 0.4 s (CborSerializationTest 0.4 s, the rest under 0.05 s), so there are no ci-time findings (C7). The newer regression suites (repeated elements, pointer addresses, hard-fork bound, native scripts, inline datums, translation encodings) are precise and pin ledger references; they copy one hand-written CBOR kit three times (C05-17). The older suites repeat each other: SlotConfig anchors in three files, Word64 round trips in three, Timelock and Base58 example round trips that their own properties cover, and Blockfrost JSON round trips in two files. Gaps are in error paths and operators: Bech32 rejections, NonNegativeInterval comparisons and division, TaggedSeq tag decoding, Value predicates. One main-code defect: Timelock.blockfrostReadWriter writes a slot as a JSON string and reads it as a number (C05-1). Generator gaps: Word64 skips middle magnitudes so flatBytesCount branches stay unexecuted (C05-4), ProtocolVersion never reaches majors 11-12 and MOf m never 0 (C05-5); F-7 (Coin never 0) is already logged and not re-reported.",
+  "behaviors": [
+    {
+      "pass": "Base58",
+      "name": "encode/decode, leading zeros, invalid characters",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Base58Test.scala:9-109"
+      ]
+    },
+    {
+      "pass": "Bech32",
+      "name": "decode/encode valid BIP-173 vectors",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Bech32Test.scala:18-33"
+      ]
+    },
+    {
+      "pass": "Bech32",
+      "name": "rejects bad checksum, characters, HRP, padding (see C05-3)",
+      "tests": []
+    },
+    {
+      "pass": "BootstrapWitness",
+      "name": "addrKeyHash golden vector",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/BootstrapWitnessTest.scala:8-25"
+      ]
+    },
+    {
+      "pass": "CBOR codecs",
+      "name": "round trip of ~55 ledger types via ArbitraryInstances",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/CborSerializationTest.scala:11-222",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/TimelockTest.scala:340-366",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Word64Test.scala:192-196"
+      ]
+    },
+    {
+      "pass": "CBOR codecs",
+      "name": "keep original bytes (KeepRaw, Sized, inline datums, native scripts)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/KeepRawTest.scala:25-48",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/SizedTest.scala:23-37",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/DatumOptionTest.scala:50-103",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/NativeScriptTest.scala:48-227"
+      ]
+    },
+    {
+      "pass": "CBOR decoders",
+      "name": "protocol-version-dependent rejection: repeats, pointers, hard-fork bound",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/RepeatedElementsTest.scala:105-236",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/PointerAddressDecodingTest.scala:76-108",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/HardForkInitiationDecodingTest.scala:39-108"
+      ]
+    },
+    {
+      "pass": "TaggedSeq types",
+      "name": "dedupe/order/strict construction",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/TaggedSeqTest.scala:7-34"
+      ]
+    },
+    {
+      "pass": "TaggedSeq types",
+      "name": "tag 258 decoding and non-empty check (see C05-15)",
+      "tests": []
+    },
+    {
+      "pass": "CostModels",
+      "name": "language view encoding",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/CostModelsTest.scala:8-34"
+      ]
+    },
+    {
+      "pass": "ProtocolParams",
+      "name": "Blockfrost and cardano-cli JSON codecs, schema types, error messages, diff, CardanoInfo.verify",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/ProtocolParamsTest.scala:13-111",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ProtocolParamsJsonTest.scala:10-87",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ProtocolParamsDiffTest.scala:10-67"
+      ]
+    },
+    {
+      "pass": "SlotConfig",
+      "name": "slot/time/epoch arithmetic and Instant conversions",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/SlotConfigParityTest.scala:31-93",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/SlotConfigTest.scala:16-52",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/SlotConfigInstantTest.scala:21-124"
+      ]
+    },
+    {
+      "pass": "Value/MultiAsset/Coin",
+      "name": "arithmetic, overflow, equality",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ValueArithmeticTest.scala:12-49",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/ValueTest.scala:7-64"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "isPositive/isNegative, decoder size check (see C05-14)",
+      "tests": []
+    },
+    {
+      "pass": "NonNegativeInterval",
+      "name": "reduce, +, *(Long), equals/hashCode, fee formula",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/NonNegativeIntervalTest.scala:25-161"
+      ]
+    },
+    {
+      "pass": "NonNegativeInterval",
+      "name": "comparisons, /, *(Int), *(interval), FromData (see C05-2)",
+      "tests": []
+    },
+    {
+      "pass": "ExUnits",
+      "name": "fitsWithin/exceeds, fee",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ExUnitsTest.scala:9-31",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/NonNegativeIntervalTest.scala:82-98"
+      ]
+    },
+    {
+      "pass": "RefScriptFee",
+      "name": "tiered reference-script fee, overflow, argument checks",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/RefScriptFeeTest.scala:7-63"
+      ]
+    },
+    {
+      "pass": "Timelock",
+      "name": "evaluate, interval helpers",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/TimelockTest.scala:18-281"
+      ]
+    },
+    {
+      "pass": "Timelock",
+      "name": "Blockfrost JSON read/write (see C05-1)",
+      "tests": []
+    },
+    {
+      "pass": "Word64",
+      "name": "construction, arithmetic, CBOR and flat encoding",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Word64Test.scala:12-225",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Word64FlatTest.scala:22-62"
+      ]
+    },
+    {
+      "pass": "Language/Builtins",
+      "name": "introducedInVersion, PlutusV4 well-formedness at Dijkstra",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/LanguageTest.scala:12-43"
+      ]
+    },
+    {
+      "pass": "LedgerToPlutusTranslation",
+      "name": "pointer addresses, NewConstitution, UpdateCommittee, ChangedParameters encodings",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/PointerAddressTranslationTest.scala:26-54",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/NewConstitutionEncodingTest.scala:51-99",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/UpdateCommitteeEncodingTest.scala:49-70",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ChangedParametersEncodingTest.scala:26-69"
+      ]
+    },
+    {
+      "pass": "v1 contexts Eq",
+      "name": "Eq[DCert], Eq[v1.ScriptPurpose] field comparison",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ContextsEqTest.scala:26-57"
+      ]
+    },
+    {
+      "pass": "AssocMap (prelude)",
+      "name": "ledger-ordered redeemer lookup, fromList order",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/RedeemersAssocMapTest.scala:45-116"
+      ]
+    },
+    {
+      "pass": "Anchor/PoolMetadata/Relay",
+      "name": "UTF-8 byte-length bounds",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ChangedParametersEncodingTest.scala:76-101"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C05-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Timelock.scala:229-249",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Timelock.scala:266-269",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/ProtocolParamsTest.scala:20-28"
+      ],
+      "claim": "Timelock.blockfrostReadWriter cannot read its own output for TimeStart/TimeExpire. The writer builds ujson.Obj(\"slot\" -> slot) with slot: Long (SlotNo = Long), and ujson 4.4.3 converts a bare Long through JsonableLong to a Str (ujson/Value.scala:151; the same trap ProtocolParamsTest:20-28 documents for ProtocolParams). The reader does json(\"slot\").num.toLong, which throws on a Str. So write(TimeStart(10)) gives {\"type\":\"after\",\"slot\":\"10\"} and read of that fails. Real Blockfrost sends a number, so BlockfrostProvider (the only reader, BlockfrostProvider.scala:1250) works; the public writer is wrong. Also .num.toLong loses precision above 2^53. By reading, not executed; the reader branches all/any/atLeast/after/before (257-270) are uncovered in the baseline.",
+      "action": "Add a property test in TimelockTest: for any generated Timelock, read(write(t))(using Timelock.blockfrostReadWriter) == t, plus one example that reads a Blockfrost-shaped JSON with numeric slots. Main-code note only: write the slot with ujson.Num(slot.toDouble) or read both Num and Str (as the ProtocolParams reader does).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-57",
+      "verification": "Timelock.scala:247-250: the writer builds ujson.Obj(\"type\"->\"after\", \"slot\"->slot) with slot: SlotNo = Long (Timelock.scala:12,37-38). \"slot\"->slot is a varargs item typed (String, Value), so the Long goes through ujson JsonableLong. In ujson 4.4.3 that conversion returns Str(i.toString) (ujson/Value.scala:151, read from the sources jar). The reader at Timelock.scala:266-269 calls json(\"slot\").num, and Value.num throws InvalidData on a non-Num (Value.scala:64-67). So read(write(TimeStart(10))) throws. The only production reader is BlockfrostProvider.scala:1250, which gets numeric slots from the API, so that path works. The broken path is the public given used as a writer, for example upickle write(t)(using Timelock.blockfrostReadWriter). No test uses blockfrostReadWriter. The precision loss from .num.toLong above 2^53 is also real."
+    },
+    {
+      "id": "C05-2",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/NonNegativeInterval.scala:57-65",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/NonNegativeInterval.scala:108-180",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/NonNegativeInterval.scala:238-249",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/NonNegativeInterval.scala:337-343",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/NonNegativeIntervalTest.scala:100-111"
+      ],
+      "claim": "NonNegativeInterval has no test for *(Int), *(NonNegativeInterval), /, <, <=, >, >=, the 'overflows Long' rejection of reduceBigInt, or FromData: all of them are uncovered in the baseline (lines 61-63, 108-111, 123-127, 137-177, 246, 338-341). The suite tests only +, *(Long), reduce, equals/hashCode and the fee formula.",
+      "action": "Add law properties over Gen.chooseNum numerators/denominators: exactly one of a<b, a==b, a>b holds and <=, >= agree with them; (a*b)/b == a for b>0; a*(n: Int) == a*(n.toLong); a*b == b*a; fromData(toData(a)) == a. Add one example: reduceBigInt of a fraction whose reduced numerator exceeds Long.MaxValue throws IllegalArgumentException; a / zero throws.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C05-3",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Bech32.scala:128-139",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Bech32.scala:153",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Bech32.scala:224-225",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Bech32Test.scala:10-33"
+      ],
+      "claim": "Bech32Test uses only the five valid BIP-173 vectors. Every rejection path is uncovered: invalid character (130), empty HRP (137), data shorter than the checksum (138), bad checksum (139), encode with an empty HRP (153), and bad 5-bit padding (224-225). A decoder that skips the checksum check passes the suite.",
+      "action": "Add a table test with the BIP-173 invalid vectors (bad checksum, invalid character, empty HRP '1pzry9x0s0muk', too short, mixed case) asserting IllegalArgumentException, and a property: Bech32.decode(Bech32.encode(hrp, bytes)) returns hrp and bytes for random lowercase hrp and random bytes.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C05-4",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ArbitraryInstances.scala:452",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Word64.scala:292-305",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Word64FlatTest.scala:52-53"
+      ],
+      "claim": "Arbitrary[Word64] maps arbitrary[Long], which is uniform over the 64-bit range plus a few special values. Values of 2^14 to 2^56 almost never occur, so flatBytesCount returns 3, 4, 6, 7 and 8 bytes for no sample: lines 299-304 are uncovered although Word64FlatTest has a flat round-trip property. A wrong threshold there sizes the flat buffer wrong and no test notices.",
+      "action": "Generate Word64 by bit length: Gen.choose(0, 64).flatMap(bits => a random value below 2^bits, as a Long), plus the boundaries 2^(7k) - 1 and 2^(7k) for k = 1..9. Keep Arbitrary[Long]-based coverage of values >= 2^63 (bit length 64).",
+      "coverageRisk": "none: widens the inputs of existing properties",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C05-5",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ArbitraryInstances.scala:336-341",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ArbitraryInstances.scala:305-311",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/HardForkInitiationDecodingTest.scala:39-61"
+      ],
+      "claim": "Arbitrary[ProtocolVersion] draws major 1..10, so no sample has major 11 (mainnet today, vanRossemPV) or 12, the largest major a HardForkInitiation may carry; the CBOR round trip of GovAction never reaches the bound that HardForkInitiationDecodingTest pins by hand. The Timelock generator draws MOf m in 1..n, so m = 0 and m > n (both valid CBOR, and m > n is a script that can never validate) never reach the CBOR or evaluate tests.",
+      "action": "Change ProtocolVersion major to Gen.choose(1, 12) with extra weight on 9..12. In genTimelockWithDepth draw m from Gen.choose(0, scripts.length + 1).",
+      "coverageRisk": "none: widens the inputs of existing properties",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C05-6",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/SlotConfigTest.scala:16-42",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/SlotConfigParityTest.scala:49-79",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/SlotConfigInstantTest.scala:21-61",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/SlotConfigInstantTest.scala:63-85",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/SlotConfigInstantTest.scala:87-124",
+        "scalus-core/jvm/src/main/scala/scalus/cardano/ledger/SlotConfigPlatform.scala:15-18"
+      ],
+      "claim": "SlotConfigTest's three epochOf example tests (16-42) assert the same anchors and boundaries as SlotConfigParityTest:49-79 (mainnet 4492800 -> 208, +432000 -> 209, clamp below; preprod 86400 -> 4, 518400 -> 5; preview 86399/86400). In SlotConfigInstantTest, slotToInstant/instantToSlot are one-line delegations to slotToTime/timeToSlot (SlotConfigPlatform.scala:15-18); the six network examples (21-61) and the two 'after zeroSlot' examples (87-101) repeat values SlotConfigParityTest pins, and the consistency properties 103-124 already tie them to slotToTime/timeToSlot. The property at 74-85 starts from a slot exactly as 63-72 does and asserts a consequence of it.",
+      "action": "Move the property SlotConfigTest:44-52 into SlotConfigParityTest and delete SlotConfigTest.scala. In SlotConfigInstantTest keep the two consistency properties (103-124) and one round-trip property (63-72); delete 21-61, 74-101.",
+      "coverageRisk": "low: the delegations are one line each; the Parity test keeps every anchor value",
+      "ciSavingSec": 0,
+      "linesRemoved": 80,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "Most duplication is real. The SlotConfigInstantTest deletions are safe: SlotConfigPlatform.scala:15-18 only delegates, and the consistency properties at 103-124 remain. One SlotConfigTest assertion has no equivalent: mainnet epochOf(0L)==208 (SlotConfigTest:24). epochOf is `if slot <= zeroSlot then zeroEpoch else zeroEpoch + (slot - zeroSlot)/epochLength` (SlotConfig.scala:26-28). SlotConfigParityTest:53 checks the clamp only at 4492799. Without the clamp, that slot still gives 208 because (-1)/432000 truncates to 0. Preprod epochOf(0) also passes without the clamp, since -86400/432000 truncates to 0. Only mainnet epochOf(0) fails if the clamp is removed: it would give 208 + (-10) = 198. Corrected action: before you delete SlotConfigTest, move assert(epochOf(0L)==208) for mainnet, or any mainnet slot below 4492800-432000, into the Parity mainnet epoch test, together with the property at 44-52. Also update the SlotConfigInstantTest scaladoc (line 15), which refers to SlotConfigTest."
+    },
+    {
+      "id": "C05-7",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Base58Test.scala:17-41",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Base58Test.scala:43-59",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Base58Test.scala:91-97"
+      ],
+      "claim": "Base58Test:43-59 round-trips seven fixed arrays; the property at 91-97 asserts the same law for arbitrary arrays. The only cases the property rarely draws are leading zero bytes, which 17-28 and 33 already pin. The encode-vector test (30-35) and the decode-vector test (37-41) assert the two directions of the same three pairs; 'encode leading zeros' (17-22) and the vector Array(0,0,0,0) -> '1111' (33) repeat each other.",
+      "action": "Delete 43-59. Make the property draw a prefix of 0-3 zero bytes before the random array. Merge 17-41 into one table of (bytes, string) pairs asserting both encode and decode.",
+      "coverageRisk": "none: the property with a zero-byte prefix covers every deleted case",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Base58Test:43-59 uses seven fixed arrays. Arrays of up to 100 bytes and the zero-leading cases are within reach of the Arbitrary[Array[Byte]] property at 91-97, once that property gets the proposed prefix of 0-3 zero bytes. A zero prefix plus an empty random part also gives the all-zero arrays. The encode vectors (30-35) and decode vectors (37-41) are the same three pairs in both directions. Leading-zero encode (17-22) and Array(0,0,0,0)->\"1111\" (33) test the same behavior. A single table of (bytes, string) pairs that asserts both encode and decode keeps every pair. It also adds decode(\"112\"), which no test checks today."
+    },
+    {
+      "id": "C05-8",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Bech32Test.scala:18-26",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Bech32Test.scala:28-33"
+      ],
+      "claim": "'Bech32 decode' (18-26) only checks that decode does not throw for the five vectors; 'Bech32 must round trip' (28-33) decodes the same vectors and fails on the same throw, so the first test can never fail alone.",
+      "action": "Delete 18-26.",
+      "coverageRisk": "none: 28-33 decodes every vector",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Bech32Test:18-26 only calls Bech32.decode(s) in a try block and fails on any throw. Bech32Test:28-33 calls Bech32.decode(s) on the same testData vectors. A throw there also fails the test, and that test also checks the re-encode. So 18-26 cannot fail unless 28-33 also fails."
+    },
+    {
+      "id": "C05-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Word64Test.scala:148-171",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Word64Test.scala:192-196",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/CborSerializationTest.scala:130-131",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/Word64FlatTest.scala:11-62"
+      ],
+      "claim": "Word64 CBOR round trip is tested three times: two example lists (Word64Test:148-171), the property Word64Test:192-196 (whose generator yields values >= 2^63 in about half the samples), and CborSerializationTest:130-131. Word64FlatTest has ten one-line example tests (22-50) of the round trip that the property at 52-53 and the >= 2^63 table at 55-62 also assert; its try/catch of StackOverflowError (12-20) only rewords a failure.",
+      "action": "Delete Word64Test:148-171 and CborSerializationTest:130-131. Fold Word64FlatTest into Word64Test as one table test over the 7-bit boundaries (0, 127, 128, 2^14, ..., Long.MaxValue, 2^63, MaxValue) that checks flatBytesCount and the round trip, plus the existing property; drop the StackOverflowError catch. Do after C05-4.",
+      "coverageRisk": "none: the boundary table keeps every deleted value",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Arbitrary[Word64] is arbitrary[Long].map(Word64(_)) (ArbitraryInstances.scala:452). ScalaCheck chooseNum puts about half its mass on the special values 0, 1, -1, Long.MinValue and Long.MaxValue. So the CBOR property at Word64Test:192-196 almost always draws Zero, One, Long.MaxValue, 2^63 (MinValue) and MaxValue (-1). It also draws random values above 2^63, such as 12345678901234567890. CborSerializationTest:130-131 runs the same Arbitrary through Cbor.encode/decode with == (lines 238-246), which duplicates the property. The 'CBOR encoding format' test (174-185) stays. The flat example tests (Word64FlatTest:22-50) are mid-range members of the flatBytesCount branches (Word64.scala:292-306). A 7-bit boundary table covers each branch at its edges. Caveat: the folded test must keep the bitSize==80 assertion and the round trip for values >= 2^63 (Word64FlatTest:55-62). Flat.bitSize is flatBytesCount*8 (Word64.scala:311), so asserting flatBytesCount==10 in the table is equivalent."
+    },
+    {
+      "id": "C05-10",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/TimelockTest.scala:283-338",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/TimelockTest.scala:340-344",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/CborSerializationTest.scala:76-77",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/CborSerializationTest.scala:100-101"
+      ],
+      "claim": "TimelockTest:283-287 (AddrKeyHash CBOR round trip) repeats CborSerializationTest:76-77. The round trips of Signature (289-294), TimeStart (296-301), TimeExpire (303-308) and three fixed AllOf/AnyOf/MOf trees (310-338) are instances of 'Any Timelock structure round-trip' (340-344), whose generator produces all six constructors (gen-stats: Signature 55 %, TimeStart/TimeExpire 42 %, AllOf/AnyOf/MOf 17.5 %), and of CborSerializationTest:100-101.",
+      "action": "Delete 283-338. Keep 340-344 and the depth-5 test 346-366 (the generator caps depth at 3).",
+      "coverageRisk": "none: the generated property covers every deleted shape",
+      "ciSavingSec": 0,
+      "linesRemoved": 55,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "TimelockTest:283-287 (forAll AddrKeyHash, borer Cbor.encode/decode) checks the same thing as CborSerializationTest:76-77 (testSerializationRoundTrip[AddrKeyHash], same Arbitrary). TimelockTest:289-338 round-trips through toCbor/fromCbor (368-369). That is the same entry point as the property at 340-344. The property draws Gen.resize(5, genTimelock) with depth min(5,3)=3 and all six constructors (ArbitraryInstances.scala:263-311). One minor loss: 296-308 draw slots from arbitrary Long, which includes negative values. genSlotNo is Gen.choose(0, Long.MaxValue) (ArbitraryInstances.scala:258), so negative-slot round trips are no longer tested. A negative slot is outside the CDDL uint domain, so this is not valid coverage. The depth-5 test at 346-366 stays."
+    },
+    {
+      "id": "C05-11",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/TimelockTest.scala:39-153",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/TimelockTest.scala:228-249",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Timelock.scala:60-90"
+      ],
+      "claim": "The AllOf/AnyOf/MOf evaluate examples (39-153, 7 tests that each rebuild the same 3-4 key hashes) are instances of three composition laws: AllOf(xs) = xs.forall(eval), AnyOf(xs) = xs.exists(eval), MOf(m, xs) = xs.count(eval) >= m. The two 'properties' at 228-249 generate an interval that Signature ignores, so they are the Signature examples at 18-37 again.",
+      "action": "Replace 39-139 and 228-249 with three properties over generated children (TimelockGen), key sets and ValidityInterval, asserting the laws above. Keep the MOf m=0 example (141-153), the TimeStart/TimeExpire boundary examples and the nested example (199-225). Move keyHash(\"deadbeef\") etc. into private vals.",
+      "coverageRisk": "low: the laws hold for every generated child; MOf m=0 and boundary examples stay",
+      "ciSavingSec": 0,
+      "linesRemoved": 90,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The laws hold for every input, so I found no counterexample. evaluate is AllOf=scripts.forall, AnyOf=scripts.exists, and MOf=isValidMOf (Timelock.scala:75-97). For any m, including m<=0, isValidMOf equals count(eval)>=m. The tests at 228-249 do only check Signature, which ignores the interval. The gap is in the inputs. TimelockGen makes Signature children from fresh random genKeyHash values (ArbitraryInstances.scala:277,297). If the key set is generated on its own, every Signature child is almost always false. Then AllOf over Signature children is never true, and AnyOf is true only through time locks. Those are the shapes 39-139 pin: all keys present, exactly m of n signers. Corrected action: build the key set as a random subset of the key hashes found in the generated script, and also allow the empty set. Add classify/collect, or one example per outcome, so that true and false results both occur for each combinator. Draw m so that count==m is reachable."
+    },
+    {
+      "id": "C05-12",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/RedeemersAssocMapTest.scala:53-70",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/RedeemersAssocMapTest.scala:20"
+      ],
+      "claim": "The on-chain test passes when term.toString contains \"true\". A result such as an error term or constant whose printing includes 'true' anywhere passes too; the suite mixes in EvalTestKit (line 20) but uses none of its helpers.",
+      "action": "Replace 63-69 with assertTermEvalEq(applied, Term.Const(Constant.Bool(true))) from EvalTestKit, and add the negative case: a Minting purpose absent from the map evaluates to false.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C05-13",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/ValueTest.scala:7-64",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ValueArithmeticTest.scala:12-49",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Value.scala:23",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Value.scala:136-140"
+      ],
+      "claim": "The jvm-only ValueTest checks Value addition with three examples built from arbitrary[...].sample.get, and 'Value equality checks' (45-64) asserts reflexivity of a case class and ada1 == multi3 where both are Value.lovelace(1000): no mutation of Value breaks those lines. The examples are instances of the CommutativeGroup[Value] laws, and unary_- and CommutativeGroup.inverse/empty are uncovered in the baseline.",
+      "action": "Delete ValueTest.scala. In shared ValueArithmeticTest add properties over values with amounts bounded to +/-2^40 (to avoid overflow): a + b == b + a, (a + b) + c == a + (b + c), a + Value.zero == a, a + (-a) is zero, and (a + b).coin == a.coin + b.coin; keep one example that Value(coin, MultiAsset.empty) == Value.lovelace(coin).",
+      "coverageRisk": "none: properties cover the deleted examples and add unary_-",
+      "ciSavingSec": -0.5,
+      "linesRemoved": 25,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "ValueTest's examples are weak. For example, 'equality checks' (45-64) compares Value.lovelace(1000) with itself. The CommutativeGroup laws do hold mathematically. The proposed generator has two traps. (1) Zero amounts: MultiAsset.binOp drops entries whose combined value is 0 (Types.scala:286-290). So if a holds a zero amount, a + Value.zero != a. Value.asset(...,0L) and fromPolicy (Value.scala:60-98) can build such a value, so the generator must exclude 0. (2) No overlap: independently drawn 28-byte policies almost never collide. Then a+b never sums two amounts under the same policy and asset name, which the deleted example checks (10+5, 20+15 under one policy, ValueTest:13-33). Only a+(-a) would reach that path. Corrected action: draw policies and asset names from a small fixed pool, with non-zero amounts bounded to +/-2^40. Keep one same-policy summation example, or assert the per-asset law (a+b).assets.asset(p,n) == a(p,n)+b(p,n). Note also that Value.fromPolicy has no other test in scalus-core."
+    },
+    {
+      "id": "C05-14",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Value.scala:25-27",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Value.scala:121-129",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ValueArithmeticTest.scala:12-49"
+      ],
+      "claim": "Value.isPositive, Value.isNegative and the Value decoder's 'Expected 2 elements' rejection (line 127) are uncovered in the baseline. isPositive is false for (0 lovelace, positive tokens), a choice no test pins.",
+      "action": "Add examples to ValueArithmeticTest: isPositive/isNegative for ADA-only, token-only, mixed-sign values; and decoding a 3-element CBOR array as Value fails.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C05-15",
+      "check": "C6",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/TaggedSeqTest.scala:7-35",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/TaggedSeq.scala:18-21",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/TaggedSeq.scala:33-37"
+      ],
+      "claim": "TaggedSeqTest names a test 'TaggedSet' but tests TaggedOrderedSet; the test 'TaggedOrderedSet' repeats line 8 at line 13 and then tests TaggedOrderedStrictSet, whose '=== Seq' inside assertThrows (15, 32) is never evaluated. No test decodes CBOR: the wrong-tag rejection (TaggedSeq.scala:36) and the empty-set rejection at Conway (checkNonEmpty, 20) are uncovered.",
+      "action": "Rename the tests after the type they test, delete line 13 and the dead '=== ...' parts. Add CBOR tests: a set with tag 258 and without it decodes the same; tag 259 is rejected; an empty TaggedSortedSet decodes before Conway and is rejected from Conway.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C05-16",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/NonNegativeIntervalTest.scala:68-73",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/NonNegativeIntervalTest.scala:82-98",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ExUnitsTest.scala:29-31"
+      ],
+      "claim": "NonNegativeIntervalTest:68-73 computes the fee for 100000 mem / 50000000 steps = 9375 by hand; ExUnits.fee at 82-98 asserts the same inputs and result through the production method. Separately, ExUnitsTest 'fitsWithin rejects units over on both components' (29-31) never calls fitsWithin.",
+      "action": "Delete 68-73. In ExUnitsTest:30 add assert(!ExUnits.enormous.fitsWithin(maxTxExUnits)).",
+      "coverageRisk": "none: 82-98 keeps the 9375 golden value",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "ExUnits.fee is exactly Coin((prices.priceMemory*memory + prices.priceSteps*steps).ceil) (Types.scala:535-539). NonNegativeIntervalTest:68-73 computes the same expression by hand with the same prices (precision 15) and the same inputs (100000/50000000) as the ExUnits.fee test at 82-98, which asserts 9375. The fee1 and fee3 cases in the same test still exercise the hand arithmetic. Separately, ExUnitsTest:29-31 calls only exceeds (= !fitsWithin, Types.scala:527) and never calls fitsWithin, as claimed. Adding assert(!ExUnits.enormous.fitsWithin(maxTxExUnits)) is correct."
+    },
+    {
+      "id": "C05-17",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/RepeatedElementsTest.scala:36-62",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/RepeatedElementsTest.scala:90-103",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/PointerAddressDecodingTest.scala:27-74",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/HardForkInitiationDecodingTest.scala:26-35",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/HardForkInitiationDecodingTest.scala:83-84"
+      ],
+      "claim": "Three suites copy the same hand-written CBOR kit: the Raw encoder class and given, cbor, cborArray, cborMap, value, assertRejected (cause-chain message search) and body(pv)(fields*) (a minimal TransactionBody decoded at a protocol version). RepeatedElementsTest and PointerAddressDecodingTest are identical in these 40 lines.",
+      "action": "Create scalus-core/shared/src/test/scala/scalus/cardano/ledger/RawCbor.scala (a trait or object with these helpers) and use it in the three suites.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C05-18",
+      "check": "C5",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/ProtocolParamsTest.scala:13-18",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ProtocolParamsJsonTest.scala:10-14",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/ProtocolParams.scala:87-89"
+      ],
+      "claim": "ProtocolParamsJsonTest:10-14 writes mainnet params with blockfrostParamsReadWriter and reads them back; ProtocolParamsTest:13-18 does the same through toBlockfrostJson (a one-line wrapper of the same write, ProtocolParams.scala:87-89) for mainnet, preprod and preview. ProtocolParamsTest uses only shared APIs (CardanoInfo, ujson) but lives in jvm/, so JS and Native never run its schema check.",
+      "action": "Move ProtocolParamsTest's two tests into the shared ProtocolParamsJsonTest, delete ProtocolParamsJsonTest:10-14 and ProtocolParamsTest.scala.",
+      "coverageRisk": "none if the moved tests compile on JS/Native; otherwise keep the file in jvm and only delete 10-14",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "toBlockfrostJson is write(params)(using blockfrostParamsReadWriter) (ProtocolParams.scala:87-89). So ProtocolParamsJsonTest:10-14 (mainnet only) is a subset of ProtocolParamsTest:13-18 (mainnet, preprod and preview, with a diff message). Every API that ProtocolParamsTest uses is in shared main code: CardanoInfo (shared/.../CardanoInfo.scala:14), ProtocolParams.diff (ProtocolParams.scala:54), toBlockfrostJson/fromBlockfrostJson, and ujson (upickle %%% in build.sbt:502). The file has no JVM-only imports, so moving it to shared should compile on JS and Native."
+    },
+    {
+      "id": "C05-19",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ChangedParametersEncodingTest.scala:72-101",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/RedeemersAssocMapTest.scala:84-116"
+      ],
+      "claim": "Two suites hide in files named after another suite: TextByteLengthTest (Anchor, PoolMetadata, Relay byte-length bounds) in ChangedParametersEncodingTest.scala, and AssocMapOrderTest (prelude.AssocMap.fromList order) in RedeemersAssocMapTest.scala.",
+      "action": "Move TextByteLengthTest to its own file TextByteLengthTest.scala. Move AssocMapOrderTest to the prelude AssocMap tests (scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C05-20",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/CborSerializationTest.scala:156-171",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/CostModelsTest.scala:27-31",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/TimelockTest.scala:368-369",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/KeepRawTest.scala:12-48",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/SizedTest.scala:10-21"
+      ],
+      "claim": "Dead or redundant test code: 15 commented-out lines in CborSerializationTest; three unused vals plutusV1Key/V2Key/V3Key in CostModelsTest; an unused [A: Decoder] type parameter on TimelockTest.decode; in KeepRawTest, reencoded and reencoded2 (44-47) call the same object (Cbor is scalus.serialization.cbor.Cbor), the 'equal to itself' tests (KeepRawTest:13-23, SizedTest:11-21) assert case-class reflexivity, carry a 'TODO not sure why' comment and use s-interpolators without arguments. KeepRawTest is jvm-only for no reason.",
+      "action": "Delete the dead lines; replace the two 'equal to itself' tests with one assertion each that different payloads compare unequal; move KeepRawTest to shared next to SizedTest.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C05-21",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/NativeScriptTest.scala:78-98",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/NativeScriptTest.scala:133-153",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/NativeScriptTest.scala:18-22",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/DatumOptionTest.scala:17-21"
+      ],
+      "claim": "NativeScriptTest builds the same one-input transaction with a native-script witness twice (79-88 and 134-143) and then runs the same canonical-to-raw replace and assertions; the address val is copied from DatumOptionTest.",
+      "action": "Extract a private def witnessRoundTrip(timelock, canonicalHex, rawHex) and use it in both tests.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 10 findings of scope merge-duplicate-tests, to-property or main-bug; 7 confirmed, 3 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

@@ -1,0 +1,439 @@
+{
+  "cluster": "uplc.builtin",
+  "summary": "The cluster is cheap: about 1.8 s on the JVM for 15 suites; the only cost above 0.25 s is FromDataDerivationTest (0.94 s), which spawns the uplc CLI once per sample, and its two deriveEnum tests are the same test (C36-9). The main findings are two main-code defects found by reading: the JVM BuiltinArray.apply truncates the BigInt index with intValue, so off-chain indexArray(arr, 2^32) returns element 0 where the CEK fails (C36-1), and the upickle DataReadWriter that Data still exposes writes the Constr index as a JSON string and reads it with .num, so it cannot read back any Constr (C36-2). Coverage gaps that matter: every CBOR Data decoder rejection path (64-byte chunk bound, unknown tag, non-bytes bignum, simple values) and the Constr tag boundaries 6/7 and 127/128 (C36-3); the public BuiltinValue.fromData/fromEntryList API (C36-5). Several assertions are weaker than their test names: the value tests check only lookupCoin and cannot see a zero entry (C36-4), the BuiltinArray 'flat encoding' tests never put an array into the flat program (C36-11), and two files assert nothing (C36-12). BuiltinValueCompileTest repeats the BuiltinValueTest examples through the compiler (C36-7) and is built by hand (C36-8). Not reported: FromDataMacros/ToDataMacros/UplcReprMacroUtils coverage is unreliable because they run at compile time (F-12); the Bitwise.scala:525/578 guards are unreachable (length*8 never exceeds Int); the byteStringArb branch with weight 0 never fires; the Data Constr-tag generator gap (posNum, never tag 0 or >= 128) is C07-10 and the missing BuiltinValue constant generator is C07-13; the evalTo* helper pattern follows C10-15.",
+  "behaviors": [
+    {
+      "pass": "Data CBOR codec (DataApi.dataCborEncoder/Decoder)",
+      "name": "encode/decode I, B (64-byte chunks), List, Map with duplicate keys, Constr tags 121-127, 1280-1400, 102 with unsigned 64-bit index",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataCborCodecTest.scala:24-196",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataCborCodecTest.scala:198-230"
+      ]
+    },
+    {
+      "pass": "Data CBOR codec (DataApi.dataCborDecoder)",
+      "name": "rejects chunks over 64 bytes, unknown tags, non-bytes bignum payloads, simple values (see C36-3)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataCborCodecTest.scala:107-150"
+      ]
+    },
+    {
+      "pass": "Data JSON codec (dataJsonCodec, toJson/fromJson)",
+      "name": "standard Cardano JSON form, big integers, key order, junk rejected",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataJsonTest.scala:12-110"
+      ]
+    },
+    {
+      "pass": "Data JSON (toJsonIndented extension, DataReadWriter upickle given)",
+      "name": "indented extension and the legacy upickle ReadWriter (see C36-2)",
+      "tests": []
+    },
+    {
+      "pass": "Pretty[Data]",
+      "name": "Constr/Map/List rendering with rainbow brackets (DataApi.scala:363-388 unexecuted)",
+      "tests": []
+    },
+    {
+      "pass": "Flat[Data]",
+      "name": "Data flat-encodes as a CBOR byte string; only an assertion-free probe in the cluster, real coverage in FlatTest",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/TestFlatData.scala:11-39",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:438-455"
+      ]
+    },
+    {
+      "pass": "FromData/ToData derivation macros",
+      "name": "derived codecs for an enum ADT and a 7-field record, on JVM, Scalus CEK and the uplc CLI",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/FromDataDerivationTest.scala:134-193"
+      ]
+    },
+    {
+      "pass": "FromData/ToData derivation macros",
+      "name": "@UplcRepr(ProductCaseOneElement) encodes as the bare field; opaque type fields",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/FromDataDerivationTest.scala:195-218",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/OpaqueTypeDataDerivationTest.scala:28-42"
+      ]
+    },
+    {
+      "pass": "FromData/ToData derivation macros",
+      "name": "pinned encodings of v1 ledger types (TxId, TxInfo, ScriptPurpose)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataDerivationTest.scala:11-58"
+      ]
+    },
+    {
+      "pass": "Data constructors in @Compile code",
+      "name": "Data.unit/I/B/Constr/List/Map lower and evaluate, constant and variable arguments",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataConstructorCompileTest.scala:34-182"
+      ]
+    },
+    {
+      "pass": "BuiltinArray / array builtins (CIP-156)",
+      "name": "listToArray, lengthOfArray, indexArray (in/out of bounds) through the compiler",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinArrayTest.scala:15-177"
+      ]
+    },
+    {
+      "pass": "BuiltinArray / array builtins (CIP-156)",
+      "name": "JVM implementations Builtins.lengthOfArray/listToArray/indexArray and BuiltinArray.apply (Builtins.scala:469-479 unexecuted; see C36-1)",
+      "tests": []
+    },
+    {
+      "pass": "BuiltinValueOps (CIP-153)",
+      "name": "insertCoin, lookupCoin, unionValue, valueContains, scaleValue, toData/fromData, bounds and overflow errors",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinValueTest.scala:18-203"
+      ]
+    },
+    {
+      "pass": "Value builtins in @Compile code",
+      "name": "Builtins.insertCoin/lookupCoin/unionValue/valueContains/scaleValue/valueData/unValueData lower and evaluate; BuiltinValue as a type argument",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinValueCompileTest.scala:60-544"
+      ]
+    },
+    {
+      "pass": "BuiltinValue API (BuiltinValueApi)",
+      "name": "fromData / fromEntryList normalizing constructors (unused in the repo, unexecuted)",
+      "tests": []
+    },
+    {
+      "pass": "ByteString builtins",
+      "name": "integerToByteString both endians with budgets, width overflow fails; utf8 interpolator",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/ByteStringTest.scala:11-61"
+      ]
+    },
+    {
+      "pass": "BLS12-381 platform builtins",
+      "name": "zero encodings, identity, doubling, immutability, hashCode, Miller loop identity, g1/g2 interpolators",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BLS12_381BuiltinsTest.scala:25-160"
+      ]
+    },
+    {
+      "pass": "BLS12-381 platform builtins",
+      "name": "MSM equals sum of scalarMul, compress round trip, inverse, bilinearity",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BLS12_381PropertiesTest.scala:70-115"
+      ]
+    },
+    {
+      "pass": "ripemd_160",
+      "name": "empty input and two known vectors",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/Ripemd_160BuiltinsTest.scala:9-22"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C36-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/BuiltinArray.scala:48",
+        "scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:1293-1298",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/Builtins.scala:479",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinArrayTest.scala:125-134,168-177"
+      ],
+      "claim": "By reading, not executed: the JVM BuiltinArray.apply indexes with n.intValue, which keeps only the low 32 bits. Builtins.indexArray(arr, BigInt(2).pow(32)) on a non-empty array returns arr(0), and 2^32 + 1 returns arr(1), where the CEK IndexArray checks the BigInt against [0, length) and fails. Off-chain evaluation of @Compile code (compiled.code, EvalTestKit's JVM side) and on-chain evaluation then disagree. Builtins.scala:469-479 never executes in the baseline: BuiltinArrayTest only evaluates UPLC, so its out-of-bounds tests (5 and -1) never reach the JVM path. The exception class differs too (IndexOutOfBoundsException, documented at Builtins.scala:476-478); that is by design and not part of this finding.",
+      "action": "Add a JVM-side test: Builtins.indexArray(BuiltinArray(BigInt(1), BigInt(2)), n) must throw for n = 2^32, 2^32 + 1 and -(2^32), as the CEK does for the same term. Main-code note: in BuiltinArray.apply check `n < 0 || n >= array.length` before `n.toInt` and throw (BuiltinException or IndexOutOfBoundsException, as the doc says).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "findingsLog": "F-75",
+      "verdict": "CONFIRMED",
+      "verification": "The finding holds. One correction: BuiltinArray.scala:48 is in shared/, so the defect is on every platform, not only the JVM. `def apply(n: BigInt): A = array(n.intValue)` keeps the low 32 bits. BigInt(2^32).intValue == 0, (2^32+1).intValue == 1 and (-(2^32)).intValue == 0, so each call returns an element instead of throwing. Builtins.indexArray (Builtins.scala:479) delegates to it with no bounds check. The CEK IndexArray (Builtin.scala:1293-1298) checks `idx < 0 || idx >= arr.length` on the BigInt and throws BuiltinException. The JIT (scalus-uplc-jit-compiler BuiltinImpls.scala:343-349) does the same check. Reachable when @Compile code runs directly as Scala off-chain with a large index: on-chain it fails, off-chain it returns arr(0) or arr(1). BuiltinArrayTest.scala:125-134 and 168-177 only call term.evaluateDebug (the CEK path), so they never reach BuiltinArray.apply. The proposed test and fix are correct."
+    },
+    {
+      "id": "C36-2",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/DataApi.scala:61-110",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/DataApi.scala:68,79,86,105",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/Data.scala:142"
+      ],
+      "claim": "By reading the upickle 4.4.3 and ujson sources, not executed: DataReadWriter (still a public given in Data's implicit scope, kept for source compatibility since 0107bb88a) writes the Constr index with writeJs(constr: BigInt). upickle's BigIntWriter is a SimpleMapKeyWriter, so the index becomes a JSON string (ujson.Str(\"0\")). The reader takes json.obj(\"constructor\").num, and ujson.Value.num throws InvalidData on a Str. So upickle.default.read[Data](upickle.default.write(Data.Constr(0, Nil))) throws for every Constr. Integers fail the same way: writeJs(value.toLong) goes through visitInt64, which emits a string above 2^53, and values beyond Long go through BigIntWriter; the reader's .num.toLong then throws (and would lose precision through Double if it did not). No test anywhere uses DataReadWriter (DataApi.scala:66-108 unexecuted).",
+      "action": "Add a test in DataJsonTest: for Data.Constr(0, [I(1)]), I(2^53 + 1) and I(2^64), assert upickle.default.read[Data](upickle.default.write(d)) == d. Main-code note: make DataReadWriter delegate to dataJsonCodec (bimap via Data.toJson / Data.fromJson on the rendered ujson value), or deprecate it.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "findingsLog": "F-76",
+      "verdict": "CONFIRMED",
+      "verification": "Verified against the upickle 4.4.3 sources. DataReadWriter (DataApi.scala:61) is a public given in `object Data extends DataApi` (Data.scala:83). It writes `\"constructor\" -> writeJs(constr)`. BigIntWriter is a SimpleMapKeyWriter (upickle-implicits Writers.scala:71, 138-141) whose write0 calls out.visitString, so the index becomes ujson.Str. The reader calls `json.obj(\"constructor\").num`, and ujson Value.scala:64-67 throws InvalidData for anything but ujson.Num. So every Constr round-trip throws. For Data.I, writeJs(Long) goes through visitInt64 (JsVisitor.scala:31-34), which emits visitString when |i| > 2^53. Values beyond Long use BigIntWriter, which also emits a string. `.num` on the read side then throws. A grep of scalus-* sources finds no use of DataReadWriter outside its definition. Small ints in I(...) and B round-trip fine, so the defect is in Constr (every index) and in large I only."
+    },
+    {
+      "id": "C36-3",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/DataApi.scala:188-194",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/DataApi.scala:205-211",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/DataApi.scala:250-266",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/DataApi.scala:140-145",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/DataApi.scala:332-335",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataCborCodecTest.scala:81-97,107-108"
+      ],
+      "claim": "Every rejection path of the CBOR Data decoder is unexecuted in the baseline: a definite bytestring chunk over 64 bytes (194), a bignum tag whose payload is not bytes (211), a tag outside 121-127, 1280-1400, 102 and the bignum tags (262-265), and a non-Data item such as true, null or a float (266). These bounds decide which datums and redeemers Scalus accepts; a mutation that drops the 64-byte check or widens `value < 1401` to `<= 1401` passes every test. The encoder boundaries Constr 6/7 and 127/128 are also unpinned (examples use 3, 7, 1234567890 and 2^63 ranges) and the property generator never produces 0 or tags >= 128 (C07-10). Data.fromCbor(InputStream) and fromCbor(ByteString) are never called.",
+      "action": "Add to DataCborCodecTest, reusing assertRejects: '5841' + 65 bytes (B with a 65-byte chunk), '5f 5841..(65 bytes) ff' (indefinite with an oversized chunk), 'c2 01' (bignum over an int), 'd8 78 80' (tag 120), 'd8 80 80' (tag 128), 'd9 0579 80' (tag 1401), 'f5' and 'f6'. Pin encodings: Constr(6) -> d87f80, Constr(127) -> d9057880, Constr(128) -> d86682188080, and decode each back. One line each for fromCbor(ByteString) and fromCbor(InputStream) on an existing vector.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C36-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinValueTest.scala:42-46,72-78,110-115,205-210",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/BuiltinValueOps.scala:64-69",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/BuiltinValueOps.scala:120",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinValueCompileTest.scala:89-100,233-246,371-393"
+      ],
+      "claim": "'insertCoin with zero removes token', 'unionValue removes zero-sum tokens' and 'scaleValue with zero returns empty' assert only lookupCoin == 0, which is also true when a zero entry or an empty inner map is kept. Mutations that pass: make BuiltinValueOps.scala:120 always `tokenAcc.updated(token, sum)`, or line 69 always keep the empty inner map. The invariant matters: valueData would then emit a zero quantity that unValueData rejects. The plutus-conformance corpus (insertCoin 15 cases, unionValue 9) probably catches these on all platforms, so the hole is local: the tests cannot fail on what their names claim. Other tests in both files also check one lookupCoin where the whole value is known (e.g. unValueData non-empty at BuiltinValueCompileTest:89-100 would pass with an extra token). 'BuiltinValue Constant integration' (205-210) asserts the tpe of a constant built with that type, which no mutation of BuiltinValueOps breaks.",
+      "action": "Assert full value equality (BuiltinValue has structural equals): `assert(v2 == BuiltinValue.empty)`, `assert(merged == BuiltinValue.empty)`, `assert(scaled == BuiltinValue.empty)`, and in tests that build a known value compare with the expected value built by insertCoin. Delete 'BuiltinValue Constant integration' or replace it with a flat/Data round trip of the constant.",
+      "coverageRisk": "none: assertions get stronger; the deleted tpe test checks nothing in BuiltinValueOps",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C36-5",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/BuiltinValueApi.scala:57-72",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/BuiltinValueApi.scala:141-187",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/BuiltinValueOps.scala:142",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/BuiltinValueOps.scala:159-169"
+      ],
+      "claim": "BuiltinValue.fromData and fromEntryList are public, used nowhere in the repository and never executed. They differ from BuiltinValueOps.fromData (the unValueData semantics): on a duplicate currency key the later entry silently replaces the earlier one's tokens (acc.updated), keys over 32 bytes are accepted, and unordered keys are sorted instead of rejected. Whether that is intended is an owner decision; today nothing pins either behavior. Separately, the valueContains shortcut `totalSize(v1) < totalSize(v2) then false` (BuiltinValueOps.scala:142) is unexecuted: every test uses values of equal size.",
+      "action": "Add BuiltinValueTest cases: BuiltinValue.fromData drops zero quantities and empty inner maps, throws IllegalArgumentException on a non-B key and on a non-Map; fromEntryList(toEntryList(v)) == v; pin (or, after an owner decision, reject) the duplicate-currency and 33-byte-key behavior. Add valueContains(single token, two tokens) == false. Main-code note: if the lenient behavior is not intended, deprecate fromData/fromEntryList in favor of BuiltinValueOps.fromData.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C36-6",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinValueTest.scala:54-70,100-108,117-143",
+        "scalus-core/shared/src/test/scala/scalus/uplc/BuiltinValueFlatTest.scala:70-87"
+      ],
+      "claim": "The union, scale and Data round-trip examples are instances of laws over values: lookupCoin(c, t, unionValue(a, b)) == lookupCoin(c, t, a) + lookupCoin(c, t, b); unionValue(a, empty) == a and is commutative; lookupCoin(c, t, scaleValue(k, v)) == k * lookupCoin(c, t, v) and scaleValue(1, v) == v; BuiltinValueOps.fromData(toData(v)) == v. Each example uses one hand-built value with at most three tokens. BuiltinValueFlatTest already has a canonical value generator built from insertCoin.",
+      "action": "Move BuiltinValueFlatTest's keyGen/quantityGen/valueGen into an opt-in Gen in scalus.uplc.test (not a given: ArbitraryInstances is copied into the published testkit, F-29; share it with C07-13). Add a bounded-quantity variant (|q| <= 2^60) for the union and scale laws, since the generator's +-2^127 values overflow. Replace BuiltinValueTest 54-70, 100-108, 117-129 and 131-143 with four forAll properties; keep the empty, zero, overflow and rejection examples.",
+      "coverageRisk": "low: the examples' exact values (1000000 lovelace, two policies) become random values; keep 'unionValue removes zero-sum tokens' as an example since a random pair rarely cancels",
+      "ciSavingSec": -0.2,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "All four laws hold in BuiltinValueOps.scala. unionValue sums per key and drops zeros, so a cancelled token reads as 0 (lines 103-128). scaleValue returns empty for 0 and the value itself for 1 (163-165). fromData accepts any canonical value that insertCoin builds (200-275). BuiltinValue.equals is structural (BuiltinValue.scala:29). The action as written would still make the tests vacuous in two ways. (1) keyGen draws independent 0-32 byte keys (BuiltinValueFlatTest.scala:70-73). Two random values almost never share a (currency, token) pair; empty-empty has probability about 1/1089 per entry. So 'unionValue adds amounts for same token' (64-70), which the action deletes, would almost never be tested. (2) A lookup at random (c, t) checks 0 == 0+0. Lines 124-129 (scale by -1) also need the scalar generator to include negative values."
+    },
+    {
+      "id": "C36-7",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinValueCompileTest.scala:139-168,188-197,215-246,263-276,371-414,436-455",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinValueTest.scala:18-22,42-70,80-92,100-129"
+      ],
+      "claim": "BuiltinValueCompileTest repeats BuiltinValueTest's semantic examples through the compiler with the same values: union merges different tokens (150-168 vs 54-62) and empty+empty, valueContains false (215-229 vs 87-92) and empty/empty, scale by 0 and by -1 (233-246, 263-276 vs 110-129), insertCoin with zero (371-393 vs 42-46), lookupCoin of an empty value and of a wrong token (397-414, 436-455 vs 18-22, 48-52). The compiled Builtins.* are one-line delegates to BuiltinValueOps (Builtins.scala:1385-1468) and the CEK runtime calls the same BuiltinValueOps, so the compile path adds only the lowering wiring; one compiled test per builtin checks that. The CEK semantics are also pinned by the conformance corpus (insertCoin 15, unValueData 28, valueContains 12, unionValue 9, scaleValue 7, valueData 6, lookupCoin 2 cases).",
+      "action": "Keep one compiled test per builtin, with asymmetric inputs where arguments share a type: unionValue 'adds amounts for same token' (170-184), valueContains 'true when first contains second' (199-213; swapped arguments give false), scaleValue 'by positive' (248-261), insertCoin 'into empty' and 'updates existing' (323-369; the replace semantics is not in BuiltinValueTest, keep it), lookupCoin 'returns correct amount' (416-434), valueData/unValueData (80-135), and the complex and type-parameter tests (280-319, 470-544). Delete 139-148, 150-168, 188-197, 215-229, 233-246, 263-276, 371-393, 397-414, 436-455.",
+      "coverageRisk": "none for semantics: each deleted example has a same-value twin in BuiltinValueTest (shared, all platforms) and conformance cases; each builtin keeps one compiled test whose inputs detect swapped arguments",
+      "ciSavingSec": 0.05,
+      "linesRemoved": 140,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "In Builtin.scala:1308-1418, each CEK runtime for InsertCoin, LookupCoin, UnionValue, ValueContains, ValueData, UnValueData and ScaleValue only unlifts its arguments and calls BuiltinValueOps. So the compiled tests add only lowering and argument-order wiring. Twins of the deleted tests: 150-168 = BuiltinValueTest 54-62; 188-197 = 97; 215-229 = 87-92; 233-246 = 110-115; 263-276 = 124-129; 371-393 = 42-46; 397-414 = 18-22; 436-455 = 48-52. One correction: 139-148 (union of empty and empty) has no twin in BuiltinValueTest. It is covered by conformance cases unionValue/unitl and unionValue/unitr (empty plus a non-empty value), which run in shared PlutusConformanceTest. Each kept compiled test detects swapped arguments. valueContains uses 100 vs 50. lookupCoin and insertCoin use policyA != tokenA, so a swap yields 0. scaleValue's two arguments have different types. Interaction with C36-6: that finding replaces BuiltinValueTest 54-62 and 124-129, the twins of compiled 150-168 and 263-276. Its generator must cover a negative scalar and keys shared by both values (see C36-6)."
+    },
+    {
+      "id": "C36-8",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinValueCompileTest.scala:25-56,457-466",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinValueCompileTest.scala:323-344",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataConstructorCompileTest.scala:22-30",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinArrayTest.scala:15-177"
+      ],
+      "claim": "Three suites wrap every evaluation in `evaluateDebug match { Success(Const(...)) => ...; Failure => fail }`: four eval helpers in BuiltinValueCompileTest (one defined after its use, 457-466), a copy of evalToData in DataConstructorCompileTest, and eleven inline match blocks in BuiltinArrayTest. Term.evaluate already returns the term and throws on failure. BuiltinValueCompileTest also recompiles the same lambda in every test and builds 2-4 level Term.Apply chains by hand (e.g. 332-341) where TermDSL's `$` and constant conversions apply. BuiltinArrayTest's 11 success tests differ only in the compiled expression and the expected constant. Same pattern as C10-15 in compiler.lowering.intrinsics.",
+      "action": "Compile each builtin lambda once as a val; apply arguments with `uplc $ a $ b` (TermDSL; BuiltinValue has no LiftValue, so a local `def v(x: BuiltinValue) = Term.Const(Constant.BuiltinValue(x))`); assert `term.evaluate == expected.asTerm` and delete evalToBuiltinValue/evalToBool/evalToData/evalToInteger. Turn BuiltinArrayTest's success cases into a table of (name, compiled term, expected constant) with one assertion line each, and the two failure cases into `assert(term.evaluateDebug.isFailure)`. Optionally switch BuiltinArrayTest to EvalTestKit.assertEvalEq (Eq[BigInt] and Eq[Data] exist), which also runs the JVM delegates (Builtins.scala:469-479, unexecuted) and would have caught C36-1; there is no Eq[BuiltinValue], so value tests stay at term level.",
+      "coverageRisk": "none: same assertions; the EvalTestKit option adds JVM-side coverage",
+      "ciSavingSec": 0,
+      "linesRemoved": 170,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C36-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/FromDataDerivationTest.scala:153-170",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/FromDataDerivationTest.scala:172-193",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/FromDataDerivationTest.scala:29-36"
+      ],
+      "claim": "'FromData.deriveEnum' compiles `fromData[Adt](d)` and 'derived FromData.deriveEnum' compiles `Adt.derivedFromData(d)`. The only FromData[Adt] in scope is the companion's `given derivedFromData = FromData.derived` (36); the deriveEnum variant the first name refers to is commented out (31-35). Both summon the same instance, so both tests compile the same SIR, run the same generator, and assert the same three things (JVM fromData, uplc CLI, Scalus CEK). Each spawns the uplc process once per sample, about 0.31 s per test (timings.csv).",
+      "action": "Delete 'FromData.deriveEnum' (153-170) and rename the remaining test 'derived FromData for an enum ADT round-trips on JVM, CEK and uplc'.",
+      "coverageRisk": "none: identical SIR and assertions",
+      "ciSavingSec": 0.3,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Data.fromData is `inline def fromData[A](inline data: Data)(using inline ev: FromData[A]): A = ev(data)` (Data.scala:111-114). The only FromData[Adt] in scope is `given derivedFromData = FromData.derived` (FromDataDerivationTest.scala:36); the deriveEnum variant at 31-35 is commented out. So `fromData[Adt](d)` (157) inlines to `Adt.derivedFromData(d)`, the same as line 176: identical SIR. Both tests use V2 and the same Arbitrary[Adt]. Both assert JVM fromData == r, uplc CLI result == d.asTerm, and CEK evaluate == d.asTerm. The only difference is a println in one failure branch (186). Deleting 153-170 and renaming the other test loses nothing."
+    },
+    {
+      "id": "C36-10",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/FromDataDerivationTest.scala:220-263",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/FromDataDerivationTest.scala:31-35,78-84",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/FromDataDerivationTest.scala:73",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/FromDataDerivationTest.scala:143-149,162-168,181-191",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/FromDataDerivationTest.scala:10,18-19"
+      ],
+      "claim": "FromDataDerivationTest carries dead code: a 44-line commented-out test (220-263) that calls a VM API that no longer exists, commented-out hand-written instances (31-35, 78-84), `object BigRecord extends ArbitraryInstances` on a @Compile companion that uses none of it (73), and imports that the package already provides (10, 18-19). The UplcCli result match with three cases is written out three times (143-149, 162-168, 181-191), one with a stray println.",
+      "action": "Delete 220-263, 31-35 and 78-84, drop `extends ArbitraryInstances` from object BigRecord and the redundant imports. Extract a local `assertUplcAndCek(program: Program, expected: Term)` that runs UplcCli.evalFlat and Program.evaluate and fails with the error text; use it in the remaining property tests.",
+      "coverageRisk": "none: no assertion changes",
+      "ciSavingSec": 0,
+      "linesRemoved": 65,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C36-11",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BuiltinArrayTest.scala:179-228",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/SIRDefaultOptions.scala:16",
+        "scalus-core/shared/src/main/scala/scalus/uplc/DefaultUni.scala:81"
+      ],
+      "claim": "The three 'BuiltinArray flat encoding roundtrip' tests build the array at run time with listToArray(mkCons(...)); optimizeUplc is off by default, so nothing folds it, and the flat-encoded program holds only Data/integer constants and builtins. The array flat codec (DefaultUni tag 12 and the Constant.Array encoding) is never reached; a mutation that breaks array constant encoding passes all three. What they do assert, length 3/0/2, duplicates tests 60-74 and 109-123.",
+      "action": "Replace the three tests with one that flat-round-trips a program holding real array constants: `Term.Const(Constant.Array(DefaultUni.Data, Vector(I(1), B(hex\"dead\"))))` and an empty `Constant.Array(DefaultUni.Integer, Vector())` under lengthOfArray/indexArray; assert the decoded term α_== the original and evaluates to the expected value. If C07-13 lands first (Array in the full constant generator used by FlatTest), just delete them.",
+      "coverageRisk": "none: the deleted assertions are duplicates; the new one covers the array codec",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C36-12",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/builtin/TestFlatData.scala:10-39",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataTest.scala:6-10",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:438-455"
+      ],
+      "claim": "TestFlatData.scala (class TestFlatDataTest, file name differs) has no assertion: it prints which Flat[Data] is in scope and whether the hex looks like CBOR, and passes whatever it finds. DataTest.scala has one empty test 'Ord' whose body is a commented-out checkEval with a TODO. Neither can fail. Data flat encoding is covered by FlatTest 438-455.",
+      "action": "Delete both files. If the Data-is-CBOR-in-flat fact should stay pinned, add one line to FlatTest: decode the flat bytes of Constant.Data(d) as a bytestring and assert it equals d.toCbor.",
+      "coverageRisk": "none: neither test asserts anything",
+      "ciSavingSec": 0,
+      "linesRemoved": 50,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C36-13",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataConstructorCompileTest.scala:34-40",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataConstructorCompileTest.scala:42-46"
+      ],
+      "claim": "'Data.unit compiles to Data constant' asserts the compiled term ~=~ Const(Data(Constr(0, Nil))). 'Data.unit evaluates correctly' evaluates the same compiled term and expects that constant; a constant evaluates to itself, so any mutation that breaks the second breaks the first.",
+      "action": "Delete 'Data.unit evaluates correctly' (42-46).",
+      "coverageRisk": "none: the first test implies the second",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "DataConstructorCompileTest.scala:34-40 asserts `uplc ~=~ Const(Data(Constr(0, Nil)))`. Term.~=~ compares Const by `c1 == c2` (Term.scala:359). Test 42-46 compiles the same `compile { Data.unit }` and evaluates it. A closed Const evaluates to itself on the CEK, so if the first test passes, the second must too. A CEK defect that broke constant evaluation would also fail many other tests. Deleting 42-46 loses no coverage."
+    },
+    {
+      "id": "C36-14",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BLS12_381BuiltinsTest.scala:31-43,53-60,68-79,89-96",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/BLS12_381PropertiesTest.scala:27-42,89-93"
+      ],
+      "claim": "Per group, 'zero + zero == zero', 'zero + p == p', 'p + p == 2p' and 'equal points built in different ways have equal hashCodes' are the identity, doubling and hash-consistency laws checked at one point each (the generator or one hashToGroup point). BLS12_381PropertiesTest already draws pointOrZero per group (zero one time in five), so the same laws fit into its existing forAll with no new point generation, which is the expensive part on JS (noble G2).",
+      "action": "Add `equal: (P, P) => Boolean` to Group (bls12_381_G*_equal) and, inside the existing 'p + neg(p) == zero' forAll (89-93), also assert equal(add(zero, p), p), equal(add(p, zero), p), add(p, p) == scalarMul(2, p) and its hashCode equality. Delete the eight G1/G2 examples (31-37, 40-43, 53-60, 68-74, 76-79, 89-96 of BLS12_381BuiltinsTest). Keep the encoding, immutability, ML result and interpolator tests. Do not change runs.",
+      "coverageRisk": "low: the examples use the builtin bls12_381_G*_equal, so Group needs the equal field to keep that path; Set.contains in the hashCode tests becomes a plain hashCode check",
+      "ciSavingSec": -0.3,
+      "linesRemoved": 35,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The laws hold, and the entry points match. Builtins.bls12_381_G*_add, scalarMul, equal and hashToGroup delegate to `ps` (Builtins.scala:1076-1148). PropertiesTest calls platform.* directly. ArbitraryInstances.scala:43-51 builds points with Builtins.bls12_381_G*_hashToGroup, the same kind of point the examples use. Both tests are in shared/. But pointOrZero picks zero with weight 1/5 (BLS12_381PropertiesTest.scala:41). With G2 runs = 20, about 0.8^20 ≈ 1.2% of runs never draw zero. Those runs do not check 'zero + zero == zero', an edge case that the noble (JS) and blst backends handle in their own code. The deleted G1 and G2 'zero + zero' examples (31-33, 68-70) would then be tested only by chance."
+    },
+    {
+      "id": "C36-15",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/DataApi.scala:356-388",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/DataApi.scala:296-298",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/DataApi.scala:341"
+      ],
+      "claim": "Pretty[Data] for Constr, Map and List (363-388) is unexecuted; only I and B render in any test. The rendering appears in error messages and debug output. The toJsonIndented extension (297-298) and tryFromData (341) are also never called.",
+      "action": "Add a small DataPrettyTest (or rows in DataJsonTest): render Constr(1, [I(2), B(hex\"ab\")]), Map([(I(1), List([]))]) and a nested value with Style.Normal and assert the exact strings; one assertion each for d.toJsonIndented(2) == Data.toJson(d, 2) and tryFromData success/failure.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C36-16",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataCborCodecTest.scala:6-7,24,31,177,180,188-189",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataDerivationTest.scala:4,10",
+        "scalus-core/shared/src/test/scala/scalus/uplc/builtin/DataConstructorCompileTest.scala:50,66,98,130,156"
+      ],
+      "claim": "DataCborCodecTest: unused or self-package imports (6-7), fully qualified scalus.uplc.builtin.ByteString inside its own package (177-189), and two misnamed tests: 'of < 64 bits' (24) encodes a 71-bit value with tag c2, and '> 64 bits is chunked' (31) is about values over 64 bytes. DataDerivationTest mixes in ScalaCheckPropertyChecks and ArbitraryInstances and uses neither. DataConstructorCompileTest names five tests 'compiles to iData/bData/constrData/listData/mapData builtin' but only evaluates the result.",
+      "action": "Remove the unused imports and mixins, drop the qualification, rename to 'BigInt over 64 bits up to 64 bytes is one bignum chunk' and 'BigInt over 64 bytes is chunked', and rename the five DataConstructorCompileTest tests to '... evaluates to the expected Data'.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 7 findings of scope merge-duplicate-tests, to-property or main-bug; 5 confirmed, 2 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

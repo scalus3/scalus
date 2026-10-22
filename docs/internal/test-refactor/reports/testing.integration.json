@@ -1,0 +1,451 @@
+{
+  "cluster": "testing.integration",
+  "summary": "The cluster is the scalus-cardano-ledger-it module: Blockfrost endpoint smoke tests against preprod, UtxoQuery, TxBuilder and capture tests on a Yaci DevKit container, an HTLC suite on a selectable environment, and mainnet-block decoding and ledger-rule replay over it-data. It runs only in the nightly it.yml workflow, not in ci-jvm, and P0 has no timings or coverage for it, so C7 gives no ci-time finding. The main weakness is assertion strength: 21 Blockfrost tests assert nothing, discovery code turns errors into cancels, query tests pass on empty results, CaptureNodeErrorsTest checks only the HTTP status, and the it-data tests can pass vacuously (C38-3, -4, -7, -11, -15, -16). Two suites never run where they should: BlockfrostEndpointsTest always cancels on CI (no key, C38-5) and HtlcIntegrationTest runs on the Emulator, where it repeats HtlcTest (C38-9). Reading BlockfrostProvider found two main-code defects: FromTransaction/FromInputs return spent outputs (C38-1) and FromAsset reports a partial result as success (C38-2); about 180 lines of dead or copied test code can go (C38-6, -8, -12, -13, -14). No generators (C8) and no property candidates (C4) in this cluster.",
+  "behaviors": [
+    {
+      "pass": "BlockfrostProvider",
+      "name": "health, genesis, network and epoch endpoints decode real Blockfrost JSON",
+      "tests": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:85-153"
+      ]
+    },
+    {
+      "pass": "BlockfrostProvider",
+      "name": "block endpoints (latest, by hash, by slot, txs, next, previous, addresses)",
+      "tests": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:157-220"
+      ]
+    },
+    {
+      "pass": "BlockfrostProvider",
+      "name": "address, transaction, script, account, pool, metadata, asset, DRep and datum endpoints",
+      "tests": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:224-352",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:405-637",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:679-694"
+      ]
+    },
+    {
+      "pass": "BlockfrostProvider",
+      "name": "fetchParamsOfEpoch and fetchDatumJson",
+      "tests": []
+    },
+    {
+      "pass": "BlockfrostProvider.findUtxos",
+      "name": "FromAddress source with MinLovelace / HasAsset filters, limit and minTotal",
+      "tests": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:30-112",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:213-260"
+      ]
+    },
+    {
+      "pass": "BlockfrostProvider.findUtxos",
+      "name": "FromTransaction, FromAsset, Or and And sources",
+      "tests": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:118-207",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:266-303",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:280-292",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:598-622"
+      ]
+    },
+    {
+      "pass": "BlockfrostProvider.findUtxos",
+      "name": "FromInputs source and findUtxo(input): only unspent outputs, NotFound for a spent input",
+      "tests": []
+    },
+    {
+      "pass": "BlockfrostProvider.submit / SubmitError",
+      "name": "a script failure on a real node is classified as ScriptFailure and carries the trace",
+      "tests": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CaptureNodeErrorsTest.scala:66-171"
+      ]
+    },
+    {
+      "pass": "TxBuilder",
+      "name": "payment, Plutus and native minting, stake (de)registration and delegation, DRep registration, vote delegation, proposal, vote and withdraw-zero transactions are accepted by a real node",
+      "tests": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/TxBuilderIntegrationTest.scala:62-377"
+      ]
+    },
+    {
+      "pass": "HtlcTransactions / HtlcValidator",
+      "name": "lock, reveal and timeout paths and the four failure reasons on a selectable environment",
+      "tests": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/HtlcIntegrationTest.scala:97-272"
+      ]
+    },
+    {
+      "pass": "BlockFile / KeepRaw[Data]",
+      "name": "mainnet blocks and their witness datums decode",
+      "tests": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CborTest.scala:32-56"
+      ]
+    },
+    {
+      "pass": "CardanoMutator + StakeStateResolver",
+      "name": "every transaction of 1000 mainnet blocks passes the ledger rules with the era params and stake state",
+      "tests": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/LedgerRulesValidationTest.scala:34-68"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C38-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockfrostProvider.scala:972-1001",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockfrostProvider.scala:1017-1028",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/EmulatorBase.scala:688-691",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockchainProvider.scala:34-40",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockchainProvider.scala:249-252"
+      ],
+      "claim": "By reading (not executed): BlockfrostProvider answers UtxoSource.FromTransaction and FromInputs from GET /txs/{hash}/utxos, which lists every output of the transaction, spent or not; fetchUtxosFromTransaction maps all of them (986-990) and never checks whether an output was consumed. The Emulator answers the same sources from its live UTxO set (EmulatorBase 688-691). So on Blockfrost/Yaci, findUtxo(input) and findUtxos(inputs) return an already spent output as found, and a TxBuilder that resolves inputs this way builds a transaction the node rejects with BadInputsUTxO. No test spends an output and queries it again: UtxoQueryIntegrationTest:118-159 and BlockfrostEndpointsTest:280-292 check only that results come from the queried tx. The shared interface states the intended meaning: BlockchainProvider.checkTransaction's doc (249-252) says a transaction whose outputs are all spent reads as NotFound 'since it produces no current UTxOs'. Caveat: Yaci Store is only a Blockfrost-compatible proxy; if its /txs/{hash}/utxos filters spent outputs, the Yaci test passes while real Blockfrost still misbehaves.",
+      "action": "Add a test to UtxoQueryIntegrationTest: submit tx1 (alice pays 10 ADA to bob), then tx2 that spends output (tx1, 0); assert that FromTransaction(tx1) does not contain (tx1, 0), and that ctx.provider.findUtxo(TransactionInput(tx1.id, 0)) is Left(NotFound). For a deterministic check that does not depend on Yaci, also add a shared unit test with an sttp4 BackendStub (as in C38-2): the stubbed /txs/{h}/utxos returns two outputs, one with consumed_by_tx set; assert FromTransaction returns only the unspent one. Main-code note only: if it fails, drop outputs whose consumed_by_tx is set (or intersect with the address UTxOs).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -5,
+      "linesRemoved": -70,
+      "confidence": "medium",
+      "findingsLog": "F-67",
+      "verdict": "CONFIRMED",
+      "verification": "BlockfrostProvider.scala:991-1001 maps every element of json(\"outputs\") from GET /txs/{h}/utxos to a UTxO. It indexes them with zipWithIndex and never reads a consumed_by_tx (or collateral) field: `git grep consumed_by` finds no match anywhere in the repo. FromTransaction (730-731) returns that map directly. FromInputs (719-728) goes through fetchUtxoFromInput (1036-1043), which looks the input up in the same map. So a spent output reads as found. EmulatorBase.scala:688-691 filters the live UTxO set instead. The behavior is reachable from the public API: BlockchainProvider.findUtxo/findUtxos(inputs) (BlockchainProvider.scala:34-48) build FromInputs, and TxBuilder resolves deferred queries through reader.findUtxos (TxBuilder.scala:2090). UtxoQueryIntegrationTest:118-159 checks only nonEmpty and the txId. No test spends an output and then queries it. The Yaci caveat stands, so the proposed BackendStub unit test is the deterministic check. I could not confirm, without the network, that real Blockfrost sends spent outputs in this list, but the claim matches Blockfrost's documented consumed_by_tx field."
+    },
+    {
+      "id": "C38-2",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockfrostProvider.scala:699-718",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/BlockfrostOrCombineTest.scala:8-15"
+      ],
+      "claim": "By reading (not executed): UtxoSource.FromAsset fetches /addresses/{holder}/utxos/{asset} once per holder and returns Left only when every holder fails (`combined.isEmpty && errors.nonEmpty`, 712). If one holder request fails (429 rate limit, timeout: fetchUtxosFromBech32Address maps any exception to NetworkError) and another succeeds, the query returns Right with the failed holder's UTxOs silently missing. This is the same defect BlockfrostOrCombineTest documents as fixed for Or: an incomplete answer reported as success. Lines 699-718 are uncovered in the baseline; the only test, BlockfrostEndpointsTest:598-622, needs a Blockfrost key and never runs on CI.",
+      "action": "Add a shared unit test with an sttp4 BackendStub: /assets/{a}/addresses returns two holders, the first holder's utxos request returns HTTP 429 and the second returns one UTxO; assert findUtxos(UtxoQuery(FromAsset(p, n))) is Left(NetworkError). Main-code note only: make it fail when any holder fails, as combineOr does.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -40,
+      "confidence": "medium",
+      "findingsLog": "F-68",
+      "verdict": "CONFIRMED",
+      "verification": "BlockfrostProvider.scala:700-718: each holder is fetched with fetchUtxosFromBech32Address (952-968). That call goes through fetchAllPages to fetchPage (109-128), which throws on any non-2xx, non-404 status such as 429. The throw is recovered into Left(NetworkError) at 965-967. Line 712 then returns Left only when `combined.isEmpty && errors.nonEmpty`. So one failed holder plus one successful holder gives a Right that silently lacks the failed holder's UTxOs. BlockfrostProvider takes `backend: Backend[Future]` as a using parameter (35-43), so the stub test is feasible. No BackendStub is used in the repo yet (`git grep BackendStub` is empty), so the test will be the first one. Note: a 404 on a holder still maps to an empty result. That is correct, and the test must not use 404 as the failure."
+    },
+    {
+      "id": "C38-3",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:183-193",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:216-220",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:254-278",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:303-346",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:443-455",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:465-482",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:502-534"
+      ],
+      "claim": "21 of the 52 tests assert nothing: they print the result size, so they pass when an endpoint returns an empty list and the element decoder is never run. 'findUtxos with pagination' (254-269) cannot fail at all: it accepts Left and catches IllegalArgumentException, although testAddress comes from fetchAccountAddresses and is always a Shelley bech32 address. Several inputs guarantee a non-empty answer: testBlock has txCount > 0 (41), testStakeAddress is a pool delegator (so it has a registration and a delegation), the pool from fetchPoolsExtended has history, label 674 is used on preprod, and testTxHash is in a block (checkTransaction must be Confirmed).",
+      "action": "Assert nonEmpty for fetchBlockTxs and fetchBlockAddresses of testBlock, fetchAccountRegistrations and fetchAccountDelegations of testStakeAddress, fetchPoolHistory, fetchMetadataByLabel(674) and its CBOR variant; assert checkTransaction(testTxHash) == Confirmed; make the address findUtxos test require Right and drop the try/catch; assert fetchAccountUtxos is Right. Leave the per-tx endpoints that are empty for a random tx (mirs, pool retires) as smoke calls.",
+      "coverageRisk": "none: assertions only get stronger; a stronger check can expose a provider bug",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:359-403",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:486-491",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:539-563",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:626-637",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:642-677"
+      ],
+      "claim": "The discovery vals testScriptHash, testPoolId, testAsset and testDatumHash end in `catch { case _: Exception => None }`, and the tests turn None into cancel (407, 504, 567) or into the fake-hash fallback (681-688). So when findUtxos, fetchBlockTxs or fetchPoolsExtended throws (a decoder regression), 8 tests report canceled instead of failed. fetchDrep cancels on any message that contains '404'.",
+      "action": "Remove the four catch-all blocks so exceptions fail the tests; keep None (and cancel) only for 'searched and found nothing'.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-5",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        ".github/workflows/it.yml:76",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:23-27",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockfrostProvider.scala:577",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockfrostProvider.scala:182"
+      ],
+      "claim": "BlockfrostEndpointsTest never runs on CI: the nightly IT workflow sets only SCALUS_IT_DATA_PATH, no BLOCKFROST_API_KEY, so every test cancels at line 25. With C38-2 and its baseline (BlockfrostProvider is mostly uncovered by jvm/test), the 40 endpoint decoders have no automatic check. fetchParamsOfEpoch (577) and fetchDatumJson (182) are not called by any test.",
+      "action": "Add a preprod Blockfrost key as a repository secret and export it as BLOCKFROST_API_KEY in the it.yml test step. Add two tests: fetchParamsOfEpoch(current epoch - 1) has maxTxSize > 0, and fetchDatumJson on the found datum hash (or assert failure on the fake hash, as 685-687 do).",
+      "coverageRisk": "none: adds coverage only. Side effect: the same variable feeds BlocksTestUtils.apiKey (35), a mainnet BFBackendService (48), and StakeStateResolver (LedgerRulesValidationTest:19); a preprod key gets 403 there on a cache miss, but today's empty key fails on a cache miss as well, so nothing regresses",
+      "ciSavingSec": -60,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-6",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:280-285",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:363-401",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:539-562",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:645-676"
+      ],
+      "claim": "The lookup `provider.findUtxos(UtxoQuery(UtxoSource.FromTransaction(TransactionHash.fromHex(h)))).await(timeout).toOption.getOrElse(Map.empty)` is written out 4 times, and testScriptHash, testAsset and testDatumHash each walk the transactions of testBlock in the same way with nested imports (360-362, 540-541, 643-644).",
+      "action": "Add two private helpers: `outputsOf(txHash: String): Utxos` and `blockOutputs(blockHash: String): Iterator[TransactionOutput]`; express the three discovery vals as collectFirst over blockOutputs; move the imports to the file header.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CaptureNodeErrorsTest.scala:49-64",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CaptureNodeErrorsTest.scala:109-115",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CaptureNodeErrorsTest.scala:164-170"
+      ],
+      "claim": "Both tests assert only `statusCode >= 400`; the parsed SubmitError from ctx.provider.submit is printed, never checked. A node rejection for any other reason (fee, bad input) passes. Every run of `sbtn it` also rewrites the two tracked fixture files in src/test/resources. The node response does not contain the validator's trace strings (the fixtures hold 'PlutusFailure', 'CekError' and the script hash, but not 'test_script_failure' or 'log_line_1'), so the second test checks nothing the first does not.",
+      "action": "Assert that ctx.provider.submit(tx) is Left(SubmitError.ScriptFailure) whose message contains 'PlutusFailure' and script.scriptHash.toHex. Write the fixtures only when an env var such as SCALUS_CAPTURE_FIXTURES is set. The fixture consumer is C38-18.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-8",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CaptureNodeErrorsTest.scala:66-116",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CaptureNodeErrorsTest.scala:118-171"
+      ],
+      "claim": "The two tests are the same 50-line lock/spend/raw-submit flow; they differ only in the compiled validator, the fixture filename and a println label.",
+      "action": "Extract `private def captureScriptFailure(contract: PlutusV3[Data => Unit], fixture: String): (Int, String, Either[SubmitError, TransactionHash])` and make each test one call plus its assertions (see C38-7).",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/HtlcIntegrationTest.scala:23-39",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala:91-230",
+        "scalus-testkit/jvm/src/main/scala/scalus/testing/integration/IntegrationTest.scala:47-48",
+        "scalus-testkit/jvm/src/main/scala/scalus/testing/yaci/YaciDevKit.scala:41-42",
+        ".github/workflows/it.yml:76"
+      ],
+      "claim": "HtlcIntegrationTest runs on the Emulator unless SCALUS_TEST_ENV is set, and the nightly it.yml does not set it. On the Emulator its 7 tests repeat the 7 scenarios of HtlcTest (reveal, timeout reclaim, wrong preimage, wrong receiver, reveal after timeout, wrong committer, reclaim before timeout) with the same HtlcTransactions and the same assertScriptFail reasons. So the only suite built for a real node never runs on one.",
+      "action": "In HtlcIntegrationTest add `override protected lazy val testEnvName: String = sys.env.getOrElse(\"SCALUS_TEST_ENV\", \"yaci\").toLowerCase.trim` (the same override YaciDevKit uses), so the nightly run uses the shared Yaci container; the Emulator path stays covered by HtlcTest.",
+      "coverageRisk": "none: the Emulator scenarios stay in HtlcTest; the suite starts to cover node acceptance and real slot timing",
+      "ciSavingSec": -60,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "IntegrationTest.scala:47-48 defaults testEnvName to \"emulator\". build.sbt:1272 only forwards SCALUS_TEST_ENV if it is set. it.yml:76 runs `sbt it` (build.sbt:1455-1461) with only SCALUS_IT_DATA_PATH exported. `git grep SCALUS_TEST_ENV` in .github finds nothing. So the nightly run uses the Emulator. HtlcTest.scala (scalus-examples/jvm, part of normal CI) covers the same 7 scenarios with the same HtlcTransactions methods and the same assertScriptFail reasons: reveal :91, wrong preimage :116 InvalidReceiverPreimage, wrong receiver :135 UnsignedReceiverTransaction, after timeout :154 InvalidReceiverTimePoint, reclaim :173, wrong committer :196 UnsignedCommitterTransaction, before timeout :214 InvalidCommitterTimePoint. On the Emulator the IT suite adds nothing. The proposed override matches the YaciDevKit pattern (YaciDevKit.scala:41-42), and IntegrationTest.beforeAll acquires the container when testEnvName == \"yaci\". The lock() helper (84-92) already handles a shared script address, and commit 221533603 touched this file for the Yaci companion mode."
+    },
+    {
+      "id": "C38-10",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/HtlcIntegrationTest.scala:97-114",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/HtlcIntegrationTest.scala:67-93",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/HtlcIntegrationTest.scala:50-53"
+      ],
+      "claim": "'lock HTLC funds' (97-114) repeats the body of the lock() helper (68-82) line by line; the other six tests call lock(), which asserts the same isRight and also that the locked UTxO is at the script address. TestSetup.currentTimeout (50-53) is never called.",
+      "action": "Delete the 'lock HTLC funds' test (or reduce it to `lock(setup())`) and delete currentTimeout.",
+      "coverageRisk": "none: every other test runs lock() with a stronger assertion",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "HtlcIntegrationTest.scala:97-114 matches lock() at 67-82 token for token: the same findUtxos(alice), the same txCreator.lock arguments, and the same submit plus `assert(result.isRight)`. Only the message text differs. lock() also asserts that the locked UTxO from lockTx.id is at the script address (87-91). The other six tests call lock(s) on the same setup(): 118, 138, 166, 185, 204, 230, 253. currentTimeout (50-53) has no caller: `git grep currentTimeout` returns only its definition."
+    },
+    {
+      "id": "C38-11",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:51-70",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:76-89",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:95-112",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:266-303"
+      ],
+      "claim": "Four query tests pass on a wrong answer. MinLovelace (51-70) and And (266-303) have no nonEmpty check, so an empty result passes; MinLovelace also passes when the filter is ignored, if every alice UTxO already holds >= 100 ADA. 'limit' asserts `size <= 2`, which an empty result meets. minTotal passes when the provider ignores minTotal and returns everything.",
+      "action": "MinLovelace: first pay alice a 5-ADA output, then assert the result is nonEmpty and excludes that output. limit: first pay alice two small outputs (so she has at least 3 UTxOs whatever ran before), then assert size == 2. And: assert the result equals the outputs of tx at alice's address and contains (tx.id, 0). minTotal: assert the result is smaller than the unfiltered query when the unfiltered total exceeds minTotal by more than one UTxO.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-12",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:139-142",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:185-188",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:235-238",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:277-280",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:120-127",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:168-175",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/UtxoQueryIntegrationTest.scala:217-220",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/TxBuilderIntegrationTest.scala:65-72",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/TxBuilderIntegrationTest.scala:93-96",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/TxBuilderIntegrationTest.scala:273-275",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/TxBuilderIntegrationTest.scala:317"
+      ],
+      "claim": "UtxoQueryIntegrationTest repeats `provider.submit(tx).await match { Right => waitForBlock; Left => fail }` 4 times, while YaciTestContext.submit already submits and waits 2 slots; and the `findUtxos(q).await match { Right => ..; Left => fail }` frame 7 times. Both suites build an always-succeeds minting policy by hand (UQ 217-220, TB 93-96) where PlutusV3.alwaysOk exists (TB 317 uses it). A recipient address is built by hand-hashing changeKeyPair three times (UQ 120-127, 168-175, TB 65-72) where any funded test party address (ctx.bob.address) serves; TB 273-275 hand-hashes the payment key that account.paymentKeyHash already gives.",
+      "action": "Use `assert(ctx.submit(tx).await().isRight)`; add a local `query(q: UtxoQuery): Utxos` that fails on Left; use PlutusV3.alwaysOk.script for both minting policies; use ctx.bob.address as the second address; use account.paymentKeyHash in test 9.",
+      "coverageRisk": "low: the Or test must still use an address other than alice's; bob's address satisfies that",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-13",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlocksTestUtils.scala:30-33",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlocksTestUtils.scala:46",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlocksTestUtils.scala:59-64",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlocksTestUtils.scala:67-74",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlocksTestUtils.scala:78-144",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlocksTestUtils.scala:161-171",
+        "scalus-cardano-ledger-it/src/test/resources/blockfrost-params-epoch-543.json:1"
+      ],
+      "claim": "Most of BlocksTestUtils is dead: readTransactionsFromBlockCbor (3 overloads) and BlockTx, newEvaluator, loadBlock, utxoResolver, protocolParamsSupplier, epochMagic and the two YaciConfig flags (needed only by the bloxbean block reader) have no caller in the repository (shared-helpers.csv: 0 using files; grep confirms). CborTest uses only blockPath and getAllBlocksPaths; LedgerRulesValidationTest uses apiKey, resourcesPath, getAllBlocksPaths and scalusUtxoResolver. The resource blockfrost-params-epoch-543.json is referenced by no code (only the 544 file is read).",
+      "action": "Delete the dead members, the imports only they need (Blake2bUtil, TransactionBodyExtractor, WitnessUtil, CborSerializationUtil, Era, FileChannel, etc.) and the unused epoch-543 params resource.",
+      "coverageRisk": "none: no test calls the deleted code",
+      "ciSavingSec": 0,
+      "linesRemoved": 105,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-14",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CborTest.scala:17-30",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CborTest.scala:32-43",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CborTest.scala:45-56"
+      ],
+      "claim": "'Scalus OK' decodes block 11545396 and checks its witness datums; 'Scalus OK all' does the same for every block in it-data/blocks, and that directory holds block-11545396.cbor (117,979 blocks, 11544518..11662495). The ignored test documents a bloxbean WitnessUtil bug and runs no Scalus code.",
+      "action": "Delete 'Scalus OK', the ignored test and the badBlock val; name the remaining test after what it checks, for example 'every it-data block and its witness datums decode', and keep 11545396 in a comment as the block that bloxbean fails on.",
+      "coverageRisk": "none: the remaining test decodes the same block",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "CborTest.scala:32-43 'Scalus OK' reads blockPath(11545396) = resourcesPath/blocks/block-11545396.cbor (BlocksTestUtils.scala:76). It asserts `data.value != null` for every witness datum. 'Scalus OK all' (45-56) runs the same decode and the same assertion over getAllBlocksPaths() (BlocksTestUtils.scala:146-158), which lists every *.cbor in the same resourcesPath/blocks directory. block-11545396.cbor exists in the local it-data/blocks. 'Scalus OK' passes in CI only if the file exists there too, so 'all' covers it on the same data. The ignored test (19-30) calls only bloxbean WitnessUtil and borer, not Scalus decoding. Deleting it loses only documentation, and the suggested comment keeps that."
+    },
+    {
+      "id": "C38-15",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CborTest.scala:41",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CborTest.scala:54"
+      ],
+      "claim": "`assert(data.value != null)` cannot fail: a KeepRaw[Data] holds a decoded value, and a decoding error throws before the assert. The only real check is 'no exception'. A mutation that shifts the raw byte slice of each datum (which ScriptDataHash depends on) passes.",
+      "action": "Assert `Data.fromCbor(data.raw) == data.value` for each datum, so the kept raw slice must decode to the same value.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-16",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/LedgerRulesValidationTest.scala:48",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/LedgerRulesValidationTest.scala:67"
+      ],
+      "claim": "Transactions whose UTxOs fail to resolve are dropped by `Try(scalusUtxoResolver.resolveUtxos(transaction)).toOption` and never validated. If the UTxO cache is missing or the resolver regresses, no transaction is validated and `failed.isEmpty` still passes; the resolved count is only printed.",
+      "action": "Collect the unresolved transactions too and assert that none exists (or assert utxosResolvedCount == transactionsCount), printing the tx ids of the unresolved ones.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-17",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/TxBuilderIntegrationTest.scala:138-140",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/TxBuilderIntegrationTest.scala:189-191",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/TxBuilderIntegrationTest.scala:167-169",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/TxBuilderIntegrationTest.scala:251-253",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/TxBuilderIntegrationTest.scala:354-356",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/BlockfrostEndpointsTest.scala:148-150"
+      ],
+      "claim": "Small nits. TxBuilderIntegrationTest builds the same stake signer (payment + stake key) twice and the same DRep signer twice inside test bodies, and the comment of test 11 says 'Same as test 11'. BlockfrostEndpointsTest says 'Use a recent epoch' above epoch 10.",
+      "action": "Make stakeSigner and drepSigner private vals; fix the test-11 comment (it follows 10a/10b); fix the epoch comment.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C38-18",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/CaptureNodeErrorsTest.scala:19-25",
+        "scalus-cardano-ledger-it/src/test/resources/yaci-error-script-failure.json:1",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:107-117",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockchainProvider.scala:510-519"
+      ],
+      "claim": "The captured Yaci responses (yaci-error-script-failure*.json) are read by no test, although CaptureNodeErrorsTest's doc says SubmitErrorTest uses them. SubmitErrorTest classifies only short hand-written messages, so the real node body (a nested JSON string with escaped ConwayUtxowFailure ... PlutusFailure text, status 400) never goes through fromHttpResponse.",
+      "action": "Move the two JSON files to scalus-cardano-ledger/jvm/src/test/resources and add a SubmitErrorTest case per file: read status_code and message, call SubmitError.fromHttpResponse(400, message) and assert ScriptFailure. This also covers the 4xx branch named in C17-11; do it in the same unit.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 5 findings of scope merge-duplicate-tests, to-property or main-bug; 5 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

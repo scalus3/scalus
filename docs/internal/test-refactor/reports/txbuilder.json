@@ -1,0 +1,682 @@
+{
+  "cluster": "txbuilder",
+  "summary": "The cluster covers the low-level TransactionBuilder (steps, balancing, collateral return, change value), Change.changeOutputDiffHandler, UtxoPool, TransactionEditor, the JVM TransactionSigner, and a few TxBuilder end-to-end suites (diagnostic replay, fee estimation, ref-script selection, spend-and-reference). It is cheap except one test: 'fees okay property' (3.2 s local, 7.3 s in F-6). About 60 % of its CPU goes to the real Plutus evaluator on transactions that have no scripts, so a noop evaluator removes most of the cost without fewer samples. One main-code defect was found by reading: TransactionConversion.toEditableTransactionSafe resets the whole witness set, so editTransactionSafe drops vkey witnesses, scripts and datums (C09-1). The main gaps are error paths that no test reaches (BalanceDidNotConverge, failing redeemer/datum builders, every SomeBuildError message, ref-script and multi-token collateral, non-Spend redeemer tags in the editor), plus several duplicate tests, weak assertions (a try/catch that passes when nothing throws, size-only signer checks), and copied setup that TestUtil already provides.",
+  "behaviors": [
+    {
+      "pass": "TransactionBuilder.build",
+      "name": "Spend step: pubkey, native and Plutus witnesses, wrong witness kind, wrong script hash, wrong network, duplicate input",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:182-245"
+      ]
+    },
+    {
+      "pass": "TransactionBuilder.build",
+      "name": "Spend with a reference script from a referenced or a consumed UTxO, mismatched script ref",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:293-372"
+      ]
+    },
+    {
+      "pass": "TransactionBuilder.build",
+      "name": "expectedSigners for pubkey, native and Plutus spends",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:378-446"
+      ]
+    },
+    {
+      "pass": "TransactionBuilder.build",
+      "name": "Send, Mint (monoid, reciprocal burn, zero amount), Deregister, ModifyAuxiliaryData, Donate, SetCurrentTreasuryValue",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:558-783",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:1162-1277"
+      ]
+    },
+    {
+      "pass": "TransactionBuilder.build",
+      "name": "ReferenceOutput, AddCollateral, SetCollateralReturn",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:799-899"
+      ]
+    },
+    {
+      "pass": "ThreeArgumentPlutusScriptWitness / TwoArgumentPlutusScriptWitness factories",
+      "name": "attached/reference with immediate and delayed redeemer",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:452-552"
+      ]
+    },
+    {
+      "pass": "TransactionBuilder.replaceDelayedRedeemers / replaceDelayedDatums",
+      "name": "delayed redeemer sees the final inputs",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:247-287",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:738-764"
+      ]
+    },
+    {
+      "pass": "TransactionBuilder.replaceDelayedRedeemers / replaceDelayedDatums",
+      "name": "a builder that throws gives RedeemerComputationFailed / DatumComputationFailed",
+      "tests": []
+    },
+    {
+      "pass": "TransactionBuilder.ensureCollateralReturn",
+      "name": "return output for tokens, above the 5 ADA threshold, boundary at 5 ADA, insufficient ADA with tokens",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:902-1156"
+      ]
+    },
+    {
+      "pass": "TransactionBuilder.calculateChangeValue",
+      "name": "pool deposit against CertState, legacy stake deregistration refund, totals past Long.MaxValue",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:1311-1375",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/ChangeOutputDiffHandlerTest.scala:459-476"
+      ]
+    },
+    {
+      "pass": "Context.finalizeContext / validate",
+      "name": "balance against CertState; treasury value check",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:1377-1432"
+      ]
+    },
+    {
+      "pass": "TransactionBuilder.balanceFeeAndChangeWithTokens + Change.changeOutputDiffHandler",
+      "name": "change added/removed, exact balance, tokens in change, insufficient funds, DRep refund, FeesOk property",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/ChangeOutputDiffHandlerTest.scala:42-76",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/ChangeOutputDiffHandlerTest.scala:123-351"
+      ]
+    },
+    {
+      "pass": "TransactionBuilder.balanceFeeAndChangeWithTokens",
+      "name": "BalanceDidNotConverge after MaxBalancingIterations",
+      "tests": []
+    },
+    {
+      "pass": "SomeBuildError",
+      "name": "reason and toString for every error case",
+      "tests": []
+    },
+    {
+      "pass": "UtxoPool.selectForValue",
+      "name": "smallest sufficient, largest-first, tokens first, already-selected excluded, ref-script UTxOs last",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:47-171",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/RefScriptUtxoSelectionTest.scala:40-124"
+      ]
+    },
+    {
+      "pass": "UtxoPool.selectForCollateral",
+      "name": "optimal, smallest sufficient, largest-first, token fallback, maxCollateralInputs cap, tier fallback",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:177-386",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/RefScriptUtxoSelectionTest.scala:61-86"
+      ]
+    },
+    {
+      "pass": "UtxoPool.selectForCollateral",
+      "name": "several token UTxOs largest-first; ref-script UTxOs as last-resort collateral",
+      "tests": []
+    },
+    {
+      "pass": "UtxoPool",
+      "name": "withInputs, withCollateral, replaceCollateral, remainingForInputs, totals",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:388-565"
+      ]
+    },
+    {
+      "pass": "TransactionEditor.editTransaction / editTransactionSafe",
+      "name": "re-index Spend redeemers after input edits",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionEditorTest.scala:46-248"
+      ]
+    },
+    {
+      "pass": "RedeemerManagement.detachRedeemer / indexFor",
+      "name": "Mint, Reward, Cert, Proposing, Voting redeemers",
+      "tests": []
+    },
+    {
+      "pass": "TransactionSigner (JVM)",
+      "name": "sign adds one witness per key, keeps existing ones, valid Ed25519 signature; companion apply from byte pairs",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionSignerTest.scala:40-169"
+      ]
+    },
+    {
+      "pass": "PlutusScriptEvaluationException",
+      "name": "source position, redeemer, script, args and message layout",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/PlutusScriptEvaluationExceptionTest.scala:40-149"
+      ]
+    },
+    {
+      "pass": "TxBuilder diagnostic replay",
+      "name": "replay with debug scripts for spend, mint, payTo, references, withDebugScript, Emulator.submitSync; bounded replay",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/DiagnosticReplayTest.scala:54-388"
+      ]
+    },
+    {
+      "pass": "TxBuilder.complete fee estimation",
+      "name": "fee covers the sponsor and multi-script signatures; extra keys filtered",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/MultiScriptFeeEstimationTest.scala:52-167",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/SponsorSignatureFeeTest.scala:24-113"
+      ]
+    },
+    {
+      "pass": "TxBuilder spend + references",
+      "name": "spend and reference the same UTxO at PV 11, rejected at PV 10",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/SpendAndReferenceSameUtxoTest.scala:86-128"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C09-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionEditor.scala:205-224",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionEditor.scala:179-203",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionEditor.scala:320-336",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionEditorTest.scala:80-106"
+      ],
+      "claim": "By reading (not executed): toEditableTransactionSafe sets `updatedTx = tx.withWitness(TransactionWitnessSet.empty)` (line 222), so editTransactionSafe returns a transaction with no vkey witnesses, native/Plutus scripts, datums or bootstrap witnesses. Its doc says it only removes the redeemers, and the unsafe twin toEditableTransaction keeps the rest of the witness set. TransactionEditorTest cannot see it: every fixture has a witness set that holds only redeemers. No main code calls editTransactionSafe (only the test), so the impact is the public API.",
+      "action": "Add a test: a tx with one input, a Spend redeemer, a PlutusV1 script (script1) and one VKeyWitness in the witness set; assert editTransactionSafe(identity)(tx) == Right(tx) and that editTransaction(identity)(tx) keeps the script and the witness. Main-code note only: build updatedTx with `tx.withWitness(_.copy(redeemers = None))`.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-74",
+      "verification": "TransactionEditor.scala:222 sets `updatedTx = tx.withWitness(TransactionWitnessSet.empty)`. The doc at 206-208 says it only removes redeemers. The unsafe twin at 196-200 keeps the witness set and clears only `redeemers`. editTransactionSafe (320-336) calls toEditableTransactionSafe on the input and on the processed tx, then fromEditableTransaction (247-263), which copies the now-empty witness set. So vkey witnesses, scripts, datums and bootstrap witnesses are dropped. You reach it through the public API: TransactionEditor.editTransactionSafe(identity)(tx) on any tx whose witness set holds more than redeemers. The only callers are in TransactionEditorTest.scala (lines 102, 163, 224). Those fixtures build anyNetworkTx and set only redeemers, so the test passes. The suggested fix compiles: Transaction.scala:81 has the overload `withWitness(f: TransactionWitnessSet => TransactionWitnessSet)`."
+    },
+    {
+      "id": "C09-2",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/ChangeOutputDiffHandlerTest.scala:314-351",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/ChangeOutputDiffHandlerTest.scala:430-438",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:1235-1246",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/PlutusScriptEvaluator.scala:245-251",
+        "docs/internal/test-refactor/profiles/ledger-analysis.md:7",
+        "docs/internal/test-refactor/profiles/ledger-analysis.md:36-42"
+      ],
+      "claim": "'fees okay property' is the slowest test of the module (3.2 s local, 7.3 s in F-6; the suite is 33 % of ledger test CPU). Every balancing iteration calls computeScriptsWitness, which runs the full DefaultImpl evaluator (allResolvedScripts, allNeededScriptData, TxInfo setup) on a transaction that has no scripts and no redeemers. In the profile, computeScriptsWitness and evalPlutusScripts take 19.5 % / 17.3 % of all ledger CPU, which is about 60 % of this suite. The result is always empty for these transactions.",
+      "action": "In checkFeeOk (430-438) pass PlutusScriptEvaluator.noop instead of the suite's real evaluator; keep the real evaluator in check() and the other example tests. Do not change the property config.",
+      "coverageRisk": "low: setupRedeemers still runs with an empty redeemer list; the DefaultImpl evaluator on scriptless transactions stays covered by the example tests in this file and by every TxBuilder test.",
+      "ciSavingSec": 4,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-3",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionSignerTest.scala:15-33",
+        "docs/internal/test-refactor/profiles/ledger-analysis.md:15",
+        "docs/internal/test-refactor/timings.csv:98"
+      ],
+      "claim": "Each test derives fresh keys from a mnemonic with bloxbean (PBKDF2 + BIP32), 11 derivations in total; the suite takes 0.84 s, single tests 0.13-0.17 s, and TransactionSignerTest.generateKeyPair is 2.2 % self CPU of the ledger profile. No test needs keys that differ between tests.",
+      "action": "Derive three BloxbeanKeyPair values once (private lazy vals for account indices 0, 1, 2) and use them in every test; delete the accountIndex var. Keep BloxbeanKeyPair: this suite is its only test.",
+      "coverageRisk": "none: the same BloxbeanKeyPair code path runs, only fewer times",
+      "ciSavingSec": 0.5,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/ChangeOutputDiffHandlerTest.scala:226-238",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/Change.scala:35-38"
+      ],
+      "claim": "'should fail on invalid change output index' wraps the call in try/catch and asserts only inside the catch. If balanceFeeAndChangeWithTokens returns Left or Right instead of throwing (e.g. a mutation that wraps the diff handler in Try, or drops the require and returns InsufficientFunds), the test passes.",
+      "action": "Replace the try/catch with intercept[IllegalArgumentException] and assert the message contains \"out of bounds\".",
+      "coverageRisk": "none: same scenario, stricter check",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/ChangeOutputDiffHandlerTest.scala:430-454",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/ChangeOutputDiffHandlerTest.scala:412-416"
+      ],
+      "claim": "checkFeeOk, used by the 100k-sample property and two examples, checks only FeesOkValidator. A balancer that sets a large enough fee but leaves the change output wrong (value not conserved), or lowers the fee below the initial fee, passes. check() already asserts value conservation, so the cheapest oracle is in the file.",
+      "action": "In checkFeeOk also assert ValueNotConservedUTxOValidator.validate(Context(), State(utxo), balancedTx).isRight and balancedTx.body.value.fee >= Coin(feeAda).",
+      "coverageRisk": "none: adds assertions only",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-6",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/ChangeOutputDiffHandlerTest.scala:317-348",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/Change.scala:42-52"
+      ],
+      "claim": "The property's four generators produce ADA-only values with amounts drawn uniformly up to 2^55-2^57. They never produce native tokens (changeOutputDiffHandler merges diff.assets and the min-ADA of a multi-asset change output depends on them), and the change left after fee is almost never near the min-ADA boundary (probability ~1e6/2^57), which is where the size-vs-fee interaction of the balancing loop is tight.",
+      "action": "Add gen4: input Value with 1-3 policies/assets (reuse policyId, co2, h2so4), output Value.zero or ADA only, fee 0. Add gen5: in = out + fee + minAda + Gen.choose(0, 2 ADA) with small out. Keep the property's success expectation; for gen5 accept Left(InsufficientFunds) only when in - out < final fee + minAda.",
+      "coverageRisk": "none: adds cases",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-7",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:902-1156",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:966-1044"
+      ],
+      "claim": "The six ensureCollateralReturn tests are instances of one rule, each repeating the same 25 lines of setup (UTxO, AddCollateral build, set fee, call, match). Observable invariants: for collateral value V and fee f, with required = ceil(f * collateralPercentage / 100): a return output exists iff V has tokens or (V.coin - required >= minAda(return) and required > 5 ADA); when it exists, return.coin + totalCollateral == V.coin, totalCollateral == required, and return.assets == V.assets; with tokens and V.coin - required < minAda the result is Left(InsufficientCollateralForReturn).",
+      "action": "Add a helper collateralReturn(v: Value, fee: Coin) and a forAll over (ADA 1..100, optional tokens, fee 0.1..10 ADA) asserting the invariants above, with minAda taken from MinCoinSizedTransactionOutput.computeMinAda. Keep the 3_333_333 / 3_333_334 boundary cases and the tokens-with-1-ADA error case as three short table rows.",
+      "coverageRisk": "low: the exact 14 ADA and 10_999_999 return amounts are kept by the boundary rows and implied by the invariant; the property adds the ADA-only 'required > 5 ADA but excess < minAda' case that no example pins",
+      "ciSavingSec": 0,
+      "linesRemoved": 150,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The invariants match TransactionBuilder.scala:966-1043. required = ceil(fee*150/100) (CollateralSufficient.scala:48-54). When a return exists, totalCollateral = V.coin - (V.coin - required) = required, and return.assets = V.assets. Left(InsufficientCollateralForReturn) occurs iff tokens and potentialReturnAda < minAda (1011-1019). An ADA-only return needs excess >= minAda && required > 5 ADA (1023-1024). When V.coin < required, the Coin is negative, and Coin (Types.scala:37) and its encoder (writeLong) accept negative values, so the generator range does not throw. Gap: the stated law describes only the case where a return exists. The example at 962-1001 also asserts `totalCollateral.isEmpty` when there is no return. The property lacks that assertion. The error example also pins totalAda == V.coin. Corrected action: in the no-return branch, add `result == Right(tx)` (or `totalCollateral.isEmpty`). On Left, check the error fields (totalAda == V.coin, required, minAda). Then the three boundary/error rows plus the forAll can replace the six tests."
+    },
+    {
+      "id": "C09-8",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:286-306",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:517-537",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/UtxoPool.scala:168-300"
+      ],
+      "claim": "Strategy 6 makes the coverage outcome of selectForCollateral exact: the selection covers `required` iff the maxCollateralInputs largest UTxOs of the pool cover it; and always size <= maxCollateralInputs and selection is a subset of available. The examples at 286-306 and 517-537 are weak instances of this law: 286-299 asserts only nonEmpty + contains, 517-537 asserts only under `if selected.size == 1`, so it passes for any multi-UTxO result.",
+      "action": "Add one forAll over pools of 0-8 UTxOs (ADA 0.5-20, 30 % with tokens, 15 % with a scriptRef) and required 0.5-30 ADA asserting the three invariants. Delete 286-306 and 517-537. Keep the strategy-specific examples (177-284, 338-386), which pin which UTxO is chosen.",
+      "coverageRisk": "low: the deleted tests assert less than the property; the empty-pool case is a generated size-0 pool",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The law holds for UtxoPool.scala:168-300. Every strategy returns only when its selection covers `required`. Each strategy checks size < maxInputs before it adds (lines 216, 242, 247, 264, 268). Strategy 6 (284-297) takes the k largest overall, so when tiers fail, the result covers iff the top-k cover. Deleting 286-306 is safe. In 286-299 (pool 1 ADA + 10 ADA token, required 5), coverage implies input(1). The empty pool is the size-0 case, and the subset law forces empty. But 517-537 is not weaker than the property. With all-token UTxOs 10/5/3 and required 4, strategy 4 (lines 239-245) always returns a single UTxO: the smallest sufficient token UTxO, input(1). So the `if selected.size == 1` branch always runs and pins that choice. Picking input(0) (10 ADA) would also cover, so the property would not detect that mutation. No other example pins this choice: the token tests at 286 and 364 each have only one token UTxO. Corrected action: add the forAll and delete 286-306. Keep 517-537 but make it strict: `assert(selected == Map(input(1) -> tokenOutput(5, 50)))`."
+    },
+    {
+      "id": "C09-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:485-515",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:258-284",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:458-479",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:409-433",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:308-336",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:193-217"
+      ],
+      "claim": "Three tests repeat others: 'integration: full flow' (485-515; computes inputKeys/collateralKeys and never uses them, asserts only nonEmpty and inputs tracking) is a weaker copy of 'can reuse UTxOs already selected for inputs' (258-284); 'immutability' (458-479) re-asserts the 'original pool unchanged' checks of 409-433; 'documents no collateralReturn when optimal UTxO selected' (308-336) is the optimal-UTxO case of 193-217 with other amounts and never looks at a collateral return.",
+      "action": "Delete 485-515 and 308-336. Move the two cross-checks of 474-478 (pool1.collateral empty, pool2.inputs empty) into the withInputs/withCollateral tests and delete 458-479.",
+      "coverageRisk": "none: every assertion that is deleted is also made by the kept test",
+      "ciSavingSec": 0,
+      "linesRemoved": 80,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "485-515 asserts inputSelection.size == 1, collateralSelection.nonEmpty and poolWithInputs.inputs == inputSelection. The size-1 check is covered by the selectForValue tests (47-61). The reuse/collateral check is covered by 258-284, which is stronger (key-set equality). The inputs tracking is covered by withInputs at 409-420. 308-336 asserts size == 1 and excess < minAda. 193-217 asserts the same plus contains(input(1)), with other amounts on the same entry point. Both deletions are safe. 458-479 also asserts `pool.remainingForInputs.size == 2` on the original pool after withInputs. No kept test asserts this: 435-456 checks the original only before modification. The action moves only 474-478. The risk is small because UtxoPool fields are private vals (UtxoPool.scala:8-12), but the claim 'every assertion is also made' is false. Corrected action: when you delete 458-479, also move `assert(pool.remainingForInputs.size == 2)` into the withInputs test (409-420), next to the two cross-checks."
+    },
+    {
+      "id": "C09-10",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/MultiScriptFeeEstimationTest.scala:52-108",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/MultiScriptFeeEstimationTest.scala:110-167",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/MultiScriptFeeEstimationTest.scala:17-34"
+      ],
+      "claim": "The two tests build the same transaction from identical setup (56-91 vs 113-146: same UTxOs, emulator, delayed redeemers, builder calls); one asserts emulator acceptance, the other fee >= MinTransactionFee. Both also print debug lines to System.err (98-100, 155-160), and the class doc describes a fixed bug with a stale 'line ~1590' reference.",
+      "action": "Merge into one test that builds and signs once, asserts feeInTx >= minFee (with the shortfall in the clue), then submits and asserts isRight. Delete the System.err.println lines and shorten the doc to what the test guards.",
+      "coverageRisk": "none: both assertions are kept on the same transaction",
+      "ciSavingSec": 0,
+      "linesRemoved": 55,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "MultiScriptFeeEstimationTest.scala:56-91 and 113-148 have the same setup and the same builder chain. The only difference is that the first test maps the signing inside the future. The first test asserts emulator.submit(...).isRight (102-107). The second asserts feeInTx >= minFee (162-166). Both use the same computeMinFee(signedTx, emulator.utxos, ...) computed before submit. A merged test that computes minFee before submit, asserts it, then submits keeps both assertions on the same tx. Ordering matters: emulator.utxos changes after submit, so the fee check must come first, as the action states. The System.err lines are at 98-100 and 155-160. The class doc (17-34) cites 'line ~1590'."
+    },
+    {
+      "id": "C09-11",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/SponsorSignatureFeeTest.scala:24-53",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/SponsorSignatureFeeTest.scala:55-76",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/SponsorSignatureFeeTest.scala:78-113"
+      ],
+      "claim": "'fee accounts for sponsor signature' and 'submission succeeds with correct sponsor fee' build the same Alice->Bob 10 ADA transaction with the same emulator and sign it the same way; they differ only in the final assertion. The emulator setup is copied three times.",
+      "action": "Merge the first two into one test asserting fee >= min fee for the signed tx and provider.submit(...).isRight. Extract a private def provider(): Emulator for the three copies.",
+      "coverageRisk": "none: both assertions are kept",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "SponsorSignatureFeeTest.scala:24-53 and 55-76 build the same Emulator (same UTxO, Context.testMainnet, PlutusScriptsTransactionMutator) and the same Alice->Bob 10 ADA tx, signed with sender.signer. The first asserts fee >= computeMinFee(...).toOption.get. The second asserts provider.submit(...).isRight. Merged: compute the min fee first (keep .toOption.get, which is strict), then submit. That keeps both. The emulator block is repeated at 28-35, 59-66 and 82-89."
+    },
+    {
+      "id": "C09-12",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/ChangeOutputDiffHandlerTest.scala:459-476",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:1357-1375",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:1047-1048"
+      ],
+      "claim": "Both tests check that calculateChangeValue sums token totals exactly past Long.MaxValue with the same 2 x (2^62 + 1) token setup. The 3-argument overload used at 459-476 only delegates to the CertState overload with CertState.empty, which 1357-1375 exercises (plus a pool registration). The ChangeOutputDiffHandlerTest copy is also off-topic for that suite.",
+      "action": "Delete ChangeOutputDiffHandlerTest.scala:459-476.",
+      "coverageRisk": "low: the 3-argument overload stays covered by TransactionBuilderTests.scala:1321-1322 and 1347-1348",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "ChangeOutputDiffHandlerTest.scala:459-476 asserts calculateChangeValue(tx, utxo, params) == Value.ada(1) with 2 x (2^62+1) tokens on both sides. The 3-arg overload (TransactionBuilder.scala:1047-1048) only delegates to the CertState overload with CertState.empty. The exact-total logic lives in TxBalance.producedExact/consumedExact (1060-1071), which both paths share. TransactionBuilderTests.scala:1357-1375 tests the same token amounts through the 4-arg overload (registeringTx, change Value.ada(997)) on the same JVM platform. The 3-arg overload stays covered at 1321-1322 and 1347-1348."
+    },
+    {
+      "id": "C09-13",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionSignerTest.scala:133-146",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionSignerTest.scala:40-53"
+      ],
+      "claim": "'VKeyWitness has correct field sizes' signs with one key and asserts witness.vkey == verification key, which 'sign with single key adds VKeyWitness' already asserts; it adds only the 32/64 byte length checks.",
+      "action": "Move the two length assertions into the single-key test and delete 133-146.",
+      "coverageRisk": "none: all assertions are kept",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "TransactionSignerTest.scala:133-146 asserts vkey.length == 32, vkey == keyPair.verificationKey and signature.length == 64. The test at 40-53 already asserts the single witness and vkey == verificationKey. Moving the two length checks keeps every assertion. The accountIndex counter (23-31) shifts key derivation for later tests, but no test pins key bytes (no fromHex or fixed-key assertions), so the deletion is safe."
+    },
+    {
+      "id": "C09-14",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionSignerTest.scala:89-106",
+        "scalus-cardano-ledger/jvm/src/main/scala/scalus/cardano/txbuilder/TransactionSigner.scala:24-42"
+      ],
+      "claim": "The companion TransactionSigner.apply test asserts only witnesses.size == 2. Swapping priv and pub in apply, or signing with the wrong key, still yields two witnesses, so no mutation of the key handling breaks it. The companion's verify (lines 37-38) is uncovered.",
+      "action": "Assert the witness vkeys equal Set(pub1, pub2) and that every signature passes platform.verifyEd25519Signature(vkey, unsignedTx.id, signature).",
+      "coverageRisk": "none: adds assertions only",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-15",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:766-783",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:533-552",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:282-286"
+      ],
+      "claim": "'Mint with static redeemer' asserts only result.isRight: storing a different redeemer, or none, passes. 'factory methods work in Spend step' asserts only redeemers.nonEmpty: a redeemer with the wrong datum or purpose passes. At 285 the fallback is fail(\"unreachable\"), which hides the actual value when the match fails.",
+      "action": "766-783: assert context.redeemers == Seq(DetachedRedeemer(staticRedeemer, ForMint(scriptHash1))). 533-552: assert context.redeemers == Seq(unitDRedeemer(ForSpend(script1Utxo.input))). 285: fail(s\"unexpected redeemer: $other\").",
+      "coverageRisk": "none: stricter checks on the same scenarios",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-16",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:1203-1232",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:367"
+      ],
+      "claim": "No test reaches BalanceDidNotConverge (line 1206-1207 uncovered), the guard that stops a non-converging balancing loop after MaxBalancingIterations = 20. A diff handler that changes the fee does not trigger it, because each pass resets the fee to max(minFee, initial fee).",
+      "action": "Add a ChangeOutputDiffHandlerTest case: call balanceFeeAndChangeWithTokens with a diff handler that returns a tx with a field the loop never recomputes changed on every call (e.g. ttl = Some(ttl.getOrElse(0L) + 1)); assert Left(BalanceDidNotConverge(21)).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-17",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:876-897",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:904-941",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/StepError.scala:104-110"
+      ],
+      "claim": "The error paths for user callbacks are untested: a redeemer builder that throws (catch at 891-893, uncovered) gives RedeemerComputationFailed, and a datum builder that throws (catch at 935-937, uncovered) gives DatumComputationFailed. These are the errors a user sees when a delayed-redeemer lambda fails.",
+      "action": "Add two TransactionBuilderTests cases with testBuilderStepsFail-style asserts: Spend(script1Utxo, ThreeArgumentPlutusScriptWitness(PlutusScriptValue(script1), _ => throw RuntimeException(\"boom\"), DatumInlined)) -> Left(SomeStepError(RedeemerComputationFailed(\"boom\", step))); the same for Send with a datumBuilder that throws -> DatumComputationFailed.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-18",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:1372-1438"
+      ],
+      "claim": "SomeBuildError.reason and toString (every case, lines 1372-1438) are unexecuted in the full jvm/test baseline. These strings are what users and logs see for build failures; a broken interpolation or a swapped field goes unnoticed.",
+      "action": "Add one table test: for each SomeBuildError case (step error, redeemer indexing, EvaluationFailed, Failed, BalanceDidNotConverge, InsufficientFunds with and without tokens, InsufficientCollateralForReturn, ValidationError) assert toString and reason.getMessage contain the key fields (e.g. \"after 21 iterations\", \"adaDiff=-5\", \"tokens=\").",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -40,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-19",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/UtxoPool.scala:248-282",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/RefScriptUtxoSelectionTest.scala:61-86"
+      ],
+      "claim": "Two selectForCollateral strategies are never reached: several token UTxOs taken largest-first when no single one covers (249-253 uncovered), and ref-script UTxOs as last-resort collateral (265-280 uncovered). RefScriptUtxoSelectionTest checks only that a ref-script UTxO is NOT used when alternatives exist.",
+      "action": "Add two UtxoPoolTest cases: (a) ADA-only 1 ADA + token UTxOs of 3 and 3 ADA, required 6 ADA -> both token UTxOs selected; (b) a 10 ADA UTxO with a scriptRef and a 1 ADA plain UTxO, required 5 ADA -> the ref-script UTxO is selected.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-20",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionEditor.scala:76-138",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionEditorTest.scala:46-248"
+      ],
+      "claim": "TransactionEditorTest uses only Spend redeemers. The Mint, Reward, Cert, Proposing and Voting branches of RedeemerManagement.detachRedeemer (82-105) and indexFor (120-136) are uncovered, so re-indexing a mint or certificate redeemer after an edit is untested.",
+      "action": "Add one table test: for each tag, a tx with two targets (two policies in mint, two withdrawals, two certificates, two proposals, two voters) and a redeemer at index 1; remove the first target with editTransaction and assert the redeemer now has index 0; then remove its own target and assert the redeemer is dropped.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-21",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:452-531",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:158-163",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:190-193"
+      ],
+      "claim": "Six ThreeArgumentPlutusScriptWitness factory tests repeat one shape (build witness, assert scriptSource, redeemerBuilder result, datum); the 'and datum value' variants differ only in the stored datum. The TwoArgumentPlutusScriptWitness delayed-redeemer factories attached(script, builder) and reference(builder) (158-163, 190-193) are uncovered.",
+      "action": "Replace 452-531 with one table of (witness, expected scriptSource, tx, expected redeemer, expected datum) rows; add the two TwoArgumentPlutusScriptWitness delayed rows.",
+      "coverageRisk": "none: same assertions; two factories gain coverage",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-22",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionEditorTest.scala:16-19",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionEditorTest.scala:21-44",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionEditorTest.scala:108-248"
+      ],
+      "claim": "Every test builds transactions with two-lens pipelines and spells out Redeemer(tag = Spend, index, data, exUnits = ExUnits.zero) by hand (14 times); the four tests are 200 lines for four equality asserts. addInput (16-19) is never used and the ScalaCheckPropertyChecks mixin is unused.",
+      "action": "Add local helpers spendR(index, data) and txWith(inputs: TransactionInput*)(redeemers: Redeemer*); rewrite the four tests with them; delete addInput and the mixin.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 110,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-23",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/DiagnosticReplayTest.scala:54-306",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/DiagnosticReplayTest.scala:256-273",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/DiagnosticReplayTest.scala:308-315",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/DiagnosticReplayTest.scala:152-167"
+      ],
+      "claim": "Nine tests repeat the same three UTxO lines, the same intercept[BalancingException] { TxBuilder(env).spend(paymentUtxo).collaterals(collateralUtxo)...build(changeTo = Alice.address) } and the same logs.nonEmpty + contains(\"expected failure\") pair. 'script hash is preserved in withErrorTraces' (256-273) asserts the hashes DIFFER, against its name, and 311-315 repeats that assertion. 'successful script evaluation does not trigger replay' (152-167) asserts only inputs.nonEmpty, so it cannot detect a replay.",
+      "action": "Add private helpers failingBuild(f: TxBuilder => TxBuilder): BalancingException (supplies the three UTxOs, collateral, payTo Bob, build) and assertReplayed(ex); rewrite the nine tests with them. Rename 256 to 'withErrorTraces keeps the SIR and changes the script hash' and drop 311-315. Rename 152 to 'a succeeding script builds', or drop it if TxBuilder tests already cover a passing spend.",
+      "coverageRisk": "none: same scenarios and assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 90,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-24",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/testing/kit/TestUtil.scala:55-56",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/DiagnosticReplayTest.scala:20-21",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/MultiScriptFeeEstimationTest.scala:39-40",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/RefScriptUtxoSelectionTest.scala:20-21",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/SpendAndReferenceSameUtxoTest.scala:38-39",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/SponsorSignatureFeeTest.scala:21-22",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/UtxoPoolTest.scala:22-23"
+      ],
+      "claim": "Six suites redefine the all-zero genesisHash that TestUtil.genesisHash already provides (same value, documented for exactly this use). DiagnosticReplayTest also defines input/adaOutput helpers (23-25) that it never uses.",
+      "action": "Import scalus.testing.kit.TestUtil.genesisHash in the six files and delete the local vals; delete DiagnosticReplayTest's unused input and adaOutput.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-25",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/DiagnosticReplayTest.scala:44-52",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/PlutusScriptEvaluationExceptionTest.scala:30-38",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TxBuilderTest.scala:37-45",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/PlutusScriptEvaluationExceptionTest.scala:41-52",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/PlutusScriptEvaluationExceptionTest.scala:91-101"
+      ],
+      "claim": "createScriptLockedUtxo is copied verbatim in three suites (one, TxBuilderTest, is in the txbuilder.core cluster). PlutusScriptEvaluationExceptionTest also builds the same failing transaction twice (41-52 and 91-101).",
+      "action": "Add TestUtil.scriptLockedUtxo(script: PlutusScript, datum: Data = 42.toData)(using CardanoInfo): Utxo and use it in the three suites. In PlutusScriptEvaluationExceptionTest hold the intercepted exception in one private lazy val used by both tests.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-26",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:147-163",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:38",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:789-797",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:1442-1447",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:1458",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:1475-1481",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TransactionBuilderTests.scala:1548-1555"
+      ],
+      "claim": "Nits in one file: plutusScript1RefWitness, plutusScript1RefSpentWitness and plutusScript2RefWitness (147-163) are three identical values; networkL (1458), testnetTransaction and testnetContext (1551-1555) are never used; a commented-out test (789-797); ScalaCheckPropertyChecks is mixed in but no forAll exists; a top-level def unitRedeemer(tag, index) (Data.List(Nil)) and a val unitRedeemer (empty ByteString data) share one name; the file is TransactionBuilderTests.scala but the class is TransactionBuilderTest; the shared fixtures (script1, pkhOutput, input0..2) are package-level globals in a test file that TransactionEditorTest also depends on.",
+      "action": "Keep one refWitness val; delete networkL, testnetTransaction, testnetContext, the commented test and the unused mixin; rename the val to emptyBytesSpendRedeemer; rename the file to TransactionBuilderTest.scala; move the top-level fixtures into an object TxBuilderFixtures in its own file and import it in both suites.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C09-27",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/ChangeOutputDiffHandlerTest.scala:78-121",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/utils/MinTransactionFeeTest.scala:1"
+      ],
+      "claim": "Two tests in ChangeOutputDiffHandlerTest test ledger.utils, not the change handler: MinCoinSizedTransactionOutput.ensureMinAda is a fixed point (78-91) and MinTransactionFee.ensureMinFee is stable after setting the fee (93-121). A shared MinTransactionFeeTest already exists in ledger/utils.",
+      "action": "Move 93-121 into MinTransactionFeeTest and 78-91 next to it (ledger/utils), unchanged.",
+      "coverageRisk": "none: tests move, they are not changed",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 8 findings of scope merge-duplicate-tests, to-property or main-bug; 5 confirmed, 3 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

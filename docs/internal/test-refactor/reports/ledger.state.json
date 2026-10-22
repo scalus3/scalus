@@ -1,0 +1,437 @@
+{
+  "cluster": "ledger.state",
+  "summary": "Twelve small suites (1278 lines) that test ledger state and fee helpers: StakeDistribution, RewardsCalculation, ConwayAccountState/DelegationState, ScriptCache, ExactValue, MinTransactionFee, EvaluatorReportConfig, the 3-element transaction decoder, the Plutus scope check and the Byron script-context rejection. The cluster is cheap: every suite in timings.csv runs in under 0.5 s (PlutusScriptScopeTest's 0.40 s is first-test evaluator warm-up; TransactionWithoutIsValidTest is newer than the baseline and has no row), so there are no ci-time findings. The newer suites (TransactionWithoutIsValid, DelegationState, ConwayAccountState, ScriptCache, ExactValue, MinTransactionFee) are precise; the older ones (RewardsCalculation, StakeDistribution, NativeRefScriptMinFee) print to stdout and assert only inequalities that survive obvious mutations. StakeDistribution's pool-stake path, fromCertState and the Script/Byron/StakeAddress branches have no test at all, and two main-code defects surfaced while reading: fromCertState ignores account reward balances (the ledger adds them to active stake), and RewardsCalculation uses Double arithmetic that overpays by a lovelace and does not cap the leader share when the pool reward is below its cost; neither object has a caller in main code apart from EmulatorBase's use of aggregateUtxoStake. EvaluatorReportConfig's SCALUS_PROFILE_OUT parsing and file-format inference are entirely untested.",
+  "behaviors": [
+    {
+      "pass": "StakeDistribution",
+      "name": "aggregateUtxoStake: sums coin per Key delegation credential; enterprise (Null) outputs contribute nothing",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/StakeDistributionTest.scala:10-50"
+      ]
+    },
+    {
+      "pass": "StakeDistribution",
+      "name": "aggregateUtxoStake: Script delegation, Pointer, StakeAddress and Byron outputs",
+      "tests": []
+    },
+    {
+      "pass": "StakeDistribution",
+      "name": "computeSnapshot: poolStakes and activeStake from non-empty delegations",
+      "tests": []
+    },
+    {
+      "pass": "StakeDistribution",
+      "name": "computeDRepVotingStake: one credential per DRep (summing two credentials into one DRep is untested)",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/StakeDistributionTest.scala:52-80"
+      ]
+    },
+    {
+      "pass": "StakeDistribution",
+      "name": "fromCertState",
+      "tests": []
+    },
+    {
+      "pass": "RewardsCalculation",
+      "name": "computeTotalRewards, distributePoolRewards, splitPoolRewards, aggregateAccountRewards; zero total stake",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/RewardsCalculationTest.scala:9-191"
+      ]
+    },
+    {
+      "pass": "RewardsCalculation",
+      "name": "splitPoolRewards edge branches: reward below cost, leader takes everything, zero pool stake",
+      "tests": []
+    },
+    {
+      "pass": "ConwayAccountState",
+      "name": "CBOR encoding [balance, deposit, null | pool, null | drep] and decoding",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/ConwayAccountStateTest.scala:13-25"
+      ]
+    },
+    {
+      "pass": "DelegationState",
+      "name": "accounts map, deprecated 4-map views, deprecated apply/constructor and their defaults",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/DelegationStateTest.scala:19-118"
+      ]
+    },
+    {
+      "pass": "ScriptCache",
+      "name": "intern returns the first equal instance, keys on language, LRU eviction, natives pass through, positive capacity",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/ScriptCacheTest.scala:10-54"
+      ]
+    },
+    {
+      "pass": "ExactValue",
+      "name": "exact sums past Long range, zero amounts dropped, toValue throws on overflow, toClampedValue clamps",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/utils/ExactValueTest.scala:13-37"
+      ]
+    },
+    {
+      "pass": "MinTransactionFee",
+      "name": "reference-script fee term: native scripts count, spent+referenced UTxO counts once, fee rule accepts the min fee",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/utils/NativeRefScriptMinFeeTest.scala:57-207",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/utils/MinTransactionFeeTest.scala:45-59"
+      ]
+    },
+    {
+      "pass": "MinTransactionFee",
+      "name": "computeMinFee returns BadInputs / BadReferenceInputs for an unresolved input",
+      "tests": []
+    },
+    {
+      "pass": "EvaluatorReportConfig",
+      "name": "defaults, fromLegacyBoolean, SCALUS_DUMP / SCALUS_DUMP_DIR / SCALUS_PROFILE / SCALUS_PROFILE_MAX_ROWS, effectiveProfileOutputs Full",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/EvaluatorReportConfigTest.scala:7-101"
+      ]
+    },
+    {
+      "pass": "EvaluatorReportConfig",
+      "name": "SCALUS_PROFILE_OUT parsing, formatFromName, SCALUS_PROFILE=summary/unknown, artifact aliases cbor/profile/unknown",
+      "tests": []
+    },
+    {
+      "pass": "Transaction CBOR",
+      "name": "3-element (no isValid) transactions decode, keep their bytes, size/fee as 3 elements; malformed records rejected",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/TransactionWithoutIsValidTest.scala:60-195"
+      ]
+    },
+    {
+      "pass": "PlutusScriptEvaluator",
+      "name": "ledger scope check: out-of-scope index fails even if unevaluated, not inside Case",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/PlutusScriptScopeTest.scala:65-81"
+      ]
+    },
+    {
+      "pass": "LedgerToPlutusTranslation / TxBuilder",
+      "name": "Byron outputs rejected in script contexts; TxBuilder rejects Byron inputs",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/ByronAddressInScriptContextTest.scala:30-120"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C41-1",
+      "check": "C1",
+      "scope": "main-bug",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/StakeDistribution.scala:113-122",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/StakeDistribution.scala:30-48",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/ConwayAccountState.scala:17-22"
+      ],
+      "claim": "StakeDistribution claims to implement the SNAP rule, but fromCertState passes only the pool delegations of the accounts, so computeSnapshot never adds the account reward balances. cardano-ledger's resolveActiveInstantStakeCredentials (libs/cardano-ledger-core/src/Cardano/Ledger/State/Stake.hs:225-244) adds balanceAccountStateL to the UTxO stake of each registered, pool-delegated credential, and counts a delegated account with no UTxO stake but a non-zero balance. Scalus gives that account 0 stake and lowers activeStake and poolStakes by the sum of all balances. Also, stakeCredentials keeps unregistered credentials, which the ledger drops (Map.dropMissing). Impact today is low: no main code calls fromCertState or computeSnapshot (EmulatorBase.scala:211 uses only aggregateUtxoStake).",
+      "action": "Add a test: CertState with one account (balance 5 ADA, delegated to pool P) whose credential has 10 ADA of UTxO stake, and one account (balance 3 ADA, delegated to P) with no UTxO; assert poolStakes(P) == 18 ADA and activeStake == 18 ADA. Main-code note only: add account balances of pool-delegated registered accounts in fromCertState, as the ledger does.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-58",
+      "verification": "StakeDistribution.scala:113-122 builds only the delegation maps from certState.dstate.accounts. ConwayAccountState.balance (ConwayAccountState.scala:17-22) is never read. computeSnapshot (30-48) sums only the UTxO stake from aggregateUtxoStake (56-61). The ledger does it differently. cardano-ledger libs/cardano-ledger-core/src/Cardano/Ledger/State/Stake.hs:225-244 uses resolveActiveInstantStakeCredentials: Map.dropMissing drops unregistered UTxO credentials, mapMaybeMissing counts a non-zero balance of a delegated account with no UTxO, and zipWithMaybeAMatched adds stake <> balance. So Scalus under-counts poolStakes and activeStake by the balances of registered, pool-delegated accounts. stakeCredentials keeps unregistered credentials. poolStakes is not affected by those credentials, because delegations come only from registered accounts. The only main-code use of StakeDistribution is aggregateUtxoStake at EmulatorBase.scala:211. Nothing calls fromCertState or computeSnapshot, so the impact is low, as the finding says. The proposed test expectation (10+5+3 = 18 ADA for poolStakes(P) and activeStake) is correct, and it fails today with 10 ADA."
+    },
+    {
+      "id": "C41-2",
+      "check": "C6",
+      "scope": "main-bug",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/RewardsCalculation.scala:157-158",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/RewardsCalculation.scala:47-61",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/RewardsCalculation.scala:120-128"
+      ],
+      "claim": "multiplyByDouble computes Coin((coin.value.toDouble * factor).toLong). Above 2^53 lovelace (mainnet reserves are near that) and for factors like 0.003 that have no exact binary form, the result differs from the ledger's floor of the exact rational: computeTotalRewards(Coin(10000000000000666), Coin(0), rho = 0.003) gives a monetary expansion of 30000000000002 where floor(10000000000000666 * 3 / 1000) = 30000000000001 (checked with IEEE doubles; about 0.7 % of reserves values in 1e15..4.5e16 differ). RewardsConfig takes Double by API, so the fix is a rational config. No main code calls RewardsCalculation; only RewardsCalculationTest does. Second defect in the same object: splitPoolRewards does not cap the leader share. When poolReward < cost (e.g. reward 300 ADA, cost 340 ADA), leaderReward = cost + 0 = 340 ADA, more than the pool earned, so leader + members exceeds totalRewards and lovelace is created; the ledger's leaderRew gives the whole pool reward to the leader when it is at most the cost.",
+      "action": "Add tests that fail today: reserves 10000000000000666 with rho 3/1000 gives the exact floor 30000000000001; splitPoolRewards(300 ADA, cost 340 ADA, ...) gives leaderReward == 300 ADA and empty or zero member rewards. Main-code note only: take rho, tau and margin as rationals and compute floor(BigInt * num / den); cap the leader reward at poolReward.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-59",
+      "verification": "RewardsCalculation.scala:157-158 computes Coin((coin.value.toDouble * factor).toLong). I checked with IEEE doubles: 10000000000000666 is exactly representable, and int(10000000000000666.0*0.003) = 30000000000002, while 10000000000000666*3//1000 = 30000000000001. computeTotalRewards (47-61) uses this helper for rho and tau. Second defect: splitPoolRewards (120-128) sets remainingAfterCost = 0 when poolReward <= cost, then leaderReward = cost + 0 = cost. With reward 300 ADA and cost 340 ADA, the leader gets 340 ADA, which is more than the pool earned. Haskell eras/shelley/impl/src/Cardano/Ledger/Shelley/Rewards.hs:122-123 calcStakePoolOperatorReward has `f <= cost = f`. memberRewardsPool (131-132) becomes 0, so the members get 0 each and the total is 340 > 300. A repo-wide grep finds no main-code caller of RewardsCalculation outside its own file. Both proposed tests fail today, as the finding says."
+    },
+    {
+      "id": "C41-3",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/TransactionWithoutIsValidTest.scala:152-176",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/TransactionWithoutIsValidTest.scala:178-195"
+      ],
+      "claim": "The three byte arrays of 'the length is checked against the flag after the elements are read' are rows of the 'malformed records' table: noFlagButFour (179) = \"4 x [body, wits, null, null]\" (158-159), flagButThree (180) = \"3 x [body, wits, true, null]\" (162-163), excess (181-182) = \"indefinite [body, wits, null, null]\" (167-168). The second test only adds message checks to inputs the first already rejects.",
+      "action": "Make the table values (bytes, Option[String]) with the expected message substring for those three rows (\"without the isValid flag has 3 elements, got 4\", \"with the isValid flag has 4 elements, got 3\", \"Excess terms\"); in the loop, assert getMessage.contains(msg) when present. Delete lines 178-195.",
+      "coverageRisk": "none: the same inputs and the same three message checks remain",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Both tests are in the same shared/ file, TransactionWithoutIsValidTest.scala. They use the same entry point (Transaction.fromCbor) and the same exception type (Borer.Error). The byte arrays match exactly. Line 179 noFlagButFour = items(0x84, body, witnesses, [null, null]), the same as row '4 x [body, wits, null, null]' at 158-159. Line 180 flagButThree = items(0x83, ..., [true, null]), the same as row '3 x [body, wits, true, null]' at 162-163. Lines 181-182 excess = items(0x9f, ..., [null, null, 0xff]), the same as row 'indefinite [body, wits, null, null]' at 167-168. The second test adds only three getMessage.contains checks at 184-193. The proposed table keeps these checks with the same substrings on those three rows. No assertion is lost. Optional: keep the old test name's intent ('length checked after elements are read') as a comment on the rows."
+    },
+    {
+      "id": "C41-4",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/StakeDistributionTest.scala:10-80",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/ArbitraryInstances.scala:75-82",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/StakeDistribution.scala:56-102"
+      ],
+      "claim": "The three StakeDistribution examples are instances of three invariants: sum(stakeCredentials) equals the coin of the outputs whose delegation part is Key or Script; activeStake == poolStakes.values.sum and poolStakes(p) == sum of stakeCredentials of credentials delegated to p; computeDRepVotingStake sums stakes per DRep. C8: Arbitrary[ShelleyDelegationPart] produces all four kinds, but its random 28-byte hashes never collide, so a plain generator never makes two outputs share a credential, and the reducers at StakeDistribution.scala:61, 91 and 102 (the only aggregation logic) never combine two values.",
+      "action": "Replace the examples at 10-31 and 52-80 with a forAll: draw 3 stake credentials (Key and Script), build 0..10 outputs whose ShelleyAddress delegation part is one of them, Null, or a Pointer, plus Byron and StakeAddress outputs; draw delegations to 2 pools and DRep delegations from the same credential pool (some credentials without UTxOs); assert the three invariants against an independent fold. Keep the enterprise example (33-50) as a readable anchor. Use scalus.cardano.ledger.ArbitraryInstances (via ValidatorRulesTestKit or directly).",
+      "coverageRisk": "low: the property covers the example cases; it adds Script, Pointer, Byron and shared-credential cases",
+      "ciSavingSec": -0.2,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "The laws hold in main code. aggregateUtxoStake (StakeDistribution.scala:56-61) maps Key to KeyHash and Script to ScriptHash (71-74), and returns None for Pointer, Null, StakeAddress and Byron (75-80). The sum of stakeCredentials therefore equals the coin of the Key- and Script-delegated outputs. computeSnapshot sets activeStake to the sum of poolStakes (42). computePoolStakes (83-91) sums the stake of each delegated credential that has UTxO stake. Credentials without UTxOs are skipped, and an independent fold that uses getOrElse(0) or a filter gives the same result. computeDRepVotingStake (94-102) does the same per DRep. Overflow cannot happen: Arbitrary[Coin] is at most 2^53 (scalus-core ArbitraryInstances.scala:76), and there are at most 10 outputs. The C8 point is correct. The address generator draws random 28-byte hashes for Key and Script (address/ArbitraryInstances.scala:75-82), so shared credentials need the fixed credential pool that the action prescribes. The examples' shapes are inside the planned domain: two UTxOs share one Key credential (10-31), and two creds go to KeyHash and AlwaysAbstain DReps (52-80). Arbitrary[DRep] has constant AlwaysAbstain and AlwaysNoConfidence, so the reducer at 102 also gets collisions. Keeping the enterprise example (33-50) is fine."
+    },
+    {
+      "id": "C41-5",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/utils/ExactValueTest.scala:20-31",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Types.scala:267-287"
+      ],
+      "claim": "Tests 20-24 and 26-31 are instances of two laws: Value.+ is an oracle for ExactValue (Try(a + b).toOption == Try((ExactValue(a) + b).toValue).toOption, since Value.+ uses addExact and MultiAsset.binOp drops zero results, Types.scala:286), and cancellation ((ExactValue(a) + b) - ExactValue(b) == ExactValue(a)). Arbitrary[Value] asset amounts reach Long.MaxValue, so the overflow side of the oracle is reached often.",
+      "action": "Mix in ScalaCheckPropertyChecks and scalus.cardano.ledger.ArbitraryInstances; replace 20-31 with the two forAll properties. Keep the hand-made overflow examples 13-17 and 33-37 (sums of 4 values past Long.MaxValue, clamping).",
+      "coverageRisk": "low: both example inputs are inside the property domain; the throwing case is checked by the oracle's Failure side",
+      "ciSavingSec": -0.3,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "Both laws are true. Value.+ (Value.scala:17, 38-40) uses addExact per amount, and MultiAsset.binOp (Types.scala:267-287) drops zero results. ExactValue.toValue (ExactValue.scala:30, 37-42) throws ArithmeticException through Coin.exact. With two operands, both sides fail exactly when some final amount does not fit in a Long. Cancellation holds because the Accumulator drops zero amounts (97-103). The claim that the overflow side is reached often is false. Arbitrary[Coin] is 0..2^53 (scalus-core ArbitraryInstances.scala:76), so coin sums never overflow. Asset amounts are 1..Long.MaxValue (142), but each PolicyId is a fresh random 28-byte hash (54-57, 189), so two independent Values never share a (policy, name) key. So asset sums never overflow, and amounts are never negative. As a result, line 30 (overflow throws) and line 23 (adding a negative amount on the same key cancels to zero) are shapes that a plain forAll over Arbitrary[Value] cannot produce."
+    },
+    {
+      "id": "C41-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/utils/NativeRefScriptMinFeeTest.scala:49-55",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/utils/NativeRefScriptMinFeeTest.scala:95-100",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/utils/NativeRefScriptMinFeeTest.scala:119-151",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/utils/NativeRefScriptMinFeeTest.scala:201-206",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/utils/MinTransactionFeeTest.scala:47"
+      ],
+      "claim": "All three fee assertions are '>', so the mutation 'count a native script as 1 byte' (or any wrong positive size) survives; MinTransactionFeeTest:47 already shows the exact form. The reference-input test compares two different transactions (txNoRef has no referenceInputs), so its difference also contains a tx-size fee and would pass even if the ref script counted 0. Test 49-55 asserts only that a CBOR encoding is non-empty: no main-code mutation breaks it.",
+      "action": "Assert feeWith == feeWithout + RefScriptFee.fee(size, params.minFeeRefScriptCostPerByte), with size = the script's CBOR length (equal to TxRefScriptsSizeValidator.scriptSize, which reads binaryScript.raw). In the reference-input test keep one tx and vary only the UTxO's scriptRef. In the size test assert both fees exactly. Delete test 49-55.",
+      "coverageRisk": "none: assertions get stricter; the deleted test checks no main code",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C41-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/RewardsCalculationTest.scala:36-38",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/RewardsCalculationTest.scala:79-81",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/RewardsCalculationTest.scala:124"
+      ],
+      "claim": "The rewards assertions are inequalities. 'Use the wrong tau' or 'double the monetary expansion' survives 36-38; 'give pool 1 55 %' survives 79-81; 'ignore the margin' survives 124 and the conservation check at 128 (leader = cost, members split the rest).",
+      "action": "Assert exact values: totalRewards == 42001000000000 and treasuryTax == 8400200000000; poolRewards == Map(pool1 -> 600000000, pool2 -> 400000000); leaderReward == 359800000 and memberRewards == Map(member1 -> 384120000, member2 -> 256080000).",
+      "coverageRisk": "none: assertions get stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C41-8",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/ByronAddressInScriptContextTest.scala:30",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/ByronAddressInScriptContextTest.scala:43-54",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/StepError.scala:208",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionStepsProcessor.scala:651,1259"
+      ],
+      "claim": "assertThrows[BuildStepException] accepts any build-step error (wrong network, missing witness, insufficient funds), so removing the Byron checks at TransactionStepsProcessor.scala:651/1259 can still pass if another step fails. The test name 'TxBuilder rejects does not allow to assemble ...' is garbled.",
+      "action": "val e = intercept[BuildStepException](...); assert(e.stepError.isInstanceOf[StepError.ByronAddressesNotSupported]). Rename to 'TxBuilder rejects a Byron input'. Drop the unused initialUtxos entries if the build fails before balancing.",
+      "coverageRisk": "none: assertion gets stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C41-9",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/RewardsCalculation.scala:122",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/RewardsCalculation.scala:132",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/RewardsCalculation.scala:140"
+      ],
+      "claim": "splitPoolRewards' edge branches are uncovered: a pool reward at or below the fixed cost (122 else, leader takes everything, members get 0), the leader share reaching the whole reward (132 else), and zero pool stake (140, empty member map). These are the boundary cases of the leader/member split.",
+      "action": "Add one table test in RewardsCalculationTest: poolStake 0 -> memberRewards empty; leader share equal to the whole reward (margin 100 %) -> members get 0. The 'reward below cost' row (122 else) belongs to C41-2, where it fails today because the leader reward is not capped.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C41-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/StakeDistribution.scala:42",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/StakeDistribution.scala:73-79",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/StakeDistribution.scala:88-91",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/StakeDistribution.scala:113-120"
+      ],
+      "claim": "Every StakeDistributionTest call passes empty delegations, so poolStakes is always empty and activeStake always 0 (42, 88-91 uncovered). Script delegation (73-74), StakeAddress (77) and Byron (79) outputs and fromCertState (113-120) are never reached. aggregateUtxoStake feeds Emulator.stakeDistribution (EmulatorBase.scala:211), so the Script and Byron cases matter beyond this object.",
+      "action": "If C41-4 is not done, add examples: a Script-delegated output, a Byron output and a pointer output in one UTxO set; delegations of two credentials to one pool; fromCertState on a CertState built from DelegationState(accounts). Together with C41-1 this covers fromCertState.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C41-11",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/EvaluatorReportConfig.scala:148",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/EvaluatorReportConfig.scala:156-183",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/EvaluatorReportConfig.scala:192-205",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/EvaluatorReportConfigTest.scala:26-101"
+      ],
+      "claim": "The baseline marks uncovered: SCALUS_DUMP with only unknown names keeping the base artifacts (148 else), SCALUS_PROFILE=summary (158) and an unknown level being ignored (160), all of SCALUS_PROFILE_OUT (163-183: console aliases '-'/'console'/'stdout', absolute paths, relative names, the Off -> Full promotion that keeps an explicit Summary), the artifact aliases cbor/txcbor/profile/unknown (194-197) and formatFromName (200-205, incl. .htm and upper case). This is the public env-var contract of the profiler output, which the VS Code extension consumes.",
+      "action": "Add a table test over fromEnv(disabled, env): {SCALUS_DUMP=bogus} keeps Set(Flat) and enables; {SCALUS_DUMP=cbor,profile}; {SCALUS_DUMP=false} and {SCALUS_DUMP=none}; {SCALUS_PROFILE=summary}; {SCALUS_PROFILE=loud} unchanged; {SCALUS_PROFILE_OUT=-,/tmp/p.HTM,x.csv,y.json,z.txt} -> Console Text, AbsoluteFile Html, File Csv, File Json, File Text and profile Full; {SCALUS_PROFILE=summary, SCALUS_PROFILE_OUT=x.csv} keeps Summary.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C41-12",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/utils/MinTransactionFee.scala:19-20",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/utils/MinTransactionFeeTest.scala:42-43"
+      ],
+      "claim": "computeMinFee's error path (19-20 Left) is uncovered: no test calls it with an input or reference input missing from the UTxO set.",
+      "action": "In MinTransactionFeeTest add: computeMinFee(tx(Coin(1_000_000)), Map.empty, params) is Left(BadInputsUTxOException); with only the spent input resolved and the reference input pointing to another missing TransactionInput, Left(BadReferenceInputsUTxOException).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C41-13",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/ByronAddressInScriptContextTest.scala:16-17",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/utils/NativeRefScriptMinFeeTest.scala:30-31",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/TransactionWithoutIsValidTest.scala:24-25",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/testing/kit/TestUtil.scala:55-56"
+      ],
+      "claim": "Three files redefine the all-zeros genesis hash that TestUtil.genesisHash provides for exactly this use; ByronAddressInScriptContextTest already imports TestUtil (line 11) and still redefines it. node.emulator.json reports the same for the emulator files.",
+      "action": "Import scalus.testing.kit.TestUtil.genesisHash in the three files and delete the local vals.",
+      "coverageRisk": "none: same value",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C41-14",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/PlutusScriptScopeTest.scala:18",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/PlutusScriptScopeTest.scala:31-41"
+      ],
+      "claim": "mint() draws an unseeded random TransactionInput and a random ShelleyAddress (then overwrites its payment part) with Arbitrary...sample.get, and mixes in ValidatorRulesTestKit only for those givens. The tests need any fixed key-address UTxO; randomness only makes failures non-reproducible.",
+      "action": "Use Input(TestUtil.genesisHash, 0) and Alice.address(Network.Mainnet); drop the ValidatorRulesTestKit mixin and the Arbitrary/ShelleyAddress imports.",
+      "coverageRisk": "none: the scope check does not depend on the input or address",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C41-15",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/RewardsCalculationTest.scala:10-16,29-34,53-59,71-75,115-120,159-161,173-179",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/StakeDistributionTest.scala:74-75",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/utils/NativeRefScriptMinFeeTest.scala:54,89-93,144-145,172-173,198-199"
+      ],
+      "claim": "Three suites print to stdout/stderr on every run (21 println/System.err.println lines) and RewardsCalculationTest builds the same RewardsConfig three times.",
+      "action": "Delete the print statements (put the values into assertion clues where they help); hoist one private val config in RewardsCalculationTest.",
+      "coverageRisk": "none: no assertion changes",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C41-16",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/utils/NativeRefScriptMinFeeTest.scala:23-208",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/utils/MinTransactionFeeTest.scala:11-60"
+      ],
+      "claim": "NativeRefScriptMinFeeTest (jvm/) and MinTransactionFeeTest (shared/) test the same term of the same function, computeMinFee's reference-script fee, in the same package; the jvm file uses nothing JVM-only and rebuilds by hand the tx/output/minFee setup that MinTransactionFeeTest has as helpers (tx, output, minFee at 23-43).",
+      "action": "After C41-6, move the three native-script cases into MinTransactionFeeTest as tests over its helpers, parameterised by the script (Native small/large on a spent input, Native on a reference input); delete NativeRefScriptMinFeeTest.",
+      "coverageRisk": "none: the same cases move; they also start running on JS",
+      "ciSavingSec": -0.1,
+      "linesRemoved": 120,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C41-17",
+      "check": "C6",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/ScriptCacheTest.scala:18",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/ScriptCacheTest.scala:28"
+      ],
+      "claim": "Line 18 (interned script's hash equals the first hash) cannot fail when line 17 (eq first) holds, and line 28 (V2 and V3 hashes differ) tests Script hashing, not the cache. No ScriptCache mutation breaks either.",
+      "action": "Delete both lines; the cache keying on language is already pinned by lines 26-27 and 29.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 5 findings of scope merge-duplicate-tests, to-property or main-bug; 4 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

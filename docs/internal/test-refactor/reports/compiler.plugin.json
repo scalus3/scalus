@@ -1,0 +1,566 @@
+{
+  "cluster": "compiler.plugin",
+  "summary": "The cluster is the Scalus compiler plugin (SIRCompiler, SIRTyper, SIRPreprocessor, CompilationError) seen through 25 test files, 4.1k lines, about 6.5 s per run; C7 found no lever: the largest cost is the first in-process scalac run of the snippet suites (CustomUnapplyErrorTest control 1.3 s, JVM warm-up), and suites run in parallel since F-4. The two big SIR-shape suites rely on SIR.~=~, which has two oracle defects (non-injective variable mapping, Let flags ignored with a println), reported as main-bug C08-1/C08-2. Coverage data cannot judge the plugin core: SIRCompiler.scala and SIRTyper.scala are excluded from instrumentation by coverage-exclude.sh, so C2 is by reading; a repository-wide grep shows no test for the var, lazy val, return, assign/try/while, local mutual recursion, BigInt-op and type-mismatch diagnostics (C08-3). Six CompilationError classes (GuardsNotSupported, MissingConstructors, LiteralPattern, UnsupportedTopLevelBind, UnsupportedBinding, ExpectedTypeLambda) are never constructed by main code: dead code, not reported. Most line savings come from CompilerPluginBuiltinsToSIRTest, where hand-written expected SIR for equality and eta-expanded builtins collapses into helpers (C08-12, C08-13), with the caveat that the helper must keep expected types independent of SIRBuiltins.",
+  "behaviors": [
+    {
+      "pass": "SIRCompiler",
+      "name": "literals, val, def, inline def, lambda, if-then-else to SIR",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:61-118",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:120-142",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:144-162",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:164-227",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:291-299",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:301-324"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "throw: literal message, non-literal falls back to expression text, custom exception names",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:326-360",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/ThrowMessageAndHexTest.scala:54-61"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "datatypes: constructor, companion apply, field select, match on case class/ADT/tuples, inner matches, enums",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:443-511",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginEvalTest.scala:34-103",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginEvalTest.scala:208-233"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "Builtins.* methods map to SIRBuiltins (macro-generated map) and are eta-expanded when unapplied",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:65-1113"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "== / != lowering per type (Boolean, ByteString, String, Data, BigInt)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:851-864",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:1139-1614",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:415-424"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "&&, ||, ! compile to And/Or/Not with short-circuit",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:1115-1137"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "BigInt / and % have Scala (truncated) semantics on-chain",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/IntegerDivisionSemanticsTest.scala:52-84"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "ToData, fieldAsData and offsetOf macros",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:362-413",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:513-590"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "-> builds Tuple2 only for Predef.ArrowAssoc; user-defined -> is not mis-desugared",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:592-612",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/ArrowDesugaringTest.scala:34-66"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "@Ignore drops definitions",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:614-623"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "val pattern destructuring (1, 2, 3 fields) and failure on mismatch",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:625-750"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "zero-argument defs and methods, varargs, case class copy, ? debug operator, large scripts, custom Builtins platform",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:752-868",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginEvalTest.scala:105-206",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginEvalTest.scala:235-243",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CopyReceiverEvalTest.scala:33-84"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "representation alignment keeps call-by-value strictness of higher-order args",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/RepresentationAlignmentStrictnessTest.scala:31-61"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "@OnChainSubstitute redirects trait calls to the substitute object",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/OnChainSubstituteTest.scala:22-68"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "inline recursion (inline fib) is expanded at compile time",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/InlineFib.scala:24-34"
+      ]
+    },
+    {
+      "pass": "SIRTyper",
+      "name": "field-level @UplcRepr annotations land in TypeBinding",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:870-924"
+      ]
+    },
+    {
+      "pass": "SIRTyper",
+      "name": "empty first param list: fields stay constructor params; TypeVar ids distinct per binder",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/SecondaryParamListCaseClassTest.scala:39-73",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/TypeVarIdCollapseTest.scala:24-54"
+      ]
+    },
+    {
+      "pass": "SIRCompiler error reporting",
+      "name": "by-name params, overloads, boolean unapply, alternative alias, unsupported type, invalid hex are positioned errors",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/ByNameParamErrorTest.scala:26-56",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/OverloadedDefRejectionTest.scala:27-41",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/CustomUnapplyErrorTest.scala:33-56",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/AlternativeAliasErrorTest.scala:8-40",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/UnsupportedTypeErrorTest.scala:15-30",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/ThrowMessageAndHexTest.scala:37-51"
+      ]
+    },
+    {
+      "pass": "CompilationError",
+      "name": "var, lazy val, return, assignment, try, while, local mutual recursion, unsupported BigInt op, type mismatch report positioned errors",
+      "tests": []
+    },
+    {
+      "pass": "SIRCompiler / SIRHelper",
+      "name": "SIR is embedded as Latin-1 string chunks and written as a decodable .sir module",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/LargeSirStringTest.scala:11-32",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/SirFileWriteTest.scala:19-36"
+      ]
+    },
+    {
+      "pass": "SIRCompiler",
+      "name": "a clean compile prints nothing to stdout",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/NoDebugOutputTest.scala:28-46"
+      ]
+    },
+    {
+      "pass": "EraseSpecifications",
+      "name": "specifications stay in SIR, are erased before lowering, and do not change script bytes or definition order",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/SpecTest.scala:101-252"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C08-1",
+      "check": "C6",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/SIRUnify.scala:118-135",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:164-227",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:1139-1213"
+      ],
+      "claim": "SIR.~=~ (SIRUnify.unifySIRExpr, Var case) maps names one way and not injectively: a left name not yet in varNames is bound to whatever right name it meets, with no check that the right name is already the image of another left name. So a compiled term that refers to a wrong or free variable still unifies. Concrete pair: left LamAbs(l, Apply(headList, Var(\"m\"))) vs right LamAbs(l, Apply(headList, Var(\"l\"))) returns true today (l->l, then m is unseen and is mapped to l). The ~=~ assertions in CompilerPluginToSIRTest/CompilerPluginBuiltinsToSIRTest (132 uses) cannot catch a wrong variable reference. Same class of defect as F-33 (Term.~=~), but a different function.",
+      "action": "Main-code note: keep a reverse map (right name -> left name) in Env and fail when a name is bound to two different partners, as alpha-equivalence does. Test side: add SIRUnifyTest (shared) cases that assert the pair above and Var(\"x\") ~=~ Var(\"y\") after LamAbs(x) vs LamAbs(x) return false; then run scalusJVM/test to see which existing expected SIR was hiding a wrong name.",
+      "coverageRisk": "none: adds coverage only; the fix may turn some existing ~=~ assertions red, which shows a hidden wrong expectation",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-42",
+      "verification": "SIRUnify.scala:118-125: on Var vs Var, if name1 is not in env.varNames it is bound to name2 with no reverse check (no right->left map anywhere in Env, :10-21). varNames is threaded through LamAbs (:166-172) and Apply (:190-193), so for LamAbs(l, Apply(f, Var m)) vs LamAbs(l, Apply(f, Var l)): param binds l->l, then m is unseen and binds m->l, success (types equal). unifyBinding (:1063-1068) has the same one-way pattern. SIR.~=~ (SIR.scala:186-190) calls unifySIR with Env.empty, so the CompilerPluginToSIRTest/CompilerPluginBuiltinsToSIRTest asserts (e.g. CompilerPluginToSIRTest.scala:224) use this check. Reachable in normal test use: a plugin bug that emits a wrong or free variable name with matching type passes these asserts. Test-oracle defect, not a runtime defect."
+    },
+    {
+      "id": "C08-2",
+      "check": "C6",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/SIRUnify.scala:147-170",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:164-227"
+      ],
+      "claim": "SIR.~=~ on two Let nodes with different flags succeeds: SIRUnify.scala:159-164 only println's 'warning: let flags are different' and unifies with v1.flags & v2.flags. CompilerPluginToSIRTest 'compile def' expects LetFlags.Recursivity on the binding of recursive def c (line 216); a plugin that stops marking recursion still passes this test, and the warning goes to stdout.",
+      "action": "Main-code note: return UnificationFailure when v1.flags != v2.flags (or make the relaxation an explicit Env option used only by callers that need it). Test side: add a SIRUnifyTest case: Let(..., Recursivity) ~=~ Let(..., None) is false; then run scalusJVM/test and fix the expected SIR of any test that turns red.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-43",
+      "verification": "SIRUnify.scala:159-167: when v1.flags != v2.flags the Let case only println's a warning and returns UnificationSuccess with flags v1.flags & v2.flags. No failure path exists. CompilerPluginToSIRTest.scala:216 expects LetFlags.Recursivity on the Let for recursive def c, and :224 asserts compiled ~=~ expected; a plugin that emits LetFlags.None there would still pass, with only a stdout warning. Proposed SIRUnifyTest case (Recursivity vs None is false) is correct; tightening may turn some existing expectations red."
+    },
+    {
+      "id": "C08-3",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/SIRCompiler.scala:1255",
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/SIRCompiler.scala:1265",
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/SIRCompiler.scala:3599",
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/SIRCompiler.scala:3604-3621",
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/SIRCompiler.scala:1205",
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/SIRCompiler.scala:2262",
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/SIRCompiler.scala:2294",
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/CompilationError.scala:135-232"
+      ],
+      "claim": "No test in the repository asserts the user-facing diagnostics for var (VarNotSupported, SIRCompiler:1255), lazy val (:1265), return (:3599), assignment/try/while (ExpressionNotSupported, :3604-3621), local mutual recursion (:1205), unsupported BigInt op (:2262) or TypeMismatch (:2294 and three more sites); a grep of all test sources for \"can't be used in Scalus\", \"is not supported in Scalus\", \"Forward reference to local\" and \"Type mismatch\" finds nothing. The coverage baseline cannot show this: SIRCompiler.scala is excluded from instrumentation by coverage-exclude.sh (it contains compile { text), and the snippet tests run the packaged plugin jar.",
+      "action": "Add scalus-core/jvm/.../compiler/plugin/UnsupportedConstructErrorTest over SnippetCompilation: one snippet per construct (var, lazy val, return, x = 1, try/catch, while, two local defs that call each other, a one-argument BigInt method outside the operator match at SIRCompiler:2109-2262, e.g. x.pow(2) or x.gcd(y), and one TypeMismatch trigger), each asserting the specific message substring and a single diagnostic. Because error(...) returns a fallback SIR instead of aborting, several cases may share one snippet in separate @Compile objects; the edit agent must first confirm that one error does not suppress the later ones, else use one compile per case.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -2,
+      "linesRemoved": -70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-4",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CopyReceiverEvalTest.scala:61-73",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginEvalTest.scala:235-243",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginEvalTest.scala:19"
+      ],
+      "claim": "CompilerPluginEvalTest 'compile case class copy method' (copy with one named, one defaulted field, result value checked) and CopyReceiverEvalTest 'copy with a defaulted field evaluates the receiver exactly once' (same shape, but asserts only the trace count, not the value) check one behavior: copy with a defaulted field. Neither alone checks both the value and the single evaluation.",
+      "action": "In CopyReceiverEvalTest:61-73 add assert((uplc $ 1.asTerm).evaluate == 1.asTerm) for the defaulted field b; then delete CompilerPluginEvalTest:235-243 and the package-level case class CopyTestUser (line 19, no other users).",
+      "coverageRisk": "low: CopyTestUser is a top-level case class with a String field, Box is a suite member with BigInt fields; the verify agent should confirm both lower through the same copy$default path (SIRCompiler copy handling) so no case-class shape is lost",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "Deleted test CompilerPluginEvalTest.scala:235-243 copies CopyTestUser(\"John\",30).copy(age=31) and reads the EXPLICIT field age==31 (distinct from original 30), optimizeUplc=true, V2 VM. Survivor CopyReceiverEvalTest.scala:61-73 reads the DEFAULTED field b of Box(x,x).copy(a=x+1), optimizeUplc=false. The proposed added assert b==1 cannot detect a field mix-up, because Box(x,x) gives a==b==1 originally, and it never reads an explicitly overridden field in a copy that also has a defaulted field. Other copy tests in CopyReceiverEvalTest (:33-46, :76-84) override all fields, so no copy$default path. CopyTestUser has no other users (only :19, :237)."
+    },
+    {
+      "id": "C08-5",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:605-612",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/ArrowDesugaringTest.scala:34-41"
+      ],
+      "claim": "CompilerPluginToSIRTest '-> operator field access' (val pair = 1 -> 2; pair._1 + pair._2 == 3) and ArrowDesugaringTest 'stdlib ArrowAssoc a -> b still builds Tuple2' (x -> (x+1); p._1 + p._2 at x = 1 == 3) assert the same behavior. The ToSIR copy is the weaker one: its suite runs optimizeUplc = true on constant inputs, so the optimizer can fold the sum to 3 before the CEK runs Tuple2 construction and selection; the ArrowDesugaring control applies a lambda to an argument with optimizeUplc = false.",
+      "action": "Delete CompilerPluginToSIRTest:605-612. Keep '-> operator as Tuple2' (592-603) and the ArrowDesugaringTest control.",
+      "coverageRisk": "none: the kept ArrowDesugaringTest control checks the same result without constant folding",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "ArrowDesugaringTest.scala:34-41 keeps the same desugaring with a lambda parameter (stronger: no constant folding); CompilerPluginToSIRTest.scala:592-603 keeps the Tuple2 shape check."
+    },
+    {
+      "id": "C08-6",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/IntegerDivisionSemanticsTest.scala:68-74",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/IntegerDivisionSemanticsTest.scala:52-66"
+      ],
+      "claim": "'(a/b)*b + a%b == a holds on-chain' is implied by the two tests above it on the same cases: if on-chain / and % both equal Scala's, the identity holds because it holds in Scala.",
+      "action": "Delete IntegerDivisionSemanticsTest:68-74 and the euclidUplc val (lines 36-38).",
+      "coverageRisk": "low: loses the only compound (a/b)*b + a%b lowering check in the suite; compound integer arithmetic is covered widely elsewhere",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "The '/' and '%' tests (IntegerDivisionSemanticsTest.scala:52-66) and the property at :76-84 imply the Euclid identity on the same cases and options. Delete :68-74 and euclidUplc :36-38."
+    },
+    {
+      "id": "C08-7",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/OnChainSubstituteTest.scala:22-41"
+      ],
+      "claim": "'@OnChainSubstitute: works with different values' (ctx = I(10) -> 20) repeats 'end-to-end evaluation with substituted calls' (ctx = I(42) -> 84) with another constant; same code path, same assertion.",
+      "action": "Fold both into one test that checks I(42) -> 84 and I(10) -> 20; delete lines 34-41.",
+      "coverageRisk": "none: both inputs stay",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "OnChainSubstituteTest.scala:22-32 and :34-41 differ only in the constant; fold both inputs into one test."
+    },
+    {
+      "id": "C08-8",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/UnsupportedTypeErrorTest.scala:15-30",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/SnippetCompilation.scala:29-47",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/ArrowDesugaringTest.scala:47-66"
+      ],
+      "claim": "UnsupportedTypeErrorTest discards the escaped exception of compileSnippetAllowingCrash, so it passes even if the plugin still crashes with NotImplementedError after reporting the diagnostic (the audit M6 bug was the crash). ArrowDesugaringTest:62-65 accepts any diagnostic that contains the two characters '->', for example a type printout, so it does not pin the 'user -> falls through to normal compilation' error.",
+      "action": "UnsupportedTypeErrorTest: assert the Option[Throwable] is None, or switch to compileSnippet; if that passes, delete compileSnippetAllowingCrash and lastReporterErrors (SnippetCompilation:29-47 become dead). ArrowDesugaringTest: assert errors.size == 1 and a substring of the actual diagnostic (read it from a run), not just '->'.",
+      "coverageRisk": "none: assertions only get stricter; if the crash still happens the test turns red and shows an open defect",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-9",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/ThrowMessageAndHexTest.scala:54-61",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:326-360"
+      ],
+      "claim": "The E10 test asserts only that x = 0 fails. With the old bug (non-String first constructor argument used as the error message) the script also fails: trace on a non-String argument errors, so the assertion has no mutation that breaks it except a crash at lowering.",
+      "action": "For x = 0 assert that evaluateDebug fails and its logs contain the fallback expression text (e.g. 'CodeException'). Optionally pin it at SIR level in CompilerPluginToSIRTest 'compile throw': compile { throw new CodeException(BigInt(1)) } ~=~ Error(<expression text>).",
+      "coverageRisk": "none: assertion only gets stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-10",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:717-750",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:894-924",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginEvalTest.scala:119-155"
+      ],
+      "claim": "Three assertions check too little. CompilerPluginToSIRTest 'Compile pattern in val with three arguments': the Success branch (744-745) asserts nothing, so a wrong destructured field passes. '@UplcRepr with parameterized SumBuiltinList' checks args.size == 1 but not that the argument is UplcConstr. CompilerPluginEvalTest 'compile large script' asserts flatEncoded.length > 0, which any successful compile satisfies; a lowering that drops appends passes.",
+      "action": "Three-arguments test: return txInfo.id.hash (a ByteString) and assert evaled == hex\"bb\".asTerm, or compare evaled with the same script that reads .txInfo through FromData. UplcRepr test: match the single argument against the UplcConstr representation. Large-script test: evaluate the script and assert the result is a String of length 92716 (52 + 99 * 936, from the generator), keeping the encoding call.",
+      "coverageRisk": "none: assertions only get stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-11",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:1205-1212",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:1336-1360",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:1478-1499",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:1589-1613"
+      ],
+      "claim": "The evaluation halves of the four equality tests (Boolean, ByteString, String, Data) check == and != on two fixed input pairs each. They are instances of one oracle law: for all a, b of the type, eval(eq a b) == (a == b) and eval(ne a b) == (a != b).",
+      "action": "Replace the 16 fixed evaluations with one forAll per type over Arbitrary Boolean/ByteString/String and the Data generator from ArbitraryInstances (include equal pairs, e.g. Gen.oneOf(same, independent)), applying the compiled eq/ne terms. The suite already mixes in ScalaCheckPropertyChecks, so keep it (see C08-14).",
+      "coverageRisk": "none: fixed pairs become generated pairs that include equal and unequal values",
+      "ciSavingSec": -1,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "Boolean (CompilerPluginBuiltinsToSIRTest.scala:1205-1212) already enumerates the whole domain; keep it. Replace only the 12 ByteString, String and Data evaluations (:1336-1360, :1478-1499, :1589-1613) with forAll over pairs that include equal pairs. For Data the oracle is the implementation itself (Builtins.equalsData = d1 == d2), so the property cannot detect divergence from Plutus; see F-82."
+    },
+    {
+      "id": "C08-12",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:1139-1614"
+      ],
+      "claim": "The four equality tests (Boolean 1139-1213, ByteString 1215-1361, String 1363-1500, Data 1502-1614, about 475 lines) build the same expected SIR by hand: Let(check = λa.λb. body, λa.λb. check a b) for == and the Not(...) variant for !=. Only the type and the body differ (Boolean uses IfThenElse, the others equalsX).",
+      "action": "Add a local helper expectedCheck(tp: SIRType, body: (Var, Var) => SIR) that builds the Let/LamAbs wrapper, and a table of (compiled eq, compiled ne, type, eq body) rows; keep the Boolean IfThenElse bodies as explicit arguments. Do this together with C08-11 (evaluation parts).",
+      "coverageRisk": "none if the helper only builds the wrapper and each row keeps its own body and type",
+      "ciSavingSec": 0,
+      "linesRemoved": 300,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-13",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:368-478",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:480-826",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:827-850",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:1023-1095"
+      ],
+      "claim": "About 25 assertions compile an unapplied builtin (un*Data, serialiseData, all BLS12-381 G1/G2/pairing ops, keccak_256, blake2b_224, mkPairData/fst/snd) and compare it with a hand-written eta expansion LamAbs(p1, ..., Apply(Apply(SIRBuiltins.x, p1, Fun(...)), p2, res)). Each takes 15-30 lines; the Fun nesting of the intermediate Apply types is mechanical.",
+      "action": "Add a helper etaBuiltin(builtin: SIR.Builtin, params: (String, SIRType)*)(result: SIRType) that builds the LamAbs chain and the nested Apply with the Fun types derived from the explicit param and result types; rewrite the assertions as one-line table rows.",
+      "coverageRisk": "medium if done wrong: Builtin unification compares only bn, so the hand-written param/result types are the only independent check of SIRBuiltins.*.tp. The helper MUST take param and result types explicitly; a helper that reads builtin.tp makes the type check tautological.",
+      "ciSavingSec": 0,
+      "linesRemoved": 300,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-14",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:23",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:35-54",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:67",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:29",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:39-41",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:241-264",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:362-413",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:513-554",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:614-616",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:625-750",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:765-783",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:352"
+      ],
+      "claim": "Dead and noisy test code in the two ToSIR suites. Both mix in ScalaCheckPropertyChecks with no forAll. Unused helpers: sirList, sirBuiltinList, sirPair, sirString, sirVoid (ToSIR), sirList, sirConstUnit (Builtins); dead val x: SIR (Builtins:67). ToSIR: compiledTp and constructedExpr unused (241-264, the latter repeats the asserted literal); 'compile ToData' has a dead else branch and unused a1Tp..a3Tp (Options is fixed to V3); fieldAsData has a dead 'case _ => 348' branch (lines 552-553); '@Ignore annotation' declares an unused local foo (615-616); the zero-arg type-param test computes uplc twice (775 unused); pattern tests println before fail instead of a clue; 'compile throw' expected uses Error(..., null) annotations (line 352).",
+      "action": "Delete the dead vals, helpers, branches and commented-out println blocks; replace println+fail with fail(clue) / assert(cond, clue); use AnE instead of null at 352. Remove ScalaCheckPropertyChecks from CompilerPluginToSIRTest; in CompilerPluginBuiltinsToSIRTest keep it only if C08-11 lands.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-15",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:31-52",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:26-56"
+      ],
+      "claim": "CompilerPluginToSIRTest and CompilerPluginBuiltinsToSIRTest copy the same SIR test vocabulary verbatim: sirData/sirBool/sirInt/sirString/sirByteString/sirVoid, sirList/sirBuiltinList/sirPair, six sirConst overloads, sirConstUnit, AnE, deadbeef. SirDSL already has Conversion instances from constants to SIR.",
+      "action": "Move the block into one test trait (e.g. scalus.compiler.SirTestVocabulary in scalus-core/jvm/src/test) mixed into both suites, or replace sirConst(x) with SirDSL's constant Conversion where the type is not ambiguous. Only two users today.",
+      "coverageRisk": "none: test-only refactor",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-16",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/LargeSirStringTest.scala:22-31",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/SecondaryParamListCaseClassTest.scala:21-24",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/SnippetCompilation.scala:56-61"
+      ],
+      "claim": "Two snippet suites load a member of the compiled object by hand with a URLClassLoader, getField(MODULE$) and reflection; SecondaryParamListCaseClassTest never closes its loader. SnippetCompilation creates a temp directory per compile and never deletes it.",
+      "action": "Add SnippetCompilation.loadObjectMember[T](outDir, objectName, member): T that opens, uses and closes the loader; use it in both suites. Delete the temp directory after the caller is done (or use a per-suite directory cleaned in afterAll).",
+      "coverageRisk": "none: test-only refactor",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-17",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginEvalTest.scala:23-30",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:24",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:58-63",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:30",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginToSIRTest.scala:54-59",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CopyReceiverEvalTest.scala:20-27",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/IntegerDivisionSemanticsTest.scala:25-32",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/OnChainSubstituteTest.scala:13-20",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/RepresentationAlignmentStrictnessTest.scala:22-29",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/ThrowMessageAndHexTest.scala:27-34",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/ArrowDesugaringTest.scala:22-31"
+      ],
+      "claim": "Nine suites declare their own given PlutusVM and an Options literal (V3 lowering, error traces, debug off; optimizeUplc true in four, false in five). EvalTestKit provides both, overridable via compilerOptions and plutusVM, and is the shared pattern elsewhere (SortedMapPV11Test, MathTest).",
+      "action": "Mix EvalTestKit into these suites; delete the local givens where they equal the defaults and override compilerOptions (optimizeUplc = false) and plutusVM (V2) where they differ.",
+      "coverageRisk": "low: Options given at a compile { } site can be baked at scalac time; the edit must leave the produced UPLC unchanged (compare flat bytes of one script per suite before and after). Suites that pin a V2 VM must keep it.",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-18",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CopyReceiverEvalTest.scala:38",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CopyReceiverEvalTest.scala:39-45",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/RepresentationAlignmentStrictnessTest.scala:39-43",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/RepresentationAlignmentStrictnessTest.scala:56-57",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/InlineFib.scala:22-33"
+      ],
+      "claim": "Small suites build integer argument terms by compiling a whole program (compile { BigInt(1) }.toUplc(), 7 times) instead of 1.asTerm, and evaluate the same term twice (evaluate, then evaluateDebug) to check value and logs. InlineFib has a dead val compileMe and commented-out println lines.",
+      "action": "Use n.asTerm for the arguments; evaluate once with evaluateDebug and assert on its success term and logs; delete compileMe and the commented lines.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-19",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/IntegerDivisionSemanticsTest.scala:76-84"
+      ],
+      "claim": "The property draws operands from Gen.chooseNum(-1000, 1000): it never produces integers above 64 bits, where the JVM BigInt and Plutus integer paths differ in representation.",
+      "action": "Draw operands from Gen.oneOf(Gen.chooseNum(-1000L, 1000L).map(BigInt(_)), Arbitrary.arbitrary[BigInt]) (ScalaCheck's BigInt generator covers values beyond Long).",
+      "coverageRisk": "none: widens inputs",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C08-20",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/IntegerDivisionSemanticsTest.scala:41-50",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/IntegerDivisionSemanticsTest.scala:79"
+      ],
+      "claim": "Division and remainder by zero are never tested: the case table has no b = 0 row and the property filters it out with whenever(b != 0). Scala throws ArithmeticException; the script must fail, not return a value.",
+      "action": "Add a test: for a in (-7, 0, 7), assert (divUplc $ a $ 0).evaluateDebug.isFailure and the same for modUplc.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agents, read-only, 2026-10-22: 7 findings of scope merge-duplicate-tests, to-property or main-bug; 5 confirmed, 2 narrowed, 0 disproved. Other findings are unverified."
+}

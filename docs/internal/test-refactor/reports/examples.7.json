@@ -1,0 +1,490 @@
+{
+  "cluster": "examples.7",
+  "summary": "The cluster is cheap in CI: about 2 s (StorageTest 1.2 s, FusingBenchmarkTest 0.64 s, the rest under 0.1 s); four of the six setbench suites are Benchmark-tagged and do not run. The biggest gap is that nothing in CI runs the six SetBench Scalus validators or SetBenchTransactions (package coverage 1.9 %); C14-1 adds a small smoke test, and C14-8 then moves the untagged FusingBenchmarkTest out of CI. SimpleTransferValidator and ProxyValidator have untested failure branches (C14-10, C14-12), including the double-satisfaction guards and the OwnerChanged check, and SimpleWalletTest does not check where change and withdrawn funds go (C14-16). Code duplication is the other theme: AikenMpfCompatibilityTest re-implements main-code SetBenchTransactions, three suites hand-encode MPF proofs that derived ToData already produces, and SetBenchEmulatorTest copies its two MPF bench loops for Aiken. C8: the cluster defines no generators (only fixed random hashes in SimpleTransferValidatorTest), so there is nothing to report; C4: no example group is worth a property, because the SimpleTransfer examples carry exact budget pins. No main-code defect found; F-6/F-18/F-19 do not touch this cluster.",
+  "behaviors": [
+    {
+      "pass": "SetBench validators (Mpf16o, Mpf16b, light variants, Acc, Imt)",
+      "name": "withdraw/deposit update the trie root and the remaining-lovelace datum; reject wrong root, wrong remaining, missing continuing output",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:679-796",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/ImtBenchEmulatorTest.scala:436-556"
+      ]
+    },
+    {
+      "pass": "SetBench validators",
+      "name": "CI coverage: none; every test that runs them is tagged Benchmark (see C14-1)",
+      "tests": []
+    },
+    {
+      "pass": "SetBenchTransactions",
+      "name": "publishScript / lock / withdraw / deposit for compiled contracts and raw scripts",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:65-174",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:420-532"
+      ]
+    },
+    {
+      "pass": "MerklePatriciaForestry off-chain proofs vs Aiken MPF validator",
+      "name": "Scalus MPF-16o membership and non-membership proofs are accepted by the Aiken-compiled validator",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:132-190",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:192-253"
+      ]
+    },
+    {
+      "pass": "MPF-16o vs FusedMPF-16 (compiled UPLC)",
+      "name": "has() and insert() succeed in UPLC for N up to 32000 (budget tables only)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/FusingBenchmarkTest.scala:128-224",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/CollectionMembershipBudgetTest.scala:304-322",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/MpfCostAnalysisTest.scala:134-174"
+      ]
+    },
+    {
+      "pass": "SimpleTransferValidator",
+      "name": "deposit by owner with exact continuing output; budget pin",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simpletransfer/SimpleTransferValidatorTest.scala:29-45"
+      ]
+    },
+    {
+      "pass": "SimpleTransferValidator",
+      "name": "withdraw partial / all by recipient; budget pins",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simpletransfer/SimpleTransferValidatorTest.scala:79-94",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simpletransfer/SimpleTransferValidatorTest.scala:110-124"
+      ]
+    },
+    {
+      "pass": "SimpleTransferValidator",
+      "name": "rejects wrong signer, negative amount, withdraw above balance",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simpletransfer/SimpleTransferValidatorTest.scala:47-77",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simpletransfer/SimpleTransferValidatorTest.scala:96-108",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simpletransfer/SimpleTransferValidatorTest.scala:126-153"
+      ]
+    },
+    {
+      "pass": "SimpleTransferValidator",
+      "name": "double-satisfaction guards, own-output address/value/datum checks, leftover output on withdraw-all",
+      "tests": []
+    },
+    {
+      "pass": "SimpleWalletTransactions",
+      "name": "transfer pays recipient; withdrawAll spends every owner UTxO",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simplewallet/SimpleWalletTest.scala:27-58"
+      ]
+    },
+    {
+      "pass": "MultiSigWallet",
+      "name": "2-of-3 native script accepts two signers, rejects one",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simplewallet/SimpleWalletTest.scala:60-101"
+      ]
+    },
+    {
+      "pass": "StorageTransactions",
+      "name": "storeData splits into chunks, one tx per chunk; readData reassembles in order",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/storage/StorageTest.scala:44-105"
+      ]
+    },
+    {
+      "pass": "StorageTransactions",
+      "name": "empty data, exact chunk-size multiples, non-ByteString node error",
+      "tests": []
+    },
+    {
+      "pass": "ProxyValidator / ProxyTransactions",
+      "name": "Call requires the datum logic withdrawal and an unchanged datum; Upgrade requires owner signature, new hash, preserved value; single proxy input",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:143-435"
+      ]
+    },
+    {
+      "pass": "ProxyValidator",
+      "name": "OwnerChanged, MissingContinuation, ContinuationMustHaveInlineDatum, ValueMustBePreserved on Call",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C14-1",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchContract.scala:8-13",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchMpf16oValidator.scala:29-47",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:679-796",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/ImtBenchEmulatorTest.scala:436-556",
+        "docs/internal/test-refactor/baseline/summary.csv:71",
+        "build.sbt:791",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/FusingBenchmarkTest.scala:71-85"
+      ],
+      "claim": "The six SetBench Scalus validators (Mpf16o, Mpf16oLight, Mpf16b, Mpf16bLight, Acc, Imt) and SetBenchTransactions run only in SetBenchEmulatorTest and ImtBenchEmulatorTest, whose every test is tagged Benchmark and excluded from CI (build.sbt:791). The package has 1.9 % statement coverage (1 of 52). Their failure branches (Wrong root, Wrong remaining, Insufficient remaining, Expected one continuing output) are reached by no test at all, not even the benchmarks, which submit only valid transactions.",
+      "action": "Add a non-Benchmark SetBenchValidatorTest: for Mpf16oContract and Mpf16bContract (the light variants too if cheap), N=100, publish + lock via SetBenchTransactions, then one withdraw and one deposit that must submit, and three negatives that must fail with the validator message: new datum with a wrong root, wrong remaining, and a withdraw when remaining < K. Also evaluate the compiled has() once per variant (lift mpf16oHasProgram/mpf16bHasProgram from FusingBenchmarkTest.scala:71-85, N=100, one key, assert Result.Success), so compiled has() keeps a CI run after C14-8. Reuse the setup helper from C14-6.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -4,
+      "linesRemoved": -100,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-2",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:42-118",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchTransactions.scala:104-184",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:436-454"
+      ],
+      "claim": "publishAikenScript, lockAiken, withdrawAiken and depositAiken in AikenMpfCompatibilityTest are line-for-line copies of the raw-script overloads of main-code SetBenchTransactions (publishScript(.., Script.PlutusV3, ..), lock/withdraw/deposit(.., scriptAddress, ..)). SetBenchEmulatorTest already calls those overloads for the same Aiken script. The overloads are uncovered in CI (uncovered.tsv lines 106-183).",
+      "action": "Replace lines 42-118 with `private val txHelper = SetBenchTransactions(env)` and call txHelper.publishScript(utxos, aikenScript, ..), txHelper.lock(utxos, aikenAddress, ..), txHelper.withdraw(.., aikenAddress, ..), txHelper.deposit(.., aikenAddress, ..).",
+      "coverageRisk": "none: same transactions; the change adds CI coverage of SetBenchTransactions 106-184",
+      "ciSavingSec": 0,
+      "linesRemoved": 70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-3",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:132-157",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:192-217"
+      ],
+      "claim": "The two AikenMpfCompatibilityTest tests repeat the same 25-line setup: element generation (seed 42), trie build, emulator, publish script, lock, first contract UTxO. Only the lock amount differs.",
+      "action": "Extract a local `setup(lockAmount: Long)` that returns (elems, trie, emulator, refScriptUtxo, contractUtxo, rng); use the shared element generator from C14-6.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:161-189",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:226-252"
+      ],
+      "claim": "AikenMpfCompatibilityTest submits only valid proofs and asserts isRight. Mutation that survives: an Aiken wrapper (or an emulator configuration) that does not check the proof at all; the test then passes without proving that the Scalus proof encoding is what the Aiken validator verifies, which is the purpose of the suite.",
+      "action": "Add one negative per test: submit a withdraw whose proof is for a different key (or a deposit with a stale root in the datum) and assert the submit fails with a script failure.",
+      "coverageRisk": "none: adds assertions",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-5",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/FusingBenchmarkTest.scala:54-67",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/CollectionMembershipBudgetTest.scala:82-97",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/MpfCostAnalysisTest.scala:49-64",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/crypto/trie/MerklePatriciaForestry.scala:23-41",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:163",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:919"
+      ],
+      "claim": "mpf16oStepToData and mpf16oProofToData are hand-written in three setbench suites. They rebuild exactly what the derived ToData of ProofStep (Branch=0, Fork=1, Leaf=2; Neighbor as Constr 0) and Proof = List[ProofStep] produces. AikenMpfCompatibilityTest and SetBenchEmulatorTest already use `proof.toData`.",
+      "action": "Delete both defs in the three files and use `mpf16o.proveMembership(key).toData` / `.proveNonMembership(key).toData` (import scalus.uplc.builtin.Data.toData); drop the now-unused Mpf16oProof/Mpf16oStep imports.",
+      "coverageRisk": "none if the encodings agree; they do by construction order, and AikenMpfCompatibilityTest pins the derived encoding against Aiken",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-6",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:30-37",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:120-130",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:135-139",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:40-47",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:408-418",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:648-674",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/ImtBenchEmulatorTest.scala:408-433",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/MpfCostAnalysisTest.scala:77-85",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/MpfCostAnalysisTest.scala:88-93",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/FusingBenchmarkTest.scala:43-50",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/CollectionMembershipBudgetTest.scala:57-64"
+      ],
+      "claim": "The setbench test sources repeat the same helpers: findContractUtxo/findRefScriptUtxo (3 files), extractMetrics (2), the Aiken blueprint loader from /scalus/examples/AikenMpfData/plutus.json (3; two of them leak the InputStream), and the seed-42 \"element-<rnd>-<i>\"/\"value-<i>\" generator (6 places).",
+      "action": "Create object SetBenchTestKit in the setbench test package with findOutputAt(tx, address), findRefScriptUtxo(tx), extractMetrics(tx), aikenScript (closing the stream), and elements(n). Replace the local copies.",
+      "coverageRisk": "none: same values (keep seed 42 and the string format so benchmark numbers stay comparable)",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-7",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:420-532",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:65-174",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:534-646",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:178-287",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TxBuilder.scala:426-443"
+      ],
+      "claim": "benchAikenWithdraw and benchAikenDeposit copy benchMpfWithdraw and benchMpfDeposit; the only difference is the target: a compiled contract (contract overloads) or a raw Aiken script and address (raw overloads). The two TxBuilder.references overloads differ only in debug-script registration, so the measured budgets do not depend on which overload runs.",
+      "action": "Give benchMpfWithdraw/benchMpfDeposit a target parameter (script: Script.PlutusV3, address: Address) and call the raw-script overloads; pass (contract.script, contract.address(env.network)) for Scalus contracts and (aikenScript, aikenAddress) for Aiken. Delete benchAikenWithdraw and benchAikenDeposit.",
+      "coverageRisk": "none for CI (Benchmark-tagged); benchmark output unchanged except the loss of diagnostic replay for Scalus scripts",
+      "ciSavingSec": 0,
+      "linesRemoved": 200,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-8",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/FusingBenchmarkTest.scala:18-22",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/FusingBenchmarkTest.scala:128-224",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala:23-25"
+      ],
+      "claim": "FusingBenchmarkTest is a benchmark by its own doc comment (\"Run with: sbt testOnly\"); it prints cost tables with info() and asserts no budget, yet it has no Benchmark tag, so CI runs it: 0.64 s of tests (timings.csv) plus the construction of a 32000-element vector and four tries per size. Its only check is that has()/insert() succeed in compiled UPLC for both MPF variants.",
+      "action": "Tag both tests with scalus.testing.Benchmark, as the sibling setbench suites do. Keep the compiled-UPLC success check in CI through C14-1 (N=100 withdraw/deposit for Mpf16o and Mpf16b).",
+      "coverageRisk": "low if C14-1 lands first (it evaluates compiled has() and, through the validators, insert/delete at N=100); otherwise medium: compiled has() for Mpf16o/Mpf16b would run nowhere in CI (FusedMerklePatriciaForestryTest runs the on-chain code on the JVM only). Large-N (1000, 32000) UPLC runs are lost either way",
+      "ciSavingSec": 0.8,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-9",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/CollectionMembershipBudgetTest.scala:57-64",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/CollectionMembershipBudgetTest.scala:99-150",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/MpfCostAnalysisTest.scala:66-75",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/MpfCostAnalysisTest.scala:193-218"
+      ],
+      "claim": "CollectionMembershipBudgetTest and MpfCostAnalysisTest are excluded from CI by tag, but ScalaTest still instantiates the suite to read the tags, so their eager vals run in every CI run: a 100000-element ByteString vector and six PlutusV3.compile values (CollectionMembershipBudgetTest), and six PlutusV3.compile values (MpfCostAnalysisTest).",
+      "action": "Make these vals lazy (allElements, the *Program vals, collectionSizes can stay). No test logic changes.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0.3,
+      "linesRemoved": 0,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/simpletransfer/SimpleTransferValidator.scala:56-63",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/simpletransfer/SimpleTransferValidator.scala:70-78",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/simpletransfer/SimpleTransferValidator.scala:82-97",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simpletransfer/SimpleTransferValidatorTest.scala:47-60",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simpletransfer/SimpleTransferValidatorTest.scala:96-108",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simpletransfer/SimpleTransferValidatorTest.scala:126-137"
+      ],
+      "claim": "SimpleTransferValidator has seven failure branches that no test reaches: \"Contract should have exactly one own input\" and \"at most one own output\" (the double-satisfaction guards), \"Own output address changed\" (deposit and withdraw), \"Contract has received incorrect amount\", \"Output datum changed\", \"Contract balance is incorrect\", and \"Contract own output is not empty\" (withdraw-all with a leftover output). The three wrong-signer/over-withdraw tests assert only !isSuccess, not the message.",
+      "action": "Add cases for the seven branches (two own inputs; two own outputs; own output with a staking part; deposit with a wrong amount; continuing output with another datum; partial withdraw with a wrong balance; withdraw-all with a leftover own output), each asserting the error message via res.logs. Add the message check to the three existing negatives. Write them as rows of the table from C14-11.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -50,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-11",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simpletransfer/SimpleTransferValidatorTest.scala:29-153",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simpletransfer/SimpleTransferValidatorTest.scala:155-188"
+      ],
+      "claim": "All eight SimpleTransferValidatorTest tests have one shape: build context(balance, redeemer, signer, inputs, outputs), run, then assert success with a budget pin or failure with an optional message. About 125 lines assert 8 rows.",
+      "action": "Turn them into one table of (name, balance, redeemer, signatories, inputs, outputs, Either[expectedMessage, ExUnits]) with one test per row (registered in a loop, names kept), so the C14-10 rows add one line each.",
+      "coverageRisk": "none: same contexts and assertions; keep the ExUnits pins unchanged",
+      "ciSavingSec": 0,
+      "linesRemoved": 50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-12",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/upgradeableproxy/UpgradeableProxyValidator.scala:62-65",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/upgradeableproxy/UpgradeableProxyValidator.scala:79-80",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/upgradeableproxy/UpgradeableProxyValidator.scala:87-88"
+      ],
+      "claim": "Three ProxyValidator failures are untested: OwnerChanged on Call and on Upgrade (lines 80, 88), MissingContinuation (62), and ContinuationMustHaveInlineDatum (65). (ValueMustBePreserved runs before the redeemer match, so the Upgrade-drain test at 367-387 already covers it for Call too.) A mutation that deletes `require(continuationDatum.owner === d.owner, OwnerChanged)` lets an attacker take over the proxy on a Call, and no test fails.",
+      "action": "Add four failure tests with assertSubmitScriptFail: Call with owner changed in the datum; Upgrade with owner changed; Call paying the continuation to Alice instead of the script; continuation with a datum hash instead of an inline datum.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -55,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-13",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:289-321",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:183-201",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:268-287",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:389-435",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/upgradeableproxy/UpgradeableProxyValidator.scala:73-76"
+      ],
+      "claim": "\"success: Call rejects old logic after upgrade\" asserts the same behavior as \"failure: Call with wrong logic validator withdrawn\": a Call whose withdrawal credential is not the datum logicHash fails with LogicNotInvoked (one branch, UpgradeableProxyValidator.scala:76). That an upgrade writes the new hash is pinned by 268-287, and that the upgraded proxy enforces the new logic is pinned by 389-435. The test is also misnamed (\"success:\" for a failure test).",
+      "action": "Delete 289-321. If the owner wants to keep the after-upgrade scenario, rename it to \"failure: Call with the old logic after upgrade\" instead.",
+      "coverageRisk": "low: the after-upgrade path reaches the same validator branch; the upgrade itself stays tested by 268-287 and 389-435",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "Test 289-321 has two assertions. (1) Line 303: the upgrade tx submits. The same assertion exists at 281 (same txCreator.upgrade, mustNotMint->mustMint, Alice signer), and 420 checks it again. (2) Line 320: a Call that withdraws mustNotMintStakeAddress fails with LogicNotInvoked. That message is raised only by `tx.withdrawals.getOrFail(Credential.ScriptCredential(d.logicHash), LogicNotInvoked)` (UpgradeableProxyValidator.scala:75-76). The datum d is the spent UTxO's datum, and the validator keeps no history. So the only thing this scenario adds is 'after an upgrade, d.logicHash is the new hash'. Lines 283-286 pin that directly: they decode the continuation datum and assert logicHash == mustMintHash. Test 183-201 covers 'withdrawn credential != d.logicHash -> LogicNotInvoked', with the same entry point (TxBuilder spend Call, txCreator.script), the same JVM test file and the same evaluator. In 289, the old logic (mustNotMint, no mint) would itself pass, so the failure can only come from the proxy branch. No Call that succeeds after an upgrade is lost, because 289 never makes one. Caveat: 389-435 step 3 asserts only 'Transaction must not mint', so it does not by itself prove the proxy accepted the new hash. The coverage argument rests on 183-201 plus 283-286, not on 389. The misnaming is real: the test is named 'success:' but asserts a failure. Delete 289-321, or rename it if the owner wants to keep it."
+    },
+    {
+      "id": "C14-14",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:173-178",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:192-198",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:213-220",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:233-239",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:308-318",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:399-406",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:426-433",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:114",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:160",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:283",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:305",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:408",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:421"
+      ],
+      "claim": "UpgradeableProxyTest builds the same Call transaction by hand seven times (spend Call, payTo the script, optional withdrawRewards, optional mint, complete, sign) and finds the proxy output with `tx.utxos.find(_._2.address == txCreator.scriptAddress)` six times.",
+      "action": "Add local helpers `callTx(proxy: Utxo, datum, value, withdraw: Option[(StakeAddress, ScriptWitness)], mint: Boolean): Transaction` and `proxyOutput(tx): Utxo`; use them in the tests. ProxyTransactions.call cannot be reused because the negatives need tampered parts.",
+      "coverageRisk": "none: same transactions",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-15",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:87-101",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingTransactionTest.scala:87-101",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:454",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:1053"
+      ],
+      "claim": "assertSubmitScriptFail(provider, expectedError)(tx) is copied byte-for-byte in UpgradeableProxyTest and VestingTransactionTest; AmmTest and LinkedListTest have a weaker assertSubmitFails without the message check. ScalusTest.assertScriptFail covers only build-time failures.",
+      "action": "Move assertSubmitScriptFail to one test-side trait in scalus-examples (for example scalus.examples.EmulatorAssertions, mixed in next to ScalusTest), not into scalus-testkit ScalusTest, because a new trait method is a MiMa change. Replace the two copies; let AmmTest/LinkedListTest adopt it where they know the message.",
+      "coverageRisk": "none: same assertion",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-16",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simplewallet/SimpleWalletTest.scala:27-45",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simplewallet/SimpleWalletTest.scala:47-58",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simplewallet/SimpleWalletTest.scala:85-100",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/simplewallet/SimpleWalletTransactions.scala:28-32",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/simplewallet/SimpleWalletTransactions.scala:42-46"
+      ],
+      "claim": "\"transfer pays the recipient and returns change to the owner\" never checks the change: a mutation that passes the recipient as the change address survives, because Bob still has a 3 ADA output. \"withdrawAll ... sends the balance to the recipient\" never checks the recipient: a mutation that sends the balance to any other address survives (Alice is still emptied). The 1-of-3 case asserts isLeft for any reason, so a rejection for an unrelated cause also passes.",
+      "action": "In transfer, assert that Alice's UTxOs after submit sum to 20 ADA - 3 ADA - tx fee. In withdrawAll, assert that Bob's UTxOs sum to 20 ADA - fee. In the multisig case, assert that the Left is the native-script failure (match the error type or message).",
+      "coverageRisk": "none: adds assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-17",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simplewallet/SimpleWalletTest.scala:67-72",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/simplewallet/SimpleWalletTest.scala:86-91"
+      ],
+      "claim": "The multisig test builds the same one-UTxO Emulator twice and looks up the wallet UTxO twice.",
+      "action": "Extract `multisigProvider(): (Emulator, Utxo)` and call it for both cases.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-18",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/storage/StorageTransactions.scala:73-76",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/storage/StorageTransactions.scala:63-71",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/storage/StorageTest.scala:44-105"
+      ],
+      "claim": "StorageTransactions.splitIntoChunks has an empty-data branch (line 75, uncovered) and no test stores data whose length is an exact multiple of chunkSize (the grouped() boundary). The readData error path for a non-ByteString node (68-69) is uncovered too.",
+      "action": "Add two StorageTest cases: store ByteString.empty (expect 1 tx and root data B(empty)), and store 200 bytes with chunkSize 100 (expect 2 txs and readData == data). Skip the readData error path; it needs a hand-made foreign node.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -1.2,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C14-19",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/storage/StorageTest.scala:6-8",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/storage/StorageTest.scala:18",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/storage/StorageTest.scala:44-75",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/storage/StorageTest.scala:77-105"
+      ],
+      "claim": "StorageTest: `import scalus.cardano.ledger.EvaluatorMode` (line 7) repeats the wildcard import on line 6; `given ec` (line 18) has no user in the file (Emulator.submit/await take none); the two tests repeat the store-submit-find sequence.",
+      "action": "Remove the duplicate import and the unused given (compile to confirm). Extract `storeAll(data, chunkSize): (StorageTransactions, Emulator, List[Transaction], Utxos)` that stores, submits each tx with its index in the failure message, and returns the storage UTxOs; keep each test's own assertions. This also gives C14-18 a one-line test body.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 1 findings of scope merge-duplicate-tests, to-property or main-bug; 1 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

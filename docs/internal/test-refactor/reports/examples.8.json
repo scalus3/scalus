@@ -1,0 +1,408 @@
+{
+  "cluster": "examples.8",
+  "summary": "The cluster is cheap in CI: VestingValidatorTest 1.2 s and VestingVerificationTest 1.0 s (Lean proofs replay from the kept .proofs.json); timings.csv shows 0.017 s for VaultTransactionTest and 0.008 s for VestingTransactionTest, which is under-measured for suites that run an Emulator, so no saving is claimed on them. The main theme is coverage of on-chain guards: scoverage does not see @Compile code (F-9), and a manual census shows the Vault tests assert 3 of its 25 error messages, so most security guards (backdated deadline, deposit status, finalize payee, owner/recovery key changes) have no test (C34-4); Vesting misses InvalidDatum and NoValidityLowerBound (C34-5). Reading the Vault validator found two new defects: initiateWithdrawal does not pin waitTime/amount, so a stolen owner key can reduce the wait to zero (C34-1), and deposit lets anyone merge two same-owner vaults into one output (C34-2); VestingTransactions drops native tokens from the continuing output (C34-3). The VestingValidatorTest amount/schedule examples are one law with linearVesting as the oracle (C34-6), and the rest is duplication: a Vault test that is a prefix of another, a mislabelled '2 ScriptContexts' test, repeated lock/query blocks, and two copies of runValidator. C8: the cluster has no ScalaCheck generators (random[TxId] only; the forAll in VestingVerificationTest is symbolic), so nothing to report.",
+  "behaviors": [
+    {
+      "pass": "VaultValidator.initiateWithdrawal",
+      "name": "owner initiates; output Pending with deadline = validTo + waitTime; budget pin",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:92-191",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:348-472"
+      ]
+    },
+    {
+      "pass": "VaultValidator.initiateWithdrawal",
+      "name": "rejects: owner not signing, already Pending, no upper bound, wrong deadline (backdated), value decrease, output not Pending",
+      "tests": []
+    },
+    {
+      "pass": "VaultValidator.deposit",
+      "name": "deposit adds lovelace, keeps status Idle, datum amount = output lovelace; budget pin",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:193-286"
+      ]
+    },
+    {
+      "pass": "VaultValidator.deposit",
+      "name": "rejects: tokens added, no ADA added, amount/waitTime/deadline/status changed, two vault outputs",
+      "tests": []
+    },
+    {
+      "pass": "VaultValidator.finalize",
+      "name": "finalize after deadline pays owner and closes the vault; budget pin",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:348-472"
+      ]
+    },
+    {
+      "pass": "VaultValidator.finalize",
+      "name": "rejects Idle vault and finalize before deadline",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:288-346",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:474-577"
+      ]
+    },
+    {
+      "pass": "VaultValidator.finalize",
+      "name": "rejects: payout to non-owner, output back to the vault, owner paid less than amount, leftover",
+      "tests": []
+    },
+    {
+      "pass": "VaultValidator.cancel",
+      "name": "recovery key cancels Pending to Idle; owner-signed cancel rejected",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:636-670",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:672-691"
+      ]
+    },
+    {
+      "pass": "VaultValidator.cancel",
+      "name": "rejects: nothing pending, output not Idle, amount or waitTime changed, owner/recovery key changed",
+      "tests": []
+    },
+    {
+      "pass": "VaultTransactions",
+      "name": "lock / withdraw / deposit / cancel / finalize build transactions the ledger accepts",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:92-191",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:193-286",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:348-472",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:636-670"
+      ]
+    },
+    {
+      "pass": "VaultTransactions",
+      "name": "non-Shelley address and missing inline datum throw (uncovered, low value)",
+      "tests": []
+    },
+    {
+      "pass": "VestingValidator.linearVesting",
+      "name": "schedule: 0 before start, everything from the end, monotone, bounded (proved in Lean, replayed from kept results)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:110-216",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:172-192"
+      ]
+    },
+    {
+      "pass": "VestingValidator.spend",
+      "name": "accepts withdrawal up to vested-minus-released (full, 50 %, 25 %, 1 s, long duration, small amount, second partial)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:107-320",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingTransactionTest.scala:117-188"
+      ]
+    },
+    {
+      "pass": "VestingValidator.spend",
+      "name": "rejects over-withdrawal, before start, no signature, unpaid fee, zero amount",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:324-450",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingTransactionTest.scala:190-261",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:255-439"
+      ]
+    },
+    {
+      "pass": "VestingValidator.spend",
+      "name": "rejects double satisfaction, native-token strip, staking-credential redirect",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:564-739"
+      ]
+    },
+    {
+      "pass": "VestingValidator.spend",
+      "name": "rejects continuing output with a changed datum (InvalidDatum) and a range with no lower bound",
+      "tests": []
+    },
+    {
+      "pass": "VestingTransactions",
+      "name": "lock builds the datum; withdraw builds full and partial withdrawals; budget pins",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingTransactionTest.scala:103-188"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C34-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultValidator.scala:104-138",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultValidator.scala:94",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultValidator.scala:156-178",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultValidator.scala:130-131"
+      ],
+      "claim": "VaultValidator.initiateWithdrawal checks owner, recoveryKey, status=Pending and finalizationDeadline of the new datum, but not newDatum.waitTime nor newDatum.amount. deposit (line 94) and cancel (line 177) compare waitTime with the incoming datum, so a waitTime written during initiation is permanent. Threat model from the file's own comment (157-159): a stolen owner key. Attack: (1) attacker initiates with output waitTime = 0 (this deadline still uses the old waitTime); (2) recovery cancels, and cancel must keep waitTime = 0; (3) attacker initiates again, deadline = validTo + 0 (130-131); (4) finalize passes in the next slot, so the recovery key has no wait window. The unpinned amount also lets the recovery signer take inputLovelace minus datum.amount in cancel (171-175), and an amount that differs from the value makes finalize fail.",
+      "action": "Main code: in initiateWithdrawal require newDatum.waitTime === datum.waitTime and newDatum.amount === datum.amount (and out lovelace === datum.amount). Test: add two negative cases to the Vault fill-gap suite (C34-4).",
+      "coverageRisk": "none: a main-code fix plus new tests",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "findingsLog": "F-52",
+      "verdict": "CONFIRMED",
+      "verification": "VaultValidator.scala:104-138: initiateWithdrawal reads newDatum and checks only status.isPending (133) and finalizationDeadline (134-137). requireSameOwner (196-200) checks only owner and recoveryKey. Nothing compares newDatum.waitTime or newDatum.amount with datum, and the value check is only out lovelace >= input lovelace (121-124). requireEntireVaultIsSpent is not called here. cancel (177) requires vaultDatum.waitTime === datum.waitTime and deposit (94) does the same, so after a Pending datum carries waitTime = 0 no path can restore it. The builder cancel (VaultTransactions.scala:101) copies currentDatum, so it keeps waitTime = 0. Attack path, with a stolen owner key: initiate with waitTime 0 -> recovery cancels -> re-initiate, deadline = validTo + 0 (130-131) -> finalize (142) needs only validRange entirely after the deadline, so it succeeds in the next slot. The amount part also holds: cancel pins out lovelace to the new datum.amount (171-175), not to the input lovelace. finalize needs datum.amount === input lovelace (144, 182-186). The fix and test actions are sound."
+    },
+    {
+      "id": "C34-2",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultValidator.scala:81-102",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultValidator.scala:188-191",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultTransactions.scala:31-38",
+        "docs/internal/EXAMPLES_REVIEW.md:262"
+      ],
+      "claim": "deposit has no signature check and no one-vault-input guard. Each vault input checks only its own datum against the unique output at the vault address (findContinuingOutputOrFail): out lovelace > own input, datum.amount = own input lovelace, new amount = out lovelace, and owner/recoveryKey/status/waitTime/finalizationDeadline equal to its own datum. Two vaults that one owner locks with one waitTime have equal datums except amount (lock sets Idle and deadline 0, VaultTransactions 31-38) and share the unparameterized script address. Anyone can spend both with Deposit and pay one output of max(A, B) + 1 lovelace; both runs pass and the spender keeps the rest. EXAMPLES_REVIEW.md:262 lists only the finalize variant as deferred; this deposit variant needs no Pending state and no key.",
+      "action": "Main code: add a single-own-input guard (txInfo.inputs.findUniqueOrFail on the own credential, as VestingValidator 79-82 does) to deposit, and to finalize/cancel for the known deferred variant. Test: two-vault deposit case in C34-4.",
+      "coverageRisk": "none: a main-code fix plus new tests",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "findingsLog": "F-53",
+      "verdict": "CONFIRMED",
+      "verification": "deposit (VaultValidator.scala:81-102) has no signature check and no own-input uniqueness guard. getVaultOutput uses findContinuingOutputOrFail (190-191). That function returns the unique output whose whole address equals the own input address (Contexts.scala:1037-1041). Two vault inputs at the same unparameterized script address resolve to the same single output. The per-input checks are: out lovelace > own input (90); datum.amount === own input lovelace (91, 182-186); newDatum.amount === out lovelace (93); waitTime, deadline and status equal to own datum (94-101); owner and recoveryKey equal (85, 196-200). lock (VaultTransactions.scala:31-38) creates Idle with deadline 0, so two locks with the same owner, recovery and waitTime have datums that differ only in amount. One output of max(A,B)+1 with that datum satisfies both runs. Any party can submit this, and it keeps about min(A,B)-1 minus the fee. EXAMPLES_REVIEW.md:262 defers only the finalize variant. VestingValidator.scala:79-82 shows the findUniqueOrFail guard to copy."
+    },
+    {
+      "id": "C34-3",
+      "check": "C1",
+      "scope": "main-bug",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingTransactions.scala:73-75",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingTransactions.scala:37-45",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala:126-132"
+      ],
+      "claim": "VestingTransactions.withdraw pays the continuing output Value.lovelace(contractAmount - amount), which drops native tokens, while the validator requires contractOutput.value === ownInput.value - lovelace(requested). lock accepts any Value, so a vesting UTxO with tokens cannot be partially withdrawn through the builder. Low severity: it fails closed.",
+      "action": "Main code: pay vestingUtxo.output.value - Value.lovelace(amount) back to the script. Test: a partial emulator withdrawal of a UTxO locked with a token in VestingTransactionTest.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "medium",
+      "findingsLog": "F-54",
+      "verdict": "CONFIRMED",
+      "verification": "VestingTransactions.scala:73-75 pays Value.lovelace(contractAmount - amount) back to the script on a partial withdrawal. lock (28-48) accepts any Value and pays it as-is (45), so tokens can be locked. The validator requires contractOutput.value === ownInput.value - Value.lovelace(requestedAmount) (VestingValidator.scala:126-129). With tokens in the input, the builder output lacks them, the tokens go to change, and the script fails with ContinuingValueMismatch. It fails closed. A full withdrawal (amount == contractAmount, line 74) emits no continuing output, so it is not affected. The fix vestingUtxo.output.value - Value.lovelace(amount) matches the validator check."
+    },
+    {
+      "id": "C34-4",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultValidator.scala:202-238",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:345",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:576",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:690",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:53-103"
+      ],
+      "claim": "scoverage does not instrument @Compile code (F-9), so the baseline shows only off-chain throws. A census of the 25 error messages in VaultValidator: the tests assert 3 (ContractMustBePending, DeadlineNotPassed, RecoveryKeyMustSign). No test reaches the security guards: IncorrectDatumFinalization and NoFinalizationUpperBound (the backdating fix), OwnerMustSign, WithdrawalAlreadyPending, MustBePending, ValueNotConserved, DepositMustNotChangeStatus, CannotAddTokens, AdaNotConserved, WaitTimeChanged, FinalizationDeadlineChanged, WrongAddressWithdrawal (finalize has no signature, so the payee check is the only guard), WithdrawalsMustNotSendBackToVault, NothingToCancel, StateNotIdle, WrongOutputAmount, VaultOwnerChanged, RecoveryKeyChanged, NotExactlyOneVaultOutput (staking redirect).",
+      "action": "Add VaultValidatorTest in the ScriptContext-builder style of VestingValidatorTest (no Emulator): one base context per action and one negative case per guard above, each with assertFailureWith(VaultValidator.X, result), plus the C34-1 (waitTime/amount change on initiate) and C34-2 (two vault inputs, one deposit output) regressions. WrongAddressWithdrawal and IncorrectDatumFinalization can also go through the existing builders (attacker ownerAddress in finalize; wrong validityEndTime) with the constMaxBudget creator.",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": -1.5,
+      "linesRemoved": -300,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C34-5",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala:134",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala:86",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:53-103"
+      ],
+      "claim": "No Vesting test reaches InvalidDatum (continuing output with a changed datum, e.g. a new beneficiary or initialAmount) or NoValidityLowerBound (validRange with no lower bound). Every partial-withdrawal context copies the input datum, and every interval is Interval.after(t).",
+      "action": "Add two negative cases to VestingValidatorTest: a partial withdrawal whose continuing datum names another beneficiary (expect InvalidDatum), and one with Interval.always or Interval.before(t) (expect NoValidityLowerBound).",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C34-6",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:107-262",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:264-320",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:324-376",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala:143-153"
+      ],
+      "claim": "The six success examples (full, 50 %, 25 %, 1 s after start, 10 000-year duration, 1000-lovelace amount), the second partial withdrawal and the two over-withdrawal failures are instances of one law with linearVesting as oracle: a signed withdrawal is accepted iff 0 < requested <= linearVesting(config, validFrom) - (initialAmount - locked), with beneficiary output = requested + beneficiary inputs - fee and continuing output = locked - requested under the same datum (no continuing output when requested == locked). This suite has no ExUnits pins, so nothing is lost there.",
+      "action": "Replace these 9 tests with one ScalaCheck forAll over start, duration > 0, initialAmount > 0, locked <= initialAmount, time and requested, built through a generalized TestCase (locked, requested); assert success iff the law holds, and assertFailureWith(AmountExceedsAvailable) otherwise. Seed the time generator with Gen.oneOf edges: time < start, time == start + duration, 1 s after start, and a 10 000-year duration. Reason for the extra CI time: VestingVerificationTest proves the schedule only when Lean is present and otherwise replays kept results, so this property is the only CI-run check of the law.",
+      "coverageRisk": "medium-low: the named edges (before start, exactly at the end, 10 000-year duration, 1 lovelace per second) become generator duties; keep them as explicit seeds",
+      "ciSavingSec": -1,
+      "linesRemoved": 150,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The law holds as a validator property. linearVesting (VestingValidator.scala:143-153) and the check order (signature, AmountExceedsAvailable, beneficiary output, continuing output; 84-131) accept exactly when 0 < requested <= linearVesting(validFrom) - (initial - locked), if outputs are built as stated and beneficiary inputs = fee. requested > locked always implies requested > available, so it fails with AmountExceedsAvailable before the output checks. Two gaps make the action as written wrong. (1) The action says to assert assertFailureWith(AmountExceedsAvailable) for every non-accepted input. Inputs with requested <= 0 fail with NonPositiveAmount at line 75, so the generator must keep requested > 0. (2) If the property uses VestingValidator.linearVesting as its oracle, it only checks UPLC against the JVM. It does not check the schedule itself. The replaced examples use independent expected values: initialAmount/2 at half time (140-141), /4 at quarter time (166-167), full amount before the end fails (324-346). A wrong linearVesting would pass the property but fail those examples. VestingVerificationTest runs only with Lean, so this is a real coverage loss. Corrected action: replace the 9 tests with the forAll, but use an oracle written independently in the test (clamped initial*elapsed/duration with floor division), keep requested > 0 or expect NonPositiveAmount for requested <= 0, and keep the named edges as explicit seeds. There are no ExUnits pins in the file, so that claim is correct."
+    },
+    {
+      "id": "C34-7",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:92-191",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:348-472",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:153",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:406"
+      ],
+      "claim": "'vault withdrawal request' is a prefix of 'vault finalization succeeds after withdrawal request': the same lock, the same withdraw at slot 1000 and the same budget pin ExUnits(63548, 26_641_144). Its only extra checks are the pending datum asserts (174-190) and the lock output amount (131).",
+      "action": "Move the asserts at 131 and 174-190 into lockAndRequest (580-634) so every caller checks them; delete 'vault withdrawal request'.",
+      "coverageRisk": "none if the asserts move; the budget pin stays in the finalize test",
+      "ciSavingSec": 0,
+      "linesRemoved": 95,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "VaultTransactionTest.scala:92-191 ('vault withdrawal request') and 348-406 (finalize test) use the same lock, the same withdraw at slot 1000 with validTo = slotToTime(1001), and the same pin ExUnits(63548, 26_641_144) (153 vs 406). Both use the same runValidator entry point, and both are JVM-only. The extra assertions are the lock coin == defaultInitialAmount (131) and the pending datum checks status == Pending, amount unchanged, deadline > 0 (174-190). The finalize test already implies these: finalize requires status Pending (Validator 141), datum.amount == input lovelace (144), and validRange entirely after the deadline (142). Note: the finalize test inlines its own lock and request and does not call lockAndRequest (580-634). Only the two cancel tests (636, 672) call it. Moving the asserts into lockAndRequest keeps them in the cancel tests, through the same builder path, so no coverage is lost."
+    },
+    {
+      "id": "C34-8",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:488-562",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:558",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:403-426",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:564-624"
+      ],
+      "claim": "'2 ScriptContexts' asserts failure for both runs, while the message at 558 says 'should succeed'. Reasoned from code, not run: the first context pays the beneficiary twice (513-521), so it fails on BeneficiaryOutputMismatch; the second runs spend on the beneficiary's pubkey input (551), so contractAmount = 1 ADA and it fails on AmountExceedsAvailable. Neither is a distinct behavior: 'no fee is paid' (403-426) covers BeneficiaryOutputMismatch and the double-satisfaction test (564-624) covers several inputs.",
+      "action": "Delete the test.",
+      "coverageRisk": "none: both failure reasons are covered by other tests (pin them with messages, C34-10)",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 75,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "VestingValidatorTest.scala:488-562. Both runs assert isFailure (555-561). The message 'First withdrawal should succeed' at 558 is wrong. Run 1 (own input = script input, 20 ADA, 25% time, requested 5 ADA): signed, available = 5 ADA, so the amount check passes. The two beneficiary outputs of 5 ADA give adaInOutputs = 10 ADA against expected 5 + 1 - 1 = 5 ADA, so it fails with BeneficiaryOutputMismatch (VestingValidator.scala:114-117). Run 2 (own ref = beneficiary pubkey input, 551): the unique-credential guard passes because there is only one beneficiary input. contractAmount = 1 ADA, so released = 19 ADA and available = 5 - 19 < 5, which fails with AmountExceedsAvailable (100-103). Equivalent checks survive. 'no fee is paid' (403-426) fails with BeneficiaryOutputMismatch (expected 19 ADA, output 20 ADA). The over-withdrawal tests (324-376), or the C34-6 property, cover AmountExceedsAvailable. A spending run with a pubkey own ref cannot occur on the ledger, so it is not a distinct behavior."
+    },
+    {
+      "id": "C34-9",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:95-129",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:196-230",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:291-325",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:351-385",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:477-511",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:580-634"
+      ],
+      "claim": "VaultTransactionTest repeats the lock-then-find-vault-UTxO block 5 times and the owner-UTxO query with minTotal about 10 times; the tests at 348 and 474 redo the lock and withdraw that lockAndRequest already does.",
+      "action": "Add file-local helpers lock(provider): Utxo, ownerUtxos(provider, min) and scriptUtxoOf(provider, txId); use lockAndRequest in the finalize tests; use lock in the Idle and deposit tests.",
+      "coverageRisk": "none: same transactions and asserts",
+      "ciSavingSec": 0,
+      "linesRemoved": 180,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C34-10",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:346",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:372-375",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:400",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:425",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:449",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:616-623",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:684",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:738",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/assertions/ResultAssertions.scala:128-129"
+      ],
+      "claim": "Nine VestingValidatorTest failure checks assert only result.isFailure. A failure for any reason passes them: for example a context-builder change that makes the datum unreadable (DatumNotFound) keeps all nine green, and the double-satisfaction, token-strip and staking tests would stay green even if they stopped reaching their guard.",
+      "action": "Use ResultAssertions.assertFailureWith(VestingValidator.<Message>, result) with AmountExceedsAvailable, NoBeneficiarySignature, BeneficiaryOutputMismatch, NonPositiveAmount, MultipleVestingInputs, ContinuingValueMismatch and NotExactlyOneContractOutput.",
+      "coverageRisk": "none: assertions become stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C34-11",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:185-188",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:345",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:576",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:690",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:467-471"
+      ],
+      "claim": "VaultTransactionTest checks finalizationDeadline > 0 instead of the exact deadline, so a change of both on-chain and off-chain formulas (e.g. validTo + waitTime / 2) passes; failure checks use result.logs.last.contains, which breaks if a trace follows the error and does not show the result on failure.",
+      "action": "Assert newDatum.finalizationDeadline == validityEndTime + defaultWaitTime; replace the three logs.last checks with ResultAssertions.assertFailureWith(VaultValidator.X, result).",
+      "coverageRisk": "none: assertions become stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C34-12",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vault/VaultTransactionTest.scala:69-90",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingTransactionTest.scala:41-59"
+      ],
+      "claim": "Both transaction suites define the same runValidator (resolve inputs from the Emulator, build the V3 context, find the script by hash, run with debug). examples.2 finding C11-18 proposes a shared Transaction.runSpend in scalus-testkit for this exact code.",
+      "action": "After C11-18 lands, replace both local runValidator defs with the testkit helper.",
+      "coverageRisk": "none: same evaluation",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C34-13",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:107-113",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:264-320",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:564-624",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:626-685",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:687-739",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:94",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:128",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:555"
+      ],
+      "claim": "VestingValidatorTest builds the same default Config 17 times, and five tests hand-build TxInfo and ScriptContext (about 40 lines each) that differ from scriptContext(TestCase) only in inputs, outputs or ownRef; 7 commented-out println/debugPrint lines are dead code.",
+      "action": "Add a defaultConfig val; give TestCase optional inputs/outputs/ownRef overrides (or a context(inputs, outputs, ownRef) helper) and use it in the five tests; delete the commented lines.",
+      "coverageRisk": "none: same contexts and asserts",
+      "ciSavingSec": 0,
+      "linesRemoved": 120,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C34-14",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingValidatorTest.scala:315",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/kit/ScalusTest.scala:86-104"
+      ],
+      "claim": "'Successful Multiple partial withdrawals.' runs runWithProfileReport, which profiles and writes HTML/JSON/CSV report files, and asserts only isSuccess; it takes 0.298 s against about 0.04 s for its siblings.",
+      "action": "Use compiled.runScript(scriptContext) like the other tests (or the generalized TestCase from C34-13).",
+      "coverageRisk": "low: only the profile-report demo goes; it may be deliberate, keep it if the owner wants a profiling example",
+      "ciSavingSec": 0.25,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 6 findings of scope merge-duplicate-tests, to-property or main-bug; 5 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

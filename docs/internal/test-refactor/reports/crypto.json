@@ -1,0 +1,777 @@
+{
+  "cluster": "crypto",
+  "summary": "The crypto cluster (22 files, ~3.1k lines; hashes, Ed25519, bilinear accumulators, Merkle trees, MPF tries, plus their on-chain verifiers) runs in about 1 s locally, so the only ci-time item is a benchmark class that compiles three on-chain programs in its constructor although its only test is ignored (C26-11). The main gap is the Montgomery-arithmetic NTT path (MontField256 and NTT.multiplyJ, ~540 statements), which no default test reaches because it needs >= 512 accumulator elements (C26-1); and no test anywhere checks that an accumulator verifier returns false (C26-7). Many hash tests assert only the output length at exactly the padding boundaries they claim to test; pinned vectors (computed with python) and a platform oracle fix that (C26-13..16). MPF and Fused MPF suites are near-copies and pin no external root (C26-26, C26-27); several example groups (Poly laws, getFinalPoly vs Poly.product, Merkle tree sizes, IMT membership, E2E accumulator) become properties. Referenced, not re-reported: F-8 (private Benchmark tag in BilinearAccumulatorBenchmarkTest and the FusedMPF benchmark), F-9 (on-chain @Compile files are excluded from coverage, so Merkling/G1/G2/on-chain Poly gaps come from reading). No main-code defect found.",
+  "behaviors": [
+    {
+      "pass": "Keccak",
+      "name": "keccak256 / sha3_256 match published vectors; padding at the 136-byte rate boundary",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/KeccakTest.scala:17-35",
+        "scalus-core/shared/src/test/scala/scalus/crypto/KeccakTest.scala:48-75",
+        "scalus-core/shared/src/test/scala/scalus/crypto/KeccakTest.scala:113-130"
+      ]
+    },
+    {
+      "pass": "Ripemd160",
+      "name": "ripemd160 matches the reference vectors; padding at 55/56/64-byte boundaries",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/Ripemd160Test.scala:19-92",
+        "scalus-core/shared/src/test/scala/scalus/crypto/Ripemd160Test.scala:96-131"
+      ]
+    },
+    {
+      "pass": "Hmac",
+      "name": "hmacSha512 matches RFC 4231; keys longer than the 128-byte block are hashed first",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/HmacTest.scala:9-93"
+      ]
+    },
+    {
+      "pass": "Hmac",
+      "name": "key of exactly 128 bytes (not hashed) vs 129 bytes (hashed)",
+      "tests": []
+    },
+    {
+      "pass": "Pbkdf2",
+      "name": "deriveKey matches PBKDF2-HMAC-SHA512 vectors incl. BIP-39 seeds",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/Pbkdf2Test.scala:13-99"
+      ]
+    },
+    {
+      "pass": "Pbkdf2",
+      "name": "multi-block output (keyLength > 64) and truncation of a partial last block",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/Pbkdf2Test.scala:101-109"
+      ]
+    },
+    {
+      "pass": "Pbkdf2",
+      "name": "argument guards: iterations and keyLength bounds",
+      "tests": []
+    },
+    {
+      "pass": "Ed25519Signer / platform",
+      "name": "sign then verify; a 1-bit change of sig, msg or pk is rejected",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/ed25519/Ed25519PropertiesTest.scala:44-74"
+      ]
+    },
+    {
+      "pass": "Ed25519Signer / platform",
+      "name": "verify verdicts equal libsodium on the fixture corpus",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/ed25519/Ed25519LibsodiumParityTest.scala:54-80"
+      ]
+    },
+    {
+      "pass": "Ed25519Signer",
+      "name": "signExtended with a BIP32-Ed25519 extended key; scalarMultiplyBase",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/ed25519/Ed25519ExtendedKeyTest.scala:36-50"
+      ]
+    },
+    {
+      "pass": "Ed25519LibsodiumRules",
+      "name": "canonical scalar / canonical point / small-order / pre-checks",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/ed25519/Ed25519LibsodiumRulesTest.scala:20-96"
+      ]
+    },
+    {
+      "pass": "Ed25519 key types",
+      "name": "fromByteString/fromArray return Left on a wrong size; unsafe* throw",
+      "tests": []
+    },
+    {
+      "pass": "NTT",
+      "name": "principalRoot is a primitive n-th root; forward+inverse is identity; multiply equals schoolbook",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/NTTTest.scala:9-122"
+      ]
+    },
+    {
+      "pass": "NTT",
+      "name": "principalRoot argument guards (not a power of 2, beyond two-adicity)",
+      "tests": []
+    },
+    {
+      "pass": "NTT.multiplyJ + MontField256",
+      "name": "Montgomery-arithmetic NTT used by Poly.productTree for operands >= 256 coefficients",
+      "tests": []
+    },
+    {
+      "pass": "Poly (off-chain)",
+      "name": "ring operations, divmod, extGcd, eval, product/productTree",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/PolyTest.scala:7-102"
+      ]
+    },
+    {
+      "pass": "Poly (off-chain)",
+      "name": "NTT-accelerated `*` (operands >= 256 coefficients)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/PolyTest.scala:104-122"
+      ]
+    },
+    {
+      "pass": "BilinearAccumulatorProver",
+      "name": "membership / non-membership proofs verify on G1 and G2; proof generation rejects wrong subsets",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/BilinearAccumulatorE2ETest.scala:14-142",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G1AccumulatorTest.scala:23-65"
+      ]
+    },
+    {
+      "pass": "BilinearAccumulatorProver",
+      "name": "verify returns false for a wrong proof, wrong subset, tampered accumulator",
+      "tests": []
+    },
+    {
+      "pass": "BilinearAccumulatorProver",
+      "name": "commitment guards (zero polynomial, not enough CRS points); Setup.fromPoints",
+      "tests": []
+    },
+    {
+      "pass": "G2Accumulator (on-chain)",
+      "name": "verifyMembership / verifyNonMembership with fixture CRS; UPLC budget of one membership check",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G2AccumulatorTest.scala:89-273"
+      ]
+    },
+    {
+      "pass": "G1Accumulator (on-chain)",
+      "name": "verifyMembership / verifyNonMembership compiled to UPLC",
+      "tests": []
+    },
+    {
+      "pass": "on-chain Poly",
+      "name": "getFinalPoly coefficients; budget of 100 binomials",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G2AccumulatorTest.scala:81-87",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G2AccumulatorTest.scala:275-390"
+      ]
+    },
+    {
+      "pass": "on-chain Poly",
+      "name": "getFinalPoly agrees with off-chain Poly.product (mod p)",
+      "tests": []
+    },
+    {
+      "pass": "Merkling (on-chain)",
+      "name": "combine null hashes, suffix, nibble, merkle4",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/trie/MerklingTest.scala:16-86"
+      ]
+    },
+    {
+      "pass": "Merkling (on-chain)",
+      "name": "merkle8, merkle16, sparseMerkle4/8/16, nibbles, combine3",
+      "tests": []
+    },
+    {
+      "pass": "IncrementalMerkleTree (off-chain + on-chain)",
+      "name": "append proofs and membership proofs verify on-chain; wrong key/path/slot rejected",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/tree/IncrementalMerkleTreeTest.scala:20-153"
+      ]
+    },
+    {
+      "pass": "IncrementalMerkleTree (off-chain)",
+      "name": "duplicate key, full tree, contains, fromKeys auto depth",
+      "tests": []
+    },
+    {
+      "pass": "FrontierMerkleTree",
+      "name": "roots and proofs equal IMT; append proofs verify on-chain at depth 1..256; slot bounds",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/tree/FrontierMerkleTreeTest.scala:9-258"
+      ]
+    },
+    {
+      "pass": "FrontierMerkleTree",
+      "name": "depth bounds and too-many-keys guards; proveAppend on a full tree",
+      "tests": []
+    },
+    {
+      "pass": "MerkleTree (off-chain + on-chain)",
+      "name": "build, prove, verify for several sizes; wrong element/proof rejected",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/tree/MerkleTreeTest.scala:10-127"
+      ]
+    },
+    {
+      "pass": "MerkleTree (off-chain)",
+      "name": "empty input and duplicate elements rejected",
+      "tests": []
+    },
+    {
+      "pass": "MerklePatriciaForestry (mpfo)",
+      "name": "get/insert/delete, order independence, proofs drive on-chain has/insert/delete/update",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/MerklePatriciaForestryTest.scala:50-225"
+      ]
+    },
+    {
+      "pass": "FusedMerklePatriciaForestry (mpfb)",
+      "name": "same behaviors for the fused binary proof format",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/FusedMerklePatriciaForestryTest.scala:51-242"
+      ]
+    },
+    {
+      "pass": "MPF / Fused MPF",
+      "name": "root hash equals an external reference (Aiken fruits trie)",
+      "tests": []
+    },
+    {
+      "pass": "MPF / Fused MPF",
+      "name": "proveMembership of a missing key / proveNonMembership of a present key throw; on-chain update with a wrong old value fails",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C26-1",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/MontField256.scala:15-280",
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/NTT.scala:273-323",
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/NTT.scala:333-413",
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/Poly.scala:57-100",
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/Poly.scala:173-181",
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/PolyTest.scala:64-69",
+        "scalus-core/jvm/src/test/scala/scalus/crypto/accumulator/BilinearAccumulatorBenchmarkTest.scala:34-42"
+      ],
+      "claim": "The Montgomery-arithmetic NTT path (NTT.multiplyJ, forwardMont256, inverseMont256 and all of MontField256: 332 uncovered statements, plus 204 in NTT.scala) never runs in the default test run. Poly.productTree reaches it only through Poly.multiplyJ when both operands have >= 256 coefficients (Poly.scala:179-180), i.e. two 256-element halves, so >= 512 elements. PolyTest:64-69 uses 100 elements; the only caller with enough elements is BilinearAccumulatorBenchmarkTest, which is tagged Benchmark and excluded. This is the production path for any accumulator over 512 elements.",
+      "action": "Add to PolyTest/NTTTest (package scalus.crypto.accumulator, so private[accumulator] is reachable): (1) NTT.multiplyJ(a, 300, b, 300) equals NTT.multiply on the same seeded random coefficients in [0, p), including 0, 1 and p-1 entries, and for lengths 256x256 and 256x257 (n = 512 and 1024); (2) Poly.productTree of 512 seeded random elements mod p equals the iterative fold acc * Poly(a, 1) (naive path); (3) a MontField256 property: for a, b in [0, p) with edge values 0, 1, p-1: fromMont(montMul(toMont a, toMont b)) == a*b mod p, addMod/subMod == (a+b) mod p / (a-b) mod p, toBigInteger(fromBigInteger(a)) == a.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -1,
+      "linesRemoved": -50,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-2",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/PolyTest.scala:104-122"
+      ],
+      "claim": "'NTT-accelerated multiply matches naive for medium polynomials' never compares with naive multiplication: it asserts !result.isZero and the degree only (119-121). Any NTT bug that returns wrong non-zero coefficients of the right length passes. Lines 112-116 test a small product unrelated to the test name.",
+      "action": "Compute the schoolbook product mod p of the two 300-coefficient polynomials (as NTTTest:101-107 does) and assert equality with a * b; drop the small-product lines 112-116 (covered by NTTTest:62-69 and PolyTest:7-12).",
+      "coverageRisk": "none: the assertion gets stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-3",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/PolyTest.scala:7-38",
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/PolyTest.scala:71-102",
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/Poly.scala:233-298"
+      ],
+      "claim": "Nine PolyTest examples are single instances of ring/field laws over polynomials: multiply (7-12), divmod exact and with remainder (14-28), extGcd Bezout (30-38), eval (71-76), add/sub (78-90), multiply by zero/one (92-102). Uncovered branches of the same code: `/` and `%` (Poly.scala:251,253), eval of the empty poly (257), extGcd with gcd 0 (294).",
+      "action": "Replace with properties over a Gen[Poly] (degree 0..8, coefficients from {0, 1, p-1} and uniform [0, p)): (a*b) /% b == (a, zero) for b != 0; for any a, b != 0: q*b + r == a and r.degree < b.degree; a.extGcd(b) gives s*a + t*b == gcd and gcd monic (or zero when both are zero); eval(a*b, x) == eval(a,x)*eval(b,x) mod p and eval(a+b, x) == eval(a,x)+eval(b,x) mod p; (a + b) - b == a; a*one == a; a*zero == zero; a / b and a % b equal the parts of /%. Keep 7-12 and 22-28 as readable anchors.",
+      "coverageRisk": "low: the anchors stay; properties cover more shapes than the examples",
+      "ciSavingSec": -0.3,
+      "linesRemoved": 30,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The laws hold. Poly.scala:233-249 /% gives q*b+r==a with deg r<deg b (b stripped, so b.last!=0). extGcd at 270-296 gives Bezout; for (0,0) it returns (zero, one, zero). eval at 256-264 is a ring homomorphism mod p. But two of the proposed laws are weaker than the examples they replace. (1) eval: Poly.eval is tested only at PolyTest:71-76 (grep finds no other caller). The add/mul homomorphism laws do not fix the evaluation point: a bug that evaluates at x+1 passes both. (2) extGcd: s*a+t*b==gcd plus gcd monic does not make gcd the GCD. Returning (a/lead(a), 1/lead(a), 0) satisfies both laws. PolyTest:34 pins gcd==one for coprime inputs. Corrected action: add the eval anchor (keep 71-76 or assert eval(Poly(c0,c1), x) == c0+c1*x mod p). Add to the extGcd law that a % gcd and b % gcd are zero (when gcd != 0), or keep 30-38 as an anchor. With these additions, deleting 14-20 and 78-102 is safe."
+    },
+    {
+      "id": "C26-4",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/PolyTest.scala:40-45",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G2AccumulatorTest.scala:81-87",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/crypto/accumulator/Poly.scala:26-31",
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/Poly.scala:108-135"
+      ],
+      "claim": "'product matches on-chain getFinalPoly' (PolyTest:40-45) never calls getFinalPoly: it compares Poly.product with a literal. The two G2AccumulatorTest examples (81-87) check getFinalPoly against literals only. No test states the law the accumulator relies on: on-chain getFinalPoly and off-chain Poly.product describe the same polynomial (getFinalPoly does not reduce mod p, Poly.product does).",
+      "action": "Replace PolyTest:40-45 with a property: for a list of 0..40 elements in [0, p) (crosses the 32-element switch from iterative product to productTree at Poly.scala:109), getFinalPoly(PList(xs)).map(_ mod p) == Poly.product(xs).coefficients. Keep G2AccumulatorTest:81-87 as anchors.",
+      "coverageRisk": "none: the literal example is an instance of the property",
+      "ciSavingSec": -0.2,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "PolyTest:40-45 never calls getFinalPoly; it compares Poly.product with a literal. On-chain getFinalPoly (onchain/.../Poly.scala:26-31) builds an unreduced monic polynomial with n+1 coefficients. Poly.product (crypto/accumulator/Poly.scala:108-135) reduces mod p. It strips only trailing (highest-degree) zeros, and the leading coefficient is always 1, so the lengths match. Mapping getFinalPoly to `mod p` equals product(xs).coefficients for all xs in [0,p). The 0..40 range crosses the <=32 switch to productTree at line 109. Both files are in shared/ tests. The G2AccumulatorTest:81-87 literal anchors stay."
+    },
+    {
+      "id": "C26-5",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G1AccumulatorTest.scala:23-65",
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/BilinearAccumulatorE2ETest.scala:80-104",
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/BilinearAccumulatorE2ETest.scala:117-133"
+      ],
+      "claim": "The five G1 off-chain tests in G1AccumulatorTest (membership single/multi/full, non-membership single/multiple) are copies of BilinearAccumulatorE2ETest's G1 tests: same tau, same sets, same calls and assertions.",
+      "action": "Delete G1AccumulatorTest:23-65; keep `tau`, the on-chain tests at 67-148 use it. BilinearAccumulatorE2ETest keeps the G1 coverage.",
+      "coverageRisk": "none: identical inputs and assertions remain in BilinearAccumulatorE2ETest",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "G1AccumulatorTest:23-65 and BilinearAccumulatorE2ETest:80-104 and 117-133 match line for line. They use the same tau (\"12345678901234567890\", G1AccumulatorTest:21 and E2E:10). They use the same sets: {10..50}/{20}, {100..1000}/{200,500,800}, {1,2,3}/full, {10,20,30}/{99}, {10,20,30}/{40,50}. They use the same setup sizes and the same calls: accumulateG1, membershipProofG1/nonMembershipProofG1, verifyMembershipG1/verifyNonMembershipG1 from BilinearAccumulatorProver. Both files are in shared/src/test, so they run on the same platforms. Keep `tau` and the toScalusList/imports that the on-chain tests at 67+ use."
+    },
+    {
+      "id": "C26-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G1AccumulatorTest.scala:67-101",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G1AccumulatorTest.scala:103-148",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G1Accumulator.scala:11-35",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G2AccumulatorTest.scala:95-105"
+      ],
+      "claim": "The two 'G1 on-chain UPLC' tests compile an inline copy of the pairing equation (bls12_381_finalVerify of two Miller loops) instead of G1Accumulator.verifyMembership/verifyNonMembership, and compute Poly.getG2Commitment on the JVM. So G1Accumulator never compiles to UPLC in scalus-core: a lowering bug in it, or in `setup !! 0` / getG2Commitment on-chain, passes these tests. (G2AccumulatorTest:95-105 does compile the real G2 verifier.)",
+      "action": "Compile the real verifier with element arguments, since List[G2Element] cannot be passed as Data: PlutusV3.compile((g2_0: G2Element, g2_1: G2Element, acc: G1Element, x: BigInt, proof: G1Element) => G1Accumulator.verifyMembership(List(g2_0, g2_1), acc, List(x), proof)) and apply Constant.BLS12_381_G2_Element / Constant.Integer / G1 constants; same for verifyNonMembership with the (G2, G1) proof pair. Assert true for the valid proof and false for a proof of another element. Drop the local given Options (use EvalTestKit's).",
+      "coverageRisk": "none: the real code replaces a copy",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-7",
+      "check": "C6",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/BilinearAccumulatorE2ETest.scala:14-38",
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/BilinearAccumulatorE2ETest.scala:51-67",
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/BilinearAccumulatorE2ETest.scala:80-133",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G2AccumulatorTest.scala:116-273",
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/BilinearAccumulatorProver.scala:101-131",
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/BilinearAccumulatorProver.scala:167-195",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/bilinearAccumulator/AllowlistValidatorE2ETest.scala:83"
+      ],
+      "claim": "Every verify assertion in the cluster expects true (BilinearAccumulatorE2ETest, G1AccumulatorTest, G2AccumulatorTest). Mutating G1Accumulator/G2Accumulator.verifyMembership or verifyNonMembership to `true` passes the whole cluster; the four 'fails' tests (E2E:40-47, 69-76, 106-113, 135-142) check only that the prover refuses to build a proof. The only negative check is in scalus-examples (AllowlistValidatorE2ETest:83, G2 membership through a validator).",
+      "action": "Add negative cases to BilinearAccumulatorE2ETest for G1 and G2: verifyMembership with the proof of another subset; with a subset element not in the set and a proof copied from a member; with a tampered accumulator (acc + generator); verifyNonMembership against a different disjoint set; and one false case in G2AccumulatorTest from the fixture data (first subset element + 1).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-8",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/BilinearAccumulatorE2ETest.scala:14-38",
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/BilinearAccumulatorE2ETest.scala:51-67",
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/BilinearAccumulatorE2ETest.scala:80-104",
+        "scalus-core/shared/src/test/scala/scalus/crypto/accumulator/BilinearAccumulatorE2ETest.scala:117-133",
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/BilinearAccumulatorProver.scala:50-61"
+      ],
+      "claim": "The ten positive E2E tests are hand-picked instances of two laws per group: for U and S subset of U, verifyMembership(acc(U), S, proof(U, S)) holds; for D disjoint from U, verifyNonMembership(acc(U), D, proof(U, D)) holds. They use only sets of size 1..10 with round numbers.",
+      "action": "Replace them with four properties (G1/G2 x membership/non-membership) on one suite-level lazy trustedSetup(tau, 12): U = 1..12 distinct elements in [0, p) (include 0 and p-1), S a non-empty subset of U, D 1..12 elements disjoint from U; about 30 samples per law. Keep the four 'fails' tests (40-47, 69-76, 106-113, 135-142). The slowdown is about 0.5 s (pairings per sample); accepted for goal 2 because the examples never hit large or edge-valued elements.",
+      "coverageRisk": "low: properties generalize the examples; the 'fails' tests stay",
+      "ciSavingSec": -0.5,
+      "linesRemoved": 40,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The laws hold for elements in [0,p). Membership uses the quotient P_U/P_S (Prover:139-149). Non-membership uses extGcd with gcd==one (Prover:154-164) for disjoint sets. On-chain getFinalPoly leaves coefficients unreduced, but every scalarMul path reduces mod r: blsScalar at PlatformSpecific.scala:295-296 on JVM/Native, and `%` with sign handling in JS G1Element.scala:19-25. A setup of 12 gives 13 points, which is enough for |U|,|D|<=12. Gap: every example sizes the setup exactly (trustedSetup(tau, fullSet.size) or max(|U|,|D|)). That tests the boundary coeffs.length == powers.length (Prover:202,210) and the on-chain List.map2 truncation in getG1/G2Commitment, which silently drops coefficients when the setup is too short. One fixed suite-level setup of 12 hits that boundary only when |U|=12 or |D|=12. Corrected action: in each sample, build or slice the setup to exactly max(|U|,|D|) points (take(max+1) from one degree-12 setup). Otherwise force |U|=12 and |D|=12 cases. Also note the E2E suite is in shared/, so pairings also run on JS (noble), and the 0.5 s estimate is JVM-only."
+    },
+    {
+      "id": "C26-9",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/BilinearAccumulatorProver.scala:36-37",
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/BilinearAccumulatorProver.scala:199-212",
+        "scalus-core/shared/src/main/scala/scalus/crypto/accumulator/NTT.scala:47-57"
+      ],
+      "claim": "Uncovered guards: g1Commitment/g2Commitment 'Cannot commit to zero polynomial' and 'Not enough CRS points for polynomial degree' (BilinearAccumulatorProver.scala:201-202, 209-210), Setup.fromPoints (36-37), and NTT.principalRoot's two requires (power of 2, beyond two-adicity; NTT.scala:53,55). 'Not enough CRS points' is the error a user gets when the set outgrows the setup.",
+      "action": "Add to BilinearAccumulatorE2ETest: accumulateG1/G2 with |U| > setup degree throws IllegalArgumentException with the CRS message; Setup.fromPoints round-trips trustedSetup's points. Add to NTTTest: principalRoot(3) and principalRoot(1 << (twoAdicity + 1)) throw.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-10",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G2AccumulatorTest.scala:89-114",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/accumulator/G2AccumulatorTest.scala:276-280",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:38-43",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:125-150"
+      ],
+      "claim": "G2AccumulatorTest's 'check membership one element' hand-writes what EvalTestKit.assertEvalWithBudget does (compile, compare JVM result, evaluateDebug, check success, term and exact budget). Both tests also declare a local `given compilerOptions` (90-94, 276-280) equal to EvalTestKit.compilerOptions (V3 lowering, error traces, optimizeUplc = true; debug defaults to false in compiler.scala:19).",
+      "action": "Rewrite 89-114 as assertEvalWithBudget({...verifyMembership(...)}, true, ExUnits(memory = 64313, steps = 1_648_919_657)); delete both local givens.",
+      "coverageRisk": "none: same options, same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-11",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/FusedMerklePatriciaForestryBenchmarkTest.scala:24-48",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/FusedMerklePatriciaForestryBenchmarkTest.scala:84",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/FusedMerklePatriciaForestryBenchmarkTest.scala:116",
+        "docs/internal/test-refactor/profiles/core-analysis.md:29"
+      ],
+      "claim": "FusedMerklePatriciaForestryBenchmarkTest's only test is `ignore`d, but the class compiles three on-chain programs eagerly in its constructor (hasProgram, insertProgram, and deleteProgram, which is never used) and prints a blank line from the class body (116). The suite costs 0.8 % of scalusJVM test CPU for zero assertions, and it is shared code, so JS and Native pay it too.",
+      "action": "Make the three programs lazy vals (or move them into the test body), delete deleteProgram and the class-body println(); replace `ignore` with the Benchmark tag (F-8 notes the tag is private per file in scalus-core). Alternative: move the benchmark to the bench module.",
+      "coverageRisk": "none: the ignored test never asserted anything",
+      "ciSavingSec": 0.5,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-12",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/crypto/tree/ComputeEmptyHashes.scala:1-15",
+        "docs/internal/test-refactor/shared-helpers.csv:469"
+      ],
+      "claim": "ComputeEmptyHashes is a `main` that prints a table of empty-subtree hashes `E[0..20]`; shared-helpers.csv lists 0 users, and no source contains the table it prints (git grep '// E\\[' finds only this file). It is dead test code.",
+      "action": "Delete the file.",
+      "coverageRisk": "none: not a test and not used",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-13",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/KeccakTest.scala:37-43",
+        "scalus-core/shared/src/test/scala/scalus/crypto/KeccakTest.scala:78-84",
+        "scalus-core/shared/src/test/scala/scalus/crypto/KeccakTest.scala:88-100",
+        "scalus-core/shared/src/test/scala/scalus/crypto/KeccakTest.scala:103-130",
+        "scalus-core/shared/src/test/scala/scalus/crypto/KeccakTest.scala:133-145",
+        "scalus-core/shared/src/main/scala/scalus/crypto/Keccak.scala:59-90",
+        "scalus-core/jvm/src/main/scala/scalus/uplc/builtin/JVMPlatformSpecific.scala:29",
+        "scalus-core/jvm/src/main/scala/scalus/uplc/builtin/JVMPlatformSpecific.scala:205",
+        "scalus-core/js/src/main/scala/scalus/uplc/builtin/JSPlatformSpecific.scala:100",
+        "scalus-core/js/src/main/scala/scalus/uplc/builtin/JSPlatformSpecific.scala:271",
+        "scalus-core/native/src/main/scala/scalus/uplc/builtin/NativePlatformSpecific.scala:679",
+        "scalus-core/native/src/main/scala/scalus/uplc/builtin/NativePlatformSpecific.scala:788"
+      ],
+      "claim": "Nine KeccakTest tests assert only `length == 32` (200 bytes, single byte, the rate-boundary and multi-block tests) and two only determinism; a wrong padding at the rate boundary (Keccak.scala:80-83) or a wrong block loop passes them all. The 'rate boundary (136 bytes)' tests use 135 bytes. The keccak/sha3-differ tests (88-100) add nothing over the vectors. Keccak.scala is the implementation used on Native only (NativePlatformSpecific:679,788); the JVM uses BouncyCastle and JS uses noble.",
+      "action": "Replace 37-43, 78-84, 88-145 with (a) a property: for byte arrays of length 0..400 (force 134-137 and 270-273), Keccak.keccak256(x) == platform.keccak_256(x) and Keccak.sha3_256(x) == platform.sha3_256(x); (b) pinned SHA3-256 vectors (python hashlib) so Native keeps a real check: 0x42*135 bf74b197d7905c23664c1ad645cea270c7ce1fddce5d69dd79aa8b0a5705ca21, 0x42*136 8df3ccb0056a17ca5002a8b54e23ea11c17231b16a9641cd05ebeb1f2f52ad62, 0x42*137 f1fe54b6bbbaf94b746358e815593e3d09bf16d205605e402b7ed00c064fa0cb, 0x42*271 5fc89b38d18511afbedd240bd292ba1f858fa35d68fb04d917ecd4a441f5180f, 0x42*272 bb913bf9c786e016ed2eb23e6c3efb062dcd469c46dd2895bbfe53784e423fc8, 0xa3*200 79f38adec5c20307a98ef76e8324afbfd46cfd81b22e3973c65fa1bd9de31787.",
+      "coverageRisk": "low: on Native the oracle compares the implementation with itself; the pinned SHA3 vectors cover the shared padding code there; Keccak-256 boundaries rely on the JVM/JS oracle",
+      "ciSavingSec": 0,
+      "linesRemoved": 50,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-14",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/Ripemd160Test.scala:96-131",
+        "scalus-core/shared/src/test/scala/scalus/crypto/Ripemd160Test.scala:135-140",
+        "scalus-core/jvm/src/main/scala/scalus/uplc/builtin/JVMPlatformSpecific.scala:210",
+        "scalus-core/js/src/main/scala/scalus/uplc/builtin/JSPlatformSpecific.scala:274"
+      ],
+      "claim": "The six padding-boundary tests (0x00, 55, 56, 64, 128, 200 bytes) assert only `length == 20`, and the determinism test cannot fail. A bug in the 55/56-byte padding split passes them.",
+      "action": "Replace the length checks with pinned values (python hashlib ripemd160): 0x00 c81b94933420221a7ac004a90242d8b1d3e5070d; 0x42*55 9d156cfbfb4378a4c69b6a417e3fbf005ba41dec; 0x42*56 5a31503106a9a0571330197f80c5d56b690500d7; 0x42*64 60d192cdbaec27888085032def4e29f57d6e246f; 0x42*128 7dad30536b373ee20c4b21f76ac479c61fc634ce; 0xa3*200 46dd0341fcc0e6cea95b77119e52fc0285b37d81; fold them into one table test. Delete 135-140.",
+      "coverageRisk": "none: the assertions get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-15",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/crypto/Hmac.scala:31-33",
+        "scalus-core/shared/src/test/scala/scalus/crypto/HmacTest.scala:69-100",
+        "scalus-core/shared/src/test/scala/scalus/crypto/HmacTest.scala:102-108"
+      ],
+      "claim": "The key-hashing branch `key.length > 128` (Hmac.scala:32) is tested only with 131-byte keys (RFC cases 6-7); the boundary 128 (not hashed) vs 129 (hashed) is untested, so an off-by-one (`>=`) passes. 'empty key and data' asserts only length 64 and 'deterministic' cannot fail.",
+      "action": "Add pinned vectors (python hmac/hashlib), data 'Hi There': key 0xaa*128 17eb09b3d3c0f3ac497c608347e1d5b5df5e4b062bfd56c191c8499f24a3a9d1c3dfb449d01f4c9ca316b6b8d6a6299bad883d0bffe11c88c60d7daed6feeb48; key 0xaa*129 da329f7dbde1631286451a0404a7cc75656497f5fc8ecc2ed1c384e3a83685243bf1792cc06c745a466f50c04c99cc5a7fbe1a67e4bbdcf922f1ee4108b3e328. Pin the empty key/data result b936cee86c9f87aa5d3c6f2e84cb5a4239a5fe50480a6ec66b70ab5b1f4ac6730c6c515421b327ec1d69402e53dfb49ad7381eb067b338fd7b0cb22247225d47. Delete 102-108.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-16",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/Pbkdf2Test.scala:101-140",
+        "scalus-core/shared/src/main/scala/scalus/crypto/Pbkdf2.scala:45-62"
+      ],
+      "claim": "'longer output (multiple blocks)', 'empty password' and 'empty salt' assert only the length; 'deterministic' cannot fail. The second block (blockIndex = 2 in the salt suffix, Pbkdf2.scala:79-82) and the truncation of a partial last block (57-62 with keyLength 100) are never checked by value.",
+      "action": "Pin values (python hashlib.pbkdf2_hmac sha512, iterations 1): password/salt keyLength 128 -> 867f70cf...60a57fce followed by 7b532e206c2967d4c7d2ffa460539fc4d4e5eec70125d74c6c7cf86d25284f297907fcea1ad214effdbea23e1312084eabb180ab72edbac45ea2a53f5f5b9fe1; keyLength 100 -> the first 100 bytes of that; empty password + salt 'salt' -> 00ef42cdbfc98d29db20976608e455567fdddf141f6eb03b5a85addd25974f5d2375bd5082b803e8f4cfa88ae1bd25256fcbddd2318676566ff2797792302aee; password + empty salt -> ae16ce6dfd4a6a0c20421ff80eb3ba4acc13bd1dea45f8bb034b753e4cf2032fe7ce7f4f90d5d50ac5f40d1318165984231735a191fade57b25b543991c79f08. Delete 131-140.",
+      "coverageRisk": "none: the assertions get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-17",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/crypto/Pbkdf2.scala:37-40"
+      ],
+      "claim": "The four argument guards of Pbkdf2.deriveKey (iterations > 0, iterations <= MaxIterations, keyLength > 0, keyLength <= 1024) are uncovered. Without the first guard, iterations = 0 would silently return the 1-iteration result; no test pins that the guards exist.",
+      "action": "Add one table test: deriveKey with iterations 0, MaxIterations + 1, keyLength 0, keyLength 1025 each throws IllegalArgumentException.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-18",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/crypto/ed25519/Ed25519.scala:9-69"
+      ],
+      "claim": "VerificationKey, Signature, SigningKey and ExtendedSigningKey fromByteString/fromArray (wrong size -> Left) and the size `require` of the unsafe constructors are uncovered (52 statements). These are the validation points for user-supplied keys.",
+      "action": "Add a table test in Ed25519PropertiesTest or a new small suite: for each type, sizes expected-1, expected, expected+1 via fromByteString and fromArray (Left/Right) and unsafeFromByteString (throws IllegalArgumentException / succeeds); ExtendedSigningKey.standardKey == first 32 bytes.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-19",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/crypto/trie/Merkling.scala:29-30",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/crypto/trie/Merkling.scala:56-61",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/crypto/trie/Merkling.scala:85-124",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/crypto/trie/Merkling.scala:135-205",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/trie/MerklingTest.scala:71-86"
+      ],
+      "claim": "merkle8, merkle16, sparseMerkle4/8/16, nibbles and combine3 have no direct test; MerklingTest checks merkle4 only. sparseMerkle16 has four cases per level (me/neighbor in the same or different halves); the fruit-trie proofs reach only a few of the 240 (me, neighbor) pairs through Fork steps. On-chain files are excluded from coverage (F-9), so the gap does not show in uncovered.tsv.",
+      "action": "Add properties to MerklingTest with an oracle root16(leaves) = pairwise fold of 16 leaves: merkle16(i, leaves(i), n8, n4, n2, n1) == root16 for all i in 0..15 (neighbors taken from the oracle tree), same for merkle8; an exhaustive loop over me != neighbor in 0..15: sparseMerkle16(me, h1, neighbor, h2) == root16 of NullHash leaves with h1 at me and h2 at neighbor (same for 8 and 4); nibbles(path, s, e) == bytes of nibble(path, k) for k in s until e; combine3(a,b,c) == blake2b_256(a ++ b ++ c).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -45,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-20",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/trie/MerklingTest.scala:31-42",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/crypto/trie/Merkling.scala:33-43"
+      ],
+      "claim": "The suffix property draws the cursor from Gen.choose(0, 31), but a 32-byte path has nibble cursors 0..64, so cursors 32..64 (empty or one-nibble suffixes, the leaf case near the end of the path) are never generated; and it checks only the first byte, so a wrong slice offset passes.",
+      "action": "Draw the cursor from 0..64 and assert the whole result: even c -> 0xff ++ path.drop(c/2); odd c -> 0x00, low nibble of byte c/2, path.drop((c+1)/2).",
+      "coverageRisk": "none: widens the generator",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-21",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/trie/MerklingTest.scala:31-86",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:34-35"
+      ],
+      "claim": "Four MerklingTest properties wrap a ScalaTest forAll in `check { (_: Int) => forAll(...) {...}; true }`: the outer Checkers.check draws Ints it ignores and runs the inner forAll once per Int. Neither EvalTestKit nor ArbitraryInstances overrides generatorDrivenConfig, so the effective count is 10 outer x 10 inner = 100 samples per property, through a confusing double loop.",
+      "action": "Replace each wrapper with a plain forAll(..., minSuccessful(100)) { ... }. This keeps the 100 samples per property, so it is not a sample-count reduction.",
+      "coverageRisk": "none: same assertions, same number of samples",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-22",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/tree/MerkleTreeTest.scala:10-69",
+        "scalus-core/shared/src/test/scala/scalus/crypto/tree/MerkleTreeTest.scala:98-114",
+        "scalus-core/shared/src/main/scala/scalus/crypto/tree/MerkleTree.scala:64-109"
+      ],
+      "claim": "Five MerkleTreeTest examples (single element, 10, 100, 8, 5 elements) and the proof-size loop are instances of one law: for n distinct elements, depth == max(1, ceil(log2 n)), capacity == 2^depth, every element is contained, its proof has depth*33 bytes and verifies on-chain. 'root is deterministic' (109-114) cannot fail.",
+      "action": "Replace 10-69 and 98-107 with a property over n in 1..130 (forced 1, 2, 2^k, 2^k+1): depth computed independently in the test (loop or 32 - numberOfLeadingZeros(n - 1)), capacity, contains, proof length and OnChainMerkleTree.verifyMembership for every element. Keep two pinned anchors (n=10 -> depth 4, n=100 -> depth 7). Delete 109-114 or pin the root hex of a 4-element tree.",
+      "coverageRisk": "low: anchors stay; the property checks every size the examples checked",
+      "ciSavingSec": -0.2,
+      "linesRemoved": 40,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "MerkleTree.fromElements (MerkleTree.scala:64-100) uses depthForSize (103-108), which gives max(1, ceil(log2 n)). capacity = 1<<depth (line 20). proveMembership writes depth*(1+32) bytes (34-50). So the law holds for all n>=1 distinct elements, and the property covers every example: 1, 10, 100, 8 and 5 elements, plus the sizes in the 98-107 loop. 'root is deterministic' (109-114) builds the tree twice with a pure function and cannot fail. The single-element test also asserts rootHash.length==32 (line 16). The on-chain verifyMembership checks this implicitly, because the computed blake2b root must equal tree.rootHash. Caveat for the implementer: if the test computes depth as 32 - numberOfLeadingZeros(n-1), it needs max(1, ...), or it gets 0 for n=1. The forced n=1 case would then fail loudly, so no coverage is lost silently."
+    },
+    {
+      "id": "C26-23",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/tree/IncrementalMerkleTreeTest.scala:13-62",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/crypto/tree/IncrementalMerkleTreeTest.scala:111-136",
+        "scalus-core/shared/src/main/scala/scalus/crypto/tree/IncrementalMerkleTree.scala:41-47",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/crypto/tree/IncrementalMerkleTree.scala:67-110"
+      ],
+      "claim": "The IMT membership tests (single member 20-28, ten members 30-39, full depth-3 tree 111-122, depth 10 with 50 keys 124-136) are instances of one law: after appending n distinct keys to an empty tree of depth d, every key's proof verifies on-chain. 'append proof verifies on-chain' (41-50) is the first iteration of 'multiple appends with on-chain verification' (52-62). 'empty tree root is deterministic' (13-18) cannot fail except on length.",
+      "action": "Replace 20-39, 41-50 and 111-136 with a property over d in 1..10 and n in 1..min(2^d, 40) (force n = 2^d): append keys one by one, assert the on-chain append root equals the off-chain root at every step, then verify every key's membership proof on-chain. Keep 52-62 as the anchor. Replace 13-18 with a pin of the empty depth-4 root hex (or delete it: FrontierMerkleTreeTest:9-17 compares empty roots for d 1..20).",
+      "coverageRisk": "low: the property covers the depths and sizes the examples covered",
+      "ciSavingSec": -0.3,
+      "linesRemoved": 35,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "Off-chain append (crypto/tree/IncrementalMerkleTree.scala:41-47) fills slot `size`. On-chain append (onchain IMT:90-136) checks the empty-slot path against the root and returns the new root. On-chain verifyMembership (67-80) checks the proof length d*33 and the recomputed root. So 'append n distinct keys, then every on-chain append root equals the off-chain root, then every member proof verifies' covers 20-28, 30-39, 111-122 (d=3 full, which is reachable with forced n=2^d and d<=5) and 124-136 (d=10, though n<=40 instead of 50; the old test spot-checked only 4 keys). 41-50 is the first iteration of 52-62, which stays. 13-18 compares two calls of a pure function. Its length==32 assertion is checked implicitly: on-chain append requires oldHash == expectedRoot, and that comparison uses a 32-byte blake2b hash (onchain IMT:121). FrontierMerkleTreeTest:9-17 also compares the empty roots for d=1..20."
+    },
+    {
+      "id": "C26-24",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/crypto/tree/IncrementalMerkleTree.scala:42-44",
+        "scalus-core/shared/src/main/scala/scalus/crypto/tree/IncrementalMerkleTree.scala:50-51",
+        "scalus-core/shared/src/main/scala/scalus/crypto/tree/IncrementalMerkleTree.scala:58-62",
+        "scalus-core/shared/src/main/scala/scalus/crypto/tree/IncrementalMerkleTree.scala:72",
+        "scalus-core/shared/src/main/scala/scalus/crypto/tree/IncrementalMerkleTree.scala:154-177",
+        "scalus-core/shared/src/main/scala/scalus/crypto/tree/MerkleTree.scala:65",
+        "scalus-core/shared/src/main/scala/scalus/crypto/tree/MerkleTree.scala:94-98",
+        "scalus-core/shared/src/main/scala/scalus/crypto/tree/FrontierMerkleTree.scala:68",
+        "scalus-core/shared/src/main/scala/scalus/crypto/tree/FrontierMerkleTree.scala:200-213"
+      ],
+      "claim": "Uncovered error paths of the off-chain tree builders: IncrementalMerkleTree.append on a full tree and with a duplicate key (42, 44), contains (50-51, never called), proveMembership of a missing key (61), proveAppend on a full tree (72), fromKeys(keys) with automatic depth and its duplicate/too-many-keys guards (154-177); MerkleTree.fromElements of an empty seq and of duplicates (65, 94-98); FrontierMerkleTree.proveAppend on a full tree (68-69), empty/fromKeys depth bounds and too many keys (200-213). Duplicate-key rejection keeps a set from holding one member twice.",
+      "action": "Add one table of assertThrows[IllegalArgumentException]/[NoSuchElementException] per tree class (in IncrementalMerkleTreeTest, MerkleTreeTest, FrontierMerkleTreeTest), plus positive checks: IMT.contains true/false, IMT.fromKeys(keys) has depth depthForSize(keys.size) and the same root as fromKeys(keys, that depth).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-25",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/tree/FrontierMerkleTreeTest.scala:35-51",
+        "scalus-core/shared/src/test/scala/scalus/crypto/tree/FrontierMerkleTreeTest.scala:68-123",
+        "scalus-core/shared/src/test/scala/scalus/crypto/tree/FrontierMerkleTreeTest.scala:125-142",
+        "scalus-core/shared/src/test/scala/scalus/crypto/tree/FrontierMerkleTreeTest.scala:175-244"
+      ],
+      "claim": "FrontierMerkleTreeTest repeats one loop (append, compute on-chain append root, compare with the new frontier root) four times with only depth and key count changed (35-51, 68-83, 85-101, 103-123), and the membership loop (prove, compare with IMT proof, verify on-chain) four times (175-190, 192-201, 219-232, 234-244). 'single element' (125-142) is the first iteration of these loops.",
+      "action": "Extract two local helpers, appendAndCheck(depth, n) and membershipAndCheck(depth, n, cache = None), and call them from a table: (8,10), (64,5), (256,3, with the proof-length check), (3,8, plus the final IMT root check), (5,1); membership (8,20), (6,10), (3,8, with the proof-length check), (5,1), and the cache variant (10,50). Delete 125-142.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 70,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-26",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/MerklePatriciaForestryTest.scala:10-48",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/FusedMerklePatriciaForestryTest.scala:11-49",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/MerklePatriciaForestryTest.scala:50-116",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/FusedMerklePatriciaForestryTest.scala:51-121",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/MerklePatriciaForestryTest.scala:120-225",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/FusedMerklePatriciaForestryTest.scala:125-242"
+      ],
+      "claim": "MerklePatriciaForestryTest and FusedMerklePatriciaForestryTest are near-copies: the 30-entry fruit dataset and trie setup (MPT:10-48, FMT:11-49) and 19 of 22 tests are the same code with the trie type and on-chain verifier swapped. A fix or a new case must be written twice.",
+      "action": "Create a shared abstract test trait (e.g. MpfBehaviors) parameterized by the off-chain operations (empty, fromList, insert, delete, get, proveMembership, proveNonMembership, rootHash, size) and the on-chain ones (apply(root), has, insert, delete, update, verifyMembership, verifyNonMembership) with an abstract Proof type, plus a shared Fruits fixture object. Keep both suites, each a thin instance of the trait. Do C26-27's new negative tests in the trait if this lands first.",
+      "coverageRisk": "none: both implementations keep every test",
+      "ciSavingSec": 0,
+      "linesRemoved": 180,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-27",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/FusedMerklePatriciaForestryTest.scala:48-49",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/FusedMerklePatriciaForestryTest.scala:67-69",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/FusedMerklePatriciaForestryTest.scala:178-188",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/MerklePatriciaForestryTest.scala:47-48",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/MerklePatriciaForestryTest.scala:154-161",
+        "scalus-core/shared/src/test/scala/scalus/crypto/trie/FusedMerklePatriciaForestryTest.scala:159-166",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/crypto/trie/MerklePatriciaForestry.scala:94-104",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala:17-24"
+      ],
+      "claim": "Fused 'fruit trie root hash matches expected' (67-69) is a tautology: expectedRoot is fullTrie.rootHash (49). Neither suite pins a root to an external value, so a hash change that keeps off-chain and on-chain consistent passes ('insertion order', 'delete and reinsert' compare with the same computed root). 'binary proof is compact' (178-188) asserts only 0 < size < 2000. The update tests (MPT:154-161, FMT:159-166) assert only updated.has(newValue); removing the old-value `require` in on-chain update (MerklePatriciaForestry.scala:100-103) passes them; no test calls on-chain insert/delete/update with a bad proof or value.",
+      "action": "Pin the MPF fruit root to the value in aiken-lang/merkle-patricia-forestry's fruits fixture, after confirming the 30 entries match byte for byte; pin the fused root as a golden hex; delete FMT:67-69. Pin the proof sizes of 2-3 fruits in 'compact'. In both update tests also assert updated.root == fullTrie.delete(k).insert(k, newValue).rootHash and that update with a wrong oldValue throws; add on-chain insert with a membership proof of a present key and delete with a wrong value, each expected to throw.",
+      "coverageRisk": "moderate, JVM-only: scalus-examples' AikenMpfCompatibilityTest checks proof compatibility with Aiken through the emulator, but not inside scalus-core or on JS/Native",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C26-28",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/crypto/trie/MerklePatriciaForestry.scala:58-76",
+        "scalus-core/shared/src/main/scala/scalus/crypto/trie/FusedMerklePatriciaForestry.scala:60-76"
+      ],
+      "claim": "Uncovered: proveMembership of a missing key throws NoSuchElementException (MerklePatriciaForestry.scala:61, Fused:63), proveNonMembership of a present key throws IllegalArgumentException (67, Fused:70), toOnChain (76, Fused:76).",
+      "action": "Add these three cases (in the shared trait of C26-26 if it exists, else in both suites): assertThrows for both prove calls, and toOnChain.root == rootHash.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 6 findings of scope merge-duplicate-tests, to-property or main-bug; 4 confirmed, 2 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

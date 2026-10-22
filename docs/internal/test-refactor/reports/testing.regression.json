@@ -1,0 +1,430 @@
+{
+  "cluster": "testing.regression",
+  "summary": "The cluster is 41 files, 5.9k lines of regression reproductions for the Scala-to-SIR plugin and SirToUplcV3Lowering; 3.4k of the lines are contract fixtures (two cosmex contracts, hydrozoa Treasury/DisputeResolution), and the cluster has no generators, so C8 found nothing to fix beyond the to-property proposal in C01-5. It costs about 8 s per JVM run: SameCborTest 5.1 s (two plain child JVMs that duplicate the hashCode-perturbing determinism tests, C01-1), CompileCosmexFullTest 1.3 s, ParseScriptInfoOldBackendTest 0.7 s; everything else is under 0.1 s. The main weakness is assertion strength: about 20 tests only check that compilation does not throw (assert(x != null), isInstanceOf[Const], isSuccess on Unit, or nothing), so a miscompile passes (C01-8, C01-9); SumTypeFieldAccessTest never compares unequal values (C01-5). Dead code is large: a pending cosmex package that copies a 1048-line contract (C01-2), a pending SumDatumValidator test, an unused TreasuryValidatorScript and unused ScriptContexts. C2: the regressions pin compiler shapes rather than main-code lines; the gaps that matter are && on match-typed operands, non-Spending ScriptInfo decoding, and the fixtures that are plugin-compiled but never lowered (TreasuryValidator, KnightsQueueRepro.run). No main-code defect was found.",
+  "behaviors": [
+    {
+      "name": "inline extension on opaque type with a type-alias return type in a @Compile object (scope proxy filter)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocular20260408/OpaqueInlineExtensionTest.scala:24-27",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocular20260408/BitcoinValidator.scala:13-38"
+      ],
+      "pass": "scalus-plugin (SIRCompiler)"
+    },
+    {
+      "name": "|| and && on operands whose type is a union of Boolean literal types (parenthesized match expressions)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/booleanor20251105/BooleanOrMatchTest.scala:83-134"
+      ],
+      "pass": "scalus-plugin (SIRCompiler)"
+    },
+    {
+      "name": "&& on parenthesized match expressions (only the extracted-val form is tested)",
+      "tests": [],
+      "pass": "scalus-plugin (SIRCompiler)"
+    },
+    {
+      "name": "nested matches that reuse binder names (cosmex shadowing bug) compile and lower",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20251107/CompileCosmexFullTest.scala:20-40",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20251107/CompileCosmexStep4Test.scala:12-28",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20251107/CompileCosmexStep4MinimizedTest.scala:11-23"
+      ],
+      "pass": "scalus-plugin (PatternMatchingCompiler)"
+    },
+    {
+      "name": "recursive enum with derived FromData/ToData compiles and lowers",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/forktree20260312/RecursiveEnumDerivedTest.scala:45-50"
+      ],
+      "pass": "scalus-plugin / FromData derivation"
+    },
+    {
+      "name": "function and Order-case upcasts lower without 'Cannot upcast' (Data Ord, () => Dog to () => Animal, !! in a match branch)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/orddata20251106/OrdDataUpcastTest.scala:27-53",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/orddata20251106/SimpleFunctionUpcastTest.scala:18-44",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocular20251004/MedianListIndexing.scala:28-68"
+      ],
+      "pass": "SirToUplcV3Lowering (upcast)"
+    },
+    {
+      "name": "nested matches on List[ByteString]/List[BigInt] with recursion unify (Groth16 derive)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/gr20251006/Groth16MinimalTest.scala:31-60"
+      ],
+      "pass": "SirToUplcV3Lowering (type unification)"
+    },
+    {
+      "name": "List[ByteString] field of a derived-FromData case class keeps element repr after take().map()",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/hydrozoa20260126/ListByteStringBugMinimalTest.scala:55-67"
+      ],
+      "pass": "SirToUplcV3Lowering (typegens)"
+    },
+    {
+      "name": "field access on a type-test-bound sum-type child (DataConstrEmitter.genSelect)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/SumTypeFieldAccessTest.scala:69-148"
+      ],
+      "pass": "SirToUplcV3Lowering (typegens)"
+    },
+    {
+      "name": "@UplcRepr(UplcConstr) case-class field access (visited.head, depth)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/knightsqueue20260410/KnightsQueueTest.scala:151-180"
+      ],
+      "pass": "SirToUplcV3Lowering (typegens)"
+    },
+    {
+      "name": "KnightsQueueRepro.run / depthSearch with the opaque specialized Queue: plugin-compiled, never lowered or run",
+      "tests": [],
+      "pass": "SirToUplcV3Lowering (typegens)"
+    },
+    {
+      "name": "list/pair/tuple shapes: pair-list varargs, foldLeft over tuples, List[TxInInfo] fold, ScriptContext field reads",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/PairListVarArgsInitTest.scala:24-51",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/InvalidMkConsReprTest.scala:32-291",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/GeneratingUnscopedVarsTest.scala:33-43",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/GenUpcastFailureTest.scala:18-29",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/ClausifyMinTest.scala:56-85",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/hzmin20251002/HzMinCompilationTest.scala:10-39",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/TypeVarMatchingTest.scala:19-31",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocularmin20250826/compileMin.scala:20-33"
+      ],
+      "pass": "SirToUplcV3Lowering"
+    },
+    {
+      "name": "recursive function returning a matched list (BrokenFib) evaluates to the right value",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/match20251022/BrokenFibTest.scala:27-60"
+      ],
+      "pass": "SirToUplcV3Lowering"
+    },
+    {
+      "name": "decode of ScriptContext with SpendingScript",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/ParseScriptInfoTest.scala:98-143",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/ParseScriptInfoTest.scala:154-199"
+      ],
+      "pass": "ScriptInfo FromData (V3 and SumOfProducts backends)"
+    },
+    {
+      "name": "decode of Minting/Rewarding/Certifying/Voting/Proposing ScriptInfo on-chain",
+      "tests": [],
+      "pass": "ScriptInfo FromData (V3 and SumOfProducts backends)"
+    },
+    {
+      "name": "insert of an existing ByteString key updates instead of duplicating, on-chain",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocular20251117/SortedMapInsertTest.scala:54-205"
+      ],
+      "pass": "prelude SortedMap"
+    },
+    {
+      "name": "compiling DisputeResolutionValidator twice gives the same CBOR (same JVM, and two plain child JVMs)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/hydrozoa20250804/SameCborTest.scala:22-63"
+      ],
+      "pass": "UplcPipeline / V3Optimizer"
+    },
+    {
+      "name": "TreasuryValidator (400 lines, hydrozoa) lowering: plugin-compiled only, TreasuryValidatorScript is never referenced",
+      "tests": [],
+      "pass": "SirToUplcV3Lowering"
+    },
+    {
+      "name": "cosmex 2025-09-19 contract with ValueEx.unionWith (SortedMap.union + These): test is pending, never lowered",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20250919/CompileCosmexToUpclTest.scala:10-28"
+      ],
+      "pass": "SirToUplcV3Lowering"
+    },
+    {
+      "name": "SumDatumValidator (match on Option datum to enum): test is pending since 2025-06",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/SumDatumValidator.scala:44-49"
+      ],
+      "pass": "SirToUplcV3Lowering"
+    }
+  ],
+  "findings": [
+    {
+      "id": "C01-1",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/hydrozoa20250804/SameCborTest.scala:38-72",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/hydrozoa20250804/SameCborTest.scala:9-19",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/hydrozoa20250804/DisputeResolutionValidator.scala:521-525",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/PipelineDeterminismCrossJvmTest.scala:30-62",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseDeterminismCrossJvmTest.scala:21-49"
+      ],
+      "claim": "SameCborTest 'create two JVM-s and compile same script each in own JVM' (3.9 s, the slowest test of the cluster, 5.4 % of core test CPU with test 1) starts two child JVMs with identical flags, runs `java` from PATH (not java.home), never drains stderr, and its own header (lines 17-18) says it never reproduced the problem. Cross-JVM determinism is checked honestly by PipelineDeterminismCrossJvmTest (every example validator, child with -XX:hashCode=2) and CseDeterminismCrossJvmTest (hashCode=2 and 3), which perturb identity hashes on purpose; two children with the same default hash algorithm do not.",
+      "action": "Delete SameCborTest test 2 (38-63), readOutput (65-72), and the AtomicReference import; replace the stale header (9-19) with a one-line doc for test 1; delete the @main disputeResolutionValidatorRun (DisputeResolutionValidator.scala:521-525), its only caller. Keep test 1 (same-JVM double compile).",
+      "coverageRisk": "low: DisputeResolutionValidator is not in the examples corpus, so cross-JVM drift that only this contract triggers is no longer checked; the deleted test could not provoke identity-hash drift anyway. Same-JVM determinism (test 1) stays.",
+      "ciSavingSec": 3.9,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "SameCborTest.scala:38-63 starts two children with no JVM flags. It runs plain \"java\" from PATH (lines 41 and 50) and never reads stderr (readOutput at 65-72 reads only stdout). The header at 17-18 says the reproduction was unsuccessful. The deleted assertions are: both exit codes are 0, and the two children print the same sha3 of the cbor. The child is disputeResolutionValidatorRun (DisputeResolutionValidator.scala:521-525), which prints DisputeResolutionScript.hash = sha3(sir.toUplcOptimized(generateErrorTraces = true).plutusV3.cbor) (lines 509-519). Test 1 (22-36) keeps the same compile and the same config: it calls toUplcOptimized() with Options.default, and SIRDefaultOptions.scala:14 sets generateErrorTraces = true. So test 1 still checks that the contract compiles and that two lowerings in one JVM are equal. Two children with identical default hash flags do not perturb identity hashes. PipelineDeterminismCrossJvmTest.scala:30-64 (hashCode=2, every example validator) and CseDeterminismCrossJvmTest.scala:21-49 (hashCode=2 and 3) perturb them on purpose. The only real loss is cross-JVM drift that only DisputeResolutionValidator would trigger. That loss is small, because DisputeResolutionValidator is not in the examples corpus. grep finds no other caller of disputeResolutionValidatorRun or DisputeResolutionScript; the only other hit is the stale header string at SameCborTest.scala:13. Addition to the action: also delete the DisputeResolutionScript object (DisputeResolutionValidator.scala:509-519), because nothing uses it once the @main is gone."
+    },
+    {
+      "id": "C01-2",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20250919/CompileCosmexToUpclTest.scala:10-28",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20250919/Contract.scala:1-1048",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20250919/ValueEx.scala:1-58",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20251107/ContractFull.scala:628-629",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20251107/CompileCosmexFullTest.scala:20-40"
+      ],
+      "claim": "The cosmex20250919 package is dead: its only test calls `pending` on line 13, so lines 15-27 never run and CosmexValidator is never lowered. Its 1048-line Contract.scala differs from cosmex20251107/ContractFull.scala in 61 diff lines (package, unused binder names, BigInt(0) vs 0 literals, getOrFail form, toUplc vs toUplcOptimized); the one semantic difference is ValueEx.unionWith at Contract.scala:630, which ContractFull replaced with `Value.zero // FIXME` (628-629). CompileCosmexFullTest already lowers the full contract. The plugin still compiles all 1136 lines on every test compile.",
+      "action": "Delete scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20250919/ (Contract.scala, ValueEx.scala, CompileCosmexToUpclTest.scala). Optional, only if the owner wants the unionWith path: first remove `pending` and run it once; if it passes, keep ValueEx and switch ContractFull:628-629 to ValueEx.unionWith instead of keeping a second copy of the contract.",
+      "coverageRisk": "low: ValueEx.unionWith (SortedMap.union over These) loses its plugin-to-SIR compile; it is never lowered or evaluated today. The shadowing-bug regression stays in cosmex20251107.",
+      "ciSavingSec": 2,
+      "linesRemoved": 1135,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "CompileCosmexToUpclTest.scala:13 calls `pending` before any work, so CosmexValidator.mkCosmexValidator is never called and nothing is lowered. grep finds no reference to the cosmex20250919 package outside its own directory. The diff between Contract.scala and cosmex20251107/ContractFull.scala is 61 lines. All but one of the differences are cosmetic: package name, the CurrencySymbol alias vs PolicyId, unused binders renamed to `_`, BigInt(0) vs 0 literals, and toUplc vs toUplcOptimized. `redeemers.getOrFail(k, msg)` vs `.get(k).getOrFail(msg)` is also equivalent: SortedMap.getOrFail is `inline def getOrFail(key, inline message) = get(key).getOrFail(message)` (SortedMap.scala:742-745). The only semantic difference is ValueEx.unionWith at Contract.scala:630, which ContractFull.scala:628-629 replaces with `Value.zero // FIXME`. CompileCosmexFullTest.scala:20-40 compiles and lowers the full contract with the V3 backend. The deletion loses only the plugin-to-SIR compile of ValueEx (SortedMap.union over These plus mapValues), which is never evaluated. SortedMapTest.scala:254-275 and 369 still check SortedMap.union and These on the JVM and on-chain."
+    },
+    {
+      "id": "C01-3",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocular20251117/SortedMapInsertTest.scala:54-72",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1649-1662"
+      ],
+      "claim": "SortedMapInsertTest 'SortedMap.insert should update existing entry - simple test' runs on the JVM only (no compile): insert 1, insert 2, re-insert 1, assert size 2 and value 111. It is one instance of the SortedMapTest 'insert' properties: insert(k, v) equals fromList(filterNot(k) ++ (k, v)), and insert(k, v).get(k) == Some(v), over arbitrary BigInt maps.",
+      "action": "Delete SortedMapInsertTest lines 54-72. The on-chain ByteString-key test (74-205) stays (see C01-4).",
+      "coverageRisk": "none: SortedMapTest:1650-1662 checks the same law for arbitrary maps and keys, including re-insert of an existing key.",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "SortedMapInsertTest.scala:54-72 is a JVM-only test with no compile step. It inserts 1->100 and 2->200, then re-inserts 1->111. It asserts toList.size == 2 and that find(k == 1) gives 111. SortedMapTest (shared, so it runs on the JVM and more) has 'insert' at about 1650-1662. Property 1 checks `map.insert(k, v) === fromList(map.toList.filterNot(_._1 === k) ++ singleton((k, v)))`. Property 2 checks `insert(k, v).get(k) === Some(v)`. Property 1 is not circular for the update path. fromList folds from the right (SortedMap.scala:84-96), so (k, v) goes into an empty map first, and the filtered list has no k. The expected map therefore never uses insert's replace branch, and === on the lists catches a duplicate entry, which is the size == 2 check. Re-insert of an existing key is generated often: the BigInt generator (uplc/test/ArbitraryInstances.scala:57-65) draws from constants such as 0, -1, 1, ±1000 and Int/Long bounds, and arbSortedMap (line 379) builds maps over the same generator. Every deleted assertion has a stronger equivalent that also runs on the JVM."
+    },
+    {
+      "id": "C01-4",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocular20251117/SortedMapInsertTest.scala:30-52",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocular20251117/SortedMapInsertTest.scala:74-205"
+      ],
+      "claim": "SortedMapInsertTest has a dead `batch2Keys` val (31-52, never read) and then writes the same 20 keys again as 20 hand-unrolled vals and 23 chained inserts inside compile{} (78-175). It prints on every run (188-191) and has a redundant `if resultInt == 21 then fail` before `assert(resultInt == 20)` (195-200). The expected 20 is hand-coded instead of computed on the JVM.",
+      "action": "Compile once `(keys: List[ByteString]) => keys.foldLeft(SortedMap.empty[ByteString, BigInt])((m, k) => m.insert(k, 1)).toList.size` (or with indexed values), apply it to the Data of batch1 ++ batch2 ++ the 3 re-inserted keys built from the existing `batch2Keys`-style hex Seq, and assert the on-chain size equals the same fold run on the JVM (and equals 20). Use EvalTestKit (or the result-match from KnightsQueueTest) for the evaluation; drop the println and the `if == 21` branch.",
+      "coverageRisk": "none: same keys, same insert order, same updates; the JVM oracle is stronger than the literal 20.",
+      "ciSavingSec": 0,
+      "linesRemoved": 95,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C01-5",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/SumTypeFieldAccessTest.scala:69-148",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/SumTypeFieldAccessTest.scala:37-54"
+      ],
+      "claim": "The three SumTypeFieldAccessTest tests evaluate eqWithBinders/eqDirectFieldAccess only on equal inputs (42, 42 and (42, \"error\") twice) and assert only isSuccess: a lowering that returns false, or ignores a field, passes. No test compares different values or different variants (Pending vs Done vs Failed). The 'Budget comparison' test asserts no budget (its comparison, 138-147, is commented out), and comments 38-39 and 87-89 still describe the genSelect failure that the passing test 2 contradicts.",
+      "action": "Replace 69-148 with one property: compile once a program `(t1, a1, s1, t2, a2, s2) => (eqWithBinders(mk(t1,a1,s1), mk(t2,a2,s2)), eqDirectFieldAccess(...))` where mk picks Pending/Done/Failed by tag; generate tags in 0..2, ints and strings from a two-value domain so equal pairs are frequent; assert both on-chain results equal the JVM `TestStatus.eqWithBinders` on the same inputs. Update the stale comments.",
+      "coverageRisk": "none: the equal-input cases are in the domain; adds unequal and cross-variant cases.",
+      "ciSavingSec": -0.5,
+      "linesRemoved": 45,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "SumTypeFieldAccessTest.scala:69-148 has three tests, and each evaluates on equal inputs only: (42, 42) at lines 79 and 103, and (42, \"error\") twice at 127-133. Each asserts only result.isSuccess, so a lowering that returns false, or that ignores a field, still passes. The 'Budget comparison' test asserts no budget; its comparison is commented out at 138-147. The comments at 38-39 and 87-89 describe a 'Cannot generate select' failure, but test 2 asserts that the same program succeeds, so the comments are stale. The proposed law holds for every input. eqWithBinders (22-35) and eqDirectFieldAccess (40-54) have identical semantics, and both use === on BigInt and String, which has the same meaning on the JVM and on-chain. TestStatus is a plain enum, so the JVM methods can be called as an oracle. The generator domain (tags 0..2, two-value int and string domains) contains the old equal Done/Done and Failed/Failed inputs and adds unequal and cross-variant pairs. Caveats for the rewrite: keep the same Options and the same toUplcOptimized(false).plutusV3 plus PlutusV3 VM entry point (61-67, 78). Build each value inside the compiled program with a direct constructor call per tag branch, like mkDone and mkFailed, so the type-test field-select lowering is still the code under test."
+    },
+    {
+      "id": "C01-6",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/ParseScriptInfoTest.scala:89-143",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/ParseScriptInfoTest.scala:145-199"
+      ],
+      "claim": "ParseScriptInfoOldBackendTest (145-199) is a line-for-line copy of ParseScriptInfoTest (89-143) except the backend. Both assert only `result.isSuccess` although validate returns the constant `false` for this context, so a miscompiled match that takes a wrong branch passes. Both evaluate a plutusV3 program with PlutusV1VM (138, 194). Commented-out printlns and a dead commented `appliedValidator` remain.",
+      "action": "Make one suite that loops over Seq(SirToUplcV3Lowering, SumOfProductsLowering) and registers one test per backend; build the ScriptContext once; assert the evaluated term equals `false` (and equals ParseScriptInfo.validate on the JVM); use PlutusVM.makePlutusV3VM(); delete the commented lines.",
+      "coverageRisk": "none: same two backends, same input, stronger assertion.",
+      "ciSavingSec": 0,
+      "linesRemoved": 55,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C01-7",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/ParseScriptInfoTest.scala:22-38",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v3/Contexts.scala:784-789"
+      ],
+      "claim": "ParseScriptInfo.validate dispatches on all six ScriptInfo cases, but the only input is a SpendingScript with an inline datum. No test in scalus-core, scalus-examples or scalus-cardano-ledger builds a VotingScript or ProposingScript (grep), so the on-chain FromData of those cases (and of Minting/Rewarding/Certifying here) is untested on both backends.",
+      "action": "After C01-6, add a table of ScriptInfo values: MintingScript, SpendingScript with and without datum, RewardingScript, CertifyingScript, VotingScript, ProposingScript; for each backend assert the evaluated result equals the JVM validate result (false). Reuse the one compiled program per backend so the cost is evaluation only.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C01-8",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocular20251004/MedianListIndexing.scala:28-68",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocularmin20250826/compileMin.scala:20-33",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/TypeVarMatchingTest.scala:19-31",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/orddata20251106/SimpleFunctionUpcastTest.scala:18-44",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/orddata20251106/OrdDataUpcastTest.scala:27-53",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/hydrozoa20260126/ListByteStringBugMinimalTest.scala:55-67",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/forktree20260312/RecursiveEnumDerivedTest.scala:45-50",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/PairListVarArgsInitTest.scala:24-51",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/ClausifyMinTest.scala:72-85",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocular20260408/OpaqueInlineExtensionTest.scala:24-27"
+      ],
+      "claim": "These tests compile closed or easily applied programs but never check the value: MedianListIndexing (3 tests), CompileMin, TypeVarMatchingTest and ListByteStringBugMinimalTest have no assertion (the last discards `result`); SimpleFunctionUpcastTest, OrdDataUpcastTest and RecursiveEnumDerivedTest assert only `uplc != null`; PairListVarArgsInitTest and ClausifyMin 'insertUniqueOrdered' bind the value to an unused val and assert isSuccess on a Unit result; OpaqueInlineExtensionTest is `succeed`. Only a lowering crash breaks them; a miscompile (wrong element, wrong repr, wrong Order case) does not. RecursiveEnumDerivedTest's name says 'and evaluates' but nothing is evaluated.",
+      "action": "Compare each on-chain result with the JVM value via EvalTestKit.assertEvalEq (override compilerOptions to the file's Options), instead of hand-computed constants: getMedian/indexing/getFirst results; byteStringToInteger(true, hex); NoOutputDatum.toData; getAnimal()/getAny(); `d1 equiv d2`, `d1 < d2`, `d1 <=> d2` applied to two Data pairs (equal and unequal); `Setup.process` vs bls12_381_G2_uncompress(g2Point); return the PairListVarArgsInitCaseClass (or its toData) and the insertUniqueOrdered list instead of Unit; `(d: Data) => ForkTreeValidator.update(d.to[ForkTree]).toData` on Fork(List(Fork(Nil))); BitcoinValidator.validateBlock on an 80-byte header equals bytes 72-75.",
+      "coverageRisk": "none: keeps every compile path, adds value checks.",
+      "ciSavingSec": -0.3,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C01-9",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/booleanor20251105/BooleanOrMatchTest.scala:76-80",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/booleanor20251105/BooleanOrMatchTest.scala:83-134",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/booleanor20251105/BooleanOrMatchTest.scala:157-160"
+      ],
+      "claim": "All five BooleanOrMatchTest tests assert `result.isInstanceOf[Term.Const]`: an || that lowers to && (or returns the wrong branch) still yields a Const and passes. The bug shape (operator applied directly to parenthesized match expressions, typed as a union of Boolean literal types) is tested only for ||; the && test (136-161) uses extracted vals, so the && side of the =:= -> <:< fix is untested.",
+      "action": "Assert the exact value against the JVM with EvalTestKit.assertEvalEq (tests 2 and 3 give 1). Add a test with && on two parenthesized match expressions (expect 0 for Pending/Complete, 1 for Pending/Pending).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.05,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C01-10",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/booleanor20251105/BooleanOrMatchTest.scala:54-81",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/booleanor20251105/BooleanOrMatchTest.scala:136-189",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilerPluginBuiltinsToSIRTest.scala:1115-1137"
+      ],
+      "claim": "BooleanOrMatchTest tests 1, 4 and 5 ('WORKING' controls) first bind each match result to a val and then apply ||, && or nested if to Boolean vals: they do not use the bug shape (operator on a match-typed operand). Plain ||/&&/! on Boolean values is pinned in CompilerPluginBuiltinsToSIRTest 'compile Boolean &&, ||, ! builtins' (SIR shape and evaluated value).",
+      "action": "Delete tests 1, 4 and 5 (54-81, 136-189); keep tests 2 and 3 plus the new && test from C01-9.",
+      "coverageRisk": "low: lowering of a Boolean val produced by a two-case match stays covered by tests 2-3 (same matches, inline); nested if-else on Boolean vals is generic lowering covered across the suite.",
+      "ciSavingSec": 0,
+      "linesRemoved": 80,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "BooleanOrMatchTest tests 1, 4 and 5 (54-81, 136-161, 163-189) bind each match to a val before they apply ||, && or nested if. Scala 3 widens the inferred type of a non-final val (true | false) to Boolean, so these tests do not use the bug shape. The bug shape is an operator on an operand typed as a union of match constants, per the header at 34-39. Each test asserts only `result.isInstanceOf[Term.Const]`, so it checks that the code compiles and evaluates, not the result value. Tests 2 and 3 (83-134) keep the same TestDatum/Status ToData construction, the same two-case match lowering, the same Options (V3 lowering, traces, optimizeUplc) and the same PlutusV2VM evaluation. CompilerPluginBuiltinsToSIRTest.scala:1115-1137 checks ||, && and ! on a Boolean val. It checks both the SIR shape (Or, And, Not) and the evaluated value (evaled == true.asTerm), which is stronger than isInstanceOf[Const]. The && on match-derived Booleans is restored by the C01-9 test that the action keeps. Nested if-else on Boolean vals is generic lowering."
+    },
+    {
+      "id": "C01-11",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20251107/CompileCosmexFullTest.scala:33-39",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20251107/CompileCosmexStep4Test.scala:16-27"
+      ],
+      "claim": "CompileCosmexFullTest takes 1.3 s (6.0 % of core test CPU in the profile, the 4th-largest suite). The regression it pins is the plugin's variable-shadowing bug (fix 4b377e845), which failed during lowering; it then runs the V3Optimizer via toUplcOptimized, which the bug never reached. Step4 (0.03 s) is a reduction of the same bug, but per commit 2c5f51ed7 it is not certain it reproduces the same exception, so Full stays.",
+      "action": "Replace `toUplcOptimized().plutusV3` with `toUplc().plutusV3` in CompileCosmexFullTest (line 37), and delete the null assert (39). Measure before and after; revert if the saving is under 0.3 s.",
+      "coverageRisk": "low: the optimizer on the full cosmex contract is no longer exercised; SameCborTest test 1 still runs the optimizer on a 500-line contract.",
+      "ciSavingSec": 0.5,
+      "linesRemoved": 0,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C01-12",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/gr20251006/Groth16MinimalTest.scala:33-59",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/orddata20251106/OrdDataUpcastTest.scala:34",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/orddata20251106/SimpleFunctionUpcastTest.scala:31",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20251107/CompileCosmexStep4Test.scala:21-27",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20251107/CompileCosmexStep4MinimizedTest.scala:22",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/hzmin20251002/HzMinCompilationTest.scala:11-37",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocular20251004/MedianListIndexing.scala:70-95",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/hydrozoa20250804/TreasuryValidator.scala:443-466",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/InvalidMkConsReprTest.scala:228-283",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/InvalidMkConsReprTest.scala:70-94",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/InvalidMkConsReprTest.scala:118-176",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/SumDatumValidator.scala:44-49"
+      ],
+      "claim": "Dead or noise test code: `assert(x != null)` after a call that throws or returns non-null (OrdData 34/43/52, SimpleFunctionUpcast 31/43, RecursiveEnum 49, Cosmex Full 39, Step4 27, Step4Minimized 22, HzMin `sir != null` 37, Groth16 50); Groth16MinimalTest wraps the call in Try + println + printStackTrace + fail (33-59), which ScalaTest already does on an exception; MedianListIndexing has a commented-out test (70-95); TreasuryValidatorScript (TreasuryValidator.scala:443-466) is never referenced and half commented out; InvalidMkConsReprTest 'check sericalization with unB' builds a full ScriptContext, paramsData and input (228-283) and never uses them (the program is not applied), and the other tests keep unused inTxId/currentTxId/txCert/pl/input vals and a whole ScriptContext of which only inputs.head is used; SumDatumValidatorTest is `pending` since 2025-06; commented-out printlns in most files.",
+      "action": "Delete the null asserts (those in files covered by C01-8 are removed there), the Groth16 Try/println wrapper (keep `compile(...).toUplc()`), the commented test and printlns, TreasuryValidatorScript, and the unused vals/contexts in InvalidMkConsReprTest (build the two TxInInfo once as a private val). For SumDatumValidatorTest remove `pending`: if it passes keep it with a value check; if it fails, report it to the coordinator as a main-bug candidate instead of keeping a pending test.",
+      "coverageRisk": "none: removes only code that runs no assertion; SumDatumValidator may turn red, which is the intent.",
+      "ciSavingSec": 0,
+      "linesRemoved": 190,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C01-13",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/knightsqueue20260410/KnightsQueueTest.scala:140-180",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/match20251022/BrokenFibTest.scala:27-60",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:78-96"
+      ],
+      "claim": "KnightsQueueTest matches Result.Success/Failure by hand in each test (14 lines per one-value check) and BrokenFibTest builds the expected value as a hand-written Data constant of an 11-element list, with a comment that it assumes the Data representation of List[BigInt]. EvalTestKit.assertEvalEq compiles code and expected, compares the JVM values and the evaluated terms, and does not depend on the list representation. Every file in the cluster also repeats its own `given Options(...)` block (21 of the 41 files) and PlutusVM.",
+      "action": "Mix EvalTestKit into KnightsQueueTest (override compilerOptions with the vanRossemPV options and plutusVM) and BrokenFibTest (override plutusVM to V2); replace each test body with assertEvalEq(code, expected), e.g. assertEvalEq(BrokenFib.fib(10), List(55, 34, ..., 0)). Use the same trait for the files touched by C01-8/C01-9.",
+      "coverageRisk": "none: same programs and values; BrokenFib stops depending on the list representation.",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C01-14",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20251107/CompileCosmexFullTest.scala:10-20",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/cosmex20251107/CompileCosmexStep4MinimizedTest.scala:11",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/booleanor20251105/BooleanOrMatchTest.scala:38-39",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/ClausifyMinTest.scala:56",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/hzmin20251002/HzMinCompilationTest.scala:10",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/PairListVarArgsInitTest.scala:24",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/PairListVarArgsInitTest.scala:41",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/InvalidMkConsReprTest.scala:210"
+      ],
+      "claim": "Stale or wrong text: CompileCosmexFullTest says 'Current status: FAILS because the bug still exists' and its name says 'should succeed when bug is fixed' (fixed in 4b377e845); Step4Minimized's name says it 'triggers different error (LoweringException)' but it passes; BooleanOrMatchTest cites scalus-plugin/src/main/scala/scalus/SIRCompiler.scala lines 2285-2297, a path that has moved; test names with typos: 'foirst', 'scriot', 'ehuch', 'filds', 'sericalization'.",
+      "action": "Rewrite the doc comments to say what each test pins now (the fixed bug and its commit), rename the tests without typos and without 'when bug is fixed', and drop the line-number reference to SIRCompiler.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 5 findings of scope merge-duplicate-tests, to-property or main-bug; 5 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

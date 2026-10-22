@@ -1,0 +1,453 @@
+{
+  "cluster": "uplc.eval.budget",
+  "summary": "The cluster is cheap: about 2.1 s wall in total; ExprSizeAndBudgetTest is the only notable cost (4.8 % of scalus-core CPU, almost all from the n = 100 000 T1/T2 loops, C21-5), and the two Benchmark-tagged sort suites still lower about 20 programs in their constructors on every CI run (C21-6). Budget comparison suites compare costs but often not results: DatumEqualityBudgetTest and EqualsDataVsTypedComparisonTest never check that the compared programs return the same answer, and two tests assert nothing (C21-7, C21-8, C21-13). CostingIntegerTest is a set of saturation examples that one BigInt-oracle property replaces, and reading it found a main-code defect: satMul(-1, Long.MinValue) does not saturate (C21-1). The dropList-09 cost path is simulated four times on top of its conformance case (C21-3), and a mis-named test duplicates another (C21-4). The BuiltinCostModel JSON writer, toJsonString and flattenCostModel have no test and no caller (C21-12).",
+  "behaviors": [
+    {
+      "pass": "BuiltinSemanticsVariant",
+      "name": "fromProtocolAndPlutusVersion maps (PV, language) to variants C/D/E; rejects PlutusV4 before Dijkstra",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/BuiltinCostModelTest.scala:9-41"
+      ]
+    },
+    {
+      "pass": "MachineParams",
+      "name": "fromCostModels pads a short (pre-PV11) cost model with maxBound, so new builtins are priced out",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/BuiltinCostModelTest.scala:43-76"
+      ]
+    },
+    {
+      "pass": "PlutusV1/V2/V3Params",
+      "name": "fromSeq reads 166..350-entry cost models from cardano-cli and Blockfrost JSON; absent tail is Long.MaxValue",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/BuiltinCostModelTest.scala:78-89",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/BuiltinCostModelTest.scala:158-223"
+      ]
+    },
+    {
+      "pass": "BuiltinCostModel",
+      "name": "fromPlutusParams per semantics variant: PV11 divideInteger diagonal costing, string builtins by UTF-8 bytes",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/BuiltinCostModelTest.scala:91-156"
+      ]
+    },
+    {
+      "pass": "BuiltinCostModel",
+      "name": "JSON writer, toJsonString, flattenCostModel (no caller in the repository)",
+      "tests": []
+    },
+    {
+      "pass": "BuiltinCostModel",
+      "name": "fromInputStream reads a reference JSON model",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/CostingIntegerJVMTest.scala:8-45"
+      ]
+    },
+    {
+      "pass": "CostingInteger",
+      "name": "satPlus / satMinus / satMul saturate at Long.MinValue/MaxValue; extension + - *",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:8-111",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:148-208",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:255-266"
+      ]
+    },
+    {
+      "pass": "CostingInteger",
+      "name": "fromBigInt clamps out-of-range BigInt",
+      "tests": []
+    },
+    {
+      "pass": "CostModel functions",
+      "name": "OneVariableLinearFunction, TwoArguments.LinearInX/ConstantCost saturate on huge memory sizes (dropList-09 path)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:113-145",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:210-253",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/CostingIntegerJVMTest.scala:8-45"
+      ]
+    },
+    {
+      "pass": "ExUnits",
+      "name": "+ and |+| saturate",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:268-288"
+      ]
+    },
+    {
+      "pass": "CekMachineCosts",
+      "name": "per-step machine costs equal the Haskell uplc CLI budget",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/CekBudgetJVMTest.scala:9-43"
+      ]
+    },
+    {
+      "pass": "Flat encoder / lowering",
+      "name": "bit sizes of unit, bool, integer, var, lambda, let, singleton list",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:34-80"
+      ]
+    },
+    {
+      "pass": "CEK budget",
+      "name": "pinned budgets and fees for list vs packed-bytestring element access, recursion cost",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:82-221"
+      ]
+    },
+    {
+      "pass": "Recursion lowering (T1 SAT, T2 self-application)",
+      "name": "self-application beats Z by 6 steps per call; SAT saves 6 steps per call",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:293-410"
+      ]
+    },
+    {
+      "pass": "Intrinsic Eq (===) lowering",
+      "name": "=== vs equalsData cost ordering for TxOutRef, Address, OutputDatum, Value, TxOut, TxInInfo, tuples",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/EqualsDataVsTypedComparisonTest.scala:45-468"
+      ]
+    },
+    {
+      "pass": "v2.TxOut.hasInlineDatum",
+      "name": "wrap-and-compare is cheaper than decode-and-compare",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/DatumEqualityBudgetTest.scala:45-67"
+      ]
+    },
+    {
+      "pass": "prelude List.sort",
+      "name": "sorts correctly on UplcConstr-represented lists, optimizer on and off; structured inputs not quadratic",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/UplcConstrSortTest.scala:81-120"
+      ]
+    },
+    {
+      "pass": "prelude List.sort / SortedMap.fromList",
+      "name": "algorithm candidates benchmark (Benchmark tag, excluded from CI)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SortBudgetTest.scala:198-374",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SortedMapFromListBudgetTest.scala:125-190"
+      ]
+    },
+    {
+      "pass": "CIP-153 Value builtins and T7 lowering",
+      "name": "builtin Value ops cheaper than portable SortedMap ops; prelude Value ops lower to builtins at PV11",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ValueBuiltinsBudgetTest.scala:136-339"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C21-1",
+      "check": "C6",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/CostModel.scala:59-66",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:66-81"
+      ],
+      "claim": "By reading (not executed): satMul(-1, Long.MinValue) returns Long.MinValue instead of saturating to Long.MaxValue. r = -1 * MinValue wraps to MinValue, and the overflow check r / a == b evaluates MinValue / -1, which the JVM (JLS 15.17.2) also wraps to MinValue, so it equals b and the wrapped r is returned. The mirrored order satMul(Long.MinValue, -1) is caught (r / a = 1). No test uses -1 with MinValue in that order. Practical reach is low: it needs a negative coefficient times an already negatively saturated value.",
+      "action": "Main-code note: detect the case explicitly, e.g. use Math.multiplyHigh(a, b) != (r >> 63) as the overflow test, or special-case a == -1 && b == Long.MinValue. Test side: the property in C21-2 covers it with edge values in the generator; until the fix lands, add satMul(-1L, Long.MinValue) == Long.MaxValue as an expected-failure example.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "findingsLog": "F-77",
+      "verification": "The defect is real. CostModel.scala:59-66 computes r = -1 * MinValue, which wraps to MinValue. The check r / a = MinValue / -1 also wraps to MinValue (JLS 15.17.2; Scala.js and Native emulate the same) and equals b, so the code returns MinValue, not MaxValue. Reversing the order is safe: satMul(MinValue, -1) gives r/a = 1 != -1, so it saturates. The defect cannot be reached from cost evaluation. The buggy case needs the right operand b == Long.MinValue. Every `*` site puts a non-negative memory size or a non-negative product on the right (CostModel.scala:92, 109, 121 c11*(x*y), 130, 161, 184, 192, 275, 290). At line 102 the right operand (arg1-arg2).max(minimum) has non-negative args, so it is never below -MaxValue. Corrected claim: satMul(-1, Long.MinValue) returns MinValue (latent, not reachable from any current costing function). Fix it as hygiene (Math.multiplyHigh check or a special case), not as a costing bug."
+    },
+    {
+      "id": "C21-2",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:8-81",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:167-191",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:255-266",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/CostModel.scala:30-33"
+      ],
+      "claim": "The satPlus/satMinus/satMul example groups (10 tests) are instances of one oracle law: satOp(a, b) == clamp(BigInt(a) op BigInt(b)) into [Long.MinValue, Long.MaxValue]. 255-266 repeat lines 15-16 word for word. 'satMul: edge cases with large numbers' (175-191) asserts product2 > 0 || product2 == MaxValue, which no plausible mutation breaks. CostingInteger.fromBigInt (CostModel.scala:30-33) has no test (uncovered in the baseline).",
+      "action": "Replace 8-81, 167-191 and 255-266 with three forAll properties (shared, ScalaCheckPropertyChecks) against the BigInt clamp oracle, plus one for fromBigInt(x) == clamp(x). Use a Long generator that mixes Gen.oneOf(0, 1, -1, Long.MinValue, Long.MaxValue, MinValue+1, MaxValue-1, 3037000499L, 3037000500L) with Arbitrary[Long]. Keep the extension-operator tests 84-111 as one short example each.",
+      "coverageRisk": "low: every deleted example value is in the edge generator; the property will fail on C21-1 until that is fixed",
+      "ciSavingSec": 0,
+      "linesRemoved": 80,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "The oracle law clamp(BigInt(a) op BigInt(b)) holds for satPlus (CostModel.scala:43-48), satMinus (51-56) and fromBigInt (30-33). It holds for satMul except the single pair (-1, MinValue) from C21-1. CostingIntegerTest.scala:255-266 repeat lines 15-16. Every deleted example value is in the proposed edge set or follows from it (for example (MaxValue-1)+1 checks the exact boundary at line 170). Two parts are wrong. (1) The claim that no mutation breaks 175-191 is false: 3037000500^2 = 9223372037000250000 > MaxValue. If the overflow check is removed, product2 wraps negative and the assert at 187-190 fails. That test is weak but not vacuous. (2) A random draw hits (-1, MinValue) about 1/81 of the times both operands come from the 9-value edge set. So the satMul property would fail intermittently, not always, until C21-1 is fixed. Corrected action: land the satMul fix before (or with) the property, or pin (-1, MinValue) as an explicit example. Then replace 8-81, 167-191 and 255-266 with the clamp-oracle properties as proposed."
+    },
+    {
+      "id": "C21-3",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/CostingIntegerJVMTest.scala:8-45",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:113-131",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:148-165",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CostingIntegerTest.scala:210-253",
+        "plutus-conformance/test-cases/uplc/evaluation/builtin/semantics/dropList/dropList-09/dropList-09.budget.expected:1"
+      ],
+      "claim": "Four tests simulate the dropList-09 cost path with the same numbers (intercept 116711, slope 1957, arg Long.MaxValue): CostingIntegerTest 113-131, 148-165 (same arithmetic through satMul/satPlus), 210-228 (LinearInX, a subset of 230-253) and CostingIntegerJVMTest (with four println calls). The conformance case dropList-09 already pins the end-to-end result cpu 9223372036854775807, mem 704.",
+      "action": "Delete CostingIntegerJVMTest.scala, and CostingIntegerTest 148-165 and 210-228. Keep 113-131 and 230-253 (they also check ConstantCost memory). Move the one fromInputStream call into the C21-12 roundtrip test so that API keeps a caller.",
+      "coverageRisk": "low: BuiltinCostModel.fromInputStream (a one-line read wrapper) loses its only test unless C21-12 picks it up; the saturation logic stays covered by 113-131, 230-253 and dropList-09 conformance",
+      "ciSavingSec": 0,
+      "linesRemoved": 85,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "148-165 runs the same arithmetic as 113-131: the `*`/`+` extensions inline to satMul/satPlus (CostModel.scala:72-73) with the same numbers (116711, 1957, MaxValue). 210-228 (LinearInX, arg2=1) is a subset of 230-253 (LinearInX plus ConstantCost mem, arg2=704). CostingIntegerJVMTest.scala:8-45 asserts three things. (a) The dropList entry in the loaded model is non-null. (b) memoryUsageLiteral(10^19) == MaxValue. (c) cpu == MaxValue. The conformance case dropList-09 (budget.expected cpu 9223372036854775807) covers (b) and (c) end to end. If memoryUsageLiteral did not saturate, the cpu would be finite. PlutusConformanceTest.scala:262-291 checks the budget. It runs in the JVM, JS and Native subclasses, and none of them ignores dropList. It uses builtinCostModelE.json, whose dropList coefficients (E json:1217-1218) equal C json:414-415. Caveat: CostingIntegerJVMTest is the only code that parses builtinCostModelC.json and the only caller of fromInputStream (grep). So delete it only together with the C21-12 roundtrip test that loads builtinCostModelC.json through fromInputStream, as the action already says."
+    },
+    {
+      "id": "C21-4",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:68-74",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:76-80"
+      ],
+      "claim": "Test 68-74 is named 'List.cons(true, Nil) size is 63' but its body compiles List.singleton(true), the same body as 76-80. The prelude List has no `cons` method, so the name describes nothing.",
+      "action": "Delete 68-74.",
+      "coverageRisk": "none: the body is identical to 76-80",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "ExprSizeAndBudgetTest.scala:68-74, test 'List.cons(true, Nil) size is 63', has the body compile(plutus.prelude.List.singleton(true)).toUplcOptimized() with assert bitSize == 63. Lines 76-80 have the same body and the same assertion. The real Cons constructor case is covered separately at 59-66 and stays. Deleting 68-74 loses nothing."
+    },
+    {
+      "id": "C21-5",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:293-324",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:381-410",
+        "docs/internal/test-refactor/timings.csv:205",
+        "docs/internal/test-refactor/profiles/core-analysis.md:12"
+      ],
+      "claim": "ExprSizeAndBudgetTest is 4.8 % of scalus-core test CPU and 0.92 s wall; 0.91 s of it are the three T1/T2 proofs, which run CEK loops of n = 100 000 for both encodings to amortize the one-off entry cost. The T1 test already shows the exact method: differencing two loop lengths cancels the entry cost, because cost is linear in n.",
+      "action": "In both T2 tests and in T1, measure at n1 = 10 and n2 = 1010 and assert ((z2 - s2) - (z1 - s1)) / (n2 - n1) == 96000 cpu and 600 mem. Keep the n = 0, 10, 1000 loop of the countdown test.",
+      "coverageRisk": "none: the per-call constant is exact under differencing; the same assertions remain",
+      "ciSavingSec": 0.8,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C21-6",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SortBudgetTest.scala:93-149",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SortedMapFromListBudgetTest.scala:75-101",
+        "build.sbt:226-229"
+      ],
+      "claim": "Both suites are tagged Benchmark and excluded with '-l', but ScalaTest still instantiates excluded suites to read their tags. Their `candidates` (14 and 5 programs) and `isSortedTerm` are strict vals, so every CI run lowers and optimizes about 20 sort programs (initSupportBindings plus V3Optimizer each, see F-14) that no test uses. timings.csv shows 0.0 s for both because constructor time is not attributed to a test; the cost is an estimate.",
+      "action": "Make `candidates` and `isSortedTerm` lazy vals in both suites (the matrix is already lazy).",
+      "coverageRisk": "none: only evaluation order changes",
+      "ciSavingSec": 1.5,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C21-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/DatumEqualityBudgetTest.scala:55-66"
+      ],
+      "claim": "The test compares budgets of two programs but never checks what they return. evaluateDebug.budget is also defined for a failed run, so a regression that makes `hasInlineDatum` return false early, or fail, makes the 'wrap' side cheaper and the test still passes.",
+      "action": "Evaluate with evaluateDebug.success (or match Result.Success) and assert both results are (con bool True); add one case where the output datum differs (count 43) and assert both return False.",
+      "coverageRisk": "none: adds assertions only",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C21-8",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/EqualsDataVsTypedComparisonTest.scala:49-50",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/EqualsDataVsTypedComparisonTest.scala:292-335",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/EqualsDataVsTypedComparisonTest.scala:345-353"
+      ],
+      "claim": "No test in the file checks that the `===` program and the equalsData program return the same boolean; only budgets are compared, and a failed run also has a budget. A lowering bug that makes `===` return the wrong answer, or fail fast, would make it 'cheaper' and pass. 'pack+equalsData vs Case+equalsInteger' (292-335) has no assertion at all; it only logs.",
+      "action": "In every example and forAll test, assert both programs succeed with the same result (the forAll ones give an oracle: result == (a == b)). In 292-335 assert both return True and the ordering that the comment claims, or delete the test as a report.",
+      "coverageRisk": "none: adds assertions only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C21-9",
+      "check": "C8",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/EqualsDataVsTypedComparisonTest.scala:126-184",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/EqualsDataVsTypedComparisonTest.scala:416-468"
+      ],
+      "claim": "The forAll tests draw a and b independently, so they almost never produce equal values, and `===`/equalsData stop at the first differing field. The full-traversal path (the worst case a validator pays) is checked only by the example tests for TxOutRef (126-145), Address (147-166) and OutputDatum (168-184), each with one fixed equal value. Those examples are instances of the forAll properties at 416-468 once the generator also yields equal pairs.",
+      "action": "Generate pairs with Gen.oneOf(arbitrary.map(a => (a, a)), independent pair) in the TxOutRef, Address and OutputDatum properties (and the tuple ones). Then delete the three example tests 126-184.",
+      "coverageRisk": "low: the fixed values (32-byte TxId, PubKeyCredential without stake, NoOutputDatum) are within the generators' range; verify the Address generator also yields the no-stake shape",
+      "ciSavingSec": 0,
+      "linesRemoved": 55,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The fixed example values are in the generators' range. TxId is genByteStringOfN(32) (v3 ArbitraryInstances.scala:12), and the TxOutRef index includes 0. Address is autoDerived (v1:53), with PubKeyCredential (v1:43) and an arbitrary prelude Option that includes None (uplc/test/ArbitraryInstances.scala:366). OutputDatum includes NoOutputDatum (v2:15). The properties at EqualsDataVsTypedComparisonTest.scala:416-468 assert the same relations as the examples at 126-184 (steps <, memory >, fee <; equality for OutputDatum). Independent pairs mostly differ early, as the report says. The weak point: nobody has checked that the relations hold for every full-traversal equal pair, for example Address with Some(StakingHash(ScriptCredential)) or a large TxOutRef index. The examples show only one shape each. Corrected action: add the equal-pair branch to the generators and run the properties. Delete the examples 126-184 only if the extended properties pass. If they fail, record that as a finding about the === vs equalsData cost claim, not as a reason to keep the examples silently."
+    },
+    {
+      "id": "C21-10",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/EqualsDataVsTypedComparisonTest.scala:45-290",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/EqualsDataVsTypedComparisonTest.scala:337-468"
+      ],
+      "claim": "`PlutusV3.compile { (d1: Data, d2: Data) => equalsData(d1, d2) }` is written 13 times, and the 9 example tests repeat the same 8 lines (two budgets, two sizes, two info lines) around 3 assertions.",
+      "action": "Compile eqData once as a private val. Add a local helper compare(labelA, progA, labelB, progB, args: Data*): (ExUnits, ExUnits) that evaluates, checks the results (C21-8) and logs formatLine. Each example test becomes 3-5 lines.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 110,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C21-11",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:108-221",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:83-85",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:96",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:277",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ExprSizeAndBudgetTest.scala:30"
+      ],
+      "claim": "The six fee-pin tests 108-221 copy the same bs1..bs5 setup and the same 4 assertions; they differ only in the compiled accessor, the argument and the pinned numbers. Dead code: `ifBudget0` (85) is never read, `params` (96) shadows the class val, the `iterations` parameter of compareEncodings (277) is never used, and the comment at 30 names SimpleSirToUplcLowering while the code uses ScottEncodingLowering.",
+      "action": "Turn 108-221 into one table (name, compiled fn, arg Data, expected term, mem, cpu, fee) with a loop of test(...) registrations. Remove ifBudget0, the inner params val and the iterations parameter (and its 4 call-site arguments); fix the comment.",
+      "coverageRisk": "none: same pinned numbers",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C21-12",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/BuiltinCostModel.scala:209-228",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/BuiltinCostModel.scala:255-376",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/CostModel.scala:229-232"
+      ],
+      "claim": "The writer half of the BuiltinCostModel and cost-function ReadWriters, toJsonString and flattenCostModel are public and fully uncovered in the baseline; nothing in the repository calls them. Only the reader half is exercised (reference models, fromInputStream).",
+      "action": "Add a shared roundtrip test: for vanRossemReferenceD and vanRossemReferenceE (and the model from builtinCostModelC.json via fromInputStream), assert fromJsonString(m.toJsonString) == m, and that flattenCostModel has one entry per non-null cost parameter with the expected key for one known parameter (e.g. 'addInteger-cpu-arguments-intercept').",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C21-13",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/UplcConstrSortTest.scala:122-128",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/UplcConstrSortTest.scala:140-162"
+      ],
+      "claim": "'UplcConstr and Data-packed paths stay within sight of each other' is documented as a regression guard ('a large divergence would mean the UplcConstr lowering had drifted') but asserts nothing; it only logs. 'report: cost by shape at n=32' also only logs and repeats evaluations that 110-120 already run.",
+      "action": "In 144-162 assert a loose bound on the ratio per row (e.g. 0.5 <= dataCost / constr <= 2). Fold the n=32 cost log of 122-128 into the 110-120 loop as info lines and delete 122-128.",
+      "coverageRisk": "none: adds an assertion; the report output is kept",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C21-14",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/UplcConstrSortTest.scala:51-57",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/UplcConstrSortTest.scala:130-143",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/UplcConstrSortTest.scala:168-170",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/UplcConstrSortTest.scala:182-184"
+      ],
+      "claim": "Comments still describe the deleted UplcConstrListOperations.sort intrinsic as live: sortDataPacked 'runs the PRELUDE sort body rather than the intrinsic' (51-57), Box 'dispatches to UplcConstrListOperations.sort' (168-170), sortPlain likewise (182-184), and 130-139 is a stale scaladoc directly followed by a second one (140-143), so only the second attaches to the test. The class scaladoc (15-20) says the intrinsic was deleted.",
+      "action": "Delete the stale doc comment 130-139 and rewrite 51-57, 168-170 and 182-184 to say both paths run the prelude sort.",
+      "coverageRisk": "none: comments only",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C21-15",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SortBudgetTest.scala:63-83",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SortedMapFromListBudgetTest.scala:51-58",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/UplcConstrSortTest.scala:62-69"
+      ],
+      "claim": "The same input shapes (random with seed 42, ascending, descending, allEqual, fewUnique, organPipe; SortBudgetTest adds sawtooth) are written three times with identical expressions.",
+      "action": "Extract an object SortInputShapes (scalus-core/jvm test, package scalus.uplc.eval) with `all: Seq[(String, Int => Seq[BigInt])]` and use it in the three suites (UplcConstrSortTest maps it to its Int => Seq form).",
+      "coverageRisk": "none: same inputs",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C21-16",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SortBudgetTest.scala:93-145",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SortBudgetTest.scala:210-239"
+      ],
+      "claim": "The optimizeUplc=false test re-writes 8 of the compile {} blocks from `candidates` only to lower them with other Options, and labels the preludeSort program 'OLDUNUSED' (213) although it is the shipped NEW(prelude) sort.",
+      "action": "Keep a lazy Seq of (name, SIR) from compile {} and derive both term lists with .toUplc() and .toUplc(using unoptimized)(); rename the label to NEW(prelude).",
+      "coverageRisk": "none: Benchmark-tagged suite, same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C21-17",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/BuiltinCostModelTest.scala:158-223"
+      ],
+      "claim": "The three 'BuiltinCostModel from ... Protocol Parameters' tests repeat the same 12-line body (load JSON, three fromSeq, three fromPlutusParams) and differ only in loader, file and expected sizes/values.",
+      "action": "Extract a local helper load(pparams): (Seq v1, v2, v3, params V1..V3) that also builds the three models, and keep the per-file assertions in each test.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 5 findings of scope merge-duplicate-tests, to-property or main-bug; 2 confirmed, 3 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

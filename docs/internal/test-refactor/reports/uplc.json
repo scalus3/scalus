@@ -1,0 +1,683 @@
+{
+  "cluster": "uplc",
+  "summary": "The cluster is cheap on the JVM: about 1.5 s for all suites, the slowest is ProgramFlatTest at 0.31 s (it spawns the uplc CLI per sample), so the only cost lever is on Scala.js, where CekBuiltinsJsTest re-runs the 42 shared builtin tests and spawns uplc for every assertTermEvalEq (C07-11). The two strongest findings are an assertion that cannot fail and a main-code defect: the FlatTest Term round trip decodes the same bytes twice (enc.result instead of enc2.result) and never compares with the input (C07-1), and TermSanitizer keeps non-ASCII letters and digits that the reference uplc parser rejects (C07-6). Several other assertions are vacuous or close to it (ChooseList failure branch, DeBruijnedProgramTest's unsigned-tag check, HashConsed dedup size check, ScalusTag 'first error'), the ArbitraryInstances generators never produce String/Array/BLS/BuiltinValue constants, Constr arities other than 3, or Data Constr tag 0 and tags of 128 and above, and the CIP-122/123 example rows in CekBuiltinsTest repeat the Plutus conformance corpus row for row. alpha-equality, the oracle of EvalTestKit.assertTermEvalEq, has no negative test. Already settled and not re-proposed: F-29 (generator families; its open items 'String/BLS/BuiltinValue gap' and '10 default cases' land here as C07-13), F-32 (catch-all failure handling, extended by C07-5), F-33 (~=~ sizes, fixed with TermEqualityTest). Noted without a finding: DataFlatInstance.scala is unreferenced dead main code and a verbatim copy of FlatInstances.scala:26-87; UplcParser.stringChars (UplcParser.scala:179) is unused; ProgramFlatTest's Plutus oracle runs ScalaTest's default 10 samples (F-29 open item), a count change is not proposed because each sample spawns a process and the cost was not measured.",
+  "behaviors": [
+    {
+      "pass": "Flat primitives",
+      "name": "bits, Boolean, Int/Long/BigInt zigzag + word7, String, Array[Byte], List round trip; malformed input raises FlatDecodingError",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:17-420",
+        "scalus-core/jvm/src/test/scala/scalus/serialization/flat/JavaInteropTest.scala:6-24"
+      ]
+    },
+    {
+      "pass": "DefaultFun flat codec",
+      "name": "every builtin encodes to 7 bits and decodes back",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:422-435"
+      ]
+    },
+    {
+      "pass": "Constant / DefaultUni flat codec",
+      "name": "constants round trip; BLS constants have no flat encoding; unapplied type constructors fail",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:36-59",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:437-456"
+      ]
+    },
+    {
+      "pass": "Term / Program flat codec",
+      "name": "Program flat bytes equal the Plutus uplc CLI; decode(encode(p)) is alpha-equal; Word64 tags and indices",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/ProgramFlatTest.scala:9-35",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:219-244",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:458-493"
+      ]
+    },
+    {
+      "pass": "BuiltinValue flat codec",
+      "name": "structural entry-list format, canonical round trip, rejects non-canonical lists",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/BuiltinValueFlatTest.scala:35-121"
+      ]
+    },
+    {
+      "pass": "SIR flat (FlatInstances, HashConsed)",
+      "name": "Module, TypeVar, Case-pattern round trip; hash collisions keep both nodes; structural dedup",
+      "tests": [
+        "scalus-plugin/src/test/scala/scalus/serialization/flat/SIRFlatSerializationTest.scala:10-63",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatInstancesCodecTest.scala:8-37",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/HashConsedCollisionTest.scala:26-70"
+      ]
+    },
+    {
+      "pass": "SIR flat (FlatInstances)",
+      "name": "encode arms for SIRType BLS12_381_G1/G2/MlResult, BuiltinValue and SIR And/Or/Not",
+      "tests": []
+    },
+    {
+      "pass": "DeBruijn",
+      "name": "deBruijnTerm / fromDeBruijnTerm / checkScope, free variables, shadowing, deep nesting",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/DeBruijnTest.scala:14-107"
+      ]
+    },
+    {
+      "pass": "DeBruijnedProgram",
+      "name": "fromCborWithRemainingBytes; Constr tag decoded unsigned",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/DeBruijnedProgramTest.scala:8-68"
+      ]
+    },
+    {
+      "pass": "Term equality",
+      "name": "~=~ ignores annotations, compares Constr/Case sizes",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermEqualityTest.scala:17-40"
+      ]
+    },
+    {
+      "pass": "Term equality",
+      "name": "alpha_== distinguishes different terms (negative cases)",
+      "tests": []
+    },
+    {
+      "pass": "TermDSL",
+      "name": "constant lifting, implicit conversions, force/delay/lam/apply operators, show of Apply chains and arrays",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermDSLTest.scala:16-92"
+      ]
+    },
+    {
+      "pass": "Term annotations",
+      "name": "fillEmptyAnnotations/fillEmptyPos bottom-up and top-down",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/FillAnnotationsTest.scala:15-68",
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermPositionFillTest.scala:23-76"
+      ]
+    },
+    {
+      "pass": "Term annotations",
+      "name": "withAnnotationIfEmpty / withPosIfEmpty (used by lowering)",
+      "tests": []
+    },
+    {
+      "pass": "TermSanitizer",
+      "name": "names sanitized to the reference parser grammar, collisions made unique",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermSanitizerTest.scala:10-193",
+        "scalus-core/shared/src/test/scala/scalus/uplc/UplcParserTest.scala:285-326"
+      ]
+    },
+    {
+      "pass": "UplcParser",
+      "name": "versions, terms, constants, data, builtins, value literals, 1.0.0 constr/case rejection; pretty-printer isomorphism",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/UplcParserTest.scala:22-283"
+      ]
+    },
+    {
+      "pass": "UplcParser",
+      "name": "BLS12_381 G1/G2 constant literals",
+      "tests": []
+    },
+    {
+      "pass": "TermPrinter",
+      "name": "decorated pretty printing",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/PrettyDecoratedTest.scala:7-27"
+      ]
+    },
+    {
+      "pass": "ScalusTag",
+      "name": "Options control tagging; zero budget; first (error) marked; legacy tag recognised",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/ScalusTagTest.scala:25-164"
+      ]
+    },
+    {
+      "pass": "Program version",
+      "name": "minVersionFor, V1/V2 version per protocol, flat encoder/decoder version gate",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/UplcVersionTest.scala:54-200"
+      ]
+    },
+    {
+      "pass": "PlutusParams",
+      "name": "JSON round trip and historical prefixes",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/PlutusParamsJsonTest.scala:14-30"
+      ]
+    },
+    {
+      "pass": "Compiled / PlutusV1-3",
+      "name": "compile and apply, alwaysOk script hashes, withErrorTraces",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/CompiledTest.scala:13-91"
+      ]
+    },
+    {
+      "pass": "CEK builtins",
+      "name": "integer, list, pair, data, bytestring, crypto and CIP-122/123 bitwise builtins",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:33-788",
+        "scalus-core/js/src/test/scala/scalus/uplc/CekBuiltinsJsTest.scala:18-43",
+        "scalus-core/shared/src/test/scala/scalus/uplc/BLS12_381ScalarMulBoundTest.scala:68-118"
+      ]
+    },
+    {
+      "pass": "ProfileReportWriter",
+      "name": "uplc.json artifact and manifest entry",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/internal/ProfileReportWriterUplcTest.scala:37-172"
+      ]
+    },
+    {
+      "pass": "UplcSourceMapRenderer",
+      "name": "text equals show, spans, nesting, marker spoofing, JSON",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/internal/UplcSourceMapRendererTest.scala:22-198"
+      ]
+    },
+    {
+      "pass": "ArbitraryInstances",
+      "name": "Data and Constant node counts bounded",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstancesBoundsTest.scala:47-59"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C07-1",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:474-493",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:487",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:259",
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermDSLTest.scala:73"
+      ],
+      "claim": "The 'encode/decode Term' property cannot fail: line 487 reads `val result2 = enc.result` instead of `enc2.result`, so decoded2 decodes the same bytes as decoded and the assert compares a value with itself. Independently, the input t is never compared: arbitraryTerm builds Var(NamedDeBruijn(n)) with the default index 0 (TermDSLTest:73 pins that default), so every encoded variable index is 0 and the property never checks that indices survive.",
+      "action": "In FlatTest:474-493: let d = DeBruijn.deBruijnTerm(t); encode d, decode, assert `decoded α_== d`; re-encode decoded and assert `enc2.result sameElements enc.result`. Keep the bitSize example asserts at 461-473. Optionally use FlatCodec.encode (buffer bitSize/8+1) instead of the +2 slack: if that throws, bitSize under-estimates – report it as a main-code finding, not a test fix.",
+      "coverageRisk": "none: the test gains a real assertion",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-2",
+      "check": "C2",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:422-435",
+        "scalus-core/shared/src/main/scala/scalus/uplc/DefaultFun.scala:1566-1567,1597,1613,1700",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:261-265"
+      ],
+      "claim": "The DefaultFun round trip draws from Gen.oneOf(DefaultFun.values) with ScalaTest's default sample count, so one run checks about 10 of the 99 builtins. The baseline marks the encode arms of VerifyEcdsaSecp256k1Signature, VerifySchnorrSecp256k1Signature, WriteBits, IndexArray and the decode arm of Bls12_381_G2_multiScalarMul unexecuted. IndexArray is also excluded from arbitraryTerm (ArbitraryInstances:261-265), so nothing in the repository encodes it. A wrong tag in one arm passes most runs.",
+      "action": "Replace the forAll with `for f <- DefaultFun.values do` asserting fl.bitSize(f) == 7 and decode(encode(f)) == f, with a clue naming f. Fix the test name typo 'DefaulnUni' -> 'DefaultFun'.",
+      "coverageRisk": "none: exhaustive instead of sampled",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-3",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:619-701",
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:719-730",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:14",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/PlutusConformanceJvmTest.scala:10",
+        "scalus-core/js/src/test/scala/scalus/uplc/eval/PlutusConformanceJsTest.scala:8",
+        "scalus-core/native/src/test/scala/scalus/uplc/eval/PlutusConformanceNativeTest.scala:7"
+      ],
+      "claim": "The ReadBit (619-640), WriteBits (642-674), ReplicateByte (676-690) tests and the fixed rows of ShiftByteString (695-701) and RotateByteString (722-730) are the CIP-122/123 test vectors that the Plutus conformance corpus already holds row for row, except three rows that differ only in a non-discriminating argument (WriteBits 650-651 pass True where the corpus passes False with the same negative index; ReplicateByte 681-682 use byte 0/3 where the corpus uses 141 with the same length 8193; Rotate 723 rotates the empty string by -3, the corpus by -1): plutus-conformance/test-cases/uplc/evaluation/builtin/semantics/readBit (22 cases incl. #f4 bits 0-8, #fff4 16, #f4ff 10, empty and -1), writeBits (48 cases incl. every row here, e.g. #f4ff [10,1] and [1,10]), replicateByte (10 cases incl. -1, 8193, 256, 0 255, 4 255), shiftByteString (#ebfc by 0/±5/±16, empty by ±3), rotateByteString (#ebfc by ±5/±16/±21). PlutusConformanceTest checks each against the expected output on JVM, JS and Native.",
+      "action": "Delete CekBuiltinsTest tests 619-640, 642-674, 676-690, and the fixed assertTermEvalEq rows 695-701 and 722-730 (keep the random-oracle loops, see C07-4). Keep CountSetBits (769-778) and FindFirstSetBit (780-788): they have rows the corpus lacks (#000F, #FFFF, #8000). Keep the variant C/E test 748-767.",
+      "coverageRisk": "none: the rows are covered by the corpus on all three platforms; a checkout without the corpus symlink cannot compile scalusJVM tests at all (AGENTS.md, worktree rule 1), so CekBuiltinsTest never runs without it either",
+      "ciSavingSec": 0,
+      "linesRemoved": 85,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "The row-for-row claim mostly holds. I listed the corpus under plutus-conformance/test-cases/uplc/evaluation/builtin/semantics. readBit cases 01-15 match all 15 ReadBit rows. writeBits cases 01-18, 25, 16, 29-31, 36 and 37 match the WriteBits rows. The only differences are CekBuiltinsTest:650-651 ([0,-1] and [-1,0] with True), where cases 06 and 07 pass False. replicateByte cases 01-08 match. Case 10 is 8193/141, where the test uses 8193 with byte 0 and byte 3. shiftByteString cases 01-06 and rotateByteString cases 01 and 03-08 match. One small error in the claim: the corpus has no '#ebfc by 0' row for shift or rotate. Shift-by-0 and rotate-by-0 exist only on the long 44-byte input (shift case-07, rotate case-09). PlutusConformanceTest:87-90 runs every case on JVM, JS and Native. ignoredCases is empty by default and no subclass skips a bitwise case. Two things have no surviving equivalent. (1) CekBuiltinsTest is the only test in scalus-core, scalus-plugin or scalus-examples that compiles these builtins with compile(...).toUplc(). A grep for readBit, writeBits, replicateByte, shiftByteString and rotateByteString finds only CekBuiltinsTest.scala. So deleting the three whole tests (619-640, 642-674, 676-690) drops the only check that the Scala-to-SIR mapping (SIRBuiltins.scala:728-730, the type schemes) produces a working term. The corpus parses UPLC directly and never touches that path. (2) The 22 assertTermEvalThrows[BuiltinError] rows pin the exception class. The corpus checks only 'evaluation failure'. If the fixed Shift/Rotate rows are deleted, the compiled ShiftByteString and RotateByteString vals (694, 721) become unused, unless C07-4 reuses them. CORRECTED ACTION: Delete the duplicate rows, but keep one compile-path row per builtin. Examples: ReadBit $ hex\"F4FF\" $ 10 -> true, WriteBits $ hex\"F4FF\" $ List(10,1) $ false -> F0FD, ReplicateByte $ 4 $ 0xff -> FFFFFFFF, plus one BuiltinError row, such as ReadBit $ hex\"F4\" $ 8. Keep the Shift/Rotate compiled vals only if C07-4's CEK property uses them."
+    },
+    {
+      "id": "C07-4",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:493-605",
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:703-716",
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:732-745"
+      ],
+      "claim": "AndByteString, OrByteString and XorByteString are three 37-line truth tables over the same 13 inputs (00/FF/00FF/FFFF, both padding modes); each row is an instance of one law: with padding the result has the longer length and the missing bytes of the shorter operand act as the identity of the op (0xFF for And, 0x00 for Or/Xor, compare rows 520 and 558); without padding the result is truncated to the shorter length. The Shift/Rotate 'oracle' loops use unseeded scala.util.Random for one 20-byte input per run and call Builtins.shiftByteString/rotateByteString directly, bypassing the CEK.",
+      "action": "Replace 493-605 with one forAll(padding: Boolean, a: ByteString, b: ByteString) per op (or one table over the three ops) comparing assertTermEvalEq(Op $ padding $ a $ b, oracle) where the oracle zips the byte arrays as described; keep the empty-input rows. Replace 703-716 and 732-745 with forAll(bs, i in [-8*len-8, 8*len+8]) through the CEK (assertTermEvalEq(ShiftByteString $ bs $ i, oracle)).",
+      "coverageRisk": "low: the 0x00/0xFF rows become random bytes; keep 2-3 literal rows per op so the CIP padding direction stays pinned by example. The corpus (andByteString/orByteString/xorByteString, 14 cases each) also covers padding.",
+      "ciSavingSec": 0,
+      "linesRemoved": 70,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "The law holds for every input. Builtins.scala:791-848 delegates to BitwiseLogicalOperations, and the doc and the rows agree. Bytes align from index 0. Without padding, the result has the shorter length (example: Or false 00FF|FF = FF). With padding, the result is padded with the remaining bytes of the longer input, which equals using the op's identity: 0xFF for And, 0x00 for Or and Xor. The rows at 520 and 558 show this (And/Or true 00FF,00 -> 00FF). Equal lengths give the same result in both modes. I found no input outside this law. The 13 rows are 00/FF/00FF/FFFF, so they pin no shape that a random ByteString generator cannot produce, and the law is per bit. A ByteString Arbitrary exists (test/scala/scalus/uplc/test/ArbitraryInstances.scala:36). The corpus has 14 cases each for and, or and xor (42 in total). The Shift/Rotate loops (703-716, 732-745) use unseeded scala.util.Random. They call Builtins.shiftByteString and rotateByteString directly, not through the CEK, and they cover only amounts 0 to 20 on one 160-bit input. The proposed forAll(bs, i in [-8len-8, 8len+8]) through the CEK is a strict improvement, and those amounts always fit Int64, so the variant-E rejection does not apply. Keep 2-3 literal rows per op, as the report says."
+    },
+    {
+      "id": "C07-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:195-204",
+        "scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:491-495",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/Cek.scala:1650",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/Cek.scala:1670-1680",
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:28-31",
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:47,61,203,218,230,246,263,293,316"
+      ],
+      "claim": "The ChooseList property's failure branch is vacuous: ChooseList is All(a, All(b, ...)) (two forces), but line 203 applies `!ChooseList $ t` with one force, so evaluation fails with BuiltinTermArgumentExpectedMachineError for every t, list or not; a ChooseList that accepted non-lists would still pass. All other failure branches use assertTermEvalThrows[Exception], and evaluatesToInteger maps any exception to None via Try(...).toOption, so a host crash (NPE, MatchError) on both sides passes (the F-32 pattern). Every builtin failure is wrapped into BuiltinError (Cek.scala:1670-1680), so the precise type is available.",
+      "action": "Line 203: use `!(!ChooseList) $ t $ asConstant(true) $ asConstant(false)`. Narrow assertTermEvalThrows[Exception] to [MachineError] at 47, 61, 218, 230, 246, 263, 293, 316 (BuiltinError where the failure is a type mismatch inside the builtin). In evaluatesToInteger catch only MachineError (as LetChainRegroupCekConformanceTest does).",
+      "coverageRisk": "none: assertions get stricter; a newly failing case is a real defect",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-6",
+      "check": "C4",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/TermSanitizer.scala:5-12",
+        "scalus-core/shared/src/main/scala/scalus/uplc/TermSanitizer.scala:94",
+        "scalus-core/shared/src/main/scala/scalus/uplc/TermSanitizer.scala:117-118",
+        "scalus-core/shared/src/main/scala/scalus/uplc/TermSanitizer.scala:127-128",
+        "scalus-core/shared/src/main/scala/scalus/uplc/Term.scala:630-632"
+      ],
+      "claim": "TermSanitizer's doc requires ASCII (first char ASCII letter or '_', then ASCII letter/digit/'_'/'\\''), but isValidFirstChar uses Char.isLetter, isValidSubsequentChar uses isLetterOrDigit and line 94 uses isDigit, all Unicode. So sanitizeName keeps 'é', 'π' or an Arabic digit, and Term.show / Program.show (Pretty[Term] sanitizes, Term.scala:630-632) print names the reference parser rejects. Checked with uplc 1.70.0.0: `(program 1.0.0 (lam é é))` fails with \"unexpected 'é'\" and `(program 1.0.0 (lam x٣ x٣))` with \"unexpected '٣'\", while `(lam e e)` parses. Scala identifiers may be Unicode, so the names reach UPLC through SIR. Found by reading (not run through Scala).",
+      "action": "Test side: add rows \"é\" -> \"_\", \"xé\" -> \"x_\", \"x٣\" -> \"x_\" to the sanitizer table, plus the property in C07-12; both fail today. Main-code note only: restrict the three predicates to ASCII ('a'-'z', 'A'-'Z', '0'-'9').",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-79",
+      "verification": "The doc comment (TermSanitizer.scala:10-11) requires ASCII. The code uses Unicode predicates: isValidFirstChar is c.isLetter || '_' (117-118), isValidSubsequentChar is c.isLetterOrDigit || '_' || '\\'' (127-128), and line 94 uses firstChar.isDigit. So sanitizeName keeps 'é' and '٣'. Term.show is pretty.render (Term.scala:378). Pretty[Term] calls TermSanitizer.sanitizeNames (Term.scala:630-632), so show and pretty emit these names unchanged. I reproduced the parser rejection with the local reference binary (/nix/store/...plutus-executables-exe-uplc-1.70.0.0/bin/uplc evaluate -i). `(program 1.0.0 (lam é é))` fails with \"unexpected 'é'\" at 1:21. `(program 1.0.0 (lam x٣ x٣))` fails with \"unexpected '٣'\". `(lam e e)` evaluates to `(lam e-0 e-0)`. Reachability: Scala identifiers may contain Unicode letters, and lambda and let names flow through SIR into UPLC LamAbs names, so a validator with such a binder prints unparseable UPLC. The proposed rows (é -> _, xé -> x_, x٣ -> x_) are correct after an ASCII-only fix, and they fail today."
+    },
+    {
+      "id": "C07-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/DeBruijnedProgramTest.scala:67",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Word64.scala:68"
+      ],
+      "claim": "'Constr.tag should be unsigned' asserts `!p.toString.contains(\"Constr(-1, )\")`. Constr tags are Word64 and Word64.toString is toUnsignedString, so the text 'Constr(-1, ' can never be printed; the substring also requires empty fields. A decoder that read the tag as signed would still pass.",
+      "action": "Collect the Constr tags of p.term and assert each equals the expected unsigned value (or at least that no tag has value.toLong < 0, i.e. above 2^63), and assert p re-encodes to the same flat bytes (p.flatEncoded vs the input's flat payload). Delete the commented println at 66.",
+      "coverageRisk": "none: the test gains a real assertion",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-8",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/HashConsedCollisionTest.scala:57-70"
+      ],
+      "claim": "'structurally equal nodes still dedup to one encoding' asserts bitSize(Fun(tp1, tp2)) == bitSize(Fun(tp1, tp1)) with tp1 and tp2 structurally equal. Without dedup both sides encode two equal CaseClass nodes and have the same size too, so the assert holds with dedup removed.",
+      "action": "Compare with a non-equal pair of the same size: assert bitSize(Fun(tp1, tp2)) < bitSize(Fun(caseClass(\"Aa\"), caseClass(\"BB\"))) (\"Aa\"/\"BB\" have equal lengths, so only dedup can make the left side smaller).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-9",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/ScalusTagTest.scala:141-149",
+        "scalus-core/shared/src/main/scala/scalus/uplc/ScalusTag.scala:45-67",
+        "scalus-core/shared/src/main/scala/scalus/uplc/ScalusTag.scala:75"
+      ],
+      "claim": "'wrap marks the first (error) node and only that one' checks isTagged and countMarkers == 1. A wrap that tagged the last (error) in pre-order, or the Delay one, passes. The Constr and Case traversal of tagFirstError/containsMarkedError is reached by no test (ScalusTag.scala:75 uncovered).",
+      "action": "Assert the exact result: wrapped == LamAbs(\"x\", Apply(Force(Apply(Error(), Const(ScalusTag.marker))), Delay(Error()))). Add a Constr(0, [c, Error, Error]) and a Case(scrutinee-with-no-error, [Error, Error]) case asserting the marker lands on the first error field/branch and isTagged is true.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-10",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:109-113",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/DataApi.scala:139-151"
+      ],
+      "claim": "arbData draws Constr tags from Gen.posNum[Long], which yields 1..size (size <= 100). It never produces tag 0 (CBOR tag 121, the first constructor, the most common in real datums) and never a tag of 128 or above, so the tag-102 general form of the Data CBOR encoder (DataApi.scala:146-151) and its decoder are never reached by any Data property in the repository; DataCborCodecTest covers tag 102 by fixed examples only.",
+      "action": "Replace Gen.posNum[Long] with Gen.frequency((4, Gen.choose(0L, 6L)), (2, Gen.choose(7L, 127L)), (1, Gen.choose(128L, Long.MaxValue)), (1, Gen.const(BigInt(\"18446744073709551615\")))) (adjust to the Constr tag type). Rerun gen-stats for Data and the Data CBOR round-trip properties.",
+      "coverageRisk": "none: widens the generator; seeded tests that pin generated values must be rechecked",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-11",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/js/src/test/scala/scalus/uplc/CekBuiltinsJsTest.scala:10-16",
+        "scalus-core/js/src/test/scala/scalus/uplc/CekBuiltinsJsTest.scala:18-43",
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:19"
+      ],
+      "claim": "CekBuiltinsJsTest extends the shared CekBuiltinsTest, so Scala.js runs all 42 builtin tests twice (CekBuiltinsTest itself is also discovered on JS), and its assertTermEvalEq override spawns the uplc CLI for each of the 191 assertTermEvalEq call sites plus every forAll iteration (roughly 300 process starts per run). ChildProcess (10-16) is unused and the assertTermEvalThrows override (40-43) only calls super. Builtin semantics against the Haskell reference are already pinned on JS by PlutusConformanceJsTest. Not measured: there are no JS timings in timings.csv; the saving below is an estimate. CI-JS became the longest job after P1 (F-31).",
+      "action": "Delete CekBuiltinsJsTest, or reduce it to one smoke test that runs a handful of terms through uplc on JS. Measure the CI-JS test phase before and after.",
+      "coverageRisk": "low: this is the only place where random builtin inputs (forAll BigInt/Constant) meet the Haskell oracle on JS; the corpus pins fixed cases only. JVM has no equivalent oracle run for these builtins.",
+      "ciSavingSec": 15,
+      "linesRemoved": 45,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-12",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermSanitizerTest.scala:10-45",
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermSanitizerTest.scala:53",
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermSanitizerTest.scala:62-71",
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermSanitizerTest.scala:112-116"
+      ],
+      "claim": "Six single-name tests (10-45) and 'Handle empty name' (112-116, the same as the table row at 70) are instances of two laws on sanitizeName: the result matches referenceParserNameRegex (line 53) or is '_empty', and sanitizing is idempotent (a valid name is unchanged). The examples use ASCII inputs only, which is why C07-6 was not caught.",
+      "action": "Merge 10-45 and 112-116 into the table at 62-71 (input -> expected rows, add the C07-6 non-ASCII rows), and add forAll(s: String) asserting the regex (or '_empty') and sanitizeName(sanitizeName(s)) == sanitizeName(s). The property fails until C07-6 is fixed in main code: mark it pending or land it with the fix.",
+      "coverageRisk": "none: every example stays as a table row",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "TermSanitizerTest:10-38 has five single-name tests (dots, dollar, colon, leading digit, com.example.MyClass$Inner) and 40-45 preserves valid names. Test 112-116 ('' -> _empty) duplicates the table row at line 70. Once C07-6 is fixed, both laws hold for every String. (1) The output matches ^[A-Za-z_][A-Za-z0-9_']*$ (line 53). The first char is a valid first char, or it is replaced by or prefixed with '_', and every later char is valid or replaced by '_'. '_empty' also matches. (2) Idempotence holds because a valid output is a fixed point. Surrogate pairs become '__', which is still idempotent. Today the property fails, because ScalaCheck's default Arbitrary[String] generates non-ASCII chars that pass isLetter. So mark it pending or land it with the fix, as the report says. Caveat: idempotence alone does not imply that a valid input is unchanged (a constant function to '_' is also idempotent). So the 'Preserve valid names' examples (foo, bar123, foo_bar, foo') must stay as table rows, and the report already keeps every example as a row."
+    },
+    {
+      "id": "C07-13",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:138-166",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:207-208",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:307-315",
+        "scalus-core/shared/src/main/scala/scalus/uplc/UplcParser.scala:342-345",
+        "scalus-core/shared/src/test/scala/scalus/uplc/UplcParserTest.scala:261-275",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:447-455"
+      ],
+      "claim": "F-29 left the arbitraryTerm gaps to this cluster. arbitraryDefaultUni never yields String (commented out at 156), ProtoArray, BLS12_381_G1/G2 or BuiltinValue (gen-stats: Constant kinds have none of them), so the flat round trip and the parser/printer isomorphism never see String, Array, BLS or BuiltinValue constants; no test parses a BLS constant literal (UplcParser.scala:342-345 unexecuted). arbConstantByType(BuiltinValue) is always empty. arbitraryTerm's Constr always has 3 fields and tags 0-10, Case always 3 branches (307-315), so 0/1/2-field constrs, single-branch cases and Word64 tags above 10 (2^63, 2^64-1) never round-trip.",
+      "action": "Add a self-contained opt-in generator (ArbitraryInstances is copied into the published testkit, F-29 point 1), e.g. genConstantFull(withBls: Boolean) that adds String, Array(elem), non-empty BuiltinValue (via insertCoin as in BuiltinValueFlatTest:83-87) and, if withBls, G1/G2. Use it with withBls = true in UplcParserTest:261-275 and with withBls = false in FlatTest:447-455 (BLS has no flat encoding, FlatTest:45-59). Keep the default arbitraryConstant unchanged for ProgramFlatTest (uplc escaping, comment 153-156). In arbitraryTerm draw Constr/Case arity from Gen.choose(0, 4) and tags from Gen.frequency over 0-10 and Word64 extremes.",
+      "coverageRisk": "none: widens generators; arity/tag changes alter unseeded samples of every arbitraryTerm user, so watch the ~10 users for new failures (each would be a real finding)",
+      "ciSavingSec": -1,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-14",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/Term.scala:315-345",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:471-474",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/ProgramFlatTest.scala:33",
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermEqualityTest.scala:13-40"
+      ],
+      "claim": "α_== is the oracle of EvalTestKit.assertTermEvalEq (hundreds of assertions) and of the Program flat round trip, but no test checks that it returns false: TermEqualityTest covers only ~=~. An α_== that ignored a Var index, a Constr tag or field count, a Case branch, a constant, or returned true for different node kinds would turn those assertions vacuous. The baseline marks a branch of its equals at the end of the match unexecuted.",
+      "action": "Add to TermEqualityTest: α_== is true for terms that differ only in binder names and annotations; false for different Var indices, different constants, different builtins, Constr tag or field-count mismatch, Case branch-count mismatch, and different node kinds (Force vs Delay); and it asserts on index 0 (named, un-de-Bruijned terms) as documented.",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-15",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/UplcParserTest.scala:285-326",
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermSanitizerTest.scala:10-38",
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermSanitizerTest.scala:100-128"
+      ],
+      "claim": "The five 'Variable names with ... are sanitized and can be parsed' tests repeat the TermSanitizerTest examples (dots, dollar, colon, leading digit, com.example.Class) and the 'Sanitized names round-trip through UplcParser' test. The only extra is that they go through Term.show, which sanitizes on its own (Term.scala:630-632), while TermSanitizerTest:105 uses sanitizeNames + pretty.",
+      "action": "Delete UplcParserTest:286-316 (four tests); keep 318-326 as the single test of show's sanitize step, with a comment saying so.",
+      "coverageRisk": "low: show's sanitize step stays covered by the kept test",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "UplcParserTest:286-316 has four tests (foo.bar, anonfun$1, foo:bar, 1foo). Each one runs term.show, parses with parser.term.parse, and compares the result to the sanitized lambda. Surviving equivalents: TermSanitizerTest:10-32 pins the exact sanitizeName outputs (foo_bar, anonfun_1, foo_bar, _1foo). sanitizeNames maps every binder through sanitizeName (TermSanitizer.scala:37-53). Term.show is pretty.render(DefaultRenderWidth) (Term.scala:378) through Pretty[Term], which calls sanitizeNames (630-632). That is the same path as TermSanitizerTest:105 (sanitized.pretty.render(120)), whose round-trip covers the '9bar' -> '_9bar' leading-digit parse and the '$' parse. The kept test, UplcParserTest:318-326, still goes through show and covers dots and dollar in a nested term. The deleted tests use parser.term.parse, and the surviving one uses parseTerm (UplcParser.scala:93-97). parseTerm is the same parser, only stricter (surrounded by whitespace, then P.end), so nothing is lost. No assertion is left without an equivalent."
+    },
+    {
+      "id": "C07-16",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/DeBruijnTest.scala:14-22",
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermPositionFillTest.scala:72-76",
+        "scalus-core/shared/src/test/scala/scalus/uplc/FillAnnotationsTest.scala:63-68",
+        "scalus-core/shared/src/main/scala/scalus/uplc/Term.scala:253-261",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:279-287",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:314-331"
+      ],
+      "claim": "Three exact duplicates: (a) DeBruijnTest 'deBruijnTerm' (14-16) asserts the same equality as line 20 of 'fromDeBruijnTerm'; (b) TermPositionFillTest 'fills leave a fully-located term untouched' (72-76) is FillAnnotationsTest 63-68 through the one-line wrappers fillEmptyPosBottomUp/TopDown (Term.scala:253-261); (c) FlatTest 'encode/decode Long round-trips large values' (279-287) is the same round trip as 'encode/decode full Int and Long range' (314-331) with five more example values.",
+      "action": "(a) Delete DeBruijnTest:14-16. (b) Delete TermPositionFillTest:72-76 (better: move the remaining TermPositionFillTest tests into FillAnnotationsTest, one suite for the fill functions). (c) Move the five values of FlatTest:285 into the Long list at 327 and delete 279-287.",
+      "coverageRisk": "none for (a), (b); for (c) the mid-width values (2^34, 2^40) stay as example rows, which matters because arbitrary Long is almost always ~63 bits",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "(a) is confirmed: DeBruijnTest:15 asserts exactly the same equality as line 20. (c) is confirmed: FlatTest:279-287 and 314-331 use the same roundTrip shape (EncoderState(bitSize/8+1), encode, decode). Moving the five values into the Long list at line 327 keeps every assertion. (b) is not a duplicate. TermPositionFillTest:72-76 uses annotations with a position and an empty functionName (UplcAnnotation(pos(line))), three distinct objects. FillAnnotationsTest:63-68 uses the same `ann`, which has a non-empty functionName ('validate'), on every node. Term.fillEmptyFields (Term.scala:467-475) has the guard fillName = own.functionName.isEmpty && rep.functionName.nonEmpty. Consider a mutant that drops `rep.functionName.nonEmpty`. It reallocates every name-less annotation, so it breaks the identity (eq) check only in TermPositionFillTest:74-75. FillAnnotationsTest:66-67 still passes, because its own names are non-empty. The pos-only wrappers fillEmptyPosTopDown and fillEmptyPosBottomUp (Term.scala:253-261) are also exercised only there. CORRECTED ACTION: Delete DeBruijnTest:14-16. Move the FlatTest:285 values into the list at 327 and delete 279-287. Keep TermPositionFillTest:72-76, or move it into FillAnnotationsTest as a second identity case for name-less annotations, but do not delete it."
+    },
+    {
+      "id": "C07-17",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/DeBruijnTest.scala:99-107",
+        "scalus-core/shared/src/test/scala/scalus/uplc/DeBruijnTest.scala:86-92",
+        "scalus-core/shared/src/main/scala/scalus/uplc/DeBruijn.scala:109-111"
+      ],
+      "claim": "The property named 'fromDeBruijnTerm(deBruijnTerm(t)) == t' only asserts that a second named->index->named round trip gives the same names as the first (idempotence); it never checks the indices. A deBruijnTerm off by one at a fixed depth would still be stable. The checkScope test puts the out-of-scope variable only in argument position, so the function-side return (DeBruijn.scala:111) is unexecuted.",
+      "action": "In the property: d = deBruijnTerm(t); assert deBruijnTerm(fromDeBruijnTerm(d)) α_== d and checkScope(d).isEmpty (arbitraryTerm is closed); rename the test. In 86-92 add a case with the bad index in function position: lam x [ (var y 2) (var x 1) ].",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-18",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/Term.scala:74-107",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/lowering/LoweredValue.scala:1083,1379"
+      ],
+      "claim": "withAnnotationIfEmpty / withPosIfEmpty are public and used by lowering, but no test calls them: the baseline marks lines 79-100 unexecuted, including the branch that keeps an existing functionName and the recursion into LamAbs, Force, Delay, Constr and Case.",
+      "action": "Add to FillAnnotationsTest: a term whose root has only a functionName keeps it and gets the position; recursion stops at a positioned subterm; fields of Constr and branches of Case are filled; a positioned root is returned unchanged (eq).",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-19",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/serialization/flat/FlatInstances.scala:560-579",
+        "scalus-core/shared/src/main/scala/scalus/serialization/flat/FlatInstances.scala:1233-1245",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatInstancesCodecTest.scala:23-37"
+      ],
+      "claim": "The SIR encoder arms for SIRType.BLS12_381_G1_Element, G2_Element, MlResult, BuiltinValue, TypeNothing and for SIR And/Or/Not are unexecuted in scalus-core (the plugin encodes them, but plugin coverage depends on the incremental build, F-12). No unit test round-trips these tags, so a swapped tag constant shows up only when a user module that uses them is linked. SirToExprTest and SIRTypeSerializationTest (cluster compiler.sir) also round-trip SIR, so that report may raise the same gap; dedupe there.",
+      "action": "Add to FlatInstancesCodecTest a table round trip (as in its TypeVar test at 23-37) over every SIRType leaf tag, and a SIR term with And, Or and Not, asserting decode(encode(x)) == x.",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-20",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/main/scala/scalus/uplc/internal/UplcSourceMap.scala:128-133",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/internal/UplcSourceMapRendererTest.scala:126-144"
+      ],
+      "claim": "The marker-spoof guard is tested only with a top-level string constant; the Pair, List and Array arms of constantHasMarkerChar are unexecuted, so a spoofing string inside a list constant could reach the scanner unverified if one arm broke.",
+      "action": "Extend the spoof test with a (list string) and a (pair string integer) constant holding the marker characters; assert uplc == show and spans are empty.",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-21",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:263-287",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:314-420",
+        "scalus-core/shared/src/test/scala/scalus/uplc/BuiltinValueFlatTest.scala:22-25",
+        "scalus-core/shared/src/main/scala/scalus/serialization/flat/FlatCodec.scala:12-38"
+      ],
+      "claim": "FlatTest hand-writes the same 'EncoderState(fl.bitSize(x) / 8 + 1); fl.encode; fl.decode(DecoderState(enc.result))' sequence about ten times (146-151, 263-277, 281-284, 317-324, 347-351, 360-365, 375-379, 386-391, 401-406, 412-418), and BuiltinValueFlatTest:22-25 re-implements it as toBytes. FlatCodec.encode(value, fl) / FlatCodec.decode(bytes, fl) do exactly this.",
+      "action": "Use FlatCodec.encode/decode (or one local roundTrip[A: Flat] built on them) in those places. Keep explicit EncoderState only where a test encodes several values into one buffer or checks nextWord padding (List tests at 403/414).",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-22",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/ScalusTagTest.scala:25-87",
+        "scalus-core/shared/src/test/scala/scalus/uplc/ScalusTagTest.scala:89-110"
+      ],
+      "claim": "Seven V3 option tests (25-29, 45-55, 71-87) differ only in the Options value and the expected isTagged; the V1/V2 ones differ in the inline entry point, which cannot be passed as a value. 'Tagged program evaluates to the same result' and 'Tagging costs ZERO budget' compile the same two programs and evaluate them twice.",
+      "action": "Replace the V3 option tests with one table over (name, Options, expectTagged) for PlutusV3.compile; keep the V1/V2 tests. Merge 89-110 into one test that evaluates once with evaluateDebug and asserts success, equal result terms and equal budgets.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-23",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/internal/ProfileReportWriterUplcTest.scala:37-172",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/internal/UplcSourceMapRendererTest.scala:146-198",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/internal/UplcSourceMapRendererTest.scala:52-61",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/CompiledTest.scala:37-77"
+      ],
+      "claim": "ProfileReportWriterUplcTest spells out the 8-argument ProfileReportWriter.write call seven times with only key, config, index and term varying, and never deletes its temp dirs. UplcSourceMapRendererTest compiles the same `double(21)` program twice (146-157, 175-198) and repeats the span-bounds loop three times (55-57, 120-122, 185-189). CompiledTest repeats the parseUplc(...).toOption.get.deBruijnedProgram.term pipeline three times for the alwaysOk hash tests.",
+      "action": "ProfileReportWriterUplcTest: local def write(dir, key, cfg = fullReport(dir), index = 0, term = Some(annotated), console = _ => ()). UplcSourceMapRendererTest: one lazy val for the compiled program, merge the sortedness test into the nesting test, extract assertSpansInBounds(map). CompiledTest: one table (Compiled, expected hash, expected UPLC text) for the three alwaysOk tests.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-24",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:337,370,415,437,459,494,532,570,609,620,643,677,693,720,751-752,770,781",
+        "scalus-core/shared/src/main/scala/scalus/uplc/TermDSL.scala:7-8",
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:34"
+      ],
+      "claim": "Eighteen call sites in 17 tests obtain a builtin term with compile(scalus.uplc.builtin.Builtins.x).toUplc() (a plugin compile and lowering per test) and shadow the DefaultFun name with a local val, while the file already uses the TermDSL conversion DefaultFun => Term (line 34: AddInteger $ ...). The compile adds nothing to what the test asserts: the Builtins -> DefaultFun mapping is the subject of the compiler-plugin builtin tests.",
+      "action": "Drop the local vals and use DefaultFun.X directly (e.g. AndByteString $ false $ hex\"\" $ hex\"\"); remove the `compile` import if unused.",
+      "coverageRisk": "low: if the compiled form were an eta-expanded lambda, partial-application behavior differs, but no test here relies on it",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-25",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-plugin",
+      "evidence": [
+        "scalus-plugin/src/test/scala/scalus/serialization/flat/SIRFlatSerializationTest.scala:4",
+        "scalus-plugin/src/test/scala/scalus/serialization/flat/SIRFlatSerializationTest.scala:16-23",
+        "scalus-plugin/src/test/scala/scalus/serialization/flat/SIRFlatSerializationTest.scala:47-62"
+      ],
+      "claim": "The two Module round-trip tests repeat the encode/decode sequence; the per-key annotation asserts at 51-61 are implied by `module == module2` at 62 (Module is a case class including anns); ScalaCheckPropertyChecks is mixed in but unused; lines 18-20 are a stale commented-out filler call.",
+      "action": "Extract a local roundTrip(module) and keep only the equality assert in each test; drop the unused mixin and the commented code.",
+      "coverageRisk": "none: the equality covers the removed asserts (the per-key asserts only improve the failure message)",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C07-26",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:84,86,108,111",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:145,157",
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:273-279",
+        "scalus-core/shared/src/test/scala/scalus/uplc/CekBuiltinsTest.scala:51",
+        "scalus-core/shared/src/test/scala/scalus/uplc/DeBruijnedProgramTest.scala:13",
+        "scalus-core/shared/src/test/scala/scalus/uplc/TermDSLTest.scala:71-81"
+      ],
+      "claim": "Dead and nondeterministic test code: commented-out println lines in FlatTest and a commented-out FstPair property in CekBuiltinsTest; unseeded scala.util.Random in FlatTest (145, 157) and an unseeded Arbitrary sample in DeBruijnedProgramTest:13, so a failure cannot be replayed; test name typo 'SubstractInteger' (51). TermDSLTest:71-81 runs a forAll over random terms for constructor aliases whose result does not depend on the term (vr\"a\" is asserted inside the loop).",
+      "action": "Delete the commented code (or restore the FstPair property, which works like the SndPair one at 288-294); use forAll or a fixed seed instead of Random/sample; fix the name; in TermDSLTest use one fixed term and move the vr\"a\" assert out of the loop.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 6 findings of scope merge-duplicate-tests, to-property or main-bug; 4 confirmed, 2 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

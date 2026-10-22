@@ -1,0 +1,539 @@
+{
+  "cluster": "ledger.rules.value",
+  "summary": "The cluster tests twelve Conway UTXO-level rules (inputs present, inputs non-empty, FeesOk/collateral, ref-input disjointness, metadata, output min-ADA and value size, validity interval, collateral count, tx size, treasury value, value conservation) in 12 suites, 3.3k lines, about 1.6 s per run; the 0.45 s and 0.19 s first tests of FeesOk and AllInputs are JVM warm-up of Arbitrary, so there is no ci-time finding (C7). Statement coverage is high but hides weak tests: FeesOk failure tests fail for two reasons each, so the fee >= minFee, non-ADA, sufficiency and has-collateral checks can be deleted without a failing test (C19-1, C19-2); most other failure tests assert only isLeft (C19-6); one disjointness test runs at PV11 where the rule is off (C19-5); boundaries of min-ADA, value size and the validity lower bound are untested (C19-7); the Plutus-script part of the metadata check and the BadInputs path of value conservation never run (C19-8, C19-15). Fixtures are mostly random (randomTransactionWithIsValidField, unseeded Arbitrary samples), which blocks exact assertions and causes a real 0.1 % flake in two ValueNotConserved tests (C19-14); TreasuryValueMismatchValidatorTest and the overflow half of ValueNotConservedUTxOValidatorTest are the models. The cluster has no property test and uses generators only for fixtures (C8); the one generator fact that matters is the empty-AssetName collision. Simplification (FeesOk builders, Metadata and validity tables, ValueNotConserved table + property) removes about 1.9k lines. No main-bug: FeesOk check 4 was compared with Babbage validateCollateralContainsNonADA and InputsAndReferenceInputsDisjoint with Babbage disjointRefInputs (cardano-ledger-conway-1.22.1.0); both match. Related: C02-16/C02-17/C02-18 (ledger.rules.scripts) propose the same fixture cleanup and shared builders for ValidatorRulesTestKit.",
+  "behaviors": [
+    {
+      "pass": "AllInputsMustBeInUtxoValidator",
+      "name": "spend, collateral and reference inputs that are all in the UTxO pass (incl. all empty)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AllInputsMustBeInUtxoValidatorTest.scala:9-28,47-67,87-107,127-145"
+      ]
+    },
+    {
+      "pass": "AllInputsMustBeInUtxoValidator",
+      "name": "a missing input of any kind fails; each kind is reported in its own set",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AllInputsMustBeInUtxoValidatorTest.scala:30-45,69-85,109-125",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:229"
+      ]
+    },
+    {
+      "pass": "EmptyInputsValidator",
+      "name": "a tx with no spend inputs fails",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/EmptyInputsValidatorTest.scala:7-45"
+      ]
+    },
+    {
+      "pass": "FeesOkValidator",
+      "name": "fee >= minFee (both the no-redeemer path and the redeemer path)",
+      "tests": []
+    },
+    {
+      "pass": "FeesOkValidator",
+      "name": "no redeemers: collateral checks are skipped",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:119-168"
+      ]
+    },
+    {
+      "pass": "FeesOkValidator",
+      "name": "collateral at a non-VKey address fails",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:272-365"
+      ]
+    },
+    {
+      "pass": "FeesOkValidator",
+      "name": "non-ADA in collateral must all go to the collateral return",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:367-591",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:859-901"
+      ]
+    },
+    {
+      "pass": "FeesOkValidator",
+      "name": "collateral ADA balance >= fee * collateralPercentage / 100",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:593-693"
+      ]
+    },
+    {
+      "pass": "FeesOkValidator",
+      "name": "totalCollateral, when present, equals the collateral ADA balance",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:10-117",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:695-795"
+      ]
+    },
+    {
+      "pass": "FeesOkValidator",
+      "name": "at least one collateral input",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:797-857"
+      ]
+    },
+    {
+      "pass": "FeesOkValidator",
+      "name": "a collateral input missing from the UTxO, or a minFee error, gives BadCollateralInputs / BadReferenceInputs",
+      "tests": []
+    },
+    {
+      "pass": "FeesOkValidator",
+      "name": "ref-script fee term accepted at PV11 for a tx that spends and references one UTxO",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/utils/MinTransactionFeeTest.scala:57"
+      ]
+    },
+    {
+      "pass": "InputsAndReferenceInputsDisjointValidator",
+      "name": "inputs and reference inputs overlap: rejected only at PV 9 and 10",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/InputsAndReferenceInputsDisjointValidatorTest.scala:31-107"
+      ]
+    },
+    {
+      "pass": "MetadataValidator",
+      "name": "hash/data presence: none ok, hash-only and data-only fail",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MetadataValidatorTest.scala:8-73"
+      ]
+    },
+    {
+      "pass": "MetadataValidator",
+      "name": "the aux data hash must equal blake2b_256 of the raw aux data bytes",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MetadataValidatorTest.scala:75-154"
+      ]
+    },
+    {
+      "pass": "MetadataValidator",
+      "name": "bytes and text (UTF-8 bytes) at most 64, checked inside lists and map keys/values",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MetadataValidatorTest.scala:156-317",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MetadataValidatorTest.scala:361-382"
+      ]
+    },
+    {
+      "pass": "MetadataValidator",
+      "name": "no content check at PV <= 2 (Shelley)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MetadataValidatorTest.scala:319-359"
+      ]
+    },
+    {
+      "pass": "MetadataValidator",
+      "name": "Plutus V1/V2/V3 scripts in the aux data must be well formed",
+      "tests": []
+    },
+    {
+      "pass": "OutputsHaveNotEnoughCoinsValidator",
+      "name": "outputs and collateral return need coin >= minAda and no negative assets",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutputsHaveNotEnoughCoinsValidatorTest.scala:9-241"
+      ]
+    },
+    {
+      "pass": "OutputsHaveTooBigValueStorageSizeValidator",
+      "name": "serialized Value of outputs and collateral return at most maxValueSize",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutputsHaveTooBigValueStorageSizeValidatorTest.scala:9-125"
+      ]
+    },
+    {
+      "pass": "OutsideValidityIntervalValidator",
+      "name": "slot in [invalidBefore, invalidHereafter), each bound optional",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutsideValidityIntervalValidatorTest.scala:7-227"
+      ]
+    },
+    {
+      "pass": "TooManyCollateralInputsValidator",
+      "name": "collateral inputs at most maxCollateralInputs",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/TooManyCollateralInputsValidatorTest.scala:9-53"
+      ]
+    },
+    {
+      "pass": "TransactionSizeValidator",
+      "name": "size without the isValid flag at most maxTxSize, exact boundary",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/TransactionSizeValidatorTest.scala:11-77",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/TransactionWithoutIsValidTest.scala:98-115"
+      ]
+    },
+    {
+      "pass": "TreasuryValueMismatchValidator",
+      "name": "currentTreasuryValue must equal env treasury, only when isValid",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/TreasuryValueMismatchValidatorTest.scala:32-70"
+      ]
+    },
+    {
+      "pass": "ValueNotConservedUTxOValidator / TxBalance",
+      "name": "inputs, outputs and fee balance; output > input fails",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:24-258"
+      ]
+    },
+    {
+      "pass": "ValueNotConservedUTxOValidator / TxBalance",
+      "name": "mint counts as consumed, burn as produced",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:263-465"
+      ]
+    },
+    {
+      "pass": "ValueNotConservedUTxOValidator / TxBalance",
+      "name": "withdrawals consumed, donation produced",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:470-736"
+      ]
+    },
+    {
+      "pass": "ValueNotConservedUTxOValidator / TxBalance",
+      "name": "pool deposits: new pool pays once, re-registration pays none; declared cert deposits",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:774-794",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:879-893"
+      ]
+    },
+    {
+      "pass": "ValueNotConservedUTxOValidator / TxBalance",
+      "name": "sums are exact past Long.MaxValue; error clamps to Long",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:835-938"
+      ]
+    },
+    {
+      "pass": "ValueNotConservedUTxOValidator / TxBalance",
+      "name": "a spend input missing from the UTxO gives BadInputsUTxOException",
+      "tests": []
+    },
+    {
+      "pass": "TxBalance",
+      "name": "public Value-returning consumed(...)",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C19-1",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:170-270",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:367-476",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:479-591",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:593-693",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:797-857",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/FeesOkValidator.scala:105-111"
+      ],
+      "claim": "Five of the six FeesOk failure tests fail for two reasons and assert only isLeft, so they cannot detect the loss of the check they name. 'fee too low' (170-270) also has totalCollateral 60 ADA against a net 40 ADA (30+30-20), so check 6 fails too. 'return has more tokens' (367-476) and 'return has less tokens' (479-591) have the same 60-vs-40 ADA totalCollateral mismatch. 'collateral insufficient' (593-693) has inputs 60 ADA, return 60 ADA, so the net is 0 against totalCollateral 60 ADA (check 6 fails as well). 'no collateral input' (797-857) has a balance of 0, which fails check 5 for fee 10 ADA at the mainnet collateralPercentage of 150. Only 'VKey address' (272-365) and 'totalCollateral mismatch' (695-795) isolate their check. Mutations that the suite does not catch: delete `!isTransactionFeeGreaterOrEqualThanMinRequiredFee ||`, `remainingAssets.nonEmpty ||`, `!isCollateralSufficient ||` or `!hasCollateralInputs` from FeesOkValidator.scala:105-110. With C19-2 (the fee-too-low branch at 61-75 is uncovered), no test in this suite fails when 'fee >= minFee' breaks.",
+      "action": "Make each failure case one change from the passing baseline (10-117), and assert the exact FeesOkException fields that name the reason. Fee too low: totalCollateral = 40 ADA, fee = 1; assert error.minRequiredFee > error.transactionFee. Tokens: totalCollateral = 40 ADA; assert error.remainingAssets is the unreturned (or negative) MultiAsset. Insufficient: drop totalCollateral, return 59 ADA so the net is 1 ADA; assert actualTotalSumOfCollateralCoins == 1 ADA. No collateral: check 5 always fails here, so either set collateralPercentage = 0 in the context and assert Left, or assert hasCollateralInputs == false on the exception. Use the field-match style of 859-901.",
+      "coverageRisk": "none: assertions become stricter; the same scenarios stay",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-2",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/FeesOkValidator.scala:35-37",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/FeesOkValidator.scala:49-51",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/FeesOkValidator.scala:61-75",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/utils/CollateralSufficient.scala:4"
+      ],
+      "claim": "The baseline marks three FeesOkValidator paths unexecuted in the whole jvm/test: a collateral input missing from the UTxO (BadCollateralInputsUTxOException, line 37), computeMinFee returning Left (line 51: a reference input or spend input missing from the UTxO gives BadReferenceInputsUTxOException / BadInputsUTxOException), and the no-redeemer branch with fee < minFee (64-75). The collateral-percentage boundary is also untested: every case is either well above or well below fee * 150 / 100.",
+      "action": "Add to FeesOkValidatorTest: (1) collateral input absent from State.utxos -> Left(BadCollateralInputsUTxOException(tx.id)); (2) a reference input absent from utxos -> Left(BadReferenceInputsUTxOException); (3) no redeemers, fee = 0 -> Left(FeesOkException) with areTotalExUnitsZero = true; (4) redeemers present, collateral ADA balance exactly ceil(fee * 150 / 100) -> Right, and one lovelace less -> Left (as in CollateralSufficient: balance * 100 >= fee * pct).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -50,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-3",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:10-117",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:119-168",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:17-18",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:11-13",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:859-901"
+      ],
+      "claim": "Eight FeesOk tests repeat about 90 lines each: randomTransactionWithIsValidField followed by 13 body-field resets and 9 witness-set resets back to empty, two generateKeyPair calls whose private keys are unused (17-18 and five more pairs), a key-hash address built by copying an Arbitrary ShelleyAddress, a `given Arbitrary[Data]` that nothing uses (11-13, repeated in 8 tests), and a random redeemer tag/index/ExUnits that the validator ignores. The last test (859-901) shows the short form: Transaction(TransactionBody(...), witnessSet with one fixed Redeemer).",
+      "action": "Add a local builder collateralTx(fee, collateral: Map[TransactionInput, Value], collateralReturn: Option[Value], totalCollateral: Option[Coin], redeemers = true): (State, Transaction) using Transaction(TransactionBody(...)) and a fixed Redeemer(RedeemerTag.Spend, 0, Data.unit, ExUnits(1000, 1000)), with fixed inputs and one key address (see C19-16). Rewrite tests 10-857 on it and delete the unused givens and key pairs. Do it together with C19-1, which changes the same tests.",
+      "coverageRisk": "none: same scenarios, same assertions; random fields the validator ignores are removed",
+      "ciSavingSec": 0.3,
+      "linesRemoved": 600,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-4",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/InputsAndReferenceInputsDisjointValidatorTest.scala:31-62",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/InputsAndReferenceInputsDisjointValidatorTest.scala:64-82",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/InputsAndReferenceInputsDisjointValidatorTest.scala:84-107"
+      ],
+      "claim": "'rule failure' (31-62) builds the same full-overlap tx at PV10 and asserts Left; 'allows overlap since PV11' (64-82) builds it at the default PV11 and asserts Right. The table test (84-107) runs the same tx at PV 7, 8, 9, 10 and 11 with the same isRight assertion, so its rows 10 and 11 are these two tests.",
+      "action": "Delete 31-82. Keep the table at 84-107 and give its PV 9/10 rows the exact error (see C19-5).",
+      "coverageRisk": "none: the table rows PV10 -> rejected and PV11 -> accepted assert the same outcomes on the same kind of tx",
+      "ciSavingSec": 0,
+      "linesRemoved": 50,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "All three tests are in the same shared/ file and call the same entry point, InputsAndReferenceInputsDisjointValidator.validate. 'rule failure' (InputsAndReferenceInputsDisjointValidatorTest.scala:31-62) runs at PV(10,0) and asserts isLeft (:55). Its other two asserts (:56-61) only check how the test built the tx (inputs non-empty, inputs == refInputs). They check nothing in the validator. 'allows overlap since PV11' (:64-82) uses the default Context and asserts isRight (:81). The table (:84-107) builds the same tx (inputs == refInputs, 1-4 random inputs). It sets PV(10,0) -> false and PV(11,0) -> true explicitly (:98-106) and asserts isRight == accepted. The validator reads only protocolVersion.major (InputsAndReferenceInputsDisjointValidator.scala:38-40). So the explicit PV11 row is at least as strong as the default-context test. Deleting :31-82 loses no validator assertion."
+    },
+    {
+      "id": "C19-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/InputsAndReferenceInputsDisjointValidatorTest.scala:7-29",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/InputsAndReferenceInputsDisjointValidator.scala:14-16",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/InputsAndReferenceInputsDisjointValidatorTest.scala:26-28",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/InputsAndReferenceInputsDisjointValidatorTest.scala:56-61",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/EmptyInputsValidatorTest.scala:25",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/EmptyInputsValidatorTest.scala:44"
+      ],
+      "claim": "'InputsAndReferenceInputsDisjointValidator rule success' (7-29) runs with Context(), whose default params are PV11, where the validator returns success at line 15-16 before it looks at the inputs. The test cannot fail for any change to the disjointness check. The asserts at InputsAndRef 26-28, 56-61 and EmptyInputs 25, 44 check the fixture the test just built, not the validator, so no main-code mutation breaks them. No test has a partial overlap, and no test checks that the error reports exactly the intersection.",
+      "action": "Pin the success test to PV10 and give it disjoint non-empty inputs and reference inputs. Add a PV10 partial-overlap case: inputs {a, b}, reference inputs {b, c} -> Left(NonDisjointInputsAndReferenceInputsException(tx.id, Set(b))). Delete the fixture asserts at InputsAndRef 26-28, 56-61 and EmptyInputs 25, 44.",
+      "coverageRisk": "none: removes assertions that cannot fail and adds cases",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AllInputsMustBeInUtxoValidatorTest.scala:44",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AllInputsMustBeInUtxoValidatorTest.scala:84",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AllInputsMustBeInUtxoValidatorTest.scala:124",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/EmptyInputsValidatorTest.scala:43",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/TooManyCollateralInputsValidatorTest.scala:52",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutputsHaveNotEnoughCoinsValidatorTest.scala:82,123,199,240",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutputsHaveTooBigValueStorageSizeValidatorTest.scala:65,124",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/AllInputsMustBeInUtxoValidator.scala:21-28",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/OutputsHaveNotEnoughCoinsValidator.scala:22-28"
+      ],
+      "claim": "Every failure test in AllInputs, EmptyInputs, TooManyCollateral, OutputsHaveNotEnoughCoins and OutputsHaveTooBigValueStorageSize asserts only isLeft. Mutations no test catches: swap the missingInputs and missingCollateralInputs arguments of BadAllInputsUTxOException (AllInputsMustBeInUtxoValidator.scala:24-26); report an empty invalidOutputs or drop invalidCollateralReturnOutput in OutputsHaveNotEnoughCoinsException (22-28); report the wrong size or maxValueSize in OutputsHaveTooBigValueStorageSizeException; swap actual and max in TooManyCollateralInputsException. TreasuryValueMismatchValidatorTest:40-51 already asserts the exact Left.",
+      "action": "Replace each `assert(result.isLeft)` with `assert(result == Left(<Exception>(tx.id, ...)))` that names the expected sets, outputs, sizes and limits, as TreasuryValueMismatchValidatorTest:40-51 does. Requires fixed fixtures (C19-11) so the expected values are known.",
+      "coverageRisk": "none: assertions become stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-7",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutputsHaveNotEnoughCoinsValidatorTest.scala:22-23,64",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/OutputsHaveNotEnoughCoinsValidator.scala:41",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutputsHaveTooBigValueStorageSizeValidatorTest.scala:33-66",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/OutputsHaveTooBigValueStorageSizeValidator.scala:43",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutsideValidityIntervalValidatorTest.scala:145-227",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/OutsideValidityIntervalValidator.scala:34-35",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AllInputsMustBeInUtxoValidatorTest.scala:9-125"
+      ],
+      "claim": "The boundaries of three rules are untested. OutputsHaveNotEnoughCoins uses coin 1 lovelace or 1000 ADA, so the mutation `coin < minAda` -> `coin <= minAda` (line 41) survives. OutputsHaveTooBigValueStorageSize uses a small random value or a 10x100-asset value, so `>` -> `>=` (line 43) survives. OutsideValidityInterval with both bounds tests slots 499, 700 and 1000, so `slot >= invalidBefore` -> `slot > invalidBefore` in the both-bounds branch (line 35) survives. AllInputs never mixes kinds: no test has spend inputs present and a collateral input missing, so a validator that checks only the first non-empty set would pass.",
+      "action": "Add boundary rows. Min ADA: compute minAda = MinCoinSizedTransactionOutput.computeMinAda for the output, set coin = minAda, recompute and check it is stable (the coin's CBOR width changes the size; pick a value in one width class), then assert minAda -> Right and minAda - 1 -> Left. Value size: set maxValueSize = Cbor.encode(value).length -> Right and length - 1 -> Left, as TransactionWithoutIsValidTest:98-115 does for maxTxSize; do not try to build an exact 5000-byte value. Validity: (Some(500), Some(1000)) at slot 500 -> Right and 999 -> Right. AllInputs: spend input present, collateral and reference input missing -> Left with exactly those two sets.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-8",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/MetadataValidator.scala:96-107",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/MetadataValidator.scala:86-87",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/MetadataValidator.scala:56",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MetadataValidatorTest.scala:186-214",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MetadataValidatorTest.scala:319-359"
+      ],
+      "claim": "The Plutus-script half of the aux-data check (isValidAuxiliaryPlutusScripts, lines 100-106) is unexecuted in the baseline of all modules: no test puts a script in AuxiliaryData.MetadataWithScripts or AlonzoFormat. The text-size test (186-214) uses 65 ASCII chars, so the mutation `str.getBytes(UTF_8).length` -> `str.length` (line 87) survives; Metadatum.Text has no constructor check. The PV gate (line 56) is tested only at PV 2 (skip) and the default PV 11 (check), so `<= shelleyPV` -> `< 11` survives.",
+      "action": "Add: (1) AlonzoFormat aux data with a malformed PlutusV1, V2 and V3 script (e.g. bytes that do not decode as a UPLC program) and a matching hash -> Left(InvalidAuxiliaryDataException); a well-formed script -> Right. (2) Metadatum.Text of 33 two-byte chars (\"é\" * 33 = 66 UTF-8 bytes, 33 chars) -> Left, and 32 of them (64 bytes) -> Right. (3) PV 3 with oversized metadata -> Left.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-9",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MetadataValidatorTest.scala:75-111",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MetadataValidatorTest.scala:156-317",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MetadataValidatorTest.scala:41-46"
+      ],
+      "claim": "Eleven Metadata tests rebuild the same tx (empty inputs, empty outputs, fee 0, aux hash) and compute the blake2b_256 hash of KeepRaw(auxData).raw by hand (8 copies). The five invalid-metadatum tests (156-317) differ only in the Metadatum and are one table. Each failure test asserts isLeft and then left.exists(isInstanceOf), so the first assert is redundant.",
+      "action": "Add local helpers hashOf(aux) and txWith(aux: Option[AuxiliaryData], hash: Option[AuxiliaryDataHash]). Turn 156-317 into a table of (name, Metadatum) rows, each asserting Left(InvalidAuxiliaryDataException(tx.id, aux)). Replace isLeft + isInstanceOf with one exact-Left or pattern-match assert.",
+      "coverageRisk": "none: same cases and stronger assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 200,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-10",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutsideValidityIntervalValidatorTest.scala:7-227"
+      ],
+      "claim": "The eight OutsideValidityInterval tests are copies of one 28-line body that differ in (invalidBefore, invalidHereafter, slot, expected). Each builds the tx from randomTransactionWithIsValidField and asserts only isRight/isLeft.",
+      "action": "Replace with one table of 8 rows (plus the C19-7 rows) over a tx built as Transaction(TransactionBody(inputs = empty, outputs = empty, fee = 0, validityStartSlot, ttl)). Failure rows assert Left(OutsideValidityIntervalException(tx.id, interval, slot)).",
+      "coverageRisk": "none: same 8 cases, stronger assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 180,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-11",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/EmptyInputsValidatorTest.scala:11",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/InputsAndReferenceInputsDisjointValidatorTest.scala:11",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutputsHaveNotEnoughCoinsValidatorTest.scala:12-21",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutputsHaveTooBigValueStorageSizeValidatorTest.scala:15",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/TooManyCollateralInputsValidatorTest.scala:21-23",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/TransactionSizeValidatorTest.scala:14-53",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/AllInputsMustBeInUtxoValidatorTest.scala:9-125",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValidatorRulesTestKit.scala:63-64"
+      ],
+      "claim": "Seven suites build fixtures from randomTransactionWithIsValidField (an Arbitrary[Transaction] with random mint, certificates, withdrawals and witnesses) and then override the one or two fields under test; TooManyCollateral even draws two random txs per test and mixes them (21-23, 43-45). TransactionSizeValidatorTest:14-53 spends 40 lines resetting a random tx back to almost empty. OutputsHaveNotEnoughCoins copies an Arbitrary ShelleyAddress and replaces its payment part six times (12-21 and five more) to get a key address. AllInputs repeats one 18-line body seven times for {inputs, collateral, reference} x {present, missing}. The random fixtures also make exact-Left assertions (C19-6) impossible to write.",
+      "action": "Build each tx as Transaction(TransactionBody(inputs, outputs, fee, <field under test>)) as TreasuryValueMismatchValidatorTest:19-27 does, with fixed TransactionInput values (TransactionInput(TransactionHash.fromHex(\"0\" * 64), i)) and a fixed key address (C19-16). Turn AllInputs into a table over the three input kinds. When ValidatorRulesTestKit gets the shared builders proposed in C02-18, use them; drop randomTransactionWithIsValidField if no caller remains (it has 13 users).",
+      "coverageRisk": "low: the random parts of the tx never reached these validators; a random mint or certificate cannot change their result",
+      "ciSavingSec": 0.2,
+      "linesRemoved": 250,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-12",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/TransactionSizeValidatorTest.scala:11-77",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/TransactionWithoutIsValidTest.scala:98-115"
+      ],
+      "claim": "Both TransactionSizeValidator tests are weaker forms of TransactionWithoutIsValidTest:98-115, which sets maxTxSize to the exact 3-element size, asserts Right for both encodings and Left at size - 1. The local tests check a 1-input tx (Right) and a 1000-input tx (Left) at the mainnet limit, far from the boundary.",
+      "action": "Delete TransactionSizeValidatorTest.scala, or move the 98-115 boundary test into it and delete the two random tests. The covering test is in package scalus.cardano.ledger (another cluster); P3 must pick one home and not delete both.",
+      "coverageRisk": "low: the exact-boundary test covers both outcomes; it lives in another cluster, so a later edit there could drop it",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 75,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "Both files are in scalus-cardano-ledger/shared/src/test and call TransactionSizeValidator.validate. The validator compares toCborForFeeCalculation.length with params.maxTxSize (TransactionSizeValidator.scala:11-14). TransactionWithoutIsValidTest.scala:99-115 sets maxTxSize to the exact size and asserts isRight for the 3-element and 4-element encodings. It sets size-1 and asserts isLeft. This covers both branches at the boundary. The local tests are weaker: a 1-input tx -> isRight (TransactionSizeValidatorTest.scala:55) and a 1000-input tx -> isLeft (:76), both at the default limit. One minor difference: the random tx can have isValid=false, but neither local test checks the size value, so no assertion is lost. Caveat (already in the action): the covering test is in another cluster/package. P3 must keep it, or move it into TransactionSizeValidatorTest, before it deletes the file."
+    },
+    {
+      "id": "C19-13",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:24-736",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:807-828",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:87"
+      ],
+      "claim": "The first 19 tests (24-736, about 710 lines) are instances of one law: a tx whose consumed side (inputs + mint>0 + withdrawals) equals its produced side (outputs + fee + burn + donation) passes, and any other tx fails with ValueNotConservedUTxOException. Each test hand-builds the tx; 18 assert isRight and one (64-87) asserts only isLeft. The suite already has the right builder at 807-828 (balanceTx), used only by the overflow tests.",
+      "action": "Extend balanceTx with withdrawals and donation. Replace 24-736 with (a) a table of the named scenarios (one row each, about 3 lines) and (b) one forAll: generate 1-3 input Values, a mint (positive and negative), 0-2 withdrawals, an optional donation and a fee; compute the balancing output with plain sums over those components (not TxBalance, to avoid a circular oracle); assert Right; then add a non-zero delta of lovelace or of one token to an output and assert Left(ValueNotConservedUTxOException(tx.id, consumed, produced)) with the hand-computed sides. Keep the deposit tests (739-795) and the overflow tests (797-938) as they are. Land C19-14 first.",
+      "coverageRisk": "low: every named scenario stays as a table row; the property adds random combinations. The examples check only isRight, so no assertion is lost",
+      "ciSavingSec": -0.2,
+      "linesRemoved": 550,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "There are 19 tests at ValueNotConservedUTxOValidatorTest.scala:24-736. 18 assert only isRight. One asserts only isLeft (:87). The law matches the main code. consumedExact = inputs + withdrawals + refunds + mint.onlyPositive (TxBalance.scala:39-63). producedExact = outputs + fee + deposits + proposalDeposits + burned + donation (:91-106). The validator compares these exactly (ValueNotConservedUTxOValidator.scala:26). ExactValue drops zero entries (ExactValue.scala:99), so a plain-sum oracle cannot fail on zero-quantity tokens. With no certificates or proposals, refunds and deposits are 0. Withdrawals are summed without a state check (TxBalance.scala:133-138). So no counterexample exists for the generated shape. Some examples have shapes the generator cannot produce: empty tx (:24), no outputs (:240), Some(Coin.zero) withdrawal/donation (:536, :595), a 2-policy mint (:297). The action keeps each of these as a table row, so no coverage is lost. Generator constraints P3 must apply: burns must not exceed the input holdings, and the coin balance must stay >= 0 after fee and donation. Otherwise the balancing output gets a negative amount. Use a positive delta (or a delta to the fee) for the Left case. Inputs/withdrawals are keyed by random createInput/reward accounts, and duplicates collapse in the Map (:812-814), so build the oracle from the deduplicated keys. Use fixed distinct asset names in the 'mint and burn same asset' row (:418-465). With random names it is a known flake: the two names can collide."
+    },
+    {
+      "id": "C19-14",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:418-466",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:625-677",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidatorTest.scala:14-17",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ArbitraryInstances.scala:77-79"
+      ],
+      "claim": "This fixes a flaky test. 'mint and burn same asset' (418-466) and 'complex transaction ...' (625-677) draw two unseeded random AssetNames. Arbitrary[AssetName] picks the length with Gen.choose(0, 32), so both names are empty with probability (1/33)^2, about 0.09 % per test per run (plus rarer 1-byte collisions). Then Map(assetName1 -> -100, assetName2 -> 50) collapses to one entry, the tx no longer balances, and the test fails. The suite also draws every input, address and policy id at random (14-17) with no seed.",
+      "action": "Use fixed values: AssetName.fromString(\"A\") / (\"B\"), a fixed PolicyId, TransactionInput(TransactionHash.fromHex(\"0\" * 64), i) and Party.Alice.address. Delete createInput/createAddress/createPolicyId/createAssetName.",
+      "coverageRisk": "none: the same balances; removes a nondeterministic failure",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-15",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/utils/TxBalance.scala:24-30",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/utils/TxBalance.scala:40-41",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/utils/TxBalance.scala:111-120",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/ValueNotConservedUTxOValidator.scala:22-23"
+      ],
+      "claim": "ValueNotConservedUTxOValidator returns BadInputsUTxOException when a spend input is not in the UTxO (TxBalance.consumedInputs, line 119, propagated at 41), but the baseline marks line 41 unexecuted: no test reaches it. The public TxBalance.consumed (24-30, which returns a Value and throws on overflow) is also unexecuted.",
+      "action": "Add to ValueNotConservedUTxOValidatorTest: a tx whose input is absent from State.utxos -> Left(BadInputsUTxOException(tx.id)). Add one test of TxBalance.consumed: it returns the consumed Value for a small tx, and throws ArithmeticException for the 4 x 2^62-token input of 867-877, as 849 does for produced.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C19-16",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:17-18",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:84-92",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/FeesOkValidatorTest.scala:863-868",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/OutputsHaveNotEnoughCoinsValidatorTest.scala:12-21"
+      ],
+      "claim": "FeesOkValidatorTest makes key-hash collateral addresses with generateKeyPair() + platform.blake2b_224(publicKey) + a copied Arbitrary ShelleyAddress (16 sites, 8 unused private keys). OutputsHaveNotEnoughCoins does the same with a random AddrKeyHash (6 sites). The shared scalus.testing.kit.Party gives deterministic key addresses: Party.Alice.address(Network.Testnet). ValueNotConservedUTxOValidatorTest:917-918 already uses it.",
+      "action": "Replace these sites with Party.Alice.address(Network.Testnet) / Party.Bob.address(...). For the script-address case in FeesOk (272-365) use Address(Network.Testnet, Credential.ScriptHash(<fixed hash>)). With C02-17 this can remove generateKeyPair from ValidatorRulesTestKit.",
+      "coverageRisk": "none: the validators only check that the payment part is a key hash",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 3 findings of scope merge-duplicate-tests, to-property or main-bug; 3 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

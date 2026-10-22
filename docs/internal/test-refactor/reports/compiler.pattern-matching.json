@@ -1,0 +1,347 @@
+{
+  "cluster": "compiler.pattern-matching",
+  "summary": "The cluster is ten suites (1960 lines) on the plugin's PatternMatchingCompiler and the lowering of matches on SOP, Data and Data-Constr values; it is cheap (about 1.8 s per run, slowest suite 0.41 s), so there are no ci-time findings, and it has no generators or property tests (C8 not applicable). The examples already enumerate the input partitions of each match exhaustively, and a match shape is fixed at Scala compile time, so no example group is a good to-property candidate (C4 found none). The main problems are duplication left by the M1/M2 audit (PatternMatchAuditTest repeats the later dedicated regression suites; DataPatternMatchingTest repeats DataPatternMatchingDefaultTargetTest), about 120 lines of commented-out tests, and copy-paste boilerplate. Coverage gaps that matter: type-test patterns (unrollTypeSelector mostly uncovered), @unchecked non-exhaustive matches on Data and Data-represented sum types, and alias binders that no test reads. TupleMatchFirstMatchWinsTest overlaps PatternActionEmbeddingTest 64-89 in shape but reaches the Inline (not ByReference) action embedding, so it stays. No main-code defect found.",
+  "behaviors": [
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "constructor patterns on SOP enums, nested several levels",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:27-92",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:107-124"
+      ]
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "single-constructor case class pattern",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:95-104"
+      ]
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "wildcard patterns, top level and nested; default branch",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:127-165",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchWildcardRowOrderingTest.scala:120-142"
+      ]
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "primitive constant patterns (Boolean, String); equal constants grouped into one branch (audit M1)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:198-233",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchConstantGroupingTest.scala:28-73",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchAuditTest.scala:24-59"
+      ]
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "BigInt and ByteString literal patterns (unsupported; tests commented out)",
+      "tests": []
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "guards, guard fallthrough to later rows",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:289-346",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchAuditTest.scala:104-119",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchConstantGroupingTest.scala:28-40",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchConstantGroupingTest.scala:61-73"
+      ]
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "wildcard rows between constructor rows keep first-match priority (audit M2)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchWildcardRowOrderingTest.scala:29-142",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchAuditTest.scala:61-83",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/TupleMatchFirstMatchWinsTest.scala:23-43"
+      ]
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "tuple patterns over constants and sum types (grouped tuples, type selectors)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchConstantGroupingTest.scala:42-59",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchWildcardRowOrderingTest.scala:96-118",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/TupleMatchFirstMatchWinsTest.scala:23-43",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternActionEmbeddingTest.scala:64-145"
+      ]
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "alias binders x @ P",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:397-423"
+      ]
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "or-patterns; Inline vs ByReference embedding of actions and guards (audit M2/M3)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternActionEmbeddingTest.scala:29-145",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchAuditTest.scala:85-102",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchAuditTest.scala:121-145"
+      ]
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "type-test patterns (case x: T) via unrollTypeSelector: primitive, case-class scrutinee, sealed sub-trait",
+      "tests": []
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "@unchecked non-exhaustive match: (x: @unchecked) match form",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:426-442"
+      ]
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "@unchecked non-exhaustive match: (x match ...): @unchecked form",
+      "tests": []
+    },
+    {
+      "pass": "PatternMatchingCompiler (plugin)",
+      "name": "scrutinee evaluated strictly and exactly once (audit X1)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/MatchScrutineeStrictnessTest.scala:29-115"
+      ]
+    },
+    {
+      "pass": "DataSirTypeGenerator.genMatch",
+      "name": "match on Data dispatches through chooseData on PV11 and PV12, never Case",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingDefaultTargetTest.scala:42-107",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingTest.scala:37-120"
+      ]
+    },
+    {
+      "pass": "DataSirTypeGenerator.genMatch",
+      "name": "Data.Constr branch uses one unConstrData for tag and args",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingTest.scala:122-140"
+      ]
+    },
+    {
+      "pass": "DataSirTypeGenerator.genMatch",
+      "name": "non-exhaustive Data match without wildcard gets Unmatched Data.X error branches",
+      "tests": []
+    },
+    {
+      "pass": "DataSirTypeGenerator (construction, field selection)",
+      "name": "Data.I/B/List/Map/Constr built and fields selected inside compile",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingTest.scala:146-456"
+      ]
+    },
+    {
+      "pass": "DataConstrEmitter / SumDispatch",
+      "name": "Data-Constr sum type: Case on Data at PV12/PlutusV4, unConstrData at PV11, same results; zero/one/multi-field; nested",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/CaseOnDataConstrLoweringTest.scala:130-214"
+      ]
+    },
+    {
+      "pass": "DataConstrEmitter.prepareCases",
+      "name": "@unchecked match on a Data-represented sum type adds an Unexpected case error branch",
+      "tests": []
+    },
+    {
+      "pass": "PatternMatchingCompiler.compileMatch",
+      "name": "alias on an alternative pattern is rejected",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/plugin/AlternativeAliasErrorTest.scala:1"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C39-1",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchAuditTest.scala:24-41",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchAuditTest.scala:43-59",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchAuditTest.scala:61-83",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchConstantGroupingTest.scala:28-40",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchConstantGroupingTest.scala:42-59",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchWildcardRowOrderingTest.scala:71-94",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternActionEmbeddingTest.scala:45-62"
+      ],
+      "claim": "PatternMatchAuditTest is the scratch suite of the M1/M2 audit; its regressions later got dedicated suites. Scenario 1 (24-41) is the same match and inputs as PatternMatchConstantGroupingTest 28-40; scenario 2 (43-59) is a subset of ConstantGroupingTest 42-59; scenario 3 (61-83) is the same match as PatternMatchWildcardRowOrderingTest 71-94, which checks one more input. The only difference is optimizeUplc = false in the audit suite vs true in the others. The 'suspected bug: yields N' comments (39, 57, 79, 80, 143) are stale: those bugs are fixed and the asserts pass.",
+      "action": "Delete scenarios 1, 2 and 3. Move scenario 4 (85-102, big or-pattern action at case index >= 1) and scenario 6 (121-145, ByReference action with binder via a guarded wildcard) into PatternActionEmbeddingTest, and scenario 5 (104-119, constructor row with a guard on an external variable falling through to the same constructor; no other suite has this shape) into PatternMatchWildcardRowOrderingTest, all without the stale comments; delete PatternMatchAuditTest. To keep the unoptimized lowering covered, run the ConstantGrouping cases and WildcardRowOrdering 71-94 for both optimizeUplc values: lower the same SIR twice with toUplc(optimizeUplc = b), no extra compile.",
+      "coverageRisk": "low: the unoptimized path stays covered by the optimizeUplc loop. Deleting a test source can drop plugin coverage (F-12), but the deleted matches have identical copies in the kept suites, so the same plugin paths still compile.",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 85,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Scenario 1 (PatternMatchAuditTest.scala:26-41) has the same match as PatternMatchConstantGroupingTest.scala:28-40. The asserts are the same: (a,t)=1, (a,f)=2, (b,t)=3. The inputs are equal: compile{\"a\"}.toUplc() and \"a\".asTerm are both a String constant. The VM is the same (V2) and the backend is the same (V3 lowering). Scenario 2 (45-59: ax=1, ay=2, zz=0) is covered by ConstantGroupingTest:42-59 (ax=1, ay=2, az=0, bx=0). There, bx takes the same first-column-mismatch path that zz takes, and az adds a second-column case. Scenario 3 (63-83) has the same match as PatternMatchWildcardRowOrderingTest.scala:71-94. WRO checks every audit input, using some15 for some20 (both > 10), and adds (some15, true). The only config difference is optimizeUplc=false (audit:20) vs true (CGT:24, WRO:25). toUplc takes optimizeUplc as an explicit parameter that overrides the given Options (scalus/package.scala:73-91). The plugin's optimizeUplc parsing is in commented-out code (Plugin.scala:480+), so the SIR does not depend on that flag. The proposed loop 'toUplc(optimizeUplc = b) on the same SIR' therefore keeps the unoptimized path covered. Scenarios 4, 5 and 6 keep their shapes because the action moves them. A grep for 'Some(v) if flag' finds only the audit suite, which confirms that scenario 5 is unique. PatternActionEmbeddingTest:29-62 has the or-pattern only at index 0, so scenario 4 (index >= 1) must move, as the action says. The 'suspected bug' comments contradict the asserts beside them, and those asserts are in the live suite."
+    },
+    {
+      "id": "C39-2",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingTest.scala:37-91",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingDefaultTargetTest.scala:42-67",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingDefaultTargetTest.scala:79-87",
+        "scalus-core/shared/src/main/scala/scalus/compiler/compiler.scala:11",
+        "scalus-core/shared/src/main/scala/scalus/compiler/compiler.scala:65"
+      ],
+      "claim": "The first three tests of DataPatternMatchingTest are subsets of DataPatternMatchingDefaultTargetTest: 'extract constructor tag' (37-54) vs 'extract both tag and args' (79-87), 'extract integer' (56-71) vs 'extract integer from Data.I with wildcard fallback' (58-67), and 'type discrimination' (73-91, one input, Data.I only) vs 'type discrimination on all five Data variants' (42-56). The options are equal: Options.default already targets vanRossemPV (compiler.scala:11), so Options.default.copy(targetProtocolVersion = vanRossemPV) is Options.default.",
+      "action": "Delete DataPatternMatchingTest 37-91. Optionally move the DefaultTargetTest tests into DataPatternMatchingTest (one file, one run helper, keep the R1 doc comment), see C39-6.",
+      "coverageRisk": "none: each deleted test has a stronger copy on the same options. The VM differs only in makePlutusV3VM(vanRossemPV) vs makePlutusV3VM() (mainnet PV), and the chooseData test at DataPatternMatchingTest 96-120 still pins both PV11 and PV12.",
+      "ciSavingSec": 0.05,
+      "linesRemoved": 55,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Options are equal: Options.targetProtocolVersion defaults to vanRossemPV (compiler.scala:11) and Options.default = Options() (compiler.scala:65). The VMs are equivalent: makePlutusV3VM() uses CardanoInfo.mainnet, which uses epoch-645 params at PV11 (CardanoInfo.scala:18-27). So both VMs run PV11 semantics. Asserts: (1) 'extract constructor tag' (DataPatternMatchingTest.scala:37-54) checks Constr(42,[I1,I2]) -> 42. DefaultTargetTest:79-87 checks the same value with 'tag + args.length' = 44, and also checks the Data.I fallback. One caveat: the deleted test is the only plugin-compiled 'Constr(tag, _)' shape, with tag bound and args a wildcard. Its parts stay covered: Constr(_, _) in DefaultTargetTest:45 and Constr(tag, args) in 79-87 and in DataPatternMatchingTest:122-140. SimpleLoweringTestBase.scala:260 has this shape only as hand-built SIR. The coverage risk is negligible. (2) 'extract integer' (56-71) checks I(42) -> 42. DefaultTargetTest:58-67 has the same match and checks I(17), B and Constr. The chooseData test (DataPatternMatchingTest:96-120) also checks this match at PV11 and PV12. (3) 'type discrimination' (73-91) checks one input, I -> 3. DefaultTargetTest:42-56 has the same match and checks all five variants."
+    },
+    {
+      "id": "C39-3",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:167-195",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:235-257",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:259-286",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:348-394",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:444-475",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:485",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:36",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:205-232",
+        "scalus-core/shared/src/test/scala/scalus/compiler/CaseOnDataConstrLoweringTest.scala:117-128"
+      ],
+      "claim": "CompilePatternMatchingTest carries about 120 lines of commented-out tests: four need BigInt(n) literal patterns and one needs ByteString literal patterns, which the plugin does not support. The sixth (444-475, nested match in a case body, 'TODO: Fix issue with sequential match expressions') is probably obsolete: CaseOnDataConstrLoweringTest 117-128 runs a nested match in a case body. Also: a commented println (485); toUplc(generateErrorTraces = true) repeats the class-level given, which already sets it (19-24); and literal arguments go through a full compile + UplcPipeline run (compile { \"hello\" }.toUplc()) where \"hello\".asTerm does the same, as PatternMatchConstantGroupingTest does.",
+      "action": "Delete the five blocks that need BigInt/ByteString literal patterns (record the missing feature in an issue). Uncomment 446-475 and run it; keep it if it passes, delete it and file an issue if it fails. Delete line 485. Replace toUplc(generateErrorTraces = true) with toUplc(). Replace compile { <Boolean/String/BigInt literal> }.toUplc() with <literal>.asTerm.",
+      "coverageRisk": "none: commented code runs no assertion. The revived nested-match test adds coverage.",
+      "ciSavingSec": 0,
+      "linesRemoved": 120,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C39-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:397-423",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:426-442",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:477-512"
+      ],
+      "claim": "'pattern matching with variable bindings' binds some @, opt @ and list @ but never uses them, so a mutation that binds an alias to the wrong column or value still passes; it also never takes the guard-false path into case _ => -2 (no Some(v <= 0) input). The @unchecked test (440-441) and 'List in List' (499-510) accept any failure via isFailure: a lowering error or a wrong branch that fails for another reason passes too. 'List in List' fails with fail(\"123\") under generateErrorTraces = true, so the log can be checked.",
+      "action": "Make each alias reach the result: e.g. case l @ List.Cons(Option.Some(v), _) if v > 0 => v + l.length; case List.Cons(opt @ Option.None, tail) => tail.length + (if opt.isDefined then 100 else 0); case l @ List.Nil => l.length - 1. Add input List.Cons(Some(-5), Nil) expecting -2. In 'List in List' assert that the failure logs contain \"123\". In the @unchecked test assert the failure is an evaluation error (not a lowering exception), using the Result.Failure logs.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C39-5",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/PatternMatchingCompiler.scala:672",
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/PatternMatchingCompiler.scala:2244-2275",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:426-442",
+        "scalus-core/shared/src/test/scala/scalus/compiler/CaseOnDataConstrLoweringTest.scala:90-100"
+      ],
+      "claim": "@unchecked non-exhaustive matches are tested only on an SOP Option with the (x: @unchecked) match form (CompilePatternMatchingTest 426-442). No test covers them on Data or on a Data-represented sum type, and the (x match ...): @unchecked form (SIRCompiler Typed(Match) -> PatternMatchingCompiler 672) is uncovered in the baseline. The plugin appends a FailMatch default case for a sum type with missing constructors (2244-2275), so the lowering-side fallbacks (DataConstrEmitter 177-189, DataSirTypeGenerator 330-348) are probably unreachable from source; the new tests pin the behavior, not those lines. (redeemer.to[Action]: @unchecked) match is a common validator idiom; a wrong branch here could accept a constructor the author meant to reject.",
+      "action": "In CaseOnDataConstrLoweringTest, for pv11 and pv12: (d.to[Credential]: @unchecked) match { case Credential.PubKeyCredential(pkh) => pkh.hash }, assert the PubKey input returns the hash and the Script input fails (check the log or error message). Add the same once with the (... match ...): @unchecked form. In DataPatternMatchingTest: (d: @unchecked) match { case Data.I(i) => i }, assert Data.I returns i and Data.B fails.",
+      "coverageRisk": "none (adds tests)",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -35,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C39-6",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/PatternMatchingCompiler.scala:1763-1772",
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/PatternMatchingCompiler.scala:1778-1786",
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/PatternMatchingCompiler.scala:1823-1843",
+        "scalus-plugin/src/main/scala/scalus/compiler/plugin/PatternMatchingCompiler.scala:1847-1909"
+      ],
+      "claim": "No test in the cluster uses a type-test pattern (case x: T). Most of PatternMatchingCompiler.unrollTypeSelector is uncovered: a primitive type selector (1763-1771, e.g. case n: BigInt on a BigInt scrutinee, and its mismatch error), a case-class scrutinee (1778-1786), a pattern class whose parent is not the scrutinee (1823-1843), and a sealed sub-trait selector through the synthetic narrow constructor (1847-1909). The covered parts are reached only indirectly, by tuple patterns over sum types (TupleMatchFirstMatchWinsTest).",
+      "action": "Add a test group to CompilePatternMatchingTest: case n: BigInt => n on BigInt; case p: PubKeyHash => p.hash on PubKeyHash; case t: These.This[BigInt, Boolean] => t.a with a wildcard fallback; and a two-level sealed hierarchy (sealed trait A; sealed trait B extends A; case class C(x: BigInt) extends B; case class D() extends A) with case b: B => 1 / case _ => 0. Evaluate every branch. If a shape does not compile (the comment at 1892-1893 says multi-level hierarchies are not officially supported), pin the compile error in the plugin test suite instead.",
+      "coverageRisk": "none (adds tests)",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -40,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C39-7",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingTest.scala:17-35",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingTest.scala:38-40",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingTest.scala:189-198",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingTest.scala:219-223",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingTest.scala:383-387",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingTest.scala:51",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/DataPatternMatchingDefaultTargetTest.scala:25-29",
+        "scalus-core/shared/src/test/scala/scalus/compiler/CaseOnDataConstrLoweringTest.scala:53-54"
+      ],
+      "claim": "DataPatternMatchingTest repeats the same three-line given PlutusVM + given Options block in 16 tests (38-40 and copies); those options equal Options.default (compiler.scala:11). It wraps arguments as SIR.Const(Constant.X(..), SIRType.X, AnnotationsDecl.empty) by hand 17 times, writes scalus.cardano.onchain.plutus.prelude.List fully qualified 12 times although PList is imported (line 8), builds the same pairType twice (219-223, 383-387), and declares two unused vals testConstr0 and testConstr1 (19-25). DataPatternMatchingDefaultTargetTest 25-29 and CaseOnDataConstrLoweringTest 53-54 hold the same 'apply SIR to a Data constant' helper.",
+      "action": "Put one class-level given PlutusVM = makePlutusV3VM(vanRossemPV) and given Options = Options.default in DataPatternMatchingTest. Add local helpers dataArg(d: Data), intArg(i), bytesArg(b) and listArg returning SIR.Const. Use PList, one private pairType val, delete testConstr0/testConstr1. Merge DataPatternMatchingDefaultTargetTest into this file with its run helper (after C39-2), keeping its R1 doc comment.",
+      "coverageRisk": "none: same assertions.",
+      "ciSavingSec": 0,
+      "linesRemoved": 75,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C39-8",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/MatchScrutineeStrictnessTest.scala:29-40",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/MatchScrutineeStrictnessTest.scala:83-99",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/MatchScrutineeStrictnessTest.scala:101-115",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/MatchScrutineeStrictnessTest.scala:35-36"
+      ],
+      "claim": "Three tests compile the same program ((BigInt(1) / x) match case _ => 42) and differ only in Options: V3 without optimizer, SumOfProducts without optimizer, V3 with optimizer. The SumOfProducts test's method-local given (84-89) is not seen by the plugin's implicit search at the compile{} site, so it changes only toUplc; toUplc(backend = ..., optimizeUplc = ...) on one SIR is equivalent. The optimizeUplc = true test omits the positive check (one -> 42). Arguments are built with compile { BigInt(0) }.toUplc() instead of 0.asTerm.",
+      "action": "Compile the program once at class level and loop: for (label, backend, opt) <- Seq((V3, false), (SoP, false), (V3, true)) do test(s\"wildcard-only match evaluates erroring scrutinee ($label)\") { val uplc = sir.toUplc(backend = backend, optimizeUplc = opt); assert one -> 42 and zero fails }. Use 0.asTerm and 1.asTerm for the arguments. Optionally run the 'tuple match' and trace-count tests through the same loop.",
+      "coverageRisk": "none: same three configurations; the optimizer case gains the success check.",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C39-9",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/CompilePatternMatchingTest.scala:17-24",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchConstantGroupingTest.scala:19-26",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/PatternMatchWildcardRowOrderingTest.scala:20-27",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/MatchScrutineeStrictnessTest.scala:20-27",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:39-58"
+      ],
+      "claim": "Three suites copy EvalTestKit.compilerOptions literally (V3 lowering, error traces, optimizer on, debug off) and declare their own PlutusVM; MatchScrutineeStrictnessTest differs only in optimizeUplc = false. They use makePlutusV2VM with V3 (SOP) lowering, which works only because PV11 opens Constr/Case to V1/V2; EvalTestKit's default is the V3 VM.",
+      "action": "Mix EvalTestKit into CompilePatternMatchingTest, PatternMatchConstantGroupingTest and PatternMatchWildcardRowOrderingTest and delete their local givens; in MatchScrutineeStrictnessTest override compilerOptions with optimizeUplc = false. Check that compile{} still finds the inherited class-level given (the plugin's implicit search sees class-level givens, not method-local ones).",
+      "coverageRisk": "low: the VM changes from V2 to V3 at the same PV; the lowering options do not change.",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 2 findings of scope merge-duplicate-tests, to-property or main-bug; 2 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

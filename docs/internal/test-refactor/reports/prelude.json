@@ -1,0 +1,746 @@
+{
+  "cluster": "prelude",
+  "summary": "The cluster is cheap: about 5.6 s per run (SortedMapTest 2.2 s, MathTest 1.1 s, OptionTest 0.8 s; slowest single test 0.2 s), so C7 gives no ci-time findings. Coverage data exists only for EqMacros and LogMacros, because F-9 excludes the @Compile prelude files from scoverage; the gaps below come from reading and git grep. The suites pin many exact budgets and have JVM-side property tests, but several properties are weak or duplicated (OptionTest two-direction pairs and a tautology, SortedMap unionMap/size copies, independent random keys that rarely hit the map), several tests assert nothing or only fragments (AssocMap union, sortedMapFromDataWithValidation, EqDerivingTest budget comparisons, LogTest substring checks, TutorialTest), and whole APIs have no test anywhere: SortedMap.filterKeys, most of AssocMap and PairList, Ord/Eq combinators, ShowByteString, and Scalar on-chain. One main-code defect: Math.log(x, base = 1) never terminates for x >= 1. The BLS12_381_G1Test/G2Test files are copies of each other, but assertEval is an inline compile over concrete code, so a shared generic helper is not possible; no finding.",
+  "behaviors": [
+    {
+      "pass": "SortedMap",
+      "name": "constructors: empty, singleton (direct Data lowering), unsafeFromList, fromList, fromLargeList (first duplicate wins), fromStrictlyAscendingList (require), from (JVM)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:24-250",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1764-1824",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SortedMapFromListBudgetTest.scala:125"
+      ]
+    },
+    {
+      "pass": "SortedMap",
+      "name": "union / unionMap into These",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:252-509"
+      ]
+    },
+    {
+      "pass": "SortedMap",
+      "name": "Eq and Ord instances",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:511-680"
+      ]
+    },
+    {
+      "pass": "SortedMap",
+      "name": "ToData / FromData, and the validating FromData",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:682-780"
+      ]
+    },
+    {
+      "pass": "SortedMap",
+      "name": "queries: isEmpty, nonEmpty, length, size, keys, values, forall, exists, find, findMap, foldLeft, foldRight, singleOrFail",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:91-113",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:782-1058",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1220-1436"
+      ]
+    },
+    {
+      "pass": "SortedMap",
+      "name": "mapValues, filter, filterNot",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1060-1218"
+      ]
+    },
+    {
+      "pass": "SortedMap",
+      "name": "filterKeys (SortedMap.scala:584)",
+      "tests": []
+    },
+    {
+      "pass": "SortedMap",
+      "name": "lookup and update: get, getOrFail, at, contains, insert, delete (also at PV11)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1438-1762",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapPV11Test.scala:23-28",
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/binocular20251117/SortedMapInsertTest.scala:54"
+      ]
+    },
+    {
+      "pass": "AssocMap",
+      "name": "empty, singleOrFail, union, insert, get, delete",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/AssocMapTest.scala:57-147"
+      ]
+    },
+    {
+      "pass": "AssocMap",
+      "name": "AssocMapEq.equals (order-insensitive)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/AssocMapEqLoweringTest.scala:20-40"
+      ]
+    },
+    {
+      "pass": "AssocMap",
+      "name": "fromList, keys, values, mapValues, forall, exists, filterKeys, filter, filterNot, find, foldLeft, foldRight, getOrFail, contains, ToData/FromData",
+      "tests": []
+    },
+    {
+      "pass": "PairList",
+      "name": "head, tail, isEmpty",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/PairListTest.scala:11-50"
+      ]
+    },
+    {
+      "pass": "PairList",
+      "name": "from, toList, mapValues, map, find, findMap, ++, prepended, asScala, unsafeToSortedMap, unsafeToAssocMap, ToData/FromData, Eq (only indirectly through SortedMap)",
+      "tests": []
+    },
+    {
+      "pass": "Option",
+      "name": "Eq, Ord, ToData/FromData, asScala/asScalus",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:17-65"
+      ]
+    },
+    {
+      "pass": "Option",
+      "name": "flatten, isEmpty/isDefined/nonEmpty, get/getOrFail/orFail, getOrElse, orElse, map, flatMap, filter, filterNot, contains, exists, forall",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:67-259"
+      ]
+    },
+    {
+      "pass": "Math",
+      "name": "abs, min, max, clamp, gcd, sqrt/isSqrt, divFloor/divCeil (properties and budget pins)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/MathTest.scala:23-205",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/MathTest.scala:388-436"
+      ]
+    },
+    {
+      "pass": "Math",
+      "name": "pow, exp2, log2, log (examples only, no property; log base 1 untested, see C04-1)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/MathTest.scala:207-386"
+      ]
+    },
+    {
+      "pass": "Eq / EqMacros",
+      "name": "Eq.derived for case classes, enums, sealed traits; === / !==; no structural advisory; budgets",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/EqDerivingTest.scala:150-498"
+      ]
+    },
+    {
+      "pass": "Eq / EqMacros",
+      "name": "nested sealed-trait child, macro compile-error paths (EqMacros.scala:16-29, 57-59, 95-97, 112-159 uncovered)",
+      "tests": []
+    },
+    {
+      "pass": "Eq / Ord / Order",
+      "name": "Eq.by/orElse/orElseBy, Ord.by/orElse/orElseBy, Order.isLessEqual/isGreaterEqual",
+      "tests": []
+    },
+    {
+      "pass": "Ord",
+      "name": "Ord[Data] total order",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/testing/regression/orddata20251106/OrdDataUpcastTest.scala:27-37"
+      ]
+    },
+    {
+      "pass": "Show",
+      "name": "Show for Unit, Boolean, ByteString, String, BigInt, Data",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/ShowTest.scala:17-62"
+      ]
+    },
+    {
+      "pass": "ShowByteString",
+      "name": "ShowByteString instances (used directly)",
+      "tests": []
+    },
+    {
+      "pass": "Log / LogMacros",
+      "name": "log(...) concatenates args with spaces into one trace; literals unquoted; Show or ToData fallback",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/LogTest.scala:31-167"
+      ]
+    },
+    {
+      "pass": "Prelude",
+      "name": "fail, require, impossible, ???",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/PreludeTest.scala:11-43"
+      ]
+    },
+    {
+      "pass": "Prelude",
+      "name": "Rational ordering/equality, Spec contracts",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/RationalEqLoweringTest.scala:20-27",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/SpecTest.scala:101-110"
+      ]
+    },
+    {
+      "pass": "Prelude",
+      "name": ".let / .also extensions",
+      "tests": []
+    },
+    {
+      "pass": "Varargs",
+      "name": "args.list in apply and non-apply methods",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/VarargsTest.scala:44-87",
+        "scalus-core/shared/src/test/scala/scalus/testing/regression/PairListVarArgsInitTest.scala:24-41"
+      ]
+    },
+    {
+      "pass": "Deriving",
+      "name": "ToData/FromData derived for enums and case classes, on-chain",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/DerivingTest.scala:124-189"
+      ]
+    },
+    {
+      "pass": "bls12_381.Scalar",
+      "name": "field arithmetic and byte decoding (JVM only)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/bls12_381/ScalarTest.scala:13-131"
+      ]
+    },
+    {
+      "pass": "bls12_381.Scalar",
+      "name": "on-chain evaluation, toByteStringBigEndian/LittleEndian, applyUnsafe failure",
+      "tests": []
+    },
+    {
+      "pass": "bls12_381.G1 / G2",
+      "name": "zero, generator, equal, add, scale, negate, compress/uncompress, hashToGroup",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/bls12_381/BLS12_381_G1Test.scala:13-63",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/bls12_381/BLS12_381_G2Test.scala:13-63"
+      ]
+    },
+    {
+      "pass": "scalus.prelude / scalus.builtin (deprecated)",
+      "name": "forwarders return canonical results, compile on-chain, ? traces the same",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/DeprecatedPackageObjectsTest.scala:29-87"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C04-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/Math.scala:301-306",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/MathTest.scala:344-386"
+      ],
+      "claim": "Math.log(self, base) guards only base <= 0. For base = 1 and self >= 1, go(ret, n) never reaches n < 1 because n / 1 == n, so the recursion never ends: on the JVM it loops forever (tailrec), on-chain it runs until the budget is exhausted. The scaladoc promises 'greatest k such that base^k <= self', which does not exist for base 1. MathTest tests bases 0, 2, 3, 4 and 42, never 1.",
+      "action": "Main-code note: decide the contract for base 1 (return 0 like base <= 0, or fail with a message) and guard it before go. Test: only after the fix, add log(BigInt(5), base = BigInt(1)) to the 'log' test. Do NOT add it before the fix with assertEval*/assertEvalFails: every EvalTestKit assertion runs the JVM code first and would hang CI. If a pre-fix test is wanted, compile the term and evaluate only the UPLC with a small explicit budget, expecting budget exhaustion.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-65",
+      "verification": "Math.scala:301-306: `if base <= 0 then 0 else go(0, self)` with `go(ret, n) = if n < base then ret else go(1 + ret, n / base)`. For base = 1 and self >= 1, `n < 1` is always false and `n / 1 == n`, so the recursion never ends. It is @tailrec, so the JVM loops forever; on-chain it runs until the budget is exhausted. self <= 0 with base 1 returns 0, so only self >= 1 hangs. Any caller of the public `Math.log(x, base = 1)` reaches it. MathTest.scala:344-386 tests bases 2, 3, 0, 4 and 42, never 1. The advice to add the test only after the fix is correct, because EvalTestKit runs the JVM code first and would hang."
+    },
+    {
+      "id": "C04-2",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:93-96",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:50-55",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:215-216"
+      ],
+      "claim": "The second 'empties' property ends with `asScala.nonEmpty == asScala.nonEmpty`, a tautology: no mutation of Option.nonEmpty breaks it (the first property at 82-85 covers nonEmpty only through asScalus). Lines 50-55 and 215-216 are commented-out assertions (one marked 'TODO: UPLC error').",
+      "action": "Change line 95 to compare `asScalus.nonEmpty == asScala.nonEmpty`. Delete the commented-out blocks 50-55; turn 215-216 into a pending/ignored test with the reason, or delete it.",
+      "coverageRisk": "none: the fix makes the assertion able to fail",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-3",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:110-120",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:127-135",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:150-156",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:168-174",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:193-207",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:218-224",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/OptionTest.scala:235-258",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:366-370"
+      ],
+      "claim": "Each operation (getOrElse, orElse, map, flatMap, filter, filterNot, contains, exists, forall) has two JVM properties that check the same law in two directions: one draws scala.Option and converts with asScalus, the other draws prelude Option and converts with asScala. arbOption is itself `arbitrary[scala.Option[A]].map(_.asScalus)`, so both draw the same distribution. Direction 1 exercises only asScalus, direction 2 only asScala; the operation under test is checked identically by both.",
+      "action": "Keep the first property of each pair (scala.Option input) and delete the second. Add one roundtrip property `(o: Option[BigInt]) => o.asScala.asScalus === o` to keep a property over asScala.",
+      "coverageRisk": "low: asScala stays covered by the explicit examples at OptionTest.scala:27-30 (both constructors) and the added roundtrip property; the operations keep one property each plus their on-chain examples",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "OptionTest.scala:110-258: each pair checks the same equation over the same distribution. arbOption (ArbitraryInstances.scala:366-370) is `arbitrary[scala.Option[A]].map(_.asScalus)`, and EvalTestKit mixes in ArbitraryInstances (EvalTestKit.scala:34). Direction 2 is the weaker one. Example: if asScala always returned None, `o.map(_*2).asScala == o.asScala.map(_*2)` would still pass. So deleting direction 2 loses nothing. The added roundtrip `o.asScala.asScalus === o` plus the eq examples at 27-30 cover asScala better than now. Both directions run in the same shared/ file, so platform coverage does not change. The 'empties' and 'flatten' pairs (80-94, 66-78) are not in scope and stay."
+    },
+    {
+      "id": "C04-4",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:816-854",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:856-894",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/SortedMap.scala:479",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/SortedMap.scala:491"
+      ],
+      "claim": "SortedMap.size is `inline def size: BigInt = length`. The 'size' test is a copy of the 'length' test with the same property and the same three budget pins (2132/344723, 3534/669931, 6238/1304347).",
+      "action": "Delete the 'size' test and add one line to 'length': assertEvalEq(SortedMap.singleton(BigInt(1), BigInt(1)).size, BigInt(1)) to keep the alias compiled on-chain.",
+      "coverageRisk": "none: size is an inline alias of length; the alias stays compiled once",
+      "ciSavingSec": 0.05,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "SortedMap.scala:479 `inline def length: BigInt = self.toPairList.length`, and :491 `inline def size: BigInt = length`. SortedMapTest.scala:856-894 'size' copies 816-854 'length' line for line: the same property against toList.length, the same inputs, and the same pins (2132/344723, 3534/669931, 6238/1304347). Both tests are in the same shared/ file. Because the alias is inline, the UPLC is identical. One assertEvalEq on `.size` keeps the alias compiled on-chain."
+    },
+    {
+      "id": "C04-5",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:253-284",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:381-412",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/SortedMap.scala:245-283",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/SortedMap.scala:310-348"
+      ],
+      "claim": "The three unionMap properties are copies of the three union properties with f = identity, so they assert exactly what union already asserts. The two main-code go functions differ only in applying f; with identity, a unionMap bug that applies f to the wrong side's These (for example f(These.This(v)) where That is meant) is caught, but nothing checks that f's result is used for a non-trivial f.",
+      "action": "Replace the three unionMap properties with one: for (lhs, rhs), `unionMap(lhs, rhs, f) === union(lhs, rhs).mapValues(f)` with a non-identity f: These[BigInt, BigInt] => BigInt (This(a) => a, That(b) => b * 10, These(a, b) => a + b). Keep the three unionMap budget examples at 414-508: their ExUnits differ from union's.",
+      "coverageRisk": "none: the new property is stronger than the deleted ones and still covers both empty-side cases through the generator",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "SortedMapTest.scala:381-412 are the three union properties (253-284) with `identity` added. The two go functions (SortedMap.scala:251-283 vs 316-348) differ only in wrapping each These in f, including both PairNil branches. With identity, no current property shows that f's result is used. The proposed `unionMap(l, r, f) === union(l, r).mapValues(f)` with a non-identity f is stronger. Its oracle is checked by union's own properties, which stay. The PairNil branches run in almost every generated pair, because one list always runs out first. The identity budget examples at 414-508 stay and still pin the empty-side cases on-chain."
+    },
+    {
+      "id": "C04-6",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:584-680",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/SortedMap.scala:357-358"
+      ],
+      "claim": "The 'Ord' test has one weak property (reflexivity) and nine assertEval examples with no budget pins, each an instance of two laws: antisymmetry ((a <=> b) is the reverse of (b <=> a)) and consistency with Eq ((a <=> b).isEqual == (a === b)).",
+      "action": "Replace the examples at 587-618, 624-644 and 650-679 with one checkEval property over (SortedMap[BigInt, BigInt], SortedMap[BigInt, BigInt]) asserting antisymmetry and Eq consistency. Keep the two direction-pinning examples at 620-622 (empty < singleton) and 646-648 (singleton > empty), because antisymmetry alone cannot catch a global Less/Greater swap. Note C04-11: two independent maps differ at the first key almost always, so also feed pairs where m2 = m1.insert(k, v) or m1.delete(k).",
+      "coverageRisk": "low: the kept examples pin direction; the deleted examples have no budget pins; on-chain evaluation stays through checkEval",
+      "ciSavingSec": 0,
+      "linesRemoved": 55,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "Ord is `lhs.toList <=> rhs.toList` (SortedMap.scala:357-358). Antisymmetry and Eq-consistency hold. But the deleted examples at 624-644 (singleton(0) < singleton(1); [1,2] < singleton(3)) and 650-679 (singleton(1) > singleton(0); [1,2] > [0,2]) are the only checks of key-comparison direction. The kept examples 620-622 and 646-648 (empty vs singleton) pin only the Nil-vs-Cons direction. A bug that swaps only element comparison (for example `rhs.head <=> lhs.head` in List/tuple Ord) passes antisymmetry, Eq-consistency and both kept examples. Corrected action: replace only the equal-case examples (587-618) with the antisymmetry + Eq property. Also keep one key-direction example, for example 624-628 singleton(0) < singleton(1). Or add an oracle property that compares against Scala lexicographic ordering of toList. Keep C04-11's insert/delete pair feeding."
+    },
+    {
+      "id": "C04-7",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:787-796",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:843-850",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1086-1094",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1476-1483",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1740-1745"
+      ],
+      "claim": "The file builds the same maps by hand: the 3-entry map {1->1, 2->2, 3->3} as `SortedMap.fromStrictlyAscendingList(List.Cons(..., List.Cons(..., List.Cons(..., List.Nil))))` appears 32 times (6-10 lines each), plus 2-entry variants; fromStrictlyAscendingList is called 76 times. The tests are much longer than what they assert.",
+      "action": "Add a test-local @Compile object (e.g. SortedMapTestMaps with m123, m12, m13 and their These variants) or use the varargs List((k, v), ...) form, which already compiles on-chain (line 752), and use it in every example. Re-pin the exact budgets of the touched examples.",
+      "coverageRisk": "low: the asserted values do not change, but about 40 exact budget pins in the file shift and must be re-pinned by hand; the update-budgets script rewrites by value and some literals appear twice (2132/344723, 3534/669931, 632/100844, 28102/6304217)",
+      "ciSavingSec": 0,
+      "linesRemoved": 250,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-8",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:36-50",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:122-139",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:180-199",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:156"
+      ],
+      "claim": "Three 'Budget-only check' blocks hand-roll PlutusV3.compile + `$ toData(arg).asTerm` + evaluateDebug + match, which is what EvalTestKit.assertEvalWithBudget[A1, T] (argument passed as Data at runtime) does. They pin the budget but never assert the result: a toList/unsafeFromList/fromList that returned a wrong list at the same cost would pass.",
+      "action": "Replace each block with assertEvalWithBudget((list: List[(BigInt, BigInt)]) => SortedMap.fromList(list).toList, arg, expectedList, ExUnits(...)) (and the singleton/unsafeFromList analogues), so the result is checked too.",
+      "coverageRisk": "low: adds a result check; the budgets may shift slightly if the helper's wrapper differs, and need re-pinning",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-9",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:736-780",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/SortedMap.scala:385-397",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/SortedMap.scala:187-204"
+      ],
+      "claim": "'sortedMapFromDataWithValidation' only checks that valid maps roundtrip. The block at 746-760 compiles an invalid-map script and calls toUplc but asserts nothing, and the intended failure check is commented out (762-778). No test shows that the validating instance rejects unsorted or duplicate keys: replacing fromStrictlyAscendingList by unsafeFromList in main code passes.",
+      "action": "Delete 746-778. Add JVM assertions with the local given in scope (it shadows the companion sortedMapFromData): assertThrows[RequirementError] for Data maps with keys (2, 1) and (1, 1). Keep it JVM-only: FromData instances are erased on-chain, as the TODO says.",
+      "coverageRisk": "none: replaces a no-op block with a real check",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-10",
+      "check": "C1",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/SortedMap.scala:584-587",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/PairList.scala:39-160",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/PairList.scala:162-190",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/PairListTest.scala:11-50"
+      ],
+      "claim": "SortedMap.filterKeys has no test in the repository (git grep finds no use in any test). PairListTest covers only head, tail and isEmpty; PairList.from, map, mapValues, find, findMap, ++, prepended, asScala, unsafeToSortedMap, unsafeToAssocMap and its ToData/FromData/Eq instances are reached only indirectly through SortedMap, and ++, prepended, map, from and the unsafeTo* conversions not at all.",
+      "action": "SortedMapTest: add a 'filterKeys' test like 'filter' (property `m.filterKeys(_ > 0) === fromStrictlyAscendingList(m.toList.filter(_._1 > 0))` plus one on-chain example). PairListTest: add JVM properties against toList for map, mapValues, find, findMap, ++, prepended and from, a ToData/FromData roundtrip property, and one on-chain example each for ++ and the roundtrip.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-11",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1439-1446",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1607-1612",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1701-1706",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:514-519",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/AssocMapTest.scala:125-147",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:372-384"
+      ],
+      "claim": "Unmeasured, by reading: the key-lookup properties (get, contains, find, findMap, getOrFail, at, the first delete property, and AssocMap insert/get/delete) draw `key: BigInt` independently of the map from ScalaCheck's default Arbitrary[BigInt], and arbSortedMap/arbAssocMap build keys from the same wide distribution, so the key is almost never present. These properties then exercise mostly the 'absent' branch (Order.Less/None, insert-at-end, delete no-op); the 'present' branch rests on the hand-written examples. The 'Eq' property at 514-519 draws two independent maps, which are almost never equal. gen-stats.md has no entry for SortedMap[BigInt, BigInt] or AssocMap.",
+      "action": "Add a shared generator (in scalus.uplc.test.ArbitraryInstances or locally) for (map, key) where the key is taken from map.keys half of the time, e.g. Gen.oneOf(Gen.oneOf(keys), arbitrary[BigInt]) when keys are non-empty, and use forAll with it in the listed properties. For Eq, feed (m, m), (m, m.insert(k, v)) and (m, m.delete(k)) pairs. Optionally add a GenStatsTest entry that reports the hit rate.",
+      "coverageRisk": "none: widens what the properties reach",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-12",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/AssocMapTest.scala:85-117",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/AssocMapTest.scala:119-123",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/AssocMapTest.scala:125-131",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/AssocMapTest.scala:140-147",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/AssocMap.scala:146-157"
+      ],
+      "claim": "'union' compiles three scripts (88-94 with a dead `val a = BigInt(132)`, 103-109, 111-116) and evaluates none; the equalsAssets helper (30-42) is never asserted. The 'insert' property checks only `toList.contains((k, v))`: an insert that prepends (k, v) without removing the old pair passes it and the 'get' property (get returns the first match). In 'delete', line 143 is a discarded Boolean. 119-123 is a commented-out property.",
+      "action": "In 'union': delete the unused compiles and either evaluate equalsAssets(m1, m2) == false and equalsAssets(m1, m1) == true on-chain or delete equalsAssets. In 'insert': also assert keys are distinct and size == map.size + (if map.contains(k) then 0 else 1). In 'delete': drop line 143 or make it part of the result. Delete 119-123 or re-enable it with AssocMap.fromList.",
+      "coverageRisk": "none: assertions get stronger; the deleted compiles assert nothing",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-13",
+      "check": "C1",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/AssocMap.scala:30-70",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/AssocMap.scala:83-144",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/AssocMap.scala:170-191",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/AssocMapTest.scala:57-147"
+      ],
+      "claim": "AssocMapTest covers only empty, singleOrFail, union (one JVM example), insert, get and delete. fromList (dedupe), keys, values, mapValues, forall, exists, filterKeys, filter, filterNot, find, foldLeft, foldRight, getOrFail, contains, the ToData/FromData roundtrip, and union as a property have no test; union's 'rhs keys not in lhs' path is checked by one example only. SortedMapTest already has the matching properties.",
+      "action": "Port the SortedMapTest properties for these operations to AssocMapTest (oracle: the same operation on toList), add a union property (keys = distinct(lhs.keys ++ rhs.keys), values per These case), a fromList property (first occurrence wins, compare with the distinctByKey helper at SortedMapTest.scala:19-22), and a ToData/FromData roundtrip. Add a few on-chain examples for union and get with assertEvalEq.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.3,
+      "linesRemoved": -80,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-14",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/EqDerivingTest.scala:288-373",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/EqDerivingTest.scala:375-498"
+      ],
+      "claim": "The two budget-comparison tests assert only `isSuccess` for every evaluation (330-331, 357-358, 433-435, 481-483), never the Boolean result: resultDerived2/resultManual2 (unequal points) would pass if they returned true. The comment at 371-372 claims derived is 'equal or better' but nothing asserts it. About 45 lines are println of budgets.",
+      "action": "Assert each result term (true for the equal inputs, false for 348-355), assert budgetDerived.memory <= budgetManual.memory and steps likewise (or pin exact ExUnits), and delete the println blocks.",
+      "coverageRisk": "none: assertions get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-15",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/EqDerivingTest.scala:150-209",
+        "scalus-core/shared/src/test/scala/scalus/testing/ArbitraryDerivation.scala:13"
+      ],
+      "claim": "The nine JVM example tests of Eq.derived (case class, empty case class, enum singletons, enum case-class variants, sealed trait) are instances of one law: for derived instances on case classes, eq(a, b) == (a == b) (Scala case-class equality is structural, so it is a sound oracle).",
+      "action": "Replace 150-159 and 166-200 with one property per type (EqTestPoint, EqTestStatus, EqTestExpr); keep 161-164, the only test of the zero-field case class (EqMacros.scala:49 caseFields.isEmpty branch) using ArbitraryDerivation with small field generators (Gen.choose(0, 2) for BigInt, Gen.oneOf(\"a\", \"b\") for String) so equal pairs occur often; keep the === / !== example at 202-209.",
+      "coverageRisk": "low: the property covers every constructor pair the examples cover, provided the field generators are small; the zero-field EqTestEmpty example (161-164) stays; examples have no budget pins",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "EqDerivingTest.scala:150-200: the examples are equal/different pairs for EqTestPoint, the EqTestStatus singleton and case variants, and EqTestExpr (Lit, Add, Zero). All are instances of eq(a, b) == (a == b). Scala case-class/enum `==` is structural over BigInt and String fields, so it is a sound oracle. Small field generators (choose(0,2), oneOf(\"a\",\"b\")) produce every pair the examples use, with high probability over 100 samples: same-constructor equal, one-field-differs, and cross-constructor with the same first field (Done(42) vs Failed(42,\"x\"); Lit(1) vs Add(1,0)). One note: ArbitraryDerivation.split uses NoFallback, which is Gen.fail at size 0 (ArbitraryDerivation.scala:43-52, 60-73). This causes a few discards, or a hand-written Gen.oneOf can be used instead. This is an implementation detail, not a coverage loss. The examples have no budget pins and run only off-chain."
+    },
+    {
+      "id": "C04-16",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/LogTest.scala:44-115",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/LogTest.scala:132-167",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/LogMacros.scala:65-74"
+      ],
+      "claim": "Every LogTest assertion checks substrings (`contains(\"check\") && contains(\"42\")`, `startsWith(\"label\")`). Mutation: change the separator \" \" at LogMacros.scala:69 to \"\": all tests still pass. The enum and case-class tests (90-115) check only the label, so a macro that drops non-literal arguments passes too.",
+      "action": "Assert exact logs, for example logs == Seq(\"check 42\"), Seq(\"values 1 2 3\"), Seq(\"mixed True 42\"), Seq(\"color <0, []>\"), Seq(\"point <0, [1, 2]>\"), Seq(\"label \\\"hello\\\"\") (confirm the Data renderings at edit time; ShowTest.scala:60 shows the Constr format). Merge 'log produces single trace entry' (132-149) into the multi-arg test once the exact check is there.",
+      "coverageRisk": "none: assertions get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-17",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/LogTest.scala:31-42",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/LogTest.scala:151-167",
+        "scalus-core/shared/src/test/scala/scalus/DeprecatedPackageObjectsTest.scala:75-77",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:69-76"
+      ],
+      "claim": "All nine LogTest tests repeat compile + toUplc + evaluateDebug + match Success(_, _, _, logs) / fail (about 11 lines each), and DeprecatedPackageObjectsTest defines a local `logs(sir)` with the same match. EvalTestKit has no helper that returns or asserts trace logs.",
+      "action": "Add to EvalTestKit an `inline def assertEvalLogs(inline code: Any, expected: Seq[String])` (and/or `evalLogs(inline code): Seq[String]`) that compiles with compilerOptions, evaluates, fails on Failure and returns/compares the logs. Make LogTest extend EvalTestKit (override compilerOptions with optimizeUplc = false) and use it; use it in DeprecatedPackageObjectsTest:66-80.",
+      "coverageRisk": "none: same assertions through a helper",
+      "ciSavingSec": 0,
+      "linesRemoved": 75,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-18",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/VarargsTest.scala:33-87",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/EqDerivingTest.scala:247-286",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:78-96"
+      ],
+      "claim": "VarargsTest declares its own given PlutusVM and Options and hand-rolls compile + toUplc + evaluateDebug + match three times to compare one Integer; EqDerivingTest:247-286 does the same twice with four BigInt arguments. EvalTestKit.assertEvalEq (JVM and on-chain) does this in one line. The VarargsTest test names misspell 'varargs' ('use varasg').",
+      "action": "Make VarargsTest extend EvalTestKit (override compilerOptions with optimizeUplc = false if the test depends on it) and write each test as assertEvalEq(VarargsTestObj.pos(BigInt(-1), BigInt(2), BigInt(-3), BigInt(4)).head, BigInt(2)). In EqDerivingTest use assertEval / assertEvalEq on the Eq call, or keep the term-level form but replace the match with `assert(result.success.term == true.asTerm)`. Fix the test names.",
+      "coverageRisk": "low: assertEvalEq also runs the JVM side, which adds a check; the inline compile happens inside the helper instead of the test",
+      "ciSavingSec": 0,
+      "linesRemoved": 50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-19",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/DerivingTest.scala:124-159",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/DerivingTest.scala:161-189",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/DerivingTest.scala:14-37",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/DerivingTest.scala:81-122"
+      ],
+      "claim": "The AE3 test decodes only DS3_A (line 137) and the AE4 test only DS4_B (line 174); the match maps each constructor to a distinct result, but only one row is evaluated. Mutation: swap the constructor indexes of B and C in the derived ToData/FromData: both tests pass. DerivingSpec_Account is derived but never used. 14-37 and 81-122 are commented-out code; the Failure branches print stack traces.",
+      "action": "Evaluate all three constructors of both enums (expected 1, 2, 3), and add a roundtrip for DerivingSpec_Account; use EvalTestKit (assertEvalEq) or a small loop over (value, expected) with one compiled term. Delete the commented-out blocks and the printStackTrace/println branches.",
+      "coverageRisk": "none: assertions get stronger; deleted code is commented out",
+      "ciSavingSec": 0,
+      "linesRemoved": 70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-20",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/DumpUplcTest.scala:13-40"
+      ],
+      "claim": "DumpUplcTest has one test, marked ignore, that only prints the lowered value, the UPLC and the budget of SortedMap.singleton. It never runs and asserts nothing; SortedMapTest.scala:52-88 already pins the singleton lowering and budget.",
+      "action": "Delete the file.",
+      "coverageRisk": "none: the test is ignored",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-21",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/TutorialTest.scala:265-279",
+        "scalus-core/shared/src/test/scala/scalus/TutorialTest.scala:148-168",
+        "scalus-core/shared/src/test/scala/scalus/TutorialTest.scala:170-177"
+      ],
+      "claim": "TutorialTest's only test has an empty body (all lines commented out). The top-level compile{} vals are real compile-time fixtures for the plugin, but nothing evaluates them; the comment at 177 claims modules evaluates to (con integer 2) and nothing checks it. All top-level vals share one package initializer, and serializeToDoubleCborHex (148-168) calls writePlutusFile twice, so the first assertion that touches any top-level val writes two pubKeyValidator.plutus files into the working directory. The file also puts Account, State and ReusableCode into package scalus.",
+      "action": "First turn serializeToDoubleCborHex into a def. Then assert at least: modules.toUplc().evaluate == BigInt(2).asTerm, controlFlow fails, and that constants/builtinFunctions/dataTypes/fromDataExample lower to UPLC without error. Keep the file as compile fixtures; optionally move Account/State into an object to avoid the scalus-package names.",
+      "coverageRisk": "none: adds assertions; the file stays",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-22",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/bls12_381/ScalarTest.scala:49-131",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/bls12_381/Scalar.scala:118-204"
+      ],
+      "claim": "The add, mul, sub, neg, div, recip, scale and scale2 examples compare against precomputed field values (e.g. the 77-digit constants at 62, 77, 99, 108, 119). They are instances of one oracle: the operation equals the same operation on BigInt modulo fieldPrime (for div/recip: x * y.recip == x, None for zero; scale2(k) == scale(2^k)).",
+      "action": "Replace 49-131 with JVM properties over Gen.choose(0, fieldPrime - 1) values against BigInt mod p (and modPow for scale, modInverse for recip/div), plus the boundary examples that pin wrap-around: fieldPrime - 1 + 1 == zero (51), zero - 5 == p - 5 (130), scale(-1) == zero (69), s / zero == None (95), zero.recip == None (122).",
+      "coverageRisk": "low: the kept boundary examples pin the wrap-around and None cases; the oracle checks every other example's arithmetic",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The oracle holds only for in-range inputs and non-negative exponents (Scalar.scala). (1) scale(e<0) returns zero, but BigInt.modPow(-1, p) returns an inverse. So the scale oracle must use e >= 0. scale2(k<0) returns zero (line 82 example), and that case has no 2^k oracle, but the report does not keep line 82. (2) Two examples pin inputs outside the field that Gen.choose(0, p-1) cannot make. ScalarTest.scala:52 `new Scalar(3) + new Scalar(fieldPrime) == 3` and :129 `zero - new Scalar(fieldPrime) == zero`. Neither is in the kept list. (3) The div/recip law as written ('x * y.recip == x') is wrong. Correct form: (x / y).get * y == x and x * x.recip.get == one for x != 0. Corrected action: also keep lines 52, 82 and 129, generate scale exponents >= 0 only, and use the corrected div/recip laws."
+    },
+    {
+      "id": "C04-23",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/bls12_381/ScalarTest.scala:9-131",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/bls12_381/Scalar.scala:21-22",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/bls12_381/Scalar.scala:53-55",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/bls12_381/Scalar.scala:220-231"
+      ],
+      "claim": "Scalar is a @Compile object, but ScalarTest extends AnyFunSuiteLike with plain assert: no Scalar operation is ever compiled or evaluated on-chain. toByteStringBigEndian/toByteStringLittleEndian have no test, and the applyUnsafe failure path (require 'value not in the field') is untested.",
+      "action": "Make ScalarTest extend EvalTestKit and add on-chain checks with assertEvalEq for +, *, -, unary -, /, scale and scale2 on a few values (including the fieldPrime - 1 boundary), a roundtrip property fromByteStringBigEndian(s.toByteStringBigEndian(32)) == Some(s) (and little-endian), and assertEvalFailsWithMessage[RequirementError](\"value not in the field\")(Scalar.applyUnsafe(Scalar.fieldPrime)).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.3,
+      "linesRemoved": -40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-24",
+      "check": "C4",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/MathTest.scala:207-386",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/Math.scala:211-306"
+      ],
+      "claim": "pow, exp2, log2 and log are tested only by examples, all of which are budget pins (so they stay); unlike abs/min/max/clamp/gcd/sqrt/divFloor they have no property. log2's eight-way byte branch (Math.scala:270-279) is hit for few leading-byte values.",
+      "action": "Add checkEval properties with bounded generators (exponents in Gen.choose(-5, 512) so integerToByteString stays within limits): exp2(n) == pow(2, n); for x > 0, pow(2, log2(x)) <= x < pow(2, log2(x) + 1); for base >= 2 and x >= 1, pow(base, log(x, base)) <= x < pow(base, log(x, base) + 1); pow(b, e + 1) == pow(b, e) * b for e >= 0. Use only on-chain-compilable code inside the lambdas. Keep every budget example.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-25",
+      "check": "C1",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/Ord.scala:65-143",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/Ord.scala:161-180",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/Eq.scala:63-84",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/Order.scala:27-33",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/Show.scala:31-102",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/ShowTest.scala:17-62"
+      ],
+      "claim": "No test in the repository uses Ord.by/orElse/orElseBy, Eq.by/orElse/orElseBy, Order.isLessEqual/isGreaterEqual or any ShowByteString instance directly (git grep in all test sources). Ord[Data], the key order of every Data-keyed map, has only a regression test (OrdDataUpcastTest) and no law check across the 5x5 constructor matrix of chooseData. Show[BigInt] is checked on three values only.",
+      "action": "Add an OrdEqTest (shared, EvalTestKit): JVM properties over the ArbitraryInstances Data generator for Ord[Data] reflexivity, antisymmetry and consistency with equalsData, plus one checkEval of antisymmetry; examples for Ord.by/orElse/orElseBy, Eq.by/orElse/orElseBy and the Order predicates. In ShowTest add a property that x.show == x.toString for BigInt (compile `(x: BigInt) => x.show` once and evaluate over generated values) and on-chain examples of showByteString for Unit, Boolean, BigInt (negative), ByteString and String.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.4,
+      "linesRemoved": -90,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-26",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/EqMacros.scala:107-159",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/EqMacros.scala:16-29",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/LogMacros.scala:56-59",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/LogMacros.scala:75-76",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/EqDerivingTest.scala:59-60"
+      ],
+      "claim": "The coverage baseline marks EqMacros genCaseForChild's sealed-trait-child branch (112-159) uncovered: a sealed trait whose child is another sealed trait. EqDerivingTest:59-60 says the plugin does not support it on-chain, but the macro still expands for JVM use. Also uncovered: genComparisons with no fields (89), and the compile-error paths of Eq.derived (non-case class, trait without children, field without Eq: 16-29, 57-59, 95-97) and of log() (type without Show/ToData, Seq argument: LogMacros 56-59, 75-76).",
+      "action": "Add a JVM-only Eq.derived test for a nested sealed hierarchy (outer sealed trait with a sealed-trait child that has its own Eq given) asserting equal/unequal pairs. Add compile-error tests with ScalaTest assertTypeError / scala.compiletime.testing.typeCheckErrors for the Eq.derived and log() error paths, checking the message text.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -40,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C04-27",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/PreludeTest.scala:11-24",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1513-1527",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/SortedMapTest.scala:1565-1579",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/SortedMap.scala:742-763"
+      ],
+      "claim": "Failure messages are never asserted where the message is the behavior: PreludeTest checks fail(\"This is a failure message\") and require(false, \"Condition failed\") only by exception type, and the require(cond) overload without a message is untested. SortedMapTest 'getOrFail' and 'at' are the same examples with the same budgets; they differ in main code only by the message ('SortedMap doesn't contain searching key' vs 'Undefined key in SortedMap.at'), and the custom-message parameter of getOrFail is never passed.",
+      "action": "Use assertEvalFailsWithMessage in PreludeTest for fail(msg) and require(false, msg), and add require(false) without a message. In SortedMapTest, assert the two default messages on one missing-key case each, add one getOrFail(key, \"custom\") case, and drop the duplicated 3-entry examples from one of the two tests.",
+      "coverageRisk": "none: assertions get stronger; the dropped examples are duplicated in the other test",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 7 findings of scope merge-duplicate-tests, to-property or main-bug; 5 confirmed, 2 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

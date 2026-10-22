@@ -1,0 +1,633 @@
+{
+  "cluster": "address-wallet-blueprint",
+  "summary": "Three unrelated areas: CIP-19 addresses (scalus-core), CIP-57 blueprints (scalus-core) and the BIP-39/BIP32-Ed25519/CIP-1852 HD wallet (scalus-cardano-ledger). The cluster is cheap (about 1.5 s; the only cost is repeated PBKDF2 in the HD suites, C35-15). Pointer and variable-length decoding are tested thoroughly against the ledger; the rest of CardanoAddressTest is example-based, with many repeated type-id/header/Byron asserts and a few that cannot fail, and no property uses the cluster's own address generator. Reading the main code against cardano-ledger found four main-code defects: Address.fromBytes and TransactionOutput accept addresses the ledger's decodeAddr rejects (C35-1, pinned by the TransactionOutput generator, C35-9), the blueprint Purpose codec cannot round-trip OneOf (C35-2), Bip39 skips NFKD normalization (C35-3), and Cip1852.parsePath accepts negative indices (C35-4). The HD tests have strong oracles (cardano-addresses vector, bloxbean parity) next to many size-only and determinism tests that cannot fail.",
+  "behaviors": [
+    {
+      "pass": "VarLen / Pointer",
+      "name": "variable-length numbers: shortest encoding, MSB-first, 64-bit wrap, no recursion, truncation fails",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:78-112",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:484-508"
+      ]
+    },
+    {
+      "pass": "Pointer",
+      "name": "toBytes/fromBytes/parseFrom per protocol version: widths, overlong numbers, trailing bytes, lenient normalization",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:63-76",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:325-342",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:344-414",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:478-482"
+      ]
+    },
+    {
+      "pass": "Address.fromBytes / fromBech32",
+      "name": "CIP-19 type ids 0-7, 14, 15 from vectors; Shelley/Stake parse and round trip",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:43-48",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:225-251",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:273-284",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/CborSerializationTest.scala:113"
+      ]
+    },
+    {
+      "pass": "Address.fromBytes",
+      "name": "pointer addresses at a protocol version; lenient read (fromBytesLenient, fromBech32Lenient)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:425-465"
+      ]
+    },
+    {
+      "pass": "Address.fromBytes",
+      "name": "rejects empty input, unknown type nibble, short payload",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:253-271"
+      ]
+    },
+    {
+      "pass": "Address.fromBytes",
+      "name": "per-type wrong-length payload errors for types 1, 2, 3, 5, 7, 15 (Address.scala:1331-1487 uncovered)",
+      "tests": []
+    },
+    {
+      "pass": "Address.fromBytes",
+      "name": "header checks of the ledger's decodeAddr: network nibble 0/1 only, Byron header exactly 0x82 with CRC (see C35-1)",
+      "tests": []
+    },
+    {
+      "pass": "ShelleyAddress / StakeAddress",
+      "name": "typeId, toHeader, toBytes, hrp, hasScript, isEnterprise",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:114-223",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:286-305",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:510-529"
+      ]
+    },
+    {
+      "pass": "ShelleyAddress.toStakeAddress",
+      "name": "Key delegation converts; Null fails",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:307-323"
+      ]
+    },
+    {
+      "pass": "ShelleyAddress.toStakeAddress",
+      "name": "Script delegation converts, Pointer delegation fails (Address.scala:461-468)",
+      "tests": []
+    },
+    {
+      "pass": "Network",
+      "name": "fromNetworkId / networkId / isMainnet",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:50-61"
+      ]
+    },
+    {
+      "pass": "Address.addr / Address.stake interpolators",
+      "name": "parse bech32, reject non-stake for stake\"\"",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:531-582"
+      ]
+    },
+    {
+      "pass": "ByronAddress",
+      "name": "fromBase58 with CRC check, toBase58/encode, addrType, derivation path, attributesSize, fromString",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:609-775"
+      ]
+    },
+    {
+      "pass": "ByronAddress",
+      "name": "network magic attribute: parseNetworkMagic and getNetwork == Testnet (Address.scala:874-894, 945-948, 963)",
+      "tests": []
+    },
+    {
+      "pass": "ParsedByronAddress.parse",
+      "name": "malformed CBOR error paths (Address.scala:645-737, 756-798, 822-853)",
+      "tests": []
+    },
+    {
+      "pass": "Pretty[Address]",
+      "name": "concise and detailed printing of Shelley, Stake and Byron addresses (Address.scala:487-509, 582-591, 1011-1013, 1144-1155)",
+      "tests": []
+    },
+    {
+      "pass": "address.ArbitraryInstances",
+      "name": "Pointer generator covers every encoded length",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:467-476"
+      ]
+    },
+    {
+      "pass": "PlutusDataSchema.derived",
+      "name": "enum, case class, tuple, nested tuple, tuple field, ProductCaseOneElement schemas",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/blueprint/BlueprintTest.scala:89-170",
+        "scalus-core/shared/src/test/scala/scalus/cardano/blueprint/BlueprintTest.scala:310-323"
+      ]
+    },
+    {
+      "pass": "PlutusDataSchema.derived",
+      "name": "List / Map fields, enum leaf, nested case-class field, compile errors (PlutusDataSchema.scala:84-97, 115-118, 208-215, 275-291)",
+      "tests": []
+    },
+    {
+      "pass": "Blueprint.plutusV3",
+      "name": "four overloads: preamble, validator datum/redeemer/parameter schemas, code and hash",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/blueprint/BlueprintTest.scala:172-308"
+      ]
+    },
+    {
+      "pass": "Blueprint JSON codec",
+      "name": "toJson/fromJson round trip, scalus key presence and back-compat",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/blueprint/BlueprintTest.scala:325-372"
+      ]
+    },
+    {
+      "pass": "Blueprint JSON codec",
+      "name": "Purpose codec (spend/mint/withdraw/publish/oneOf) and Language/DataType decode errors (Blueprint.scala:320-333, 459-466, 479-501)",
+      "tests": []
+    },
+    {
+      "pass": "BlueprintTool",
+      "name": "stampScalaVersion, aggregate (order, mixed versions, empty)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/blueprint/BlueprintToolTest.scala:21-73"
+      ]
+    },
+    {
+      "pass": "Bip39",
+      "name": "BIP-39 vectors: entropy -> mnemonic -> seed; validity; case insensitivity; entropy round trip",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/wallet/hd/Bip39Test.scala:14-182"
+      ]
+    },
+    {
+      "pass": "Bip39",
+      "name": "error paths of mnemonicToEntropy, mnemonicToSeed, entropyToMnemonic (Bip39.scala:51-58, 124-139, 152-155)",
+      "tests": []
+    },
+    {
+      "pass": "Bip32Ed25519",
+      "name": "master key, hardened/normal derivation, cardano-addresses vector at m/1852'/1815'/0'/0/0, parsePath",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/wallet/hd/Bip32Ed25519Test.scala:37-231"
+      ]
+    },
+    {
+      "pass": "Cip1852",
+      "name": "path builders, parsePath, parseAccountPath, negative-index rejection",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/wallet/hd/Cip1852Test.scala:8-118"
+      ]
+    },
+    {
+      "pass": "HdKeyPair",
+      "name": "fromMnemonic, derive, sign/verify, equality",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdKeyPairTest.scala:17-139"
+      ]
+    },
+    {
+      "pass": "HdAccount",
+      "name": "keys per role, withPaymentIndex, base address; parity with bloxbean Account",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdAccountTest.scala:18-323"
+      ]
+    },
+    {
+      "pass": "HdAccount",
+      "name": "enterpriseAddress, stakeAddress, withChangeIndex/withStakingIndex/withDrepIndex (HdAccount.scala:103-108, 117-118, 156-165)",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C35-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/address/Address.scala:1218-1229",
+        "scalus-core/shared/src/main/scala/scalus/cardano/address/Address.scala:1244-1267",
+        "scalus-core/shared/src/main/scala/scalus/cardano/address/Address.scala:1462-1467",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/TransactionOutput.scala:273",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/TransactionOutput.scala:293",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ArbitraryInstances.scala:335",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/CborSerializationTest.scala:113"
+      ],
+      "claim": "By reading, Address.fromBytes claims to be 'the ledger's decodeAddr' (1218-1219) but accepts bytes that decodeAddr rejects. cardano-ledger conway-1.22.1.0, Cardano/Ledger/Address.hs: a Byron address needs header exactly 0x82 (headerByron, 540-544) and is decoded in full with decodeCrcProtected (decodeBootstrapAddress, 688-697; Byron Address.hs:174); a Shelley header must have header .&. 0x8E == 0 (headerNonShelleyBits, 547-548, check at 653-659), so the network nibble is 0 or 1 and types 8-15 are not output addresses. Scalus: (a) any header 0x80-0x8F becomes a ByronAddress with no CBOR or CRC check (1262, 1462-1467), so Address.fromBytes(Array(0x80.toByte)) succeeds and fails only later in the lazy `parsed`; (b) a Shelley header with network nibble 2-15 parses to Network.Other (1317 and the other parseTypeN); (c) TransactionOutput reads its address with Address.read (TransactionOutput.scala:273, 293), so a stake address (header 0xe_/0xf_) is accepted as an output address. A grep of scalus.cardano.ledger.rules finds no rule that references StakeAddress, so such an output passes validation in Scalus and fails deserialization on a node. The tests pin the lax behavior: Arbitrary[TransactionOutput] = autoDerived (ledger ArbitraryInstances:335) draws Address from address.ArbitraryInstances, which yields StakeAddress in 34 % and Network.Other in ~20 % of samples (gen-stats.md), and CborSerializationTest:113 round-trips them.",
+      "action": "Main-code note: in fromBytes require header == 0x82 for Byron and decode it (reuse ParsedByronAddress.parse + isValid), and reject a Shelley/stake header whose network nibble is not 0 or 1; in TransactionOutput read the address with a variant that rejects StakeAddress (fromBech32(\"stake1...\") must keep returning StakeAddress, RewardAccount.scala:60 relies on it). Tests: add the three negative cases to CardanoAddressTest and a TransactionOutput decode test; then apply C35-9 to the generator.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-35",
+      "verification": "The ledger source (../cardano-ledger at conway-1.22.1.0, libs/cardano-ledger-core/src/Cardano/Ledger/Address.hs) matches the claim. headerByron = 0b10000010, and isByronAddress is equality. Byron bytes go through decodeBootstrapAddress -> decodeFull' (lines 688-697). A Shelley header must satisfy header .&. (0x82 .|. 0x0C) == 0 (lines 547-548 and 653-659), so the network is only bit 0 and every header with bit 7 set (types 8-15, stake 0xE_/0xF_) is rejected. Scalus Address.scala:1244-1267 dispatches on the high nibble only. parseType8 (1462-1467) wraps any 0x8_ header in ByronAddress with no CBOR or CRC check; parsed is lazy (928). Network.fromNetworkId (154-157) maps 2-15 to Other. TransactionOutput.scala:273/293 use Address.read (Address.scala:1197-1201), which calls fromBytes, so a StakeAddress is accepted as an output address. In rules/, only WrongNetworkValidator checks output addresses, through getNetwork.contains(expected). A StakeAddress on the right network passes it, so (c) is reachable. Note: WrongNetworkValidator does reject Network.Other at validation, so (b) is a parse-level leniency only, not a validation hole. The generator pins hold: ledger ArbitraryInstances:335 is autoDerived, address ArbitraryInstances:9-17 gives Other at weight 1/5, and CborSerializationTest:112-113 round-trips TransactionOutput."
+    },
+    {
+      "id": "C35-2",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/blueprint/Blueprint.scala:476-501",
+        "scalus-core/shared/src/main/scala/scalus/cardano/blueprint/Blueprint.scala:410-416"
+      ],
+      "claim": "By reading (lines 485-501 never executed in the baseline): the Purpose JSON codec is incomplete (marked todo in the source). (1) Purpose.OneOf encodes as an empty JSON array `[]`, while CIP-57 writes `{\"oneOf\": [...]}`; (2) decodeValue calls readString, so it cannot read back the `[]` it wrote, nor the CIP-57 oneOf object that Aiken emits; a blueprint whose TypeDescription has purpose = Some(OneOf(...)) does not round-trip; (3) an unknown purpose string (e.g. \"vote\" or \"propose\") falls through the match and throws scala.MatchError instead of in.decodeError. The string \"oneOf\" decodes to OneOf(Seq.empty).",
+      "action": "Main-code note: encode OneOf as {\"oneOf\": [..]} and decode both forms, with decodeError on unknown input. Test: in BlueprintTest, round-trip a TypeDescription for each Purpose case including OneOf(Seq(Spend, Mint)), parse a CIP-57 oneOf object, and assert a decode error (JsonReaderException) for an unknown purpose string.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-36",
+      "verification": "Blueprint.scala:482-490: decodeValue calls in.readString and then does a non-exhaustive String match, so an unknown string throws scala.MatchError, not decodeError. \"oneOf\" maps to OneOf(Seq.empty) with a // todo. Lines 492-501: OneOf encodes as an empty array via writeArrayStart/writeArrayEnd. readString cannot read an array or an object back, so TypeDescription(purpose = Some(OneOf(...))) (411-416, JsonCodecMaker.make) does not round-trip. Compare DataType's codec (459-464), which uses in.decodeError correctly."
+    },
+    {
+      "id": "C35-3",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Bip39.scala:108-113",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Bip39.scala:201-205"
+      ],
+      "claim": "By reading: BIP-39 derives the seed with PBKDF2 over the mnemonic 'in UTF-8 NFKD' and salt 'mnemonic' + passphrase 'again in UTF-8 NFKD'. mnemonicToSeed uses passphrase.getBytes(\"UTF-8\") with no NFKD, so a non-ASCII passphrase in composed form (e.g. \"caf\\u00e9\") gives a seed different from other BIP-39 implementations (which decompose to \"cafe\\u0301\"). normalizeWords also uses the default-locale toLowerCase, so on a JVM with a Turkish default locale an upper-case word with I (e.g. \"LIBRARY\") lowers to a dotless i and the mnemonic is rejected. Cardano keys (Bip32Ed25519.masterKeyFromEntropy) do not use mnemonicToSeed, so the impact is limited to callers of the BIP-39 seed.",
+      "action": "Main-code note only: NFKD-normalize mnemonic and passphrase (java.text.Normalizer is not available on Scala.js; it needs a platform shim or a documented ASCII-only restriction) and use toLowerCase(Locale.ROOT). Test: add the trezor vectors with a non-ASCII passphrase (the Japanese vector file) on JVM.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "findingsLog": "F-37",
+      "verification": "Both defects are real. Bip39.scala:108-113 builds the salt as (\"mnemonic\" + passphrase).getBytes(\"UTF-8\") with no NFKD. Bip39.scala:201-202 normalizeWords uses the default-locale toLowerCase, so a JVM in a tr locale lowercases \"LIBRARY\" to a dotless i and the word lookup fails. Scala.js toLowerCase is locale-independent, so this is JVM-only. The impact statement is wrong for the locale part. normalizeWords is also used by mnemonicToEntropy (Bip39.scala:47-48) and isValidMnemonic (23-24). mnemonicToEntropy feeds Bip32Ed25519.masterKeyFromMnemonic (181-183), which HdAccount/HdKeyPair.fromMnemonic use. Corrected claim: the NFKD gap affects only mnemonicToSeed callers, but the locale bug also rejects upper-case mnemonics in the Cardano key path (masterKeyFromMnemonic) on a Turkish-locale JVM. Fix both with Locale.ROOT, and add an upper-case mnemonic test."
+    },
+    {
+      "id": "C35-4",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Cip1852.scala:159-178",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Cip1852.scala:187-212",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Bip32Ed25519.scala:216-246"
+      ],
+      "claim": "By reading: Cip1852.parsePath accepts invalid paths and disagrees with Bip32Ed25519.parsePath. \"m/1852'/1815'/0'/0/-1\" returns Some((0, 0, -1)) and \"m/1852'/1815'/-5'/0/0\" returns account -5, because role/index use \"-1\".toInt and parseHardenedIndex does not check the sign, while Cip1852.path rejects negatives (146-148). parseHardenedIndex accepts ' and H but not h, which Bip32Ed25519.parsePath accepts (229-230); a path without the m/ prefix is accepted (161), while Bip32Ed25519 requires m/ or M/ (218-221) and Cip1852 rejects M/. Low impact: the result is only used to describe a path.",
+      "action": "Main-code note: reject negative numbers and accept the same suffixes and prefixes as Bip32Ed25519.parsePath. Test: extend Cip1852Test 'parsePath - invalid paths' (71-80) with \"-1\" role/index/account, a non-hardened purpose \"m/1852/1815'/0'/0/0\" (reaches the NonFatal catch at 175-177) and the h suffix.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-38",
+      "verification": "Cip1852.scala:159-178: role and index use plain toInt, so \"-1\" and \"+1\" parse. parseHardenedIndex (204-209) checks only the suffix (' or H) and then toInt, so \"-5'\" gives account -5. The m/ prefix is optional (161), and \"M/...\" splits into 6 parts and returns None. Bip32Ed25519.parsePath (216-246) requires m/ or M/, accepts h, and rejects negatives. Cip1852.path (145-149) rejects negatives, so the two disagree. grep finds no use of Cip1852.parsePath or parseAccountPath in main code, so the impact is low (public API only)."
+    },
+    {
+      "id": "C35-5",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:210-223",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:225-251",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:273-284",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:618-630",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:758-775",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/ArbitraryInstances.scala:21-31",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/ArbitraryInstances.scala:92-97",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/CborSerializationTest.scala:113",
+        "scalus-core/shared/src/main/scala/scalus/cardano/address/Address.scala:874-894"
+      ],
+      "claim": "No property test in the cluster uses address.ArbitraryInstances, its own generator file. CborSerializationTest:113 already round-trips Address.fromBytes(toBytes) indirectly through TransactionOutput, but no property checks bech32, Byron base58, or the Byron network magic. The examples 'Address serialization' (210-223), 'Address parsing should handle all address types' (225-251), 'Address round-trip' (273-284) and the Byron round trips (618-630, 758-775) are instances of one round-trip law over a single hand-built address. The Byron generator (21-31) produces network-magic attributes, which would reach parseNetworkMagic (874-894, fully uncovered).",
+      "action": "Add to CardanoAddressTest (with ScalaCheckPropertyChecks and address.ArbitraryInstances): forAll (a: Address) Address.fromBytes(a.toBytes.bytes) == a and a.typeId == header nibble; for Shelley/Stake with network Testnet or Mainnet Address.fromBech32(a.toBech32.get) == a; for ByronAddress ByronAddress.fromBase58(b.toBase58).get == b, b.getNetwork == (if b.networkMagic.isEmpty then Mainnet else Testnet) and b.networkMagic equals the generated magic. Delete 225-251, 273-284, 625-630 and 758-775; keep the CIP-19 vectors (43-48) and the header pins (185-208).",
+      "coverageRisk": "low: the deleted examples use one fixed hash pair; the property draws all types and networks; Byron equality on the parsed fields (758-775) is implied by equal bytes",
+      "ciSavingSec": -0.1,
+      "linesRemoved": 30,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The laws hold for every generated input. Shelley/Stake toHeader writes the Other(v) nibble, and fromBytes maps it back to Other(v) (Address.scala:154-157). The Pointer generator stays within the widths. Byron typeId 0x08 matches header 0x82. ByronAddress.create (1046+) CBOR-encodes magics 764824073, 1097911063 and 1, which parseNetworkMagic (874-894) decodes via additional=26 or <24. getNetwork (942-945) gives Testnet for any present magic, which matches the proposed law. The proposed deletions lose one assertion. CardanoAddressTest:625-630 is the only test of ByronAddress.encode (grep finds no other .encode assertion on addresses), and the property does not assert encode. The generator also never produces a derivation path, unlike the Daedalus vector, but 758-775 is implied by the kept 618-623. 225-251 and 273-284 are covered by the round-trip plus the kept header pins (185-208). Corrected action: add b.encode == Success(b.toBase58) to the Byron property, or delete 625-630 only together with C35-7, whose table keeps encode. The Network.Other part of the property must change if the C35-1 fix lands."
+    },
+    {
+      "id": "C35-6",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:43-48",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:163-183",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:185-208",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:210-223",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:286-305",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:225-251"
+      ],
+      "claim": "Type id, header and hasScript/isEnterprise are asserted several times on the same hand-built base address: typeId 0x00 at 168, 238 and through vector 0 at 43-48; typeId 0x0e at 200, 250 and vector 14; header 0x01 at 192 and 217; header 0xe1 at 203 and 222; hasScript at 206-207 and 296-297; isEnterprise at 182 and 300; StakeAddress.isEnterprise is a constant false (Address.scala:544). Lines 303-304 are commented-out asserts.",
+      "action": "Merge 163-223 and 286-305 into one table test over the eight Shelley types and the two stake types: (address, typeId, header for Testnet and Mainnet, hasScript, isEnterprise), built from the sample hashes. Delete the commented lines 303-304.",
+      "coverageRisk": "none: every asserted value stays in the table",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "The duplicates are real. typeId 0x00 is asserted at 168/238/vector 0, 0x0e at 200/250/vector 14, header 0x01 at 192/217, header 0xe1 at 203/222, and isEnterprise at 182/300. Lines 303-304 are commented out. hasScript at 206-207 (StakeAddress) and 296-297 (ShelleyAddress) cover different classes, not repeats. The proposed table columns (typeId, header, hasScript, isEnterprise) drop two assertions from 'Address serialization' (210-223): toBytes.length == 57 for a base address and 29 for a stake address, and toBytes.bytes(0) (toBytes header, which is not toHeader). No other address test pins these lengths (grep finds only 216/221). Corrected action: add the columns toBytes.size and toBytes.bytes(0) == header to the table, or keep 210-223. The enterprise row must still be built via Address(Network, Credential), which 34 other test sites also use."
+    },
+    {
+      "id": "C35-7",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:609-775"
+      ],
+      "claim": "The 14 Byron tests each loop over the same three addresses and call ByronAddress.fromBase58(base58).get again. 'should encode to Base58' (618-623) and 'round-trip through encode' (625-630) assert the same thing because encode == Success(toBase58) (Address.scala:954); 'round-trip preserves all data' (758-775) follows from 618-623; keyHashOption size 28 (642-649) repeats parsed.addrRoot size 28 (681); addrType is asserted as '0 or 2' (683-686) and exactly (727-744).",
+      "action": "Replace 609-775 with one table: (base58, addrType, hasDerivationPath, attributesSize == 0) for the Icarus, Daedalus and Redeem vectors, and assert in one test: fromBase58 succeeds, typeId 0x08, toBase58 == base58, encode == Success(base58), getNetwork == Mainnet, keyHashOption == Some(AddrKeyHash(parsed.addrRoot)), addrRoot size 28, parsed.isValid, byronAddrType, derivationPath presence, Address.fromString is a ByronAddress, plus hasScript/isEnterprise/scriptHashOption/hrp. Keep the CRC corruption test (659-667) separate.",
+      "coverageRisk": "none: the table keeps every value assertion; only repeats and the always-true checks of C35-7 go",
+      "ciSavingSec": 0,
+      "linesRemoved": 90,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Each assertion in CardanoAddressTest:609-775 maps to the proposed table, which uses the same entry point and the same three real vectors, and on all vectors where the old tests used only .head:\n- decode success and typeId 0x08 (609-616)\n- toBase58 (618-623)\n- encode (625-630)\n- getNetwork Mainnet (632-640)\n- keyHashOption defined and size 28 (642-649), covered by keyHashOption == Some(AddrKeyHash(addrRoot)) plus addrRoot size 28\n- hasScript, isEnterprise, scriptHashOption and hrp (651-657), only on head before\n- Address.fromString (669-674)\n- addrRoot size, isValid and addrType (676-687)\n- derivationPath presence/absence and attributesSize (696-725); the nonempty path follows from attributesSize != 0, because attributesSize = derivationPath size (Address.scala:991-995)\n- exact addrType (727-744)\nThe dropped checks are always true (attributesSize >= 0 at 689-694, addrType 0 or 2) or follow from toBase58 == base58 (758-775). 'different lengths' (746-756) tests only string constants. The CRC test (659-667) is kept."
+    },
+    {
+      "id": "C35-8",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:689-695",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:746-756",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:642-649",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:550-552",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:683-686"
+      ],
+      "claim": "Assertions that no main-code mutation can break, or that check too little: attributesSize >= 0 (692-694) holds for any Int size; 'Daedalus and Icarus addresses should have different lengths' (746-756) compares the lengths of two string literals in the test and calls no main code; keyHashOption is checked for size 28 only (645-647), so returning any 28-byte value passes; intercept[Exception] for addr\"invalid_address\" (550-552) also passes on a NullPointerException; addrType '0 or 2' (683-686) passes if the two are swapped.",
+      "action": "Delete 689-695 and 746-756. Compare keyHashOption with the addrRoot from parsed (or a pinned hex), intercept the specific exception type at 550-552, and assert the exact addrType (this folds into the C35-7 table).",
+      "coverageRisk": "none: the deleted asserts cannot fail",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C35-9",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/ArbitraryInstances.scala:9-18",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/ArbitraryInstances.scala:21-31",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/ArbitraryInstances.scala:92-97",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ArbitraryInstances.scala:335",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:697-724"
+      ],
+      "claim": "address.ArbitraryInstances is the address source for Arbitrary[TransactionOutput] (autoDerived, ledger ArbitraryInstances:335), but Arbitrary[Address] draws StakeAddress (34 %) and Network.Other (~20 % of Shelley/Stake samples, gen-stats.md), which a node cannot decode in an output (C35-1). The Byron generator writes only attribute key 2 (network magic): it never produces a derivation path (key 1), unknown attributes, or a payload over 255 bytes, so attributesSize > 0 and the 1- and 2-byte length forms in parseAttributesDirect (Address.scala:845-853) and parse (682-690) come only from the two golden vectors (697-724).",
+      "action": "Add genOutputAddress (Byron or Shelley, network Testnet or Mainnet) and use it for the TransactionOutput address (an explicit Arbitrary[TransactionOutput] or a given scoped to it); keep Arbitrary[Address] for address tests. Extend the Byron generator with an optional key-1 attribute of 0-300 random bytes (ByronAddress.create needs a derivationPath parameter, or build the CBOR in the generator). Prerequisite for fixing C35-1.",
+      "coverageRisk": "none: generator change; may surface the C35-1 mismatch in CborSerializationTest",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C35-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/address/Address.scala:457-468",
+        "scalus-core/shared/src/main/scala/scalus/cardano/address/Address.scala:1328-1495",
+        "scalus-core/shared/src/main/scala/scalus/cardano/address/Address.scala:638-741",
+        "scalus-core/shared/src/main/scala/scalus/cardano/address/Address.scala:945-948",
+        "scalus-core/shared/src/main/scala/scalus/cardano/address/Address.scala:963"
+      ],
+      "claim": "Uncovered in the baseline: toStakeAddress for Script delegation (461-462) and the Pointer case of the failure branch; the wrong-length require of parseType1, 2, 3, 5, 7 and 15 (1331, 1348, 1365, 1412, 1450, 1487; only types 0, 4, 6, 14 reach theirs); every error branch of ParsedByronAddress.parse (646-737: wrong major types, unsupported tag/length encodings, 'Byron address too short'); the Testnet branch of ByronAddress.getNetwork and networkMagic (963) through a real address.",
+      "action": "Add to CardanoAddressTest: toStakeAddress for a Script delegation (Success StakePayload.Script) and a Pointer delegation (Failure); a table of (header, payload length) for every Shelley/stake type with a wrong length, asserting IllegalArgumentException; ByronAddress(bytes).parsed on truncated and wrong-major-type CBOR asserting IllegalArgumentException; a testnet Byron golden address (cardano-ledger Byron golden tests) with networkMagic == Some(1097911063) or the preprod magic it holds and getNetwork == Some(Testnet).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C35-11",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:164-165",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:186-187",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:211-212",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:274-275",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:287-289",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:308-309",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:511-512",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/CardanoAddressTest.scala:359"
+      ],
+      "claim": "The same base address (ShelleyPaymentPart.Key(samplePaymentHash), ShelleyDelegationPart.keyHash(sampleStakeHash)) is rebuilt in seven tests. The local hex helper (359) is ByteString.fromHex(_).bytes, which scalus.utils.Hex.hexToBytes already provides (repeated-defs.csv: hex in 5 files).",
+      "action": "Add private vals basePart/delegation/baseAddress(network) next to the sample hashes and use them; replace hex with Hex.hexToBytes. Do this together with C35-6 so the rebuilt tests use the vals.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C35-12",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/blueprint/BlueprintTest.scala:117-122",
+        "scalus-core/shared/src/test/scala/scalus/cardano/blueprint/BlueprintTest.scala:55-78",
+        "scalus-core/shared/src/test/scala/scalus/cardano/blueprint/BlueprintTest.scala:353-372"
+      ],
+      "claim": "'should produce correct schemas for HtlcValidator input types' derives redeemerSchema (119) and never asserts it, so the Action schema literal (55-78) is dead and any change to enum-with-fields derivation passes. 'Blueprint.plutusV3 methods should produce valid JSON' (353-372) checks six fields after the round trip; a codec that drops schemas, compiledCode or hash passes.",
+      "action": "At 121 add assert(readFromString[PlutusDataSchema](Action.schema) == redeemerSchema) (compare parsed values, not strings: the literal's empty fields array at 62-64 is formatted differently from the writer). At 365-371 assert parsed == bp, the form the test at 333 already uses.",
+      "coverageRisk": "none: strengthens existing tests",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C35-13",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/blueprint/BlueprintTest.scala:172-308"
+      ],
+      "claim": "The four Blueprint.plutusV3 overload tests are 137 lines with the same 6 preamble asserts and the same validator asserts; they differ only in which of datum/parameters is present and the version/license strings.",
+      "action": "Add a local helper check(bp, title, description, version, license, hasDatum, paramCount) that asserts the preamble, validator count, title, description, datum/redeemer/parameter presence, compiledCode and hash, the datum title ContractDatum and redeemer title Action when present, and the parameter dataType Integer; call it from the four tests.",
+      "coverageRisk": "none: same assertions; the description assert (193) and compiledCode/hash asserts (missing at 229-238) apply to all four",
+      "ciSavingSec": 0,
+      "linesRemoved": 70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C35-14",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/blueprint/Blueprint.scala:320-333",
+        "scalus-core/shared/src/main/scala/scalus/cardano/blueprint/Blueprint.scala:459-466",
+        "scalus-core/shared/src/main/scala/scalus/cardano/blueprint/PlutusDataSchema.scala:84-97",
+        "scalus-core/shared/src/main/scala/scalus/cardano/blueprint/PlutusDataSchema.scala:108-118",
+        "scalus-core/shared/src/main/scala/scalus/cardano/blueprint/PlutusDataSchema.scala:275-281",
+        "scalus-core/shared/src/test/scala/scalus/cardano/blueprint/BlueprintTest.scala:89-170"
+      ],
+      "claim": "Uncovered in the clean baseline (macro statements are covered at test-compile time, F-12): the Language codec's unknown-version error (324-328) and the DataType codec's unknown dataType (463); in PlutusDataSchema.derived the enum-leaf branch (95-97), List and Map types (115-118, 275-278), and every errorAndAbort path (84-86, 91-93, 117-118). No test in the repository derives a schema for a case class with a List, Map or nested case-class field.",
+      "action": "Add to BlueprintTest: derived for a case class with List[BigInt], Map[ByteString, BigInt] and nested case-class fields (dataTypes List, Map, Constructor); derived for an enum leaf such as Action.Reveal (the code passes index 0 at 95-96 although Reveal is constructor 1; pin the intended index);Blueprint.fromJson with plutusVersion \"v4\" and an unknown dataType asserting a decode failure; compileErrors(...) for derived on an unsupported type and on a @UplcRepr other than ProductCase/ProductCaseOneElement.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -40,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C35-15",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdAccountTest.scala:18-323",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdKeyPairTest.scala:17-139",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/wallet/hd/Bip32Ed25519Test.scala:37-198"
+      ],
+      "claim": "Every test re-runs PBKDF2 (4096 iterations of HMAC-SHA512 for the Icarus master key) on the same mnemonic: HdAccountTest calls HdAccount.fromMnemonic(testMnemonic) with the same arguments in 17 tests and Account.createFromMnemonic(Networks.mainnet(), testMnemonic) in 6; HdKeyPairTest calls fromMnemonic/masterFromMnemonic 18 times. ledger-analysis.md: Pbkdf2.deriveKey 8.7 % and HdAccountTest 8.7 % of the module's CPU; timings: HdAccountTest 0.96 s, HdKeyPairTest 0.31 s, Bip32Ed25519Test 0.11 s.",
+      "action": "Hoist the shared values into suite-level lazy vals: account = HdAccount.fromMnemonic(testMnemonic), bbMainnet / bbTestnet (bloxbean Accounts), master = HdKeyPair.masterFromMnemonic(testMnemonic), payment = HdKeyPair.fromMnemonic(testMnemonic, \"m/1852'/1815'/0'/0/0\"), and in Bip32Ed25519Test master1 / derived1. Tests that need another passphrase or account index keep their own call.",
+      "coverageRisk": "none: values are immutable, the same keys are compared",
+      "ciSavingSec": 0.4,
+      "linesRemoved": 25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C35-16",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdKeyPairTest.scala:57-65",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdKeyPairTest.scala:77-87",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdAccountTest.scala:69-87",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/HdAccount.scala:49",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/HdAccount.scala:124-128"
+      ],
+      "claim": "Four tests sign and verify a message with the same code path: HdKeyPairTest 'sign and verify' (57-65) and 'CIP-1852 payment key derivation' (77-87) both use the key at m/1852'/1815'/0'/0/0 of the same mnemonic (Cip1852.paymentPath(0, 0) is that path); HdAccountTest 'sign and verify with payment key' (69-77) uses account.paymentKeyPair, which is derivePaymentKey(0) = accountKey.deriveNormal(0).deriveNormal(0) (HdAccount.scala:49, 124-128), the same key again; 'with staking key' (79-87) runs the same HdKeyPair.sign/verify with another key.",
+      "action": "Keep HdKeyPairTest 57-65 and turn it into forAll (message: ByteString) keyPair.verify(message, keyPair.sign(message)); keep the negative test (67-75) and the bloxbean cross-checks (HdAccountTest 234-271). Delete HdKeyPairTest 77-87 and HdAccountTest 69-87.",
+      "coverageRisk": "none: the same key and the same sign/verify code remain tested, cross-checked against bloxbean",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "HdKeyPairTest:77-87 uses Cip1852.paymentPath(0,0), and Cip1852Test:27 pins that to \"m/1852'/1815'/0'/0/0\", the same path as 57-65. vk size 32 is also asserted at line 20, and sign/verify at 57-65. HdAccountTest:69-77 uses paymentKeyPair = derivePaymentKey(0) = accountKey.deriveNormal(0).deriveNormal(0) (HdAccount.scala:49, 124-128). Its sign is cross-checked by bloxbean verification (HdAccountTest ~235-251), and its verify by a bloxbean-signed message (~253-271). The base address that contains the stake key hash matches bloxbean (~225-231). HdAccountTest:79-87 runs the same HdKeyPair sign/verify code with the stake key. No assertion is lost; the signature size 64 stays at HdKeyPairTest:62."
+    },
+    {
+      "id": "C35-17",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/wallet/hd/Bip32Ed25519Test.scala:78-108",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/wallet/hd/Bip32Ed25519Test.scala:190-198",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdKeyPairTest.scala:17-46",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdKeyPairTest.scala:89-94",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdKeyPairTest.scala:131-139",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdAccountTest.scala:18-33",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdAccountTest.scala:51-58",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdAccountTest.scala:123-129",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Bip32Ed25519.scala:36-38"
+      ],
+      "claim": "About 14 tests assert only key sizes or that a pure function returns equal results twice. Sizes cannot fail: ExtendedKey requires 32-byte kL/kR/chainCode (Bip32Ed25519.scala:36-38) and VerificationKey is fixed-size, so only an exception breaks them; the 'deterministic' tests (Bip32 190-198, HdKeyPair 38-46, HdAccount 51-58) compare two calls of a function with no state. The values are pinned elsewhere: the cardano-addresses vector (Bip32Ed25519Test 50-76) and the bloxbean parity tests (HdAccountTest 169-323).",
+      "action": "Delete Bip32Ed25519Test 78-108 and 190-198, HdKeyPairTest 17-46, 89-94 and 131-139, HdAccountTest 18-33, 51-58 and 123-129. Keep the clamping asserts of Bip32Ed25519Test 37-48 and also assert the third-highest bit of kL[31] is 0 (clampKey masks with 0x1f, Bip32Ed25519.scala:258). Where a deleted test was the only one on a path (masterFromMnemonic, staking key), assert equality with the lower layer instead: HdKeyPair.masterFromMnemonic(m).extendedKey == Bip32Ed25519.masterKeyFromMnemonic(m).",
+      "coverageRisk": "low: the deleted tests also show the calls do not throw, which every value test also shows",
+      "ciSavingSec": 0,
+      "linesRemoved": 70,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C35-18",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/wallet/hd/Bip39Test.scala:170-182",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/wallet/hd/Bip39Test.scala:174",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/wallet/hd/Cip1852Test.scala:95-104"
+      ],
+      "claim": "Bip39Test 'entropy round-trip for all valid sizes' draws one unseeded scala.util.Random entropy per size (174): a failure cannot be replayed, and it runs once per size. Cip1852Test 'round-trip paths' (95-104) checks parsePath(path(a, r, i)) for one triple.",
+      "action": "Replace both with ScalaCheck properties: forAll (size in Gen.oneOf(16, 20, 24, 28, 32), bytes of that size) isValidMnemonic(entropyToMnemonic(e)) && mnemonicToEntropy(entropyToMnemonic(e)) sameElements e; forAll (account, role, index in Gen.choose(0, Int.MaxValue)) Cip1852.parsePath(Cip1852.path(a, r, i)) == Some((a, r, i)), and the same for parseAccountPath(accountPath(a)).",
+      "coverageRisk": "none: same law, more and replayable samples",
+      "ciSavingSec": -0.05,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Bip39Test:169-181 draws one unseeded scala.util.Random entropy per size, so a failure cannot be replayed. The law isValidMnemonic(entropyToMnemonic(e)) && mnemonicToEntropy(..) == e holds for every entropy of 16/20/24/28/32 bytes (Bip39.scala:150-155 accepts exactly these sizes). Cip1852Test:95-104 tests one triple. For a, r, i in 0..Int.MaxValue, path() (Cip1852.scala:145-149) writes the decimal values, parseHardenedIndex drops the suffix and toInt parses up to 2147483647, and role/index use toInt, so parsePath(path(a,r,i)) == Some((a,r,i)) always holds. The same holds for parseAccountPath(accountPath(a)) (57-60, 187-202). scalatestplus scalacheck is a test dependency (build.sbt), and shared ledger tests already use forAll (for example PlutusScriptScopeTest)."
+    },
+    {
+      "id": "C35-19",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/wallet/hd/Bip39Test.scala:33-122"
+      ],
+      "claim": "The five BIP-39 vector tests repeat the same 15 lines; two of them (53-68, 90-105) skip the mnemonicToEntropy check that the other three do. Only 12- and 24-word vectors are present; 15/18/21-word mnemonics (20, 24, 28 bytes) have no known-answer test.",
+      "action": "Replace 33-122 with a table (entropyHex, mnemonic, seedHex with passphrase TREZOR) and one loop that asserts entropyToMnemonic, isValidMnemonic, mnemonicToEntropy and mnemonicToSeed for every row; add the 24-byte (18-word) rows from trezor vectors.json.",
+      "coverageRisk": "none: every asserted value stays; adds the entropy check for two vectors",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C35-20",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/HdAccount.scala:103-108",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/HdAccount.scala:117-118",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/HdAccount.scala:151-165",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/wallet/hd/HdAccountTest.scala:208-232"
+      ],
+      "claim": "HdAccount.enterpriseAddress (103-108) and withChangeIndex / withStakingIndex / withDrepIndex (156-165) are never executed; stakeAddress is executed elsewhere but not compared with any reference. HdAccountTest already compares the base address with bloxbean (208-232).",
+      "action": "Add to HdAccountTest: enterpriseAddress(Mainnet/Testnet).toBech32.get == bbAccount.enterpriseAddress(); stakeAddress(Mainnet).toBech32.get == bbAccount.stakeAddress(); and for each with*Index(3) the changed key equals the matching derive*Key(3) while the other three keys stay equal (as 89-109 does for withPaymentIndex).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C35-21",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Bip39.scala:47-58",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Bip39.scala:120-155",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Bip32Ed25519.scala:50-52",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Bip32Ed25519.scala:240-243",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Cip1852.scala:73-75",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Cip1852.scala:109-111",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Cip1852.scala:128-130",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/wallet/hd/Cip1852.scala:145-148"
+      ],
+      "claim": "Error paths never executed: mnemonicToEntropy with a wrong word count, unknown word or bad checksum (53, 57-58); mnemonicToSeed on an invalid mnemonic (validateMnemonic 124-139: three messages); entropyToMnemonic with a 15-byte entropy (152-155); Bip32 deriveHardened(-1) (51) and parsePath(\"m/-1\") (240-243); the account/role checks of Cip1852 paymentPath, stakingPath, drepPath and path (74, 110-111, 129-130, 146-148).",
+      "action": "Add one table test per file asserting IllegalArgumentException and the message fragment: Bip39Test for the three mnemonicToEntropy and three mnemonicToSeed cases and entropyToMnemonic(Array.fill(15)(0)); Bip32Ed25519Test for deriveHardened(-1) and parsePath(\"m/-1\"); Cip1852Test for a negative account or index in every builder.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 9 findings of scope merge-duplicate-tests, to-property or main-bug; 6 confirmed, 3 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

@@ -1,0 +1,557 @@
+{
+  "cluster": "ledger.rules.scripts",
+  "summary": "The cluster tests the script-related Conway ledger rules (ExUnitsTooBig, ExactSetOfRedeemers, MissingOrExtraScriptHashes, MissingRequiredDatums, NativeScripts, TxRefScriptsSize) and PlutusScriptsTransactionMutator: 7 suites, 4.8k lines, about 1.5 s per run (the mutator suite 1.3 s), so there is no ci-time finding. Statement coverage of the main code is near complete (one unreachable getOrElse at ExactSetOfRedeemersValidator:49), but it hides untested paths that run on empty sets: reference-input native scripts and the needed filter in NativeScriptsValidator, multi-redeemer ExUnits summing, reference-resolved Plutus scripts and redundant witnesses. Most failure tests assert only isLeft, and the mutator turns any exception into a Left, so many tests cannot tell which rule fired; two MissingRequiredDatums tests cannot fail for their stated reason. The suites are copy-paste heavy: 12 MissingOrExtraScriptHashes tests and 6 ExactSetOfRedeemers 'extra' tests are duplicates, 7 NativeScripts tests repeat TimelockTest, and the per-purpose and V1/V2 guard groups collapse into tables (about 2.6k lines less). TxRefScriptsSizeValidatorTest is the model: exact Left values, local builders, boundary cases. No generator exists in the cluster (C8): Arbitrary is used only for one-off fixture values. A suspected V1 reference-script divergence was checked against cardano-ledger-conway-1.22.1.0 (Conway transTxOutV1 does not reject reference scripts) and is not reported.",
+  "behaviors": [
+    {
+      "pass": "ExUnitsTooBigValidator",
+      "name": "sum of redeemer ExUnits within max passes (incl. exactly max, no redeemers)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExUnitsTooBigValidatorTest.scala:9-33",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExUnitsTooBigValidatorTest.scala:84-97"
+      ]
+    },
+    {
+      "pass": "ExUnitsTooBigValidator",
+      "name": "memory or steps over max fails, each checked independently",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExUnitsTooBigValidatorTest.scala:35-82"
+      ]
+    },
+    {
+      "pass": "ExUnitsTooBigValidator",
+      "name": "ExUnits of several redeemers are summed before the check",
+      "tests": []
+    },
+    {
+      "pass": "ExactSetOfRedeemersValidator",
+      "name": "a needed Plutus purpose (spend/mint/cert/reward/voting/proposing) with its redeemer passes",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:36-64",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:133-171",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:244-275",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:340-380",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:454-489",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:558-595"
+      ]
+    },
+    {
+      "pass": "ExactSetOfRedeemersValidator",
+      "name": "a needed Plutus purpose without a redeemer fails (missingRedeemers)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:66-101",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:173-210",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:277-307",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:382-421",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:491-525",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:597-632"
+      ]
+    },
+    {
+      "pass": "ExactSetOfRedeemersValidator",
+      "name": "a redeemer with no needed purpose fails (extraRedeemers)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:103-131",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:212-242",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:309-338",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:423-452",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:527-556",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:634-664"
+      ]
+    },
+    {
+      "pass": "ExactSetOfRedeemersValidator",
+      "name": "native-script purposes need no redeemer; spend index follows sorted input order",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:666-770"
+      ]
+    },
+    {
+      "pass": "ExactSetOfRedeemersValidator",
+      "name": "a script resolved only through a reference input needs a redeemer; an unresolved script hash needs none",
+      "tests": []
+    },
+    {
+      "pass": "MissingOrExtraScriptHashesValidator",
+      "name": "a needed script hash per purpose present in witnesses passes",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:31-58",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:89-118",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:151-178",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:209-241",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:277-305",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:339-365"
+      ]
+    },
+    {
+      "pass": "MissingOrExtraScriptHashesValidator",
+      "name": "a needed script hash per purpose absent from witnesses and references fails",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:60-87",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:120-149",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:180-207",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:243-275",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:307-337",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:367-393",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:935-1456"
+      ]
+    },
+    {
+      "pass": "MissingOrExtraScriptHashesValidator",
+      "name": "a needed hash provided by a reference script in an input or reference input needs no witness",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:418-934"
+      ]
+    },
+    {
+      "pass": "MissingOrExtraScriptHashesValidator",
+      "name": "a witness script that no purpose needs fails (extra)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:395-416"
+      ]
+    },
+    {
+      "pass": "MissingOrExtraScriptHashesValidator",
+      "name": "a witness script already provided by reference is extra; native witness scripts count",
+      "tests": []
+    },
+    {
+      "pass": "MissingRequiredDatumsValidator",
+      "name": "a datum hash on a Plutus-locked input must be in the witness datums",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:34-94"
+      ]
+    },
+    {
+      "pass": "MissingRequiredDatumsValidator",
+      "name": "a V1/V2-locked input without a datum fails; V3 and inline datums need none",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:96-146",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:379-406"
+      ]
+    },
+    {
+      "pass": "MissingRequiredDatumsValidator",
+      "name": "supplemental witness datums are allowed only when an output, reference input or collateral return carries their hash",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:148-268",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:319-347"
+      ]
+    },
+    {
+      "pass": "MissingRequiredDatumsValidator",
+      "name": "native-script-locked inputs are skipped",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:349-376"
+      ]
+    },
+    {
+      "pass": "NativeScriptsValidator",
+      "name": "needed witness native scripts are evaluated with vkey witness hashes and the tx validity interval",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/NativeScriptsValidatorTest.scala:11-610",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/NativeScriptsValidatorTest.scala:612-641"
+      ]
+    },
+    {
+      "pass": "NativeScriptsValidator",
+      "name": "needed native scripts from reference inputs are evaluated; unneeded native scripts are skipped",
+      "tests": []
+    },
+    {
+      "pass": "TxRefScriptsSizeValidator",
+      "name": "total non-distinct reference script size over 200 KiB fails; isValid=false skips the check",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/TxRefScriptsSizeValidatorTest.scala:60-142"
+      ]
+    },
+    {
+      "pass": "PlutusScriptsTransactionMutator",
+      "name": "isValid=true and scripts pass: inputs consumed, outputs added, fee and donation added",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:16-192",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:355-366"
+      ]
+    },
+    {
+      "pass": "PlutusScriptsTransactionMutator",
+      "name": "isValid=false and a script fails: collateral consumed, collateral return added, collected collateral added to fees (exact past Long.MaxValue)",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:194-353"
+      ]
+    },
+    {
+      "pass": "PlutusScriptsTransactionMutator",
+      "name": "isValid flag disagrees with the script result: Left",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:368-462"
+      ]
+    },
+    {
+      "pass": "PlutusScriptsTransactionMutator",
+      "name": "context translation errors (V1/V2 Conway fields, V1 inline datums and Byron addresses) become Left",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:466-1233"
+      ]
+    },
+    {
+      "pass": "PlutusScriptsTransactionMutator",
+      "name": "collateral input missing from UTxO gives BadCollateralInputsUTxO; no collateral return; return index = outputs.size",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C02-1",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:935-1456",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:60-87",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:120-149",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:180-207",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:243-275",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:307-337",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:367-393"
+      ],
+      "claim": "The 12 'failure for <purpose> with missing reference script in inputs/referenceInputs' tests (935-1456) are the 6 'failure with missing <purpose> in witnesses' tests plus one extra UTxO that has scriptRef = None (a key address in inputs or reference inputs). The extra UTxO adds nothing to allProvidedReferenceScriptHashes, so every one of them runs the same path and asserts the same isLeft. Diff of 180-207 vs 1100-1142 shows only the added UTxO.",
+      "action": "Delete lines 935-1456 (12 tests). If a reference-input UTxO without a scriptRef should stay covered, add that UTxO to one of the kept 'missing in witnesses' tests.",
+      "coverageRisk": "low: a reference input or spent input without scriptRef is still exercised by the 12 'success ... with reference script' tests (418-934), which also have such UTxOs.",
+      "ciSavingSec": 0.02,
+      "linesRemoved": 520,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "All 12 tests at MissingOrExtraScriptHashesValidatorTest.scala:935-1456 (935, 968, 1009, 1054, 1100, 1143, 1187, 1235, 1284, 1328, 1373, 1415) assert only result.isLeft. Each one is the matching 'missing <purpose> in witnesses' test (60, 120, 180, 243, 307, 367; same file, shared/, same validator entry point, also isLeft only) plus one UTxO with scriptRef = None. That UTxO is either a key-address spent input or a reference input. The Inputs variants at 935 and 968 are test 60 with a Babbage output with scriptRef=None, plus a reference input that has no scriptRef. A UTxO with no scriptRef adds no hash to allProvidedReferenceScriptHashes (MissingOrExtraScriptHashesValidator.scala:91-92, 101-127). So the missing set and extras are the same, and the deleted tests take the same Left path. The deleted tests also cannot detect any mutation in how a None scriptRef is resolved, because any Left (including BadReferenceInputs) would pass them too. The coverage-risk note holds: the success test at 449 has a spent input with scriptRef=None, and it asserts Right."
+    },
+    {
+      "id": "C02-2",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:103-131",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:212-242",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:309-338",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:423-452",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:527-556",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:634-664",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidator.scala:24-28"
+      ],
+      "claim": "The 6 'failure with extra <tag> redeemer' tests differ only in the RedeemerTag of the single redeemer; in every one the needed set is empty and extraRedeemers = actual -- needed. The validator never inspects the tag on this path (ExactSetOfRedeemersValidator.scala:24-28), so the 6 tests assert one behavior.",
+      "action": "Replace the 6 tests with one test that loops over RedeemerTag.values (or 3 tags) and asserts the exact Left(ExactSetOfRedeemersException(tx.id, Set((tag, 0)), Set.empty)).",
+      "coverageRisk": "none: same inputs per tag; the table keeps every tag.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": 150,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "The 6 extra-redeemer tests are at ExactSetOfRedeemersValidatorTest.scala:103, 212, 309, 423, 527 and 634. Each has one spent input at an arbitrary ShelleyAddress, one witness Plutus script, and one Redeemer(tag, 0). The body never contains the purpose (mint=None, empty certificates, withdrawals=None, votingProcedures=None, empty proposals). A random script-credential address cannot match the witness script hash, so neededPlutusScriptHashes is empty (ExactSetOfRedeemersValidator.scala:17-23). The validator then gives extra = actualRedeemers = {(tag,0)} and missing = {} (lines 24-28). The tag is never inspected on this path. The only other difference is that Mint uses PlutusV2, which is irrelevant. RedeemerTag has exactly 6 cases (scalus-core Redeemer.scala:20), so a loop over RedeemerTag.values keeps every tag. The proposed exact Left(ExactSetOfRedeemersException(tx.id, Set((tag,0)), Set.empty)) matches lines 32-36 and is strictly stronger than isLeft."
+    },
+    {
+      "id": "C02-3",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/NativeScriptsValidatorTest.scala:111-422",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/NativeScriptsValidatorTest.scala:612-641",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/TimelockTest.scala:39-153"
+      ],
+      "claim": "Seven NativeScriptsValidatorTest tests (AllOf success/failure 111-215, AnyOf success/failure 217-310, MOf success/failure 312-422, MOf m=0 612-641) re-test Timelock.evaluate combinators through the validator. TimelockTest:39-153 tests the same AllOf/AnyOf/MOf/m=0 cases on Timelock.evaluate directly. The validator only calls nativeScript.script.evaluate(validatorKeys, validityInterval) (NativeScriptsValidator.scala:73-74); its own wiring is covered by the Signature and TimeStart/TimeExpire tests that stay.",
+      "action": "Delete the 7 tests. Keep: no native scripts, Signature success/failure (vkey wiring), TimeStart/TimeExpire success/failure (validity interval wiring), empty AllOf/AnyOf (not in TimelockTest).",
+      "coverageRisk": "low: TimelockTest covers each combinator; the 7 tests add no validator-specific path.",
+      "ciSavingSec": 0.06,
+      "linesRemoved": 340,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "TimelockTest (scalus-core/shared, so the same shared platforms) covers the AllOf, AnyOf and MOf success/failure semantics and m=0 on Timelock.evaluate (TimelockTest.scala:39-153). But two of the 7 tests check validator wiring that no kept test checks: 'AllOf success' (NativeScriptsValidatorTest.scala:111-160) and 'MOf success' (312-365). They are the only tests with more than one vkey witness. NativeScriptsValidator.extractValidatorKeys (NativeScriptsValidator.scala:62-64) must collect every witness's vkeyHash. A mutation that keeps only the first witness passes all kept tests: Signature success has 1 witness, Signature failure has 0, and the Time* tests have none. Such a mutation fails AllOf success and MOf success. Corrected action: delete AllOf failure (162), AnyOf success (217), AnyOf failure (267), MOf failure (367) and MOf m=0 (612). Keep one multi-witness success test, for example AllOf success with 2 witnesses (preferably built from a plain Transaction, per C02-16), to cover extraction of all witness keys."
+    },
+    {
+      "id": "C02-4",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExUnitsTooBigValidatorTest.scala:9-48",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExUnitsTooBigValidatorTest.scala:52-97",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/ExUnitsTooBigValidator.scala:12-17"
+      ],
+      "claim": "ExUnitsTooBigValidatorTest has 6 examples of one law, each with one redeemer: result.isLeft == (sum.memory > max.memory || sum.steps > max.steps). The summing over several redeemers (totalExUnits, line 13) is never tested: every example has exactly one redeemer, so a mutation that checks only the first or the largest redeemer passes. 'failure' (35-48, Long.MaxValue on both) is subsumed by the two single-component tests; the Left payload (actual, max) is never checked.",
+      "action": "Replace 'success' (9-22) and 'failure' (35-48) with one forAll over 0-4 redeemers whose ExUnits are drawn around max/n: assert result == (if sum exceeds max pointwise then Left(ExUnitsExceedMaxException(tx.id, sum, max)) else Right(())). Keep the boundary examples (exactly max, steps-only, memory-only, no redeemers). Build the tx with Transaction(TransactionBody(...), witnessSet) instead of randomTransactionWithIsValidField.",
+      "coverageRisk": "none: boundary examples stay; the property adds the multi-redeemer sum.",
+      "ciSavingSec": -0.05,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "All 6 tests in ExUnitsTooBigValidatorTest.scala:9-97 use Redeemers with exactly one Redeemer(Spend, 0, ...), or None. The validator sums with redeemers.totalExUnits (ExUnitsTooBigValidator.scala:12-14; Redeemer.scala:101-105), and the per-redeemer sum is not exercised anywhere else: the only other suite that mentions ExUnitsExceedMax is SubmitErrorTest (jvm), which tests error mapping. So a mutation to 'first redeemer only' survives. The law result.isLeft == sum.exceeds(max) holds for every input. ExUnits.+ is saturating (Types.scala:505-509), and exceeds is the pointwise negation of fitsWithin (Types.scala:522-527). With draws around max/n there is no overflow. 'failure' at 35-48 (Long.MaxValue on both components, single redeemer) adds no path beyond the steps-only and memory-only tests. Two generator constraints are needed. First, 0 redeemers must map to redeemers=None, because Redeemers.Map requires nonEmpty (Redeemer.scala:117-118). Second, (tag, index) keys must be distinct, because Redeemers.from builds a TreeMap and collapses duplicates (Redeemer.scala:122-127); the expected sum must be computed over the deduplicated set."
+    },
+    {
+      "id": "C02-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:66-101",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:100",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:130",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:209",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidator.scala:30-37"
+      ],
+      "claim": "Every ExactSetOfRedeemersValidatorTest failure test asserts only result.isLeft. 'failure with missing spend redeemer' (66-101) uses a redeemer at index 1, so it yields both extra {(Spend,1)} and missing {(Spend,0)}: deleting `missingRedeemers.nonEmpty` at line 30 still fails it via the extra set, and swapping the extra/missing arguments at lines 34-35 breaks no test in the file.",
+      "action": "Assert the exact Left(ExactSetOfRedeemersException(tx.id, extra, missing)) in every failure test (or in the tables of C02-2/C02-15). Change the missing-spend test to have no redeemers, so it isolates the missing set.",
+      "coverageRisk": "none: assertions only get stronger.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:60-87",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:395-416",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidator.scala:65-75"
+      ],
+      "claim": "All MissingOrExtraScriptHashesValidatorTest failure tests assert only isLeft. The exception carries 7 per-purpose sets (lines 66-75); a mutation that passes missingWithdrawalsScriptHashes in the voting slot, or reports extras as missing inputs, breaks no test. The per-purpose sets are what SubmitError and users read.",
+      "action": "Assert the exact Left(MissingOrExtraScriptHashesException(tx.id, ...)) with the expected set in its slot and empty sets elsewhere, in each missing-<purpose> test and in 'failure with extra in witnesses'.",
+      "coverageRisk": "none: assertions only get stronger.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:269-317",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:379-406",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:68-120",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidator.scala:66-72"
+      ],
+      "claim": "Three weak MissingRequiredDatums tests. (1) 'success when datum is used in outputs, reference inputs and collateral return but skipped in witness' (269-317) has no witness datums and no Plutus input, so needed and witness sets are both empty and it passes for any supplemental-hash logic: no mutation of getSupplementalDatumHashes breaks it. (2) 'success with inline datum in inputs' (379-406) uses a PlutusV3 script, and V3 also accepts a missing datum (line 71), so treating an inline datum as no datum still passes; it needs PlutusV1/V2. (3) The two failure tests (68-94, 96-120) assert isLeft only and cannot tell unmatchedDatumHashes from inputsWithMissingDatumHash.",
+      "action": "(1) Delete 269-317, or add the datum to the witness set so it asserts that a hash present in all three places is allowed once. (2) Switch 379-406 to Script.PlutusV1 (or V2). (3) Assert the exact DatumsException(tx.id, inputsWithMissing, unmatched, notAllowed) in the failure tests.",
+      "coverageRisk": "none: (1) is a no-op assertion today; the other changes only strengthen.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-8",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:368-417",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:419-462",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:466-1233",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutator.scala:46-64",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutator.scala:110-116"
+      ],
+      "claim": "16 mutator tests assert only result.isLeft: 'isValid = false and valid scripts', 'isValid = true and invalid scripts', and the 14 V1/V2 guard tests. The mutator turns any NonFatal exception into a Left (lines 110-116), so a guard test also passes when the tx fails for an unrelated reason (a missing UTxO, a bad datum, a script failure). Example: if the V1 inline-datum check were removed but the alwaysOk script failed for another reason, all V1 tests still pass. No test checks PlutusScriptValidationException.scriptHash or that line 49's message differs from line 113's.",
+      "action": "Match on the Left: isValid=true+invalid -> PlutusScriptValidationException with scriptHash == Some(script.scriptHash); isValid=false+valid -> IllegalArgumentException whose message contains 'invalid flag passed script validation'; each guard test -> message contains its guard text ('VotingProcedures field not supported', 'inline datums or Byron addresses', ...). Put the expected substring in the guard table of C02-13.",
+      "coverageRisk": "none: assertions only get stronger.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-9",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/NativeScriptsValidator.scala:40-45",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/NativeScriptsValidator.scala:73",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/NativeScriptsValidatorTest.scala:11-641"
+      ],
+      "claim": "Two NativeScriptsValidator paths have no test that can fail: (a) reference-input native scripts (invalidProvidedReferenceNativeScriptHashes, lines 40-45): no test has a scriptRef, so replacing allProvidedReferenceNativeScripts with Set.empty breaks nothing; (b) the needed filter `neededScriptHashes.contains` (line 73): every test's witness script is needed, so deleting the filter breaks nothing, although it would reject valid txs that carry an unneeded failing native script. Statement coverage marks both covered because the code runs on empty sets.",
+      "action": "Add 3 tests: a failing native script provided only by a reference input that locks a spent input -> Left with the hash in invalidProvidedReferenceNativeScriptHashes; the same script passing -> Right; a failing native script in witnesses that no purpose needs -> Right.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.01,
+      "linesRemoved": -60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidator.scala:94-103",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidator.scala:55",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:31-58",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:418-447"
+      ],
+      "claim": "No MissingOrExtraScriptHashesValidatorTest test has (a) a witness script that is also provided by a reference script, which babbageMissingScripts reports as extraneous (sReceived \\ (sNeeded \\ sRefs)), or (b) a native script in witnesses: every test uses one Script.PlutusV1. A mutation that subtracts reference hashes from the witness set before computing extras (line 55), or drops native scripts from allWitnessesScriptHashes, breaks no test.",
+      "action": "Add: a spent script-locked input whose script is both in witnesses and in a reference input's scriptRef -> Left with that hash in the extra set; a native-script mint policy with the native script in witnesses -> Right, and without it -> Left with the hash in missingMint.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0.0,
+      "linesRemoved": -50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-11",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidator.scala:17-22",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidator.scala:54-58",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:36-664"
+      ],
+      "claim": "ExactSetOfRedeemersValidator intersects needed hashes with allResolvedPlutusScriptHashes (witnesses and reference scripts), but no test resolves a Plutus script through a reference input, and no test has a needed script hash that is not resolved at all (no redeemer needed). All mint/cert/reward/voting/proposing tests use index 0 with one item, so a wrong index order (for example mint indexes not by sorted policy id) breaks nothing; only spend has a multi-item test (704-770).",
+      "action": "Add: a spent input whose PlutusV2 script is only in a reference input's scriptRef, with and without the Spend redeemer; a mint of an unresolved policy with no redeemer -> Right; two mint policies where the Plutus one sorts second -> needs (Mint, 1).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0.0,
+      "linesRemoved": -60,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-12",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutator.scala:66-95",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:194-353"
+      ],
+      "claim": "The two collateral tests both have an empty outputs list and a collateral return, and all collateral inputs exist in the UTxO. So: the collateral return index (outputs.size, line 72) equals 0 by chance and a mutation to index 0 passes; the no-collateral-return path (getOrElse(Coin.zero), lines 77-79; empty addedUtxos) is untested; the BadCollateralInputsUTxO break (lines 85-92) is never asserted in this cluster (baseline coverage marks it executed by another suite only).",
+      "action": "Add 3 cases to the collateral tests: tx with 2 outputs -> collateral return at Input(tx.id, 2); no collateral return -> fees += sum of collateral and no UTxO added; collateral input missing from UTxO -> Left(BadCollateralInputsUTxOException(tx.id)).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-13",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:16-192",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:466-1233",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:1241-1247"
+      ],
+      "claim": "PlutusScriptsTransactionMutatorTest repeats the same 50-line fixture (spent script input with a datum hash, one Spend redeemer, alwaysOk script) in 17 tests; the 14 V1/V2 guard tests (466-1233, 768 lines) differ only in the script version and one body/UTxO field, and the V1/V2/V3 success tests (16-192) differ only in the script. invalidPlutusV3Script is a def that compiles SIR to UPLC on each of its 3 uses.",
+      "action": "Add a private fixture `spendTx(script, bodyMod, utxoMod)` and turn the guard tests into one table of (name, version, body/UTxO modification, expected message substring) and the success tests into a table over V1/V2/V3. Make the four scripts lazy vals.",
+      "coverageRisk": "none: same cases and assertions (strengthened by C02-8).",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 600,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-14",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:11-934"
+      ],
+      "claim": "After C02-1, MissingOrExtraScriptHashesValidatorTest still has 26 tests (about 920 lines) that are one table: purpose (input, mint, voting, withdrawal, proposal, certificate) x script source (witness, scriptRef in spent input, scriptRef in reference input, none) -> Right or the missing set. Each test rebuilds Transaction/TransactionBody/TransactionWitnessSet/Context/State by hand.",
+      "action": "Write a purpose table of `ScriptHash => TransactionBody => TransactionBody` modifiers and one loop per source that asserts the exact result. Keep 'no scripts' and 'extra in witnesses' as plain tests.",
+      "coverageRisk": "low: the table must keep all 6 purposes x 3 sources; a dropped row loses one purpose path (allNeededVotingProceduresScriptHashesView etc.).",
+      "ciSavingSec": 0.0,
+      "linesRemoved": 650,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-15",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:36-101",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:133-210",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:244-307",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:340-421",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:454-525",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:558-632"
+      ],
+      "claim": "The 12 matched/missing tests in ExactSetOfRedeemersValidatorTest are 6 copies of one 30-line pattern (purpose in body, script in witnesses, redeemer present or absent) per RedeemerTag; only the body field and the tag change.",
+      "action": "One table of (tag, ScriptHash => body modifier); for each row assert Right with the redeemer and the exact missing set without it. Combine with C02-2 (extra tag table).",
+      "coverageRisk": "low: keep all 6 purposes in the table.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": 350,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-16",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExUnitsTooBigValidatorTest.scala:27",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:667",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:705",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:350",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/NativeScriptsValidatorTest.scala:47-66",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/NativeScriptsValidatorTest.scala:49",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/NativeScriptsValidatorTest.scala:59-62",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValidatorRulesTestKit.scala:63-64"
+      ],
+      "claim": "Dead or misleading test code: unused vals `exUnits` (ExUnitsTooBig:27) and `privateKey` (ExactSet:667, 705; MissingRequiredDatums:350). NativeScriptsValidatorTest builds 6 txs from randomTransactionWithIsValidField (random mint, certificates, withdrawals and witnesses that the test does not control) and signs `tx.id` of the random tx before the copy changes the body, so the signatures are over the wrong id; the validator reads only vkeyHash, so the signing is dead work and the random body only adds noise. ExUnitsTooBigValidatorTest also uses the random tx where a plain Transaction is enough.",
+      "action": "Remove the unused vals. In NativeScripts and ExUnitsTooBig tests, build Transaction(TransactionBody(...), TransactionWitnessSet(...)) directly; produce vkey witnesses with Party.<X>.signer.sign(tx) on the final tx (or plain VKeyWitness values, since signatures are not checked).",
+      "coverageRisk": "none: same assertions; removes randomness that the assertions do not depend on.",
+      "ciSavingSec": 0.05,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-17",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/NativeScriptsValidatorTest.scala:36-37",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/NativeScriptsValidatorTest.scala:113-116",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:667-669",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:350-352",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/TxRefScriptsSizeValidatorTest.scala:6"
+      ],
+      "claim": "NativeScripts, ExactSetOfRedeemers and MissingRequiredDatums tests make key hashes with generateKeyPair() + platform.blake2b_224(publicKey) (about 40 call sites) and sign by hand. The shared test kit scalus.testing.kit.Party (Party.Alice.addrKeyHash, .signer) gives deterministic key hashes and signers, and TxRefScriptsSizeValidatorTest in the same cluster already uses it.",
+      "action": "Replace generateKeyPair/blake2b_224/signEd25519 with Party.Alice/Bob/Charles .addrKeyHash and .signer.sign(tx). Then drop generateKeyPair from ValidatorRulesTestKit if no other suite uses it.",
+      "coverageRisk": "none: same key-hash semantics.",
+      "ciSavingSec": 0.02,
+      "linesRemoved": 40,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C02-18",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ValidatorRulesTestKit.scala:12-68",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/ExactSetOfRedeemersValidatorTest.scala:37-62",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingOrExtraScriptHashesValidatorTest.scala:32-56",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/MissingRequiredDatumsValidatorTest.scala:35-63",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/ledger/rules/NativeScriptsValidatorTest.scala:40-45",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/rules/PlutusScriptsTransactionMutatorTest.scala:21-61"
+      ],
+      "claim": "All 7 suites rebuild the same fixtures by hand: an Output at Address(Network.Testnet, Credential.ScriptHash(h)), a TransactionBody with one input and empty outputs and fee 0, a witness set with one script and an optional redeemer, then Context() + State(utxos) + Validator.validate. Context() appears 87 times across the 4 shared files. ValidatorRulesTestKit has no builder for these.",
+      "action": "Add to ValidatorRulesTestKit: scriptAddress(hash), scriptUtxo(hash, datum = None, scriptRef = None), txSpending(inputs*, refInputs*)(witnessSet), and validate(validator, utxos, tx). Use them in the tables of C02-13..C02-15 and in MissingRequiredDatums/NativeScripts tests.",
+      "coverageRisk": "none: helpers only.",
+      "ciSavingSec": 0.0,
+      "linesRemoved": 150,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 4 findings of scope merge-duplicate-tests, to-property or main-bug; 3 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

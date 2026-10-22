@@ -1,0 +1,916 @@
+{
+  "cluster": "scalus.uplc.transform",
+  "summary": "The cluster is cheap: about 2.2 s per run after F-16 (EtaReduceCekConformanceTest 4.2 s -> 0.4 s). The slowest suite is CseDeterminismCrossJvmTest at 0.71 s, which starts two child JVMs on purpose, so no ci-time findings. Conformance testing is strong for CSE (translation validation plus CEK observation), EtaReduce and LetChainRegroup. It is weak or missing for the other passes: PrepareForSerialization has no test anywhere in the repository, ForcedBuiltinsExtractor has no semantic check and a variable-capture path, the Inliner and the V3Optimizer pipeline have no CEK differential property, and two StrictIf 'semantic' tests contain no assertion. Several property tests are vacuous or close to it: the CCE semantics generator never produces a profitable template, the CCE free-variable checks filter out the exact names a binding bug would leak, and the LetChainRegroup/CCE properties run only ScalaTest's default 10 cases. Already settled and not re-proposed: F-29 (the three conformance harnesses stay separate), F-17 (eager clue strings, referenced as a prerequisite in T-12), F-32 (extended with new sites in T-8). C9 (simplification) adds T-22..T-30: five example suites (StrictIf, PartialEvaluator, EtaReduce near-misses, isTotal, CSE/CCE 'unchanged' tests) collapse into tables with the same assertions, hand-built terms move to TermDSL, and exact duplicate tests and dead vals go.",
+  "behaviors": [
+    {
+      "pass": "CommonSubexpressionElimination",
+      "name": "shares repeated computations and large values; keeps work-free and tiny terms",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:33",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:60-104",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:119",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:143",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:152",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CseComputationSharingTest.scala:15-46"
+      ]
+    },
+    {
+      "pass": "CommonSubexpressionElimination",
+      "name": "placement: never hoists across Case branches, Delay or lambda bodies; LCA binding keeps binders in scope",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:110-176",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:605-651",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:135",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:234-326"
+      ]
+    },
+    {
+      "pass": "CommonSubexpressionElimination",
+      "name": "semantics preserved (CEK) and translation validation (Plutus UCSE relation)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:405",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:409",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:182-215",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:519",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:574"
+      ]
+    },
+    {
+      "pass": "CommonSubexpressionElimination",
+      "name": "idempotence / fixed point, no new free variables, termination measure",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:95-117",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:221-259",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:538",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:549"
+      ]
+    },
+    {
+      "pass": "CommonSubexpressionElimination",
+      "name": "AlphaTermKey/TermKey equality and hashing; deterministic tie order",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:291-369",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:588",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CseDeterminismTest.scala:40-61",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseDeterminismCrossJvmTest.scala:21"
+      ]
+    },
+    {
+      "pass": "CommonSubexpressionElimination",
+      "name": "termBits / cachedTermBits agree with the Flat encoder; unavailable sizes reject candidates",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:692-803"
+      ]
+    },
+    {
+      "pass": "CommonContextExtraction",
+      "name": "decompose / decomposeRightSpine / matchTemplate / containsHole / replaceHole / templateHeadName helpers",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:80-348"
+      ]
+    },
+    {
+      "pass": "CommonContextExtraction",
+      "name": "extracts profitable one-hole templates (sizes, counts, Case/Constr/Force contexts)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:356-409",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:636-649",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:748-894",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:956-1010"
+      ]
+    },
+    {
+      "pass": "CommonContextExtraction",
+      "name": "safety: shadowing, partial builtins across Case, unselected failing branch, BLS constants",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:415-516"
+      ]
+    },
+    {
+      "pass": "CommonContextExtraction",
+      "name": "semantics, idempotence, no free variables (see T-5, T-6: weak)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:518-580",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:686-742",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:896-945"
+      ]
+    },
+    {
+      "pass": "CommonContextExtraction",
+      "name": "generated-name collision handling (freshCceName loop)",
+      "tests": []
+    },
+    {
+      "pass": "EtaReduce",
+      "name": "plain eta rule with purity / value-arity side conditions",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/EtaReduceTest.scala:17-266",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/EtaReduceCekConformanceTest.scala:374"
+      ]
+    },
+    {
+      "pass": "EtaReduce",
+      "name": "case-constr encoded wrapper rule and its near-miss rejections",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/EtaReduceTest.scala:272-359",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/EtaReduceCekConformanceTest.scala:421"
+      ]
+    },
+    {
+      "pass": "EtaReduce",
+      "name": "traversal through Constr/Case; let-bound arity",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/EtaReduceTest.scala:369-386",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/EtaReduceCekConformanceTest.scala:404",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/EtaReduceCekConformanceTest.scala:436"
+      ]
+    },
+    {
+      "pass": "EtaReduce",
+      "name": "let-redex whose lambda is itself a case-constr wrapper (EtaReduce.scala:103-108)",
+      "tests": []
+    },
+    {
+      "pass": "Inliner",
+      "name": "beta-reduction, substitution with alpha-renaming, shadowing",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:21-164",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:550-578"
+      ]
+    },
+    {
+      "pass": "Inliner",
+      "name": "dead-code elimination by purity/totality; Force(Delay) elimination",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:166-201",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:405",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:450-464",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:649-668"
+      ]
+    },
+    {
+      "pass": "Inliner",
+      "name": "constant sharing priced by SharingCost; guarded-position inlining",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:203-403",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:466-530"
+      ]
+    },
+    {
+      "pass": "Inliner",
+      "name": "semantics, idempotence, no new free variables (examples only, see T-15)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:585-639"
+      ]
+    },
+    {
+      "pass": "PartialEvaluator",
+      "name": "tryEval folds closed reducible terms to flat-encodable constants; refuses values, open terms, Trace, failures, over-budget",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/PartialEvaluatorTest.scala:22-221",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/PartialEvaluatorTest.scala:232-299",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:418-440",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:532"
+      ]
+    },
+    {
+      "pass": "StrictIf",
+      "name": "lazy if with simple-value branches becomes strict; others unchanged; traversal",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/StrictIfTest.scala:43-314"
+      ]
+    },
+    {
+      "pass": "StrictIf",
+      "name": "semantics preserved (see T-4: two of three tests assert nothing)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/StrictIfTest.scala:320-339"
+      ]
+    },
+    {
+      "pass": "StrictIf",
+      "name": "logging, idempotence",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/StrictIfTest.scala:345-389"
+      ]
+    },
+    {
+      "pass": "LetChainRegroup",
+      "name": "groups runs of independent lets; dependency and rebinding split runs; threshold",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/LetChainRegroupTest.scala:23-91"
+      ]
+    },
+    {
+      "pass": "LetChainRegroup",
+      "name": "semantics and trace order preserved; budget never grows with CaseConstrApply; function-position chain",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/LetChainRegroupCekConformanceTest.scala:197-318"
+      ]
+    },
+    {
+      "pass": "LetChainRegroup",
+      "name": "V3Optimizer flag on/off",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/LetChainRegroupTest.scala:112-124"
+      ]
+    },
+    {
+      "pass": "CaseConstrApply",
+      "name": "apply chains of 3+ args become case/constr; budget drops",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CaseConstrApplyTest.scala:24",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/LetChainRegroupCekConformanceTest.scala:294"
+      ]
+    },
+    {
+      "pass": "ForcedBuiltinsExtractor",
+      "name": "extracts forced builtins used 2+ times, sorted, honoring exceptBuiltins (log checks only, see T-13)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/ForcedBuiltinsExtractorTest.scala:19-127"
+      ]
+    },
+    {
+      "pass": "ForcedBuiltinsExtractor",
+      "name": "fresh-name collision with user binders (freshName loop)",
+      "tests": []
+    },
+    {
+      "pass": "TermAnalysis",
+      "name": "isPure / isValueForm / isTotal classification",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/TermAnalysisTest.scala:19-630",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/BuiltinTypeSchemeChainTest.scala:149-227"
+      ]
+    },
+    {
+      "pass": "TermAnalysis",
+      "name": "soundness against the CEK (isPure => success, isValueForm => self-evaluation)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/TermAnalysisCekConformanceTest.scala:88-152",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/BuiltinTypeSchemeChainTest.scala:149"
+      ]
+    },
+    {
+      "pass": "TermAnalysis",
+      "name": "freeVars",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/PartialEvaluatorTest.scala:315-365"
+      ]
+    },
+    {
+      "pass": "SharingCost",
+      "name": "savingBits / savingLovelace",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:203-237",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:355-369",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:699-706"
+      ]
+    },
+    {
+      "pass": "TermNaming",
+      "name": "readable names for CSE/CCE bindings",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:318-348",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:182",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CseDeterminismTest.scala:58-59"
+      ]
+    },
+    {
+      "pass": "OptimizerPipelines",
+      "name": "V3Optimizer phases and flags preserve semantics (examples only)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:416-441",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:586-608",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:222",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/LetChainRegroupTest.scala:112-124"
+      ]
+    },
+    {
+      "pass": "OptimizerPipelines",
+      "name": "V1V2Optimizer (only outside the cluster: UplcPipelineTest.scala:63)",
+      "tests": []
+    },
+    {
+      "pass": "PrepareForSerialization",
+      "name": "BLS constants become uncompress(bytes); BLS lists unroll to MkCons; MlResult/Pair/Array rejected",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "T-1",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/PrepareForSerialization.scala:28-87",
+        "scalus-core/shared/src/main/scala/scalus/uplc/Program.scala:276-279",
+        "scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala:45-60"
+      ],
+      "claim": "PrepareForSerialization runs on every DeBruijnedProgram.flatEncoded, but no test in the whole repository reaches its BLS branches: coverage marks lines 29-31, 33 and 39-85 unexecuted (the full jvm/test baseline). The G1/G2 -> uncompress(compressed bytes) rewrite, the List(G1, [..]) -> MkCons unrolling, and the three IllegalArgumentException paths (MlResult, Pair, Array) are untested. FlatTest:45-60 shows that decoding a BLS-typed constant throws FlatDecodingError, so whether the empty List[G1] tail emitted at line 67 survives a flat round trip is itself unverified.",
+      "action": "Add PrepareForSerializationTest (shared): for a program with a G1 constant, a G2 constant, a List(G1, [g, 2g]) and an empty List(G1, []), encode with flatEncoded, decode, evaluate, and assert the result equals evaluating the original term. Assert IllegalArgumentException for MlResult, Pair(Integer, G2) and Array(G1) constants, and that a term without BLS constants is returned unchanged (eq).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-2",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/ForcedBuiltinsExtractor.scala:62-67",
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/ForcedBuiltinsExtractor.scala:71-73",
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/ForcedBuiltinsExtractor.scala:101-111"
+      ],
+      "claim": "By reading (not executed): go starts with Map.empty and LamAbs only does `env - name`, so env is never non-empty and the freshName loop (65-66, uncovered) is dead. A user binder named __HeadList that encloses two uses of (force (builtin headList)) captures the replacement Var(\"__HeadList\"): the outer extracted binding is shadowed and the uses now refer to the user's argument.",
+      "action": "Add a test: term = (lam __HeadList [(force (builtin headList)) __HeadList] twice, e.g. in a constr) applied to a non-empty list; assert ForcedBuiltinsExtractor(term).evaluate equals term.evaluate. Main-code note only: if it fails, collect the term's binder names (or free and bound names) into env before extraction, as CSE does with uniqueBinders.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "One use inside the user's lambda is enough to trigger extraction; also add the free-variable variant (a free __HeadList in the input is captured). Not reachable from the default V3 lowering ('N suffix); likely reachable from the Scott/SoP backends and from hand-written UPLC.",
+      "findingsLog": "F-34"
+    },
+    {
+      "id": "T-3",
+      "check": "C8",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/EtaReduce.scala:97-108",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/EtaReduceCekConformanceTest.scala:283-308",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/EtaReduceTest.scala:272-386"
+      ],
+      "claim": "The branch where a let-redex's own lambda is a case-constr eta-wrapper, [(lam a (lam b (case (constr 0 a b) g))) rhs] (EtaReduce.scala:103-107, line 106 uncovered), is reached by no test. The conformance generator cannot produce it: its let branch (283-290) takes a random body, and its generic Case always has two branches (306) while the rule needs exactly one; the wrapper generators place the wrapper inside the let body, not as the let's lambda.",
+      "action": "Add EtaReduceTest cases for the let-redex case-constr shape (reduces when valueArity(g) >= n, does not when g has arity 1), and add a generator branch `caseConstrWrapper(n) $ rhs` to genTerm in EtaReduceCekConformanceTest.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/StrictIfTest.scala:320-332",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/StrictIfTest.scala:334-339"
+      ],
+      "claim": "'strict if produces same result as lazy if for true/false condition' build a tuple and assert nothing, and they evaluate the test's own strictIf helper (line 36), not the StrictIf pass. No mutation of StrictIf can fail them. The only real semantic test (334-339) covers condition true only.",
+      "action": "Replace the two tests with one table over conditions true/false (and a non-Bool condition, which must fail on both sides): assert StrictIf(lazyIf(c, t, f)) evaluates like lazyIf(c, t, f), and that the strict form never costs more budget.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:562-580",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:695-705"
+      ],
+      "claim": "Both 'no new free variables' checks drop every __cce_ name from the result's free variables before the subset check. CCE always binds its __cce_ names, so a correct result has none free; the filter hides exactly the bug the test names (a mutation that drops or misplaces the let at CommonContextExtraction.scala:347 or :357 still passes).",
+      "action": "Remove the filterNot(_.startsWith(\"__cce_\")) in both tests and assert resultFree.subsetOf(origFree). If the property then fails, CCE leaks an unbound __cce_ binder, and the current semantic tests could not catch it (see T-6: they never trigger a rewrite).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "Remove the __cce_ filter AND use inputs that CCE really rewrites (at least 6 occurrences of the chain template, e.g. CommonContextExtractionTest.scala:356-376, or the T-6 generator). Add a guard that the result differs from the input. The current input (about 54 bits x 2) is below the 102-bit floor for 2 occurrences."
+    },
+    {
+      "id": "T-6",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:712-742",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:518-532",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:993-996",
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/CommonContextExtraction.scala:489-516"
+      ],
+      "claim": "genClosedTermWithCommonContext builds op2(op1(a, b), op1(c, b)): at most two occurrences of the template op1(HOLE, b), about 50 bits. extractionSavingBits grows with template size, and the test at 993-996 shows a 59-bit template is already rejected at two occurrences, so CCE never rewrites any generated term. The property 'CCE preserves semantics on closed evaluable terms' and the example at 518-532 (same shape) compare a term with itself.",
+      "action": "Replace the generator with one that yields a profitable template: >= 6 occurrences of a >= 47-bit skeleton over distinct leaves (the chain shape of 356-376, e.g. headList(sndPair(unConstrData(leaf_i))) on closed Data constants), or 2 occurrences of a >= 102-bit template. Add a seeded gate test, like LetChainRegroupCekConformanceTest.scala:260-264, asserting that a minimum share of generated terms is rewritten.",
+      "coverageRisk": "none: the current property exercises no CCE rewrite",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Exact floor: n=2 needs a template of at least 102 bits; n=6 needs at least 40 bits (MinTemplateBits)."
+    },
+    {
+      "id": "T-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:594-608",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:416-431",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:222-232",
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/PartialEvaluator.scala:36-57"
+      ],
+      "claim": "Both tests are vacuous for the pass they name. 'V3Optimizer with CCE preserves semantics' and 'V3Optimizer with CSE preserves semantics' optimize closed terms; in phase 1 the inliner calls PartialEvaluator.tryEval, which folds any closed, reducible, trace-free term whose CEK result is a constant (the CSE test's own comment at line 419 says it becomes 18). CCE and CSE then see a constant, so a broken CCE or CSE cannot fail either test.",
+      "action": "In both tests add assert(optimizer.logs.exists(_.startsWith(\"CCE:\")) / (\"CSE:\")), as CseCekConformanceTest.scala:228 does. If the assertion fails, abstract the inputs (lam x ... applied after optimization, as CommonContextExtractionTest.scala:586-592 does) so the pass sees an open term.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "CSE test: abstract the inputs and assert the CSE log. CCE test: use a profitable shape (at least 6 chain occurrences, or a template of at least 102 bits at 2 occurrences), abstracted over its leaves, then assert the 'CCE:' log. Abstracting alone keeps the CCE template at about 86 bits x 2, below the floor."
+    },
+    {
+      "id": "T-8",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:519-536",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:574-586",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:725-742",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/TermAnalysisCekConformanceTest.scala:32-34",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/TermAnalysisCekConformanceTest.scala:113-124",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/TermAnalysisCekConformanceTest.scala:148-151",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/BuiltinTypeSchemeChainTest.scala:36-38",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/BuiltinTypeSchemeChainTest.scala:184-185"
+      ],
+      "claim": "F-32 open item, with all sites. The CSE/CCE properties compare Try(term.evaluate).toOption on both sides; their generators use only addInteger/multiplyInteger/subtractInteger (TermGen.scala:51), which are total, so the (None, None) branch can only ever accept a host crash on both sides. New sites: evalEither catches every Exception, and Left is the accepting outcome in 'Force(Delay(t)) evaluates exactly like t' (TermAnalysisCek:118), 'always failing shapes fail on the CEK' (:151) and 'ill-formed chain unexpectedly succeeded' (BuiltinTypeSchemeChain:184). There a ClassCastException or NPE inside the machine counts as the expected UPLC failure. (TermAnalysisCek:88-94 and BuiltinTypeSchemeChain:181 fail correctly on a host exception.)",
+      "action": "CSE/CCE properties: evaluate without Try (the generator is total) and compare results. evalEither in both jvm suites: catch only MachineError (plus OutOfExBudgetError where relevant) and let other exceptions fail the test, as CseCekConformanceTest.scala:40-43 does.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-9",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:538-559",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:686-705",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:250-318",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:364-401"
+      ],
+      "claim": "The CSE and CCE idempotence and free-variable properties draw from arbitraryTerm, which builds independent random subtrees with random names and arbitrary constants. Equal subterms that CSE would share (computations, not Var/Const/Builtin/Error) or CCE templates of >= 47 bits repeated with distinct leaves should be rare, so these properties likely test the identity on most samples. Not measured. CseCekConformanceTest's generator duplicates subterms explicitly (line 379) for this reason.",
+      "action": "First add a seeded gate (as CseCekConformanceTest.scala:417-425) that counts how many of 200 arbitraryTerm samples CSE and CCE rewrite. If the share is low, move CseCekConformanceTest's genTerm into scalus.uplc.test.TermGen and use it for these four properties (CCE needs the T-6 generator for its own rewrites).",
+      "coverageRisk": "low: arbitraryTerm still covers odd syntax (random builtins, Error, BLS constants) for crash-freedom; keep one arbitraryTerm property per pass if the generator is switched",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-10",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/EtaReduceCekConformanceTest.scala:331-383",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/LetChainRegroupCekConformanceTest.scala:257-264"
+      ],
+      "claim": "The 3000-case EtaReduce property compares behavior only for terms the pass changed (line 339). reducedCount is reported with info() but never asserted. If a generator change stops producing reducible shapes (the F-28 failure class), or the pass becomes the identity, the property still passes. CSE and LetChainRegroup have a seeded vacuity gate. EtaReduce has none.",
+      "action": "Add a separate seeded test (Seed fixed, 200-500 samples of genClosedTerm) that asserts a minimum share is reduced (F-16 observed 831/3000, so a floor near 10 % is safe), and, optionally, that both the plain and the case-constr rule fire at least once (via the EtaReduce logger).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "id": "T-11",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/EtaReduceCekConformanceTest.scala:83-110",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/LetChainRegroupCekConformanceTest.scala:79-92",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:53-71"
+      ],
+      "claim": "compatibleResults accepts any pair of function-like results (LamAbs/Apply/Force/Builtin) and any pair of Delays without observing them. Closed generated programs often evaluate to a lambda or a delay (unapplied wrappers, genLambdaOfArity), so for those samples the property only checks 'both succeeded'. A rewrite that returns a function with different applied behavior (for example a case-constr wrapper with permuted fields accepted) passes whenever the program result is that function. The CSE and LetChainRegroup harnesses apply lambdas to probes and force delays.",
+      "action": "In agree/compatibleResults, observe function-like results by applying them to a few probe constants (and to the arity seen in the term) and delays by forcing them, with a depth bound, as LetChainRegroupCekConformanceTest.agreeValues does. Keep the legacy-oracle classification for disagreements so the documented quirks stay reported, not failed.",
+      "coverageRisk": "none: strictly stronger; may surface new 'pre-existing quirk' counts",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-12",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/LetChainRegroupCekConformanceTest.scala:197-207",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/LetChainRegroupCekConformanceTest.scala:307-318",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:686-742",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:18-19"
+      ],
+      "claim": "The two LetChainRegroup properties and the three CCE properties set no PropertyCheckConfiguration, so they run ScalaTest's default 10 cases (build.sbt sets no global minSuccessful). The seeded gate only guarantees >= 20 of 200 generated LetChain terms are regrouped, so a run may check one or two regrouped terms. CseCekConformanceTest uses 200 and CommonSubexpressionEliminationTest 100.",
+      "action": "Set minSuccessful = 200 in LetChainRegroupCekConformanceTest and 100 in CommonContextExtractionTest. Do F-17 first: the eager showHighlighted clues at LetChainRegroupCekConformanceTest.scala:204 and :316 dominate the per-case cost (about 7 ms per case versus 0.2 ms in CseCekConformanceTest). This raises samples, it does not lower them.",
+      "coverageRisk": "none: more cases",
+      "ciSavingSec": -1,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-13",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/ForcedBuiltinsExtractorTest.scala:39-53",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/ForcedBuiltinsExtractorTest.scala:106-127",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/ForcedBuiltinsExtractorTest.scala:30-37"
+      ],
+      "claim": "'extract same builtin used multiple times' and 'exceptBuiltins excludes ...' assert only on log strings; `optimized` is computed and never checked. Mutations that bind the wrong term to the extracted name (for example Builtin(bn) without its Force wrappers at line 109 of the pass) or drop the outer application keep the same logs and pass. No test in the suite evaluates an extracted term. In 'single-use double-force' the `logger` value is unused.",
+      "action": "In each extraction test also assert optimized.evaluate α_== uplc.evaluate (or compare the expected term structurally, as the sorted-order test does at 75-103), and assert that exceptBuiltins leaves Force(Builtin(HeadList)) in place. Remove the unused logger.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "The suite already catches the mutations through the sorted-order structural test; the gap is per test. The proposed evaluate comparison throws on both sides (headList of an empty list): use non-empty lists or compare Try outcomes. Keep the exceptBuiltins structural assertion and remove the unused logger."
+    },
+    {
+      "id": "T-14",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:141-161",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:653-673"
+      ],
+      "claim": "'should extract largest candidate first' asserts termSize(expr) >= termSize(mulXY); if CSE extracts mulXY first (the mutation the test is about), the sizes are equal and the assertion holds. 'CSE on List.at compiled term preserves semantics' asserts only that both terms evaluate successfully, not that the results are equal, and not that CSE rewrote anything; a CSE that returns any evaluable term passes.",
+      "action": "First test: assert(expr ~=~ addMul1). Second test: assert noCse.evaluate α_== withCse.evaluate and cse.logs.nonEmpty (or withCse ~!=~ noCse).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Assert result equality unconditionally for the List.at term; add the rewrite assertion only after a run shows CSE changes that term."
+    },
+    {
+      "id": "T-15",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:585-639",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:416-441",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:586-608",
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/OptimizerPipelines.scala:37-82"
+      ],
+      "claim": "The Inliner (substitution, alpha-renaming, DCE, PartialEvaluator folding) and the full V3Optimizer pipeline have no CEK differential property; they are checked by hand-picked examples of three laws: semantics preserved (InlinerTest 585-604), idempotence (606-620), no new free variables (622-639), and V3Optimizer semantics examples in the CSE and CCE suites. CSE, EtaReduce and LetChainRegroup already have such properties.",
+      "action": "Add one property suite that, for the CseCekConformanceTest-style env-scoped generator (moved to TermGen, see T-9), checks for Inliner and for V3Optimizer under (cseIterations 0/2) x (cceEnabled) x (letChainRegroup): CEK observation agrees (CseCekConformanceTest.agree), output free vars are a subset of the input's, and Inliner is idempotent. Then delete the three InlinerTest example groups and the two V3Optimizer semantics examples (keep those of T-7 only if they gain the log assertion).",
+      "coverageRisk": "low: the examples are instances of the property; keep the named regression examples elsewhere in InlinerTest",
+      "ciSavingSec": -0.5,
+      "linesRemoved": 20,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "Put the property suite in shared/. For V3Optimizer, do not use CseCek.agree as is: EtaReduce turns lam a.[[addInteger 1] a] into [addInteger 1], and agree fails on LamAbs vs a builtin partial application. Use an EtaReduce-aware comparison. Keep InlinerTest.scala:588 (multi-arg spine) and :633 (Case on a variable), or extend the generator. Gate Inliner idempotence with a seeded run before deleting InlinerTest.scala:606-620."
+    },
+    {
+      "id": "T-16",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CseComputationSharingTest.scala:43-46",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:73-77",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CseComputationSharingTest.scala:15-26",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:197-207"
+      ],
+      "claim": "CseComputationSharingTest is a 4-test suite for the same pass as CommonSubexpressionEliminationTest. Its 'still rejects duplicated small values' (43-46) asserts the same behavior as 'should not extract work-free terms (constants)' (73-77): a duplicated small integer constant is not shared. Its 'shares opaque calls' (15-26) uses the same term as CseCekConformanceTest:197-207 but is not redundant: only it applies the result to a real function (line 24), while CseCek's probes (0, 1, true, ()) make f $ x fail on both sides.",
+      "action": "Move tests 15-41 of CseComputationSharingTest into CommonSubexpressionEliminationTest, keeping the applied evaluation at line 24; delete 43-46; delete the empty file.",
+      "coverageRisk": "none: 43-46 and 73-77 both pin 'small duplicated constant is not shared'; the other three tests are kept",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "medium",
+      "verdict": "CONFIRMED"
+    },
+    {
+      "id": "T-17",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/TermAnalysisTest.scala:79-130",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/TermAnalysisTest.scala:165-187",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/TermAnalysisTest.scala:556-624",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/BuiltinTypeSchemeChainTest.scala:149-227"
+      ],
+      "claim": "BuiltinTypeSchemeChainTest checks isValueForm and isPure, against both a formula and the CEK, for every builtin x every (forces, applies) chain up to over-forced/over-applied, plus interleaved chains. The TermAnalysisTest examples in the cited ranges (forced polymorphic builtins, partial/saturated/over-forced/under-forced/over-applied chains, interleaved Force/Apply) are instances of that table. But BuiltinTypeSchemeChainTest is jvm-only, and the TermAnalysisTest examples are the only JS/Native coverage of these rules.",
+      "action": "Conditional: move BuiltinTypeSchemeChainTest to shared/ (its imports are shared; bls12_381_millerLoop exists in JSPlatformSpecific and NativePlatformSpecific) and check that its vmUnavailable set stays empty on JS and Native. Only if it passes there, delete the cited TermAnalysisTest chain examples. Keep 132-163 (ill-typed, non-constant, impure args) and 189 (Trace), which the table does not cover.",
+      "coverageRisk": "medium if done without the move: loses JS/Native coverage of TermAnalysis chain rules",
+      "ciSavingSec": 0,
+      "linesRemoved": 135,
+      "confidence": "low",
+      "verdict": "NARROWED",
+      "verification": "Keep the move-to-shared condition. Keep TermAnalysisTest.scala:584, :601-605 and :609 (Var and non-value arguments), or add such arguments to the table. Delete the rest only after the table runs on JS and Native."
+    },
+    {
+      "id": "T-18",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:471-474",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:191-214",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:525-531",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:601-607",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:595-603"
+      ],
+      "claim": "About 15 sites in the shared optimizer suites repeat `val a = term.evaluate; val b = result.evaluate; assert(a α_== b, ...)` (also CSE:287-288, 425-430, 438-440; CCE:469, 591; Inliner:212, 268, 278, 316, 328; CseComputationSharing:24, 33). EvalTestKit.assertTermEvalEq does exactly this.",
+      "action": "Use EvalTestKit.assertTermEvalEq (mix in EvalTestKit or import a small object exposing it) at these sites. Where a site needs the term in the clue, extend assertTermEvalEq with an optional clue rather than keeping local copies.",
+      "coverageRisk": "none: same comparison (α_==)",
+      "ciSavingSec": 0,
+      "linesRemoved": 50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-19",
+      "check": "C1",
+      "scope": "style",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/PartialEvaluatorTest.scala:310-367"
+      ],
+      "claim": "Thirteen TermAnalysis.freeVars tests sit in PartialEvaluatorTest; TermAnalysisTest has none. freeVars is the oracle of every 'no new free variables' property in the cluster, so a reader looking for its tests in TermAnalysisTest finds nothing.",
+      "action": "Move PartialEvaluatorTest.scala:310-367 into TermAnalysisTest unchanged.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-20",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/CommonContextExtraction.scala:184-194",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:328-343"
+      ],
+      "claim": "CCE's generated-name collision loop (freshCceName, lines 189-192) is never executed, so no test has a user binder named like a CCE binding (__cce_Hd_UnConstr) around an extraction site. CSE has the same scenario tested at CseCekConformanceTest:342. CCE is opt-in (cceEnabled), so the risk is limited to users who enable it.",
+      "action": "Add a CCE test: wrap the six-chain term of CommonContextExtractionTest.scala:356-376 in (lam __cce_Hd_UnConstr ...) applied to a value that uses the name, and check that evaluation is unchanged and that the binding gets a different name.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-21",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:364-401",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseCekConformanceTest.scala:234-239",
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/CommonSubexpressionElimination.scala:202-233",
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/CommonSubexpressionElimination.scala:269-272"
+      ],
+      "claim": "The CSE conformance generator never produces: an application of a variable (f x, the opaque calls preferComputationSharing targets), Force of anything except Delay or Trace (Force(d) on a let-bound delay), Case on a non-Constr scrutinee, or forced builtins (Force(Builtin(HeadList)) needs 12 uses to pay). The branch-placement rule for possibly-failing helper calls is checked only by the example at 234-239.",
+      "action": "Add generator branches: a let-bound lambda (lam x. op x c) with calls `vr(f) $ child` in its scope, a let-bound Delay(child) forced as Force(vr(d)), and Case(vr(s), branches) with s let-bound to a Constr. Keep the existing seeded gate (417-425) and extend it to count rewrites of opaque calls.",
+      "coverageRisk": "none: adds shapes",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-22",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/StrictIfTest.scala:31-37",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/StrictIfTest.scala:43-89",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/StrictIfTest.scala:95-172",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/StrictIfTest.scala:191-278",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/StrictIfTest.scala:284-302",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/StrictIfTest.scala:345-364"
+      ],
+      "claim": "StrictIfTest is 389 lines for about 35 one-line facts. 7 positive tests (43-89) are `assert(StrictIf(lazyIf(c, t, f)) == strictIf(c, t, f))` with different branches; 12 negative tests (95-172) and 4 edge tests (284-302) are `assert(StrictIf(input) == input)`; 8 traversal tests (191-278) put one lazy if into one context (lambda body, apply function/argument, constr field, case scrutinee/branch, force, delay) and expect the same context around the strict if. Each test repeats the same 4-7 lines. lazyIf/strictIf (32-37) are hand-built Apply(Apply(Apply(...))) chains, and the logging tests (346-347, 357-358) build a var-closure logger where scalus.uplc.eval.Log exists.",
+      "action": "Replace the three groups with tables that keep every row: `for (name, c, t, f) <- transforms do test(s\"transforms lazy if with $name branches\") { assert(StrictIf(lazyIf(c, t, f)) == strictIf(c, t, f)) }`; `for (name, input) <- unchanged do test(name) { assert(StrictIf(input) == input) }`; `for (name, ctx) <- List[(String, Term => Term)](\"lambda body\" -> (t => λ(\"x\")(t)), \"apply argument\" -> (t => λ(x => x) $ t), \"delay\" -> (Delay(_)), ...) do test(s\"transforms lazy if inside $name\") { assert(StrictIf(ctx(lazyIf(false, 1, 2))) == ctx(strictIf(false, 1, 2))) }` (Force and Case-scrutinee rows keep their own branch values). Write the helpers with the DSL: `lazyIf(c, t, f) = !(!IfThenElse $ c $ ~t $ ~f)`, `strictIf(c, t, f) = !IfThenElse $ c $ t $ f`. Use `val log = Log(); StrictIf(input, log.log)`. Leave 320-339 to T-4. Expected size: about 120 lines instead of 389.",
+      "coverageRisk": "none: same inputs, same expected terms, same == assertions; only test names change form",
+      "ciSavingSec": 0,
+      "linesRemoved": 270,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-23",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/PartialEvaluatorTest.scala:22-219",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/PartialEvaluatorTest.scala:232-307"
+      ],
+      "claim": "PartialEvaluatorTest has 35 tryEval tests (22-219) of the shape `test(\"tryEval: addInteger 2 3 => 5\") { val term = AddInteger $ 2 $ 3; assert(PartialEvaluator.tryEval(term) == Some(5.asTerm)) }`, and 12 Inliner tests (232-307) of the shape `assert(Inliner(term) == expected)`. The test name already spells the input and the result, so each 4-line test carries one table row. The budget test (221-226) is the only tryEval test with a different call.",
+      "action": "Two tables. `private val folds: List[(String, Term, Option[Term])] = List((\"addInteger 2 3\", AddInteger $ 2 $ 3, Some(5)), (\"divideInteger 1 0 (division by zero)\", DivideInteger $ 1 $ 0, None), ...)` then `for (name, term, expected) <- folds do test(s\"tryEval: $name\") { assert(PartialEvaluator.tryEval(term) == expected) }`; the same for `inlinerFolds: List[(String, Term, Term)]` with `assert(Inliner(term) == expected)`. Keep the explanatory comments as a third tuple element or as row comments. Keep 221-226 as is. About 280 lines become about 90.",
+      "coverageRisk": "none: same terms, same expected values, same == assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 190,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-24",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/EtaReduceTest.scala:295-364",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/EtaReduceTest.scala:206-221",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/EtaReduceTest.scala:26-51",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/EtaReduceTest.scala:139-199",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/EtaReduceTest.scala:53-65"
+      ],
+      "claim": "(1) Eleven case-constr near-miss tests (295-364) repeat the same four lines `val rhs = λ(\"x\", \"y\")(vr\"x\"); val wrapper = ccWrapper(...); val term = λ(\"f\")(wrapper) $ rhs; assert(etaReduce(term) == term)`; only the ccWrapper arguments (and twice rhs or the outer binder) differ. (2) The test at 206-221 is named '... reduces to (builtin addInteger)' but asserts that the term does NOT change, and it keeps a dead thinking trail ('Wait, no...', 'Actually, let me reconsider this test case', 'Let me change this test'). (3) 'does not reduce' tests write the input twice (27, 30, 36, 140-152, 168) and scalafmt splits them over 5-9 lines; `Const(Constant.Integer(1))` is spelled out at 186, 191, 198 although the file imports TermDSL.given and uses `$ 1` elsewhere. (4) 53-65 parses UPLC with a hand-written getOrElse(throw ...).",
+      "action": "(1) Table: `for (name, binders, fields, branches, tag) <- nearMisses do test(s\"case-constr wrapper with $name does not reduce\") { val term = λ(\"f\")(ccWrapper(binders, fields, branches, tag)) $ λ(\"x\", \"y\")(vr\"x\"); assertUnchanged(term) }`; keep the arity-1 and shadowed-let rows (295-299, 359-364) as separate tests or give the table an `rhs`/`outer` column. (2) Rename to '(lam a (lam b (lam c (lam d [(builtin addInteger) a b])))) does not reduce' and replace the 9 comment lines with one: 'the saturated addInteger application is impure'. (3) Add `private def assertUnchanged(t: Term) = assert(etaReduce(t) == t)` and use int literals: `Constr(Word64.Zero, List(1, 2))`. (4) `val parsedTerm = Term.parseUplc(term).fold(fail(_), identity)`.",
+      "coverageRisk": "none: same inputs and == assertions; the rename fixes a misleading name only",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-25",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/TermAnalysisTest.scala:382-519",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/TermAnalysisTest.scala:107-111",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/TermAnalysisTest.scala:308-321",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/TermAnalysisTest.scala:521-525"
+      ],
+      "claim": "(1) Thirteen isTotal tests (382-519, 138 lines) each build a named list and run `foreach { bn => assert(bn.isTotal, ...) }` or the negation, or write single asserts (422-426, 491-495, 506-508, 517-519). They are two sets of builtins, total and partial. (2) Dead code: `bs` at 109 is never used; `term` at 310 is never used, and 311-317 keep an unresolved thinking trail ('it will be impure. Let me reconsider...'); the test is named 'Nested pure terms are pure' but only checks a single beta-redex with one argument. (3) 521-525 discards the result of `bn.isTotal`; it only guards against a MatchError, and DefaultFun.isTotal (DefaultFun.scala:1429) has no wildcard, so the compiler already checks exhaustiveness. Not in scope: 79-130, 165-187, 556-624 (T-17).",
+      "action": "(1) `private val total = Set(AddInteger, SubtractInteger, ..., IfThenElse, ChooseUnit, ChooseList, ChooseData, LookupCoin, LengthOfArray, ListToArray, NullList)` and `private val partial = Set(DivideInteger, ..., ExpModInteger, Trace)`, then `test(\"total builtins\") { for bn <- total do assert(bn.isTotal, bn) }` and the same for partial, with the category comments kept inside the sets. (2) Delete `bs`; delete `term` and the comment trail; rename the test to 'Beta-redex of a 2-ary lambda applied to one argument is pure'. (3) Keep 521-525 as is: it is the only runtime guard if a wildcard-free match ever misses a new builtin and the warning is ignored.",
+      "coverageRisk": "none: the same builtins are asserted total or partial; deleted vals are unused. 521-525 stays",
+      "ciSavingSec": 0,
+      "linesRemoved": 105,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-26",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:60-104",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:382-410",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:33-58",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:616-622",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:643-650",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:713",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:743",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:753",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:766",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:771",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:778",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:657-663"
+      ],
+      "claim": "(1) Twelve tests have the body `val result = CommonSubexpressionElimination(term); assert(result ~=~ term)` with only the term different (60-104: single occurrence, Var, Const, Builtin, lambda, delay, Error; 382-410: no duplicates, Var, Const, Error, empty Constr). (2) 41-57 is a nested match + two fail() branches + two 4-line asserts (17 lines) for 'extract mul(x,2) and use the binder twice'. (3) `val result` is computed and never read at 617 and 644 (the tests assert on cse.logs). (4) `summon[scalus.serialization.flat.Flat[Term]].bitSize(...)` is written out 6 times. (5) 657-663 builds `val opts` only to write `given Options = opts`. (6) `(2: Term)`, `(42: Term)`, `(1: Term)` ascriptions (35, 74, 112, 126, 146, 266-267, 281-282, 449, 640) are not needed: `$` takes a Term and the given conversion applies.",
+      "action": "(1) `for (name, term) <- List[(String, Term)](\"single occurrence\" -> (AddInteger $ (MultiplyInteger $ vr\"x\" $ vr\"y\") $ vr\"z\"), \"variables\" -> (AddInteger $ vr\"x\" $ vr\"x\"), ...) do test(s\"CSE leaves $name unchanged\") { assert(CommonSubexpressionElimination(term) ~=~ term) }`. (2) `inside(CommonSubexpressionElimination(term)) { case Apply(LamAbs(n, body, _), expr, _) => assert(n.startsWith(\"__cse_\")); assert(expr ~=~ mulX2); assert(body ~=~ (AddInteger $ vr(n) $ vr(n))) }` (ScalaTest Inside). (3) Call `cse(term)` without binding. (4) `private def flatBits(t: Term) = summon[Flat[Term]].bitSize(t)` with an import. (5) `given Options = Options(...)`. (6) Drop the ascriptions.",
+      "coverageRisk": "none: same terms and same ~=~ / == checks; (2) checks the same three facts",
+      "ciSavingSec": 0,
+      "linesRemoved": 55,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-27",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:91-92",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:755-757",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:776-779",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:80-117",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:378-409",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:655-677",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:394",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:429",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:452",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:521-522",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:903-909"
+      ],
+      "claim": "(1) The same four forced builtins are declared locally 42 times in 18 tests: `val headList = Force(Builtin(HeadList))`, `val tailList = ...`, `val sndPair = Force(Force(Builtin(SndPair)))`, `val unConstr = Force(Force(Builtin(UnConstrData)))` (e.g. 91-92, 105-107, 149-150, 359-360, 421-423, 755-757, 776-779; grep finds 42 such lines). (2) The three decomposeRightSpine tests (80-117) use `result match { case Some(...) => ...; case None => fail(...) }` around two asserts. (3) Six tests have the body `assert(CommonContextExtraction(term) ~=~ term)` (378-385, 401-409, 655-677). (4) `val result = cce(term)` is never read at 394, 429, 452. (5) `(3: Term) $ (2: Term)` ascriptions (521-522, 596-597, 828-829, 847-848) and the `val opts`/`given Options = opts` pair at 903-909.",
+      "action": "(1) Declare them once at class level: `private val headList = Force(Builtin(HeadList)); private val tailList = ...; private val sndPair = ...; private val unConstr = ...`, and delete the 42 local copies. (2) `val (template, leaf) = decomposeRightSpine(t).getOrElse(fail(\"Expected decomposition\"))` then the two asserts. (3) A table as in T-26: `for (name, term) <- unchanged do test(s\"CCE leaves $name unchanged\") { assert(CommonContextExtraction(term) ~=~ term) }`. (4) Call `cce(term)` without binding. (5) Drop the ascriptions; `given Options = Options(...)`.",
+      "coverageRisk": "none: same terms and assertions; the class-level vals are the same immutable Terms",
+      "ciSavingSec": 0,
+      "linesRemoved": 80,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-28",
+      "check": "C9",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CseDeterminismTest.scala:23-38",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseDeterminismCrossJvmTest.scala:57-94",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/LetChainRegroupTest.scala:101",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/LetChainRegroupCekConformanceTest.scala:94-95",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/LetChainRegroupCekConformanceTest.scala:276-282",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/LetChainRegroupCekConformanceTest.scala:295-297",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/EtaReduceCekConformanceTest.scala:402"
+      ],
+      "claim": "Terms are built by hand with Apply/Var(NamedDeBruijn(...)) where TermDSL (`$`, `vr`, `λ`, given conversions) writes them in one line. `def add(a, b) = Apply(Apply(Builtin(AddInteger), a), b)` is defined three times (CseDeterminismTest:38, CseDeterminismCrossJvmTest:58, LetChainRegroupTest:101) and is `AddInteger $ a $ b`. CseDeterminismTest.chain (23-36, 14 lines) and CseDeterminismChild.fieldChain (CrossJvm 62-69) are the same term, and intChain/bytesChain (78-94) both spell out a shorter variant with one __TailList (headList(tailList(sndPair(unConstrData x)))), differing only in the UnIData/UnBData in front. LetChainRegroupCekConformanceTest builds trace (94-95), omega (276-279) and the same 5-let chain twice (280-282, 295-297) by hand; EtaReduceCekConformanceTest.int (402) is the given Int-to-Term conversion.",
+      "action": "Import TermDSL.given and write: `vr\"__HeadList\" $ (vr\"__TailList\" $ (vr\"__TailList\" $ (vr\"__SndPair\" $ (UnConstrData $ vr(v)))))` for the chain (one copy, in a shared test object that both CseDeterminismTest and CseDeterminismChild use); `fields(x) = vr\"__HeadList\" $ (vr\"__TailList\" $ (vr\"__SndPair\" $ (UnConstrData $ vr(x))))` (the one-TailList chain), `intChain(x) = UnIData $ fields(x)`, `bytesChain(x) = UnBData $ fields(x)`; `AddInteger $ a $ b` instead of `add`; `!Trace $ label $ value` for trace; `λ(x => x $ x) $ λ(x => x $ x)` for omega; one `private def chainOf(body: Term)` for the 5-let fixture. The terms stay structurally identical, so CseDeterminismChild still prints the same bytes.",
+      "coverageRisk": "none: the built terms are structurally the same; CseDeterminismCrossJvmTest compares parent and child output of the same code, so it stays valid",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-29",
+      "check": "C9",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:68-81",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:119-128",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/PartialEvaluatorTest.scala:232-235",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:418-422",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:356-376",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:614-624",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:860-872",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonContextExtractionTest.scala:986-1006"
+      ],
+      "claim": "Exact duplicates found while reading for C9. (a) InlinerTest 68-81 and 119-128: `λ(\"x\", \"y\")(vr\"x\") $ vr\"y\"` and `λ(\"x\")(λ(\"y\")(vr\"x\")) $ vr\"y\"` are the same term (Term.lam folds names into nested LamAbs, Term.scala:497-498), and both tests run the same match and `assert(newName != \"y\")`. (b) PartialEvaluatorTest 232-235 and InlinerTest 418-422 both assert `Inliner(AddInteger $ 2 $ 3) == 5.asTerm`. (c) CCE 860-872 builds the same 6-chain term as 356-363 (g = headList, f = unConstr, names x,y,z,p,q,r) and asserts only `result ~!=~ term`, which 368 already asserts; 614-624 builds the same term again and asserts `logs.nonEmpty` and `logs.exists(_.contains(\"CCE:\"))`, which 369-370 already assert. (d) CCE 993-996 (`extractionSavingBits(2, 59) < 0`) and 1003-1006 (`extractionSavingBits(6, 59) > 0`) are implied by the exact pins at 989-990 (-42.23 and 37.46).",
+      "action": "Delete InlinerTest 119-128, PartialEvaluatorTest 232-235 (or InlinerTest 418-422), CCE 860-872 and 614-624. Fold 993-996 and 1003-1006 into the test at 986-991 as its comments ('negative at two sites, positive at six'), or keep them and delete nothing there if the owner wants the readable thresholds as separate test names.",
+      "coverageRisk": "none for (a)-(c): the surviving test builds the same term and asserts a superset. (d): the exact pins fail whenever the sign checks fail",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "All 5 pairs confirmed: same entry point, same configuration, all in shared/, same comparison operator. For pair (d), keeping the sign checks is also valid: they guard the intent if a cost-model change re-pins the values. Delete the PartialEvaluatorTest copy of pair (b); keep CCE 626, 998 and 1008 (different cases)."
+    },
+    {
+      "id": "T-30",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CaseConstrApplyTest.scala:41-42",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/CaseConstrApplyTest.scala:30-54",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/ForcedBuiltinsExtractorTest.scala:33",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/ForcedBuiltinsExtractorTest.scala:20",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/ForcedBuiltinsExtractorTest.scala:41-42",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:641-644",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:540-543",
+        "scalus-core/shared/src/test/scala/scalus/uplc/transform/InlinerTest.scala:27-41"
+      ],
+      "claim": "Small dead code and noise in four files. CaseConstrApplyTest: two commented-out println lines (41-42); `Const(Constant.Integer(0))` etc. at 34-36 and 49-50 where the DSL writes `0`, `1`, `hex\"1012\"`; the match on (Success, Success) with `case _ => fail` (47-54) where `.success` (used in StrictIfTest:338) gives the result directly. ForcedBuiltinsExtractorTest: `val logger = Log()` at 33 is never used; `scalus.uplc.builtin.BuiltinList.empty` / `BuiltinPair` are written fully qualified 8 times (20, 31, 41-42, 57-58, 108-109). InlinerTest: an empty '// Logging' section header (641-644) with no test under it (the logging test is at 670); 540-543 matches `case Const(_, _) => succeed; case _ => fail(...)` instead of `assert(result.isInstanceOf[Const], result.show)`; 27-41 bind four vals only to assert `Inliner(x) == x` on each.",
+      "action": "Delete the println comments, the unused logger and the empty section header. Import BuiltinList/BuiltinPair. In CaseConstrApplyTest write `val orig = uplc.evaluateDebug.success; val opt = optimized.evaluateDebug.success` then the five asserts without the match. In InlinerTest use `assert(result.isInstanceOf[Const], result.show)` and `for t <- List[Term](42, \"hello\", AddInteger, MultiplyInteger) do assert(Inliner(t) == t)`.",
+      "coverageRisk": "none: same assertions; `.success` throws on a failed evaluation, as `fail` did",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "T-31",
+      "check": "C6",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/Term.scala:363-364",
+        "scalus-core/shared/src/main/scala/scalus/uplc/transform/CommonSubexpressionElimination.scala:364"
+      ],
+      "claim": "Term.~=~ compares Constr fields and Case branches with zip and never compares their counts, so Constr(0, List(a)) ~=~ Constr(0, List(a, b)) is true. 243 test assertions use ~=~, and CSE's TermKey equality is ~=~.",
+      "action": "Add the two size checks and a regression test; then run the scalus.uplc tests and the byte oracle (see F-33).",
+      "coverageRisk": "none: the fix makes assertions stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Confirmed by the coordinator, by reading Term.scala:336-365 (α_== checks the sizes, ~=~ does not).",
+      "findingsLog": "F-33"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-21: [P2-11] scopes (T-15, T-16, T-17) plus 7 high-impact claims. 0 disproved, 5 narrowed (corrections in 'verification'), 6 confirmed (T-29 added after C9). Other findings are unverified; [P2-11] does not require it for their scopes. T-31 (F-33) was found by the C9 agent and confirmed by the coordinator."
+}

@@ -1,0 +1,470 @@
+{
+  "cluster": "compiler.lowering.intrinsics",
+  "summary": "The cluster is cheap: 21 suites, about 1.7 s per run; only ValueIntrinsicsLoweringTest (0.9 s) is worth a cache (C10-17). It covers the V3 intrinsics (Eq-dropping list/Option ops, CIP-153 Value builtins, Order repr, enum toData, BuiltinArray), the IntrinsicResolver with hand-built modules, and the simple Scott/SoP backends with LetFloating. Reading the uncovered simple-backend code found a field-name defect: Data.Constr `.args` selection throws in DataLowering (C10-1); an ignored zero-arg-method test documents another open defect (C10-2). Assertions are weak in S3LoweringDataAccessTest, IntrinsicResolverTest (traversal skips Case/Constr), LetFloatingTest (shape-only) and BuiltinArrayLoweringTest (no assert). Most of the rest is boilerplate: hand-built SIR and eval-or-fail wrappers, copied Scott/SoP structural tests, and four Eq suites that EvalTestKit.assertEval collapses. Not reported: ReprTagConvert (intrinsics/ReprTag.scala) has no callers in the repository; main code is out of scope.",
+  "behaviors": [
+    {
+      "pass": "ListIntrinsics/LoweringEq",
+      "name": "contains/indexOf/deleteFirst/distinct/diff/Option.contains drop eq and compare via equalsRepr (concrete, Data, abstract, UplcConstr elements)",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/EqOpsLoweringTest.scala:32-275",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/ContainsEqLoweringTest.scala:31-53"
+      ]
+    },
+    {
+      "pass": "LoweringEq",
+      "name": "error paths (MlResult, function types) and Annotated uplcRepr dispatch",
+      "tests": []
+    },
+    {
+      "pass": "prelude AssocMapEq/RationalEq",
+      "name": "non-structural equality and Rational.normalize on-chain",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/AssocMapEqLoweringTest.scala:20-42",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/RationalEqLoweringTest.scala:20-54"
+      ]
+    },
+    {
+      "pass": "ValueIntrinsics",
+      "name": "Value ops lower to CIP-153 builtins at PV11, portable at PV10 or valueBuiltins=false; results agree; PV11 strict validation",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/ValueIntrinsicsLoweringTest.scala:101-275"
+      ]
+    },
+    {
+      "pass": "SumUplcConstr repr (Order)",
+      "name": "Order lowers to native constr/case; projections, nullary-constructor comparison, container round trip, other backends",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/OrderReprLoweringTest.scala:101-176"
+      ]
+    },
+    {
+      "pass": "Lowering toData upcast",
+      "name": "enum case toData without fields, in lambda, ascribed, with fields, UplcConstr enum",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/EnumCaseToDataLoweringTest.scala:45-93"
+      ]
+    },
+    {
+      "pass": "SirToUplcV3Lowering",
+      "name": "constants and toData of primitives",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/SirToUplcV3LoweringConstantsTest.scala:50-72"
+      ]
+    },
+    {
+      "pass": "SirToUplcV3Lowering",
+      "name": "case-class/enum/ledger type field access and FromData decoding of ScriptContext/TxInfo/Interval",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/S3LoweringDataAccessTest.scala:45-235",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcFromDataReplacementTest.scala:28-172"
+      ]
+    },
+    {
+      "pass": "Linker",
+      "name": "FromData instances erased after linking",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/FromDataEraseLinkerTest.scala:60-85"
+      ]
+    },
+    {
+      "pass": "ProdBuiltinArrayEmitter",
+      "name": "BuiltinArray fields in case classes convert to/from Data",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/BuiltinArrayLoweringTest.scala:26-161"
+      ]
+    },
+    {
+      "pass": "IntrinsicResolver",
+      "name": "list isEmpty/head/tail/drop substitution; fallback without modules; PV gating",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/IntrinsicResolverTest.scala:211-388"
+      ]
+    },
+    {
+      "pass": "IntrinsicsNativeList",
+      "name": "find on a Transparent TypeVar native list",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/NativeListFindTest.scala:38-63"
+      ]
+    },
+    {
+      "pass": "ScottEncodingLowering/SumOfProductsLowering",
+      "name": "structural lowering of constants, error, lambda, builtins, let, boolean ops, constr, match, select",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/simple/ScottEncodingLoweringTest.scala:43-529",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/simple/SumOfProductsLoweringTest.scala:49-275"
+      ]
+    },
+    {
+      "pass": "DataLowering",
+      "name": "Data constructors and match on I/B/Constr/wildcard (4 backends)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/simple/SimpleLoweringTestBase.scala:45-378",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/simple/ScottEncodingLoweringTest.scala:438-529"
+      ]
+    },
+    {
+      "pass": "DataLowering",
+      "name": "match on Data.List/Data.Map with bindings; field select (lowerDataSelect)",
+      "tests": []
+    },
+    {
+      "pass": "LetFloating",
+      "name": "lazy let elimination, floating, renaming, lambda barrier",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/simple/LetFloatingTest.scala:42-530"
+      ]
+    },
+    {
+      "pass": "Plugin/Lowering",
+      "name": "zero-arg method in @Compile object (ignored)",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C10-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/lowering/simple/DataLowering.scala:287,315-328",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/SIRType.scala:89",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/Data.scala:142"
+      ],
+      "claim": "DataLowering.lowerDataSelect (used by the Scott and SumOfProducts backends) maps field 'args' to Data.Constr at line 287, but the Data.Constr branch only accepts 'constr' and 'dataArgs' (317, 322). The real field name is 'args' (SIRType.scala:89, Data.scala:142), so selecting `.args` on a Data.Constr throws 'Unknown field args for Data.Constr'; the 'dataArgs' arm is unreachable. Found by reading; lines 313-328 are uncovered in the baseline.",
+      "action": "Log in findings.md. Main-code note: rename the 'dataArgs' arm to 'args'. Test side: see C10-3 (a Data select test on all four simple backends reproduces it).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-40",
+      "verification": "DataLowering.scala:287 maps field \"constr\" | \"args\" to SIRType.Data.Constr.name. The Constr branch at :316-328 matches only \"constr\" (:317) and \"dataArgs\" (:322), and every other name throws 'Unknown field ... for Data.Constr' (:325-327). The real field name is \"args\": SIRType.scala:89 has TypeBinding(\"args\", ...) and Data.scala:142 has `case class Constr(constr: BigInt, args: PList[Data])`. No code outside DataLowering uses 'dataArgs', so that arm can never match. Reachable path: lowerDataSelect is called from ScottEncodingLowering.scala:119 and SumOfProductsLowering.scala:138 when isDataVariantType(scrutinee.tp) holds. So `c.args` on a Data.Constr-typed value fails at lowering whenever the user picks the Scott or SumOfProducts backend. The default SirToUplcV3Lowering backend does not take this path."
+    },
+    {
+      "id": "C10-2",
+      "check": "C1",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/ZeroArgMethodLoweringTest.scala:13-44"
+      ],
+      "claim": "The only test in ZeroArgMethodLoweringTest is `ignore`d since 2026-03 and documents an open compiler defect: calling a zero-arg method `foo()` in a @Compile object yields `foo((), ())` in SIR and LoweringException 'Expected function type, but have: ByteString'. It is not in findings.md, and nobody re-checks whether it is still present. Not re-run here (no sbt).",
+      "action": "Coordinator: change `ignore` to `test` in one sbt run. If it passes, keep it as a test (bug fixed). If it fails, log the defect in findings.md and keep the ignore with the F-number in its comment.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "low",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-41",
+      "verification": "ZeroArgMethodLoweringTest.scala:36 is `ignore(...)`. The comment at :33-35 calls it a known bug: `foo()` lowers as `foo((), ())`, which gives 'Expected function type, but have: ByteString'. The file was added in 60319a822 (2026-03-07). Later commits only reformatted it or cleared warnings. No later commit in git log fixes zero-arg methods; 46d10169e is older and covers a different case. findings.md does not mention the test, and the grep for ZeroArg/zero-arg finds only reports and timings.csv. The plugin zero-arg tests at CompilerPluginToSIRTest.scala:752-800 use local defs inside compile{} and SortedMap methods, not a `def f(): T` called from a sibling def in a @Compile object, so they neither show a fix nor cover this case. The action (re-enable it in one sbt run, then log or keep it) is sound."
+    },
+    {
+      "id": "C10-3",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/simple/SimpleLoweringTestBase.scala:43-378",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/lowering/simple/DataLowering.scala:213-221,258-330"
+      ],
+      "claim": "SimpleLoweringTestBase (run by 4 suites: Scott/SoP at PV10 and PV11) tests Data constructors I/B/Constr and matches on I/B/Constr/wildcard only. No test reaches the Data.List/Data.Map match branches with bindings (DataLowering 213-221, uncovered) or any Data field select (lowerDataSelect 258-330, all uncovered), which hides C10-1.",
+      "action": "In SimpleLoweringTestBase add eval tests (with the helpers of C10-12): match on Data.List(vs) and Data.Map(es) binding the field and returning its length via a builtin; select .value on Data.I/Data.B, .values on Data.List/Data.Map, .constr and .args on Data.Constr; assert the evaluated result. The .args case fails until C10-1 is fixed (mark it pending with the F-number).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -1,
+      "linesRemoved": -60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-4",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/lowering/LoweringEq.scala:115-121,129-138",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/EqOpsLoweringTest.scala:233-275"
+      ],
+      "claim": "LoweringEq.generateEqualsForRepr has two error paths, equality on BLS12_381_MlResult and on function types (LoweringException, lines 115-121), and the Annotated(uplcRepr) dispatch (129-138); all are uncovered. The @UplcRepr tests in EqOpsLoweringTest reach UplcConstr equality through the representation branch, not the Annotated one.",
+      "action": "Add a LoweringEqTest (shared): lower SIR `equalsRepr(a, b)` (LoweringEq.EqualsReprName) with a,b typed MlResult and Fun(Integer,Integer); assert LoweringException with the message. Add one case with an Annotated(uplcRepr=UplcConstr) case-class type and evaluate true/false results.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/S3LoweringDataAccessTest.scala:45-70,107-132,134-193"
+      ],
+      "claim": "Five of seven tests cannot fail on a wrong result: 'V3 lowering' (45-70) has no assertion (`val r` unused); 'Option' (107-118), 'Interval' (120-132), 'IntervalBound data representation' (134-162) and 'Interval from TxInfo' (164-193) only assert isSuccess. A lowering that returns the wrong boolean or field passes. 'Interval from TxInfo' also prints logs on success (188).",
+      "action": "Assert the value: 'V3 lowering' -> constr 0 of AA (or AA.BBB.toData via the Data repr); 'Option' -> Some(true) term; 'Interval' (1000..2000 isEntirelyAfter 86_400_000) -> false; 'Interval from TxInfo' -> true; 'IntervalBound' -> assert the logged strings. Remove the println calls.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/IntrinsicResolverTest.scala:229-245,301-344,392-399",
+        "scalus-core/shared/src/main/scala/scalus/uplc/Term.scala:289-301"
+      ],
+      "claim": "The local containsBuiltin (392-399) does not descend into Case or Constr, so the two negative tests (`!containsBuiltin(uplc, NullList)` 241, `!containsBuiltin(uplc, DropList)` 340) pass vacuously if the builtin sits inside a case branch. All five tests check only builtin presence, never the result: the isEmpty placeholder returns true, and the test list is empty, so intrinsic and fallback give the same value.",
+      "action": "Replace containsBuiltin with `uplc.collectBuiltins.contains(fun)` (main Term.collectBuiltins covers Case/Constr). Use a non-empty list constant in the isEmpty tests and assert evaluation: intrinsic -> false, fallback placeholder -> true; for drop at vanRossemPV evaluate to the dropped list.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-7",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/ValueIntrinsicsLoweringTest.scala:46-59,93-94",
+        "scalus-core/shared/src/main/scala/scalus/uplc/Term.scala:289"
+      ],
+      "claim": "hasBuiltin searches `t.show` for the text '(builtin name)', and cip153Names lists builtin names as strings; a typo in a name makes a negative check (`hasNoCip153Builtins`) pass silently. Term.collectBuiltins gives the same answer typed.",
+      "action": "Replace hasBuiltin with `t.collectBuiltins.contains(DefaultFun.LookupCoin)` etc. and cip153Names with a Set[DefaultFun]; hasNoCip153Builtins becomes `(t.collectBuiltins & cip153).isEmpty`.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-8",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/simple/LetFloatingTest.scala:98-110,139-164,204-234,253-279,457-506"
+      ],
+      "claim": "Five LetFloating tests check only the outer shape. 'transitive dependencies' checks only that the head binding is z; 'rename when they would shadow' checks only that the head binding is z, so dropping the rename (z = x captured by the inner x = 1) passes; 'nested lazy lets' asserts `result != null` and isInstanceOf[Apply]; 'complex transitive chain' asserts only isInstanceOf[Let], which also holds when nothing floats; 'mixed effortless' never checks that a moved into the lambda.",
+      "action": "Assert the full expected tree with a comparison that ignores the `$floated$N` suffix (local helper that normalises binder names), and for the shadowing test also lower with ScottEncodingLowering and evaluate: result must be 42, not 1.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-9",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/FromDataEraseLinkerTest.scala:60-85",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcFromDataReplacementTest.scala:102-172"
+      ],
+      "claim": "FromDataEraseLinkerTest looks for one exact ExternalVar name 'ScriptContext$.given_FromData_ScriptContext'; if the given is renamed or a nested instance (TxInfo, ScriptInfo) survives linking, the test still passes. In SirToUplcFromDataReplacementTest, 'run Hello World' and the Option[Datum] test cover only the success path: a lowering that ignores signatories or always takes Some passes.",
+      "action": "FromDataEraseLinker: match any ExternalVar/Var whose name contains 'given_FromData'. FromDataReplacement: add negative cases with the same compiled term: empty signatories -> failure with log 'Must be signed'; wrong redeemer -> 'Invalid redeemer'; Option.None datum -> failure with 'Expected non-empty PubKeyHash'.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-10",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/BuiltinArrayLoweringTest.scala:92-113",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/lowering/typegens/SirTypeUplcGenerator.scala:416-418"
+      ],
+      "claim": "'check default representation for BuiltinArray type' has no assertion; it only logs via info(). Its comment says the generator 'falls through to ProductCaseEmitter ... incorrect', which contradicts the class doc and main code: SirTypeUplcGenerator dispatches BuiltinArray to ProdBuiltinArrayEmitter (416-418).",
+      "action": "Assert `generator eq ProdBuiltinArrayEmitter` and the expected default representation; delete the stale comment.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-12",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/simple/SimpleLoweringTestBase.scala:39-41,45-378"
+      ],
+      "claim": "The seven Data tests repeat the same scaffolding: SIR.Decl(dataDecl, Let(d = Constr(...), Match(d, [Constr pattern, Wildcard]))), then an evaluateDebug match with a fail arm (7 copies). Unused vals: bConstr/listConstr/mapConstr/constrConstr (146-149), iConstr (203); the alphaEq extension (39-41) is never used.",
+      "action": "Add local helpers dataConstr(variant, args*), dataMatch(scrutinee, variant, binders, body, default) and assertEvalsTo(sir, expected) using Term.evaluate; rewrite the tests as a table; delete unused vals and alphaEq.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 180,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-13",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/simple/ScottEncodingLoweringTest.scala:43-113,183-192,531-533",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/simple/SumOfProductsLoweringTest.scala:37-151,177-195,213-229"
+      ],
+      "claim": "Scott and SoP suites contain six copied structural tests (lower constant, error, Lam/Apply, builtins, let, And/Or/Not) with the same expected terms. Within them: unused `idType` (Scott 66-69, SoP 70-73); SoP 'lower Constr' computes `uplc` and never uses it, with commented printlns (126-133); SoP 'lower Match'/'newtype Match' rebuild the lowersTo comparison by hand with println (177-195, 213-229); SoP lowersTo repeats `lower`; Scott 531-533 is a stale TODO (the base trait already has eval Data-match tests).",
+      "action": "Create a shared trait SimpleLoweringStructuralTests (shared test dir) with an abstract lowersTo and the six tests; mix it into the two PV10 suites only (PV11 may lower IfThenElse differently). Use lowersTo with a clue in the SoP match tests; delete the dead vals, the dead `uplc`, and the TODO.",
+      "coverageRisk": "none: same assertions for both backends",
+      "ciSavingSec": 0,
+      "linesRemoved": 110,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-14",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/EqOpsLoweringTest.scala:29-30",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/ContainsEqLoweringTest.scala:28-53",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/AssocMapEqLoweringTest.scala:17-42",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/RationalEqLoweringTest.scala:17-54",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:69-76"
+      ],
+      "claim": "All 32 tests of the four Eq lowering suites repeat `val compiled = PlutusV3.compile {...}; assert(compiled.program.term.evaluate == true.asTerm)` (or false/BigInt), each with its own given PlutusVM/Options. EvalTestKit.assertEval does exactly this, and also checks the JVM result.",
+      "action": "Mix in EvalTestKit (override compilerOptions to Options.release.copy(noWarn = true)); write boolean tests as assertEval(expr) / assertEval(!expr) and BigInt ones as assertEvalEq. Merge the four small files into one EqLoweringTest with sections (helpers objects stay).",
+      "coverageRisk": "none: assertEval also checks the JVM side",
+      "ciSavingSec": 0,
+      "linesRemoved": 90,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-15",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/EnumCaseToDataLoweringTest.scala:38-41",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/OrderReprLoweringTest.scala:85-88",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/BuiltinArrayLoweringTest.scala:37-46,59-68,81-90,128-137,152-161",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/NativeListFindTest.scala:43-63"
+      ],
+      "claim": "Four files define the same 'evaluateDebug match Success => v, other => fail' wrapper (BuiltinArrayLoweringTest five times inline); Term.evaluate already returns the value and throws with the failure on error. BuiltinArrayLoweringTest tests 26-46 and 71-90 both build ArrayWrapper, extract .arr and call indexArray (index 0 vs 1): one test with two asserts covers both.",
+      "action": "Use `term.evaluate == expected` (given PlutusVM) and delete the eval helpers and match blocks; merge the two indexArray tests in BuiltinArrayLoweringTest.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-16",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/ValueIntrinsicsLoweringTest.scala:141-172",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ArbitraryInstances.scala:104-117"
+      ],
+      "claim": "'PV11 and PV10 lowerings agree on canonical values' is an oracle law (PV10 portable lowering = oracle for the CIP-153 intrinsics) checked on 11 hand-picked inputs, built from two fixed Values. The canonical v1 Value generator exists (scalus.cardano.onchain.plutus.v1.ArbitraryInstances, Arbitrary[Value]).",
+      "action": "Replace the example rows with forAll over (Value, Value, ByteString policy, ByteString token, BigInt amount) for plus, minus, multiply, negate, containsAtLeast, quantityOf, insertCoin, withoutLovelace: evaluate the cached PV11 and PV10 terms (see C10-17) on v.toData and assert equal results. Keep the ada-bearing and zero-delete rows as explicit examples.",
+      "coverageRisk": "low: keeps the edge rows; random inputs add negative amounts and multi-asset policies",
+      "ciSavingSec": -1,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The PV10 = PV11 law does not hold for every generated input. Counterexample 1: containsAtLeast lowers to valueContains(unValueData a, unValueData b) (ValueIntrinsicsV11.scala:74-75). BuiltinValueOps.valueContains throws when either value has a negative amount (BuiltinValueOps.scala:138-141). The PV10 portable lowering returns a Boolean. Arbitrary[Value] produces negative amounts (ArbitraryInstances.scala:73-83: -1, -1000, Int.MinValue, Long.MinValue, choose(-2^64, 2^64)). So forAll fails on PV11 for any negative input. Counterexample 2: insertCoin at PV11 rejects keys longer than 32 bytes and out-of-range amounts, while PV10 accepts them (ValueIntrinsicsLoweringTest.scala:195-200). The action's unconstrained 'ByteString policy, ByteString token, BigInt amount' would therefore diverge. Note: the generator lives in package scalus.cardano.onchain.plutus.v1, file scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ArbitraryInstances.scala. Corrected action: use forAll for plus, minus, multiply, negate, quantityOf and withoutLovelace over Arbitrary[Value]. Its amounts stay within ±2^64, so they cannot overflow 128 bits. For containsAtLeast, filter or map to non-negative values. For insertCoin, use genPolicyId/genAssetName and genAmount. Keep the explicit rows (zero-delete, insert-new, ada-bearing withoutLovelace)."
+    },
+    {
+      "id": "C10-17",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/ValueIntrinsicsLoweringTest.scala:101-275"
+      ],
+      "claim": "The suite takes 0.9 s (1.7 % of core CPU, profiles/core-analysis.md), most of it in lowering: it calls toUplc about 54 times on 8 SIRs and 3 option sets (22 distinct pairs); 'agree' (141-172) lowers each SIR twice per row, insertCoin 6 times. Each lowering pays initSupportBindings (F-14).",
+      "action": "Cache the lowered terms: `lazy val` per op for PV11, PV10 and valueBuiltins=false (or a memoised `lowered(sir, opts)`), and use them in all tests.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0.4,
+      "linesRemoved": 5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-18",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/ValueIntrinsicsLoweringTest.scala:22-44,129-137,161-169,183-191,213-242,262-269"
+      ],
+      "claim": "Six hand-built Data.Map value literals (each 7-10 lines of nested plutus.prelude.List/Data.B/Data.I) and two copies of the seven-op list (129-137, 183-191).",
+      "action": "Add a local `valueData(entries: (ByteString, ByteString, BigInt)*)` builder (raw Data, so malformed shapes stay possible) and one `allOps` val.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-19",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/SirToUplcV3LoweringConstantsTest.scala:28-51"
+      ],
+      "claim": "The `lower` helper (28-40) and `given PlutusVM` (48) are never used; 'lower boolean' builds SIR.Const(true) typed SIRType.Integer (51).",
+      "action": "Delete the dead helper and given; type the constant SIRType.Boolean.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-20",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/S3LoweringDataAccessTest.scala:62-68,80-83,97-100,202-233",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcFromDataReplacementTest.scala:34-37,50,57,69-73,99,134-135,166-168,174-213"
+      ],
+      "claim": "Commented-out printlns and code in both files; S3 builds a full 16-field TxInfo by hand (202-223) while TxInfo.placeholder.copy is used in the same file (176); FromDataReplacement re-serialises the ScriptContext in 'run Hello World' (166-168, a ToData/FromData roundtrip unrelated to lowering) and keeps its own random ScriptContext builder with a seeded Random.",
+      "action": "Delete the commented code and the roundtrip assert; build the ScriptContext from TxInfo.placeholder.copy(...) in both files.",
+      "coverageRisk": "low: the ToData/FromData roundtrip of ScriptContext is covered by the v3 Data codec tests",
+      "ciSavingSec": 0,
+      "linesRemoved": 50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C10-21",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/IntrinsicResolverTest.scala:21,153-177,211-388"
+      ],
+      "claim": "Six tests rebuild the same empty-list SIR.Const and Let(Binding(name, type, impl), Apply(Var(name), args)) usage; `builtinListData` (21) and the alphaEq extension (175-177) are unused; `supportModules` and `debug` parameters of lower are never passed.",
+      "action": "Add `emptyDataList` and `usage(name, type, impl, args*)` helpers; delete the unused val, extension and parameters.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 90,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 4 findings of scope merge-duplicate-tests, to-property or main-bug; 2 confirmed, 1 narrowed, 1 disproved and dropped [P2-12]. Other findings are unverified."
+}

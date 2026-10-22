@@ -1,0 +1,530 @@
+{
+  "cluster": "js-facade",
+  "summary": "The cluster is the Scala.js facade (scalus-cardano-ledger/js scalus.uplc.eval: JEvaluator, JUplc, JCbor, JHex, JEvaluationOptions, JPlutusScriptEvaluationError, JBalancer, JScalus; scalus-core/js scalus.cardano.ledger: JsUtxo, JsValue, JsProtocolParams, JsCardanoInfo, JsHashes, JsSlotConfig) and the scalus-ts-exporter generator. It is cheap: the ts-exporter suites take about 2 s (GoldenTest 0.9 s, TypeMapperTest 0.66 s, ExportCollectorTest 0.34 s), and the JS suites have no timings and no scoverage baseline (scoverage runs on the JVM only), so C2 for the JS code comes from reading, and C7 found no slow test. The JS facade is tested well at the boundary (TypeError paths, budgets, error shapes), with a parallel vitest suite under scalus-cardano-ledger/js/src/main/npm/__tests__ that covers JBalancer, the legacy JScalus evaluators and JsSlotConfig; the Scala side has no test for JsSlotConfig arithmetic and checks detached use for two of the five bindExports objects. One main-code defect: the JsUtxo constructor truncates a fractional or NaN outputIndex silently, where every other facade entry point throws TypeError (C28-8). The rest is four exact or subsumed duplicates (SmokeTest and ExportCollectorTest 'excludes' are subsumed by GoldenTest; one 'native Error' test and one CBOR round-trip test are repeated), weak assertions (a round trip that checks 2 of 18 fields, assertThrows[Exception], a golden test that cancels when the golden file is missing, a real-transaction test that only counts redeemers), and verbose test code: ExportCollectorTest repeats the same casts and member lookups 27 and 14 times, JEvaluatorTest spells out 11 near-identical evaluateTx calls, and four JS suites each define their own typeError helper. The cluster has no ScalaCheck generator (C8: nothing to report); C28-18 proposes the first property, on the JsValue constructor.",
+  "behaviors": [
+    {
+      "pass": "JEvaluator.evaluateScript",
+      "name": "evaluates a script in any envelope (hex/bytes, flat/single/double CBOR) applied to CBOR Data arguments; reports budget, logs and a classified error code (SCRIPT_FAILURE, BUILTIN_FAILURE, INVALID_RETURN_VALUE for V3 only, OUT_OF_BUDGET, INTERNAL_ERROR)",
+      "tests": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluatorTest.scala:42-216",
+        "scalus-cardano-ledger/js/src/main/npm/__tests__/evaluator-api.test.ts:26-73"
+      ]
+    },
+    {
+      "pass": "JEvaluator.evaluateTx",
+      "name": "evaluates every redeemer of a transaction from hex/bytes pairs or Utxo handles; later pair wins; bigint slot fields; maxBudget for the whole tx; TypeError for unreadable input; native Error for an unresolved input; PlutusScriptEvaluationError for a failing script",
+      "tests": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluatorTest.scala:244-470"
+      ]
+    },
+    {
+      "pass": "JEvaluationOptions",
+      "name": "mainnet/fromProtocolParams records; machine() reads plain records, any cost-model length, bigint costs, rejects mis-costing records; maxBudget parsing",
+      "tests": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluationOptionsTest.scala:31-158"
+      ]
+    },
+    {
+      "pass": "JPlutusScriptEvaluationError",
+      "name": "a failing script surfaces as an Error with redeemer, scriptHash, code, logs and a non-enumerable args; legacy (message, logs) constructor",
+      "tests": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JPlutusScriptEvaluationErrorTest.scala:28-109",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluatorTest.scala:452-470"
+      ]
+    },
+    {
+      "pass": "JUplc / JCbor / JHex",
+      "name": "decodeScript, decodeArgs, applyAll, decodeToFlat, applyArgs, applyParamsToScript, wrapBytes/unwrapBytes, hex conversion; script bytes never re-encoded; TypeError naming the bad argument",
+      "tests": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JUplcTest.scala:27-226",
+        "scalus-cardano-ledger/js/src/main/npm/__tests__/uplc-api.test.ts:34-45"
+      ]
+    },
+    {
+      "pass": "JScalus (legacy entry points)",
+      "name": "applyDataArgToScript, evalPlutusScripts (CBOR map of UTxOs, optional protocol version), evaluateScript and evaluateScriptProfile",
+      "tests": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JScalusTest.scala:13-58",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JUplcTest.scala:183-200",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluatorTest.scala:244-272",
+        "scalus-cardano-ledger/js/src/main/npm/__tests__/legacy-evaluation.test.ts:25-83"
+      ]
+    },
+    {
+      "pass": "JBalancer.balanceTx",
+      "name": "balances a transaction: installs execution units, recomputes the script data hash, prices the signatures of named keys and extra signers, rejects a bad change index; maps failures to TxBalancingError / PlutusScriptEvaluationError",
+      "tests": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JBalancerTest.scala:69-80",
+        "scalus-cardano-ledger/js/src/main/npm/__tests__/balance.test.ts:56-149",
+        "scalus-cardano-ledger/js/src/main/npm/__tests__/balance-mesh.test.ts:87-186"
+      ]
+    },
+    {
+      "pass": "bindExports",
+      "name": "every @JSExportTopLevel object's methods work detached (JScalus, JUplc, JCbor, JEvaluator, JBalancer)",
+      "tests": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JScalusTest.scala:13-22",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JUplcTest.scala:202-213",
+        "scalus-cardano-ledger/js/src/main/npm/__tests__/uplc-api.test.ts:34-45"
+      ]
+    },
+    {
+      "pass": "JsUtxo",
+      "name": "wrap/constructor, hex ids, bech32 address passthrough, CBOR [input, output] and legacy one-entry map, withDatumHash/withInlineDatum/withScriptRef keep bytes, script round trip, toObject",
+      "tests": [
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsUtxoTest.scala:25-322"
+      ]
+    },
+    {
+      "pass": "JsUtxo constructor input validation",
+      "name": "a fractional, NaN or too-large outputIndex is rejected",
+      "tests": []
+    },
+    {
+      "pass": "Utxos CBOR decoders",
+      "name": "mapDecoder, pairsDecoder (later pair wins), mapOrPairsDecoder",
+      "tests": [
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsUtxoTest.scala:115-126"
+      ]
+    },
+    {
+      "pass": "JsHashes",
+      "name": "scriptHash ignores the wrapping and keeps non-minimal native bytes; dataHash hashes the CBOR as given",
+      "tests": [
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsUtxoTest.scala:196-236"
+      ]
+    },
+    {
+      "pass": "JsValue / JsAsset",
+      "name": "ada, assets, plus, constructor sums duplicates and drops zeros, wrap by reference, toObject",
+      "tests": [
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsValueTest.scala:10-97"
+      ]
+    },
+    {
+      "pass": "JsValue lovelace guard",
+      "name": "a lovelace or quantity beyond Long is a TypeError (longOf), JsValue.ada multiplies in bigint",
+      "tests": []
+    },
+    {
+      "pass": "JsCardanoInfo / JsProtocolParams",
+      "name": "presets, custom network parsing, Network.Other throws, withProtocolParams, Blockfrost JSON round trip, number/bigint split, toObject",
+      "tests": [
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsProtocolParamsTest.scala:10-140"
+      ]
+    },
+    {
+      "pass": "JsSlotConfig",
+      "name": "slotToTime, timeToSlot, epochOf (clamped below zeroSlot), firstSlotOfEpoch, presets",
+      "tests": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:726-727",
+        "scalus-cardano-ledger/js/src/main/npm/__tests__/shared-tests.ts:336-338",
+        "scalus-cardano-ledger/js/src/main/npm/__tests__/emulator.test.ts:166-167"
+      ]
+    },
+    {
+      "pass": "DocConverter",
+      "name": "strips the comment frame, folds scaladoc tags into TSDoc, splits @constructor, resolves links, keeps fences verbatim",
+      "tests": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/DocConverterTest.scala:6-128",
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/ExportCollectorTest.scala:189-218"
+      ]
+    },
+    {
+      "pass": "Emitter",
+      "name": "renders types with precedence, readonly arrays in input positions, classes, interfaces, functions, const objects, deprecated aliases, sorted output with header",
+      "tests": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/EmitterTest.scala:11-235",
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/GoldenTest.scala:12-39"
+      ]
+    },
+    {
+      "pass": "TypeMapper",
+      "name": "maps Scala.js types to TypeScript; errors on Long, Option, Scala collections, opaque types",
+      "tests": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/TypeMapperTest.scala:64-108"
+      ]
+    },
+    {
+      "pass": "TypeMapper",
+      "name": "js.ThisFunction is rejected with an error",
+      "tests": []
+    },
+    {
+      "pass": "ExportCollector",
+      "name": "collects exported classes, objects, functions, statics, renames, overloads, docs, inheritance, chased interfaces, excludes, duplicate top-level names; empty tasty root is an error",
+      "tests": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/ExportCollectorTest.scala:16-450",
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/GoldenTest.scala:12-39"
+      ]
+    },
+    {
+      "pass": "ExportCollector",
+      "name": "a TASTy inspection that fails reports the 'TASTy inspection failed' error",
+      "tests": []
+    },
+    {
+      "pass": "VerbatimNames",
+      "name": "extracts referenced names from @TsType text and reports undeclared ones with their member",
+      "tests": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/VerbatimNamesTest.scala:7-110",
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/ExportCollectorTest.scala:363-369"
+      ]
+    },
+    {
+      "pass": "Main",
+      "name": "parse CLI arguments; run returns the emitted text, or Left with the export errors",
+      "tests": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/GoldenTest.scala:12-39",
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/GoldenTest.scala:62-89"
+      ]
+    },
+    {
+      "pass": "Golden output",
+      "name": "generated fixtures.d.ts matches the committed golden and type-checks with tsc against consumer.ts",
+      "tests": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/GoldenTest.scala:12-60"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C28-1",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-ts-exporter",
+      "evidence": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/SmokeTest.scala:9-40",
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/GoldenTest.scala:12-39",
+        "scalus-ts-exporter/src/test/resources/golden/fixtures.d.ts:313"
+      ],
+      "claim": "SmokeTest asserts that the inspector loads the fixture TASTy (ok == true) and sees @JSExportTopLevel(\"Point\"). GoldenTest:12-39 runs the full pipeline over the same fixture classes and compares to a golden that contains `export class Point` (fixtures.d.ts:313); if the inspector failed or missed the annotation, Main.run would return Left (ExportCollector reports 'TASTy inspection failed') or the output would lack Point, and GoldenTest fails. SmokeTest is the scaffolding test from the first commit of the module.",
+      "action": "Delete SmokeTest.scala. Do it together with C28-6, so a missing golden file fails GoldenTest instead of cancelling it.",
+      "coverageRisk": "low: SmokeTest reads the annotation through its own TreeAccumulator, independent of ExportCollector; GoldenTest pins the same fact through the production path, which is what matters",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "SmokeTest.scala:38-39 asserts two things: `ok` from ScalaJsTastyInspector.inspectAllTastyFiles, and that \"Point\" is among the @JSExportTopLevel names. GoldenTest.scala:12-39 runs Main.run on the same fixtureClasses and fixtureClasspath. ExportCollector.scala:753-768 calls the same ScalaJsTastyInspector.inspectAllTastyFiles. On `!inspected` it adds a 'TASTy inspection failed' ExportError, and Main.scala:36 turns that error into Left, so GoldenTest fails at line 20. The committed golden scalus-ts-exporter/src/test/resources/golden/fixtures.d.ts:313 contains `export class Point`, so a missed annotation breaks the exact text comparison. Caveat: GoldenTest:23 uses `assume` on the golden file. A missing golden cancels the test, it does not fail it. So the deletion depends on C28-6, as the finding says. The golden is committed today, so the risk is only a future deletion of that file."
+    },
+    {
+      "id": "C28-2",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-ts-exporter",
+      "evidence": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/ExportCollectorTest.scala:441-450",
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/GoldenTest.scala:12-39",
+        "scalus-ts-exporter/src/main/scala/scalus/tsexport/Main.scala:33-38"
+      ],
+      "claim": "'excludes drop declarations and errors' runs a second full TASTy collection with excludes = List(\"tsfixtures.Bad\") and asserts errors.isEmpty, no Bad* declaration, and a Point declaration. GoldenTest:12-39 calls Main.run with the same roots, classpath and excludes; Main.run returns Left when errors are non-empty (Main.scala:36), and the golden file has no 'Bad' text and has 'export class Point', so all three assertions are implied.",
+      "action": "Delete ExportCollectorTest:441-450 (with C28-6 applied first).",
+      "coverageRisk": "low: the golden comparison is strictly stronger; a Bad* declaration that rendered to an empty string would escape both",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "ExportCollectorTest.scala:441-450 makes three assertions with excludes=List(\"tsfixtures.Bad\"): errors.isEmpty, no decl named Bad*, and a decl named Point. GoldenTest.scala:13-18 passes the same roots, classpath and excludes to Main.run, which calls ExportCollector.collect(cfg.tastyRoots, cfg.classpath, cfg.excludes) at Main.scala:35. (1) errors.isEmpty: non-empty errors give Left at Main.scala:36, and GoldenTest:20 then fails. (2) A grep for 'Bad' in golden fixtures.d.ts finds no match. A Bad* decl that emits text changes the output and fails the comparison. Only a decl that renders to empty text escapes, as the report notes. (3) Point: golden line 313. The C28-6 dependency on the `assume` at GoldenTest:23 also applies here."
+    },
+    {
+      "id": "C28-3",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JPlutusScriptEvaluationErrorTest.scala:99-109",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluatorTest.scala:433-450",
+        "scalus-cardano-ledger/js/src/main/scala/scalus/uplc/eval/JEvaluator.scala:186-194",
+        "scalus-cardano-ledger/js/src/main/scala/scalus/uplc/eval/JEvaluator.scala:117-133"
+      ],
+      "claim": "Both tests build SampleTransactions.withdrawal, give no resolved UTxO, and assert a native js.Error that is not a PlutusScriptEvaluationError (spec [TX-12] in both). JPlutusScriptEvaluationErrorTest goes through JEvaluator.evaluate, which is `run(...)` (186-194); JEvaluatorTest goes through evaluateTx, which decodes and then calls the same `run` (117-133), whose surfacingErrors turns the evaluator exception into js.Error. The JEvaluatorTest version also excludes a TypeError, so it is the stronger one.",
+      "action": "Delete JPlutusScriptEvaluationErrorTest:99-109.",
+      "coverageRisk": "none: both reach the same run/surfacingErrors path with the same input; the kept test asserts more",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "Test to delete: JPlutusScriptEvaluationErrorTest.scala:99-109. Input is withdrawal(failingV3) with an empty map, through JEvaluator.evaluate (JEvaluator.scala:186-194). Assertions: a js.Error with a non-empty message, and not a JPlutusScriptEvaluationError. Kept test: JEvaluatorTest.scala:433-450. Input is withdrawal(succeedingV3) with an empty pairs array, through evaluateTx -> evaluateTxWithin (117-133). The kept test asserts the same two things and also excludes a js.TypeError. Both paths end in run (JEvaluator.scala:212-223). run wraps evalPlutusScripts in surfacingErrors (helpers.scala:158-163), which turns a NonFatal exception into a js.Error. The two tests use different scripts, and this makes the kept test stronger. With succeedingV3, the test passes only if the missing input itself raises the error. With failingV3, a script failure would show up as JPlutusScriptEvaluationError, which both tests reject. The evaluate entry point (private[scalus]) is a thin call to the same run, so the deletion loses no unique path."
+    },
+    {
+      "id": "C28-4",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsUtxoTest.scala:95-100",
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsUtxoTest.scala:102-113"
+      ],
+      "claim": "'CBOR round-trip preserves the UTxO' checks only txHash and coin after JsUtxo.fromCbor(utxo.toCbor()). The next test does the same round trip on the same kind of UTxO and asserts back.input == in && back.output == out, the exact bytes, the legacy map form and the two-entry rejection.",
+      "action": "Delete JsUtxoTest:95-100.",
+      "coverageRisk": "none: the kept test asserts full equality of input and output",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Test to delete: JsUtxoTest.scala:95-100. It wraps (hash,0)/ada(1), runs JsUtxo.fromCbor(utxo.toCbor()), and checks back.txHash and back.value.coin. Kept test: JsUtxoTest.scala:102-113. It wraps (hash,2)/ada(1) and goes through the same toCbor() -> fromCbor(Uint8Array) round trip. It asserts back.input == in && back.output == out, and that check implies equal txHash and coin. The kept test also checks the exact bytes, the legacy map form and the two-entry rejection. The deleted test also reads the getters txHash and value.coin. Those getters stay covered for a wrapped UTxO by JsUtxoTest.scala:24-34."
+    },
+    {
+      "id": "C28-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsProtocolParamsTest.scala:17-22",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/ledger/ProtocolParamsTest.scala:13-18",
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsUtxoTest.scala:55-59",
+        "scalus-core/shared/src/main/scala/scalus/utils/Hex.scala:43-52"
+      ],
+      "claim": "(1) The Blockfrost JSON round trip asserts txFeePerByte and the PlutusV3 cost-model length only: a fromBlockfrostJson that lost maxTxSize, a deposit, the prices or every cost value passes. The full equality check exists only in the JVM ProtocolParamsTest, so the Scala.js JSON path (number parsing differs between platforms) has no full check. (2) 'malformed transaction hash' uses assertThrows[Exception]: any failure, for example a NullPointerException from a later field, passes.",
+      "action": "(1) Replace the two field asserts with `assert(back.underlying == params.underlying, ProtocolParams.diff(params.underlying, back.underlying).mkString(\"\\n\"))` for mainnet and preview. (2) Use intercept[IllegalArgumentException] and assert the message contains `nothex`; add a well-formed hex of the wrong length (\"00\") as a second case.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-ts-exporter",
+      "evidence": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/GoldenTest.scala:23-26"
+      ],
+      "claim": "The golden comparison `assume`s the golden file exists. If fixtures.d.ts is deleted or renamed, ScalaTest reports a canceled test inside a green suite, and nothing checks the generator output at all (C28-1 and C28-2 lean on this test). The file is committed, so absence is always a defect.",
+      "action": "Replace the assume with assert (keep the message about seeding it from the output, and write the .actual file first so the fix is a copy). Leave the tsc assume at line 44: build.sbt makes Test/executeTests depend on installNpmTestDeps.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JScalusTest.scala:24-58",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JBalancerTest.scala:69-80",
+        "scalus-cardano-ledger/js/src/main/scala/scalus/uplc/eval/JBalancer.scala:138-158"
+      ],
+      "claim": "(1) The only Scala test of evalPlutusScripts on a real mainnet transaction asserts `redeemers.length == 2` twice: a mutation that returned zero budgets, swapped tags, or ignored the protocol-version argument passes. (2) JBalancerTest compares fee(no extra signers) with fee(named signers as extras); if balanceTx ignored `extras` (JBalancer.scala:139-147) both fees are still equal, so the Scala tests cannot see that mutation (balance-mesh.test.ts:124 does, in vitest only).",
+      "action": "(1) Decode the transaction and assert that the (tag, index) pairs equal the transaction's own redeemers, that every budget is positive and not above the ExUnits the transaction declares, and that the call with vanRossemPV returns the same budgets. (2) In JBalancerTest add one assertion: fee(balance(tx, Seq(someUnrelatedKeyHash))) > fee(balance(tx, Seq.empty)).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-8",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/js/src/main/scala/scalus/cardano/ledger/JsUtxo.scala:83-84",
+        "scalus-core/js/src/main/scala/scalus/utils/scalajs/internal/helpers.scala:74-78",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluatorTest.scala:424-430"
+      ],
+      "claim": "By reading (not executed): `new Utxo(txHash, outputIndex, address, value)` converts outputIndex with `outputIndex0.toInt`. In Scala.js, 1.5 becomes 1, NaN becomes 0 and 1e10 saturates to Int.MaxValue, so the handle silently names a different output than the caller passed. Every other numeric argument of the facade goes through intOf/safeInteger and throws TypeError (JEvaluatorTest:424-430 pins exactly this for the protocol version: 'would otherwise saturate through .toInt'). Only a negative index fails, through TransactionInput's require.",
+      "action": "Add a JsUtxoTest case: for outputIndex 1.5, NaN, -1 and 2^31, the constructor throws (a TypeError naming outputIndex). Main-code note only: use intOf(outputIndex0, \"outputIndex\") in the constructor.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "findingsLog": "F-55",
+      "verification": "The defect is real and reachable. JsUtxo.scala:83 does `TransactionInput(TransactionHash.fromHex(txHash0), outputIndex0.toInt)`, and the class is @JSExportTopLevel(\"Utxo\"). From JavaScript, `new Utxo(hash, 1.5, addr, value)` silently names output 1. NaN gives 0, and 2^31 saturates to Int.MaxValue. The other facade numbers go through intOf/safeInteger (helpers.scala:74-85), which throw TypeError, as JEvaluatorTest.scala:424-430 pins for the protocol version. The proposed test is wrong for -1. intOf(-1, ...) passes, because -1 is a safe integer and a valid Int (helpers.scala:75-77). So -1 never becomes a TypeError naming outputIndex. It fails later at TransactionInput's `require(index >= 0)` (TransactionInput.scala:22) with an IllegalArgumentException. Corrected action: assert a TypeError naming outputIndex for 1.5, NaN and 2^31. Assert an IllegalArgumentException for -1, or add a non-negative check in the constructor if a TypeError is wanted there too. Main-code fix: use `intOf(outputIndex0, \"outputIndex\")`."
+    },
+    {
+      "id": "C28-9",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/js/src/main/scala/scalus/cardano/ledger/JsSlotConfig.scala:59-77",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/SlotConfig.scala:22-31",
+        "scalus-core/js/src/main/scala/scalus/cardano/ledger/JsValue.scala:140-144",
+        "scalus-core/js/src/main/scala/scalus/cardano/ledger/JsValue.scala:65-67"
+      ],
+      "claim": "(1) JsSlotConfig re-implements slot arithmetic in Double (slotToTime, timeToSlot, epochOf with its clamp below zeroSlot, firstSlotOfEpoch) instead of delegating to SlotConfig, and no Scala test checks it; epochOf and firstSlotOfEpoch are checked only by two vitest lines. (2) JsValue.ada multiplies in bigint on purpose (comment at 140-142: the Long version 'overflows a million times sooner, silently'), and the lovelace constructor narrows through longOf, but no test pins that an amount beyond Long is a TypeError rather than a wrapped value.",
+      "action": "Add to scalus-core/js tests: (1) a property over the three presets and a custom config: for slots in [zeroSlot - 10, zeroSlot + 10 * epochLength] and epochs >= zeroEpoch, JsSlotConfig.wrap(c).slotToTime(s) == c.slotToTime(s).toDouble, epochOf(s) == c.epochOf(s).toDouble (includes s <= zeroSlot), firstSlotOfEpoch(e) == c.firstSlotOfEpoch(e).toDouble, and timeToSlot(slotToTime(s)) == s. (2) JsValueTest: JsValue.ada(js.BigInt(\"9223372036854775807\")) and new JsValue(js.BigInt(\"9223372036854775808\")) throw TypeError; JsValue.ada(js.BigInt(\"9223372036854\")) keeps the exact coin.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-ts-exporter",
+      "evidence": [
+        "scalus-ts-exporter/src/main/scala/scalus/tsexport/Main.scala:36",
+        "scalus-ts-exporter/src/main/scala/scalus/tsexport/ExportCollector.scala:762-768",
+        "scalus-ts-exporter/src/main/scala/scalus/tsexport/TypeMapper.scala:153-154"
+      ],
+      "claim": "Baseline coverage (93.2 % statements) marks three error paths that users hit as never run: Main.run returning Left (Main.scala:36; GoldenTest only reaches Right), the 'TASTy inspection failed ... clean the JS projects' error that is the advertised fix for stale class directories (ExportCollector.scala:762-768), and the js.ThisFunction rejection (TypeMapper.scala:153-154; no Bad* fixture uses js.ThisFunction). Main.main itself runs in ci-js through the d.ts generation task, so it is out of this finding.",
+      "action": "(1) In GoldenTest, assert Main.run without excludes returns Left whose members include BadLong.bad. (2) In ExportCollectorTest, copy one fixture .tasty into a temp dir, truncate it, collect it, and assert the '<tasty-inspector>' error with 'TASTy inspection failed'. (3) Add a BadThisFunction fixture class (excluded from the golden by the tsfixtures.Bad prefix) and a TypeMapperTest assertion that its signature is ERROR(...js.ThisFunction...).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.3,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-11",
+      "check": "C1",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JScalusTest.scala:13-22",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JUplcTest.scala:202-213",
+        "scalus-cardano-ledger/js/src/main/scala/scalus/uplc/eval/JBalancer.scala:16-18",
+        "scalus-cardano-ledger/js/src/main/npm/__tests__/uplc-api.test.ts:34-45"
+      ],
+      "claim": "Five exported objects call bindExports (JScalus, JUplc, JCbor, JEvaluator, JBalancer). The Scala tests check detached calls for JScalus and JUplc in two separate tests with the same shape; the vitest test adds JCbor and JEvaluator; nothing checks JBalancer, so removing its bindExports(this) would break `const { balanceTx } = balancer` unnoticed.",
+      "action": "Replace JScalusTest:13-22 and JUplcTest:202-213 with one table test (in JUplcTest or a new BindExportsTest) that, for each of the five objects, reads one method through js.Dynamic, calls it detached with valid arguments, and asserts it does not throw a 'this'-related TypeError (for JBalancer, a detached balanceTx with a bad changeOutputIndex must throw the facade's TypeError, not one about undefined 'this').",
+      "coverageRisk": "none: the two existing cases are kept as rows",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-12",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluatorTest.scala:37-40",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluationOptionsTest.scala:26-29",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JUplcTest.scala:22-25",
+        "scalus-core/js/src/test/scala/scalus/utils/scalajs/internal/NumbersTest.scala:10-11",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JPlutusScriptEvaluationErrorTest.scala:19-26",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JBalancerTest.scala:17-23",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluatorTest.scala:225-229"
+      ],
+      "claim": "Four suites define the same `typeError(body): js.TypeError` (intercept js.JavaScriptException, match js.TypeError, else fail); JPlutusScriptEvaluationErrorTest:19-26 and JEvaluatorTest:325-328, 445-449 repeat the same unwrap for PlutusScriptEvaluationError and native Error; JBalancerTest:17-23 and JEvaluatorTest:225-229 build the same mainnet slot-config record. scalus-cardano-ledger tests depend on scalus-core test classes (build.sbt: scalus % \"compile->compile;test->test\"), so one helper serves all.",
+      "action": "Add scalus-core/js/src/test/scala/scalus/utils/scalajs/JsAssertions.scala with `typeErrorFrom(body)`, `jsErrorFrom[E <: js.Any: ClassTag](body)` and `mainnetSlotConfigRecord`; use it in the five suites and NumbersTest, and delete the local copies.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-13",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluatorTest.scala:361-431",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluatorTest.scala:305,336,364,455",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JEvaluatorTest.scala:248-261"
+      ],
+      "claim": "'inputs that cannot be read throw TypeError' is 70 lines for 11 calls that differ in one argument each. Four tests rebuild the same `pairs` array from the succeeding withdrawal, and evaluateTx(…, slotConfigRecord, costModelsRecord, protocol) is spelled out about 15 times.",
+      "action": "Add private `succeedingPairs` and `def evalTx(tx: js.Any = txBytes, utxos: js.Any = pairs, slots: js.Any = slotConfigRecord, models: js.Any = costModelsRecord, protocol: Double = protocol)` in the suite; rewrite 361-431 as a table of (label, () => evalTx(...)) with withClue(label)(typeErrorFrom(...)), keeping the two comments on the NonFatal-decode rows.",
+      "coverageRisk": "none: same calls and assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-14",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JUplcTest.scala:71-93",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JUplcTest.scala:104-119",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JUplcTest.scala:56-69",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JUplcTest.scala:95-102",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/uplc/eval/JUplcTest.scala:215-225"
+      ],
+      "claim": "Two decodeArgs tests (71-93, 104-119) each mix accepted and rejected Data; the rejection of \"d86682c24901000000000000000080\" appears in both (91 and 116); the second test is named 'rejects' but mostly accepts; the accepted values are checked with toString.startsWith instead of equality. decodeScript rejections are split over three tests (56-69, 95-102, 215-220). Line 225 puts two asserts on one line with ';'.",
+      "action": "One table for decodeArgs: hex -> expected Data (exact equality, e.g. Data.Constr(BigInt(\"9223372036854775808\"), Nil)) or TypeError; one table for decodeScript rejections (malformed hex, unsupported constants, truncated flat chunks, wrong JS types) with withClue; split line 225.",
+      "coverageRisk": "none: same inputs; exact equality is stronger than the toString prefixes",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-15",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-ts-exporter",
+      "evidence": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/ExportCollectorTest.scala:16-345",
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/ExportCollectorTest.scala:65",
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/ExportCollectorTest.scala:131"
+      ],
+      "claim": "ExportCollectorTest casts `decl(x).asInstanceOf[TsDecl.Cls]` 27 times, looks up a method with `collectFirst { case m: TsMember.Method if m.name == n => m }.get` 14 times (three tests define the same local `def m`), and writes `members.exists { case p: TsMember.Property => ...; case _ => false }` 17 times. The Box type-parameter assertion at line 65 is repeated verbatim at 131.",
+      "action": "Add suite helpers `cls(name)`, `method(owner, name)`, `property(owner, name): Option[TsMember.Property]`, `methodNames(owner)`; rewrite the tests with them; drop the repeated assertion at 65.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 50,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-16",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-ts-exporter",
+      "evidence": [
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/EmitterTest.scala:153-235",
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/EmitterTest.scala:29-44",
+        "scalus-ts-exporter/src/test/scala/scalus/tsexport/VerbatimNamesTest.scala:48-52"
+      ],
+      "claim": "One 82-line EmitterTest test checks the header, ordering, interfaces, functions, const objects, deprecated aliases, generic classes, Error bases, generic interfaces and determinism; a failure names none of them. TsMember.Property is built with six named arguments six times, while VerbatimNamesTest already has `property`/`iface` builders.",
+      "action": "Split 153-235 into four tests (module layout and aliases; generic and Error-based classes; generic interface and method; determinism and no trailing space). Move the `property`/`iface` builders into a small TsBuilders test object and use them in EmitterTest and VerbatimNamesTest.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-17",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsUtxoTest.scala:132,156,190,201,239,251,281,295",
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsProtocolParamsTest.scala:80-101",
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsProtocolParamsTest.scala:10-15,35-43"
+      ],
+      "claim": "JsUtxoTest builds the same `JsUtxo.wrap(TransactionInput(hash, 0), TransactionOutput(address, Value.ada(1)))` at nine sites. JsProtocolParamsTest spells out 17 `assert(js.typeOf(params.x) == ...)` lines, and three preset tests (preview, preprod, mainnet) each check one or two fields of a preset.",
+      "action": "JsUtxoTest: a private `def plainUtxo = ...` used at the nine sites. JsProtocolParamsTest: two lists of field names (number, bigint) checked through js.Dynamic in a loop with withClue(field); one table test over (preset, expected network, expected slot-config field).",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C28-18",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/js/src/test/scala/scalus/cardano/ledger/JsValueTest.scala:48-68",
+        "scalus-core/js/src/main/scala/scalus/cardano/ledger/JsValue.scala:146-155"
+      ],
+      "claim": "'the constructor sums duplicate units and drops zeros, as adding one by one does' states an oracle law (new JsValue(c, assets).underlying.assets == assets folded with MultiAsset +), but checks it on one hand-picked list of six assets. The main code is a hand-written mutable-map accumulation (146-155) that replaced the fold for speed, which is exactly what an oracle property guards.",
+      "action": "Replace the example with a ScalaCheck property: generate lists of 0-12 JsAsset over 2 policies x 3 asset names with quantities in [-3, 3] (so duplicates, zeros and cancellations are frequent) and assert equality with the fold; keep the current list as an explicit edge example inside the property's Gen via Gen.oneOf or as a separate one-line assert.",
+      "coverageRisk": "none: the law is checked on many more inputs, including the current one",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "Law: JsValue.multiAssetOf (JsValue.scala:146-155) equals the left fold of MultiAsset.asset with `+`. multiAssetOf sums each policy/name in a mutable map, then calls MultiAsset.fromAssets. fromAssets (Types.scala:218-228) drops zero amounts and empty policies, so a policy with only zeros disappears. getOrElseUpdate leaves such an empty policy map, and fromAssets drops it too. The fold uses asset() (Types.scala:201-207), which returns zero for amount 0, and binOp (Types.scala:267-291), which drops zero sums. Zeros in between, for example 5 then -5 then 2, give the same end result either way. Both sides yield a SortedMap-backed MultiAsset, so == compares content. The law can break only on Long overflow: binOp uses Math.addExact and throws, but the mutable sum wraps silently. The proposed quantities in [-3,3] exclude overflow, so no counterexample exists inside the generator's range. The example list (JsValueTest.scala:48-68) has a duplicate unit, a zero-only policy and a +3/-3 cancellation. A generator over 2 policies x 3 names with quantities in [-3,3] produces all of these often. The extra shape assertion at line 67 (2 policies, 1 name under p) also guards against both sides being wrong in the same way, so keep the current list as an explicit example, as the action says. ScalaCheck is on the scalus-core test classpath for JS (build.sbt cross deps, and shared tests such as IntervalTest use it)."
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 6 findings of scope merge-duplicate-tests, to-property or main-bug; 5 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

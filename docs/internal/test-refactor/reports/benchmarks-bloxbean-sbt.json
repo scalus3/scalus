@@ -1,0 +1,503 @@
+{
+  "cluster": "benchmarks-bloxbean-sbt",
+  "summary": "The cluster is cheap: about 9 s per run (KnightsTest 3.6 s, KnightsDataTest 1.0 s, ClausifyTest 1.1 s, KnightsTestMinimal 1.0 s, PlutusScriptEvaluatorTest 0.9 s, the rest under 0.5 s); the benchmark suites pin budgets on purpose, so the only ci-time wins are duplicate tests (C15-12, C15-13). The bloxbean module is weakly tested: 19.3% statement and 10.1% branch coverage. Interop's ScriptContext path, ScalusTransactionEvaluator and the CCL suppliers have no unit test, and the three *BlocksLedgerTest suites silently skip 685 of 712 block txs because only 27 have UTxOs in /utxos. One main-code defect: Interop.toPlutusData loses Data.Map entry order for maps with more than 4 entries and drops duplicate keys (C15-5); InteropMapOrderingTest cannot see it because CCL encodes CBOR canonically and the test keys are pre-sorted. The benchmark files are dominated by dead Options branches and a 940-line hand-nested Cons literal (C15-16, C15-17). The sbt plugin tests (BlueprintLayout, LeanLayout) are adequate. No generators in the cluster (C8: only the Arbitrary[Data] proposed in C15-6, which never makes duplicate map keys).",
+  "behaviors": [
+    {
+      "pass": "Interop (bloxbean)",
+      "name": "toScalusData / toPlutusData convert Data <-> CCL PlutusData, keeping Map entry order",
+      "tests": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/InteropMapOrderingTest.scala:11-66",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/InteropMapOrderingTest.scala:68-109"
+      ]
+    },
+    {
+      "pass": "Interop (bloxbean)",
+      "name": "toTransactionOutput reads address (pointer with large slot) and inline datum bytes from a CCL Utxo",
+      "tests": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/InteropAddressTest.scala:13-26",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/InteropDatumTest.scala:12-28"
+      ]
+    },
+    {
+      "pass": "Interop (bloxbean)",
+      "name": "getGovernanceActionV3 encodes NewConstitution like the node",
+      "tests": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/InteropNewConstitutionTest.scala:26-34"
+      ]
+    },
+    {
+      "pass": "Interop (bloxbean)",
+      "name": "getTxInfoV1/V2/V3, getScriptPurpose*, getTxCertV3, getScriptContextV2/V3: CCL Transaction -> Plutus ScriptContext",
+      "tests": []
+    },
+    {
+      "pass": "ScalusTransactionEvaluator / ScalusUtxoResolver",
+      "name": "CCL TransactionEvaluator: evaluate a CCL tx and return per-redeemer ExUnits",
+      "tests": []
+    },
+    {
+      "pass": "CclUtxoResolver, CachedUtxoSupplier, CachedEpochParamsSupplier, ScriptSupplier",
+      "name": "UTxO/params/script suppliers for CCL backends",
+      "tests": []
+    },
+    {
+      "pass": "ScalusScriptUtils (Java)",
+      "name": "applyParamsToScript applies PlutusData params (varargs and ListPlutusData) in order",
+      "tests": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/ScalusScriptUtilsTest.scala:24-32",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/ScalusScriptUtilsTest.scala:34-46"
+      ]
+    },
+    {
+      "pass": "StakeStateResolver",
+      "name": "resolveForTx(tx, slot): account balance, deposit, pool and DRep delegation as of the tx; DRep deregistration; late registration",
+      "tests": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/StakeStateResolverTest.scala:106-134"
+      ]
+    },
+    {
+      "pass": "StakeStateResolver",
+      "name": "treasuryAt(epoch) from Koios totals",
+      "tests": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/StakeStateResolverTest.scala:136-139"
+      ]
+    },
+    {
+      "pass": "StakeStateResolver",
+      "name": "drepOf: predefined DReps, CIP-105 ids, CIP-129 script header; poolAt: pool retirement",
+      "tests": []
+    },
+    {
+      "pass": "PlutusScriptEvaluator (scalus-cardano-ledger)",
+      "name": "exact ExUnits of a PubKeyValidator V2/V3 spend; recorded mainnet budgets are upper bounds for 27 committed txs",
+      "tests": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:22-75",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:77-130",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:132-142"
+      ]
+    },
+    {
+      "pass": "Ledger rules MetadataValidator, ScriptsWellFormedValidator, ProtocolParamsViewHashesMatchValidator",
+      "name": "accept the committed mainnet block txs",
+      "tests": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/BlocksLedgerRulesValidator.scala:18-53",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/MetadataValidatorBlocksLedgerTest.scala:5",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/ScriptsWellFormedValidatorBlocksLedgerTest.scala:5-6",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/ProtocolParamsViewHashesMatchValidatorBlocksLedgerTest.scala:5-6"
+      ]
+    },
+    {
+      "pass": "BlockFile (scalus-core)",
+      "name": "decode a mainnet block from CBOR",
+      "tests": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/BlockDeserializationTest.scala:11-21",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/BlocksLedgerRulesValidator.scala:29",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:144-150"
+      ]
+    },
+    {
+      "pass": "Transaction CBOR (scalus-core)",
+      "name": "Scalus tx body hash equals CCL tx hash",
+      "tests": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/TransactionTest.scala:16-83"
+      ]
+    },
+    {
+      "pass": "SIR compiler + V3 optimizer (UplcConstr repr)",
+      "name": "Knights tour workload with UplcConstr-annotated types: result and budget (5% tolerance)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTest.scala:75-331"
+      ]
+    },
+    {
+      "pass": "SIR compiler (UplcConstr repr)",
+      "name": "repr-alignment regressions: filterMap/map over UplcConstr lists, Option field access, ++ then head, function-valued params",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTestMinimal.scala:46-173",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTestMinimal.scala:238-245",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTestMinimal.scala:272-325"
+      ]
+    },
+    {
+      "pass": "SIR compiler (unoptimized UPLC)",
+      "name": "runKnights(depth, 4) runs without error at depths 1..100",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTestMinimal.scala:175-270"
+      ]
+    },
+    {
+      "pass": "SIR compiler + V3 optimizer (Data repr)",
+      "name": "Knights tour workload with default Data repr: result and exact budget",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/knightsdata/KnightsDataTest.scala:52-294"
+      ]
+    },
+    {
+      "pass": "SIR compiler (toUplcOptimized)",
+      "name": "Clausify workload F1-F5: result and exact budget per Scala compiler generation",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/ClausifyTest.scala:35-144"
+      ]
+    },
+    {
+      "pass": "BlueprintLayout (sbt plugin)",
+      "name": "contractRelativePath, manifest pruning, listFilesRecursively, fingerprint, pruneStale",
+      "tests": [
+        "scalus-sbt-plugin/src/test/scala/scalus/sbt/BlueprintLayoutTest.scala:23-113"
+      ]
+    },
+    {
+      "pass": "LeanLayout (sbt plugin)",
+      "name": "packageName: capitalized words, starts with a letter, Proofs fallback",
+      "tests": [
+        "scalus-sbt-plugin/src/test/scala/scalus/sbt/LeanLayoutTest.scala:5-18"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C15-1",
+      "check": "C2",
+      "scope": "strengthen-assertion",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/BlocksLedgerRulesValidator.scala:22-53",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/ResourcesUtxoResolver.scala:50-56",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/ScriptsWellFormedValidator.scala:12-18"
+      ],
+      "claim": "The three *BlocksLedgerTest suites check almost nothing. The loop catches 'UTXO not found for input' and skips the tx (46-52). /utxos holds 100 files, so only 27 of the 712 txs in the 25 committed blocks resolve (counted by decoding the blocks with a scratch CBOR reader): blocks 11544518, 11544748 and 11553070 give 9+3+15; the other 22 blocks give 0. MetadataValidator and ScriptsWellFormedValidator do not read state.utxos at all (ScriptsWellFormedValidator binds it at line 14 and never uses it), yet they are skipped for the same 685 txs. A rule that rejects every tx outside those 3 blocks still passes; if /utxos is lost, all three suites pass while they check 0 txs.",
+      "action": "Give BlocksLedgerRulesValidator a constructor flag needsUtxos (false for MetadataValidator and ScriptsWellFormedValidator). When it is false, do not resolve UTxOs, so the rule runs on all 712 txs. When it is true, count the txs the rule checked and assert the count equals a pinned number (27 today). Remove the commented-out printlns at 34, 42-44, 50-52.",
+      "coverageRisk": "none: adds checks. 685 txs are new for two rules; a failure there is a real rule or decoding defect to triage, not a test bug.",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-2",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:170-185"
+      ],
+      "claim": "validateTransaction loops over the redeemers the evaluator returned (181) and checks each against the tx's recorded budget. It never checks that every recorded redeemer was evaluated. Mutation: evalPlutusScripts drops a redeemer, or returns an empty Seq -> the test passes.",
+      "action": "Before the loop, assert actualRedeemers.keySet == expectedRedeemers.keySet (tag and index). Optionally also assert the total number of evaluated redeemers across the three blocks.",
+      "coverageRisk": "none: adds one assertion per tx",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-3",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:22-75",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:77-130",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:171",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:177",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:187-194"
+      ],
+      "claim": "The V2 and V3 tests are the same 50 lines; only the compile call, the Script constructor and the two pinned numbers differ. resolveUtxoFromResources builds a new ResourcesUtxoResolver per tx and keeps commented-out alternatives (171, 177, 191, 193).",
+      "action": "Extract private def evalPubKeySpend(script: Script): ExUnits that builds the utxo, tx and evaluator; the two tests become one call plus the exact ExUnits pin each. Keep one ResourcesUtxoResolver in a private val; delete the commented lines.",
+      "coverageRisk": "none: same assertions and pins",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/ScalusScriptUtilsTest.scala:16-46",
+        "bloxbean-cardano-client-lib/src/main/java/scalus/bloxbean/ScalusScriptUtils.java:29-36"
+      ],
+      "claim": "The script is (one, two) => one + two, applied to 1 and 2. Addition is commutative, so a mutation that applies the params in reverse order (iterate params from the end, the main risk of applyParamsToScript) still gives 3.",
+      "action": "Compile (one, two) => one.toBigInt - two.toBigInt and expect -1 in both tests (or 10*one + two and expect 12).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-5",
+      "check": "C6",
+      "scope": "main-bug",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/main/scala/scalus/bloxbean/Interop.scala:190-201",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/InteropMapOrderingTest.scala:31-47",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/InteropMapOrderingTest.scala:70-91"
+      ],
+      "claim": "By reading (not executed): Interop.toPlutusData(Data.Map(items)) builds the CCL map with items...toMap.asJava. A Scala immutable Map with more than 4 entries is a HashMap, so the MapPlutusData iterates in hash order, not in the Data.Map entry order; duplicate keys, which Plutus maps allow, are silently dropped. A Data.Map with keys I(5), I(4), I(3), I(2), I(1) gives a MapPlutusData whose getMap.keySet is not in that order; Data.Map([(I 1, I 0), (I 1, I 1)]) gives 1 entry. Any non-canonical datum, or a datum with a repeated key, converted to CCL gets a different hash. The InteropMapOrderingTest round trip cannot see it: CCL's serializeToBytes encodes canonically (CborSerializationUtil.serialize defaults to canonical = true, cardano-client-common 0.7.3), which re-sorts the keys, and both tests feed already sorted keys.",
+      "action": "Main-code note only: fill a java.util.LinkedHashMap in entry order instead of .toMap.asJava, and document (or reject) duplicate keys, which a java.util.Map cannot hold. Test: see C15-6.",
+      "coverageRisk": "none: a finding, not a test change",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "findingsLog": "F-39",
+      "verdict": "NARROWED",
+      "verification": "The defect is real. Interop.scala:190-201 passes `items...toMap.asJava` into the Lombok `MapPlutusData.builder().map(...)`. That builder stores the given map as-is (MapPlutusData.java in cardano-client-plutus 0.7.3: `@Builder.Default map = new LinkedHashMap<>()`, which the builder overrides). A Scala Map with more than 4 entries is a HashMap, so `getMap` iterates in hash order. Duplicate keys are dropped by `.toMap`. Any user can reach this through the public `Interop.toPlutusData`; no main code calls it (grep finds only Interop.scala).\n\nThe hash consequence is overstated. CCL hashes and serializes canonically by default: `PlutusData.getDatumHashAsBytes` and `serializeToBytes` call `CborSerializationUtil.serialize(DataItem)`, which sets canonical=true (CborSerializationUtil.java:124-126). `CustomMapEncoder.java:45,79` then re-sorts keys in a TreeMap and also merges equal keys. `Transaction.serialize` is canonical too (Transaction.java:117). So the order loss does not change CCL's datum hash. A non-canonical datum gets a different CCL hash even after the fix. Duplicate keys are lost by any java.util.Map, and the canonical TreeMap would merge them anyway.\n\nCorrected claim: toPlutusData loses Data.Map entry order in `MapPlutusData.getMap` for maps with more than 4 entries. Only code that iterates getMap, or that serializes with `serialize(x, false)`, can see this. Fix it with a LinkedHashMap filled in entry order. Document that duplicate keys cannot be kept, because a java.util.Map cannot hold them and CCL canonical CBOR merges them anyway."
+    },
+    {
+      "id": "C15-6",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/InteropMapOrderingTest.scala:11-66",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/InteropMapOrderingTest.scala:68-109",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:103-135"
+      ],
+      "claim": "The two tests are instances of one law: Data -> PlutusData -> Data is the identity. Test 1 (5 sorted 32-byte keys) is a subset of test 2 (10 sorted keys, 4 of them shared) and asserts the same thing. Both go through canonical CBOR, which hides toPlutusData's order loss (C15-5).",
+      "action": "Replace both tests with forAll { (d: Data) => Interop.toScalusData(Interop.toPlutusData(d)) == d } using arbData from scalus.uplc.test.ArbitraryInstances (in-memory, no CBOR). Add explicit examples for a 6-entry map with descending keys and a map with a duplicate key. Build change: add scalusTestkit.jvm % Test (or scalacheck) to scalus-bloxbean-cardano-client-lib. arbData uses Gen.mapOfN, so it never makes duplicate keys (hence the explicit example). The property fails until C15-5 is fixed; mark it pending or land it with the fix.",
+      "coverageRisk": "low: the CBOR round trip through CCL's deserializer goes away; keep one CBOR example if CCL decode order matters (it is what commit a8a713232 fixed in toScalusData).",
+      "ciSavingSec": 0,
+      "linesRemoved": 70,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The law Data -> PlutusData -> Data == id mostly holds in memory once C15-5 is fixed:\n- Constr tags are `Gen.posNum[Long]` (ArbitraryInstances.scala:107), so `ConstrPlutusData.alternative: long` holds them.\n- Map keys come from `Gen.mapOfN`, so they are distinct (ArbitraryInstances.scala:120-124).\n- arbData is reachable from this module through scalusTestkit, which copies ArbitraryInstances into its src_managed.\n\nThere is one rare counterexample even after the fix. `MapPlutusData` uses `@EqualsAndHashCode` over a java.util.Map, and that equality ignores order. So an outer map whose keys are two Data.Maps that differ only in entry order loses one entry. Generating this is very unlikely.\n\nThe claim has a minor error: test 1's 5 keys are all among test 2's 10 keys (5 shared, not 4). So test 1 really is a subset of test 2 (InteropMapOrderingTest.scala:13-22 vs 70-80).\n\nThe in-memory property skips the path that commit a8a713232 fixed. That path is `PlutusData.deserialize` (MapPlutusData.deserialize builds a LinkedHashMap) followed by `toScalusData`, which is how datums from the chain arrive. Keeping a CBOR example must be required, not optional.\n\nCorrected action:\n- Delete test 1 (lines 11-66).\n- Keep test 2 (lines 68-109) as the CBOR decode-order regression test.\n- Add the in-memory forAll property only together with the C15-5 LinkedHashMap fix.\n- Add explicit examples for a map with more than 4 entries in descending order and for a duplicate key (expect it to collapse, as documented)."
+    },
+    {
+      "id": "C15-7",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/BlockDeserializationTest.scala:8-38",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/BlocksLedgerRulesValidator.scala:19-29",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/PlutusScriptEvaluatorTest.scala:144-148"
+      ],
+      "claim": "BlockDeserializationTest only checks that BlockFile.fromCborArray does not throw on 3 blocks. BlocksLedgerRulesValidator decodes every file in /blocks/ (all 25, including 11544748, 11544518 and 11649988) outside its try block, in each of its 3 suites, so a decode failure already fails them; PlutusScriptEvaluatorTest decodes 2 of the 3 again and asserts their tx counts. The ignored test (23-29) reads ./blocks, which does not exist in the repository.",
+      "action": "Delete BlockDeserializationTest.scala.",
+      "coverageRisk": "low: decode coverage of all 25 blocks stays in the *BlocksLedgerTest suites; it would be lost if those suites are removed later",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "BlockDeserializationTest.scala:11-21 has 3 tests. Each only calls `BlockFile.fromCborArray(bytes)` on block-11544748, 11544518 and 11649988, and none of them asserts anything. The ignored test (lines 23-29) reads `./blocks`, which is not in the repo.\n\nThe same entry point is used elsewhere, outside any try block. BlocksLedgerRulesValidator.scala:19-29 runs `Files.list(/blocks/)` over all 25 resources (all 3 blocks are present), and line 29 calls `BlockFile.fromCborArray(bytes)`. A decode failure therefore fails the suite. `fromCborArray` takes no `using` parameter and sets OriginalCborByteArray itself (Block.scala:98-100), so the caller's given makes no difference.\n\nThree active suites extend this validator:\n- MetadataValidatorBlocksLedgerTest\n- ScriptsWellFormedValidatorBlocksLedgerTest\n- ProtocolParamsViewHashesMatchValidatorBlocksLedgerTest\n\nCardanoMutatorBlocksLedgerTest is commented out. All three suites are in the same module, so they run in the same CI jobs.\n\nPlutusScriptEvaluatorTest.scala:133,137,144-148 also decodes 11544748 and 11544518 and asserts their txCount. No assertion is lost."
+    },
+    {
+      "id": "C15-8",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/CardanoMutatorBlocksLedgerTest.scala:1-5",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/DebugUtils.scala:8-28",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/ResourcesUtxoResolver.scala:94-126",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/TransactionTest.scala:37-42",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/TransactionTest.scala:75-78",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/TransactionTest.scala:84-110"
+      ],
+      "claim": "Dead test code: CardanoMutatorBlocksLedgerTest is commented out in full; DebugUtils.dumpTxInfo is only called from a commented line (PlutusScriptEvaluatorTest:177); ResourcesUtxoResolver.copyToResources is only called from a commented line (PlutusScriptEvaluatorTest:191); TransactionTest keeps a commented TxBuilder sketch and commented printlns.",
+      "action": "Delete CardanoMutatorBlocksLedgerTest.scala, DebugUtils.scala and copyToResources (with the mapper write path it alone uses); delete the commented blocks in TransactionTest. Keep ResourcesUtxoResolver.resolveUtxos (bench/PlutusScriptEvaluatorBenchmark uses it) and TxDownloader (the tool that fetched /blocks).",
+      "coverageRisk": "none: no assertion removed",
+      "ciSavingSec": 0,
+      "linesRemoved": 95,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-9",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/main/scala/scalus/bloxbean/Interop.scala:707-823",
+        "bloxbean-cardano-client-lib/src/main/scala/scalus/bloxbean/Interop.scala:1175-1266",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/LedgerToPlutusTranslation.scala:1043-1085"
+      ],
+      "claim": "Interop's CCL -> Plutus ScriptContext path (getTxInfoV1/V2/V3, getScriptPurposeV1/V2/V3, getTxCertV3, getScriptContextV2/V3, getInterval, getDCert) has no unit test: it holds most of the 1043 uncovered statements of Interop.scala in the baseline (getTxCertV3 114, getScriptPurposeV3 68, getGovernanceActionV3 59, getTxInfoV3 44, ...). Only the integration module reaches parts of it. An oracle exists in scalus-core: LedgerToPlutusTranslation.getScriptContextV1/V2/V3 builds the same context from the Scalus Transaction.",
+      "action": "Add InteropScriptContextTest: for each of the 27 resolvable txs in the committed blocks, decode the tx with CCL (Transaction.deserialize of the tx CBOR) and with Scalus, resolve UTxOs from /utxos for both, and for every redeemer assert Interop.getScriptContextV{n}(...) == LedgerToPlutusTranslation.getScriptContextV{n}(...) for the script's language. Report each divergence as a finding before pinning.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -1,
+      "linesRemoved": -70,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/main/scala/scalus/bloxbean/ScalusTransactionEvaluator.scala:36-61",
+        "bloxbean-cardano-client-lib/src/main/scala/scalus/bloxbean/ScalusUtxoResolver.scala:10-30",
+        "bloxbean-cardano-client-lib/src/main/scala/scalus/bloxbean/Interop.scala:216-233",
+        "bloxbean-cardano-client-lib/src/main/scala/scalus/bloxbean/Interop.scala:303-311"
+      ],
+      "claim": "ScalusTransactionEvaluator, the class CCL users plug in as TransactionEvaluator, has no unit test: all 59 statements are uncovered, as are ScalusUtxoResolver (31), Interop.getCostModels(ProtocolParams) and toUtxoEntry. A wrong cost-model mapping or redeemer-tag conversion (toBloxbeanRedeemerTag) is not caught in jvm/test.",
+      "action": "Add ScalusTransactionEvaluatorTest: a stub UtxoSupplier that reads the CCL Utxo JSON files in /utxos (they are already CCL Utxo JSON), CCL ProtocolParams for epoch 544, and evaluateTx on the CCL-decoded txs of block 11544748 (3 script txs). Assert the returned EvaluationResult list has the same tags, indexes and ExUnits as PlutusScriptEvaluator.evalPlutusScripts on the Scalus-decoded tx.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -1,
+      "linesRemoved": -60,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-11",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/main/scala/scalus/bloxbean/StakeStateResolver.scala:595-604",
+        "bloxbean-cardano-client-lib/src/main/scala/scalus/bloxbean/StakeStateResolver.scala:192-201",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/StakeStateResolverTest.scala:42-43",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/StakeStateResolverTest.scala:84-94"
+      ],
+      "claim": "StakeStateResolverTest only feeds a CIP-129 key DRep id (0x22 header). drepOf's other branches are uncovered in the baseline: drep_always_abstain, drep_always_no_confidence, the 0x23 script header, CIP-105 drep_script1 and 28-byte drep1 ids (lines 595-604). The pool-retirement branch of poolAt (195-200: a deregistration with retiring_epoch <= epoch drops the pool) is also never reached.",
+      "action": "Add a table test that writes the koios-tx-certs file with each DRep id form (abstain, no-confidence, CIP-129 script, CIP-105 key, CIP-105 script) and asserts the account's dRepDelegation. Add a test whose pool updates hold a deregistration with retiring_epoch 543, and assert state.pstate.stakePools is empty.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-12",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTest.scala:75-110",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTest.scala:112-123"
+      ],
+      "claim": "'100_4x4_experiment_copy' has the same body as '100_4x4' (its comment says so) without the budget assertion; it was a debugging aid to compare call sites at two source positions. It asserts a subset of 100_4x4 and costs 0.72 s.",
+      "action": "Delete KnightsTest lines 112-123.",
+      "coverageRisk": "none: 100_4x4 compiles the same code and asserts success plus budget",
+      "ciSavingSec": 0.7,
+      "linesRemoved": 12,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "KnightsTest.scala:112-123 has the same compile body as 100_4x4 (lines 74-80): `runKnights(100, 4)` then `require(result === List.empty)`. It uses the same `toUplc(optimizeUplc = true)`, the same `evalWithOptionalProfile`, and the same class-level given Options. It asserts only `result.isSuccess`, which 100_4x4 also asserts at line 98, together with the budget and the reference comparison.\n\nIt was added in commit 9279dac8e as a debugging aid. Its own comment says it only compares call sites at two source positions; it asserts nothing about position independence. Deleting it loses no assertion."
+    },
+    {
+      "id": "C15-13",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTestMinimal.scala:217-222",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTestMinimal.scala:247-256",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTestMinimal.scala:258-270"
+      ],
+      "claim": "Three tests compile runKnights(100, 4) with optimizeUplc = false. 217 asserts only success of .length; 247 asserts only success of (result === empty ? 1 : 0); 258 runs require(result === List.empty) and asserts success, which implies both others.",
+      "action": "Delete the tests at 217-222 and 247-256; keep 258-270 (rename it, the 'verbatim copy' comment is stale).",
+      "coverageRisk": "low: the .length path at depth 100 is not compiled any more; .length on the same list stays covered at smaller depths (C15-14)",
+      "ciSavingSec": 0.25,
+      "linesRemoved": 17,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "KnightsTestMinimal.scala has three tests, all with `optimizeUplc = false`:\n- Line 217 compiles `runKnights(BigInt(100), BigInt(4)).length` and asserts only Success with evaluateDebug.\n- Line 247 compiles `if result === expected then 1 else 0` and asserts only Success, accepting either branch.\n- Line 258 compiles `require(runKnights(100,4) === List.empty)` and asserts `isSuccess` with evaluateProfile.\n\nSuccess at line 258 means the same `===` comparison ran without a crash and returned true. That is stronger than line 247, which also accepts false. It also means the result is the empty list, so line 217's `.length` at depth 100 only takes the length of Nil.\n\nTwo small differences remain:\n- The surviving test uses evaluateProfile, not evaluateDebug. The CEK semantics are the same.\n- `.length` on the runKnights result is no longer compiled at depth 100. It stays covered at depths 1, 2, 5, 10, 20 and 50 (lines 176-211), and `===` with evaluateDebug stays covered at depth 1 (line 223).\n\nNo assertion is lost."
+    },
+    {
+      "id": "C15-14",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTestMinimal.scala:175-215",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTestMinimal.scala:224-236"
+      ],
+      "claim": "Six copy-pasted 'find the failing depth' tests (depth 1, 2, 5, 10, 20, 50) assert only that evaluation succeeds; 224-236 says 'either 0 or 1 is fine'. The values are known: a 4x4 board has no closed tour, so runKnights(d, 4) is empty for every d (KnightsTest.100_4x4 pins that for d = 100) and result === List.empty is 1. A lowering bug that returns a wrong list length still passes.",
+      "action": "Replace 175-215 with one loop: for d <- Seq(1, 2, 5, 10, 20, 50) do test(s\"runKnights depth=$d size=4 is empty\") { assertBigIntResult(compile { runKnights(BigInt(d), BigInt(4)).length }, 0) } (d must become a compile-time param or a Data arg; if compile{} cannot capture d, apply it as an argument). Make 224-236 assertBigIntResult(sir, 1).",
+      "coverageRisk": "none: same programs, stronger checks",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-15",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTest.scala:41-55",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTest.scala:100-102",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTest.scala:216-218",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTest.scala:322-324",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/knightsdata/KnightsDataTest.scala:62-79"
+      ],
+      "claim": "KnightsTest checks budgets with a 5% tolerance (assertBudgetClose, 500 bps), so a budget regression of up to 5% in the UplcConstr lowering of 4x4, 6x6 or 8x8 (up to 7.6 G steps on 8x8) passes. KnightsDataTest and ClausifyTest pin exact budgets per compiler generation with ScalaCompilerVersion.baseline(pre38, since38). The comment ties the tolerance to CSE tie order, which is now deterministic (traversal order).",
+      "action": "Replace assertBudgetClose with exact pins via ScalaCompilerVersion.baseline for the three tests (measure on 3.3.8 and 3.9.0), drop ignoreBudgetAssertions and assertBudgetClose.",
+      "coverageRisk": "none: stricter; risk is only pin churn on compiler changes",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-16",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTest.scala:84-96",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTest.scala:201-213",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTest.scala:306-319",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/knightsdata/KnightsDataTest.scala:62-76",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/knightsdata/KnightsDataTest.scala:165-179",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/knightsdata/KnightsDataTest.scala:270-285",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/ClausifyTest.scala:46-60",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/ClausifyTest.scala:82-98",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/ClausifyTest.scala:121-130",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/ClausifyTest.scala:1096-1104",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/ClausifyTest.scala:1126-1134"
+      ],
+      "claim": "Each benchmark selects its budget from summon[Options], but the suite's given Options is a constant with targetProtocolVersion = vanRossemPV, so only the first branch is live; the SirToUplcV3/SumOfProducts/Scott branches (with 'not tested' and 'actually we don't know' placeholders) are dead. Constant flags (printComparison, profilingEnabled, ignoreBudgetAssertions, isAlwaysPrintComparison, which is unused), commented budgets (ClausifyTest 1104, 1134) and commented lowering code (KnightsDataTest 58-59) add noise. All 11 tests repeat the same tail: assert success, assert budget, compareBudgetWithReferenceValue.",
+      "action": "Keep only the live pin in each test. Add one private helper per suite, checkBenchmark(name, result, expected: ExUnits, ref: ExUnits), that asserts success and budget and prints the comparison. Delete the constant flags (keep profiling as a local switch only if the owner wants it) and commented code.",
+      "coverageRisk": "none: the dead branches never run",
+      "ciSavingSec": 0,
+      "linesRemoved": 120,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-17",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/ClausifyTest.scala:142-1091",
+        "scalus-examples/jvm/src/test/scala/scalus/benchmarks/KnightsTest.scala:129-145"
+      ],
+      "claim": "ClausifyTest F4 spells its 32-clause expected result as a hand-nested Cons chain that scalafmt expands to one parenthesis per line: about 940 of the file's 1296 lines. compile{} accepts List(...) varargs (KnightsTest builds its expected tours with List(Tile(...), ...)).",
+      "action": "Rewrite F4's expected value as List[LRVars]((List(1), List(2, 3, 4, 5, 6, 7)), ...) inside // format: off, one clause per line. Re-measure and re-pin F4's budget (both baselines) if the UPLC of the literal changes.",
+      "coverageRisk": "low: the clause list is the same; the F4 budget pin and its ratio to the Plutus reference may shift slightly",
+      "ciSavingSec": 0,
+      "linesRemoved": 900,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C15-18",
+      "check": "C9",
+      "scope": "style",
+      "module": "bloxbean-cardano-client-lib",
+      "evidence": [
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/InteropMapOrderingTest.scala:9",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/ScalusScriptUtilsTest.scala:15",
+        "scalus-sbt-plugin/src/test/scala/scalus/sbt/BlueprintLayoutTest.scala:10-14",
+        "scalus-sbt-plugin/src/test/scala/scalus/sbt/BlueprintLayoutTest.scala:45-49",
+        "bloxbean-cardano-client-lib/src/test/scala/scalus/bloxbean/StakeStateResolverTest.scala:55"
+      ],
+      "claim": "Small style nits: InteropMapOrderingTest and ScalusScriptUtilsTest use a braceless class body (the style guide asks for {} on top-level definitions); BlueprintLayoutTest:45-49 is hand-wrapped and exceeds 100 columns at 49; BlueprintLayoutTest.tempDir uses deleteOnExit, which does not delete a non-empty directory, and StakeStateResolverTest.cache never deletes its temp directory, so each run leaks temp dirs.",
+      "action": "Use braces in the two classes; run scalafmt on the sbt plugin test; create temp dirs in a helper that deletes them recursively after the test (e.g. a withTempDir loan helper).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 5 findings of scope merge-duplicate-tests, to-property or main-bug; 3 confirmed, 2 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

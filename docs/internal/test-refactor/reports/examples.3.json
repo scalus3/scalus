@@ -1,0 +1,605 @@
+{
+  "cluster": "examples.3",
+  "summary": "The cluster is cheap: about 10 s locally, led by CrowdfundingScenarioTest (2.8 s) and DecentralizedIdentityTest (2.7 s); the only notable test cost is the naive-fibonacci agreement loop (0.8 s, C06-20) and a redundant naive fib(25) evaluation (C06-18). The CAPE suites are strong (exact budget, fee and size pins plus independent BigInt oracles) but copy the same case loop 8 times and the integer evaluator 5 times (C06-16), and their pins silently skip unknown case names (C06-17). The main weaknesses are in crowdfunding: neither random test can reach a successful withdraw (C06-1, C06-2), the ScalaCheck command test passes even if every honest transaction is rejected (C06-3), partial withdraw/reclaim is tested nowhere (C06-8), and the two random suites carry about 300 lines of copied off-chain model (C06-4). DecentralizedIdentityTest repeats its lifecycle test as three shorter tests (C06-12) and asserts only isLeft in its negative tests (C06-14). No main-code defect was found; validator coverage cannot be read from scoverage (F-9). Referenced known findings: F-9, F-18, F-19.",
+  "behaviors": [
+    {
+      "pass": "CapeTestSuite (test-side loader)",
+      "name": "parses Data in UPLC-text and detailed-JSON forms; resolves @refs, #hex and bare hex",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeTestSuiteTest.scala:67-69",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeTestSuiteTest.scala:146-174"
+      ]
+    },
+    {
+      "pass": "CapeTestSuite (test-side loader)",
+      "name": "ScriptContext builder: prepend order, defaults, own input, remove ops, @ref baseline",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeTestSuiteTest.scala:77-144",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeTestSuiteTest.scala:176-245"
+      ]
+    },
+    {
+      "pass": "CapeTestSuite (test-side loader)",
+      "name": "set_valid_range finite upper bound exclusive",
+      "tests": []
+    },
+    {
+      "pass": "CapeMetadata",
+      "name": "renders schema-required metadata; registry lists 8 scenarios",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeMetadataTest.scala:17-49"
+      ]
+    },
+    {
+      "pass": "CompareWithLeaderboard",
+      "name": "fee computation at CAPE fixed prices",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CompareWithLeaderboardTest.scala:12-57"
+      ]
+    },
+    {
+      "pass": "CompareWithLeaderboard",
+      "name": "BEHIND/LEADS/NO-submission verdicts, --ours, --strict",
+      "tests": []
+    },
+    {
+      "pass": "GenerateSubmissions",
+      "name": "writes submission directories",
+      "tests": []
+    },
+    {
+      "pass": "CAPE programs (ecd, htlc, linear_vesting, two_party_escrow)",
+      "name": "fixture outcomes, exact budgets, fees and script sizes",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/ecd/EcdCapeTest.scala:17-40",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/htlc/HtlcCapeTest.scala:22-44",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/linearvesting/LinearVestingCapeTest.scala:18-41",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/twopartyescrow/TwoPartyEscrowCapeTest.scala:12-63"
+      ]
+    },
+    {
+      "pass": "FactorialOpen / FactorialBase",
+      "name": "fixture outcomes and pins; correctness beyond table; termA; JVM/UPLC agreement",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/factorial/FactorialCapeTest.scala:33-222"
+      ]
+    },
+    {
+      "pass": "FibonacciOpen / FibonacciBase",
+      "name": "fixture outcomes and pins; correctness beyond table; JVM/UPLC agreement",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/fibonacci/FibonacciCapeTest.scala:32-210"
+      ]
+    },
+    {
+      "pass": "Crowdfunding validator",
+      "name": "Create: recipient signature, positive goal",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:42-145",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:27-32"
+      ]
+    },
+    {
+      "pass": "Crowdfunding validator",
+      "name": "Donate before deadline; honest donate",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:147-202",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:34-46",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala:36-101"
+      ]
+    },
+    {
+      "pass": "Crowdfunding validator",
+      "name": "Withdraw: goal reached, full withdrawal",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:204-260",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:48-53"
+      ]
+    },
+    {
+      "pass": "Crowdfunding validator",
+      "name": "Reclaim: goal not reached; ascending/distinct/length guards",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:262-588",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:55-68",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala:36-101"
+      ]
+    },
+    {
+      "pass": "Crowdfunding validator",
+      "name": "Donate-spend output/datum checks, DonationMinting policy checks, Withdraw recipient checks, partial withdraw/reclaim",
+      "tests": []
+    },
+    {
+      "pass": "CrowdfundingEndpoints",
+      "name": "create/donate/withdraw/reclaim end to end (full only)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:27-60"
+      ]
+    },
+    {
+      "pass": "Crowdfunding invariants",
+      "name": "datum invariants under random action sequences",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScalaCheckCommandTest.scala:32-57",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala:36-101"
+      ]
+    },
+    {
+      "pass": "DecentralizedIdentity validator + transactions",
+      "name": "create, transfer, delegate, publish, revoke attribute/delegate",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:29-131",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:165-219",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:266-476"
+      ]
+    },
+    {
+      "pass": "DecentralizedIdentity validator",
+      "name": "owner signature for delegate; token-less forged delegation rejected",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:133-163",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:221-264"
+      ]
+    },
+    {
+      "pass": "DecentralizedIdentity validator",
+      "name": "delegation time window, transfer without new-owner signature, revoke by non-owner",
+      "tests": []
+    },
+    {
+      "pass": "DecentralizedIdentityTransactions.submitWithRetry",
+      "name": "success path; build failure and retry paths",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:478-490"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C06-1",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala:42",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala:120",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala:53-58",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala:590-604"
+      ],
+      "claim": "The scenario explorer can never reach a successful withdraw. The goal is 10 ADA, donations are 3 ADA (Bob) and 4 ADA (Charles), so 3 donations, a wait and a withdraw take 5 steps. maxDepth is 3. Only the 'withdraw fails' side of tryWithdrawS's precondition oracle is ever checked. Reclaim success (donate, wait, reclaim) is reachable.",
+      "action": "Set goal to 4_000_000L in CrowdfundingScenarioTest. Then 'donate_charles, wait, withdraw' reaches a successful full withdraw at depth 3. 'donate_bob, wait, reclaim' still reaches reclaim (3 ADA < 4 ADA). Keep maxDepth = 3, so the cost stays the same.",
+      "coverageRisk": "none: the same paths plus a reachable withdraw-success path",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-2",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScalaCheckCommandTest.scala:67-68",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScalaCheckCommandTest.scala:240",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScalaCheckCommandTest.scala:166-187",
+        "scalus-testkit/jvm/src/main/scala/scalus/testing/ContractScalaCheckCommands.scala:128-139"
+      ],
+      "claim": "WithdrawActor practically never fires. The goal is 5 ADA and each donation is 0.2 ADA, so 25 donations must happen before the first Wait. genCommand picks uniformly from up to 5 donate txs and 2 waits (Gen.oneOf). Either wait (20 or 50 slots) moves past the deadline at slot 100 from slot 90. So P(goal reached) is about (5/7)^25, roughly 2e-4 per sequence. The withdraw builder (buildWithdrawTx, 364-447), including its partial-withdrawal branch, is dead in this property.",
+      "action": "Lower goal to 1_000_000L (5 donations), or make the wait delays apply only after N donations. Add classify/collect on the action kinds, or assert via a counter that at least one withdraw and one reclaim happened in the run.",
+      "coverageRisk": "none: the reclaim path stays reachable (sequences that wait early)",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-3",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScalaCheckCommandTest.scala:36-56",
+        "scalus-testkit/jvm/src/main/scala/scalus/testing/ContractScalaCheckCommands.scala:215-229"
+      ],
+      "claim": "All three actors build honest transactions, but postCondition treats a rejected submit (Success(Left)) as Prop.passed, and checkInvariants runs only after accepted txs. Mutation: make the validator reject every Donate, Withdraw or Reclaim. The property still passes, because the datum never changes and the invariants hold on the initial datum.",
+      "action": "Count accepted submits per action kind in the test (for example, an AtomicInteger bumped in checkInvariants when datum.totalSum or the campaign UTxO changes). After Test.check, assert that donations > 0 and that reclaim (and withdraw, after C06-2) happened at least once. Do not change ContractScalaCheckCommands: attack variations need its lenient postCondition.",
+      "coverageRisk": "none: adds assertions only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-4",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScalaCheckCommandTest.scala:248-302",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala:165-224",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScalaCheckCommandTest.scala:308-546",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala:330-540",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScalaCheckCommandTest.scala:550-611",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala:275-328",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:472-482",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:499-539",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala:126-160"
+      ],
+      "claim": "Two suites carry the same off-chain model of the contract. extractPkh, addressFromPkh, getDonationScript, hasCampaignNft, findCampaignOutputIdx, findCampaignUtxo and findDonationUtxos are copied verbatim. The donate, withdraw and reclaim tx builders (redeemer index computation, burn map, partial-campaign output) and the create-campaign code are the same logic, rewritten for Scenario and for Future. getDonationScript is copied a third time in CrowdfundingEmulatorTest. The 6-UTxO genesis map is copied in the Emulator and Scenario tests. CrowdfundingEndpoints (main code) cannot be reused, because it submits internally.",
+      "action": "Add a test-side object CrowdfundingTestKit in the crowdfunding test package. It holds the lookup helpers, plus buildCreateTx/buildDonateTx/buildWithdrawTx/buildReclaimTx(reader, ...): Future[Transaction] taking the donation amount, the max batch and a signer lookup, plus a genesis-UTxO emulator factory. The Scenario test lifts them with futureToScenarioConversion. Replace extractPkh(party.address) with PubKeyHash(party.addrKeyHash).",
+      "coverageRisk": "low: the builders are logically identical; keep the dotty-cps-async note (no .copy inside async) where it applies",
+      "ciSavingSec": 0,
+      "linesRemoved": 300,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-5",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:62-68",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:326-470",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:320-404"
+      ],
+      "claim": "'reclaim rejects duplicate donation indices' (Emulator) and 'Reclaim - rejects duplicate donation input indices' (Validator) attack the same check, requireStrictlyAscending. The validator test pins the exact message 'strictly ascending'. The emulator test only requires 'script evaluation failed', so it passes for any script failure (for example, the 2x3 ADA outputs against a 3 ADA donation, or the mint policy). It also costs a 100-line hand-built malicious tx.",
+      "action": "Delete the Emulator test, buildMaliciousReclaimTx and TestAction.ReclaimDuplicateIndices. Alternative if an end-to-end attack test is wanted: keep it, but assert the 'strictly ascending' trace (the contract is built withErrorTraces).",
+      "coverageRisk": "low: loses only the check that the ledger-translated redeemer reaches the validator in the attack shape; the honest reclaim emulator test covers that translation",
+      "ciSavingSec": 0.01,
+      "linesRemoved": 120,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "The Emulator test (CrowdfundingEmulatorTest.scala:62-68) asserts only that the tx fails and that the error contains 'script evaluation failed' (verifyResult :491-497). The malicious tx (:375-470) also sends the Action.Reclaim redeemer to the donation minting policy (:449-453). It pays 2x3 ADA against a 3 ADA donation (:456-459). So it can fail for reasons other than the duplicate-index check. The validator test (CrowdfundingValidatorTest.scala:320-404, same jvm/ test source set, same CrowdfundingContract.compiled.withErrorTraces at :15 vs :74) sends redeemer List(1,1) and asserts result.isFailure plus logs containing 'strictly ascending'. That string comes from the only such require in main code (Crowdfunding.scala:607). The surviving test therefore pins the exact check, which is stronger. Nothing else references ReclaimDuplicateIndices or buildMaliciousReclaimTx (grep), so deleting them is safe. Only the end-to-end attack shape through the ledger is lost. The honest ReclaimSuccess emulator test (:281-324) still covers the ledger-to-redeemer path."
+    },
+    {
+      "id": "C06-6",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:94-134",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:135-369",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:484-497"
+      ],
+      "claim": "The suite routes 6 tests through a TestAction/Expected/TestCase dispatcher. Each runXxxTest repeats the same 9-line createCampaign call (6 copies) and the donate call (6 copies), and wraps the last call in Try plus verifyResult, which only checks isSuccess.",
+      "action": "Remove the enums and TestCase. Add local helpers newCampaign(provider, endpoints): ByteString and donate(endpoints, id, party, amount), and write each test directly (setSlot, actions, assert). Keep the test names.",
+      "coverageRisk": "none: same actions and assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 150,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:48-60",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingEmulatorTest.scala:226-324",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/CrowdfundingEndpoints.scala:400-411"
+      ],
+      "claim": "The success tests assert only that the endpoint call did not throw. Mutation: CrowdfundingEndpoints.withdraw pays the recipient the right amount but leaves an extra donation UTxO unspent (it passes a subset of donationUtxos). The tx is still valid as a partial withdrawal, so the test stays green. The same applies to reclaim and donate: totalSum and the recipient/donor balances are never read.",
+      "action": "After each action, read chain state: after donate, assert the campaign datum totalSum equals the sum of donations and one donation UTxO exists per donor; after withdraw/reclaim, assert findCampaignUtxo is None and findDonationUtxos is empty; check the recipient/donor lovelace delta against the amounts (minus fee bound).",
+      "coverageRisk": "none: adds assertions only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-8",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/CrowdfundingEndpoints.scala:343-352",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/CrowdfundingEndpoints.scala:400-411",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/CrowdfundingEndpoints.scala:560-570",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/CrowdfundingEndpoints.scala:154-157"
+      ],
+      "claim": "Partial withdrawal and partial reclaim (a subset of the donation UTxOs, so the campaign UTxO continues with an updated withdrawn) are unexecuted in CrowdfundingEndpoints (baseline uncovered rows 345-352, 407-411, 566-570). After C06-1/C06-2 no random test reaches them either: the Scenario and ScalaCheck builders always take all donations or at most 10. The validator's continuing-output branch (Crowdfunding.scala handleWithdrawSpend/handleReclaimSpend, newWithdrawn != totalSum) is reached on-chain only by the validator test that expects a failure.",
+      "action": "Add two CrowdfundingEmulatorTest cases: (1) goal reached with 2 donations, then withdraw passing only the first donation UTxO, assert success and that the campaign datum has withdrawn = first amount; then withdraw the rest, assert the campaign is consumed. (2) The same for reclaim with goal not reached.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -50,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-9",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:96-104",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:137-145",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:194-202",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:252-260",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:396-404",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:496-504",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/kit/ScalusTest.scala:230-251"
+      ],
+      "claim": "Eight tests end with the same 8 lines: apply the program, evaluateDebug, assert isFailure, assert logs contain the message. ScalusTest.checkResult(failure(msg), result) does exactly this, and the suite already mixes in ScalusTest. The campaign-input TxInInfo (script address, NFT, inline CampaignDatum) is built by hand 6 times, and the CampaignDatum literal 7 times.",
+      "action": "Replace each tail with checkResult(failure(\"...\"), (crowdfundingContract.program $ ctx.toData).evaluateDebug). Add local builders campaignInput(datum, lovelace), donationInput(donor, amount) and a baseDatum with .copy overrides.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 120,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-10",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:17-33",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:23-27"
+      ],
+      "claim": "Three size tests cannot fail. Crowdfunding/DonationMinting assert script size > 0 and println it. The DecentralizedIdentity size test has no assertion, only info. No mutation of the validators breaks them.",
+      "action": "Either pin exact sizes as the CAPE suites do (assert(size == N)), or delete the three tests and keep the size in a test name or info elsewhere. Remove the println calls (style).",
+      "coverageRisk": "none: they assert nothing today",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-11",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala:42-588",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/Crowdfunding.scala:170-231",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/Crowdfunding.scala:345-410",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/Crowdfunding.scala:412-484"
+      ],
+      "claim": "Many validator rejections are never exercised. Donate spend: donation output address/datum amount mismatch, amount <= 0. DonationMintingPolicy: wrong policy id, minting under Create. Withdraw: wrong recipient address/amount, donation UTxO not listed in donationInputIndices. onlyBurnsUnder. The validator test has 8 negative tests, all on Create/Donate-deadline/goal/reclaim-index checks. The @Compile code is not instrumented (F-9), so the coverage baseline does not show this gap.",
+      "action": "Add a table-driven negative test group to CrowdfundingValidatorTest (using the C06-9 builders): one row per require message for Donate-spend (address, datum amount, non-positive amount), DonationMinting (policy mismatch), and Withdraw (recipient address, amount, unlisted donation input). Each row mutates one field of a valid context and calls checkResult(failure(msg), ...).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.05,
+      "linesRemoved": -90,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-12",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:57-95",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:266-312",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:314-374",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:376-476"
+      ],
+      "claim": "The 'Full lifecycle' test runs create -> delegate -> publish -> revoke attribute -> revoke delegate -> transfer. It asserts isRight at each step and the final owner, with the EvaluateAndComputeCost evaluator. 'Revoke delegate' and 'Revoke attribute' repeat prefixes of it with the same evaluator and the same assertions (isRight only). 'Transfer ownership' repeats the last step with the weaker constMaxBudget evaluator and the same final-owner assertion.",
+      "action": "Delete 'Transfer ownership', 'Revoke delegate' and 'Revoke attribute'. Keep 'Create identity', 'Add delegate' and 'Publish attribute', which assert datum contents.",
+      "coverageRisk": "low: the revoke-delegate-without-a-published-attribute state is lost, but the validator's revoke branch does not depend on attributes; a failure is reported at a later step of the lifecycle test",
+      "ciSavingSec": 0.75,
+      "linesRemoved": 145,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "The Full lifecycle test (DecentralizedIdentityTest.scala:376-476) uses EvaluateAndComputeCost (:382-385). It asserts isRight for create, delegate, publish, revokeAttribute, revokeDelegate and transfer (:395,411,427,440,452,465), and that the final datum owner is Bob (:468-475). 'Revoke delegate' (:266-312) has the same evaluator and the same steps minus publish and revokeAttribute, and asserts only revokeResult.isRight. 'Revoke attribute' (:314-374) is an exact prefix with only isRight. 'Transfer ownership' (:57-95) uses the default constMaxBudget evaluator (:543) and asserts isRight plus the new owner Bob. The lifecycle checks the same thing with the stronger evaluator, on the same identityUtxo from createTx. The RevokeDelegate spend branch (DecentralizedIdentityValidator.scala:292-309) reads only the delegation datum, the identity owner from the reference inputs, and the burn quantity. It never reads attributes, so the 'no attribute published' state adds no branch coverage. All tests are in jvm/ and use the same createProvider and compiledContract. The kept tests (Create, Add delegate, Publish) still use the constMaxBudget TxBuilder path."
+    },
+    {
+      "id": "C06-13",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:29-40",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:57-71",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:97-111",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:133-147",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:165-196",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:266-298",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:314-357"
+      ],
+      "claim": "Seven tests copy the same 12-line 'provider, Alice utxos, seed, txCreator, createIdentity, submit, find identityUtxo' prefix, and five copy the 12-line addDelegate block. The setup submits ignore the result, so a failed create surfaces later as a confusing .get failure.",
+      "action": "Add local helpers withIdentity(evaluator): (Emulator, DecentralizedIdentityTransactions, Utxo) and addBobDelegate(...): Utxo. Make both helpers assert that the submit isRight. Rewrite the remaining tests on them.",
+      "coverageRisk": "none: same actions and assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 90,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-14",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:133-163",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:221-264",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:125-130"
+      ],
+      "claim": "The two negative tests assert only result.isLeft. The forged delegation test can fail for an unrelated reason (for example, a balancing error or a missing reference input) and still pass. The contract is compiled withErrorTraces, so the message is available. 'Add delegate' asserts only delegationOutputs.size >= 1, which the identity output alone could satisfy if the tx spent it.",
+      "action": "Assert the specific trace: 'Must be signed by identity owner' for the add-delegate test, and 'Delegation reference input must hold the delegation token' for the forged-delegation test (match on the SubmitError's script logs). In 'Add delegate', use findDelegationUtxo and decode its DelegationDatum (delegatePkh == Bob, delegateType == auth).",
+      "coverageRisk": "none: tightens assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-15",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityValidator.scala:198-202",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTransactions.scala:355-396",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/decentralizedidentity/DecentralizedIdentityTest.scala:478-490"
+      ],
+      "claim": "Untested: the delegation time window checks ('Delegation not yet valid', 'Delegation expired'), and submitWithRetry's failure paths: build exception -> Left(InternalError), non-retryable rejection returned without retry, and isRetryable (baseline uncovered rows 361-396). publishAttribute already takes validFrom/validUntil, so the window checks are reachable through the public API.",
+      "action": "Add 'Publish attribute rejects expired delegation' (validUntil = oneHourLater + 1h) and 'not yet valid' (validFrom = now - 1s with delegation validFrom = now + ...). Assert the trace. Add a submitWithRetry test with a throwing buildTx (expect Left(InternalError)) and one with an already-spent input and delayMs = 0 (expect Left after the retries).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.6,
+      "linesRemoved": -70,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-16",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/ecd/EcdCapeTest.scala:34-40",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/htlc/HtlcCapeTest.scala:33-44",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/linearvesting/LinearVestingCapeTest.scala:35-41",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/twopartyescrow/TwoPartyEscrowCapeTest.scala:24-36",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/factorial/FactorialCapeTest.scala:41-67",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/fibonacci/FibonacciCapeTest.scala:40-66",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/factorial/FactorialCapeTest.scala:138-145",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/factorial/FactorialCapeTest.scala:169-178",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/factorial/FactorialCapeTest.scala:194-203",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/fibonacci/FibonacciCapeTest.scala:145-152",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/fibonacci/FibonacciCapeTest.scala:181-190"
+      ],
+      "claim": "Eight copies of 'for c <- suite.cases: CapeHarness.run, then compare the budget (and the fee) against a name-keyed map' sit in 6 suites. Five copies of an evalX(program, x): BigInt that matches Result.Success(Const(Integer)) and calls fail otherwise sit in the factorial/fibonacci suites, differing only in the label.",
+      "action": "Add CapeHarness.registerCases(suite: AnyFunSuite, prefix, program, cases, budgets: Map[String, ExUnits], fees: Map[String, Coin] = Map.empty) (or a CapeSuite trait with def capeCases(...)), and CapeHarness.evalInteger(program, x, label): BigInt. Use them in all 6 suites.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 90,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-17",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/ecd/EcdCapeTest.scala:38",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/htlc/HtlcCapeTest.scala:42",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/factorial/FactorialCapeTest.scala:46-51",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeTestSuite.scala:272"
+      ],
+      "claim": "Budget pins use expectedBudgets.get(c.name).foreach. A fixture case that is renamed or added in a CAPE update runs unpinned without notice. All maps match the fixtures today (checked against the 8 cape-tests.json files). CapeHarness also skips the result check when a 'value' case has no content (expectedTerm.foreach). Every fixture has content today.",
+      "action": "In the C06-16 helper, require a pin for every measurement case (budgets.getOrElse(c.name, fail(...))) and assert budgets.keySet == the measurement names. In CapeHarness.run, fail when expectError is false and expectedTerm is None.",
+      "coverageRisk": "none: tightens assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-18",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/factorial/FactorialCapeTest.scala:216-222",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/fibonacci/FibonacciCapeTest.scala:203-210",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/factorial/FactorialCapeTest.scala:98-109",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/fibonacci/FibonacciCapeTest.scala:99-111"
+      ],
+      "claim": "'memoized open submission costs less than the compiled naive recursion' compares the budgets of base(12) and open(12), or fib 25. The CAPE cases already pin both budgets exactly: factorial_12 base 25761/6971913 vs open 2502/471774, fibonacci_25 base 437984037/117422538753 vs open 1902/375774. Any change that breaks the inequality breaks a pin first. The fibonacci copy re-evaluates naive fib(25) (0.306 s in timings.csv).",
+      "action": "Delete both tests. Optionally state the ratio in a comment next to the pins.",
+      "coverageRisk": "none: implied by exact pins of both sides (C06-17 makes the pins mandatory)",
+      "ciSavingSec": 0.3,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Each inequality test (Factorial :216-222, Fibonacci :203-210) evaluates (program $ N.asTerm).term.evaluateDebug.budget for base and open at N=12 or N=25. CapeHarness.run (CapeTestSuite.scala:244-280) applies the fixture input '(con integer 12)' or '(con integer 25)' (the factorial_12 and fibonacci_25 entries exist in all four cape-tests.json files) and calls the same applied.term.evaluateDebug under the same given PlutusVM. It returns Some(budget) for these non-error cases, and the test asserts exact ExUnits equality (Factorial :46-48,60-62; Fibonacci :45-47,59-61). The pins are base 25761/6971913 vs open 2502/471774, and fib base 437984037/117422538753 vs open 1902/375774 (:78,107 and :78,109). Both strictly satisfy the inequality, so any change that breaks it breaks a pin first. One caveat: the inequality is a semantic invariant that survives a mechanical re-pin by the update-budgets script, but the pins do not. The optional ratio comment next to the pins partly addresses this."
+    },
+    {
+      "id": "C06-19",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/factorial/FactorialCapeTest.scala:147-161",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/factorial/FactorialCapeTest.scala:205-214",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/fibonacci/FibonacciCapeTest.scala:154-168",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/fibonacci/FibonacciCapeTest.scala:192-201"
+      ],
+      "claim": "The per-x 'CAPE open correctness' tests repeat inputs that the 'JVM, compiled naive UPLC, and the memoized open submission all agree' loop already checks with the same oracle. Factorial: -1, 0, 1, 13 and 15 are covered by the -3..15 loop. Fibonacci: -2, -1, 0, 1 are covered by the -3..25 loop. That is 18 ScalaTest tests for 9 unique extra inputs.",
+      "action": "Replace the two for-loops of tests in each suite with one test 'open program beyond the agree range' over the inputs the agree loop lacks (factorial: -100, 20, 25; fibonacci: -100, -25, 26, 30, 40, 60), asserting evalOpen(x) == scalaX(x) with x in the clue.",
+      "coverageRisk": "none: every input is still checked against the same independent oracle",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Factorial: the per-x tests use 13,15,20,25 (:147-153) and -100,-1,0,1 (:155-161). The agree loop -3..15 (:205-214) asserts jvm==scalaFactorial(x) and evalOpen(x)==jvm, which is the same oracle with the same evalOpen. So -1,0,1,13,15 are covered and only -100,20,25 are extra. This matches the claim. Fibonacci: the per-n tests use 26,30,40,60 (:154-160) and -100,-25,-2,-1,0,1 (:162-168). The agree loop -3..25 (:192-201) covers -2,-1,0,1, so the extras are -100,-25,26,30,40,60. This matches the claim: 18 tests, 9 unique extra inputs. The only behavior change is that the agree loop stops at the first failure, and a base-UPLC failure is asserted before evalOpen. This can hide an open-program failure at the same x, but it removes no coverage. The proposed replacement keeps every input on the same independent oracle."
+    },
+    {
+      "id": "C06-20",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/fibonacci/FibonacciCapeTest.scala:192-201",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/fibonacci/FibonacciCapeTest.scala:174-180"
+      ],
+      "claim": "The fibonacci agree loop evaluates naive double-recursive UPLC for every n in -3..25 (0.807 s, the slowest CAPE test). The cost grows as fib(n), so n = 21..25 is about 90 % of it. The CAPE base cases already evaluate naive fib(20) and fib(25) against fixture content.",
+      "action": "Evaluate the naive program only for n <= 20 in the agree loop (keep the JVM and open checks for -3..25). Update the long comment accordingly.",
+      "coverageRisk": "low: naive UPLC is no longer compared to the JVM at n = 21..24; it is the same program as at n <= 20 and at the fixture's n = 25",
+      "ciSavingSec": 0.7,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-21",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeTestSuiteTest.scala:110-114",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeTestSuite.scala:156-172"
+      ],
+      "claim": "set_valid_range's documented rule (finite upper bound exclusive, as the ledger's transValidityInterval translates it) is never tested. The only fixture sets from_time alone and checks the PosInf upper bound. Mutation: inclusive = true for to_time keeps CapeTestSuiteTest green, but changes the deadline semantics that every htlc/escrow/vesting 'at_timeout' case depends on. The comment at 110 ('both inclusive') describes only the infinite case.",
+      "action": "Add a CapeTestSuiteTest case with {\"op\":\"set_valid_range\",\"from_time\":11,\"to_time\":20}. Assert from = Finite(11) inclusive and to = Finite(20) not inclusive. Add a case with to_time only (from = NegInf).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-22",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeTestSuiteTest.scala:56-65",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeTestSuiteTest.scala:78",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeTestSuiteTest.scala:122-130",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CapeTestSuiteTest.scala:93-94"
+      ],
+      "claim": "The suite defines firstContext(json) but rebuilds the same 8-call chain inline in 'spending baseline defaults'. 'script context matches upstream builder semantics' re-does the cast on suite. Signatories are decoded through fromData[List[PubKeyHash]](x.toData) round-trips, although sc.txInfo.signatories is already a List[PubKeyHash] (also at 208 and 233).",
+      "action": "Use firstContext(minimal) at 122-130 and a ctxOf(suite) helper at 78. Replace the toData/fromData round-trips with sc.txInfo.signatories.toScalaList.map(_.hash).",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C06-23",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/cape/CompareWithLeaderboardTest.scala:12-57",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/cape/CompareWithLeaderboard.scala:101-124"
+      ],
+      "claim": "The leaderboard test checks the fee numbers of two rows only. The verdict logic (BEHIND with percentages, LEADS with margin and the tie note, NO submission matching, --ours handle) is unasserted: the baseline shows 24 uncovered statements in the file. The fixture already makes '_nau' fall behind 'price-check', but the '-> BEHIND price-check' line is never checked.",
+      "action": "Assert that the output contains '-> BEHIND price-check by'. Add a second run with --ours price-check that expects '-> LEADS', and one with --ours nobody that expects 'NO submission matching'. Leave --strict untested (it calls sys.exit).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 4 findings of scope merge-duplicate-tests, to-property or main-bug; 4 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

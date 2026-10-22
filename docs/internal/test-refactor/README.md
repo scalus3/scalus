@@ -3,6 +3,12 @@
 Spec: `docs/superpowers/specs/2026-10-20-test-refactoring-design.md`.
 All findings, with evidence and status: [`findings.md`](findings.md).
 
+## State (2026-10-22)
+
+P2 is done: 42 cluster reports in `reports/`, 810 findings, checked by `scripts/check_report.py`.
+Main-code defects found on the way: F-33 (fixed), F-34, F-35 to F-82. Next: P3 (style guide, helper
+catalog, backlog).
+
 ## State (2026-10-21)
 
 CI baseline: ci-jvm 3.3.8 job 15.0 min on ubuntu-26.04 (F-27); CI-JS passes with RAM and swap full (F-26).

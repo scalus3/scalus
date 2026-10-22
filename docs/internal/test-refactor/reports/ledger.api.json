@@ -1,0 +1,680 @@
+{
+  "cluster": "ledger.api",
+  "summary": "The cluster covers the on-chain ledger API types in scalus-core (v1 Value/Interval/Credential/DCert Eq, v2 OutputDatum/TxOut, v3 TxInfo helpers and TxOutRef.deriveTokenName) with 6 suites and 3 ArbitraryInstances files, 3.2k lines. It is cheap: about 5.9 s locally (ValueTest 3.5 s, TxInfoTest 1.4 s, slowest test 0.24 s), so there is no ci-time finding. Coverage data does not help (the main files are @Compile and excluded, F-9), so C2 is by reading; it found a main bug (C22-1): the IntervalBound Ord tie-break on isInclusive is wrong for lower bounds, so intersection/hull of bounds at one time with mixed inclusivity and isNever((t,t]) give wrong results, and no test or generator reaches the case (C22-2, C22-3). Five property blocks in IntervalTest and ValueTest cannot fail, because ScalaTest's forAll discards a Boolean result (C22-4); several budget pins measure a constant or an identity instead of the named operation (C22-8, C22-9). Most other findings remove duplication: exact and lovelace/token twin tests in ValueTest, examples that are instances of the adjacent property in TxInfoTest, and JVM asserts that repeat what assertEval already checks on the JVM (C22-5..C22-7, C22-10, C22-11, C22-16). Referenced, not re-reported: F-7 (Value negative amounts, Interval wide times, TxInfo size), F-9 (coverage exclusion).",
+  "behaviors": [
+    {
+      "pass": "Value",
+      "name": "constructors zero/apply/lovelace drop zero amounts",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:69-128"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "unsafeFromList / fromList / fromStrictlyAscendingListWithNonZeroAmounts (dedupe, sort, drop zeros)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:142-289"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "unsafeFromSortedMap (only outside the cluster: ValueBuiltinsBudgetTest)",
+      "tests": []
+    },
+    {
+      "pass": "Value",
+      "name": "toSortedMap, adaPolicyId, adaTokenName",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:30-67",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:291-303"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "equalsAssets, Eq (=== / !==), Eq vs toData cost parity",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:305-392",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1698-1935"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "valueOrd",
+      "tests": []
+    },
+    {
+      "pass": "Value",
+      "name": "ToData/FromData roundtrip; valueFromDataWithValidation (positive path only, see C22-13)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:394-427"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "negate / plus / minus (+ unary_- -)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:429-841"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "multiply (*), PV11 scaleValue 128-bit range failure vs PV10",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:843-947"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "showDebug / debugToString",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:949-971"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "getLovelace, quantityOf (lookupCoin at PV11)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:973-1017",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1117-1179"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "lovelaceAmount (deprecated)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1019-1055"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "isZero / nonZero",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1057-1115"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "isPositive",
+      "tests": []
+    },
+    {
+      "pass": "Value",
+      "name": "containsAtLeast (incl. negative-amount require)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1181-1226"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "insertCoin (replace, delete on zero, drop empty policy)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1228-1290"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "hasNft, hasSameTokensAndAtLeastAda, hasOnly, tokens",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1292-1467"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "withoutLovelace",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1469-1536"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "flatten",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1538-1602"
+      ]
+    },
+    {
+      "pass": "Value",
+      "name": "policyIds (only outside the cluster: AmmTest)",
+      "tests": []
+    },
+    {
+      "pass": "Value",
+      "name": "toLedgerValue (off-chain) and roundtrip via LedgerToPlutusTranslation",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1604-1696",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1937-1960"
+      ]
+    },
+    {
+      "pass": "Interval",
+      "name": "always / never / after / before / entirelyBefore / between / entirelyBetween + contains",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:16-85"
+      ]
+    },
+    {
+      "pass": "Interval",
+      "name": "isEntirelyAfter / isEntirelyBefore / isEntirelyBetween (properties cannot fail, see C22-4)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:87-159"
+      ]
+    },
+    {
+      "pass": "Interval",
+      "name": "hull / intersection (examples only; inclusivity tie-break wrong, see C22-1)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:161-237"
+      ]
+    },
+    {
+      "pass": "Interval",
+      "name": "isNever / nonNever (Equal and open-interval branches untested)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:239-252"
+      ]
+    },
+    {
+      "pass": "IntervalBound",
+      "name": "min / max / Ord tie-break on isInclusive",
+      "tests": []
+    },
+    {
+      "pass": "IntervalBound",
+      "name": "finite / finiteOrFail",
+      "tests": []
+    },
+    {
+      "pass": "Credential",
+      "name": "scriptHashOrFail / pubKeyHashOrFail",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/CredentialTest.scala:4-68"
+      ]
+    },
+    {
+      "pass": "Credential",
+      "name": "pubKeyOption / scriptOption",
+      "tests": []
+    },
+    {
+      "pass": "DCert, ScriptPurpose (v1)",
+      "name": "off-chain Eq distinguishes fields (regression)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/EqInstancesTest.scala:20-62"
+      ]
+    },
+    {
+      "pass": "Eq/Ord of other v1-v3 types",
+      "name": "Eq agrees with Data equality; Ord consistent with Eq",
+      "tests": []
+    },
+    {
+      "pass": "OutputDatum / TxOut (v2)",
+      "name": "inlineOrFail (default and custom message), hasInlineDatum",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v2/OutputDatumTest.scala:13-101"
+      ]
+    },
+    {
+      "pass": "v2.Utils",
+      "name": "findDatum: witness map first, then inline output datums",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:321-388"
+      ]
+    },
+    {
+      "pass": "TxInfo (v3)",
+      "name": "findInput / findInputOrFail",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:58-74",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:266-319",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:465-473"
+      ]
+    },
+    {
+      "pass": "TxInfo (v3)",
+      "name": "findContinuingOutputOrFail (whole address, unique)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:76-116",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:475-486"
+      ]
+    },
+    {
+      "pass": "TxInfo (v3)",
+      "name": "findOutputsByScriptHash / findOutputsByCredential",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:85",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:390-463"
+      ]
+    },
+    {
+      "pass": "TxInfo (v3)",
+      "name": "findInputsByCredential",
+      "tests": []
+    },
+    {
+      "pass": "TxInfo (v3)",
+      "name": "valuePaidTo / valueSpentFrom",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:118-159",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:488-506"
+      ]
+    },
+    {
+      "pass": "TxInfo (v3)",
+      "name": "isSignedByAny",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:161-178",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:508-516"
+      ]
+    },
+    {
+      "pass": "TxInfo (v3)",
+      "name": "isSignedBy",
+      "tests": []
+    },
+    {
+      "pass": "TxInfo (v3)",
+      "name": "validFromOrFail / validToOrFail",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:180-198",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:518-526"
+      ]
+    },
+    {
+      "pass": "TxInfo (v3)",
+      "name": "onlyBurnsUnder (empty sub-map is false)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:200-228",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:528-536"
+      ]
+    },
+    {
+      "pass": "TxInfo (v3)",
+      "name": "hasPaidTagged (exact address, value, datum)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:230-259",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:538-551"
+      ]
+    },
+    {
+      "pass": "TxOutRef (v3)",
+      "name": "deriveTokenName = blake2b_256(serialiseData)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:261-265",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:553-561"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C22-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Contexts.scala:90-91",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/Ord.scala:43-46",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Contexts.scala:114-128",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Contexts.scala:208-221",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Contexts.scala:281-298",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:161-252"
+      ],
+      "claim": "By reading (the file is @Compile, so excluded from coverage, F-9): Ord[IntervalBound] breaks a time tie with Ord[Boolean] (true > false), so an inclusive bound sorts ABOVE an exclusive bound at the same time. That is right for upper bounds and wrong for lower bounds, and min/max/isNever use the one Ord for both. Counterexamples against the code's own doc comments: (a) intersection([5,10], (5,10]) = Interval(max(incl 5, excl 5) = incl 5, ...) = [5,10], which contains 5 although (5,10] does not ('largest interval contained in both'); (b) hull([5,10], (5,10]) = (5,10], which does not contain 5 although [5,10] does ('smallest interval that contains both'); (c) isNever((5,5]): from <=> to is Less (excl < incl), not an open interval, so it returns false, while contains(t) is false for every t ('contains no values'). No test has two bounds at the same time with mixed inclusivity: the hull/intersection examples use inclusive bounds at distinct times, and isNever has two examples (Greater, never).",
+      "action": "Test side: add the contains-oracle property of C22-2 with the small-time generator of C22-3, plus three pinned examples (a)-(c) asserting the documented results: intersection([5,10],(5,10]) === Interval(finiteExclusive(5), finiteInclusive(10)); hull([5,10],(5,10]) === between(5,10); isNever(Interval(finiteExclusive(5), finiteInclusive(5))). They fail until the main code is fixed. Main-code note only: give lower bounds the opposite tie-break (inclusive lower < exclusive lower), e.g. separate minLower/maxLower helpers used by hull/intersection, and in isNever treat Equal-time bounds as never unless both are inclusive.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-56",
+      "verification": "Traced by hand. Ord[IntervalBound] (Contexts.scala:90-91) compares time first and then isInclusive with Ord[Boolean] (Ord.scala:43-46, true > false). So at equal time an inclusive bound is Greater than an exclusive one. min/max (114-128) and hull/intersection (208-221) use this one Ord for lower bounds too. (a) intersection([5,10],(5,10]): max(incl 5, excl 5) gives Greater, so the result is lhs = incl 5. The result [5,10] contains 5, but (5,10] does not. (b) hull([5,10],(5,10]): min gives excl 5, so the result is (5,10] and 5 is lost. (c) isNever(Interval(excl 5, incl 5)): from <=> to is Less. isOpenInterval is false, so the method returns false (281-296). But contains (231-249) needs t>5 and t<=5, so no t is contained. The Equal branch is not reached. The defect is reachable through the public API, e.g. Interval.intersection(validRange, Interval.entirelyBetween(...)) when the bound times match. No test has mixed inclusivity at one time (IntervalTest.scala:161-252 uses only between/before/after/never). One caveat for the proposed main fix: Equal-time infinite bounds also give a wrong answer (see C22-2)."
+    },
+    {
+      "id": "C22-2",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:161-237",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:239-252",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Contexts.scala:208-221",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Contexts.scala:281-298"
+      ],
+      "claim": "The 'hull' (5 examples), 'intersection' (5), 'isNever' (2) and 'nonNever' (1) tests are instances of three laws with `contains` as the oracle: intersection(a,b).contains(t) == a.contains(t) && b.contains(t); a.contains(t) || b.contains(t) implies hull(a,b).contains(t), and hull(a,b) bounds equal the min/max of finite bound times; isNever(i) == no t in [lo-1, hi+1] with i.contains(t) (lo/hi = smallest/largest finite bound time). No property exists for hull, intersection or isNever; Arbitrary[Interval] is not used by IntervalTest at all.",
+      "action": "Replace the 13 examples with three checkEval properties over (Interval, Interval, PosixTime) and (Interval) using the small-time generator of C22-3; for isNever enumerate t over [lo-1, hi+1] (at most 6 values with times 0..3). Keep the examples of C22-1 (a)-(c) as named regressions and one always/never example. Note: the intersection, hull and isNever properties fail until the C22-1 main bug is fixed; land them with the fix, or mark the failing cases pending.",
+      "coverageRisk": "low: the properties check every current example (all are inclusive, distinct-time bounds, which the small-time generator also produces); the hull-of-disjoint and never-with-finite examples become generated cases",
+      "ciSavingSec": 0,
+      "linesRemoved": 50,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "The intersection law (contains == a.contains && b.contains) and the hull implication law hold once C22-1 is fixed. contains ignores inclusivity on infinite bounds (231-249), and never = (posInf, negInf) (Contexts.scala:174) behaves as expected. The isNever law fails on more than the C22-1 cases. The C22-3 generator draws NegInf/PosInf with a random isInclusive and does not normalize. Interval(NegInf incl, NegInf incl): <=> is Equal and both bounds are inclusive, so isNever returns false (Contexts.scala:284). But contains always gives false, because belowTo for NegInf is false (247). Interval(PosInf incl, PosInf incl) fails the same way. These cases also have no finite bound, so 'enumerate t over [lo-1, hi+1]' is undefined for them. The proposed C22-1 main fix ('Equal-time bounds are never unless both are inclusive') does not cure this. Also, the contains oracle does not pin the representation. The intersection examples assert structural equality (=== Interval.between(150,200), IntervalTest.scala:197-200, 204-207, 218-221). Over integer times, (149,201) passes the contains law but fails those examples. The hull implication alone is also satisfied by `always`."
+    },
+    {
+      "id": "C22-3",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ArbitraryInstances.scala:13-30",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:16-252"
+      ],
+      "claim": "Arbitrary[Interval] draws bound times from the wide PosixTime/BigInt pool (F-7: 67% of bounds above 64 bit), so two bounds at the SAME time with different inclusivity, the only case where the IntervalBound Ord tie-break (C22-1) and the isNever Equal/open-interval branches (Contexts.scala:283-296) matter, is near-zero probability. It also never produces an open interval (t, t+1), which isNever treats specially. The generator is used only inside the TxInfo generator; IntervalTest uses none.",
+      "action": "Add genSmallInterval in v1 ArbitraryInstances: bound types from Gen.frequency(NegInf 1, PosInf 1, Finite(Gen.choose(0, 3)) 8) with a random isInclusive, no ordering normalization (so never-intervals occur). Use it in the C22-2 properties. Keep the existing wide generator for TxInfo. F-7 stays the reference for the wide-value issue.",
+      "coverageRisk": "none: adds a generator",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:59-73",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:88-96",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:107-115",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:124-146",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1948-1959",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:34"
+      ],
+      "claim": "Five property blocks cannot fail. They use ScalaTest's forAll (EvalTestKit extends ScalaCheckPropertyChecks) with a Boolean body. scalatestplus CheckerAsserting.assertingNatureOfT (CheckerAsserting.scala:180-183, scalacheck-1-19_3 3.2.20.0) implements succeed(result) = (true, None), and WheneverAsserting.assertingNatureOfT[T] returns Unit (WheneverAsserting.scala:57-63), so a false result is discarded; only an exception fails. Affected: IntervalTest between/entirelyBetween contains (59-73), isEntirelyAfter (88-96), isEntirelyBefore (107-115), isEntirelyBetween (124-137), and ValueTest 'toLedgerValue roundtrip property' (1948-1959). They also run on the JVM only. isEntirelyBetween is checked against its own definition (Contexts.scala:275-276), so it is tautological even with a working assertion (the assertEval at 139-146 too).",
+      "action": "Rewrite the four IntervalTest blocks as checkEval (2- and 3-argument overloads exist, EvalTestKit.scala:509-575), turning whenever(c) { p } into !(c) || p; replace the isEntirelyBetween oracle with an independent one (between(f,t).isEntirelyBetween(a,b) == (a < f && t < b)) and delete 139-146. Wrap the ValueTest body in assert(...) (toLedgerValue is off-chain, so keep forAll). The ValueTest fix may surface a real roundtrip failure (for example negative lovelace into Coin); investigate before re-pinning. Coordinator note: the Boolean-forAll pattern may exist in other clusters; a repository-wide grep for forAll bodies that end in a Boolean expression is worth one pass.",
+      "coverageRisk": "none: makes existing checks effective",
+      "ciSavingSec": -0.3,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-5",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:45-55",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:130-140",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:39-42",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:69-74",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:983-1008",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1127-1134",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1145-1152",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1163-1170",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Value.scala:701"
+      ],
+      "claim": "Exact duplicates in ValueTest: 'toSortedMap lovelace' (45-55) and 'lovelace toSortedMap' (130-140) are character-identical apart from the name; 'zero' (69-74) asserts Value.zero.toSortedMap == SortedMap.empty, already asserted at 39-42; getLovelace is defined as quantityOf(adaPolicyId, adaTokenName) (Value.scala:701), and 'quantityOf ada in zero / in lovelace / in token value' (1127-1170) pin the same inputs, results and ExUnits (1213/492985, 1257/895629, 1257/895629) as 'getLovelace zero / lovelace / token returns zero' (983-1008).",
+      "action": "Delete 130-140, 69-74, 1127-1134, 1145-1152 and 1163-1170. Keep the getLovelace tests and the three quantityOf tests that use a non-ada key (1136, 1154, 1172).",
+      "coverageRisk": "none: each deleted test asserts the same expression, input and budget as a kept one (getLovelace inlines to the same quantityOf call)",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "'toSortedMap lovelace' (ValueTest.scala:45-55) and 'lovelace toSortedMap' (130-140) are identical: same lambda, input, expected value and ExUnits(500,64100). 'zero' (69-74) asserts Value.zero.toSortedMap == SortedMap.empty. That is the assertion at 39-42, with an explicit type argument only. getLovelace is `quantityOf(adaPolicyId, adaTokenName)` (Value.scala:701). quantityOf is the PV11 intrinsic (ValueIntrinsics.scala:32). The three 'quantityOf ada' tests (1127-1134, 1145-1152, 1163-1170) pin the same inputs, results and ExUnits as getLovelace zero/lovelace/token (983-1008): 1213/492985, 1257/895629, 1257/895629. Both run through assertEvalWithBudget in the same shared/ file. The non-ada quantityOf tests and the quantityOf property (1117) stay. Small note: getLovelace is a plain def, not an inline. The equal budgets show that it lowers to the same code today."
+    },
+    {
+      "id": "C22-6",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:441-457",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:489-541",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:560-576",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:681-733",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:752-768",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:880-914",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1556-1578"
+      ],
+      "claim": "Twelve 'lovelace' tests duplicate their 'token' twin: same operation, same shape of single-entry value, same ExUnits, because the ada entry is an ordinary (empty, empty) key for the PV11 Value builtins. Pairs (token / lovelace, ExUnits): unary_ 441/450 (1413/990526); '+ x + x' 489/516 (1446/1068221); '+ x + zero' 498/525 (1425/885065); '+ zero + x' 507/534 (1425/896099); '+ x cancel' 560/569 (1424/1030062); '- x - x' 681/708 (1446/1068221); '- x - zero' 690/717 (1425/885065); '- zero - x' 699/726 (1858/1238676); '- x cancel' 752/761 (1424/1030062); '* x by 2' 880/898 (1413/990526); '* x by 0' 889/907 (1391/952367); 'flatten token/lovelace' 1565/1556 (26580/6546443).",
+      "action": "Delete the twelve lovelace twins (450-457, 516-541, 569-576, 708-733, 761-768, 898-914, 1556-1563). If the owner wants the ada key visible, fold both inputs into one table-driven test per operation instead (same pins, one row each).",
+      "coverageRisk": "low: the ada key stays covered by '+ token + lovelace' (543), '- token - lovelace' (735), the multi-asset cancel tests (578-649, 770-841), 'flatten multi-asset' (1580), and the properties, whose Arbitrary[Value] adds lovelace via genLovelace",
+      "ciSavingSec": 0.2,
+      "linesRemoved": 110,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "I checked each pair in ValueTest.scala. They use the same lambda, a single-entry input that differs only in the key, and identical ExUnits: unary_ 441/450 (1413/990526); + x+x 489/516; +x+zero 498/525; +zero+x 507/534; + cancel 560/569; - x-x 681/708; -x-zero 690/717; -zero-x 699/726 (1858/1238676); - cancel 752/761; *2 880/898; *0 889/907; flatten 1556/1565 (26580/6546443). Value.lovelace is apply(adaPolicyId, adaTokenName, v) (Value.scala:94), and the on-chain ops have no ada special case. The only special-casing is in the JVM-only toLedgerValue (Value.scala:1233), which these tests do not call. The ada key keeps deterministic pins in '+ token + lovelace' (543), '- token - lovelace' (735) and the multi-asset cancel/partial-cancel tests (578-649, 770-841). These include ada cancel to zero and so cover ada entry removal. 'flatten multi-asset' (1580) also stays. The unary_, *, + and flatten properties (428, 860-866, 458, 1540) use Arbitrary[Value], which adds lovelace about half the time via Gen.option(genLovelace) (v1 ArbitraryInstances.scala:102-106)."
+    },
+    {
+      "id": "C22-7",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:266-319",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:321-388",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:390-463"
+      ],
+      "claim": "In 'findInput', 'findDatum' and 'findOutputsByScriptHash' every assertEval example is an instance of the checkEval property just above it, and checkEval already evaluates on the JVM and on the CEK (EvalTestKit.scala:484-507): 276-285 is 267-269 at one TxOutRef; 287-318 is 271-274 with an empty TxInfo; 353-355 is 322-324; 357-368 is 326-333; 370-387 is 335-351; 426-430 is 391-393; 432-462 is 395-424 at ByteString.empty. The examples spell out the same TxOut/Address literal six times.",
+      "action": "Delete the seven examples (about 110 lines). If a fixed edge case is wanted, keep one line per test using a @Compile fixture from TxInfoTestFixtures (for example an empty-hash script output).",
+      "coverageRisk": "low: the examples pin ByteString.empty hashes and an empty input list; the properties draw them only rarely (empty ByteString about 1% of samples), and TxInfo.placeholder.findInput is the first property itself",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 110,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "Most of the examples are instances of the properties. checkEval compiles f, applies it to toData(payload) on the CEK and also runs f on the JVM (EvalTestKit.scala:484-507). findInput 276-285 and 287-318 match 267-269 and 271-274 with txInfo = placeholder. findDatum 353-355, 357-368 and 370-387 match 322-324, 326-333 and 335-351. findOutputsByScriptHash 426-430 matches 391-393. One example is stronger than its property. 432-462 gives the PubKeyCredential output and the ScriptCredential output the SAME hash bytes (both ByteString.empty). So it checks deterministically that findScriptOutputs (v1/Contexts.scala:921-926) does not match a pubkey credential that has equal bytes. In property 395-424, PubKeyHash(empty) collides with the ScriptCredential hash (validatorHash) only when validatorHash is empty. That has probability about 1/101 per sample (byteStringArb size is choose(0,100), uplc/test/ArbitraryInstances.scala:36-40), so a run of 100 samples catches the mutation only about 63% of the time. Corrected action: delete the six other examples (about 90 lines). Keep the collision case of 432-462 as one deterministic example. Or change the property so the pubkey output uses PubKeyHash(validatorHash)."
+    },
+    {
+      "id": "C22-8",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1019-1046",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1820-1857",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1859-1899",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:126-151"
+      ],
+      "claim": "Three budget pins measure a constant, not the operation. 'lovelaceAmount lovelace-only' (1022-1028), 'lovelaceAmount lovelace + native asset' (1030-1046) and 'Eq vs toData: three policies equal via Eq' (1820-1857) use the no-argument assertEvalWithBudget, so the optimizer folds the closed expression; all three pin ExUnits(200, 16100), the cost of returning a constant. A slower lovelaceAmount or Eq would not change the pin. The three-policies pair therefore compares 200 against 157024 for the toData form (1897), so the 'Eq costs the same as toData' comparison it exists for is broken at that size.",
+      "action": "Use the one-argument form with the value as a runtime argument, as the neighbouring tests do: (v: Value) => v.lovelaceAmount and (v: Value) => v === Value.fromList(...), then re-pin. Keep the deprecated lovelaceAmount tests (the comment at 1019 says they stay until removal).",
+      "coverageRisk": "none: the expected values stay; only the budget pins become meaningful",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-9",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:45-67",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:99-109",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:130-140",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:169-192",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:207-239",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:156-177"
+      ],
+      "claim": "Six tests named after a constructor ('apply token', 'lovelace toSortedMap', 'unsafeFromList two policies', 'fromList with duplicates and zeros', and the two 'toSortedMap' tests) all pin ExUnits(500, 64100). In the one-argument assertEvalWithBudget the argument (Value(...), Value.fromList(...)) is built on the JVM and passed as Data (EvalTestKit.scala:167-177); on-chain only (d: Data) => d.to[Value].toSortedMap runs, and FromData[Value] is erased there. So the pin is the cost of an identity function, the same for a one-token and a two-policy value, and 'fromList with duplicates and zeros' never runs Value.fromList's dedupe/zero-drop on the CEK (only its expected side does).",
+      "action": "Make the constructor the compiled code: (l: List[(PolicyId, List[(TokenName, BigInt)])]) => Value.fromList(l) with the raw list as argument (same for unsafeFromList; (n: BigInt) => Value.lovelace(n); a (PolicyId, TokenName, BigInt) argument for apply needs a tuple or a fixture), then re-pin. Drop the budget from the toSortedMap tests or keep a single one; 130-140 goes with C22-5.",
+      "coverageRisk": "none: the JVM checks stay, and the constructors gain a real on-chain check",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-10",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:17-53",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:58-264",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:69-95",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:412-451"
+      ],
+      "claim": "TxInfoTest writes most cases twice: a JVM assert/assertThrows on a local val, then the same expression re-typed inline in assertEval/assertEvalEq/assertEvalFailsWithMessage, because a test-local val cannot be compiled. assertEval* already evaluates the code on the JVM (assert(compiled.code), code(arg1), try code) before the CEK, so the JVM assert is redundant wherever an assertEval twin exists (60-61 vs 63-73, 131-134 vs 136-158, 164-165 vs 168-177, 182-186 vs 188-197, 202-205 vs 219-222, 233-234 vs 245-258, 262 vs 264). Conversely several cases are JVM-only and never check the on-chain lowering: 85 (loose finder), 97 (two continuing outputs), 166 (empty key list), 206-210 and 217 (two burns, other policy), 235-243 (wrong address, wrong tag, NoOutputDatum), 263. The file already has the fix: the @Compile object TxInfoTestFixtures.",
+      "action": "Move each tx setup into TxInfoTestFixtures as a named val (ownTx, redirectedTx, twoContinuingTx, paidTx, burnTx ...), then write each case once as assertEval / assertEvalEq / assertEvalFailsWithMessage on the fixture. Delete the JVM duplicates.",
+      "coverageRisk": "none: assertEval* keeps the JVM check; the JVM-only cases gain an on-chain check",
+      "ciSavingSec": -0.2,
+      "linesRemoved": 80,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-11",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/CredentialTest.scala:11-68",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v2/OutputDatumTest.scala:13-101",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/EqInstancesTest.scala:20-62",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1181-1226",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1397-1451"
+      ],
+      "claim": "The same JVM-assert-plus-assertEval duplication as C22-10 in four more files: CredentialTest (12-19 vs 21-28, 52-59 vs 60-67; the happy paths are also asserted by the two budget tests 31-49), OutputDatumTest (14 vs 16; 23-24 vs 26-29; 36-43 vs 44-64, whose TxOut literal is typed four times; 83-92 vs 94-100), EqInstancesTest (23 and 28 retyped as 33-43 with the credentials re-spelled, 49-50 as 58-62), ValueTest containsAtLeast (1181-1211 JVM only, 1213-1226 retyped) and hasOnly (1397-1451: every JVM assert retyped as assertEvalEq; 1431-1432 absent policy and zero amount are JVM-only).",
+      "action": "Per file, put the values in a private @Compile fixture object (as TxInfoTest does) and assert each case once with assertEval* on the fixture; in CredentialTest drop the happy-path assertEvalEq covered by the budget tests. Keep EqInstancesTest's JVM checks as assertEval cases (they then run on both sides).",
+      "coverageRisk": "none: assertEval* keeps the JVM check; JVM-only cases gain an on-chain check",
+      "ciSavingSec": -0.2,
+      "linesRemoved": 75,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-12",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1057-1060",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1469-1473",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:464-481",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:656-673",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1604-1696",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Value.scala:735",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Value.scala:751"
+      ],
+      "claim": "Four ValueTest properties and one example test are too weak. (1) isZero property (1058-1060): nonZero is defined as !isZero (Value.scala:751), so 'if isZero then toSortedMap.isEmpty else nonZero' holds for any isZero that returns false; mutation isZero := false passes. (2) withoutLovelace property (1470-1472) checks only getLovelace == 0; mutation withoutLovelace := Value.zero passes. (3) The second '+' and '-' properties (464-481, 656-673) check only the entries present in the result; mutation 'drop keys of b that a lacks' passes them (and the first property, since b = zero there). (4) 'toLedgerValue' (1604-1696) asserts only coin and map sizes; mutation 'swap two amounts' or 'wrong token names' passes, and the 'preserves token ordering' block (1680-1695) asserts size == 2 only.",
+      "action": "(1) isZero: value.isZero === (value === Value.zero). (2) withoutLovelace: value.withoutLovelace + Value.lovelace(value.getLovelace) === value && withoutLovelace.getLovelace === 0. (3) +/-: for every (cs, tn) in value1.flatten ++ value2.flatten, (v1 + v2).quantityOf(cs, tn) === v1.quantityOf + v2.quantityOf (same for -), plus the existing no-zero check. (4) toLedgerValue: compare with an expected ledger.Value built from MultiAsset, and delete the ordering block or assert the key sequence.",
+      "coverageRisk": "none: stronger checks of the same behaviors",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-13",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v3/Contexts.scala:1010-1011",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v3/Contexts.scala:1020-1021",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v3/Contexts.scala:1066-1067",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Value.scala:759-760",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Value.scala:646-661",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Contexts.scala:138-143",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Contexts.scala:526-531",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v2/Contexts.scala:293-308",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Value.scala:825-838",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:402-427"
+      ],
+      "claim": "Public on-chain helpers with no test in the repository (grep of all test sources): TxInfo.isSignedBy (v3 Contexts.scala:1066), findInputsByCredential (1010), Value.isPositive (Value.scala:759; only regression contracts call it), IntervalBound.finite / finiteOrFail (v1 Contexts.scala:138-143), Credential.pubKeyOption / scriptOption (526-531). findOutputsByCredential is checked once on the JVM only (TxInfoTest:85). Value.valueFromDataWithValidation is tested only on valid data: its require (zero amount, empty token map) and the SortedMap order validation never fail in a test; the on-chain negative is impossible because FromData is erased (the TODO at ValueTest:412-426), but the JVM negative is easy. findDatum's fallback when the witness map is non-empty but misses the hash, and an OutputDatumHash output, are untested. containsAtLeast has no property: Arbitrary[Value] yields negative amounts in 69% of samples (F-7), which make it throw.",
+      "action": "Add to TxInfoTest: isSignedBy (in / not in / empty signatories), findInputsByCredential and findOutputsByCredential with a same-payment-different-stake pair, findDatum with a non-matching witness map plus an inline-datum output and an OutputDatumHash output. Add to ValueTest: isPositive (zero, positive, one negative token), a JVM test that valueFromDataWithValidation throws RequirementError on a zero amount, an empty token map and unsorted keys, and a containsAtLeast checkEval property over non-negative values (map amounts to abs) against the quantityOf oracle. Add finite/finiteOrFail and pubKeyOption/scriptOption cases to IntervalTest/CredentialTest. Replace the commented-out block 412-426 with the JVM negative test.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -80,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-14",
+      "check": "C4",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/EqInstancesTest.scala:11-62",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Contexts.scala:318-351",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Contexts.scala:158-159",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/ArbitraryInstances.scala:13-61",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ArbitraryInstances.scala:13-53"
+      ],
+      "claim": "EqInstancesTest is a regression for one bug class (an off-chain Eq that compares a field with itself) on two types, by hand-picked pairs. The other hand-written off-chain Eq/Ord instances of the cluster (Interval, IntervalBound, Credential, StakingCredential, Address, TxOut, TxInInfo, TxOutRef, TxInfo, ScriptPurpose, OutputDatum) have no check that Eq agrees with structural Data equality or that Ord is consistent with Eq; on-chain the lowering uses equalsData, so a broken off-chain Eq is invisible on-chain (the class comment says so).",
+      "action": "Add one JVM law suite over every type with an Arbitrary in v1/v2/v3 ArbitraryInstances: for b drawn from Gen.oneOf(Gen.const(a), arbitrary), assert (a === b) == (a.toData == b.toData) and ((a <=> b) == Order.Equal) == (a === b). Keep EqInstancesTest's DCert cases (DCert has no Arbitrary) or add an Arbitrary[DCert].",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.3,
+      "linesRemoved": -40,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-15",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/ArbitraryInstances.scala:31-54",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v3/Contexts.scala:890-906",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:360-364",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:271-274",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:326-351",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:395-424"
+      ],
+      "claim": "Arbitrary[TxInfo] (F-7: median 2-4k nodes, 15 s per 10 000 samples) builds inputs, outputs and signatories with the unbounded arbList (up to ScalaCheck size 100) and leaves 9 of 16 fields always at their default: referenceInputs, certificates, withdrawals, redeemers, data, votes, proposalProcedures, currentTreasuryAmount, treasuryDonation. Its only users are the four TxInfoTest properties, and three of them overwrite the field they test (data/outputs at 327-330 and 336-348, outputs at 396-413), so the size buys nothing and findDatum never sees a generated witness map.",
+      "action": "Bound the lists with Gen.choose(0, 4) and listOfN; generate data as a small SortedMap of (dataHash, datum) pairs, and a few referenceInputs, withdrawals and signatories. In the three overwriting properties use TxInfo.placeholder.copy(...) instead of a random TxInfo, or keep the random one now that it is small. F-7 stays the reference for the size issue.",
+      "coverageRisk": "low: smaller TxInfo values; the properties do not depend on the large sizes",
+      "ciSavingSec": 0.1,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-16",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:1698-1935"
+      ],
+      "claim": "The ten 'Eq vs toData' tests (238 lines) are five pairs that assert the same thing: v === x and v.toData == x.toData give the same result and the same ExUnits. The 56-hex-digit policy literal is typed 18 times and each value twice (code and argument).",
+      "action": "Put the values in a @Compile fixture object (zero, lovelace, oneToken, twoPolicies, threePolicies, oneTokenOther) and write one test per pair that calls assertEvalWithBudget for the === and the toData form with the same pin (the pins after C22-8 for three policies). Same assertions, about 90 lines.",
+      "coverageRisk": "none: same expressions and pins",
+      "ciSavingSec": 0,
+      "linesRemoved": 145,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-17",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/IntervalTest.scala:10",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:412-426",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ArbitraryInstances.scala:93-96",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ArbitraryInstances.scala:107-110",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v3/ArbitraryInstances.scala:16-20"
+      ],
+      "claim": "Nits: IntervalTest's @nowarn(\"msg=entirelyAfter .* is deprecated\") (10) suppresses nothing: there is no entirelyAfter in v1 Contexts.scala and nothing in the interval API is deprecated. ValueTest 412-426 is a commented-out test with a TODO (C22-13 replaces it). v1 ArbitraryInstances comments both Gen.choose(0, 1) and Gen.choose(1, 10) as '0 to 10 policyId' (94-95, 108-109). v3 TxOutRef index weights overlap: choose(0,3), choose(4,10), choose(3,1000) (19).",
+      "action": "Delete the @nowarn and its import; delete 412-426 (with C22-13); fix the comments to 'zero or one' / 'one to ten'; make the last branch choose(11, 1000).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C22-18",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:23-28",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:583-588",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:360-364"
+      ],
+      "claim": "ValueTest and ListTest each define the same local given Arbitrary[List[T]] with size Gen.choose(0, 10), to shadow the shared arbList whose size grows up to the ScalaCheck size (100).",
+      "action": "Add def boundedListArb[A: Arbitrary](max: Int): Arbitrary[List[A]] next to arbList in uplc.test.ArbitraryInstances and use it in both places (ValueTest: given Arbitrary[List[T]] = boundedListArb(10)). Coordinate with the prelude cluster.",
+      "coverageRisk": "none: same distribution",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 5 findings of scope merge-duplicate-tests, to-property or main-bug; 3 confirmed, 2 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

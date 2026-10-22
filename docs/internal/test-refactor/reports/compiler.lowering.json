@@ -1,0 +1,481 @@
+{
+  "cluster": "compiler.lowering",
+  "summary": "The cluster is cheap: 11 suites, about 1.4 s per run (timings.csv); the slowest are SirToUplcSmLoweringTest 0.59 s (its 0.27 s 'lower error' is JVM warm-up: the same test takes 0.01 s in the simple suites) and UplcConstrTest 0.45 s, a third of which is six info-only profiling tests (C27-3), so the only CI win is small. The main code (V3 lowering core, typegens, ScalusRuntime, UplcPipeline; 64.5 % / 62.7 % statement coverage, no coverage rows for Lowering.scala) is tested mostly end to end through compile{}: results are right, but many assertions check only isSuccess, compare against a string that main code no longer emits (__Z, C27-5), or leave computed values unchecked (C27-1..C27-6). Most uncovered statements are internal invariant throws and pretty-printers; the public gap that matters is Options.uplcOptimizers (C27-12); SumDispatch.sumCaseImpl's list-source branches (SumDispatch.scala:71-107) are uncovered too but may be unreachable, so they are listed in behaviors only. No generator is defined here; 'lower constant' types every constant as Integer (C27-11). The largest code reductions are LambdaBarrierLoweringTest builders (C27-13) and the repeated Result-match blocks (C27-14, C27-15). No main-code defect found; the UplcPipelineTest even/odd fixture copy is covered by C13-18.",
+  "behaviors": [
+    {
+      "pass": "SirToUplcV3Lowering",
+      "name": "lower constants, error, Var/Let, Lam/Apply, builtins, And/Or/Not (pre-PV11 shapes)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:64-178",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:289-369"
+      ]
+    },
+    {
+      "pass": "SirToUplcV3Lowering",
+      "name": "lower Constr and Match on List/Option, constant patterns, @unchecked non-exhaustive match",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:180-287",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:371-866",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRUplcV3LoweringRandomTest.scala:35-179"
+      ]
+    },
+    {
+      "pass": "Lowering.lowerSIR (SIR.Const)",
+      "name": "type-directed constant lowering: BuiltinList/BuiltinArray of non-primitive elements converted to Data",
+      "tests": []
+    },
+    {
+      "pass": "LoweredValue.termWithNeededVars",
+      "name": "lambda barrier: non-effortless let values bound outside lambdas, effortless ones inlined",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/LambdaBarrierLoweringTest.scala:20-468"
+      ]
+    },
+    {
+      "pass": "Lowering (letrec)",
+      "name": "single self-recursion encoded by self-application, on V3 and simple backends; fixpoint stays foldable",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SelfApplicationRecursionTest.scala:27-162"
+      ]
+    },
+    {
+      "pass": "Lowering / SIRLinker (letrec groups)",
+      "name": "mutually recursive groups (2- and 3-cycles, mixed self/cross, sandwiched defs) on all backends",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/MutualRecursionTest.scala:100-174",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcPipelineTest.scala:174-184"
+      ]
+    },
+    {
+      "pass": "Lowering.loweringBinding / simpleBindingName",
+      "name": "UPLC annotations carry the enclosing source function name; shared sumEq helper keeps its own label",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/FunctionNameAnnotationTest.scala:45-106"
+      ]
+    },
+    {
+      "pass": "typegens.SirTypeUplcGenerator",
+      "name": "default and default-Data representation per SIRType (List, Option/None, BLS G2)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRLoweringRepresentationTest.scala:29-114",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:234-242"
+      ]
+    },
+    {
+      "pass": "ProdUplcConstr / SumUplcConstr (SumUplcConstrOps, ProductCaseUplcConstr*Emitter)",
+      "name": "case classes and enums with function fields; @UplcRepr(UplcConstr) construct, select, match, tag > 0",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:120-188",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:192-223",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:427-441"
+      ]
+    },
+    {
+      "pass": "LoweringEq (sumEq helpers)",
+      "name": "structural equality on UplcConstr values and nested UplcConstr lists",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:206-272",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/FunctionNameAnnotationTest.scala:63-96"
+      ]
+    },
+    {
+      "pass": "ScalusRuntime list conversions (builtinListToUplcConstr / uplcConstrToBuiltinList)",
+      "name": "UplcConstr lists across BuiltinList boundaries: flatMap, zip, map, filterMap, init, prepend through Cast",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:274-425",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrQueueTest.scala:72-146"
+      ]
+    },
+    {
+      "pass": "ScalusRuntime / DataConstrEmitter",
+      "name": "toData/fromData of @UplcRepr(UplcConstr) values nested in Data-encoded wrappers",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:548-636"
+      ]
+    },
+    {
+      "pass": "Lowering (List.unboxedNil interception)",
+      "name": "unboxedNil[A] lowers to a native list<A> constant, List.empty to list<data>",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UnboxedNilTest.scala:53-79"
+      ]
+    },
+    {
+      "pass": "UplcPipeline.run",
+      "name": "backend parameter, generateErrorTraces, V1 optimizer choice, removeTraces, same term as CompiledPlutus.program",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcPipelineTest.scala:30-90"
+      ]
+    },
+    {
+      "pass": "UplcPipeline.run",
+      "name": "custom Options.uplcOptimizers replace the default optimizer",
+      "tests": []
+    },
+    {
+      "pass": "SumDispatch.sumCaseImpl",
+      "name": "list-shape source conversions (PairIntDataList, SumBuiltinList, PackedSumDataList sources)",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C27-1",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRUplcV3LoweringRandomTest.scala:35-45",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRUplcV3LoweringRandomTest.scala:47-66",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRUplcV3LoweringRandomTest.scala:158-179",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRUplcV3LoweringRandomTest.scala:113,140"
+      ],
+      "claim": "Three of six tests cannot fail on a wrong result. 'lowering simple case class' (35-45) lowers and asserts nothing; its evaluation is commented out. 'lowering pairlist repr' (158-179) asserts only isSuccess; a lowering that builds an empty map or swaps the pair still passes. 'lowering match on simple case class' (47-66) runs only the accepting input AA(true, 123); a lowering whose `if a != 123` branch never fails still passes. `lv` (113, 140) is computed and never used; about 20 lines are commented-out printlns and code.",
+      "action": "Assert `term.evaluate == BigInt(123).asTerm` in 35-45. In 158-179 assert the result equals the lowered SortedMap with the single pair (1, 1), e.g. compare `uplc.evaluate` with the evaluated `compile { SortedMap.singleton(BigInt(1), BigInt(1)) }`. In 47-66 add the rejecting input AA(true, 124) and assert the evaluation fails. Delete `lv`, the `getOrElse { fail }` blocks and the commented code.",
+      "coverageRisk": "none: adds assertions; deleting `lv` drops only the 'lastLoweredValue is set' side check, which no assertion uses",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-2",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:548-557",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:613-631"
+      ],
+      "claim": "'toData: PointSet ... serializes to Data' (548-557) asserts only isSuccess, so a lowering that encodes the points list wrongly passes. 'full roundtrip' (577-636) decodes the result by hand, checks tag, id and name, then computes `pointsListData` (628) and never checks it; its own comment says the 3-point count is not verified. The prepend of Point(100, 200), the case the test describes, is unchecked.",
+      "action": "Compare whole Data values. Off-chain, `PointModule.given` ToData instances run on the JVM: in 548-557 assert `result.term == Term.Const(Constant.Data(toData(PointSet(42, List(Point(1,2), Point(3,4), Point(5,6))))))`; in 577-636 replace lines 615-631 with one equality against `toData(Wrapper(8, PointSet(42, List(Point(100,200), Point(1,2), Point(3,4)))))`.",
+      "coverageRisk": "none: the new equality implies every field the old code checked",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-3",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:445-542"
+      ],
+      "claim": "Six tests (98 lines) are investigation output, not tests: 'list contains scaling' prints a budget table with info() and asserts only isSuccess; the five 'profile:' tests print a profile and assert only isSuccess. Their names ask questions ('does it trigger ChooseList?') that no assertion answers. They take 0.155 s of the suite's 0.454 s (timings.csv). PointSet.map and PointSet.filter (PointModule 53-58) are reached only by these tests, so their results are never checked.",
+      "action": "Delete the six tests and the ProfileFormatter import. Add one test that checks values: `pointSetFilter(ps, 3)` has length 1 and `pointSetMap(ps)` equals List(3, 7, 11, 15, 19) (compare with the JVM result of the same @Compile functions). If the budget comparison is still wanted, move it to the bench module.",
+      "coverageRisk": "low: 'construction only' and 'init' are also covered by 'list dropRight/init' (317-338) and 'prepended preserves repr' (365-383); map and filter get value checks instead of success-only checks",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 80,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrQueueTest.scala:104-125"
+      ],
+      "claim": "'depthSearch with specialized Queue' asserts `v >= 0` on a list length, which no mutation that still evaluates can break. By hand: depth 2 pops Item(1,1) (not done), pushes Item(2,1), pops it (not done), then hits depth 0 and returns the empty queue, so the expected length is 0 and the `done` branch (line 62, appendFront) never runs.",
+      "action": "QueueModule is @Compile code and runs on the JVM: assert the UPLC result equals the JVM result of the same expression (EvalTestKit.assertEvalEq, or compute it on the JVM and compare). Pick inputs where `done` fires, e.g. depth 6 with `done = item.value > 3`, so the appendFront path is checked too.",
+      "coverageRisk": "none: replaces a vacuous check",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SelfApplicationRecursionTest.scala:35,55,71,114,144,155",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SelfApplicationRecursionTest.scala:47-77"
+      ],
+      "claim": "Six tests assert `!uplc.show.contains(\"__Z\")`. No main code emits the name `__Z` since 944d23980 (T2) removed the Z combinator (`git log -S'__Z'`; grep of scalus-core/shared/src/main finds nothing), so the check cannot fail unless a binding with that exact name returns. A different non-self-application encoding (another fixpoint helper) passes it. Three tests (47-61, 62-77, 131-149) have no other guard of the encoding; only 27-46 and 102-129 also pin a budget ceiling. The check also prints the whole term (F-17).",
+      "action": "Replace the string check with a structural one: a small helper that asserts the term contains the self-application `(lam f [f f])` shape (Apply(Var f, Var f) under LamAbs f) and no other fixpoint; or drop it and add the budget ceiling to the three unguarded tests.",
+      "coverageRisk": "none: replaces a check that cannot fail",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:269-285",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:253-267"
+      ],
+      "claim": "The second half of 'lower Constr' (269-285) lowers TxId(#DEADBEEF) into `uplc2`, builds `gen2`/`representation2`, and asserts nothing; the expected term is commented out (285). Product-constructor lowering is therefore unchecked in this test. In the first half, `nilData` and `termValue` (256-262) are computed and unused, and the commented `/// assert(termValue == nilData)` (263) shows the intended check was dropped.",
+      "action": "Assert the TxId result: pin `uplc2` with alphaEq against the expected term, or evaluate it and compare with the expected value. Check the current lowering first: a one-field product may lower to its bare field (OneElementWrapperEmitter) rather than a Data constructor. Delete `gen2`, `representation2`, `nilData`, `termValue` and the commented lines.",
+      "coverageRisk": "none: adds an assertion",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-7",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:427-441",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:172-188"
+      ],
+      "claim": "'tag > 0 constructor: direct use of Transform variant' (427-441) evaluates ActionModule.run(Action.Transform(x => x + 1), 5) == 6. 'enum with function variant: construct and match' (172-188) already evaluates the same call, run(Transform(_ + 1), 5), plus run(Const(10), 5), and asserts the sum 16. A broken tag-1 branch (Case padding) changes 16 as well.",
+      "action": "Delete 427-441; rename 172-188 to mention tag 1 (e.g. 'enum with function variant: construct and match both tags').",
+      "coverageRisk": "low: the deleted program has no Const construction; both programs link the same two-branch match in ActionModule.run, so the tag-1 Case path is identical",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "Both tests are in the same suite (UplcConstrTest.scala, shared/). They use the same suite-level `given Options` (line 115) and the same `sir.toUplc().evaluateDebug` entry point. The deleted test (427-441) asserts run(Transform(x => x+1), 5) == 6. The survivor (172-188) evaluates the same call, run(Transform(x => x + BigInt(1)), BigInt(5)), plus run(Const(10), 5), and asserts 16. Both link the same two-branch match in ActionModule.run (lines 66-69), so the tag-1 Case path is the same. If the tag-1 branch broke, it would fail evaluation or change the sum. Only a compensating error in the Const branch could hide it, which is contrived. The survivor also covers both tags. No assertion is lost."
+    },
+    {
+      "id": "C27-8",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:274-293",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:295-315"
+      ],
+      "claim": "'field-level @UplcRepr for native list' (274-293) builds the same two-point PointSet with List.Cons as 'list prepend and contains on modified list' (295-315) and calls pointSetContains on it. The second test then prepends and checks contains and size, so it exercises the same construction and the same contains on the field-level UplcConstr list.",
+      "action": "Delete 274-293 and add `PointModule.pointSetContains(ps, mkPoint(3, 4))` (the pre-prepend check) to the condition in 295-315.",
+      "coverageRisk": "none if the extra contains check is added: it keeps the 'element at position 2 of the unmodified list' case",
+      "ciSavingSec": 0,
+      "linesRemoved": 18,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "Both tests are in the same suite and use the same entry point. The deleted test (274-293) builds the same pts with Cons/Nil and calls mkPointSet(42, pts). It asserts only pointSetContains(ps, Point(3,4)), which finds the second element of the unmodified list. The survivor (295-315) builds the same ps, then checks contains(ps2, Point(5,6)), which is the head after the prepend, and checks size == 3. Without a change the survivor does not check (3,4) on the unmodified list. That gap is why the action adds `PointModule.pointSetContains(ps, mkPoint(3,4))` to the survivor's condition. With that conjunct, the deleted assertion has an exact equivalent, on the same platform and with the same config."
+    },
+    {
+      "id": "C27-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:72-78",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/simple/ScottEncodingLoweringTest.scala:51-57",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/lowering/simple/SumOfProductsLoweringTest.scala:57-60",
+        "scalus-core/shared/src/main/scala/scalus/package.scala:73-80"
+      ],
+      "claim": "The `.toUplc(generateErrorTraces = true ...) ~=~ !(!Trace $ \"error\" $ ~Error)` assertion is written three times. None of the three suites has a given Options, so `toUplc` uses Options() and its default backend (package.scala:73-80) in all three: the Scott and SoP copies test the V3 path, not their own backend, and repeat the SirToUplcSmLoweringTest copy.",
+      "action": "Keep the assertion in SirToUplcSmLoweringTest. In the Scott and SoP suites delete it, or pass `backend = TargetLoweringBackend.ScottEncodingLowering` / `SumOfProductsLowering` so each checks its own traced error (then update the expected term if it differs). Coordinate with C10-13, which moves these structural tests into a shared trait.",
+      "coverageRisk": "none for deletion: the V3 traced-error shape stays pinned once; passing backend= adds coverage of the simple backends' traced error",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "SirToUplcSmLoweringTest.scala:72-78 (shared), ScottEncodingLoweringTest.scala:49-57 (shared) and SumOfProductsLoweringTest.scala:55-61 (jvm only) all assert `SIR.Error(\"error\").toUplc(generateErrorTraces = true, ...) ~=~ !(!Trace $ \"error\" $ ~Error)`. No suite declares a given Options: grep finds no Options in the Scott or SoP files, and SimpleLoweringTestBase gives only a PlutusVM. So toUplc falls back to Options() (package.scala:73-80). SIRDefaultOptions sets targetLoweringBackend = SirToUplcV3Lowering and optimizeUplc = false. So the SoP copy, which omits optimizeUplc = false, has the same config as the other two. All three test the V3 path, not their own backend. The surviving copy is in shared/, which covers more platforms than the jvm-only SoP copy. The `lowersTo Term.Error()` line in each suite does use its own backend, and the action does not remove it. Deletion loses no coverage."
+    },
+    {
+      "id": "C27-10",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:681-758"
+      ],
+      "claim": "'lower constant pattern match on Integer' rebuilds the same Let(x = const, match) three times (x = 1, 2, 5) with a 7-line result match each. It is an oracle law: for every integer x the lowered match returns (x match 1 => 10, 2 => 20, _ => 30). The examples never try negatives, 0, or large values, which matter for the equalsInteger chain.",
+      "action": "Lower the match once under a lambda over x (SIR.LamAbs(scrutineeVar, matchExpr)) and check forAll x in Gen.oneOf(Gen.choose(-3, 6), Arbitrary[BigInt]) that `(term $ x.asTerm).evaluate == oracle(x).asTerm`. Keep x = 1, 2 explicitly in the generator mix (Gen.frequency) so both literal branches are always hit.",
+      "coverageRisk": "low: the explicit values 1, 2 and the wildcard stay covered by the generator mix",
+      "ciSavingSec": -0.05,
+      "linesRemoved": 45,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "The law holds for every integer. IntegerSirTypeGenerator.genMatch (PrimitiveSirTypeGenerators.scala:427-449) uses tryGenMatchV4 only when the match has no wildcard and its cases are a contiguous range from 0 (lines 459-485). This match has a wildcard, so it always lowers through genMatchLegacy, an equalsInteger/ifThenElse chain (497-530). For example, the lowered term gives 10 for x = 1, 20 for x = 2, and 30 for x = -3, 0, 5 or a large x, which matches the oracle. Replacing Let(x = const) with a LamAbs loses no special path. lowerLet (Lowering.scala:558-590) binds the constant as a variable and does no constant propagation, so the scrutinee is a variable in both shapes. The same suite already lowers LamAbs and applies it to arguments (e.g. lines 610-660). With the default representation, the Integer parameter takes a Constant, so `term $ x.asTerm` is valid. The three examples pin only the results 10, 20 and 30, and the generator mix (with explicit 1 and 2) produces all three."
+    },
+    {
+      "id": "C27-11",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:64-68",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/lowering/Lowering.scala:380-427"
+      ],
+      "claim": "'lower constant' pairs every arbitrary Constant with SIRType.Integer. Lowering of SIR.Const branches on the SIR type (Lowering.scala:386-422): BuiltinList of primitive elements keeps the native list, BuiltinList/BuiltinArray of other elements is rewritten to Data elements via constantToData. With the type fixed to Integer, the generator never reaches these branches; only the fall-through (422-423) runs. (No coverage data exists for Lowering.scala in the baseline, so this is by reading.)",
+      "action": "Type each constant by its universe: `SIR.Const(c, SIRType.fromDefaultUni(c.tpe), ae)` (SIRType.scala:1294). For list/array constants with non-primitive elements assert the lowered constant evaluates to the Data-converted constant; for the rest keep `lowersTo Term.Const(c)`.",
+      "coverageRisk": "none: widens the generator",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-12",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/lowering/UplcPipeline.scala:86-90",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcPipelineTest.scala:30-45"
+      ],
+      "claim": "Options.uplcOptimizers is a public option: when non-empty it replaces the default optimizer (UplcPipeline.scala:88-89). Coverage marks line 89 as never executed, and no test in the repository sets uplcOptimizers (grep). A regression that ignores the option, or runs both pipelines, is not caught.",
+      "action": "Add a test in UplcPipelineTest: run `UplcPipeline.run` with `Options(uplcOptimizers = Seq(recordingOptimizer))` where the optimizer records its input and returns a marker term; assert it ran once, its result is the pipeline output (modulo positions), and the default optimizer passed to `run` did not run.",
+      "coverageRisk": "none: adds a test",
+      "ciSavingSec": -0.02,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-13",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/LambdaBarrierLoweringTest.scala:20-468",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/LambdaBarrierLoweringTest.scala:326-329,386-388"
+      ],
+      "claim": "470 lines for 7 small cases. Each test repeats the 7-line `new VariableLoweredValue(id, name, SIR.Var(...), Constant, optRhs)` block and the 8-line `BuilinApply2LoweredVale(addInteger, Integer, Constant, pos, a, b)` block (13 copies), plus the same TermGenerationContext/termWithNeededVars lines. Checks are nested matches with `body.toString.contains(\"42\")`/`(\"x\")`, which match any occurrence of the text. The header comment of 'transitive non-effortless dependency' (326-329) says `a` is placed outside the lambda; the closing comment (386-388) and the assertion say only `c` is.",
+      "action": "Add three local helpers: `variable(name, rhs)`, `add(a, b)` and `gen(lv): Term`. Assert each result against the full expected term with TermDSL and alphaEq (e.g. `λ(\"y\")(AddInteger $ 42 $ vr\"y\")`, `λ(\"x\")(λ(\"y\")(...)) $ (AddInteger $ 1 $ 2)`). Fix the 326-329 comment.",
+      "coverageRisk": "none: full-term equality is stricter than the toString checks",
+      "ciSavingSec": 0,
+      "linesRemoved": 230,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-14",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:253-267",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:333-339",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:597-607",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:108-111,127-130,244,457,591-595,659-662"
+      ],
+      "claim": "About ten blocks of `val r = x.evaluateDebug; r match { case Result.Success(term, _, _, _) => assert(term == v); case _ => fail(...) }` (253-267, 333-339, 520-527, 597-607, 669-677, 718-757, 790-811, 842-865) where `assert(x.evaluate == v)` says the same: Term.evaluate returns the value and throws with the failure. Dead values: `idType` (108-111, 127-130), `genDataList` (244), `uplcExpected1` (457), `uplcExpected1` (591-595), `genArg1` (659-662), plus about 12 commented printlns.",
+      "action": "Replace the success blocks with `assert(term.evaluate == expected)` (keep `evaluateDebug` only in the @unchecked failure case, or use assertThrows). Delete the dead values and commented lines. C27-6 covers the dead values in 'lower Constr'; C27-10 the integer pattern test.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 90,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-15",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:134-141",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:197-203",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrQueueTest.scala:80-87",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRUplcV3LoweringRandomTest.scala:117-125"
+      ],
+      "claim": "18 tests in UplcConstrTest, 4 in UplcConstrQueueTest and 3 in SIRUplcV3LoweringRandomTest end with the same 6-9 line `result match { case Success(Const(Integer(v)),..) => assert(v == n); case Failure(ex,..) => fail; case other => fail }` block (51 `case Result.`/`case other` lines in UplcConstrTest alone). `assert(sir.toUplc().evaluate == BigInt(n).asTerm)` asserts the same and shows the failure on error.",
+      "action": "Replace each block with one line `assert(sir.toUplc().evaluate == n.asTerm)` (ByteString/Data results likewise). Where the program is plain @Compile code that also runs on the JVM, prefer EvalTestKit.assertEvalEq, which also checks the JVM result (see C27-4). Same pattern as C10-15 in the intrinsics cluster.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 130,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-16",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRLoweringRepresentationTest.scala:7-18",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRLoweringRepresentationTest.scala:40-42",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRLoweringRepresentationTest.scala:49,73-74,96-104"
+      ],
+      "claim": "SIRLoweringRepresentationTest carries dead code: the companion fixtures TestCaseClass, TestSum and TestCaseClassOneElement (7-18) are used nowhere in the repository; 'Get default representation for Case Class' (40-42) is `pending` with no body; in 'Option.None', `optionProxy` (49), `someType` (73-74) and the `nilConstr` genConstr result (96-104) are never used, and three printlns are commented out.",
+      "action": "Delete the companion object, the pending test, and the unused values. Either assert on `nilConstr.representation` (pin the value the lowering produces today) or delete the genConstr call.",
+      "coverageRisk": "none: removes code that no assertion reads",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-17",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/FunctionNameAnnotationTest.scala:29-43",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/FunctionNameAnnotationTest.scala:77-85",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UnboxedNilTest.scala:37-51",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SirToUplcSmLoweringTest.scala:56-58",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/simple/SimpleLoweringTestBase.scala:39-41"
+      ],
+      "claim": "Three suites write their own recursive Term walker over the same 9 constructors (collectFunctionNames, collectVars, listElemTypes; IntrinsicResolverTest.containsBuiltin is a fourth, see C10-6, and it misses Case/Constr). The named-term `alphaEq` extension (`DeBruijn.deBruijnTerm(a) α_== DeBruijn.deBruijnTerm(b)`) is copied in SirToUplcSmLoweringTest and SimpleLoweringTestBase (and unused in IntrinsicResolverTest, C10-21).",
+      "action": "Add a test helper next to scalus.uplc.TermDSL (shared test dir), e.g. `extension (t: Term) def subterms: Iterator[Term]` (pre-order, all 10 cases) and `infix def alphaEq(o: Term)`. Rewrite the walkers as `term.subterms.collect { case Term.Const(Constant.List(u, _), _) => u }` etc. and delete the local copies.",
+      "coverageRisk": "low: a single walker that covers every constructor fixes the missed-Case/Constr kind of bug (C10-6)",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-18",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcPipelineTest.scala:64-71",
+        "scalus-core/shared/src/main/scala/scalus/uplc/Term.scala:280-287"
+      ],
+      "claim": "'bug 3' defines a local containsCaseOrConstr that is the same function as the main-code Term.usesConstrOrCase (Term.scala:280-287), clause for clause.",
+      "action": "Delete the local def; assert `!term.usesConstrOrCase`.",
+      "coverageRisk": "none: identical semantics",
+      "ciSavingSec": 0,
+      "linesRemoved": 8,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-19",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/MutualRecursionTest.scala:84-98",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SelfApplicationRecursionTest.scala:102-129"
+      ],
+      "claim": "MutualRecursionTest defines evalInt/evalBool (15 lines, the same 'evaluateDebug match Success => Const => value' wrapper twice) and loops over three backends in every test; SelfApplicationRecursionTest repeats the per-backend loop. C13-18 proposes SirTestDsl.assertEvaluatesOnAllBackends(sir, expected, pv) for exactly this loop in the MRE and SAT suites.",
+      "action": "After C13-18 lands, write each MutualRecursionTest case as `assertEvaluatesOnAllBackends(sir, true.asTerm, vanRossemPV)` and delete evalInt/evalBool; use it for the backend loop in SelfApplicationRecursionTest 102-129 (keep the budget asserts).",
+      "coverageRisk": "none: same evaluation on the same backends",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C27-20",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UnboxedNilTest.scala:32",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRLoweringRepresentationTest.scala:22-23",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/SIRUplcV3LoweringRandomTest.scala:24-25,54",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/UplcConstrTest.scala:116,163",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/MutualRecursionTest.scala:84,92",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/lowering/LambdaBarrierLoweringTest.scala:15,470"
+      ],
+      "claim": "Fully qualified names inline instead of imports: `scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering` in four Options givens, `scalus.compiler.Options(...)`, `scalus.cardano.onchain.plutus.prelude.fail`, `scalus.uplc.builtin.ByteString.fromString`, `scalus.compiler.sir.SIR` in two signatures. LambdaBarrierLoweringTest uses a braceless `class ...:` with `end` (15, 470); the style guide asks for `{}` on top-level definitions. Six suites spell the same V3 + vanRossemPV Options given.",
+      "action": "Import the names. Use braces in LambdaBarrierLoweringTest. Optionally share one `given Options` for 'V3 at vanRossemPV' via EvalTestKit.compilerOptions overrides where the suite already mixes in EvalTestKit after C27-15.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 4 findings of scope merge-duplicate-tests, to-property or main-bug; 4 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

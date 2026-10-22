@@ -1,0 +1,630 @@
+{
+  "cluster": "node.query-stream",
+  "summary": "The cluster is cheap (about 2 s; only the fs2 timeout test has a removable 0.45 s, C37-23) and the stream tests are carefully written, with clear rationale per test. The gaps are large, though: transaction, block and params subscriptions are never delivered in any test (QueryMatching.matchesTransaction and SubscriptionHub.txEvents/blockEvents run 0 times), the successful rollback path of SubscriptionHub and HubDriver's RollBackward path never run, and BlockfrostChainFollower is never fed a block with transactions. Two intersection rules (BlockCoverage, SubscriptionSupport) are tested only with the left arm covered, so their right arm never runs (C37-6). Two main-code defects: the UTxO query macro turns `coin > x` into the non-strict MinLovelace(x) (C37-1), and, latent, SubscriptionSupport accepts MintsPolicy as indexed while the hub never treats it as covered under partial coverage (C37-2). The query DSL tests have two exact duplicates, pattern matches that one equality replaces, and minTotal assertions that cannot fail. C8: the cluster has no generators; the generator requirements for the proposed properties are in C37-5, C37-6 and C37-11. UtxoQueryMacros coverage numbers are not meaningful (macro code runs at compile time).",
+  "behaviors": [
+    {
+      "pass": "UtxoQueryMacros",
+      "name": "buildQuery: address / txId / inputs.contains / hasAsset sources",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/UtxoQueryMacrosSpec.scala:34-97"
+      ]
+    },
+    {
+      "pass": "UtxoQueryMacros",
+      "name": "buildQuery: filters (hasAsset, coin >=, hasDatumHash), && and || combination",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/UtxoQueryMacrosSpec.scala:99-205"
+      ]
+    },
+    {
+      "pass": "UtxoQueryMacros",
+      "name": "reversed operands for txId and coin (<=, <), strict > and <, datumOption.exists variants, Filter&&Source, Filter&&Filter, Source&&Source (UtxoSource.And), asset&&asset",
+      "tests": []
+    },
+    {
+      "pass": "UtxoQueryMacros",
+      "name": "compile-time rejections: standalone filter, Query&&Query, unsupported expression, multi-param lambda",
+      "tests": []
+    },
+    {
+      "pass": "UtxoQuery",
+      "name": "Simple/Or combinators: && (Or distributes the filter), limit/minTotal keep the minimum, skip",
+      "tests": []
+    },
+    {
+      "pass": "UtxoQuery",
+      "name": "evalFilter: HasAsset, HasDatumHash, MinLovelace (via Emulator)",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/UtxoQueryDslExamplesSpec.scala:62-144"
+      ]
+    },
+    {
+      "pass": "UtxoQuery",
+      "name": "evalFilter: HasDatum, AtInputs, Or, Not",
+      "tests": []
+    },
+    {
+      "pass": "UtxoQuery / EmulatorBase.evalQuery",
+      "name": "queryUtxos end to end on the Emulator: address, asset, Or, limit, minTotal",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/UtxoQueryDslExamplesSpec.scala:38-273"
+      ]
+    },
+    {
+      "pass": "BlockfrostProvider",
+      "name": "parseUtxos: pointer address normalisation, inline datum bytes kept",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/BlockfrostAddressTest.scala:11-26",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/BlockfrostDatumTest.scala:27-33"
+      ]
+    },
+    {
+      "pass": "BlockfrostProvider",
+      "name": "combineOr: union only when both sides succeed",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/BlockfrostOrCombineTest.scala:40-76"
+      ]
+    },
+    {
+      "pass": "BlockfrostProvider",
+      "name": "reference script hash, buildPlutusScript/buildNativeScript hash checks, parseUtxoItemsWithRefHashes",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/BlockfrostScriptRefTest.scala:14-83"
+      ]
+    },
+    {
+      "pass": "SubscriptionSupport",
+      "name": "of: indexed / unindexed / unsupported for address, txId, union, intersection, replay, confirmations, kinds, scan support, TransactionStatus",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionSupportTest.scala:44-256"
+      ]
+    },
+    {
+      "pass": "SubscriptionSupport",
+      "name": "FromAsset, FromPaymentCredential, UtxoQuery.Or, MintsPolicy/MintsAsset/SpendsInput/InvolvesScript/AllOf/AnyOf, Scoped replay of Block and TransactionStatus, noRollback depth message",
+      "tests": []
+    },
+    {
+      "pass": "BlockCoverage",
+      "name": "covers: Complete, Sources, union needs every arm, intersection one arm",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/BlockCoverageTest.scala:136-156"
+      ]
+    },
+    {
+      "pass": "BlockCoverage",
+      "name": "FromInputs subset rule; intersection whose left arm is uncovered",
+      "tests": []
+    },
+    {
+      "pass": "SubscriptionHub",
+      "name": "UTxO delivery gated by coverage and idle signals",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/BlockCoverageTest.scala:86-134",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionHubTest.scala:133-148"
+      ]
+    },
+    {
+      "pass": "SubscriptionHub",
+      "name": "seeding: event types, origin stamp, rewind over undelivered blocks",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionHubTest.scala:62-96",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionHubTest.scala:184-277",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/stream/DeltaBufferPolicyTest.scala:42-62"
+      ]
+    },
+    {
+      "pass": "SubscriptionHub",
+      "name": "rollback preconditions: no horizon, past horizon, noRollback",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionHubTest.scala:98-131"
+      ]
+    },
+    {
+      "pass": "SubscriptionHub",
+      "name": "successful rollbackTo: RolledBack to delivered subscriptions, tx status NotFound, tip moves back",
+      "tests": []
+    },
+    {
+      "pass": "SubscriptionHub",
+      "name": "transaction subscriptions (txEvents, coversTxQuery) and QueryMatching.matchesTransaction",
+      "tests": []
+    },
+    {
+      "pass": "SubscriptionHub",
+      "name": "block subscriptions (InSlotRange closes past the range) and protocol-parameter updates",
+      "tests": []
+    },
+    {
+      "pass": "SubscriptionHub",
+      "name": "require: closed hub, replay refused",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionHubTest.scala:150-167"
+      ]
+    },
+    {
+      "pass": "QueryMatching",
+      "name": "matchesUtxo for FromAddress (via hub tests)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/BlockCoverageTest.scala:86-134"
+      ]
+    },
+    {
+      "pass": "QueryMatching",
+      "name": "matchesUtxo for FromAsset/FromInputs/FromTransaction/FromPaymentCredential/Or/And sources, filters and UtxoQuery.Or",
+      "tests": []
+    },
+    {
+      "pass": "Mailbox",
+      "name": "delta/latestValue ordering, outstanding pull, overflow, close, cancel, offerBuffered/flush",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/MailboxTest.scala:14-133"
+      ]
+    },
+    {
+      "pass": "Mailbox",
+      "name": "pull with an already-cancelled or later-cancelled token",
+      "tests": [
+        "scalus-streaming-fs2/jvm/src/test/scala/scalus/cardano/node/stream/fs2/Fs2StreamAdapterTest.scala:54-70"
+      ]
+    },
+    {
+      "pass": "DeltaBufferPolicy",
+      "name": "bounded default; seed does not count against the bound",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/stream/DeltaBufferPolicyTest.scala:33-62"
+      ]
+    },
+    {
+      "pass": "HubDriver",
+      "name": "forwarding, clean end, failure, close, double start, backlog drain",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/HubDriverTest.scala:68-139"
+      ]
+    },
+    {
+      "pass": "HubDriver",
+      "name": "RollBackward events and apply() throwing (rollback past horizon) fail subscribers",
+      "tests": []
+    },
+    {
+      "pass": "BlockfrostChainFollower",
+      "name": "polling, coverage per height, request cost, fork -> resync, watch position, watch during assembly",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/BlockfrostChainFollowerTest.scala:125-239"
+      ]
+    },
+    {
+      "pass": "BlockfrostChainFollower",
+      "name": "blocks with transactions (fetch, dedup, AppliedTransaction), latestBlock/transaction failure, watch after close, stale blocksAfter page",
+      "tests": []
+    },
+    {
+      "pass": "Fs2StreamAdapter",
+      "name": "fromSource ordering, failure, cancel on finish, interruptible pull, Resource release",
+      "tests": [
+        "scalus-streaming-fs2/jvm/src/test/scala/scalus/cardano/node/stream/fs2/Fs2StreamAdapterTest.scala:22-83"
+      ]
+    },
+    {
+      "pass": "StreamingEmulator",
+      "name": "one provider serves raw source and fs2 stream",
+      "tests": [
+        "scalus-streaming-fs2/jvm/src/test/scala/scalus/cardano/node/stream/fs2/OneProviderTwoStreamTypesTest.scala:23-39"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C37-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/UtxoQueryMacros.scala:137-154",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/UtxoQuery.scala:84-85,236-237",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/Types.scala:53"
+      ],
+      "claim": "buildQuery translates a strict comparison into a non-strict filter: `u.output.value.coin > amount` (and `amount < u.output.value.coin`) match the guards at UtxoQueryMacros.scala:144 and :152 and become UtxoFilter.MinLovelace(amount), which evalFilter evaluates as `coin >= amount` (UtxoQuery.scala:237). Coin has a real `>` (Types.scala:53), so the lambda compiles and the query silently also returns UTxOs holding exactly `amount`. No test uses `>` or `<`.",
+      "action": "Add to UtxoQueryMacrosSpec (or the DSL examples): an Emulator with UTxOs of exactly 5 ADA and 6 ADA at one address; `queryUtxos(u => u.output.address == a && u.output.value.coin > Coin.ada(5))` must return only the 6 ADA UTxO; same for the reversed `Coin.ada(5) < u.output.value.coin`. Main-code note only: translate `>`/`<` to MinLovelace(Coin(amount.value + 1)), or reject them at compile time.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-61",
+      "verification": "UtxoQueryMacros.scala:137-146 guard is `(op == \">=\" || op == \">\")` and :148-154 is `(op == \"<=\" || op == \"<\")`; both emit `UtxoFilter.MinLovelace($amountExpr)` unchanged. UtxoQuery.scala:85 documents MinLovelace as 'at least', and evalFilter at :236-237 is `output.value.coin >= amount`. Coin is `final case class Coin(value: Long)` with real `infix def >` and `<` (Types.scala:37,53,55), so `u.output.value.coin > Coin.ada(5)` type-checks. BlockchainProvider.scala:113-114 `queryUtxos` passes the lambda straight to buildQuery, and the original predicate is not re-applied. Normal use therefore reaches the bug: a UTxO holding exactly `amount` is wrongly returned. grep finds no test or main code that uses the strict `>`/`<` forms. The proposed tests are sound and add coverage only."
+    },
+    {
+      "id": "C37-2",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/SubscriptionSupport.scala:188",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/SubscriptionHub.scala:529-558",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/BlockfrostChainFollower.scala:247-253"
+      ],
+      "claim": "Latent (no provider emits BlockCoverage.Sources today; BlockfrostChainFollower is used only by its test): SubscriptionSupport classifies TransactionQuery.MintsPolicy as Indexed when the provider pushes down Asset (line 188), but SubscriptionHub.coversTxQuery treats MintsPolicy as never covered under Sources coverage (lines 555-557). On a metered provider such a subscription is accepted and then never delivered anything, not 'some latency' as the comment at 529-535 says: every block it would see carries Sources coverage, so its watermark never advances and it gets neither events nor Idle.",
+      "action": "Record in findings.md. Test once a Sources-coverage provider is wired: a hub with Metered caps and pushdown Asset, a MintsPolicy transaction subscription, a block with Sources coverage that minted under the policy; assert either SubscriptionSupport.of returns Unindexed/Unsupported for it or the subscriber receives the Included event. Main-code note only: make indexedTxQuery and coversTxQuery agree on MintsPolicy.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "low",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-62",
+      "verification": "SubscriptionSupport.scala:188 maps `MintsPolicy` to `pushdown.contains(PushdownKind.Asset)`, so it is Indexed under Metered caps with Asset pushdown. SubscriptionHub.scala:555-557 coversTxQuery returns false for MintsPolicy under `BlockCoverage.Sources`. releaseLocked (SubscriptionHub.scala:411-427,449) keeps only blocks where `covers` is true, so for Sources-only blocks `due` stays empty. The watermark never advances, and the subscriber gets no Included or Idle event. This contradicts the 'costs some latency' comment at :529-535. The defect is latent. The only Sources emitter is BlockfrostChainFollower.scala:252, and grep finds no main-code reference to it outside its own file. It also probes only FromAddress (:230). No main code declares PushdownKind.Asset or ScanSupport.Metered outside SubscriptionSupport. Record the bug in findings.md as the report proposes."
+    },
+    {
+      "id": "C37-3",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/SubscriptionHub.scala:322-378",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionHubTest.scala:98-131"
+      ],
+      "claim": "The successful path of SubscriptionHub.rollbackTo never runs in the full jvm/test baseline: lines 342-372 (tx status reset to NotFound for orphaned transactions, RolledBack offered to UTxO, transaction and block subscriptions that were delivered past the target, tip subscribers told the target) are uncovered. SubscriptionHubTest only tests the two throwing preconditions and the noRollback case, which asserts the absence of RolledBack; StreamingEmulator declares rollbackHorizon = None unless securityParam > 0, so the conformance suite does not reach it either.",
+      "action": "Add to SubscriptionHubTest: hub(caps(rollbackHorizon = Some(5))), a depth-0 UTxO subscription and a delta tip mailbox, apply blocks 1..4 where block 3 creates an Alice UTxO (blockWith), then rollbackTo(ChainTip(point(2), 2)). Assert the UTxO mailbox ends with RolledBack(point(2)), a txStatus subscription for block 3's tx moves Confirmed -> NotFound, the tip mailbox receives ChainTip(point(2), 2), hub.currentTip is block 2, and a depth-3 subscription that was delivered only up to block 1 gets no RolledBack. Then apply block 3' and assert delivery resumes from 3.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-4",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/QueryMatching.scala:36-61",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/SubscriptionHub.scala:536-558,584-590",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/StreamingEmulator.scala:238-243"
+      ],
+      "claim": "Transaction subscriptions are never delivered in any test: QueryMatching.matchesTransaction (36-61, every line), SubscriptionHub.txEvents (584-590) and coversTxQuery (536-558) are uncovered in the full baseline, although StreamingEmulator declares SubscriptionKind.Transaction. A wrong polarity in Not, a swapped AllOf/AnyOf, or InvolvesAddress ignoring spent outputs would pass every test.",
+      "action": "Add a hub-level suite section (SubscriptionHubTest or a new TransactionSubscriptionTest in the same package): register transaction subscriptions for All, InvolvesAddress(alice) (one tx creating, one spending at alice), MintsPolicy/MintsAsset (Transaction with a mint), SpendsInput, InvolvesScript, Not, AllOf, AnyOf(Nil); apply a block with those AppliedTransactions; assert exactly the expected Included events, Idle for a non-matching block, and that a Sources-coverage block reaches InvolvesAddress(alice) only when alice was probed (coversTxQuery). A table of (query, expected tx ids) keeps it short.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-5",
+      "check": "C4",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/QueryMatching.scala:16-34",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/EmulatorBase.scala:677-726"
+      ],
+      "claim": "QueryMatching.matchesUtxo is exercised only for FromAddress without filters: lines 18-34 (filter application, UtxoQuery.Or, and the FromAsset, FromInputs, FromTransaction, FromPaymentCredential, Or, And sources) are uncovered. It re-implements EmulatorBase.evalQuery's evalSource per item (its own doc says so), which gives an oracle: for any pagination-free query q and UTxO set u, QueryMatching.matching(q, u).toMap == EmulatorBase.evalQuery(u, q). Both sides call the same UtxoQuery.evalFilter, so the oracle checks sources and Or only.",
+      "action": "Add a property in scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream (QueryMatching is private[stream]): generate 1-8 UTxOs over 3 Party addresses (one script address), 2 tx ids and 1-2 assets, then a UtxoQuery tree (depth <= 3: Simple with an optional HasAsset/MinLovelace filter, Or, source And/Or) whose leaves are drawn from the fixture's own addresses, inputs, tx ids, assets and payment credentials, so matches actually occur; assert the oracle equality. Classify the share of non-empty results.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-6",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/BlockCoverageTest.scala:136-156",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionSupportTest.scala:59-82",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/AppliedBlock.scala:54-66",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/SubscriptionSupport.scala:169-182"
+      ],
+      "claim": "Four example tests pin one rule twice: a union is covered/indexed when every arm is, an intersection when one arm is. Each intersection example has its LEFT arm covered, so the right-arm call never runs (`||` short-circuit): coverage marks AppliedBlock.scala:57 and SubscriptionSupport.scala:182 unexecuted, and the mutation 'And(l, r) => covered(l)' passes every test. The FromInputs subset rule (AppliedBlock.scala:61-64) is also unexecuted. The law, as the code states it: covers(Sources(P), Or(l,r)) == P.contains(Or(l,r)) || (covers(l) && covers(r)); the same with And and ||; FromInputs(w) is covered iff P contains FromInputs(h) with w subsetOf h; indexedSource(Or) == both arms, indexedSource(And) == either arm.",
+      "action": "Replace BlockCoverageTest 136-156 and SubscriptionSupportTest 59-82 with one property per function over a source-tree generator (depth <= 3) whose leaves come from a small alphabet: 2-3 addresses, one asset, two FromInputs sets where one is a subset of the other, one FromPaymentCredential. Draw the probed set P (and the pushdown set) independently from the same alphabet, so 'left uncovered, right covered' occurs; check against a reference evaluator written as a 6-line match in the test. Keep one named example per rule as documentation if wanted.",
+      "coverageRisk": "low: the 4 examples are instances of the law; the property adds the right-arm and FromInputs cases",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "BlockCoverage.coveredBy (AppliedBlock.scala:53-66) is exactly `probed.contains(s) || (Or => both arms; And => either arm; FromInputs(w) => exists FromInputs(h) with w subsetOf h; else false)`. The stated law is that definition, so it holds for every input. BlockCoverageTest.scala:148-156 probes {alice} against And(alice, bob). The left arm is covered, so `||` short-circuits and the right arm is never evaluated. The mutation `And(l,r) => coveredBy(l)` survives. SubscriptionSupportTest.scala:76-82 shows the same pattern: And(FromAddress(alice), FromInputs) with blockfrostLike pushdown {Address, Asset} (:20-28). No test passes FromInputs into Sources: grep finds Sources only with FromAddress (BlockCoverageTest:50,137,149; BlockfrostChainFollowerTest:145,235). So the subset branch is unexecuted. The replaced examples (Or/And of addresses, a leaf address, FromInputs(Set.empty)) are all shapes that the proposed generator alphabet produces. Implementation notes: (1) indexedSource is private, so the SubscriptionSupport property must go through `SubscriptionSupport.of(utxoRequest(src), caps)` with scanning=Metered, mapping Indexed/Unindexed to true/false. Keep replay=NoReplay or default options so that replay rules do not interfere. (2) For covers, P should sometimes hold a composite source so that the `probed.contains(Or/And)` short path is exercised."
+    },
+    {
+      "id": "C37-7",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/SubscriptionSupport.scala:85-131,158,166-167,172,177,184-195",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionSupportTest.scala:44-256"
+      ],
+      "claim": "SubscriptionSupport.of is pure and well tested for the common cases, but many branches never run (baseline): FromAsset (172) and FromPaymentCredential (177, always unindexed) sources, a UtxoQuery.Or request (166-167), MintsPolicy/MintsAsset/SpendsInput/InvolvesScript/AllOf/AnyOf transaction queries (188-195; AnyOf(Nil) must not be indexed), Scoped replay of a Block subscription (refused, 117-121) and of TransactionStatus (allowed, 113), isIndexed for Block (158), and the noRollback wording of the confirmations refusal (88).",
+      "action": "Add one table-driven test to SubscriptionSupportTest: rows of (request, caps, expected verdict) using blockfrostLike / inMemory and their .copy variants, with Unsupported matched by type. Include each branch above, and noRollback = true with rollbackHorizon 150 > maxConfirmations 100 (expect Unsupported whose reason mentions noRollback).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-8",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/BlockfrostChainFollower.scala:122-138,150-176,214-260",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/BlockfrostChainFollowerTest.scala:56-68"
+      ],
+      "claim": "Every BlockfrostChainFollowerTest fixture returns no transactions for a watched address (FakeApi.addressTransactionsIn returns Seq.empty, transaction() fails), so the path that turns a block into AppliedTransactions is untested: fetching each tx, the `.distinct` dedup when two watched addresses touch one tx, and the order of txs (240-242 uncovered). Also uncovered: watch after close throws (128), close() (136-138), a latestBlock failure (166), a transaction() failure failing the stream (171), the loop stopping on a closed mailbox (175), and the monotonic committed guard against a stale blocksAfter page (230).",
+      "action": "Extend FakeApi with a Map[(Address, BlockNo), Seq[TransactionHash]] and a Map[TransactionHash, ObservedTransaction]; add tests: a block with one tx touching alice and bob while both are watched yields one AppliedTransaction; a failing transaction() fails events with that error; latestBlock failing fails events; watch after close() throws IllegalStateException; blocksAfter returning a lower block after a higher one does not lower the position watch reports.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-9",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/HubDriver.scala:40-66",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/HubDriver.scala:73-96",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/HubDriverTest.scala:68-139"
+      ],
+      "claim": "HubDriver's RollBackward forwarding (line 65) and its 'apply throws' path (44-51: a rollback deeper than the horizon, or with no horizon, fails every subscriber and closes the follower) are uncovered; every HubDriverTest event is a RollForward and its caps declare rollbackHorizon = None. Also uncovered: fail() after close (73) and close() after a failure (92-96).",
+      "action": "Add two tests to HubDriverTest: (1) caps with rollbackHorizon = Some(5), offer RollForward 1..3 then RollBackward(ChainTip(point(2), 2)); assert the subscriber's events end with RolledBack(point(2)) and hub.currentTip.blockNo == 2. (2) with rollbackHorizon = None, offer RollForward(1) then RollBackward(...); assert the subscriber's pull fails with IllegalStateException and follower.closed. Optionally (3) driver.close() then follower.mailbox.fail(...) leaves the subscriber completed with None.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/SubscriptionHub.scala:188-198,216-222,264-274,592-608"
+      ],
+      "claim": "Block subscriptions and protocol-parameter subscriptions are never exercised at the hub: registerBlock, blockEvents (BlockQuery.All, InSlotRange in range, and closing the stream once the chain passes the range's end, 603), registerParams and updateParams (including the no-op when the params are unchanged) are uncovered in the baseline. StreamingEmulator does not declare SubscriptionKind.Block, so the conformance suite cannot reach blockEvents.",
+      "action": "Add to SubscriptionHubTest: a block subscription with InSlotRange(2, Some(3)) over AppliedBlocks 1..4 carrying a Some(Block) (any ledger Block fixture, e.g. from the testkit or Block arbitrary): assert Applied events for slots 2 and 3 only and that the mailbox ends (pull -> None) after slot 4; a block whose coverage is Sources is not delivered. A params subscription: receives the initial params, nothing on updateParams(same), the new value on updateParams(changed).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -40,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-11",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/UtxoQuery.scala:145-164,186-214,225-246,266-281"
+      ],
+      "claim": "UtxoQuery's own combinators and filter evaluator are barely tested: Or.&& (filter distribution, 188-189), Or.limit/skip/minTotal (192-207), Simple.limit/minTotal keeping the minimum when already set (149, 160), skip (152), UtxoFilter.|| and unary_! (61, 64), evalFilter's HasDatum, AtInputs, Or and Not branches (230-245), and applyPagination with both minTotal and limit (278) are uncovered in the baseline.",
+      "action": "Add a shared UtxoQueryTest in scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node: properties limit(a).limit(b) == limit(min(a, b)) and the same for minTotal on Simple and Or; (q1 || q2) && f == Or(q1 && f, q2 && f); EmulatorBase.evalQuery(u, (q1 || q2) && f) == evalQuery(u, q1 && f) ++ evalQuery(u, q2 && f) without pagination. Examples for evalFilter HasDatum (inline datum equal by content), AtInputs, Or, Not, and for applyPagination(minTotal = 50 ADA, limit = 1).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-12",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/UtxoQueryMacros.scala:102-108,148-154,168-212,243-357",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/UtxoQueryMacrosSpec.scala:34-239"
+      ],
+      "claim": "UtxoQueryMacrosSpec covers 9 of the macro's ~20 translation shapes. Untested: reversed txId (103-108), reversed coin `<=`/`<` (149-154), both datumOption.exists forms (169-212), Filter && Source, Filter && Filter, Source && Source giving UtxoSource.And, FromAsset && FromAsset, asset-first FromAsset && address, Query && FromAsset (247-308), and every compile-time rejection (standalone filter 350-355, OR with a standalone filter 335-339, Query && Query 311-315, unsupported expression 226-240). scoverage cannot see macro code, so the baseline numbers for this file are not evidence; this list comes from reading the patterns against the tests.",
+      "action": "Add one equality assertion per missing shape (see the simplify finding for the form), and compile-error tests with scala.compiletime.testing.typeCheckErrors (or ScalaTest assertDoesNotCompile) for `u => u.output.value.coin >= x`, `u => (u.output.address == a || u.output.address == b) && (u.output.address == c || u.output.address == d)`, and `u => u.output.datumOption.isEmpty`, checking the error message prefix.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -45,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-13",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/UtxoQueryMacrosSpec.scala:207-226",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/UtxoQueryMacrosSpec.scala:99-119",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/UtxoQueryMacrosSpec.scala:228-239",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/UtxoQueryMacrosSpec.scala:85-97"
+      ],
+      "claim": "'asset as filter when combined with address source' (207-226) builds exactly the same lambda as 'address with asset filter' (99-119), and asserts less (wildcards instead of the values). 'asset as source when standalone' (228-239) builds the same lambda as 'standalone asset query (becomes source)' (85-97), again with wildcards. Any mutation that fails the duplicates also fails the originals.",
+      "action": "Delete the tests at 207-226 and 228-239.",
+      "coverageRisk": "none: the originals pin the same structure with the concrete values",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Both tests are in shared/ UtxoQueryMacrosSpec.scala (same platforms) and call the same entry point, UtxoQueryMacros.buildQuery. Test 207-226 uses the same lambda as 99-119: `u.output.address == addr && u.output.value.hasAsset(policyId, assetName)` with the same testAddress/testPolicyId/testAssetName. It matches `Simple(FromAddress(_), Some(HasAsset(_,_)), _,_,_)`. The original matches `Simple(FromAddress(a), Some(HasAsset(p,n)), None, None, None)` and also asserts a==addr, p==policyId, n==assetName, so it is strictly stronger. Test 228-239 uses the same lambda as 85-97: `u.output.value.hasAsset(policyId, assetName)`. It matches `Simple(FromAsset(_,_), None, _,_,_)`. The original matches `Simple(FromAsset(p,n), None, None, None, None)` and asserts p and n. No assertion is lost. Delete 207-226 and 228-239."
+    },
+    {
+      "id": "C37-14",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/UtxoQueryMacrosSpec.scala:34-205"
+      ],
+      "claim": "Each UtxoQueryMacrosSpec test is 11-25 lines of pattern match plus field asserts and a fail branch, but UtxoQuery/UtxoSource/UtxoFilter are case classes with structural equality, so the whole check is one comparison, e.g. `assert(buildQuery(u => u.output.address == addr && u.output.value.coin >= min) == UtxoQuery.Simple(UtxoSource.FromAddress(addr), Some(UtxoFilter.MinLovelace(min))))`. The local copies (`val addr = testAddress`, etc.) are not needed either.",
+      "action": "Rewrite each remaining test as one equality assertion (keep the names); this also gives a better failure message (ScalaTest prints both values). Keep the file in shared.",
+      "coverageRisk": "none: equality is stricter than the current matches (they ignore nothing, but equality also pins the default limit/offset fields)",
+      "ciSavingSec": 0,
+      "linesRemoved": 110,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-15",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/UtxoQueryDslExamplesSpec.scala:181-245",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/UtxoQueryDslExamplesSpec.scala:146-179"
+      ],
+      "claim": "The two minTotal tests cannot fail on the property they name: the UTxOs at the queried address total 150 ADA (>= 75) and 330 ADA (>= 150), so a query that ignores minTotal and returns everything passes `total >= required`. The early-termination outcome is only printed (println at 212-214 and 242-244). The OR test (146-179) checks only `size == 2`, which a query returning Alice + Charlie also passes.",
+      "action": "minTotal: change the fixtures so the stop point does not depend on Map iteration order: 5 x 20 ADA with minTotal 75 must return exactly 4 UTxOs (ignoring minTotal returns 5); for the OR test, Alice 2 x 100 ADA and Bob 2 x 100 ADA with minTotal 150 must return exactly 2 (ignoring it returns 4). Delete the printlns. OR test: assert the returned addresses == Set(aliceAddress, bobAddress).",
+      "coverageRisk": "none: assertions get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-16",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/UtxoQueryDslExamplesSpec.scala:15-36",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/UtxoQueryDslExamplesSpec.scala:275-279",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/UtxoQueryDslExamplesSpec.scala:40-46",
+        "scalus-cardano-ledger/jvm/src/main/scala/scalus/utils/FutureOps.scala:32"
+      ],
+      "claim": "UtxoQueryDslExamplesSpec defines its own implicit class FutureOps.futureValue (275-279) although scalus.utils.await exists for JVM tests (EmulatorTest uses it), builds Alice/Bob/Charlie addresses from hand-written key hashes (15-31, 148-154) although scalus.testing.kit.Party addresses are used by the rest of the cluster, and repeats the 'genesisHash + Map(Input(genesisHash, i) -> Output(addr, Value.ada(n)))' setup in all 8 tests.",
+      "action": "Import scalus.utils.await and replace `.futureValue` with `.await()`; use Party.Alice/Bob/Charles.address; add a local `emulatorWith(outputs: (Address, Value)*)` that numbers the inputs, and use it in every test.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-17",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/BlockCoverageTest.scala:39-43,73-81",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/BlockfrostChainFollowerTest.scala:29-33,115-123",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/HubDriverTest.scala:33-37",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionHubTest.scala:34-38,52-60"
+      ],
+      "claim": "point(n) (a ChainPoint with a one-byte hash) is copied in 4 stream suites and drain(mailbox) in 3 (repeated-defs.csv rows 'point' and 'drain'); both are byte-identical apart from drain's element type.",
+      "action": "Create scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/StreamTestKit.scala with point(n), block(n) and drain[A](ScalusAsyncSource[A]); import it in the four suites. Encode n as a big-endian long in the hash so point(n) stays distinct beyond 255 (HubDriverTest's 20000-block backlog wraps today).",
+      "coverageRisk": "none: same values",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-18",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/HubDriverTest.scala:23-31",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionHubTest.scala:19-30",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/BlockCoverageTest.scala:26-35",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/SubscriptionSupportTest.scala:172-256",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/StreamCapabilities.scala:139-151"
+      ],
+      "claim": "Six StreamCapabilities literals restate StreamCapabilities.inProcess (all pushdown, Free scanning, no maxConfirmations, idle signals): HubDriverTest 23-31 and SubscriptionHubTest 19-30 are exactly inProcess(SubscriptionKind.all, NoReplay, horizon); BlockCoverageTest 26-35 is that with scanning = Metered. SubscriptionSupportTest writes four more 9-line literals (173-181, 200-208, 220-228, 240-248) that differ from blockfrostLike in two or three fields.",
+      "action": "Use StreamCapabilities.inProcess(...) (plus .copy(scanning = ScanSupport.Metered) or .copy(idleSignals = false)) in the hub suites, and blockfrostLike.copy(pushdown = Set(PushdownKind.Address), scanning = ..., replay = NoReplay, rollbackHorizon = None, maxConfirmations = None) in SubscriptionSupportTest. In SubscriptionSupportTest also drop the first assertion of 'watching every transaction is a scan' (133-138), which repeats the first assertion of the next test (151-154).",
+      "coverageRisk": "none: same values",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-19",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/HubDriverTest.scala:111-127",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/HubDriver.scala:24-37",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/SubscriptionHub.scala:206-212,302-306"
+      ],
+      "claim": "'a second start() is harmless' cannot detect a missing `started` guard, as its own comment (120-127) admits: both pumps share one pull promise, each applies the event, and the duplicate apply is invisible through currentTip.",
+      "action": "Register a Mailbox.delta[ChainTip]() with hub.registerTip before starting (registerTip delivers the current tip at once), start twice, offer RollForward(1) and RollForward(2), and assert the drained tips == List(origin tip, tip 1, tip 2). Without the guard, applyBlock runs twice per event and each tip appears twice. Replace the 'honest scope' comment.",
+      "coverageRisk": "none: assertion gets stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-20",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/BlockfrostScriptRefTest.scala:41-52,61-62",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockfrostProvider.scala:1219-1260"
+      ],
+      "claim": "The three rejection tests use assertThrows[RuntimeException], which a MatchError, a NumberFormatException or an NPE also satisfies, so a regression that crashes for another reason before the hash check still passes.",
+      "action": "Use intercept[RuntimeException] and assert the message: 'Unsupported Blockfrost script type' for plutusV9, and the hash-mismatch wording for the wrong-hash cases (read the exact text at BlockfrostProvider.scala:1237 and :1253).",
+      "coverageRisk": "none: assertions get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-21",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/BlockfrostAddressTest.scala:14-20",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/BlockfrostDatumTest.scala:15-25",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/BlockfrostScriptRefTest.scala:67-76"
+      ],
+      "claim": "Three one-to-six-test suites for BlockfrostProvider's JSON parsing each hand-build the same Blockfrost UTxO JSON object (tx_hash 'a'*64, output_index, address, lovelace amount) and call parseUtxos/parseUtxoItemsWithRefHashes.",
+      "action": "Merge BlockfrostAddressTest, BlockfrostDatumTest and BlockfrostScriptRefTest into one BlockfrostParseTest with a single `utxoJson(index, address = default, extra: (String, ujson.Value)*)` builder; keep every test.",
+      "coverageRisk": "none: same tests",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-22",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/stream/internal/Mailbox.scala:152-191",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/stream/MailboxTest.scala:14-133"
+      ],
+      "claim": "MailboxTest never passes a CancelToken: pulling with an already-cancelled token (176, abortPull at once) and cancelling a pending pull whose slot was already replaced (190, the `pending.contains(p)` false branch) are uncovered. Only the fs2 adapter reaches the token path, and only the 'cancel a parked pull' case.",
+      "action": "Add to MailboxTest: pull(cancelled token) returns a failed future with CancelledException and the next pull() is fresh and receives the next offer; cancelling a token after its pull was abandoned does not clear a newer waiter.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C37-23",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-streaming-fs2",
+      "evidence": [
+        "scalus-streaming-fs2/jvm/src/test/scala/scalus/cardano/node/stream/fs2/Fs2StreamAdapterTest.scala:54-70"
+      ],
+      "claim": "'a stream parked on a quiet chain can still be interrupted' takes 0.545 s (timings.csv), almost all of it the fixed .timeout(500.millis); the test only needs the timeout to fire. The other ~0.5 s in this module is cats-effect runtime start-up in the first test and is not actionable.",
+      "action": "Use .timeout(50.millis); keep unsafeRunTimed(10.seconds) as the hang guard.",
+      "coverageRisk": "none: the same cancellation path runs",
+      "ciSavingSec": 0.45,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 4 findings of scope merge-duplicate-tests, to-property or main-bug; 4 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

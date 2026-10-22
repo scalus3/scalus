@@ -1,0 +1,720 @@
+{
+  "cluster": "compiler.sir",
+  "summary": "The cluster is cheap: 22 suites, about 0.25 s per run in timings.csv, so it has no ci-time findings (C7) and no generators (C8). The pass-level suites (BooleanOptimizer, StaticArgumentTransformation, MutualRecursionElimination, RemoveTraces, Wrappers, TypeVarCapture) are good, but several older suites assert with SIR.~=~, which is unification: it ignores Let flags and maps any unseen Var name to any other, so RemoveRecursivityTest and SIRRenamingTest cannot fail on the behavior they are named for (C13-1, C13-2). Coverage gaps that matter are RemoveTraces.containsVar (deleting a still-used binding), MRE rewrites under Match/And/Or, SIRLinker version and symbol errors, and AbbreviateErrorTraces, which skips Cast and Select (C13-23, main-bug, no main caller). The rest is duplication and boilerplate: duplicate or assertion-free tests in SIRTypeUnifyTest, SirDSLTypingTest, SIRTypingScalaToSIRTest and SIRApplyMethodTest, two always-pending file tests in FlatSIRClausifyTest, and a shared SIR test builder that removes about 150 lines across eight suites.",
+  "behaviors": [
+    {
+      "pass": "RemoveRecursivity",
+      "name": "drops the Recursivity flag of a single-binding let whose rhs does not refer to its name",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/RemoveRecursivityTest.scala:10-88"
+      ]
+    },
+    {
+      "pass": "MutualRecursionElimination",
+      "name": "rewrites an N-member letrec group into nested single lets; result evaluates the same on all backends; size stays polynomial",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/MutualRecursionEliminationTest.scala:54-206"
+      ]
+    },
+    {
+      "pass": "MutualRecursionElimination",
+      "name": "rejects groups of non-lambda values; leaves single-binding and non-rec lets unchanged",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/MutualRecursionEliminationTest.scala:208-234"
+      ]
+    },
+    {
+      "pass": "MutualRecursionElimination",
+      "name": "rewrites group references inside Match/And/Or/Not/Constr/Select/Cast and respects pattern shadowing",
+      "tests": []
+    },
+    {
+      "pass": "RemoveTraces",
+      "name": "replaces fully-applied Trace by its value, drops the message, recurses into Let/LamAbs/Match/IfThenElse, keeps partial Trace",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/RemoveTracesSpec.scala:24-188"
+      ]
+    },
+    {
+      "pass": "RemoveTraces",
+      "name": "drops a dead Unit let binding only when its name is not free in the rest (containsVar with shadowing)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/RemoveTracesSpec.scala:133-166"
+      ]
+    },
+    {
+      "pass": "AbbreviateErrorTraces",
+      "name": "abbreviates constant error messages to unique initials and records the map",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/AbbreviateErrorTracesSpec.scala:9-139"
+      ]
+    },
+    {
+      "pass": "AbbreviateErrorTraces",
+      "name": "recurses into LamAbs/Apply/And/Or/Not/Constr/Match/Cast/Select and transformModule",
+      "tests": []
+    },
+    {
+      "pass": "BooleanOptimizer",
+      "name": "double negation, reverse De Morgan, constant folding that keeps evaluation of the left operand, If(Not) swap, recursion into Let/Cast/LamAbs/Apply, rule counting",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/BooleanOptimizerTest.scala:37-217"
+      ]
+    },
+    {
+      "pass": "BooleanOptimizer",
+      "name": "semantics preserved for arbitrary boolean trees (oracle)",
+      "tests": []
+    },
+    {
+      "pass": "StaticArgumentTransformation",
+      "name": "lifts static params (prefix and full wrapper shapes), demotes the last all-static param, handles ExternalVar self-calls and type params",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:97-208",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:274-318",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:605-718"
+      ]
+    },
+    {
+      "pass": "StaticArgumentTransformation",
+      "name": "blocks the transform on under-saturated, bare and shadowed self-references; leaves mutual and non-rec lets alone",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:270-272",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:357-491"
+      ]
+    },
+    {
+      "pass": "StaticArgumentTransformation",
+      "name": "semantics preserved (evaluation on all backends); gated by optimizeUplc",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:210-233",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:580-594"
+      ]
+    },
+    {
+      "pass": "linking.Wrappers",
+      "name": "splits a program into Decl/Let wrappers and the inner expression, and puts them back",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/linking/WrappersTest.scala:35-74"
+      ]
+    },
+    {
+      "pass": "linking.SIRLinker",
+      "name": "error paths: incompatible SIR version, symbol not found in a module",
+      "tests": []
+    },
+    {
+      "pass": "SIR.$ (SIR apply)",
+      "name": "builds Apply with the result type, unwraps and re-wraps Decls, handles TypeLambda, rejects non-functions",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRApplyMethodTest.scala:52-267"
+      ]
+    },
+    {
+      "pass": "SIR.renameFreeVars",
+      "name": "renames free Vars and keeps bound ones",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRRenamingTest.scala:7-91"
+      ]
+    },
+    {
+      "pass": "SIR / SIRType flat encoding (ToExprHSSIRFlat, ToExprHSSIRTypeFlat, SIRTypeHashConsedFlat)",
+      "name": "round trip keeps the term/type and fills all proxies",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SirToExprTest.scala:12-94",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeSerializationTest.scala:39-177",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/FlatSIRClausifyTest.scala:38-84"
+      ]
+    },
+    {
+      "pass": "SIRUnify",
+      "name": "leastUpperBound, subtypeSeq, topLevelUnifyType with TypeProxy, TypeLambda and Annotated types",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:9-469"
+      ]
+    },
+    {
+      "pass": "SIRType.substitute / RenamingTypeVars.inType",
+      "name": "capture-avoiding substitution and shadowing-aware renaming of type variables",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/TypeVarCaptureTest.scala:22-69"
+      ]
+    },
+    {
+      "pass": "SIRType.TypeVarGenerationContext",
+      "name": "fresh type-var ids never collide; context is cached in the unification env",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/TypeVarGenerationContextTest.scala:18-69"
+      ]
+    },
+    {
+      "pass": "SirDSL / SIRType constructors",
+      "name": "implicit constant conversion types; built-in types have no unfilled proxies",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SirDSLTypingTest.scala:10-41"
+      ]
+    },
+    {
+      "pass": "PrettyPrinter",
+      "name": "renders multi-binding let and rec let groups",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/MultiBindingLetPrettyPrinterTest.scala:14-44"
+      ]
+    },
+    {
+      "pass": "compiler plugin: Scala type -> SIRType",
+      "name": "case classes, enums (with parent), prelude List, Eq, opaque types (local, top-level, with companions)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypingScalaToSIRTest.scala:46-292",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/OpaqueTypeTest.scala:31-195"
+      ]
+    },
+    {
+      "pass": "compiler plugin: sirModule/sirDeps",
+      "name": "module SIR and its dependencies are written into the module object",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRPreprocessingTest.scala:7-24"
+      ]
+    },
+    {
+      "pass": "SIRType.hasDeepListChain / V3 lowering of bounded type params",
+      "name": "flatMap/++/appendedAll chain lowers without deep List chains",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/BoundedTypeParamLoweringTest.scala:76-181"
+      ]
+    },
+    {
+      "pass": "compile + V3 lowering",
+      "name": "inline-unrolled loop vs recursive loop (measurement only)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/LoopUnrollingTest.scala:60-99"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C13-1",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/RemoveRecursivityTest.scala:10-88",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/SIRUnify.scala:147-167",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/SIR.scala:186-190"
+      ],
+      "claim": "The only RemoveRecursivity test cannot fail if the pass does nothing. It compares with SIR.~=~, which calls SIRUnify.unifySIR; for two Lets that differ only in flags, unifySIR prints a warning and succeeds (SIRUnify.scala:160-167). The flag change is the pass's whole job, so `RemoveRecursivity(x) = x` passes this test. (This is SIR.~=~, not the Term.~=~ of F-33.)",
+      "action": "Replace the ~=~ tree with direct flag checks: assert the outer `nonRecursive` Let has !flags.isRec and the inner `recursive` Let has flags.isRec. Add two hand-built cases: a single-binding Recursivity let whose rhs does not use its name becomes LetFlags.None (assert ==), and one whose rhs uses its name keeps Recursivity. Add a case where the name occurs only under a shadowing LamAbs param (stays non-recursive).",
+      "coverageRisk": "none: the new assertions are strictly stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-2",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRRenamingTest.scala:31",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRRenamingTest.scala:39-49",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRRenamingTest.scala:62-83",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/SIRUnify.scala:118-135"
+      ],
+      "claim": "Every name check in SIRRenamingTest uses SIR.~=~ on a single Var. unifySIRExpr maps an unseen left name to any right name (SIRUnify.scala:120-125, the None branch returns sameNames = true), so `Var(\"y\") ~=~ Var(\"y1\")` is true. The test passes when renameFreeVarsInExpr renames nothing, and also when it renames a bound variable. Line 88 lacks the `s` interpolator.",
+      "action": "Build the expected trees and compare with ==: for the free case assert renamed1 == Apply(Apply(Var(fun1), Var(x1)), Var(y1)); for the lambda case assert rename2 == LamAbs(x, Apply(Apply(Var(fun1), x), Var(y1))). Add rows for a non-rec Let (rhs sees the outer name), a rec Let (rhs sees the binder) and a Match Constr pattern that binds `x`, the three scoping branches of renameFreeVarsInExpr (SIR.scala:584-601, 638-647).",
+      "coverageRisk": "none: stronger assertions on the same inputs",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-3",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeSerializationTest.scala:101-133",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeSerializationTest.scala:134-156",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeSerializationTest.scala:158-176"
+      ],
+      "claim": "The TxInfo field-order test checks all 16 names before encoding, only 9 after the type round trip (148-156) and only the first after the SIR round trip (176). A decoder that loses or reorders fields 10-16 passes. The same 12-line constrDecl extraction is copied three times (104-114, 135-145, 163-173).",
+      "action": "Add a local `fieldNames(tp: SIRType): List[String]` (unwrap Fun(Unit, _), then CaseClass or single-constructor SumCaseClass) and assert fieldNames(...) == expected16 for the original type, the decoded type and the decoded SIR's type. Delete the 41 single-name asserts and the copied matches.",
+      "coverageRisk": "none: checks all 16 names on all three types instead of 16/9/1",
+      "ciSavingSec": 0,
+      "linesRemoved": 65,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:308-336",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:33",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:298-303"
+      ],
+      "claim": "'subtypeSeq from enum to enum variant' (308-336) has no assertion; it only prints. The first test asserts `lub ~=~ List(Integer)` (33); SIRType.~=~ is unification, so a lub of List[FreeUnificator] or List[A] with a free type variable also passes. The suite prints six lines to stdout on every run (298-303, 326-332).",
+      "action": "In 308-336 assert parentsSeq.isEmpty (the comment says Status is not a subtype of Done), or delete the test. At 33 assert `lub == SIRType.List(SIRType.Integer)` (or compare `lub.show`). Delete the printlns (same pattern as F-17).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-5",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:68-91",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:93-120",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:358-375",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:377-395"
+      ],
+      "claim": "Two pairs assert one behavior. 68-91 and 93-120 both compile List.Nil.type and List[(BigInt, String)] and assert subtypeSeq(nilListType, listTupleType).nonEmpty; the second also computes `nilType` (103-108) and never uses it. 377-395 builds the same left/right types as 358-375 and asserts nothing.",
+      "action": "Delete 93-120 (or make it use nilType: assert subtypeSeq(nilType, listTupleType).nonEmpty, the Nil-constructor-to-List case it was named for). Delete 377-395.",
+      "coverageRisk": "low: if 93-120 is rewritten to use nilType, it adds the CaseClass-to-SumCaseClass direction; deleting 377-395 loses nothing (no assertion, identical input to 358)",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "SIRTypeUnifyTest.scala:68-91 and 93-120 compile the same Nil.type and List[(BigInt,String)] lambdas. Both assert subtypeSeq(nilListType, listTupleType, Env.empty).nonEmpty (lines 86-88 and 115-117). nilType (103-108) is never used. Its only side check is the fail branch, which asserts that Nil.type is a SumCaseClass or CaseClass, and that constrType(\"...List$.Nil\") does not throw. Other tests cover that constrType call (SirToUplcSmLoweringTest.scala:229,432,512). Lines 377-395 build the same left (Fun(Integer, List(tA))) and right (TypeLambda(List(tA), Fun(tA, Fun(Integer, listA)))) as 358-375, with the same TypeVar id 100. They call the same topLevelUnifyType and assert nothing. Lines 358-375 assert isFailure on the same input, which also proves the call does not throw. Rewriting 93-120 to use nilType is optional new coverage. It can also fail if CaseClass-to-SumCaseClass subtyping does not hold today."
+    },
+    {
+      "id": "C13-6",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:17-25",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:76-84",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:288-296",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:409-462",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:27-31"
+      ],
+      "claim": "The `compile { (x: T) => x }.tp match { case Fun(_, tp) => tp; case _ => fail }` block is written 10 times; the same 13-line SIRType.Annotated value is built three times (411-423, 430-442, 450-462); commented-out printlns remain (27, 31, 44, 48, 212-214).",
+      "action": "Add `private def resultType(sir: SIR): SIRType` and one `private val annotatedListInt`; use them in all tests; delete the commented printlns.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-7",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SirDSLTypingTest.scala:17-20",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SirDSLTypingTest.scala:32-35",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SirDSLTypingTest.scala:10-15",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SirDSLTypingTest.scala:37-43"
+      ],
+      "claim": "'list type fron macro is created without unfilled proxies' (32-35) has the same body as 'list type is created without unfilled proxies' (17-20): checkAllProxiesFilled(SIRType.List(SIRType.Integer)). 'builtin.List is used in constants' (37-43) asserts everything 'type list of ints moved to SIR via implicit conversion' (10-15) asserts, plus isInstanceOf[SIR.Const].",
+      "action": "Delete 32-35 and 10-15.",
+      "coverageRisk": "none: identical or subsumed assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "SirDSLTypingTest.scala:17-20 and 32-35 have the same body: SIRType.List(SIRType.Integer) followed by checkAllProxiesFilled. The test name says 'from macro', but no macro runs. Lines 10-15 assert only sir.tp == BuiltinList(Integer) on List(1,2,3), using the same SirDSL.given conversion. Lines 37-43 assert the same thing on the same input, and also assert isInstanceOf[SIR.Const]. All of these are in one shared file, so platform coverage does not change."
+    },
+    {
+      "id": "C13-8",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypingScalaToSIRTest.scala:46-63",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypingScalaToSIRTest.scala:277-292"
+      ],
+      "claim": "'check that simple case class is mapped to case class in fun' and 'regular case class should not have parent' compile the same lambda (x => ClassA1(x); `new` makes no difference) and match the same pattern Fun(Integer, CaseClass(_, Nil, None)); the first checks the full name, the second a substring.",
+      "action": "Delete 277-292; rename 46-63 to say it also pins 'no parent' (the None in its pattern).",
+      "coverageRisk": "none: 46-63 asserts the stronger name check and the same None parent",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "SIRTypingScalaToSIRTest.scala:46-63 compiles (x: BigInt) => new ClassA1(x). It matches Fun(Integer, CaseClass(constrDecl, Nil, None)) and asserts the full name '...SIRTypingScalaToSIRSpecScope$.ClassA1'. Lines 277-292 compile ClassA1(x) without new, match the same pattern including None as the parent, and assert only name.contains(\"ClassA1\"). For a plain case class, the companion apply and new both produce the same Constr in SIR. The pattern requires the same Integer-to-CaseClass type, so the deleted test has no extra assertion. Both tests are in one shared file."
+    },
+    {
+      "id": "C13-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRApplyMethodTest.scala:94-120",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRApplyMethodTest.scala:248-267"
+      ],
+      "claim": "'apply function wrapped in multiple Decls' and 'apply with Decl preserves Decl order' both apply a lambda wrapped in nested Decls and check that the Decls come back in the same order; 248-267 with three names, 94-120 with two plus the inner Apply fields.",
+      "action": "Keep one test: three nested Decls, assert result == Decl(d1, Decl(d2, Decl(d3, Apply(lam, arg, Integer, emptyAnns)))). Delete the other.",
+      "coverageRisk": "none: the merged == covers order, Decl identity and the inner Apply",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "SIRApplyMethodTest.scala:94-120 checks d1, then d2, then Apply(f == lam, a == arg). Lines 248-267 check only the order of Decl names (Outer, Middle, Inner). SIR.$ (SIR.scala:217-247) strips the Decls. It builds Apply(term, arg, resultType, term.anns) and re-wraps the Decls in their original order. Here term.anns is lam.anns, which is emptyAnns (mkLam, line 23-29), and resultType is Integer. So the proposed equality, result == Decl(d1, Decl(d2, Decl(d3, Apply(lam, arg, Integer, emptyAnns)))), holds. It covers every assertion of both tests: order, Decl identity, f, and arg. It is stronger, because it also pins tp and anns."
+    },
+    {
+      "id": "C13-10",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRApplyMethodTest.scala:52-92",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRApplyMethodTest.scala:122-185",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRApplyMethodTest.scala:220-246"
+      ],
+      "claim": "Each test destructures the result with a match and asserts fields one by one (f, a, tp, anns) plus a fail branch. SIR nodes are case classes, and `$` copies the function's anns, so one `assert(result == SIR.Apply(f, arg, tp, f.anns))` says the same. 'apply extracts correct output type' (171-185) is the curried test's first step (229-235).",
+      "action": "Rewrite tests 52, 69, 122, 146, 220 as one-line == assertions against the expected node (a table of (name, fun, arg, expectedTp) rows is fine); delete 171-185.",
+      "coverageRisk": "none: == compares every field the matches compared, and more",
+      "ciSavingSec": 0,
+      "linesRemoved": 80,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-11",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/OpaqueTypeTest.scala:31-55",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/OpaqueTypeTest.scala:80-195"
+      ],
+      "claim": "Ten of eleven tests are `sir.tp match { case <expected> => succeed; case _ => fail(...) }` with 10-13 lines each. SIRType.Fun/Integer/ByteString are case classes and objects, so `assert(sir.tp == Fun(Integer, Integer))` is the same check, and ScalaTest prints both sides on failure.",
+      "action": "Replace each match with `assert(sir.tp == expected)`; keep the compile blocks (they are macros and cannot move into a loop).",
+      "coverageRisk": "none: same expected types",
+      "ciSavingSec": 0,
+      "linesRemoved": 80,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-12",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypingScalaToSIRTest.scala:223-237",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/OpaqueTypeTest.scala:67-70"
+      ],
+      "claim": "Tautologies in plugin-typing tests. SIRTypingScalaToSIRTest: constrDecl is found by `_.name.contains(\"CaseA\")` and then asserted to contain \"CaseA\" (229-232); `caseClass.show.contains(\"MultiCaseEnum\")` holds for the constructor's own name whatever the parent is (234-237), and caseClass comes from decl.constrType, which sets the parent itself, so the plugin's typing is not checked. OpaqueTypeTest:68 accepts any CaseClass (`|| tp1.isInstanceOf[SIRType.CaseClass]`).",
+      "action": "SIRTypingScalaToSIRTest: assert the compiled result type is SumCaseClass(decl, Nil) with decl.name == \"...SIRTypingScalaToSIRSpecScope$.MultiCaseEnum\" and that decl.constructors.map(_.name) ends with CaseA and CaseB; drop the two tautologies. OpaqueTypeTest: compare tp1 with the result type of `compile { (x: (BigInt, BigInt)) => x }`.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-13",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/BooleanOptimizerTest.scala:201-209"
+      ],
+      "claim": "'stay linear on deeply nested negated conditionals' asserts `optimized != null`, which cannot fail. Only a hang would fail it, and the result shape is not checked.",
+      "action": "Build the expected term with the same fold, each level rewritten to ifThenElse(acc, varC, varB) (If(Not) swaps the branches), and assert optimize(deep) == expected; also assert BooleanOptimizer.optimizeCounting(deep)._2.total == 60 to pin one rewrite per level (linear work).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-14",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/MultiBindingLetPrettyPrinterTest.scala:21-25",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/MultiBindingLetPrettyPrinterTest.scala:39-43"
+      ],
+      "claim": "The pretty-printer tests only check that `let`, `in`, `and`, `fun f` and `a: Int` occur somewhere. A printer that drops the second binding's value, or prints the rec group without `rec`, passes.",
+      "action": "Assert the exact rendered string (let.show == \"...\") for both lets, taken from the current output after a manual check.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-15",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/LoopUnrollingTest.scala:60-99"
+      ],
+      "claim": "'Loop unrolling: inline vs recursive' prints sizes and costs with info() and asserts only that both scripts succeed. The comparison it is named for is not asserted, and the failure path (`throw` on a missing signature) is never run.",
+      "action": "Keep the two evaluations; assert unrolled mem < recursive mem and unrolled fee < recursive fee (measure once to confirm the direction); add one case per script with a wrong signature and assert Result.Failure. If the owner sees it as a measurement, move it to bench instead.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-16",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/FlatSIRClausifyTest.scala:86-128",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/FlatSIRClausifyTest.scala:9"
+      ],
+      "claim": "Two tests read files under `scalus-examples/jvm/target/scala-3.3.6/...`. The build has no 3.3.6 target (LTS is 3.3.8, build.sbt:40), so both always end as `pending`; the second asserts nothing even when the file exists, and the first prints only when a local `toPrint = false` flag is flipped.",
+      "action": "Delete both tests and the java.io import.",
+      "coverageRisk": "none: they never run",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-17",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/BoundedTypeParamLoweringTest.scala:76-127",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/BoundedTypeParamLoweringTest.scala:129-181"
+      ],
+      "claim": "The two tests run the same steps on two programs: walk the SIR for deep List chains, then lower with an identical SirToUplcV3Lowering setup. The first checks ExternalVar/Apply/LamAbs/Let types, the second only Let bindings, and it dumps every binding with info() on each run.",
+      "action": "Extract one `assertNoDeepChainsAndLowers(sir)` that checks all four node kinds and lowers; call it for both programs; drop the info dump (put the binding list into the failure message instead).",
+      "coverageRisk": "none: the second program gains the ExternalVar/Apply/LamAbs checks",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-18",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/MutualRecursionEliminationTest.scala:14-22",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/MutualRecursionEliminationTest.scala:71-84",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/MutualRecursionEliminationTest.scala:114-123",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:18-26",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:48-75",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:210-223",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRApplyMethodTest.scala:17-50",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/RemoveTracesSpec.scala:8-22",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/BooleanOptimizerTest.scala:14-35",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/linking/WrappersTest.scala:9-15",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/MultiBindingLetPrettyPrinterTest.scala:6-12",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/AbbreviateErrorTracesSpec.scala:7"
+      ],
+      "claim": "Eight suites in this cluster (and seven lowering suites) define their own `ann`/`anns`/`emptyAnns`, `intConst`/`int`/`mkConst`, `v`/`vr`/`mkVar`, `mkLam` and `let` builders. SAT alone writes `SIR.LamAbs(v(..), body, List.empty, ann)` about 25 times. MRE (4x) and SAT (1x) repeat the same 12-line 'for backend <- TargetLoweringBackend.values ... evaluateDebug ... assert term' loop. SIR.Const already has integer/boolean/string/unit builders (SIR.scala:404-420) that only RemoveTracesSpec uses.",
+      "action": "Add scalus-core/shared/src/test/scala/scalus/compiler/sir/SirTestDsl.scala: int(n) / bool(b) / str(s) via SIR.Const.*, v(name, tp), lam(params: SIR.Var*)(body) (typed params, no type params), let(name, tp, rhs)(body), letRec(bindings*)(body), app(f, a) via SirDSL.$, and assertEvaluatesOnAllBackends(sir, expected: Term, pv). Adopt it in the eight suites; replace SAT's local varNames with SIR.accumulate (SIR.scala:753). Do not use SirDSL.lam (see C13-28). Instance of F-8 (helper structure).",
+      "coverageRisk": "none: builders only; the trees stay equal",
+      "ciSavingSec": 0,
+      "linesRemoved": 150,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-19",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:127-198",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:407-468",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:493-576",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/StaticArgumentTransformationTest.scala:225-233",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/transform/StaticArgumentTransformation.scala:150"
+      ],
+      "claim": "Only `program` (the prefix shape) is evaluated after SAT. The full-wrapper shape (mid), the over-saturated self-call (mk) and the nested letrecs are checked by shape only; for mk the 'trailing arg kept' check is `names.contains(\"y\")`. A rewrite that passes the wrong argument in the full wrapper, or drops `y` but keeps another `y` use, keeps those tests green. The duplicate-param-name guard (main line 150) is uncovered. The 'sanity baseline' test (225-233) only re-checks the fixture.",
+      "action": "With the backend helper from the extract-helper finding, assert for mid (4 double 0), mk (5 3 1) and outer (double 2): eval(StaticArgumentTransformation(p)) == eval(p) on every backend. Fold 225-233 into 210-223 by comparing with the untransformed result per backend. Add `let rec go = λx. λx. go x x` and assert SAT returns it unchanged.",
+      "coverageRisk": "none: adds semantic checks",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-20",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/RemoveTraces.scala:114-158",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/RemoveTraces.scala:46-59",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/RemoveTracesSpec.scala:133-166"
+      ],
+      "claim": "RemoveTraces drops a Unit let binding when containsVar says its name is not free in the rest. Coverage shows containsVar's shadowing and traversal branches (lines 115, 121-156: Let shadowing, LamAbs, Apply, IfThenElse, Match pattern shadowing, Constr, Select, Cast) never run in the whole jvm/test baseline; the tests use only a bare Var body. A wrong `false` in any branch deletes a binding that is still used, which gives an unbound variable at lowering under removeTraces = true (UplcPipeline.scala:55).",
+      "action": "Add RemoveTracesSpec cases: `let u = trace(m)(()) in f u` (u used under Apply) keeps the binding as `let u = () in f u`; the same with the use under IfThenElse, Constr and Match body; `let u = trace(..)(()) in (λu. u)` and a Match case whose Constr pattern binds `u` drop the binding (shadowed); a later binding that uses u keeps it.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-21",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/MutualRecursionElimination.scala:238-275",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/MutualRecursionElimination.scala:129-136",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/MutualRecursionEliminationTest.scala:25-38"
+      ],
+      "claim": "Every MRE fixture builds members as λn. if .. then .. else callee(n - 1), so rewriteExpr's Select, And, Or, Not, Match (with Constr-pattern shadowing), Constr and Cast branches (238-275) are uncovered in the baseline. A member reference under a Match case or an && is never rewritten in any test, and a pattern binder that shadows a group name is untested.",
+      "action": "Add an MRE test: isEven/isOdd where the recursive call sits inside `n == 0 || callee(n - 1)` style And/Or/Not and inside a Match on a prelude Option (Constr pattern), evaluated on all backends with the shared helper; one case where a Constr pattern binder named like a group member shadows it (assert the inner Var is left as is).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -40,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-22",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/linking/SIRLinker.scala:241-247",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/linking/SIRLinker.scala:269-285",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/linking/SIRLinker.scala:56-60"
+      ],
+      "claim": "SIRLinker's error paths are uncovered: 'Symbol not found during linking' (243-246) and the incompatible SIR version check (274-285). Both are what a user sees when a dependency was compiled by another Scalus version or is out of date. No test in the cluster constructs a SIRLinker directly.",
+      "action": "Add linking/SIRLinkerErrorsTest: build Module values by hand, construct `new SIRLinker(options.copy(printErrors = false), Map(name -> module))`, link an ExternalVar into it; assert retrieveErrors contains 'incompatible SIR version' for version (SIRVersion._1 + 1, 0) and for (SIRVersion._1, SIRVersion._2 + 1), none for the current version, and 'Symbol not found' for a name the module does not define.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-23",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/AbbreviateErrorTraces.scala:115-148",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/SIR.scala:398",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/SIR.scala:501"
+      ],
+      "claim": "By reading (not executed): AbbreviateErrorTraces.transformAnnotatedSIR has no Cast or Select case and falls into `case _ => sir` (147). An Error under a Cast (the plugin emits Cast around typed expressions) or inside a Select scrutinee keeps its full message and is missing from the abbreviation map. RemoveTraces handles both nodes (RemoveTraces.scala:98-102). Low impact today: no main code calls AbbreviateErrorTraces.",
+      "action": "Add AbbreviateErrorTracesSpec cases: Cast(Error(\"Failed check\"), Integer) and Select(Error(..), field) are abbreviated; also cover the uncovered LamAbs, Apply, And/Or/Not, Constr, Match and transformModule branches with one tree each. Main-code note: add Cast and Select cases, or delete the class if it has no user.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -40,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-44",
+      "verification": "AbbreviateErrorTraces.scala:115-148 matches Error, Let, LamAbs, Apply, And, Or, Not, IfThenElse, Constr and Match. Every other node falls through to `case _ => sir` (147), including Select (SIR.scala:398) and Cast (SIR.scala:501). So an Error inside a Cast term or a Select scrutinee keeps its full message. RemoveTraces handles both nodes (RemoveTraces.scala:98-102). The plugin emits Cast in pattern-match narrowing (PatternMatchingCompiler.scala:2132,2583; SIRCompiler.scala:1568). The bug is not reachable from normal use today: the only reference outside docs is AbbreviateErrorTracesSpec, and no main code or plugin calls the class. The finding states this correctly."
+    },
+    {
+      "id": "C13-24",
+      "check": "C4",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/transform/BooleanOptimizerTest.scala:37-217",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/transform/BooleanOptimizer.scala:1"
+      ],
+      "claim": "BooleanOptimizer is tested by 24 example rewrites, and several rules exist only to keep evaluation order (a && false, a || true, idempotence, complementation). No test checks the law 'optimize preserves the value and the failure behavior' for trees the examples do not list. The cluster has no generator at all (C8).",
+      "action": "Add one property: a Gen of boolean SIR trees over vars a, b, c, constants and an `err` leaf (SIR.Error) with And/Or/Not/IfThenElse up to depth 6; a 15-line test-side evaluator (Error = Left); for all 8 assignments of a, b, c assert eval(optimize(t)) == eval(t). Keep the examples (they pin the rewrite shapes).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-25",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SirToExprTest.scala:12-94",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/FlatSIRClausifyTest.scala:38-84",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeSerializationTest.scala:12-37"
+      ],
+      "claim": "SirToExprTest's five tests and FlatSIRClausifyTest's first test are hand-picked instances of one law: flat encode then decode returns the same SIR / SIRType with all proxies filled. Each repeats the bitSize/EncoderState/decode boilerplate, and the corpus is four small values plus one enum.",
+      "action": "Replace them with one corpus test: for every def in the sirModule of the prelude List, Option, SortedMap and v3 ScriptContext objects (Module.defs), round-trip the value through ToExprHSSIRFlat and its type through ToExprHSSIRTypeFlat; assert checkAllProxiesFilled and equality of `.show` (or == where it holds). Keep the tailList rows as explicit cases. Reuse the encodeDecode helpers of SIRTypeSerializationTest (move them to the shared SirTestDsl).",
+      "coverageRisk": "low: the corpus must still contain a builtin application with a list type (the tailList proxy regression); keep those two rows explicitly",
+      "ciSavingSec": -0.5,
+      "linesRemoved": 60,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The law holds. ToExprHSSIRTypeFlat delegates to SIRTypeHashConsedFlat (SIRToExpr.scala:41-53), so the corpus test would still exercise the HC path of FlatSIRClausifyTest. sirModule exists on the prelude objects (SIRCompiled.scala:8; used in SIRPreprocessingTest.scala:9). The proposed action has 3 defects. (1) It compares with .show or ==. The current tests use ~=~, a structural unify (SIR.scala:186, SIRType.scala:15), and .show equality is weaker. (2) SirToExprTest 'serialize/deserialize List' (lines 12-30) is a SIR.Const of a non-empty Constant.List [1,2,3] with the type SIRType.List(Integer). Prelude List/Option/SortedMap/ScriptContext defs build empty lists with the mkNilData/mkNilPairData builtins (List.scala:230,246), so the corpus probably contains no such constant. (3) FlatSIRClausifyTest:38-84 is a JVM-only test of a DataDecl.tp, compiled from a fresh user enum with recursive fields, and it asserts unification. Module.defs gives def types, not DataDecl types, unless the decls are also iterated."
+    },
+    {
+      "id": "C13-26",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeSerializationTest.scala:49-95",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:10-14",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypingScalaToSIRTest.scala:84-112",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/LoopUnrollingTest.scala:72",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRPreprocessingTest.scala:9-23",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SirToExprTest.scala:14-20",
+        "scalus-core/jvm/src/test/scala/scalus/compiler/sir/FlatSIRClausifyTest.scala:38",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeUnifyTest.scala:56"
+      ],
+      "claim": "Fully qualified names `scalus.cardano.onchain.plutus.prelude.List/Option` and `scalus.uplc.Constant` are written inline about 40 times instead of an import (BoundedTypeParamLoweringTest:5 already uses `List as PList`). SIRPreprocessingTest uses `!= None` and `!= null`. Test names contain typos: 'sericalie', 'desericalize', 'fron', 'corret'.",
+      "action": "Import `scalus.cardano.onchain.plutus.prelude.{List as PList, Option as POption}` and `scalus.uplc.{Constant, DefaultUni}`; use `.exists` / `isDefined`; fix the four typos.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-27",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SirDSLTypingTest.scala:45-52",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypingScalaToSIRTest.scala:30-41",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeSerializationTest.scala:99-100",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeSerializationTest.scala:115",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypeSerializationTest.scala:179",
+        "scalus-core/shared/src/test/scala/scalus/compiler/sir/SIRTypingScalaToSIRTest.scala:61"
+      ],
+      "claim": "Commented-out code: a disabled test (SirDSLTypingTest:45-52), a stale DataDecl sketch (SIRTypingScalaToSIRTest:30-41), commented printlns and an empty test stub (SIRTypeSerializationTest:99-100, 115, 179).",
+      "action": "Delete them.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C13-28",
+      "check": "C9",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/SirDSL.scala:28-37"
+      ],
+      "claim": "By reading (not executed): SirDSL.lam(names*)(term) (and its alias λ) types each parameter Var as `s.tp`, the type of the body built so far, not the parameter's type: lam(\"x\")(Const(1)) gives LamAbs(Var(\"x\", Integer), ...) for any x, and the outer params get the inner lambda's Fun type. Every SIR lambda built with it is mistyped. No main or test code calls it today (the λ calls in tests are the UPLC TermDSL).",
+      "action": "Main-code note only: delete SirDSL.lam/λ, or take typed params (lam(params: SIR.Var*)(body)). Test side: the shared SirTestDsl of C13-18 must not delegate to it.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-45",
+      "verification": "SirDSL.scala:28-37: lam folds right over names and builds SIR.Var(e, s.tp, ...), where s is the body accumulated so far. So lam(\"x\")(Const(1)) types x as Integer, the body type. With 2 names, the outer param gets the inner LamAbs's Fun type. There are no callers: grep over the whole repo finds SirDSL used by PrettyPrinter (only lamAbsToList/applyToList) and by 5 test files. None of those test files calls lam( or λ(. Note: SirDSL is public in scalus.compiler.sir, a MIXED MiMa package, so deleting lam/λ needs per-symbol MiMa filters, or a deprecation."
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 7 findings of scope merge-duplicate-tests, to-property or main-bug; 6 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

@@ -1,0 +1,531 @@
+{
+  "cluster": "examples.6",
+  "summary": "Cluster examples.6 is the payment splitter (naive and stake-validator 'optimized' validators, their UPLC proofs, TxBuilder/Emulator tests) and the price bet with its beacon oracle. It is cheap (about 6 s: TxBuilder 2.6 s, Pricebet 2.3 s, proofs 1.2 s); C31-7 and C31-8 remove repeated script lowering (F-19 pattern) for ~3 s. Reading the validators found two main-code defects: the optimized splitter counts outputs instead of payees, so a submitter can take another payee's share (C31-1), and the oracle validates the old rate, not the new one (C31-20). Assertions are weak where it matters: Pricebet's assertFailure ignores the expected message and one expected message is wrong (C31-2), two splitter regexes hide that the optimized validator fails for another reason (C31-5), and two TxBuilder tests assert nothing useful (C31-6). Most rejection branches of PricebetValidator, OracleValidator and the optimized reward endpoint have no test (C31-3, C31-4); on-chain code has no scoverage data (F-9), so these gaps come from reading. Related findings in other reports: examples.2 C11-18 (runValidator helper), examples.4 C16-21 (verification encoding helpers).",
+  "behaviors": [
+    {
+      "pass": "NaivePaymentSplitterValidator",
+      "name": "honest payout accepted: non-submitters get floor(locked/n), submitter gets the rest",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/NaivePaymentSplitterValidatorTest.scala:89-93",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:75-152",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:256-265",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:232-238"
+      ]
+    },
+    {
+      "pass": "NaivePaymentSplitterValidator",
+      "name": "only a payee may submit; the fee payer input must exist",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:153-162",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:196-199"
+      ]
+    },
+    {
+      "pass": "NaivePaymentSplitterValidator",
+      "name": "outputs go only to payee keys, never to a script",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:183-192",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:207-211"
+      ]
+    },
+    {
+      "pass": "NaivePaymentSplitterValidator",
+      "name": "every payee is paid",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:163-182",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:213-216"
+      ]
+    },
+    {
+      "pass": "NaivePaymentSplitterValidator",
+      "name": "non-submitters get exactly the split; remainder < nPayed",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:193-202",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:201-205",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:218-221"
+      ]
+    },
+    {
+      "pass": "NaivePaymentSplitterValidator",
+      "name": "contract inputs hold only ADA",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/NaivePaymentSplitterValidatorTest.scala:95-147",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:223-230"
+      ]
+    },
+    {
+      "pass": "NaivePaymentSplitterValidator",
+      "name": "second payee input ('Already found a fee payer') and foreign input ('Input not from the contract or payer') rejected",
+      "tests": []
+    },
+    {
+      "pass": "OptimizedPaymentSplitterValidator.spend",
+      "name": "spend needs the script's own withdrawal; redeemer index names the own input",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:205-222",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:242-254"
+      ]
+    },
+    {
+      "pass": "OptimizedPaymentSplitterValidator.certify",
+      "name": "only stake registration / deregistration certificates",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:266-271",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:186-195"
+      ]
+    },
+    {
+      "pass": "OptimizedPaymentSplitterValidator.reward",
+      "name": "honest payout with honest redeemer accepted",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:90-94",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:261-264",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:262-264"
+      ]
+    },
+    {
+      "pass": "OptimizedPaymentSplitterValidator.reward",
+      "name": "non-change payees get exactly splitPerPayee, whatever the redeemer claims (2 payees, 2 outputs)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:256-260",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:193-202"
+      ]
+    },
+    {
+      "pass": "OptimizedPaymentSplitterValidator.reward",
+      "name": "redeemer consistency: sumContractInputs / nPayed mismatch, change < split",
+      "tests": []
+    },
+    {
+      "pass": "OptimizedPaymentSplitterValidator.reward",
+      "name": "only-ADA contract inputs, one payee input, no foreign inputs",
+      "tests": []
+    },
+    {
+      "pass": "OptimizedPaymentSplitterValidator.reward",
+      "name": "every payee is paid (counts outputs, not payees: see main-bug finding)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:163-182"
+      ]
+    },
+    {
+      "pass": "PricebetValidator",
+      "name": "Join: no player yet, doubled stake, player signs, owner/deadline/rate unchanged",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:41-61",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:63-95"
+      ]
+    },
+    {
+      "pass": "PricebetValidator",
+      "name": "Win: player signs, before deadline, oracle at oracle script with beacon, oracle rate > bet rate",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:97-137",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:139-181",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:183-220",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:428-534"
+      ]
+    },
+    {
+      "pass": "PricebetValidator",
+      "name": "Timeout: owner signs after deadline",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:222-242",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:244-261"
+      ]
+    },
+    {
+      "pass": "OracleValidator.mint",
+      "name": "beacon mint spends the seed and mints exactly one token; burn burns exactly one",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:322-366",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:368-389",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:391-426"
+      ]
+    },
+    {
+      "pass": "OracleValidator.spend",
+      "name": "Update: authorized signer, continuation at same address, timestamp before validity range; non-zero rate",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:263-286",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:288-320"
+      ]
+    },
+    {
+      "pass": "PricebetTransactions",
+      "name": "off-chain builders for initiate/join/win/timeout/oracle create/update/burn",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:641-686",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:22-39"
+      ]
+    },
+    {
+      "pass": "PricebetTransactions",
+      "name": "seed UTxO not found error (uncovered, line 76)",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C31-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidator.scala:170-192",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:163-182",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:256-260"
+      ],
+      "claim": "OptimizedPaymentSplitterValidator.reward counts OUTPUTS, not distinct payees: actualNPayed is +1 per payee output (lines 180, 187) and line 192 only requires payees.length === actualNPayed. With payees A, B and 100 locked, a submitter A can pay A 50 (+change) and A 50 again: n = 2, every output is to a payee, the redeemer (A, 100, 50, 2) passes all checks, and B gets nothing. Same with 3 payees and a duplicated output to one payee. The naive validator aggregates per payee (AssocMap, lines 79-107) and is not affected. By reading, not executed. No example has two outputs to one payee, and the proofs fix the output shape to both(toKey(a,..), toKey(b,..)).",
+      "action": "Add a test row to PaymentSplitterTestCases (or a direct test in OptimizedPaymentSplitterValidatorTest): payees (A, B), contract 100, outputs (A gets 50+change, A gets 50), honest redeemer; assert both validators reject. Main-code note: count distinct paid payees (aggregate per credential as the naive one does, or require each non-change payee credential to appear once).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-50",
+      "verification": "The defect is real. In OptimizedPaymentSplitterValidator.scala:170-189 the output fold adds n+1 for every PubKeyCredential output to a payee (lines 180 and 187), with no per-credential aggregation. Line 191 only requires actualNPayed === nPayed and line 192 only requires payees.length === actualNPayed. sumPayeeOutputs is bound (line 170) but never used. Scenario: payees (A, B), 100 locked, A submits with its own input. Outputs are A 50+change and A 50. Both outputs go to the change branch, so n=2 and changeSum is at least 50. The redeemer (A, 100, 50, 2) gives remainder 0 (lines 199-204). All checks pass and B gets nothing. The spend endpoint is reachable in normal use: it only calls StakeValidator.spendMinimal (line 102), so the reward check is the only guard. The 3-payee variant also works: two exact-split outputs to B and none to C give n=3. The naive validator in PaymentSplitterValidator.scala:79-109 sums per payee in an AssocMap, then counts distinct payees, so the same transaction gives nPayed=1 and fails 'Not all payees were paid'. No row in PaymentSplitterTestCases.scala:74-203 has two outputs to one payee."
+    },
+    {
+      "id": "C31-2",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:735-748",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:319",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/OracleValidator.scala:94",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/OracleValidator.scala:134",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:424-425"
+      ],
+      "claim": "PricebetValidatorTest.assertFailure takes expectedError but never reads it: it asserts only result.isFailure and submitResult.isLeft. All 6 negative tests pass on any failure reason. Proof that it hides a defect in the test: 'Oracle forbids unauthorized price updates' expects 'Must be signed by the authorized signer', but the oracle spend path fails with 'Must be signed by authorized signer' (OracleValidator.scala:94); the expected text is the mint path's message (line 134). 'Burn beacon fails without authorized signer' (424-425) asserts only isLeft. The scripts carry error traces (PricebetContract.scala:5, generateErrorTraces = true), so the logs are available.",
+      "action": "In assertFailure add assert(result.logs.exists(_.contains(expectedError)), result.logs). Fix line 319 to 'Must be signed by authorized signer'. In the burn test call runValidator on the oracle input and assert the log 'Must be signed by authorized signer'.",
+      "coverageRisk": "none: assertions get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-3",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/PricebetValidator.scala:60-93",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/PricebetValidator.scala:95-108",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/PricebetValidator.scala:139-144",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:183-220"
+      ],
+      "claim": "Most PricebetValidator rejection branches are reached by no test: Join 'Must match bet amount', 'Must be signed by player', 'Owner/Deadline/Exchange rate must not change'; Win 'No player joined yet', 'Must be signed by player', 'Deadline passed', 'Oracle input must be locked by the oracle script'; Timeout 'Must be signed by owner'. The strict boundary of the rate check (oracle rate == bet rate, e.g. 6/4 vs 3/2) is not tested either; only clearly lower and higher rates are.",
+      "action": "Add negative tests that build the tx with TxBuilder directly (as at 303-316) and use assertFailure with the message (after C31-2): Win with validTo after the deadline; Win before any join; Win and Join signed by a non-player; Timeout signed by Bob; Join whose continuation changes the rate or pays 1x the bet; Win with oracle rate Rational(6,4) against bet 3/2 (expect 'Oracle rate must exceed bet rate').",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -2,
+      "linesRemoved": -180,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-4",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidator.scala:138-210",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:108-233",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:74-203"
+      ],
+      "claim": "OptimizedPaymentSplitterValidatorTest always passes an honest SplitVerificationRedeemer computed from the test case (117-122), so the reward endpoint's redeemer checks are untested: 'sumContractInputs mismatch' (165), 'nPayed mismatch' (191), 'Change payee received less than split' (208), 'Payee input must be from payeeWithChange' (151). 'Contract input must contain only ADA' (155-158) has a test only for the naive validator (NaivePaymentSplitterValidatorTest:95-147); the proof onlyAdaIsSplit is also naive-only. 'Already found a fee payer' and 'Input not from the contract or ...' are untested in both validators.",
+      "action": "Refactor runTestCase into a context builder with overrides (redeemer, extra inputs, contract value) and add tests: redeemer with sumContractInputs+1; redeemer with nPayed+1; redeemer naming payee B while A submits; contract input with a native token (copy of the naive token test); two payee inputs; an input from a non-payee key. Assert the specific message for each.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -1,
+      "linesRemoved": -90,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:183-202",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidator.scala:178-187",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:117-122",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:224-232"
+      ],
+      "claim": "Two failure rows use regexes that match almost any message of these validators: '(?i)payee|split' (191) also matches 'Not all payees were paid' and 'Payee must receive exact split'; 'value to be payed|split' (201) matches any split error. They hide that the optimized validator rejects both rows for another reason than the row name says: with splitPerPayee = total/n from the test case (15 and 10), B's output 10 (row 184) and 8 (row 193) fail 'Payee must receive exact split' first, so the optimized run never reaches the 'Output must be to a payee' check or the fee/remainder check. The naive run fails with 'Output must be to a payee' and 'value to be payed to payees is too low'.",
+      "action": "Give PaymentSplitterTestCase an exact expected message per validator (expectedError: naive, optimizedError: optional override). Row 184: naive 'Output must be to a payee'; add an optimized row where B gets exactly 15 and C gets 10 so it reaches 'Output must be to a payee'. Row 193: naive 'value to be payed to payees is too low', optimized 'Payee must receive exact split'.",
+      "coverageRisk": "none: assertions get stronger; the optimized 'payee not in contract' path gets real coverage",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:267-288",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:290-330",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:71-75"
+      ],
+      "claim": "'TxBuilder: Cost comparison naive vs optimized (3 UTxOs)' asserts nothing (only println). 'verify remainder goes to fee payer' asserts feePayerLovelace >= split + remainder (319), but the fee payer's change also holds its own UTxO of 3 ADA + 100 ADA (line 74) less the fee, so the output is about 113 ADA against a bound of 10.33 ADA: no mutation of the remainder handling breaks it. Both runs are already asserted successful by the 'o1' tests.",
+      "action": "Cost test: assert o.fee < n.fee and (optReward + optSpend).steps < naiveSpend.steps (the README claim), drop the printlns. Remainder test: assert each non-fee-payer output equals splitPerPayee exactly and the fee payer output equals contract total + fee-payer UTxO - fee - (n-1) * splitPerPayee (or delete the test if the owner prefers).",
+      "coverageRisk": "none: assertions get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-7",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:56-60",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:91",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:159",
+        "scalus-core/shared/src/main/scala/scalus/uplc/Compiled.scala:391-392"
+      ],
+      "claim": "applyParam calls contract.withErrorTraces.program on every runNaive/runOptimized. withErrorTraces returns a copy with a fresh lazy program, so each call lowers and optimizes the whole validator again (UplcPipeline, F-18): 20 lowerings per suite run for 2 distinct programs. The suite takes 2.57 s, about 0.12-0.14 s per test (timings.csv).",
+      "action": "Add private lazy val naiveTraced = NaivePaymentSplitterContract.compiled.withErrorTraces.program and optimizedTraced = ... once per suite; applyParam takes the Program. Same pattern as the F-19 test-side fix.",
+      "coverageRisk": "none: the same programs are evaluated",
+      "ciSavingSec": 1.5,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-8",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:610-639",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/PricebetContract.scala:7-11",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/PricebetTransactions.scala:34-35"
+      ],
+      "claim": "Every Pricebet test calls createTxCreator, which lowers the applied oracle script twice (OracleContract at 628 only to read its hash, then again inside PricebetTransactions at line 34) and the pricebet script once (line 35): 3 SIR-level apply+lower runs per test, 14 tests (F-19 pattern). The config is the same in every test: createProvider builds the same genesis UTxOs, so the seed UTxO is the same. Suite 2.27 s, ~0.15 s per test.",
+      "action": "Build the PricebetTransactions once per evaluator in the companion (two lazy vals: constMaxBudget and EvaluateAndComputeCost); take beaconPolicyId from txCreator.beaconPolicyId instead of compiling OracleContract a second time. PricebetTransactions holds no mutable state (only vals and builders); each test keeps its fresh Emulator.",
+      "coverageRisk": "none: same scripts and same seed; a test that changed the seed would need its own instance",
+      "ciSavingSec": 1.5,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:96-106",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:235-328",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:55",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:83",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:216-222"
+      ],
+      "claim": "'Optimized: budget comparison with multiple UTxOs' asserts the same reward budget (101-102 equals expectedRewardBudgets at 55 and 83) and the same spend budget (expectedSpendBudget) that runTestCase already asserts for the row 'success with multiple contract UTxOs' (216-222). runTestCaseWithBudget (235-328) is a 94-line copy of runTestCase; its only difference, always adding the fee payer input, is moot for that row (fee payer amount 10).",
+      "action": "Delete the test at 96-106 and runTestCaseWithBudget.",
+      "coverageRisk": "none: the same row pins the same reward and spend budgets",
+      "ciSavingSec": 0.05,
+      "linesRemoved": 105,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "The test at OptimizedPaymentSplitterValidatorTest.scala:96-106 makes 2 assertions. (1) The reward budget equals pre38 234466/97_955_092 or since38 229550/96_212_543. These are the same numbers as the 'success with multiple contract UTxOs' entries at lines 55 and 83, which runTestCase checks at lines 216-218. (2) spendBudget == expectedSpendBudget, which runTestCase checks for every success row at lines 219-222. For this row, feePayerInput is (A, 10) (PaymentSplitterTestCases.scala:148). The amount is >0, so runTestCase also puts the fee payer input first and uses SpendRedeemer(1) (lines 135-169). That builds the same TxInfo, contexts and redeemers as runTestCaseWithBudget (lines 262-307). runTestCase also checks that both runs succeed, which the deleted test does not. It is the same file and runs on JVM only. Nothing is lost if the test and runTestCaseWithBudget (235-328) are deleted."
+    },
+    {
+      "id": "C31-10",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:256-265",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:87-121",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:102-128"
+      ],
+      "claim": "In PaymentSplitterTxBuilderTest the three rows 'remainder compensates fee - o1/o2/o3' build identical transactions: runNaive/runOptimized read only payees, contractInputs and feePayerInput (identical: A,B,C / 31 / (A,3)) and ignore outputs and fee, which the builder computes. 4 of the 16 generated tests repeat o1.",
+      "action": "Generate the TxBuilder tests from testCases.filter(_.expectedSuccess).distinctBy(tc => (tc.payees, tc.contractInputs, tc.feePayerInput)).",
+      "coverageRisk": "none: the dropped tests submit byte-identical transaction shapes",
+      "ciSavingSec": 0.5,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "runNaive (PaymentSplitterTxBuilderTest.scala:87-150) and runOptimized (152-254) read only tc.payees, tc.contractInputs and tc.feePayerInput, including through buildUtxos (62-80). They never read tc.outputs or tc.fee: outputs come from payTo/changeTo with the computed split, and the builder computes the fee. Rows o1, o2 and o3 (PaymentSplitterTestCases.scala:102-128) all have payees (A,B,C), contractInputs 31 and feePayerInput (A,3). So the transactions they build are the same. There are 8 success rows, which make 16 generated tests at lines 256-265. o2 and o3 repeat o1 in both suites, so 4 tests are redundant. distinctBy keeps the first match, o1. The remainder test at 290-330 finds o1 by name and is not affected."
+    },
+    {
+      "id": "C31-12",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/NaivePaymentSplitterValidatorTest.scala:149-190",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:108-159",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:12-69"
+      ],
+      "claim": "NaivePaymentSplitterValidatorTest.runTestCase and OptimizedPaymentSplitterValidatorTest.runTestCase build the script inputs, the optional fee-payer input and the outputs with the same 35 lines (naive 156-190, optimized 125-159), each with its own lockTxId/payeesTxId/scriptHash vals.",
+      "action": "Add to PaymentSplitterTestCases def txInputs(tc, scriptHash, lockTxId, payeesTxId): SList[TxInInfo] and def txOutputs(tc): SList[TxOut]; use them in both suites (and in C31-4's context builder).",
+      "coverageRisk": "none: same values",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-13",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:750-776",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:719-748"
+      ],
+      "claim": "PricebetValidatorTest.runValidator is one of the 7 copies of the resolve-UTxOs/getScriptContextV3/find-script/runWithDebug procedure that examples.2 C11-18 extracts into scalus-testkit.",
+      "action": "After C11-18 lands, replace runValidator with the testkit helper; keep assertSuccess/assertFailure local (they also submit).",
+      "coverageRisk": "none: same procedure",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-14",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:10",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:911-929"
+      ],
+      "claim": "Beyond examples.4 C16-21 (move scriptContext/spendingInfo/noDatum/someDatum out of VestingVerificationTest): PaymentSplitterVerificationTest defines two more ledger-encoding script-info builders, certifying (constrData 3) and the rewarding script info (constrData 2), that belong to the same family.",
+      "action": "When doing C16-21, move certifying and a rewardingInfo(credential) builder into the same shared object; PaymentSplitterVerificationTest imports them.",
+      "coverageRisk": "low: the proofs' kept results (PaymentSplitterVerificationTest.proofs.json) must still match; inline defs expand to the same expressions",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-15",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:22-39",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:68-82",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:103-117",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:144-158",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:189-203",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:326-337",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:558",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/pricebet/PricebetValidatorTest.scala:641-663"
+      ],
+      "claim": "PricebetValidatorTest repeats code: 'Owner initiates bet successfully' (22-39) is the body of createAndSubmitInitiateTx (641-663); join-then-refind-the-pricebet-UTxO is written out 5 times (68-82, 103-117, 144-158, 189-203, 458-473); 'Oracle discovery' (326-337) repeats createAndSubmitOracleUtxo; deadlineSlot (558) is never used.",
+      "action": "Add a companion helper joinAsBob(provider, txCreator, pricebetUtxo): Utxo (join, assertSuccess, return the new pricebet UTxO); call createAndSubmitInitiateTx in the initiate test and createAndSubmitOracleUtxo in the discovery test; delete deadlineSlot.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-16",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:14-29",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:42-48",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:137-149",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala:245-253"
+      ],
+      "claim": "Dead and noisy test code in the payment splitter suites: Payee cases F, G, H, case class Input and the gives extension are never used (PaymentSplitterTestCases 20-24, 28); payeeParty maps any other payee silently to Alice (48), which would merge two payees if a row used F; the two catch blocks print to stderr and rethrow (137-149, 245-253).",
+      "action": "Delete F/G/H, Input and gives; make payeeParty exhaustive over A-E; replace the catch blocks with withClue(scriptLogs) or delete them.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-17",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:793-828",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:862-909"
+      ],
+      "claim": "payout, payoutOf, spendingAt and payoutReward each write out the same two-input list (payerInput(payer, funds) then contractInput(script, value)); payout is payoutOf with Value.lovelace(locked).",
+      "action": "Add inline def payoutInputs(payer, funds, value): Data and define payout via payoutOf; use payoutInputs in spendingAt and payoutReward.",
+      "coverageRisk": "low: the inline defs must expand to the same UPLC, or the kept proof results need a re-run with Lean",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-18",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:75-152",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/NaivePaymentSplitterValidatorTest.scala:29-86",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:28-85",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:64-68"
+      ],
+      "claim": "The 8 success rows are instances of one law for n payees: a payout that pays each non-submitter floor(locked/n) and the submitter the rest less the fee is accepted by both validators, and changing one non-submitter output by +-1 is rejected by both. The proofs cover this only for 2 payees and 2 outputs (VT 64-68). o1/o2/o3 pin the same budget as the 3-payee row (naive 39-54, optimized 38-53), so their budget pins add nothing.",
+      "action": "Add a ScalaCheck property in a new PaymentSplitterPropertyTest (n in 1..5 payees, 1..3 contract inputs, random fee <= submitter funds): build the context with the C31-12 helpers; assert naive and optimized (honest redeemer) accept, and both reject the +-1 perturbation and a duplicated output to one payee (fails until the main-bug finding C31-1 is fixed). Then delete rows o2 and o3 and their 4 budget-map entries per suite.",
+      "coverageRisk": "low: o2/o3 shapes (fee absorbing the remainder) are inside the property's range; budget pins stay on the other rows",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -5,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The law holds for the generator, but the stated fee range cannot produce row o3. o3 (PaymentSplitterTestCases.scala:120-128) has feePayerInput 3 and fee 4. The fee exceeds the submitter's funds, and the remainder of 1 covers the gap: A gets 10 = split 10 + r 1 + 3 - 4. That is the 'remainder compensates fee' shape, and 'random fee <= submitter funds' never generates it. The optimized validator needs payeeWithChangeSum >= split (OptimizedPaymentSplitterValidator.scala:207-210), so the valid range is fee <= funds + remainder. With that range there is no counterexample. Naive: the reminder check gives r < n (PaymentSplitterValidator.scala:114-119). A ±1 change on any non-submitter is rejected: it is an exact-split mismatch for n>=3, and for n=2 the reminder becomes r-2 < 0 or r+2 >= 2. Optimized: the 'exact split' check at line 183 rejects it. The budget pins are confirmed: o1/o2/o3 pin the same budget as the 3-payee row in both suites (naive lines 39-54, optimized 38-53). Corrected action: (1) draw fee in [0, funds + (locked mod n)]; (2) draw distinct payees; (3) skip the perturbation when n=1, because there is no non-submitter; (4) add the duplicated-output check as a separate pending or expected-fail test until C31-1 is fixed, so the property can land green. Only then delete o2/o3 and their budget entries."
+    },
+    {
+      "id": "C31-19",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTestCases.scala:14-22",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/NaivePaymentSplitterValidatorTest.scala:23-26",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidatorTest.scala:23-26"
+      ],
+      "claim": "The cluster has no ScalaCheck generator of transaction shapes; the hand-written rows never produce two outputs to one payee, a second payee input, a non-payee input, a script output or a token in a contract input, which are exactly the branches the validators check (see C31-1, C31-4). The payee keys are random per run (genByteStringOfN(28).sample.get), so failing logs differ between runs.",
+      "action": "Use fixed 28-byte hex keys for Payee A-H (e.g. hex\"11...\"), as PaymentSplitterVerificationTest does; the shape generator is part of C31-18.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C31-20",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/OracleValidator.scala:86-89",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/OracleValidator.scala:97-119",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/PricebetValidator.scala:121-137"
+      ],
+      "claim": "OracleValidator.spend checks the non-zero rate and the denominator on the INPUT state (88-89), for every redeemer, and never on the continuation state of Update (107-119). An authorized Update to rate 0 (or denominator 0) is accepted, and the new oracle UTxO can then never be spent again, not even by Burn (which runs the same input check): the beacon is locked forever, and PricebetValidator.Win compares against the unchecked rate (135). By reading, not executed. Only the authorized signer can trigger it.",
+      "action": "Add a test: Update to Rational(0,1) is accepted today, then Update and Burn of the new UTxO fail. Main-code note: move checkDenominator/isZero to newState in the Update branch (and drop it from Burn).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-51",
+      "verification": "In OracleValidator.scala:87-89, spend runs checkDenominator and the !isZero check on the INPUT datum (state), and does so for every redeemer. The Update branch (98-119) checks only the continuation address and newState.timestamp. It never checks newState.exchangeRate. Mint (41-70) does not check the datum either. PricebetTransactions.updateOracle passes newExchangeRate through with no check. After an authorized Update to Rational(0,1), every later spend of that UTxO, Update or Burn, fails at line 89 ('Zero rate is not allowed'). After an Update to denominator 0, it fails at line 88 (Prelude.scala:219-220). So the oracle UTxO and its beacon are locked forever. PricebetValidator.scala:121-137 reads the oracle as a reference input, so line 88 does not run there. Win then compares against the unchecked rate with cross-multiplication (Prelude.scala:208-209). With 1/0 against 3/2: 1*2 > 3*0, so the player wins. Only config.authorizedSigner can trigger this (lines 92-95). That is normal use, for example a mistake by the oracle operator. The action in the finding is correct."
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 6 findings of scope merge-duplicate-tests, to-property or main-bug; 4 confirmed, 1 narrowed, 1 disproved and dropped [P2-12]. Other findings are unverified."
+}

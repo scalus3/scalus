@@ -1,0 +1,493 @@
+{
+  "cluster": "patterns",
+  "summary": "The cluster is the scalus-design-patterns module: 8 suites, 2799 test lines, about 2.9 s in total (UtxoIndexerTest 1.0 s, StakeValidatorTest 0.9 s of which 0.8 s is the first-compile warm-up), so there are no ci-time findings. There is no coverage baseline for this module (every main file is @Compile or shares a file with @Compile code, F-9), so gaps were found by reading the main code against the tests. The pattern helpers are thinly tested: StakeValidator.spend/withdraw and TransactionLevelMinterValidator.spend have only ignored or commented-out tests ('TODO: UPLC error', 2025-10), MerkelizedValidator failure paths, UtxoIndexer.multiOneToOneWithRedeemer and four of the five example validators (StakeValidatorExample, TransactionLevelMinterValidatorExample, MarketplaceValidator, NFTMintingPolicy, IndexerValidator) never run. Reading the payment splitter found two defects in example main code (C32-1, C32-2): it counts payee outputs instead of distinct payees, so one payee can go unpaid, and it lacks the native-token guard that commit 3c5cba3c8 added to the scalus-examples copies. The three budget tests only println and assert nothing, NormalizedIntervalTest is 18 example tests for one law, and one UtxoIndexer test passes a Boolean to a Unit callback, so it cannot fail. C8: the cluster has no property tests; the shared Arbitrary[Interval] sorts its bounds and draws Finite times from the whole BigInt range, so it almost never produces improper, adjacent or equal-bound intervals, which is why C32-5 needs a local small-range generator. LinkedList.scala is tested by the examples cluster (scalus-examples LinkedListTest), not here.",
+  "behaviors": [
+    {
+      "pass": "NormalizedInterval",
+      "name": "tryNormalize: maps each bound-type combination to ClosedRange/FromNegInf/ToPosInf/Always, resolves exclusive bounds, None for improper intervals",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/NormalizedIntervalTest.scala:11-109"
+      ]
+    },
+    {
+      "pass": "NormalizedInterval",
+      "name": "normalize: tryNormalize or fail('Improper interval encountered')",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/NormalizedIntervalTest.scala:111-209"
+      ]
+    },
+    {
+      "pass": "NormalizedInterval",
+      "name": "Eq, Ord and Show instances",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/NormalizedIntervalTest.scala:211-288"
+      ]
+    },
+    {
+      "pass": "ParameterValidation",
+      "name": "computeScriptHashV1/V2/V3: hash of the program with params applied in order",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/ParameterValidationTest.scala:23-89"
+      ]
+    },
+    {
+      "pass": "ParameterValidationOnChain",
+      "name": "verifyScriptCredential, verifyAddressScript, isExpectedScript, findOutputsToScript",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/ParameterValidationTest.scala:95-266"
+      ]
+    },
+    {
+      "pass": "ParameterValidationExample",
+      "name": "ParameterValidationUsage off-chain workflow (marketplace hash, minting policy params)",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/ParameterValidationTest.scala:67-75",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/ParameterValidationTest.scala:270-285"
+      ]
+    },
+    {
+      "pass": "ParameterValidationExample",
+      "name": "MarketplaceValidator and NFTMintingPolicy on-chain logic (royalty, cancel, NFT goes to the expected script)",
+      "tests": []
+    },
+    {
+      "pass": "StakeValidator",
+      "name": "spend: requires a Rewarding redeemer and a withdrawal, then runs the redeemer validator",
+      "tests": []
+    },
+    {
+      "pass": "StakeValidator",
+      "name": "spendMinimal: requires a withdrawal of the script credential",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorTest.scala:102-135"
+      ]
+    },
+    {
+      "pass": "StakeValidator",
+      "name": "withdraw: rejects a PubKeyCredential, passes the script hash to the validator; StakeValidatorExample",
+      "tests": []
+    },
+    {
+      "pass": "TransactionLevelMinterValidator",
+      "name": "spend: requires the Minting redeemer, runs redeemer and token validators; TransactionLevelMinterValidatorExample",
+      "tests": []
+    },
+    {
+      "pass": "TransactionLevelMinterValidator",
+      "name": "spendMinimal: requires a mint under the policy",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/TransactionLevelMinterValidatorTest.scala:114-150"
+      ]
+    },
+    {
+      "pass": "UtxoIndexer",
+      "name": "validateInput and oneToOne: input at index must be ownRef, then the callback runs",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/UtxoIndexerTest.scala:20-207"
+      ]
+    },
+    {
+      "pass": "UtxoIndexer",
+      "name": "oneToMany: per-output and collective validators",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/UtxoIndexerTest.scala:209-390"
+      ]
+    },
+    {
+      "pass": "UtxoIndexer",
+      "name": "multiOneToOneNoRedeemer: every script input matched to an index pair, no leftovers",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/UtxoIndexerTest.scala:392-541"
+      ]
+    },
+    {
+      "pass": "UtxoIndexer",
+      "name": "multiOneToOneWithRedeemer and the IndexerValidator example",
+      "tests": []
+    },
+    {
+      "pass": "MerkelizedValidator",
+      "name": "verifyAndGetRedeemer (success path only, through the examples) and getStakeRedeemer",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/BatchAuctionTest.scala:37-94",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:88-108"
+      ]
+    },
+    {
+      "pass": "BatchAuctionValidator",
+      "name": "reward verifies clearing price vs demand; spend fills or refunds each bid against the verified price",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/BatchAuctionTest.scala:37-159"
+      ]
+    },
+    {
+      "pass": "PoolSwapValidator / OrderValidator",
+      "name": "constant-product invariant per pool; order slippage, fair rate and cancel",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:50-309"
+      ]
+    },
+    {
+      "pass": "StakeValidatorPaymentSplitterValidator",
+      "name": "reward verifies inputs, equal split and change; spend delegates via spendMinimal",
+      "tests": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorPaymentSplitterTest.scala:31-142"
+      ]
+    },
+    {
+      "pass": "LinkedList",
+      "name": "linked-list pattern (tested in the examples cluster)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:19"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C32-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/main/scala/scalus/examples/StakeValidatorPaymentSplitterExample.scala:137-157",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorPaymentSplitterTest.scala:105-116",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/PaymentSplitterValidator.scala:80-109",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidator.scala:170-192"
+      ],
+      "claim": "By reading (not executed): the reward endpoint adds 1 to actualNPayed per OUTPUT, and checks only that each output goes to some payee (payees.contains) and that each non-change output equals splitPerPayee. 'Not all payees were paid' compares payees.length with the output count, not with the number of distinct payees. With payees [A, B, C], A the change payee, contract input 30, fee payer A input 10, fee 2: outputs A->18, B->10, B->10 give actualNPayed = 3 = nPayed = payees.length, remainder 0, change 18 >= 10, so the tx validates and C gets nothing (two outputs to A work the same way). The naive PaymentSplitterValidator groups outputs per payee in an AssocMap first, so it is not affected; the OptimizedPaymentSplitterValidator in scalus-examples has the same per-output count (other cluster).",
+      "action": "Add a failure test to StakeValidatorPaymentSplitterTest: payees (A, B, C), outputs A->18, B->10, B->10, nPayed 3; expect failure. Main-code note only: count distinct payee credentials (fold outputs into an AssocMap per payee as PaymentSplitterValidator does) in both StakeValidatorPaymentSplitterExample and OptimizedPaymentSplitterValidator.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-63",
+      "verification": "Traced StakeValidatorPaymentSplitterExample.scala:137-157. The output fold adds n+1 per output (146, 153). It checks only payees.contains (144) and value === splitPerPayee for non-change outputs (149-152). Line 157 compares payees.length with the output count, not with distinct payees. Example: payees [A,B,C], change payee A, contract input 30, fee payer A input 10, fee 2, outputs A->18, B->10, B->10, redeemer nPayed=3, split=10, sum=30. Input fold: A is the fee payer (121-123); 30 comes from the script. Outputs: n=3 and changeSum=18. 156 and 157 pass (3 == 3). remainder 30-30=0 is in [0,3) (166). 18 >= 10 (170). So the tx validates and C gets nothing. Ledger value conservation holds (40 = 38 + 2). sumPayeeOutputs is never used. The bug is reachable by any fee payer who builds the payout tx. OptimizedPaymentSplitterValidator.scala:170-192 has the same per-output count. Test note: the TestCase helper defaults nPayed to the distinct output count (StakeValidatorPaymentSplitterTest.scala:201), so the new test must set overrideNPayed = Some(3L). That test fails, as intended, until the main code is fixed."
+    },
+    {
+      "id": "C32-2",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/main/scala/scalus/examples/StakeValidatorPaymentSplitterExample.scala:125-126",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidator.scala:152-158",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/PaymentSplitterValidator.scala:64-70"
+      ],
+      "claim": "Commit 3c5cba3c8 'fix(examples): paymentsplitter reject native-token contract inputs' added require(input.resolved.value.withoutLovelace.isZero, \"Contract input must contain only ADA\") to both scalus-examples splitters, because outputs reconcile lovelace only and the fee payer could pocket native tokens held by a contract UTxO. The design-patterns copy, StakeValidatorPaymentSplitterValidator, still sums only getLovelace of contract inputs and has no such check.",
+      "action": "Add a failure test: one contract input with 30 lovelace plus a native token, otherwise the 'two payees split equally' case; expect failure 'Contract input must contain only ADA'. Main-code note only: port the require from OptimizedPaymentSplitterValidator.scala:153-158.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-64",
+      "verification": "StakeValidatorPaymentSplitterExample.scala:125-126 adds only input.resolved.value.getLovelace for contract inputs. grep finds no 'withoutLovelace' and no 'only ADA' anywhere in scalus-design-patterns/src/main. Both scalus-examples splitters have the require: PaymentSplitterValidator.scala:68-69 and OptimizedPaymentSplitterValidator.scala:156-157, added by commit 3c5cba3c8. The bug is reachable. Outputs must go to payees (143-144), and only lovelace is reconciled. So a native token held by a contract UTxO can go to the change payee, who is the fee payer, in any output. Test note: the TestCase helper builds only Value.lovelace inputs (StakeValidatorPaymentSplitterTest.scala:219). The new test needs the helper extended with a token-bearing contract input. The expected message exists only after the main code gets the require."
+    },
+    {
+      "id": "C32-3",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/main/scala/scalus/examples/StakeValidatorPaymentSplitterExample.scala:117-171",
+        "scalus-design-patterns/src/main/scala/scalus/examples/StakeValidatorPaymentSplitterExample.scala:89-93",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorPaymentSplitterTest.scala:92-142",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorPaymentSplitterTest.scala:184-194"
+      ],
+      "claim": "The tests reach 4 of the 12 failure messages of the reward endpoint (sumContractInputs mismatch, Not all payees were paid, Payee must receive exact split, Output must be to a payee). Never reached: 'Already found a fee payer' (122), 'Payee input must be from payeeWithChange' (124), 'Input not from the contract or fee payer' (127), 'Fee payer not found in inputs' (130), 'Output to script is not allowed' (143), 'nPayed mismatch' (156), 'Split calculation invalid' (166, including the remainder == nPayed boundary), 'Change payee received less than split' (171). The spend endpoint is only run on success; a spend without the withdrawal (spendMinimal's MissingWithdrawal) is never checked, and that is the whole security of the withdraw-zero trick.",
+      "action": "Extend TestCase with extraInputs, scriptOutputs and withWithdrawal: Boolean, and add one test per message above as a table of TestCase rows, plus a spend-without-withdrawal row that runs only the spend endpoint and expects StakeValidator.MissingWithdrawal.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-4",
+      "check": "C6",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/BatchAuctionTest.scala:161-199",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/BatchAuctionTest.scala:338-372",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/BatchAuctionTest.scala:70-94",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:311-358",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:491-533",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:250-280",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorPaymentSplitterTest.scala:144-172",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorPaymentSplitterTest.scala:299-401",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorPaymentSplitterTest.scala:67-78"
+      ],
+      "claim": "The three 'budget' tests only println; runWithBudget never checks that the evaluation succeeded, so no mutation of the validators can fail them (a failing script still returns a budget). Their scenarios repeat existing success tests: BatchAuction 162-181 is input-for-input the 'multiple bids' test 74-93; PaymentSplitter 147-155 is the 'multiple contract UTxOs' test 69-77; MultiPoolDex 312-337 is the 'multiple orders per pool' shape of 250-280 with other amounts. runWithBudget in StakeValidatorPaymentSplitterTest (299-401) is a 100-line copy of run().",
+      "action": "Delete the three budget tests and the three runWithBudget methods. If the owner wants budget regression tracking for these examples, pin it in the existing scenario test instead via success(ExUnits(..)) on the reward result (one pinned number per suite, not println).",
+      "coverageRisk": "none for assertions: the deleted tests assert nothing and their scenarios stay covered by the cited success tests. The printed numbers are lost from the test log; they are not referenced by docs (grep finds no use).",
+      "ciSavingSec": 0,
+      "linesRemoved": 295,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "The three budget tests (BatchAuctionTest.scala:161-199, MultiPoolDexTest.scala:311-358, StakeValidatorPaymentSplitterTest.scala:144-172) only println. Each runWithBudget (BatchAuction 338-372, MultiPoolDex 491-533, Splitter 299-401) returns evaluateDebug(...).budget and never calls checkResult. Proof that they assert nothing: the MultiPoolDex budget scenario fails today. Pool A has totalInput 150 and totalOutput 133, so kAfter = 1150*867 = 997050 < kBefore = 1000000 ('Constant product invariant violated'). Yet the test passes. The scenarios survive elsewhere. BatchAuction 162-181 equals the 'multiple bids' test 74-93 input for input. Splitter 147-155 equals the 'multiple contract UTxOs' test 69-77. MultiPoolDex 250-280 is the valid version of the same shape. run() checks both the reward and spend endpoints, which is stronger. runWithBudget has no other callers in the module (grep). Only the comment at BatchAuctionTest.scala:215 ('used by both run() and runWithBudget()') needs an edit after the deletion. No docs reference the printed banners."
+    },
+    {
+      "id": "C32-5",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/NormalizedIntervalTest.scala:11-209",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/NormalizedInterval.scala:186-230",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/v1/Contexts.scala:229",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ArbitraryInstances.scala:13-30"
+      ],
+      "claim": "The 18 tests at 11-209 are instances of one law: the normalized interval denotes the same set of times as the Interval. The 6 normalize success tests (111-179) repeat the 6 tryNormalize tests (11-79) input for input, and normalize is tryNormalize plus getOrFail (218-222). Not covered at all: Finite lower with NegInf upper (201), equal bounds, and adjacent exclusive bounds such as (10, 11) which normalize to lower 11 > upper 10 (206). The shared Arbitrary[Interval] cannot replace the examples: it sorts the two bounds and draws Finite from the whole BigInt range, so improper and adjacent intervals almost never occur.",
+      "action": "Replace 11-209 with two checkEval properties over a local generator (bound type NegInf/PosInf/Finite(Gen.choose(-3, 3)), random inclusive flag, bounds NOT sorted) and t in Gen.choose(-5, 5): (1) i.contains(t) === (i.tryNormalize match { None => false; Some(n) => n covers t }) with covers as a small inline match on the four cases; (2) i.tryNormalize match { Some(n) => i.normalize === n; None => true }. Keep one assertEvalFails[OnchainError] example for normalize of an improper interval.",
+      "coverageRisk": "low: denotational equality over a dense small range pins the exact bounds (an off-by-one in resolveLower/resolveUpper changes contains at t = bound); checkEval runs both the JVM and the UPLC result as the examples did. The literal examples that also serve as docs move to the scaladoc, which already has them.",
+      "ciSavingSec": 0,
+      "linesRemoved": 160,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "Law (1) holds for every input. Interval.contains (Contexts.scala:229-247) ignores the inclusive flags on infinite bounds and gives the empty set for from=PosInf or to=NegInf. tryNormalizedInterval (NormalizedInterval.scala:186-216) returns None in exactly those cases. resolveLower/resolveUpper (224-230) give the same integer set as contains. Law (2) holds by 218-222. The coverage claims are correct: the tests lack Finite..NegInf, equal bounds and adjacent exclusive bounds, and 111-179 duplicate 11-79. Gap: the denotational law cannot tell None from Some(empty ClosedRange). A mutant that drops the 'lower > upper' check (206) returns Some(ClosedRange(11,10)), and its coverage set is empty like contains. Law (1) and law (2) both still pass. Today only the Finite(200)..Finite(100) examples (81-89, 181-189) kill this mutant. Corrected action: make the property also assert that tryNormalize returns no ClosedRange(l,u) with l > u, or that None holds iff no t in the range is contained. Also keep the Finite(200)..Finite(100) improper example, not the PosInf or NegInf ones. Tests 211-288 (Eq/Ord/Show) stay."
+    },
+    {
+      "id": "C32-6",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/main/scala/scalus/patterns/NormalizedInterval.scala:163-184",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/NormalizedIntervalTest.scala:211-260"
+      ],
+      "claim": "The Ord tests compare only adjacent variants in one direction and ClosedRange with ClosedRange. Never reached: FromNegInf vs FromNegInf (173), FromNegInf vs ToPosInf/Always (174), ToPosInf vs ClosedRange/FromNegInf/ToPosInf (177-179), Always vs Always (183). A swapped Order.Less/Greater in any of them passes the suite.",
+      "action": "Add two checkEval properties over ArbitraryDerivation.autoDerived[NormalizedInterval] with small BigInt fields: (a <=> b) === (b <=> a).reverse, and ((a <=> b) === Order.Equal) === (a === b). Then delete the Eq tests 211-234 and the same-variant Ord test 250-260, which the laws subsume; keep the variant-order example 236-248.",
+      "coverageRisk": "none: the kept example pins the variant order, the laws cover the rest",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-7",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:50-84",
+        "scalus-design-patterns/src/main/scala/scalus/examples/MultiPoolDexExample.scala:137-156"
+      ],
+      "claim": "The three pool tests are points of one oracle: PoolSwapValidator accepts iff all four amounts > 0, reserveB - output > 0 and (reserveA + input) * (reserveB - output) >= reserveA * reserveB. The four positivity requires (139-142) are never reached, nor the kAfter == kBefore boundary.",
+      "action": "Replace 50-84 with a ScalaCheck forAll over SwapRedeemer fields drawn from Gen.choose(-2, 1200) (so zero, negatives and the boundary occur) that runs evalPool and asserts result.isSuccess == oracle(swap); keep one example per failure message, or assert the first failing message from an oracle that returns it.",
+      "coverageRisk": "none: the property includes the three example points' regions and adds the positivity checks",
+      "ciSavingSec": -0.3,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The oracle is correct (MultiPoolDexExample.scala:139-156): four positivity requires, then reserveB - output > 0, then (reserveA+input)*(reserveB-output) >= reserveA*reserveB. grep finds no test that reaches the 'must be positive' messages. evalPool (MultiPoolDexTest.scala:538-551) evaluates the pool alone with an empty TxInfo, so a forAll over the redeemer is feasible. But uniform Gen.choose(-2,1200) gives a value <= 0 with probability about 3/1203 per field. So the positivity branches are hit only by chance in 100 samples. The exact kAfter == kBefore boundary almost never occurs. Corrected action: draw each field with a weighted generator, for example Gen.frequency((1, Gen.choose(-2,0)), (4, Gen.choose(1,1200))). Keep an explicit boundary example, for example reserves 100/100, input 100, output 50 gives kAfter = kBefore = 10000, which must succeed. Keep one example per failure message."
+    },
+    {
+      "id": "C32-8",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorTest.scala:17-100",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorTest.scala:137-195",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/TransactionLevelMinterValidatorTest.scala:18-112",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/StakeValidator.scala:33-68",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/TransactionLevelMinterValidator.scala:27-38",
+        "scalus-design-patterns/src/main/scala/scalus/examples/StakeValidatorExample.scala:17-44",
+        "scalus-design-patterns/src/main/scala/scalus/examples/TransactionLevelMinterValidatorExample.scala:15-81"
+      ],
+      "claim": "StakeValidator.spend, StakeValidator.withdraw and TransactionLevelMinterValidator.spend have no running test: 9 tests are ignore(...) with 'TODO: UPLC error' since 2025-10 (e3cd4540a) and 2 more are commented out; one of those references StakeValidator.WithdrawalValidatorFailed, which no longer exists. Their example validators, StakeValidatorExample and TransactionLevelMinterValidatorExample, are compiled but never evaluated by any test in the repository. So MissingRedeemer, PubKeyCredentialNotSupported, 'Withdrawal must be zero' and the BEACON mint/burn checks are untested.",
+      "action": "First un-ignore the 9 tests and keep those that now pass (the compiler changed a lot since 2025-10). For the rest, and for the commented-out pair, test through the compiled example contracts with ScalusTest contexts: StakeValidatorExampleContract spend with/without the Rewarding redeemer, with/without the withdrawal, with a non-zero withdrawal, and reward with a PubKeyCredential; TransactionLevelMinterValidatorExampleContract spend for mint (+1), burn (-1), wrong token name, two token names, missing Minting redeemer, and mint with a wrong input count. If an un-ignored test still fails with a UPLC error, report it to the coordinator as a possible main-bug (functions passed to a non-inline @Compile def).",
+      "coverageRisk": "none: replaces ignored and commented-out tests that run nothing",
+      "ciSavingSec": -0.3,
+      "linesRemoved": -40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-9",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/main/scala/scalus/patterns/MerkelizedValidator.scala:56-81",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/BatchAuctionTest.scala:250-269",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:411-438"
+      ],
+      "claim": "MerkelizedValidator has no test of its own. verifyAndGetRedeemer runs only on the success path through BatchAuctionTest and MultiPoolDexTest, which always add both the withdrawal and the Rewarding redeemer; its two failure paths (MissingWithdrawal, MissingStakeRedeemer) and getStakeRedeemer are never executed. The missing-withdrawal check is what makes the spending side safe.",
+      "action": "Add MerkelizedValidatorTest (EvalTestKit, in the style of the spendMinimal tests in StakeValidatorTest): verifyAndGetRedeemer returns the redeemer; fails with MissingWithdrawal when the withdrawal is absent; fails with MissingStakeRedeemer when only the redeemer is absent; getStakeRedeemer success and missing. Also add one OrderValidator Execute case in MultiPoolDexTest whose pool has no withdrawal.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -90,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/main/scala/scalus/examples/BatchAuctionExample.scala:106-120",
+        "scalus-design-patterns/src/main/scala/scalus/examples/BatchAuctionExample.scala:141-144",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/BatchAuctionTest.scala:96-159"
+      ],
+      "claim": "The Refund branch is tested only on success and for the price check. 'Bidder must receive refund' (120) is never reached: no test refunds with no output to the bidder or with output lovelace below the input (the >= refundValue boundary at 118). The reward's 'Bid must have inline datum' (144) and the clearing-price boundary bidPrice == clearingPrice on Refund are also untested (Fill at equality is covered by test 70-94).",
+      "action": "Add TestCase rows: Refund with the output to another bidder; Refund with 499 lovelace back for a 500 input (fail) and exactly 500 (pass, already); Refund at bidPrice == clearingPrice (fail with 'Can only refund if bid price < clearing price').",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-11",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/main/scala/scalus/patterns/UtxoIndexer.scala:107-135",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/UtxoIndexer.scala:198-246",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/UtxoIndexer.scala:175",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/UtxoIndexer.scala:151",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/UtxoIndexerTest.scala:543-546"
+      ],
+      "claim": "multiOneToOneWithRedeemer and its two helpers are untested; the comment at 543-546 says Scala pattern-matching coercers do not compile, but a coercer written with field access (d.to[R] and r.stakeCred) avoids pattern matching. So TooManyIndicesSpecified, InputNotFromSpendingScript and UnprocessedRedeemers never run, nor the stake-credential filter. In multiOneToOneNoRedeemer the InputIndexMismatch at 175 (a pair whose inIdx is not the script input's position) is untested. oneToMany passes the outputs to collectiveValidator in reverse order of outputIndices (acc is built with Cons at 151); the tests check only the length, so the order is not pinned.",
+      "action": "Add tests: multiOneToOneWithRedeemer success with two script inputs and one non-matching Spending redeemer, plus one failing case per message; multiOneToOneNoRedeemer with pair (1, 0) for a script input at position 0; oneToMany whose collectiveValidator requires the exact output list (pins the current reversed order, or file a main-bug if the intended order is ascending). Delete the 543-546 comment.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.3,
+      "linesRemoved": -120,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-12",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/UtxoIndexerTest.scala:449-452",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/UtxoIndexerTest.scala:457-487",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/UtxoIndexerTest.scala:398-399",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/UtxoIndexer.scala:90"
+      ],
+      "claim": "In 'success multiOneToOneNoRedeemer with multiple pairs' the validator lambda returns a Boolean, but the parameter type is (..) => Unit, so the Boolean is discarded and the pair check can never fail (mutation: pass the wrong inIdx/outIdx to validator -> test still green). 'failed multiOneToOneNoRedeemer with more script utxos than specified' uses assertEvalFails[Throwable] with no message, so any failure passes, for example an out-of-range outputs.at. otherAddress at 398-399 is unused.",
+      "action": "Wrap the Boolean in require(.., \"pair\"). Use assertEvalFailsWithMessage[OnchainError](UtxoIndexer.MoreScriptUtxosSpentThanSpecified) at 461 (an explicit type parameter keeps the 3.3.8 ClassTag fix). Delete otherAddress at 398-399.",
+      "coverageRisk": "none: makes existing tests stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-13",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/ParameterValidationTest.scala:41-65",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/ParameterValidationTest.scala:270-285",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/ParameterValidation.scala:52-55"
+      ],
+      "claim": "'computeScriptHashV3 with multiple parameters applies in order' asserts only hash(1, 2) != hash(2, 1); a foldRight (reverse application order) mutation still gives two different hashes, so the order is not pinned. 'setupNFTWithMarketplace produces consistent hashes' never inspects mintingPolicy, so a wrong createNFTMintingPolicy passes, and its first assertion is a tautology (setupNFTWithMarketplace calls computeMarketplaceHash itself).",
+      "action": "In 41-65 assert hash1 == Script.PlutusV3(((twoParamScript $ 1.toData) $ 2.toData).cborEncoded).scriptHash. In 270-285 replace the tautological assertion with mintingPolicy == NFTMintingBaseProgram.program.deBruijnedProgram $ NFTMintParams(marketplaceHash, tokenName).toData (or compare their hashes).",
+      "coverageRisk": "none: makes existing tests stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-14",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/main/scala/scalus/examples/ParameterValidationExample.scala:57-95",
+        "scalus-design-patterns/src/main/scala/scalus/examples/ParameterValidationExample.scala:116-140"
+      ],
+      "claim": "MarketplaceValidator and NFTMintingPolicy are never evaluated. The end-to-end point of the pattern (the minting policy rejects an NFT sent to a pub-key address or to a marketplace built for another creator, and accepts the right one) has no test; neither have the hasOnly/findUniqueOrFail checks nor the royalty and cancel branches.",
+      "action": "Add tests in ParameterValidationTest that apply createNFTMintingPolicy(computeMarketplaceHash(creator), name) and evaluate it on a MintingScript context: NFT to the right marketplace (pass), to another creator's marketplace (ScriptHashMismatch), to a pub key (ExpectedScriptCredential), mint 2 or an extra token (fail), NFT split across two outputs (fail). Add Buy with royalty paid / not paid and Cancel signed / unsigned for the marketplace.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -110,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-15",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:28-29",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:150-216",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:387-392",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:423-428",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:448-453",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:472-477"
+      ],
+      "claim": "SwapRedeemer is built from a Pool three times (423-428, 448-453, 496-511) and OrderDatum from an Order three times (387-392, 472-477, 516-521); the two cancel tests (150-216) are 33-line copies that differ only in signatories; poolAContract and poolBContract are the same value.",
+      "action": "Add def swap: SwapRedeemer to Pool and def datum: OrderDatum to Order and use them; extract cancelCtx(signer: PubKeyHash) for the two cancel tests; replace poolAContract/poolBContract with one poolContract. (The runWithBudget copies go with C32-4.)",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-16",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/BatchAuctionTest.scala:242-316",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:403-438",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:538-551",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorPaymentSplitterTest.scala:237-296"
+      ],
+      "claim": "BatchAuctionTest, MultiPoolDexTest and StakeValidatorPaymentSplitterTest each hand-build the same withdraw-zero transaction: payee outputs as TxOut(Address(PubKeyCredential(pkh), None), Value.lovelace(n)), withdrawals = SortedMap of (ScriptCredential(h), 0), redeemers = AssocMap with Spending and Rewarding purposes, then a RewardingScript context and SpendingScript contexts evaluated with (program $ ctx.toData).evaluateDebug. ScalusTest.makePubKeyHashOutput already builds the output.",
+      "action": "Add a small WithdrawZeroFixtures trait in scalus-design-patterns/src/test/scala/scalus/patterns with withdrawZero(hashes*), redeemers(spending, rewarding), rewardCtx(tx, h, r), spendCtx(tx, ref, datum, r) and eval(program, ctx); use ScalusTest.makePubKeyHashOutput for the outputs. Migrate the three suites.",
+      "coverageRisk": "none: same contexts, same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-17",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/UtxoIndexerTest.scala:20-541"
+      ],
+      "claim": "Each of the 17 UtxoIndexerTest tests repeats the same 5-8 lines inside its assertEval block (txId, a pub-key or script address, Value.zero, TxInInfo/TxOut list, TxInfo) and then calls one function. The tests are about 3 times longer than what they assert.",
+      "action": "Add a @Compile object UtxoIndexerFixtures in the test sources with addr, scriptAddr, in(i, address), out(address) and tx(inputs, outputs), and call it from the assertEval blocks; group the three oneToMany success tests (209-301) into one test with three calls.",
+      "coverageRisk": "none: same inputs and assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 120,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C32-18",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-design-patterns",
+      "evidence": [
+        "scalus-design-patterns/src/test/scala/scalus/patterns/StakeValidatorPaymentSplitterTest.scala:217,229,242",
+        "scalus-design-patterns/src/test/scala/scalus/patterns/MultiPoolDexTest.scala:372,539,543"
+      ],
+      "claim": "Fully qualified names inside test code: scalus.cardano.onchain.plutus.prelude.Option.None six times in StakeValidatorPaymentSplitterTest although POption is already imported at line 14; scalus.uplc.Program and scalus.uplc.eval.Result in MultiPoolDexTest.",
+      "action": "Use POption.None; import scalus.uplc.Program and scalus.uplc.eval.Result.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 5 findings of scope merge-duplicate-tests, to-property or main-bug; 3 confirmed, 2 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

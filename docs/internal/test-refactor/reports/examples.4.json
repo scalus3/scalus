@@ -1,0 +1,643 @@
+{
+  "cluster": "examples.4",
+  "summary": "Six example suites (HTLC, its UplcBlaster proofs, Escrow, Factory, EditableNft, LinkedList) and the validators and off-chain builders they test. The cluster is cheap after P1: LinkedListTest dropped from 62.9 s to about 6.2 s (F-19), every other suite takes 1.4 s or less, so CI savings are small and come only from merging LinkedList properties. HTLC is the reference: its proofs cover every validator branch, and HtlcTest pins the error messages. The others have gaps that the suite names hide. The Escrow 'wrong signer' tests never reach the signature checks, so deleting them leaves the suite green. EditableNft and LinkedList negative tests accept any submit failure, and their setup submits go unchecked, so a broken setup step makes them pass. FactoryExample/FactoryContract is never compiled by any test, and LinkedList's SpendForUpdate path has no test or builder in the whole repository. Code duplication is high in FactoryTest (13 copies of the same fixtures), LinkedListTest (20 UTxO-fetch chains, 5 copies of the insert loop) and EditableNftValidatorTest. No main-code defect was found.",
+  "behaviors": [
+    {
+      "pass": "HtlcValidator",
+      "name": "receiver reveals the preimage up to the timeout (budget pinned, JVM and UPLC agree)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala:67-114",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala:579-644"
+      ]
+    },
+    {
+      "pass": "HtlcValidator",
+      "name": "reveal rejections: wrong preimage, wrong signer, range ends after timeout, no upper bound",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala:116-171",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala:388-577"
+      ]
+    },
+    {
+      "pass": "HtlcValidator",
+      "name": "committer refunds from the timeout on; refund rejections: other signer, before timeout, no lower bound",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala:173-230",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala:238-384"
+      ]
+    },
+    {
+      "pass": "HtlcValidator",
+      "name": "rejects a context that is not spending, an output without datum, an unknown redeemer",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala:194-234"
+      ]
+    },
+    {
+      "pass": "HtlcValidator",
+      "name": "reveal and refund windows are disjoint; bound closure does not matter; sample spends on the Lean machine",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala:648-784"
+      ]
+    },
+    {
+      "pass": "HtlcVerificationTest helpers",
+      "name": "contexts written from Data equal the ledger encoding",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala:122-192"
+      ]
+    },
+    {
+      "pass": "HtlcTransactions / HtlcContract",
+      "name": "lock, reveal, timeout builders; script size pinned at 310 bytes",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala:43-65",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala:91-114",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala:173-194"
+      ]
+    },
+    {
+      "pass": "EscrowValidator",
+      "name": "deposit: success (budget pinned), wrong signer, already funded, init amount equals escrow amount",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/escrow/EscrowTest.scala:97-197"
+      ]
+    },
+    {
+      "pass": "EscrowValidator",
+      "name": "deposit: exactly one buyer output, whole-value contract output, datum preserved, exactly one contract output",
+      "tests": []
+    },
+    {
+      "pass": "EscrowValidator",
+      "name": "exactly one escrow input per transaction (double satisfaction)",
+      "tests": []
+    },
+    {
+      "pass": "EscrowValidator",
+      "name": "pay / refund: success (budget pinned), not funded, missing seller/buyer output, wrong amount",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/escrow/EscrowTest.scala:201-364"
+      ]
+    },
+    {
+      "pass": "EscrowValidator",
+      "name": "pay needs the buyer's signature, refund needs the seller's signature",
+      "tests": []
+    },
+    {
+      "pass": "EscrowTransactions",
+      "name": "initialize pays the initialization amount to the script",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/escrow/EscrowTest.scala:88-93"
+      ]
+    },
+    {
+      "pass": "EscrowOffChain",
+      "name": "preview-testnet runner (needs Blockfrost and mnemonics; not a unit-test target)",
+      "tests": []
+    },
+    {
+      "pass": "Factory",
+      "name": "computeTokenName depends on the seed's tx id and index",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/factory/FactoryTest.scala:21-79"
+      ]
+    },
+    {
+      "pass": "Factory",
+      "name": "validateCreate: success; unsigned, seed not consumed, wrong token name, missing product output",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/factory/FactoryTest.scala:83-339"
+      ]
+    },
+    {
+      "pass": "Factory",
+      "name": "validateCreate: missing inline datum, tag mismatch, signed by a key that is not the datum creator",
+      "tests": []
+    },
+    {
+      "pass": "Factory",
+      "name": "validateDestroy burns exactly one token; validateSpend needs creator signature and burns exactly its NFT",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/factory/FactoryTest.scala:343-516"
+      ]
+    },
+    {
+      "pass": "FactoryExample / FactoryContract",
+      "name": "mint/spend dispatch, policy id as spending script hash, own address must be a script",
+      "tests": []
+    },
+    {
+      "pass": "EditableNftValidator.mint",
+      "name": "mint pair with seed; CIP-68 labels; rejects no seed, Burn-redeemer mint, extra names, user NFT in ref output",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:26-264"
+      ]
+    },
+    {
+      "pass": "EditableNftValidator burn",
+      "name": "burn the pair together; burning the user NFT alone is rejected",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:266-312",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:529-584"
+      ]
+    },
+    {
+      "pass": "EditableNftValidator.spend",
+      "name": "edit until sealed, seal, transfer then edit by new holder, edit after seal rejected",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:314-527"
+      ]
+    },
+    {
+      "pass": "EditableNftValidator.spend",
+      "name": "rejections: edit without the user NFT, token id changed, ref NFT not returned, spend-Burn without burning",
+      "tests": []
+    },
+    {
+      "pass": "LinkedListValidator / scalus.patterns.LinkedList",
+      "name": "init and deinit; deinit of a non-empty list rejected",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:26-73",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:891-935"
+      ]
+    },
+    {
+      "pass": "LinkedListValidator / scalus.patterns.LinkedList",
+      "name": "appendUnordered and prependUnordered with their anchor rejections",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:75-282"
+      ]
+    },
+    {
+      "pass": "LinkedListValidator / scalus.patterns.LinkedList",
+      "name": "ordered insert, gap insert, wrong order and duplicate key rejected",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:284-378",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:482-719"
+      ]
+    },
+    {
+      "pass": "LinkedListValidator / scalus.patterns.LinkedList",
+      "name": "insert rejected when the new key is not greater than a Node anchor",
+      "tests": []
+    },
+    {
+      "pass": "LinkedListValidator / scalus.patterns.LinkedList",
+      "name": "remove and removeHead keep order and length; insert then remove is identity",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:380-480",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:721-889"
+      ]
+    },
+    {
+      "pass": "LinkedListValidator / scalus.patterns.LinkedList",
+      "name": "SpendForUpdate (validateElementUpdate) and spend-only redeemers on mint",
+      "tests": []
+    },
+    {
+      "pass": "LinkedListOffchain",
+      "name": "readAll, findRoot, findNode, findAnchorFor over UTxO sets",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:580-889",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:937-980"
+      ]
+    },
+    {
+      "pass": "LinkedListOffchain",
+      "name": "readAll(reader) overload",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C16-1",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/escrow/EscrowTest.scala:224-242",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/escrow/EscrowTest.scala:309-327",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/escrow/EscrowValidator.scala:130-143",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/escrow/EscrowValidator.scala:168-181"
+      ],
+      "claim": "'Pay fails: wrong signer' and 'Refund fails: wrong signer' never reach the signature checks: Eve is also the payee, so the earlier 'Buyer outputs must not be empty' / 'Seller outputs must not be empty' require fires first (the tests' own comments at 229-230 and 314-315 say so). Mutation: delete require(txInfo.isSignedBy(escrowDatum.buyer), ...) at EscrowValidator.scala:140-143 and require(txInfo.isSignedBy(escrowDatum.seller), ...) at 178-181. The whole suite stays green, so anyone could release or refund an escrow.",
+      "action": "Rename the two tests to 'Pay fails: no buyer output' and 'Refund fails: no seller output'. Add two tests built with TxBuilder (as at 266-281): spend fundedUtxo with Action.Pay, pay Alice 12 ADA and Bob 1 ADA, requireSignature(Eve.addrKeyHash), sign with Eve, then assertScriptFail(\"Only buyer can release payment\"). Do the same for Action.Refund (pay Bob 10 ADA and Alice 1 ADA), signed by Eve: assertScriptFail(\"Only seller can issue refund\").",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -35,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-2",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/escrow/EscrowValidator.scala:55-61",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/escrow/EscrowValidator.scala:88-96",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/escrow/EscrowValidator.scala:103-112",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/escrow/EscrowTest.scala:125-160"
+      ],
+      "claim": "Five escrow rejections have no test. None of the tested messages is among them. They are: the double-satisfaction guard 'Exactly one escrow input may be spent' (55-61), 'Expected exactly one contract output' (89-90), 'Expected exactly one buyer output' (92-96), the whole-value check on the continuing output (106-110), and 'EscrowDatum must be preserved' (112). Each was added as a security fix (see the comments), and nothing pins it.",
+      "action": "Add TxBuilder-built negative tests that use assertScriptFail with each message. (1) Initialize and deposit two escrows, then pay both in one transaction with a single seller payout. (2) Deposit with the contract output split into two outputs. (3) Deposit with two outputs to Bob. (4) Deposit with a contract output that holds extra lovelace or a native token. (5) Deposit with a changed inline datum.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -120,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-3",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/escrow/EscrowTest.scala:82-84",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:20-24",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:22-24",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala:63-65"
+      ],
+      "claim": "Three size tests cannot fail. Escrow asserts size > 0, and EditableNft and LinkedList only call info(...). No change to the compiled script breaks them. HtlcTest:64 shows the intended form: it pins the exact size.",
+      "action": "Pin the exact flat size in each test, as HtlcTest:64 does. If the size differs between the 3.3.8 and 3.9.0 builds, use ScalaCompilerVersion.baseline(pre38, since38), as PreimageExampleTest.scala:99 does. If the owner does not want size pins in these suites, delete the three tests instead.",
+      "coverageRisk": "none: no current assertion is lost",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-4",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingTransactionTest.scala:87-102",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/upgradeableproxy/UpgradeableProxyTest.scala:87-102",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:1053-1057",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/amm/AmmTest.scala:454-458",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/kit/ScalusTest.scala:42-57"
+      ],
+      "claim": "Two suites carry the same private assertSubmitScriptFail(provider, expectedError)(tx). It matches Left(NodeSubmitError.ScriptFailure) and checks that its logs contain the message. Two other suites carry a weaker assertSubmitFails that accepts any Left. ScalusTest offers assertScriptFail only for build-time failures, so suites that submit an invalid tx (built with constMaxBudget) have no shared way to check the failure reason.",
+      "action": "Add protected def assertSubmitScriptFail(provider: Emulator, expectedError: String)(tx: Transaction): Unit to ScalusTest, next to assertScriptFail. Use the body from VestingTransactionTest:87-102. Delete the two private copies. Replace LinkedListTest.assertSubmitFails and AmmTest.assertSubmitFails with it, and pass the expected messages (see C16-5, C16-6).",
+      "coverageRisk": "none: same assertions; the assertSubmitFails call sites get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:129-130",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:161-162",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:213-214",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:259-263",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:310-311",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:394-442",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:460-494"
+      ],
+      "claim": "The six negative tests assert only result.isLeft. Any failure passes them, for example a ledger rule or a missing input, not only the validator check that the test names. 'Lifecycle: ... seal -> edit failure' (379-443) ignores the results of its mint, two edits and seal (394, 406, 418, 429). Mutation: break the seal path so that the seal tx is rejected. Then editTx3 spends a reference UTxO that is not on chain, submit returns Left, and the test still passes. The transfer lifecycle (445-527) also ignores its mint, edit and transfer results (460, 472, 494).",
+      "action": "Prerequisite: C16-4. Replace each isLeft check with assertSubmitScriptFail(provider, msg) and the validator message: 'Must spend the seed UTxO' (130), 'Must burn exactly the reference and user NFT pair' (162 and 311), 'Must mint exactly the reference and user NFT pair' (214), 'Reference NFT output must hold exactly the reference NFT' (259-263) and 'Sealed NFTs are immutable' (442). Assert isRight on every setup submit, as the first lifecycle test does at 330, 343 and 356.",
+      "coverageRisk": "none: same scenarios, stricter checks",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:45-73",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:133-188",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:226-282",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:342-378",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:580-619",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:1053-1057",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/LinkedList.scala:114",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/LinkedList.scala:174-190"
+      ],
+      "claim": "No setup submit in the suite is checked: 30 provider.submit(...).await() calls drop their result (37, 49, 61, ...), and the property loops do the same (599-604 and others). Every FAIL test uses assertSubmitFails, which accepts any Left. Mutation: make appendUnordered reject valid appends. In 'FAIL: deinit when list has a node', rootUtxo2 then comes from appendTx.utxos, which is not on chain, so deinit fails with a missing input and the test passes. 'property: insert -- readAll keys are always in strict ascending order' passes when every insert is rejected, because an empty key list is sorted. This suite is the only test of scalus.patterns.LinkedList, so a broken require is hidden.",
+      "action": "Prerequisite: C16-4. Add submitOk(provider, tx) = assert(provider.submit(tx).await().isRight) and use it for every setup submit and in the property loops. Replace assertSubmitFails with assertSubmitScriptFail and the pattern messages: 'deinit: list must be empty' (45-73, 891-935), 'Anchor must be the last element (no link)' (133-188), 'prependUnordered: anchor must be Root' (226-282), and 'New key must be less than link key (ascending order)' (342-378, 543-578, 663-719).",
+      "coverageRisk": "none: same scenarios, stricter checks",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-7",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:580-619",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:621-661"
+      ],
+      "claim": "'property: insert -- readAll keys are always in strict ascending order' and 'property: insert -- length equals number of inserted keys' run the same init plus insert-every-key loop on the same generator. Only the final assertion differs: sorted versus size == keys.size + 1. Each property case submits about 7 transactions with full script evaluation.",
+      "action": "Merge them into one property, 'insert -- readAll returns the inserted keys in ascending order'. Assert txCreator.readAll(...).map(_._1).tail == keys.sorted(using Ordering[ByteString]). This checks order, length and content in one run. Delete the second test.",
+      "coverageRisk": "none: the merged assertion implies both old ones, and also checks that no key is lost or replaced",
+      "ciSavingSec": 0.8,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "LinkedListTest.scala:580-619 and 621-661 are identical up to the final assertion: the same distinctNodeKeys generator (line 996, 1-6 distinct keys, `.suchThat(_.nonEmpty)`), init, and findAnchorFor+insert loop. Neither test checks a submit result. Line 617 asserts strict ascending order of readAll.tail. Line 657 asserts size == keys.size+1. The proposed `readAll(...).map(_._1).tail == keys.sorted(using Ordering[ByteString])` implies both. The keys are distinct, so sorted means strictly ascending, and equality fixes the length. readAll always starts with the root (LinkedListOffchain.scala:90), so `.tail` is safe. The on-chain order is lessThanByteString on prefix++key (LinkedList.scala:183/191). With a common prefix, this matches Ordering[ByteString] on the bare key. Seq equality between a Vector and a List holds. No coverage is lost, and the check gains key content."
+    },
+    {
+      "id": "C16-8",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:543-578",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:663-719",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:45-73",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:891-935",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/LinkedList.scala:114"
+      ],
+      "claim": "Two pairs check one behavior each. (a) 'membership set: FAIL duplicate key is rejected' (543-578) is one instance of 'property: duplicate key is always rejected' (663-719). The example pins the root-anchor case. The property reaches the root anchor only when keys.head is the smallest key, about 1 case in 6. (b) 'property: deinit succeeds iff list is empty' (891-935) inserts only keys.head and asserts only the non-empty half. That is 'FAIL: deinit when list has a node' (45-73) with a random key, and the check (LinkedList.scala:114, link.isEmpty) does not read the key. The other half is the example 'deinit: valid empty list' (33-43).",
+      "action": "(a) In the property, use dupKey = keys.min (root anchor) and also keys.max (Node anchor), then delete the example at 543-578. (b) Delete the deinit property at 891-935. Keep 'FAIL: deinit when list has a node' and 'deinit: valid empty list'.",
+      "coverageRisk": "low: (a) keeps the root-anchor case through keys.min; (b) the random key cannot reach any other branch of deinit",
+      "ciSavingSec": 1,
+      "linesRemoved": 80,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "(a) The example at 543-578 inserts 'b' after root, then inserts 'b' again with the root anchor and badTxCreator. It fails on `newKey < linkKey` (LinkedList.scala:188-193). The property at 663-719 uses dupKey=keys.head and findAnchorFor (LinkedListOffchain.scala:107-122). That gives the root anchor only when keys.head is the minimum. With dupKey=keys.min, findAnchorFor returns the root, and root.link==keys.min, so the same branch fails, with the same badTxCreator and assertSubmitFails. keys.max covers the Node-anchor case. (b) The property at 891-935 inserts only keys.head and asserts only that deinit fails. deinit (LinkedList.scala:100-115) checks Root data, a burn of -1, assetName===rootKey and link.isEmpty. None of these reads the node key. The example at 45-73 sets the root link (by appendUnordered instead of insert; both set root.link=Some) and asserts the same failure with the same maxBudget creator. The success half is the example at 33-43. Both deletions keep every assertion."
+    },
+    {
+      "id": "C16-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:26-43",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:75-131",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:284-340"
+      ],
+      "claim": "Three example tests are the first step of the next test. 'init: valid empty list' (26-31) is the first submit of 'deinit: valid empty list' (33-43). 'appendUnordered: valid append to empty list' (75-92) is the first append of 'appendUnordered: two nodes' (94-131). 'insert: valid insert after root' (284-301) is the first insert of 'insert: insert between two nodes' (303-340). The longer tests do not check that first step today (see C16-6), so the short tests are the only check of it.",
+      "action": "After C16-6 adds submitOk to the setup steps, delete the three short tests. The longer tests then assert the same submit.",
+      "coverageRisk": "low only after C16-6; without it, deleting them loses the only check of the first step",
+      "ciSavingSec": 0.3,
+      "linesRemoved": 45,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The pairs are correct. init at 26-31 matches the first step of 33-43. append alpha at 75-92 matches 94-131 (lines 103-111). insert after root at 284-301 matches the first insert of 303-340 (lines 312-320), on the same branch: root anchor, link None, only the key differs ('b' vs 'c'). The first step is not asserted in the longer tests (lines 37, 98/111, 307/320). The claim that the short tests are 'the only check' of the first step is wrong. Each longer test then spends an output of the first-step tx (rootUtxo from initTx.utxos at 39; alphaUtxo from appendTx1.utxos at 114; rootUtxo2 from insertTx1.utxos at 323). If the first submit were rejected, that input would not be in the ledger. The final `isRight` assert (42, 130, 337) would then fail. Corrected action: delete the three short tests now. C16-6 only gives a better failure message; it is not needed to keep coverage."
+    },
+    {
+      "id": "C16-10",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:584-612",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:114-120",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:973-974",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/linkedlist/LinkedListOffchain.scala:68-77",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/linkedlist/LinkedListOffchain.scala:124-131"
+      ],
+      "claim": "LinkedListTest repeats four blocks. The 5-6 line chain provider.findUtxos(txCreator.scriptAddress).await().toOption.get.map(Utxo.apply).toSeq appears 20 times. The init plus insert-every-key loop appears in 5 properties (589, 630, 674, 731, 806). tx.utxos.find { address == scriptAddress && hasAsset(policyId, AssetName(prefix ++ key)) } appears 13 times, although LinkedListOffchain.findNode already does this lookup. Fetching all script UTxOs and then calling readAll repeats the public readAll(reader) overload. Coverage shows that overload as never run (LinkedListOffchain.scala:125-129).",
+      "action": "In the companion object, add: scriptUtxos(provider): Seq[Utxo]; walletUtxos(provider, party); initWith(provider, keys) for init plus insert with findAnchorFor and submitOk (from C16-6); and nodeIn(tx, key) = txCreator.findNode(tx.utxos.map(Utxo.apply), key). Replace readAll(scriptUtxos(...)) with txCreator.readAll(provider).await().",
+      "coverageRisk": "none: same assertions; readAll(reader) gains coverage",
+      "ciSavingSec": 0,
+      "linesRemoved": 300,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-11",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:993-1004",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/linkedlist/LinkedListTest.scala:795",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/LinkedList.scala:174-190",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/ByteStringOffchainApi.scala:143-148"
+      ],
+      "claim": "distinctNodeKeys never produces three cases that the insert ordering branches on. (1) Bytes outside 0x20-0x7e. The off-chain anchor search uses Ordering[ByteString], which is unsigned today (ByteStringOffchainApi.scala:143-148). The on-chain check is lessThanByteString. Bytes 0x00 and 0x80-0xff are where a signed compare would disagree, so they guard that agreement against regressions. (2) Keys that are prefixes of each other. With 1-30 random bytes this happens only by chance for 1-byte keys, but the ordering checks compare prefixed names byte-wise. (3) Lists shorter than 6. Gen.listOfN(6, ...) followed by .distinct almost always yields 6 keys, so the doc comment '1-6 distinct node keys' is wrong and whenever(keys.size >= 2) at 795 is always true.",
+      "action": "Generate a list size from Gen.choose(1, 6). Draw each key from a mix: 1-4 bytes from a small alphabet {0x00, 0x41, 0x7f, 0x80, 0xff}, which gives shared prefixes and edge bytes, and 1-30 bytes over the full byte range. Keep .distinct and the 30-byte cap. Fix the doc comment.",
+      "coverageRisk": "none: widens the input space",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-12",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/linkedlist/LinkedListValidator.scala:161-165",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/linkedlist/LinkedListValidator.scala:183-197",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/LinkedList.scala:440-484",
+        "scalus-design-patterns/src/main/scala/scalus/patterns/LinkedList.scala:174-178"
+      ],
+      "claim": "Three paths have no test. (1) The SpendForUpdate spend path and LinkedList.validateElementUpdate (440-484) have no test and no off-chain builder anywhere in the repository (grep for SpendForUpdate and validateElementUpdate finds only the definitions). They have 10 require checks, for example 'Element's link must remain unchanged' and 'No list tokens may be minted or burned during update'. (2) The insert rejection 'New asset name must be greater than anchor (ascending order)' (174-178) is never reached. Every failing insert in the suite uses an anchor whose link check fails instead. (3) The mint branches that reject the spend-only redeemers (LinkedListValidator.scala:161-165) are never run.",
+      "action": "Add example tests. (1) Build a SpendForUpdate tx with TxBuilder that spends a node and reproduces it with new data: assert success. Then build the same tx with a changed link, with a minted list token, and with a moved address: assert each message with assertSubmitScriptFail. (2) Build list root -> 'b', then insert 'a' with anchor node 'b': assert 'New asset name must be greater than anchor'. (3) Mint with the ListAction.Spend redeemer: assert 'Spend is a spending-only action'.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -120,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-13",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/factory/FactoryTest.scala:83-139",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/factory/FactoryTest.scala:141-194",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/factory/FactoryTest.scala:398-516",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala:787-826"
+      ],
+      "claim": "The 14 FactoryTest tests rebuild the same fixtures in full. The creator PubKeyHash hex appears 11 times, the policy id hex 11 times, the seed tx id 1111.. 9 times (6 lines each), and the zero TxId 11 times. The whole create TxInfo (about 35 lines) is copied into 5 tests that differ in one field each. Each test is 30-55 lines and asserts one message.",
+      "action": "Move the fixtures into a companion object as inline defs, because assertEval compiles its block. HtlcVerificationTest:787-826 shows the pattern. Add creator, tag, policyId, seed(index), zeroTxId, productOutput(tokenName, datum) and createTx(inputs, outputs, mint, signatories), with defaults that pass. Each test then states only the field it changes, for example createTx(signatories = List.empty).",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 250,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-14",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/factory/FactoryTest.scala:14-79",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/factory/Factory.scala:51-60",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:484-509"
+      ],
+      "claim": "Three examples check computeTokenName. 'computeTokenName is deterministic' (21-35) cannot fail: no change to a pure UPLC function makes f(x) === f(x) false. The two 'differs' tests are instances of the documented law computeTokenName(r) == blake2b_256(serialiseData(r.toData)) (Factory.scala:51-58). Nothing pins that law: the mutation to sha2_256(serialiseData(r.toData)) passes all three tests. The suite already mixes in v3.ArbitraryInstances (line 17), which gives Arbitrary[TxOutRef], but no test uses it.",
+      "action": "Replace the three tests with checkEval[TxOutRef] (EvalTestKit.scala:484) that asserts Factory.computeTokenName(r) === blake2b_256(serialiseData(r.toData)). Keep 'differs for different output indices' as an example, because the one-shot uniqueness depends on the index. Keep the ArbitraryInstances mixin.",
+      "coverageRisk": "none: the oracle property implies the deleted 'differs for seed' example and adds the formula pin",
+      "ciSavingSec": -1,
+      "linesRemoved": 30,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "Factory.computeTokenName (Factory.scala:60) is `seedUtxo.deriveTokenName`, and that is `blake2b_256(serialiseData(self.toData))` (Contexts.scala:78). So the oracle law holds for every TxOutRef and has no counterexample. 'deterministic' (FactoryTest.scala:21-35) cannot fail. The sha2_256 mutation passes all three examples. Arbitrary[TxOutRef] is in v3.ArbitraryInstances (scalus-core/shared/src/test/scala/scalus/ledger/api/v3/ArbitraryInstances.scala:13-22): 32-byte TxIds and index 0-1000. It covers the example shapes (32-byte ids, index 0/1). checkEval[A1] (EvalTestKit.scala:484-509) evaluates the property both on-chain and on the JVM. 'differs for seed' follows from the oracle only through blake2b collision resistance, which is acceptable. Small wording issue: the action says 'replace the three tests' but keeps 'differs for different output indices'. It really deletes two tests and adds one property."
+    },
+    {
+      "id": "C16-15",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/factory/Factory.scala:110-116",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/factory/Factory.scala:138-140",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/factory/Factory.scala:171-172",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/factory/FactoryTest.scala:141-194",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/factory/FactoryTest.scala:429-458"
+      ],
+      "claim": "Several validateCreate, validateDestroy and validateSpend branches have no test. 'Product output must have an inline datum' (113) and 'Product datum tag does not match' (114) are never run. Both CreatorMustSign tests (141-194, 429-458) use an empty signatory list. The mutation isSignedBy(creator) -> signatories.nonEmpty passes them, although the comment at 110-112 says the creator is taken from the datum so that a non-signer cannot be named. validateDestroy is never called with zero tokens or with two token names under the policy (singleOrFail, 139). validateSpend is never called with an extra burn under the factory policy (hasOnly, 172).",
+      "action": "After C16-13, add assertEvalFailsWithMessage tests. (1) The product output has a datum hash: expect MissingInlineDatum. (2) The datum tag differs from the redeemer tag: expect DatumTagMismatch. (3) The datum creator is A, and the tx is signed by B: expect CreatorMustSign, in validateCreate and in validateSpend. (4) Destroy with an empty mint under the policy, and with two names at -1: expect MustBurnExactlyOneToken. (5) Spend burns its NFT and a second name: expect ProductNFTMustBeBurned.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.3,
+      "linesRemoved": -70,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-16",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/factory/FactoryExample.scala:31-71",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/factory/FactoryExample.scala:73-85"
+      ],
+      "claim": "No test in the repository compiles or runs FactoryExample (the combined mint/spend validator) or FactoryContract. A grep for FactoryContract and FactoryExample finds only their definitions. FactoryTest calls the Factory helpers directly, so these parts are untested: redeemer dispatch, spendingScriptHash = policyId, the script-hash derivation in spend ('Own address must be Script'), 'Datum required', and the compile of FactoryContract.compiled itself. Every other example in this cluster has an end-to-end or a compiled-script test.",
+      "action": "Add FactoryContractTest. Pin the FactoryContract.compiled size. Run one Emulator flow: create (spend the seed, mint the NFT to the script address with ProductDatum), then destroy (spend the product UTxO and burn with the Destroy redeemer, signed by the creator). Add one failure per purpose: destroy signed by another key fails with 'Creator must sign the transaction', and create without the seed fails with 'Seed UTxO must be consumed'.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -120,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-17",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:314-377",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:379-443"
+      ],
+      "claim": "'Lifecycle: mint -> edit -> edit -> seal -> edit failure' (379-443) repeats the mint, two edits and seal of 'Lifecycle: mint -> edit -> edit -> seal success' (314-377) line for line. Its only addition is one more edit, which must fail. The copy also drops the isRight checks that the original has.",
+      "action": "Append the failing edit (433-442) to the end of the success test, after its final-datum checks, and rename it 'Lifecycle: mint -> edit -> edit -> seal, then edit fails'. Use assertSubmitScriptFail(provider, \"Sealed NFTs are immutable\") (C16-5). Delete 379-443.",
+      "coverageRisk": "none: the merged test asserts every step of both",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "In EditableNftValidatorTest.scala, 379-431 repeats 314-369 step for step: the same createProvider, seed, mint, the edits 'First edit' and 'Second edit', and seal. It drops the isRight checks (lines 394, 406, 418 and 429 ignore the results). Its only addition is 430-442: take the sealed refNft output, edit, and assert isLeft. Appending this after the final-datum checks at 375-376 gives the same state, because the success test does not use sealTx's output afterward. The merged test asserts every step of both tests. The message 'Sealed NFTs are immutable' exists at EditableNftValidator.scala:196. The builder uses constMaxBudget (line 593), so building the failing edit does not throw. Note that assertSubmitScriptFail comes from C16-5. Until C16-5 lands, keep `assert(result.isLeft)`."
+    },
+    {
+      "id": "C16-18",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:95-110",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:180-187",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:230-237",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:283-295",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:478-485",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:571-580",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:591-600"
+      ],
+      "claim": "Four blocks repeat in this suite. The parameterized script EditableNftContract.compiled.withErrorTraces.apply(TxOutRef(...).toData) is built 5 times. Each apply recompiles the script (the F-19 pattern), and createTxCreator recompiles it once more per test. The buildRedeemer for MintRedeemer.Mint is copied 3 times. The search for the UTxO that holds the user NFT is copied twice (288-295, 478-485). The 'no output holds token X' check is copied twice (571-580). The 9-line mint-and-submit prefix appears in 7 tests. Every test builds a fresh Emulator from the same genesis, so one fixed seed and one parameterized script can serve the whole suite.",
+      "action": "In the companion object, add lazy val seed, fixed as the UTxO at Input(genesisHash, 0) instead of utxos.head, and lazy val parameterizedScript built once from that seed. Also add: mintRedeemer(seed, scriptAddr)(tx); utxoHolding(utxos, assetName); holdsNone(tx, assetName); and mintFresh(provider): (txCreator, refNftUtxo) with isRight asserted. Build the default txCreator once per evaluator. Use the helpers in the 12 tests.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0.5,
+      "linesRemoved": 120,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-19",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/editablenft/EditableNftValidator.scala:141-171",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/editablenft/EditableNftValidatorTest.scala:445-527"
+      ],
+      "claim": "No test shows the core ownership rule: a party without the user NFT cannot edit. The transfer lifecycle (445-527) shows that Bob can edit after the transfer, but no test shows that Alice can no longer edit then ('Must present user token to edit the reference NFT', 147). These are also untested: 'Must return reference NFT to the script address' (149-154), 'Token ID is immutable' (164) and the spend-Burn checks 'Must burn the reference NFT' / 'Must burn the user NFT' (166-170). Mutation: delete require(hasUserToken, ...) at 147. Every test stays green.",
+      "action": "Add TxBuilder-built tests that submit with assertSubmitScriptFail. (1) After the transfer to Bob, Alice spends the ref NFT with SpendRedeemer.Spend, and the user-input index points to her own ADA input. (2) An edit whose continuation goes to Alice's address. (3) An edit that changes tokenId in the new datum. (4) A spend with SpendRedeemer.Burn and no burn in the mint.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.4,
+      "linesRemoved": -120,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-20",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala:122-144",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:227-243",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:695-709",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala:146-192"
+      ],
+      "claim": "HTLC's 'the contexts built from Data are the ledger's encoding' (122-144) checks VestingVerificationTest's inline helpers scriptContext, spendingInfo, noDatum and someDatum. They are imported at line 9. VestingVerificationTest:227-243 has the same test with the same two assertions. Only the datum and redeemer values differ, and the helpers treat those as opaque Data. HTLC's own test at 146-192 already runs scriptContext, spendingInfo and someDatum on its field-by-field contexts.",
+      "action": "Delete HtlcVerificationTest:122-144. Keep the Vesting test as the single check of these helpers, or move it together with the helpers (C16-21).",
+      "coverageRisk": "low: a plain assert, not a proven/refuted statement, so HtlcVerificationTest.proofs.json does not change. noDatum stays checked by VestingVerificationTest:241 only.",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "HtlcVerificationTest.scala:122-144 and VestingVerificationTest.scala:227-243 both compare scriptContext(TxInfo.placeholder.toData, redeemer, spendingInfo(ref.toData, noDatum/someDatum(d))) with ScriptContext(...).toData. They use the same ref TxOutRef(TxId(hex\"00\"),0) and the same two assertions. The helpers are the inline defs at VestingVerificationTest.scala:695-709, and HTLC imports them at line 9. They only wrap the datum and redeemer into constrData/mkCons, so different values do not change what the tests check. HTLC still uses the helpers at 197/210/227/841/892, and 146-192 checks refund/reveal (scriptContext+spendingInfo+someDatum) against ledger encoding. The test is a plain assert, not proven/refuted, so proofs.json does not change. If C16-21 moves the helpers, the Vesting test must move with them."
+    },
+    {
+      "id": "C16-21",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala:9",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala:10",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/vesting/VestingVerificationTest.scala:695-709"
+      ],
+      "claim": "HtlcVerificationTest and PaymentSplitterVerificationTest import the ledger-encoding inline defs (scriptContext, spendingInfo, noDatum, someDatum) from another suite's companion object, VestingVerificationTest. Those helpers belong to no single example. A change to the Vesting suite can break two unrelated proof suites.",
+      "action": "Move the four inline defs and their encoding test (VestingVerificationTest:227-243) into a shared test object, for example scalus.examples.verify.LedgerEncoding in scalus-examples/jvm/src/test, with a LedgerEncodingTest. Update the three imports.",
+      "coverageRisk": "none: the code moves; the check stays",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C16-22",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/escrow/EscrowTest.scala:38-78",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/escrow/EscrowTest.scala:97-123",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/escrow/EscrowTest.scala:162-197",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala:57-59"
+      ],
+      "claim": "'Deposit: buyer deposits escrow amount' (97-123) copies the body of the initializeAndDeposit helper (59-78) so that it can reach the tx. 'Deposit: works when initializationAmount equals escrowAmount' (162-197) copies the body of initialize (38-56) with another amount. The 'output at the contract address' lookup is copied 4 times (52-54, 74-76, 119-121, 180-182), and once more in HtlcTest:57-59.",
+      "action": "Give initialize an initAmount parameter (default initializationAmount). Make a deposit(provider, escrowUtxo) helper that returns the tx. Add a contractUtxo(tx) helper. Rewrite the two tests to use them.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 6 findings of scope merge-duplicate-tests, to-property or main-bug; 5 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

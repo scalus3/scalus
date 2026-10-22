@@ -1,0 +1,367 @@
+{
+  "cluster": "testing.conformance",
+  "summary": "The cluster runs the cardano-ledger conformance vectors through CardanoMutator (jvm suite on CI, an IT budget suite off CI), checks LedgerToPlutusTranslation key order against the Haskell golden TxInfo corpus, and unit-tests its own decoders and the state comparison; all CI suites are cheap (2.0 s, 0.9 s, rest under 0.1 s). The strongest gaps: 168 of 333 vector dirs never run, 37 of them for certificate rules Scalus implements (C30-2); an expected-failure vector passes on any exception, and an unparsable vector passes vacuously (C30-1, the F-32 pattern); the golden oracle ignores redeemer, input and signatory order (C30-10); and the test-side MempackParser has two latent parse defects and one test (C30-3). The cleanup is large in lines: ScriptContextComparisonTest is 330 lines without an assertion (C30-8), LedgerState carries ~90 lines of unused encoders, one of which contradicts its decoder (C30-4), and the IT suite shares its class FQN and resource name with the jvm suite (C30-6/C30-7). C4 and C8 found nothing: the cluster has no ScalaCheck generators and no example group that is an instance of a law. No main-bug findings; F-32 is referenced, not re-reported.",
+  "behaviors": [
+    {
+      "pass": "CardanoMutator.transit",
+      "name": "UTXO-rule vectors (old dump format, EvaluateNoScripts default mode): expected accept/reject outcome",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerConformanceTest.scala:27-55"
+      ]
+    },
+    {
+      "pass": "CardanoMutator.transit",
+      "name": "resulting state equals newLedgerState field by field, minus the exclusion list [SC-14]",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerConformanceTest.scala:37-52"
+      ]
+    },
+    {
+      "pass": "CardanoMutator.transit",
+      "name": "UTXO-rule vectors (new dump format) in Validate mode: script budgets stay within redeemer ExUnits (IT only, not on CI)",
+      "tests": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/conformance/CardanoLedgerConformanceTest.scala:24-31"
+      ]
+    },
+    {
+      "pass": "CardanoMutator.transit",
+      "name": "certificate vectors: DELEG, GOVCERT, CERTS, LEDGER (37 dirs in the jvm tarball, see C30-2)",
+      "tests": []
+    },
+    {
+      "pass": "CardanoMutator.transit",
+      "name": "governance/epoch vectors: GOV, RATIFY, ENACT, EPOCH (131 dirs; rules not modeled, [SC-19b])",
+      "tests": []
+    },
+    {
+      "pass": "LedgerToPlutusTranslation",
+      "name": "TxInfo key order of withdrawals (V1/V2/V3), votes (V3) and data (V2/V3) equals the Haskell golden TxInfo",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/TxInfoTranslationGoldenTest.scala:253-362"
+      ]
+    },
+    {
+      "pass": "LedgerToPlutusTranslation",
+      "name": "TxInfo order of redeemers (purposes), inputs, signatories and mint against the golden TxInfo (see C30-10)",
+      "tests": []
+    },
+    {
+      "pass": "Transaction.fromCbor / UTxO decoding",
+      "name": "golden corpus decodes (82+/100 txs, 100/100 UTxO sets); PV13 hard-fork proposal is rejected",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/TxInfoTranslationGoldenTest.scala:228-249"
+      ]
+    },
+    {
+      "pass": "GoldenTranslationVectors (test infra)",
+      "name": "corpus sha256 pin, 100 instances in 9 PV x language cells, slot config matches recorded POSIX bounds",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/TxInfoTranslationGoldenTest.scala:183-221"
+      ]
+    },
+    {
+      "pass": "ConwayProtocolParams.fromCbor",
+      "name": "31-field Conway PParams decode and toProtocolParams (only indirectly, through the conformance vectors)",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerVectors.scala:73-86"
+      ]
+    },
+    {
+      "pass": "ConwayProtocolParams.fromCbor",
+      "name": "arity below 31 fails; extra trailing fields are skipped with one warning (see C30-11)",
+      "tests": []
+    },
+    {
+      "pass": "LedgerState decoder (test infra)",
+      "name": "PState current and older layouts",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/PStateDecoderTest.scala:33-54"
+      ]
+    },
+    {
+      "pass": "LedgerState decoder (test infra)",
+      "name": "DState accounts in UMap (old) and direct map (new) formats",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerConformanceTest.scala:32"
+      ]
+    },
+    {
+      "pass": "MempackParser (test infra)",
+      "name": "tag 4 output keeps the inline datum bytes",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/MempackParserTest.scala:9-21"
+      ]
+    },
+    {
+      "pass": "MempackParser (test infra)",
+      "name": "tags 0, 1, 2, 3, 5, multi-asset values, Addr28Extra, TxIn index (see C30-3)",
+      "tests": []
+    },
+    {
+      "pass": "LedgerStateComparison (test infra)",
+      "name": "compare reports top-level, account-part and key-set mismatches; exclusions filter by field and vector name; exclusions name their step",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerStateComparisonTest.scala:37-93"
+      ]
+    },
+    {
+      "pass": "LedgerStateComparison (test infra)",
+      "name": "value differences of keys-only maps (pools.*, utxo, instantStake) and dreps parts (see C30-12)",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C30-1",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerConformanceTest.scala:31-36",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerVectors.scala:104-107",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerVectors.scala:218-226",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerConformanceTest.scala:27-29"
+      ],
+      "claim": "Three ways the jvm conformance suite passes without checking anything. (1) For a vector that expects failure, any Try Failure counts as a correct rejection (line 35: success=false and result.isSuccess=false): a NullPointerException, a CBOR decoder bug or a crash inside CardanoMutator passes as 'rejected'. This is the catch-all pattern of F-32. (2) loadVector drops every file that fails to parse as JSON (218-224) without a message, so a vector directory whose files all fail yields zero runs and the test passes vacuously. (3) Nothing pins how many vectors the '.UTXO' filter selects (163 of 333 dirs today); a renamed dump layout selects fewer, or none, and stays green.",
+      "action": "In the jvm suite, require Success(Left(_)) for expected-failure cases, and allow Failure(_) only for an explicit list of vector/file names (the golden corpus shows that legitimate decode failures exist, e.g. the PV13 proposal); report the exception class otherwise. In loadVector, fail on a file that does not parse instead of skipping it. Assert runs.nonEmpty per vector, and assert the selected vector count against a floor (163), the way TxInfoTranslationGoldenTest.minCompared does.",
+      "coverageRisk": "none: adds checks only. Which expected-failure vectors pass today only through an exception is unknown until a run; the allow-list may need entries.",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-2",
+      "check": "C1",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerConformanceTest.scala:25-29",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/CertsValidator.scala:7",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/StakeCertificatesValidator.scala:1",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/VotingCertificatesMutator.scala:1"
+      ],
+      "claim": "The jvm vectors.tar.gz holds 333 vector dirs (plus pparams-by-hash); the '.UTXO' filter selects 165 and drops 2 'Bootstrap Witness' dirs, so 163 run and 168 never run in any suite. Since the filter came in (d84991e68) no test reads them. 37 of them exercise certificate rules that Scalus implements (CertsValidator, StakeCertificatesValidator/Mutator, VotingCertificatesMutator): DELEG 24, GOVCERT 10, CERTS 2, ShelleyImpSpec LEDGER 1. The other 131 (GOV 56, RATIFY 46, ENACT 16, EPOCH 12 + ShelleyImpSpec EPOCH 1) need governance/epoch rules that Scalus does not model ([SC-19b] of the emulator spec) and are out of scope here. The 2 'Bootstrap Witness' dirs are excluded with no stated reason.",
+      "action": "Extend the vector filter to DELEG, GOVCERT, CERTS and the ShelleyImpSpec LEDGER vector, with the same outcome and [SC-14] state checks. Put each vector that fails today in one explicit known-failure list with a reason, as LedgerStateComparison.exclusions does for fields. Add a one-line comment that states why 'Bootstrap Witness' is excluded, or drop the exclusion if those vectors pass.",
+      "coverageRisk": "none: adds coverage only. The size of the known-failure list is unknown until a run (report agents cannot run sbt).",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-3",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/MempackParser.scala:23-27",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/MempackParser.scala:317-321",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/MempackParser.scala:374-378",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/MempackParser.scala:389-391",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/MempackParser.scala:403-405",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/MempackParserTest.scala:9-21"
+      ],
+      "claim": "MempackParser decodes every UTxO of every vector, but MempackParserTest has one case (tag 4, coin-only). Two latent parse defects: (a) parseTransactionInput computes the TxIx as bytes(32) | (bytes(33) << 8) on signed Bytes, so an output index >= 128 sign-extends to a negative index (index 200 -> -56); high confidence by reading. (b) The inline-datum ShortByteString length is read as one raw byte (318, 375), while the same parser reads the script ShortByteString length with VarLen.decode (390, 404); a datum of 128 bytes or more gets a wrong length. Latent: no current vector has such a datum, or the suite would fail today. Tags 0, 1, 2, 3 and 5, multi-asset values and the Addr28Extra bit layout have no direct test.",
+      "action": "Fix (a) with (bytes(32) & 0xff) | ((bytes(33) & 0xff) << 8), and (b) with VarLen.decode for the datum lengths (and the CompactAddr lengths at 73, 105, 303, 348 for consistency). Extend MempackParserTest to one hand-built case per tag 0-5, plus: TxIx 200, an inline datum of 200 bytes, a multi-asset value with two policies, and Addr28Extra for mainnet/testnet x key/script payment credentials.",
+      "coverageRisk": "none: adds coverage; the fixes change only inputs the current vectors do not contain.",
+      "ciSavingSec": 0,
+      "linesRemoved": -60,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-4",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerState.scala:10",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerState.scala:26-42",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerState.scala:80-85",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerState.scala:272-307",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerState.scala:333-338",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerState.scala:380-386",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerState.scala:393-398",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerState.scala:478-525",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerState.scala:541"
+      ],
+      "claim": "LedgerState is only ever decoded: no file encodes a LedgerState, CertState, PState, VState, DState or ConwayDRepState; the encoders exist only because LedgerState 'derives Codec' (line 10) and UTxOState gets a Codec (541). The DState encoder does not even match its decoder: it writes UMElem as [RDPair, pool|null, dRep|null, ptrs] (510-520) while parseUMElem reads [StrictMaybe RDPair, Set Ptr, StrictMaybe pool, StrictMaybe dRep] (478-499), and the DState scaladoc (393-398) repeats the wrong layout. conformanceTestEnv (26-42) has no caller in the repository.",
+      "action": "Change to 'derives Decoder' and 'given Decoder[UTxOState] = Decoder.derived'; delete the five Encoder givens, writePoolParams and conformanceTestEnv; fix the DState scaladoc to the layout parseUMElem reads. After that, check whether the jvm copy of blockfrost-params-epoch-544.json still has a user (bloxbean and IT depend on jvm test->test) before deleting it.",
+      "coverageRisk": "none: removed code has no caller.",
+      "ciSavingSec": 0,
+      "linesRemoved": 90,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-5",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerVectors.scala:47-52",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerVectors.scala:64-68",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerVectors.scala:73-87",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerVectors.scala:111-161"
+      ],
+      "claim": "CardanoLedgerVectors has dead and misleading pieces. The useParams parameter (50, 67) is never false, so the 'else None' branch at 87 is dead. testVector (47-52) is only a tuple adapter for the IT suite. vectorsExist and its warning (149-161) say 'skipping conformance tests', but nothing skips: with the resource missing, conformanceVectorsPath is null and vectorNames() throws a NullPointerException at suite construction. The 25 MB extraction into a fresh createTempDirectory (117) is never deleted: 99 'cardano-ledger-vectors*' dirs exist in the local TMPDIR now.",
+      "action": "Remove useParams and the dead branch; remove testVector once C30-6/C30-7 move the IT suite to runVector. Replace vectorsExist and the warning with a hard failure that names the missing resource, as GoldenTranslationVectors does (GoldenTranslationVectors.scala:111-115). Delete the extracted tree at JVM exit (shutdown hook), or extract into target/ under a fixed name and reuse it.",
+      "coverageRisk": "none: behavior on the success path is unchanged.",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-6",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerConformanceTest.scala:32-54",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/conformance/CardanoLedgerConformanceTest.scala:24-31",
+        "build.sbt:1258"
+      ],
+      "claim": "The per-vector check (outcome comparison, [SC-14] state comparison against newLedgerState, failure message) lives inline in the jvm suite (32-54). The IT suite repeats a weaker copy of the loop (24-31) through testVector, without the state comparison, so the IT vectors never get [SC-14].",
+      "action": "Move lines 32-54 into CardanoLedgerVectors.checkVector(vectorName, mode): List[String] (the failure lines), returning the outcome and state mismatches. Let CardanoLedgerVectors take the vectors resource name (a class or a parameter, default 'vectors.tar.gz') so C30-7 can load its own set by a distinct name. The jvm suite becomes test(name)(assert(checkVector(v, mode).isEmpty, ...)). The IT caller change is C30-7.",
+      "coverageRisk": "none for the jvm suite (same checks). See C30-7 for the IT side.",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-7",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/conformance/CardanoLedgerConformanceTest.scala:23-31",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerConformanceTest.scala:16",
+        "build.sbt:1258",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/CardanoLedgerVectors.scala:113"
+      ],
+      "claim": "The IT suite has the same FQN as the jvm suite, scalus.testing.conformance.CardanoLedgerConformanceTest, and the IT module depends on the jvm test classes (build.sbt:1258), so two classes with one name sit on the IT test classpath. Both modules also ship a resource named vectors.tar.gz (jvm 1.78 MB, 333 dirs, old format; IT 269 KB, 46 dirs, new format), and CardanoLedgerVectors loads 'vectors.tar.gz' by name (113): which vector set the IT run sees depends only on classpath order. The IT suite also prints pprint of every case (28) and skips the [SC-14] state comparison.",
+      "action": "Rename the IT class (e.g. CardanoLedgerBudgetConformanceTest) and its resource (e.g. vectors-new-format.tar.gz), and pass that resource name to CardanoLedgerVectors (C30-6 adds the parameter). Call checkVector(v, EvaluatorMode.Validate) from C30-6; drop the println.",
+      "coverageRisk": "low: the IT vectors gain the state comparison and may need exclusions; whether they pass is unknown until a run (IT is not on CI).",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-8",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger-it",
+      "evidence": [
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/conformance/ScriptContextComparisonTest.scala:44-188",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/conformance/ScriptContextComparisonTest.scala:180-184",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/conformance/ScriptContextComparisonTest.scala:190-273",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/conformance/ScriptContextComparisonTest.scala:242-245",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/conformance/ScriptContextComparisonTest.scala:275-331",
+        "scalus-cardano-ledger-it/src/test/scala/scalus/testing/conformance/ScriptContextComparisonTest.scala:66-74"
+      ],
+      "claim": "ScriptContextComparisonTest is a debugging tool from the December 2025 budget investigation. It was added in d84991e68, the same commit that retired the budget-investigation note from the IT suite doc; the tool outlived the investigation. Its 3 tests contain no assertion: 330 lines of println. Test 1 catches every Exception (180-184), so it cannot fail. Test 2 writes .flat dumps into the working directory and CBOR files into /tmp (242-245, 251-262). Test 3 prints budget differences without comparing them. It repeats the pparams lookup of CardanoLedgerVectors.runVector three times (66-74, 207-214, 285-292) and the V1/V2/V3 dump code twice.",
+      "action": "Delete the file. If the owner wants the dump tool, move it to a main method outside test sources (it is a tool, not a test).",
+      "coverageRisk": "low: tests 2 and 3 fail only if evalPlutusScriptsWithContexts throws for 'UTXOS.PlutusV1.can use regular inputs for reference'. The IT conformance suite evaluates that same vector in Validate mode, which also checks the budget that test 3 only prints. Lost: evaluation under SlotConfig.mainnet and the epoch-544 params fallback, which the vector does not need.",
+      "ciSavingSec": 0,
+      "linesRemoved": 330,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-9",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/TxInfoTranslationGoldenTest.scala:253-362",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/TxInfoTranslationGoldenTest.scala:22-28",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/TxInfoTranslationGoldenTest.scala:123-147"
+      ],
+      "claim": "The six cell tests of TxInfoTranslationGoldenTest (253-362) repeat one 17-line body: cell(...), info, assertCoverage, assert(mismatches.isEmpty). Each cell recomputes getTxInfoV3/V2 for every instance, so a V3 TxInfo is built 3 times and a V2 TxInfo twice. The header (22-28) describes 'DEFECT n' cells that assert a mismatch is still present; none remain (all were flipped to 'ordering matches').",
+      "action": "Replace the six tests with a table of (test name, language, expectedKeys, actualKeys) and one loop that registers tests with the same names and floors. Memoize the translated TxInfo per instance (a lazy map from index to Try[TxInfo]). Rewrite the header paragraph to describe the current cells.",
+      "coverageRisk": "none: same tests, same names, same assertions.",
+      "ciSavingSec": 0.2,
+      "linesRemoved": 50,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/TxInfoTranslationGoldenTest.scala:19-20",
+        "scalus-core/shared/src/main/scala/scalus/cardano/ledger/LedgerToPlutusTranslation.scala:731-738",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/GoldenTranslationVectors.scala:100-105"
+      ],
+      "claim": "The golden oracle is the only test that compares LedgerToPlutusTranslation with the real Haskell ledger, but it reads only the withdrawals, votes and data fields. The corpus also carries the redeemers map (field 9 in V2/V3), whose order Scalus derives from Ordering[Redeemer] and the claim that the tag ordinals match ConwayPlutusPurpose (LedgerToPlutusTranslation.scala:731-734), plus inputs (0), signatories (8 in V2/V3, 7 in V1) and mint (4 in V2/V3, 3 in V1). A wrong order in any of these passes every other test in the repository, which build the context with the translator itself.",
+      "action": "Add cells for: the redeemer purpose sequence in V3 and V2 (compare the ScriptPurpose constructor index plus index/hash per entry), the signatory order, and the input order. Use the same floors and non-vacuity rule as the existing cells.",
+      "coverageRisk": "none: adds coverage only.",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-11",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/main/scala/scalus/cardano/ledger/ConwayProtocolParams.scala:130-132",
+        "scalus-cardano-ledger/jvm/src/main/scala/scalus/cardano/ledger/ConwayProtocolParams.scala:174-181",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerState.scala:557-562"
+      ],
+      "claim": "ConwayProtocolParams.fromCbor is main code (used for GetCurrentPParams) but is only tested through the conformance fixtures. The baseline marks both of its guard paths unexecuted: the arity check (130-132) and the skip of trailing fields with a one-time warning (174-181). The skip is the forward-compatibility path for a new protocol-parameter field.",
+      "action": "Add ConwayProtocolParamsTest (jvm): decode one pparams-by-hash file from the vectors; re-encode its borer Dom with one extra trailing element and assert the decoded params are equal; drop the last element and assert a borer validation failure.",
+      "coverageRisk": "none: adds coverage only.",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-12",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerStateComparison.scala:144-148",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerStateComparison.scala:100-110",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerStateComparisonTest.scala:42-50"
+      ],
+      "claim": "LedgerStateComparisonTest covers key-set mismatches and the accounts parts, but not the value-difference path of a keys-only map (144-148: pools.*, utxo, instantStake with the same keys and a different value) and not the dreps parts (expiry, anchor, deposit, delegates at 100-110). The 'instantStake' case at 42-50 empties the map, so it reaches the key-set path only.",
+      "action": "Add two tests: the same pool in pools.deposits with a different Coin reports exactly 'pools.deposits'; a DRep with a different deposit reports exactly 'dreps.deposit'.",
+      "coverageRisk": "none: adds coverage only.",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C30-13",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerStateComparison.scala:117-119",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerStateComparison.scala:169-172",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerStateComparison.scala:52-59",
+        "docs/internal/test-refactor/profiles/ledger-analysis.md:71"
+      ],
+      "claim": "compare renders a pprint detail string (show, 169-172) for every mismatch, including the fields that are excluded for every vector (govState, instantStake, deposited, dreps.*), and withoutExcluded drops them afterwards. instantStake differs on most successful vectors, so the suite pretty-prints maps it then throws away. The ledger profile puts LedgerStateComparison.show at 2.5 % self CPU of the module (277 samples; the conformance suite is 10.1 %), so the measurement is thin.",
+      "action": "Build the detail lazily: give FieldMismatch a by-name or () => String detail, or pass the exclusion predicate into compare so excluded fields are skipped before rendering. Keep LedgerStateComparisonTest unchanged.",
+      "coverageRisk": "none: same mismatch fields reported.",
+      "ciSavingSec": 0.3,
+      "linesRemoved": 0,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 0 findings of scope merge-duplicate-tests, to-property or main-bug; 0 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

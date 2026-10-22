@@ -1,0 +1,377 @@
+{
+  "cluster": "examples.5",
+  "summary": "The cluster is cheap: about 4.2 s locally (LotteryValidatorTest 1.3 s, LotteryScenarioTest 1.2 s, LotteryScalaCheckCommandTest 1.1 s, the two DaBondPool suites 0.6 s), so there is no ci-time finding. The DaBondPool suites are strong: 74 contexts run on both the Aiken and the Scalus script, each rejection checks the guard's trace message, and every accepted case pins exact ExUnits and fees. Only five guards with shared messages or rare inputs are untested (C18-10). The lottery is weaker. LotteryValidator allows double satisfaction in Lose and Timeout (C18-1, main-bug). Most of its rejection branches, including the 'Reveal too late' guard from the June security fix, have no test (C18-2). One 'boundary' test repeats another (C18-3). The two random suites have invariants that cannot fail, because they find games by the secrets they claim to check (C18-6, C18-7). LotteryValidatorTest repeats one setup 10 times and ignores 13 setup submit results (C18-4). The random suites copy about 200 lines of transaction builders (C18-9). Validator coverage cannot be read from scoverage (F-9). Referenced: F-9, C06-3.",
+  "behaviors": [
+    {
+      "pass": "LotteryValidator",
+      "name": "Empty: P1/P2 reveal with valid preimage, signature, continuation datum",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:26-78"
+      ]
+    },
+    {
+      "pass": "LotteryValidator",
+      "name": "Empty: wrong preimage, changed P2 secret, changed deadline rejected",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:107-199"
+      ]
+    },
+    {
+      "pass": "LotteryValidator",
+      "name": "Empty: changed P1 secret, wrong length, missing signature, wrong next state, Lose/Timeout too early",
+      "tests": []
+    },
+    {
+      "pass": "LotteryValidator",
+      "name": "second reveal: even sum wins, odd sum Unlucky, wrong preimage",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:201-246",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:467-530",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:578-618",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:701-746"
+      ]
+    },
+    {
+      "pass": "LotteryValidator",
+      "name": "second reveal: Reveal too late at/after deadline; reveal by an already-revealed player",
+      "tests": []
+    },
+    {
+      "pass": "LotteryValidator",
+      "name": "Lose: loser concedes, pot to winner; wrong preimage",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:337-381",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:532-576",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:620-659"
+      ]
+    },
+    {
+      "pass": "LotteryValidator",
+      "name": "Lose: wrong winner, insufficient payout, script winner, double satisfaction",
+      "tests": []
+    },
+    {
+      "pass": "LotteryValidator",
+      "name": "Timeout: revealer claims after deadline; before deadline, wrong preimage, third-party theft rejected",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:250-333",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:383-465",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:661-699"
+      ]
+    },
+    {
+      "pass": "LotteryValidator",
+      "name": "Timeout: two pots paid by one output (double satisfaction)",
+      "tests": []
+    },
+    {
+      "pass": "LotteryTransactions",
+      "name": "initiate, reveal P1/P2, lose, timeout builders",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:26-746"
+      ]
+    },
+    {
+      "pass": "Lottery invariants",
+      "name": "secrets/deadline unchanged, pot >= bet under random actions across concurrent games",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScenarioTest.scala:32-84",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:33-62"
+      ]
+    },
+    {
+      "pass": "LotteryContract",
+      "name": "compiled script size",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:22-24"
+      ]
+    },
+    {
+      "pass": "DaBondPoolValidator.mint",
+      "name": "InitPool: one NFT, init_ref spent, address, Bonded inline datum, exact value, floor, no ref script",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolDifferentialTest.scala:157-239"
+      ]
+    },
+    {
+      "pass": "DaBondPoolValidator.spend",
+      "name": "common: own NFT, single pool input, purpose",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolDifferentialTest.scala:308-328",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolDifferentialTest.scala:711-741"
+      ]
+    },
+    {
+      "pass": "DaBondPoolValidator.spend",
+      "name": "TopUp: minimum, datum unchanged, address, value",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolDifferentialTest.scala:248-302",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolEmulatorTest.scala:164-177"
+      ]
+    },
+    {
+      "pass": "DaBondPoolValidator.spend",
+      "name": "Slash: hub NFT, state-queue redeemer, correction lock Idle, min(bond, backing)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolDifferentialTest.scala:336-479"
+      ]
+    },
+    {
+      "pass": "DaBondPoolValidator.spend",
+      "name": "Slash: hub credential and hub datum constructor guards",
+      "tests": []
+    },
+    {
+      "pass": "DaBondPoolValidator.spend",
+      "name": "Begin/Cancel/CompleteWithdraw: quorum, params NFT/credential, state, unlock_at, range, amounts",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolDifferentialTest.scala:485-709",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolEmulatorTest.scala:180-253"
+      ]
+    },
+    {
+      "pass": "DaBondPoolValidator.getDaParams",
+      "name": "params reference script, committee hash mismatch, non-inline datum",
+      "tests": []
+    },
+    {
+      "pass": "DaBondPool Aiken parity",
+      "name": "same verdict as the Aiken blueprint on 74 contexts; exact Scalus ExUnits and fee pins",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolDifferentialTest.scala:59-106",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolEmulatorTest.scala:257-306"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C18-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:186-200",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:240-253",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:202-218",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:255-272",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:277-282"
+      ],
+      "claim": "LotteryValidator is open to double satisfaction in Lose and Timeout. Each script run checks only that some output pays the winner/revealer at least its own input's lovelace (tx.outputs.at(winnerOutputIdx) at 193 and 246; paysAtLeast at 278-282). Nothing ties that output to one lottery input or forbids a second lottery input. Example: Alice revealed first in two games (10 ADA pots each) and both opponents did not respond. After the deadline anyone (no signature is checked in Timeout) spends both pots with Timeout redeemers (Alice's preimages are public), pays Alice 10 ADA once and keeps the other 10 ADA. Lose has the same hole for a loser of two games against the same winner (one payout, same winnerOutputIdx). The README promises the Timeout pot 'can only go to the rightful claimant'; the June fix bc4b45020 closed only the single-input theft. LotteryScenarioTest's games 0 and 1 already share player one (Alice), so the precondition is realistic.",
+      "action": "Owner decision (main code). Test side: add a negative test in LotteryValidatorTest that creates two games with the same revealer, reveals both, and submits one Timeout tx spending both pots with a single payout to the revealer; it must fail. Main side fix options: require that exactly one input sits at the own script address (as DaBondPoolValidator.scala:100 does with findUniqueOrFail), or require the payout amount to cover the sum of all lottery inputs.",
+      "coverageRisk": "none: adds a test; the validator change is the owner's decision",
+      "ciSavingSec": 0,
+      "linesRemoved": -40,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-49",
+      "verification": "The defect is real and reachable. Timeout (LotteryValidator.scala:202-218, 255-272) checks only the preimage hash, isEntirelyAfter(deadline), and paysAtLeast(tx, revealerPkh, amount). paysAtLeast (277-282) is tx.outputs.exists(credential === pkh && lovelace >= amount), and amount is this input's lovelace only (line 76). There is no signer check, no count of own-script inputs and no sum over lottery inputs, so one 10 ADA output to Alice satisfies both script runs. The preimage is public because it appeared in the earlier RevealPlayerOne/Two redeemer. Lose (186-200, 240-253) reads tx.outputs.at(winnerOutputIdx) from the redeemer. Two lottery inputs can name the same index, so a player who lost two games to the same winner pays once. The precondition is realistic: LotteryScenarioTest.scala:132-133 has games 0 and 1 both with Alice as player one. README.md:41-44 promises that the Timeout pot goes 'to the rightful claimant'. bc4b45020 added only the single-input paysAtLeast pin. No test in scalus-examples/jvm/src/test/scala/scalus/examples/lottery covers multi-input spends. The proposed negative test is valid, and the main-code fix belongs to the owner."
+    },
+    {
+      "id": "C18-2",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:102-104",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:121-141",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:104",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:108-111",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:157-158",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:171-172",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:179-182",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:193-199",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:224-225",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:233-236",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:246-252",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:107-199"
+      ],
+      "claim": "Most rejection branches of LotteryValidator have no test (grep of the error strings over the three lottery suites finds none): 'Reveal too late' in both arms (179-182, 233-236; the deadline guard added by the security fix bc4b45020), 'Wrong winner', 'Insufficient payout' and 'Winner must be pubkey' in both Lose arms, 'Player one already revealed' / 'Player two already revealed' (171-172, 224-225), 'Too early to give up or claim a timeout' (157-158), 'Invalid state transition' (104, 140), 'Length mismatch' and 'Must be signed by player one/two' (102-103, 138-139), and 'Player one secret must not change'. Only 9 negative cases exist (wrong preimage x5, P2-secret change, deadline change, timeout before deadline, Unlucky, third-party timeout). The validator's scoverage is not measured (F-9), so the coverage baseline does not show this gap.",
+      "action": "Add one negative case per listed guard. Cheapest form: a context-level table like DaBondPoolDifferentialTest.rejects(name, reason) (DaBondPoolDifferentialTest.scala:142-151): build the honest ScriptContext once per state (Empty, PlayerOneRevealed, PlayerTwoRevealed), apply one mutation, evaluate LotteryContract.compiled.withErrorTraces and assert the trace contains the guard message. Include the boundary 'winning reveal with validTo = afterDeadline at deadlineSlot fails with Reveal too late'. Keep the emulator-level assertFailure only for the end-to-end cases already present.",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -150,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C18-3",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:80-105",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:26-51",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryValidator.scala:83-120"
+      ],
+      "claim": "'P1 reveal succeeds at deadline (boundary)' asserts the same behavior as 'P1 reveals valid preimage from Empty state'. The Empty-state RevealPlayerOne arm (LotteryValidator.scala:85-119) never reads tx.validRange, so the different validTo (afterDeadline) and slot (deadlineSlot) do not reach the validator. Both tests pin the identical budget ExUnits(56921, 24_888_156), which confirms the same path. No mutation of deadline handling can break the 'boundary' test; its name suggests a deadline check that does not exist in that arm.",
+      "action": "Delete VT 80-105. Put the real boundary test in its place, as listed in C18-2: the winning second reveal at the deadline slot must fail with 'Reveal too late', and one slot earlier must succeed.",
+      "coverageRisk": "none: the deleted test runs the same validator path and budget as 26-51",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "VT 80-105 and VT 26-51 are identical except for validTo (afterDeadline vs deadline) and the slot (deadlineSlot vs beforeSlot). Both use the same builder (revealPlayerOne), the same preimage, secrets, revealDeadline and signer, and the same assertSuccess. The Empty/RevealPlayerOne arm (LotteryValidator.scala:85-119) never reads tx.validRange; isEntirelyBefore appears only in the second-reveal arms (179-182, 233-236). Both tests pin ExUnits(56921, 24_888_156). The deleted test adds only one thing: the emulator accepts a tx at slot 10 with an exclusive validTo of slot 11. That is ledger and builder behavior, not lottery validator behavior. Every validator assertion survives in VT 26-51 on the same platform (jvm/). No 'Reveal too late' test exists today (grep finds none), so the C18-2 replacement adds real coverage. Side note: README.md:211 lists 'the reveal-at-deadline boundary' as covered, so update that text when the test is replaced."
+    },
+    {
+      "id": "C18-4",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:205-222",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:254-271",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:299-316",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:341-358",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:387-404",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:432-448",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:583-599",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:625-641",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:666-682",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:705-722",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:220",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:269",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:314",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:356",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:402",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:447",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:491",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:509",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:551",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:597",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:639",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:680",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:720",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:778-800"
+      ],
+      "claim": "LotteryValidatorTest copies the same 'first player reveals' setup (fetch utxos, 12-argument revealPlayerOne/revealPlayerTwo call, setSlot, submit, find the new lottery UTxO) into 10 tests, about 16 lines each. The 13 setup submits (220, 269, 314, ...) discard the result: a failed setup reveal surfaces later as a misleading failure of the step under test (wrong UTxO, 'input not found'). createProvider (778-800) builds genesis UTxOs by hand; the same createProvider exists in 13 example suites (repeated-defs.csv).",
+      "action": "Add two private helpers in the companion: revealedByP1(provider, lotteryUtxo, preimage = validPreimage1, secret2 = validSecret2): Utxo and revealedByP2(...): Utxo. Each submits, asserts the result isRight (fail with the error), and returns the continuing UTxO. Replace the 10 blocks with one call each. Keep every assertSuccess/assertFailure and every ExUnits pin unchanged.",
+      "coverageRisk": "none: same assertions; the setup submits become checked",
+      "ciSavingSec": 0,
+      "linesRemoved": 140,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C18-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryValidatorTest.scala:22-24"
+      ],
+      "claim": "The test 'Lottery validator size is N bytes' has no assertion: it only calls info(). No change of the script size can make it fail, and the size is in the test name, so the test name changes whenever the script changes.",
+      "action": "Rename it to 'Lottery validator size' and pin the size with assert(size == N), using ScalaCompilerVersion.baseline(pre38, since38) when the two compiler generations differ (as DaBondPoolEmulatorTest.scala:294-295 does for fees). Or delete it if the size is not meant to be pinned.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C18-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScenarioTest.scala:167-186",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScenarioTest.scala:576-608",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScenarioTest.scala:386-391",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScenarioTest.scala:424-429",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScenarioTest.scala:494-501",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScenarioTest.scala:526-533"
+      ],
+      "claim": "Three weaknesses in LotteryScenarioTest. (a) findGameUtxo selects the game UTxO by both secrets in its datum (174-182), so the invariants 'playerOneSecret must not change' and 'playerTwoSecret must not change' (584-593) can never fail: a UTxO with a changed secret is not found and falls into 'None => game consumed (completed) is ok' (606-607). (b) When a game ends, nothing checks who received the pot. (c) The oracle's 'must fail' side is never sent to the validator: tryRevealP1S/P2S throw 'Cannot reveal ... in this state' (500, 532), and loseS/timeoutS throw 'Cannot lose/timeout from Empty state' (391, 429), before any transaction is built. So the validator's 'already revealed' and 'Too early' branches are not exercised, and the scenario checks test code against test code. Mutation: delete LotteryValidator.scala:157-158 and 171-172; the scenario still passes.",
+      "action": "(a) Find each game by its first-seen outref chain or by secret1 alone, then check both secrets. (b) When a game UTxO disappears, check that the expected winner's address balance grew by at least the pot. (c) In the wrong state, build and submit the real transaction (Lose/Timeout from Empty, a second reveal by the same player) and let tryActionS check the rejection.",
+      "coverageRisk": "none: adds checks",
+      "ciSavingSec": -0.3,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C18-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:37-52",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:159-171",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:329-337",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:323-324",
+        "scalus-testkit/jvm/src/main/scala/scalus/testing/ContractScalaCheckCommands.scala:215-229"
+      ],
+      "claim": "LotteryScalaCheckCommandTest has the same weaknesses as crowdfunding (C06-3) plus one more. The model state is keyed by the datum's two secrets (findAllGameUtxos 167, gameInfoBySecrets.get at 332), so a UTxO with a changed secret drops out of the state and the 'secret1 unchanged'/'secret2 unchanged' props (42-43) can never fail. postCondition passes a rejected submit (ContractScalaCheckCommands.scala:226-228), so the property passes even if the validator rejects every honest reveal, lose and timeout. The TimeoutActor for the non-revealer (323-324: player2 times out a PlayerOneRevealed game with the wrong preimage) is an attack whose rejection is never asserted.",
+      "action": "Key the model state by the game index (record the game's initial outref and follow it), not by datum content. Count accepted transactions per action kind (reveal, second reveal, lose, timeout) and assert after Test.check that each count is > 0. For the non-revealer TimeoutActor, assert that the submit is rejected. Do not change ContractScalaCheckCommands (attack variations need its lenient postCondition).",
+      "coverageRisk": "none: adds assertions only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C18-8",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:96-107",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:139-153",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:296-297",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:483-541",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:33",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/README.md:215-216"
+      ],
+      "claim": "LotteryScalaCheckCommandTest derives 10 HD participants, builds preimages for 10 games and submits 10 game-creation transactions (483-541), but makeLotteryStep uses only allGameInfos.take(3) (297). 7 games are dead setup. The test name ('many concurrent games') and README.md:215 ('10 concurrent games') overstate what runs.",
+      "action": "Create only the 3 active games (gameDefs over 0 until 3, numParticipants accordingly) or remove the take(3). Then fix the test name and the README line to the real count.",
+      "coverageRisk": "none: the 7 extra games are never acted on; they only sit at the script address",
+      "ciSavingSec": 0.2,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C18-9",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScenarioTest.scala:103-147",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:113-153",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScenarioTest.scala:250-448",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:348-477",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScenarioTest.scala:121-123",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/lottery/LotteryScalaCheckCommandTest.scala:134-136",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:30-34",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/lottery/LotteryTransactions.scala:56-171"
+      ],
+      "claim": "The two random lottery suites copy the same off-chain model: GameInfo, the preimage table, genByteStringOfN, and five transaction builders (reveal P1/P2, second reveal P1/P2, lose, timeout: ST 250-448 vs CT 348-477, same TxBuilder chains). Within each suite the P1/P2 builders are mirror copies. genByteStringOfN repeats scalus.uplc.test.ArbitraryInstances.genByteStringOfN. The main LotteryTransactions already builds first reveal, lose and timeout, but takes Utxos instead of a reader.",
+      "action": "Create one test object (for example lottery/LotteryTestTxs.scala) with side-parametrized builders: reveal(side, reader, utxo, info), secondReveal(side, ...), lose(...), timeout(...), each taking a reader. Use it from both suites. Replace both local genByteStringOfN with the shared one (import from a ledger ArbitraryInstances object). Keep the Scenario-vs-Commands split: README.md:213-216 shows both as testing examples.",
+      "coverageRisk": "none: same transactions",
+      "ciSavingSec": 0,
+      "linesRemoved": 200,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C18-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/midgard/DaBondPoolValidator.scala:345-356",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/midgard/DaBondPoolValidator.scala:303-315",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/midgard/DaBondPoolValidator.scala:264",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolDifferentialTest.scala:358-363",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/midgard/DaBondPoolFixtures.scala:197-205"
+      ],
+      "claim": "Five DaBondPool guards have no test. getStateQueuePolicy runs three require(..., HubNotAuthentic) with one message (346-355). slash_rejects_unauthentic_hub (DT 358-363) moves only the NFT policy; the address stays Script(hubPolicy) (Fixtures 200-201), so only the value guard (350-353) fires. Deleting the credential guard (346-349) or the constructor-0 guard (355) keeps every test green. getDaParams' ParamsReferenceScript (305) and CommitteeHashMismatch (314) are never hit, and InlineDatumRequired (264) is never hit: for example, a correction lock or params input with a datum hash.",
+      "action": "Add five 'extra_' rejects cases next to DT 682-741. Each runs on both scripts. Cases: hub at Script(foreignPolicy) with the right NFT; hub datum with constructor 1; params input with a reference script; params datum with a wrong committeeSignersHash; correction-lock input with OutputDatumHash (reason InlineDatumRequired). First confirm that the Aiken script also rejects each case: check() asserts both.",
+      "coverageRisk": "none: adds tests",
+      "ciSavingSec": -0.05,
+      "linesRemoved": -50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 2 findings of scope merge-duplicate-tests, to-property or main-bug; 2 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

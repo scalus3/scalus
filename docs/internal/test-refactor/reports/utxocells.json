@@ -1,0 +1,568 @@
+{
+  "cluster": "utxocells",
+  "summary": "The utxocells cluster (scalus-utxo-cell, 8 test files, about 2.7k test lines) is cheap: about 1.6 s per run; the 0.65 s (CounterCellSpec) and 0.56 s (UtxoFlowEmulatorSpec) suites are first-compile and Emulator warm-up, so C7 gives no ci-time findings and deletions save about 0 s. Happy paths are well covered by Emulator lifecycles, but most guards are not: the V016/V011/V005 checks, the CellContext mint/requireInputToken ops, the DataParameterized validators and the deferred flow advance have no test, and every AuctionCell negative test fails in phase 1 or off-chain, never in the script. Reading the guards found two likely main-code defects (C33-1: the continuing output need not keep the beacon or the value; C33-2: chunk-0 free variables, including the parameter of a parameterized flow, come from the initializer's datum). UtxoFlowSpec's macro tests use a throwing CellContext stub, so several of them cannot detect the behavior they name (C33-11). C8: the cluster has no Gen or Arbitrary; C33-7 reuses existing address and Value instances. Coverage notes: scoverage has no rows for the @Compile files (UtxoCell, OnChainCellOps, CellValidator, FlowCellValidator; F-9), so C2 for them is by reading; the 197 UtxoFlowMacros rows are compile-time expansion noise (F-12). Dead main code, out of scope: UtxoCellLib.verifyStakingCredential, StateLocator, ActionEncoding, UtxoCellTransition.fromOption.",
+  "behaviors": [
+    {
+      "pass": "UtxoCellLib",
+      "name": "verifyContinuingOutput: one continuing output at the script credential, same full address, matching inline datum",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:174-204",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:460-490"
+      ]
+    },
+    {
+      "pass": "UtxoCellLib",
+      "name": "verifyContinuingOutput rejects a changed staking credential (V016) and two outputs at the script credential",
+      "tests": []
+    },
+    {
+      "pass": "UtxoCellLib",
+      "name": "verifyOutputs / removeFirstMatching / valueGeq: each expected output matched by a distinct tx output (V005)",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:399-440"
+      ]
+    },
+    {
+      "pass": "UtxoCellLib",
+      "name": "verifyOutputs double-satisfaction case and multi-asset valueGeq",
+      "tests": []
+    },
+    {
+      "pass": "UtxoCellLib",
+      "name": "verifyMintResult: beacon minted once, one script output with beacon and initial datum",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:223-266",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:506-519"
+      ]
+    },
+    {
+      "pass": "UtxoCellLib",
+      "name": "verifyMintResult rejects extra tokens under the policy (V011, hasOnly) and an output without the beacon",
+      "tests": []
+    },
+    {
+      "pass": "UtxoCellLib",
+      "name": "verifyBurnBeacon / terminal spend burns the beacon",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:270-282",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:492-504",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:95-109"
+      ]
+    },
+    {
+      "pass": "UtxoCellLib",
+      "name": "transitionMint / mint handlers: quantity -1 alone and any quantity other than +-1 rejected",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:238-251"
+      ]
+    },
+    {
+      "pass": "CellValidator",
+      "name": "validate dispatches Spending/Minting; other purposes fail",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:460-519",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:191-261"
+      ]
+    },
+    {
+      "pass": "DataParameterizedCellValidator / DataParameterizedFlowCellValidator",
+      "name": "parameter applied at UPLC level (compile-only, never evaluated)",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:854-859"
+      ]
+    },
+    {
+      "pass": "CellContextOps / CellTxInfoOps / CellOutputsOps",
+      "name": "on-chain requireSignedBy, requireValidAfter/Before, outputs.add, setContinuingValue",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:191-290",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionFlowSpec.scala:82-152",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/RecursiveAuctionSpec.scala:129-193"
+      ]
+    },
+    {
+      "pass": "CellContextOps",
+      "name": "on-chain mint, requireInputToken, ownInputValue",
+      "tests": []
+    },
+    {
+      "pass": "OffChainCellContext",
+      "name": "accumulates builder steps (signature, validity, payTo, continuing value)",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:150-158",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:211-244"
+      ]
+    },
+    {
+      "pass": "OffChainCellContext",
+      "name": "mint (V011 single token name), requireInputToken, ownInputValue, ownPolicyId",
+      "tests": []
+    },
+    {
+      "pass": "UtxoCellBuilder",
+      "name": "mintCell / spendCellRaw / spendCellCtx build init, transition and burn txs",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:29-214"
+      ]
+    },
+    {
+      "pass": "UtxoCellBuilder",
+      "name": "spendCellRaw with extra outputs (addCellOutputs) and explicit outputValue",
+      "tests": []
+    },
+    {
+      "pass": "UtxoCellBuilder",
+      "name": "toOffchainAddress (PubKey, Script, StakingPtr, out-of-range pointer), fromLedgerValue",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:280-341"
+      ]
+    },
+    {
+      "pass": "UtxoCellBuilder",
+      "name": "toOffchainAddress StakingHash delegation branches",
+      "tests": []
+    },
+    {
+      "pass": "UtxoCellDef",
+      "name": "init, apply (eager and deferred), findUtxo, currentState; off-chain require errors surface",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:224-278",
+        "scalus-utxo-cell/jvm/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:27-88",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:308-331"
+      ]
+    },
+    {
+      "pass": "UtxoCellDef / UtxoFlowDef",
+      "name": "\"UTxO not found\" and \"no inline datum\" errors",
+      "tests": []
+    },
+    {
+      "pass": "UtxoFlowDef",
+      "name": "init, eager advance, findUtxo, currentDatum",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionFlowSpec.scala:82-152",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowEmulatorSpec.scala:30-95",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/RecursiveAuctionSpec.scala:129-248"
+      ]
+    },
+    {
+      "pass": "UtxoFlowDef",
+      "name": "deferred advance (Deferred step resolved at complete)",
+      "tests": []
+    },
+    {
+      "pass": "UtxoFlow.define (macro)",
+      "name": "chunking, datum capture of live variables, branching, tail recursion, unknown chunk tag",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:53-713"
+      ]
+    },
+    {
+      "pass": "UtxoFlow.define (macro)",
+      "name": "compile errors: await in closure, non-tail recursion",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:719-756"
+      ]
+    },
+    {
+      "pass": "FlowCellValidator",
+      "name": "on-chain flow spend (continuing output or beacon burn) and mint",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionFlowSpec.scala:82-152",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/RecursiveAuctionSpec.scala:129-248"
+      ]
+    },
+    {
+      "pass": "FlowCellValidator",
+      "name": "branching and recursive flows evaluated on-chain (compile-only today)",
+      "tests": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:840-852"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C33-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/UtxoCell.scala:55-80",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/FlowCellValidator.scala:47-58",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/UtxoCellDef.scala:132-136",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:174-188",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:284-316"
+      ],
+      "claim": "By reading (not executed): no on-chain check makes the continuing output keep the beacon token, or any value. verifyContinuingOutput (UtxoCell.scala:60-79) checks only the address and the inline datum; transitionSpend and verifyFlowSpend never read tx.mint on a non-terminal spend; setContinuingValue (OnChainCellOps.scala:54-73) floors the value only when the transition calls it. The test 'CounterCell UPLC evaluates correctly with valid ScriptContext' passes with no beacon anywhere in the transaction (the input value at CounterCellSpec:294 and the output at 299 are plain lovelace). Only the off-chain builder adds the beacon (UtxoCellDef.scala:132-136). Consequence: anyone who may spend (CounterCell Increment needs no signature) can move the beacon and the locked ADA to their own address and leave a beacon-less continuing output; they can then pay the beacon back to the script address with a forged datum, which no validator checks, and findUtxo (UtxoCellDef.scala:51-60) selects the forged state. A variant: a non-terminal spend plus a -1 mint passes the mint handler's burn branch (FlowCellValidator.scala:55-56), so the cell becomes unfindable.",
+      "action": "Log in findings.md. Disproving test for the verify agent: in CounterCellSpec, build a spending context whose own input holds 10 ADA + 1 beacon, with the continuing output at the script address with the correct next datum but no beacon, and the beacon in a pubkey output; assert the spend fails (today it succeeds). Main-code note only: require the continuing output to carry exactly one beacon (value.hasNft(policyId, beaconName)) in verifyContinuingOutput, and on non-terminal spends require that tx.mint has no entry for the own policy.",
+      "coverageRisk": "none: adds a test only",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-80",
+      "verification": "Confirmed by reading; not executed. UtxoCell.scala:55-80 (verifyContinuingOutput) checks only three things: one output at the script credential, the full address, and the inline datum. It never checks value or the beacon. transitionSpend (UtxoCell.scala:221-241) and verifyFlowSpend (184-198) check the mint only when nextState is None. FlowCellValidator.mintCell (47-58) and transitionMint (243-256) accept qty == -1 through verifyBurnBeacon, which checks only mint.hasOnly(policy, name, -1) at UtxoCell.scala:168-177. So a non-terminal spend plus a burn passes both handlers. setContinuingValue (OnChainCellOps.scala:54-73) floors the value only when the transition calls it, and CounterCell/TestFlowValidator never call it. The test fixture makeSpendingContext (CounterCellSpec.scala:284-316) uses plain lovelace on the input (294) and the output (299), and the 'valid ScriptContext' test (174-188) succeeds with it. That proves no beacon is needed on-chain. Only the off-chain builder adds the beacon (UtxoCellDef.scala:132-137, UtxoFlowDef.scala:110-112). findUtxo (UtxoCellDef.scala:51-60) picks any UTxO that holds the beacon, so an attacker can pay the beacon to the script address with a forged datum. Payments to a script address run no validator. Anyone who may spend can reach this: CounterCell Increment and the CounterCellV2 transition need no signer."
+    },
+    {
+      "id": "C33-2",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/UtxoFlowMacros.scala:765-778",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/UtxoFlowMacros.scala:1100-1103",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/FlowCellValidator.scala:85-87",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/FlowCellValidator.scala:106-118",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:624-627",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:812-822"
+      ],
+      "claim": "By reading (not executed): every free variable that the body of chunk 0 references becomes a datum field (UtxoFlowMacros.scala:765-778) and is decoded from the datum, replacing the original symbol (1100-1103). The test at UtxoFlowSpec:624-627 shows it: minBid, referenced in chunk 0, must be supplied in datum0. The mint handler accepts any initial datum (datum == mint redeemer, FlowCellValidator.scala:106-118). So in ParameterizedFlowValidator (UtxoFlowSpec:812-822) the check requireSignedBy(p.seller) in chunk 0 uses p taken from the datum that the initializer chose, not the script parameter, although the trait docs (FlowCellValidator.scala:85-87) promise parameterization. A variable first used in a later function-entry chunk is packed from the real closure value (UtxoFlowSpec:519-593 works with datum0 = Constr(0, [])), so the hole is only for chunk-0 references.",
+      "action": "Log in findings.md. Disproving test: compile ParameterizedFlowValidator, apply the parameter FlowParams(seller = Alice, ..) to the program, init with datum Constr(0, [FlowParams(seller = Bob, ..).toData]), advance chunk 0 signed only by Bob in the Emulator; if it validates, the parameter is dead. Main-code note only: exclude symbols bound outside the define body from chunk-0 datum fields (reference them directly), or document and check them at mint.",
+      "coverageRisk": "none: adds a test only",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -40,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-81",
+      "verification": "Confirmed by reading; not executed. For chunk 0, boundSoFar starts as excludedSymbols = {cpsCtx, cellCtx} (UtxoFlowMacros.scala:743-756). freeVars (353-375) keeps every local Ident whose owner is not a package-level owner (isLocalSymbol, 342-348). So `p`, a val in flowDispatch(param) or in the caller after inlining, becomes a datum field (765-778). Dispatch decodes it from the datum and rebinds the symbol (1077-1103). Nothing special-cases chunk 0: grep finds no 'index == 0' or outer-scope handling. UtxoFlowSpec.scala:624-627 shows the same mechanism: minBid must come from datum0. The mint handler accepts any datum equal to the redeemer (FlowCellValidator.scala:106-118 -> verifyMintResult, UtxoCell.scala:139-162). So in ParameterizedFlowValidator (UtxoFlowSpec.scala:811-822), requireSignedBy(p.seller) uses the seller that the initializer chose. The trait's own Scaladoc example (FlowCellValidator.scala:74-80) has the same flaw, because it uses p.minBid and p.seller in chunk 0. The only on-chain test of ParameterizedFlowValidator is compile-only (UtxoFlowSpec.scala:854-859), so no test catches this."
+    },
+    {
+      "id": "C33-3",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/UtxoCell.scala:62-77",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/UtxoCell.scala:139-177",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:223-266",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:284-381"
+      ],
+      "claim": "The on-chain guards of UtxoCellLib are not reached by any test: the staking-credential check (V016, UtxoCell.scala:70-73), the 'exactly one continuing output' check (66-69), the V011 hasOnly checks in verifyMintResult (145-148) and verifyBurnBeacon (173-176), the 'initial output must contain the beacon' check (154-157), and the mint handler's quantity -1 and 'invalid beacon mint quantity' for 2 (CounterCellSpec:88-89). The three context builders always produce the happy shape, e.g. makeMintingContext always puts the beacon in the output (333). Scoverage has no rows for @Compile code (F-9), so this gap was found by reading.",
+      "action": "Add CounterCellSpec cases (on V2 after C33-15, or both): continuing output with a different staking credential -> fails; two outputs at the script credential -> fails; mint of the beacon plus a second token under the policy -> fails; mint output without the beacon -> fails; mint quantity 2 -> fails; Reset spend with an extra token burned -> fails. Give the builders optional parameters (stakingCredential, extraMint, outputValue) instead of new builders.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-4",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/OnChainCellOps.scala:27-52",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/OffChainCellContext.scala:42-80",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/CellContext.scala:36-58"
+      ],
+      "claim": "CellContext.mint, requireInputToken, ownInputValue and ownPolicyId are not called by any test transition, on-chain (OnChainCellOps.scala:27-52) or off-chain: scoverage marks OffChainCellContext.scala:42-75 unexecuted, including the V011 IllegalStateException for a second token name (65-69).",
+      "action": "Add a small test cell (shared test source) whose transition calls ctx.requireInputToken and ctx.mint; test in the Emulator: success when the token is present and the mint matches; off-chain error message when the token is missing; IllegalStateException when the transition mints two token names; on-chain failure (evaluate compiled.program on a context like CounterCellSpec's) when the tx mints a different quantity than the transition asked for.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -90,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-5",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:829-860",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/CellValidator.scala:70-77",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/FlowCellValidator.scala:93-118",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/UtxoFlowDef.scala:75-85",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/UtxoCellBuilder.scala:243-246"
+      ],
+      "claim": "BranchingFlowValidator, RecursiveFlowValidator and ParameterizedFlowValidator are only compiled; their UPLC never runs, so DataParameterizedCellValidator / DataParameterizedFlowCellValidator (CellValidator.scala:70-77, FlowCellValidator.scala:93-118) are not evaluated at all. The deferred UtxoFlowDef.advance (UtxoFlowDef.scala:75-85, UtxoCellBuilder.scala:243-246) is unexecuted: every flow test uses the eager overload.",
+      "action": "Replace the four 'compiles to UPLC' tests of UtxoFlowOnChainSpec with Emulator lifecycles in UtxoFlowEmulatorSpec (see C33-9): branching flow both branches, recursive flow loop-then-terminate, and the parameterized flow with an applied parameter (this also covers C33-2). Use the deferred advance(redeemer) with complete(emulator, ..) in at least one of them (JVM, like jvm/CounterCellEmulatorTest).",
+      "coverageRisk": "none: compile failures still surface through the lifecycles",
+      "ciSavingSec": -0.3,
+      "linesRemoved": -80,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-6",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/UtxoCell.scala:88-131",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:399-440",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/UtxoCellBuilder.scala:92-101"
+      ],
+      "claim": "The verifyOutputs tests use one expected output each, so the V005 property that the docs promise (a tx output satisfies at most one expected output, UtxoCell.scala:82-97) is untested: a mutation that returns `remaining` instead of `rest` at line 95 (outputs never consumed) passes all six tests, since each expects a single match. valueGeq is only tested with lovelace. spendCellRaw with extra outputs (addCellOutputs, UtxoCellBuilder.scala:92-101) is unexecuted.",
+      "action": "Add to CounterCellSpec: two identical expected outputs against one matching tx output -> fails; against two -> passes; expected value with a token that the tx output lacks -> fails. Add one spendCellRaw call with a non-empty outputs list in CounterCellEmulatorTest and assert the payTo output exists.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-7",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:280-321",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/UtxoCellBuilder.scala:42-64",
+        "scalus-core/shared/src/test/scala/scalus/cardano/address/ArbitraryInstances.scala:84-90",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ArbitraryInstances.scala:204"
+      ],
+      "claim": "Four example tests are instances of two round-trip laws: toOffchainAddress(LedgerToPlutusTranslation.getAddress(a), a.network) == a for a ShelleyAddress (287-321), and fromLedgerValue(v).toLedgerValue == v (280-285). The examples miss the StakingHash Key/Script branches (UtxoCellBuilder.scala:52-57, unexecuted in the baseline). Arbitrary[ShelleyAddress] already generates Key, Script, Pointer and Null delegation parts.",
+      "action": "Replace 280-321 with two forAll properties using scalus.cardano.address.ArbitraryInstances (Arbitrary[ShelleyAddress], not Arbitrary[Address], which includes Byron) and scalus.cardano.ledger.ArbitraryInstances Arbitrary[Value]; normalize or filter values with zero quantities, which the on-chain plus drops. Keep the out-of-range test 323-341. Scalacheck should arrive through scalus % \"compile->test\"; else add scalacheck-1-19 % Test to scalusUtxoCell.",
+      "coverageRisk": "low: the pointer example (Slot 2498243, 27, 3) becomes a random pointer; Arbitrary[Pointer] covers the same range",
+      "ciSavingSec": -0.2,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "The tests are in shared/src/test/.../CounterCellEmulatorTest.scala:280-341. A jvm/ file with the same name exists, but it is a different class, CounterCellBlockchainReaderTest. Law 1: LedgerToPlutusTranslation.getAddress (scalus-core .../LedgerToPlutusTranslation.scala:76-116) maps Key/Script payment, Key/Script/Pointer/Null delegation. toOffchainAddress (UtxoCellBuilder.scala:42-64) maps each case back exactly. Arbitrary[Pointer] (address/ArbitraryInstances.scala:~68-72) stays within MaxSlot/MaxIndex, so toPointer never throws. Law 2: fromLedgerValue (UtxoCellBuilder.scala:81-90) and toLedgerValue (onchain v1/Value.scala:1225-1247) round-trip. Arbitrary[MultiAsset] uses quantities >= 1 (ledger/ArbitraryInstances.scala:135-142, 196-197), and Coin is 0..2^53. The 28-byte policies cannot collide with the empty adaPolicyId. The four examples pin nothing the generators cannot produce: Key/Script payment with Null delegation, Mainnet/Testnet, and an in-range pointer. The build has scalus % \"compile->test\" (build.sbt:816-819), so the arbitraries are visible. The scalacheck dependency itself must still be checked, as the action already says."
+    },
+    {
+      "id": "C33-8",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:155-160",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:454-458",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:149-153",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionFlowSpec.scala:77-80",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/RecursiveAuctionSpec.scala:124-127",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:442-450"
+      ],
+      "claim": "Five 'compiles to UPLC' tests assert `term != null` or `size > 0`, which no compiled script violates; the same lazy compilation runs in the evaluation or Emulator tests of the same suite, which fail if compilation fails. 'UtxoCellTransition carries outputs' (442-450) checks the accessors of a case class; no main-code mutation breaks it.",
+      "action": "Delete the six tests. Keep the script-size info lines only if someone reads them (they print to the test log).",
+      "coverageRisk": "none: every deleted test's validator is evaluated in the same suite; compile errors still fail those tests",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Each deleted compile test has a stronger user of the same compiled object in the same shared suite. CounterCellCompilation.compiled (155-160) is evaluated at CounterCellSpec:174-281. CounterCellV2Compilation.compiled (454-458) is evaluated at 460+. AuctionCellCompilation.compiled (AuctionCellSpec:149-153) backs auctionCell (line 120) for the Emulator lifecycle at 191+. AuctionFlowCompilation (AuctionFlowSpec:77-80) backs flowDef (69-75) for the lifecycle at 82-152. RecursiveAuctionCompilation (RecursiveAuctionSpec:124-127) backs flowDef (105-111) for the lifecycle at 129+. All are shared/, so they run on the same JVM+JS platforms. 'UtxoCellTransition carries outputs' (442-450) only reads fields of a plain case class (UtxoCellTransition.scala), and no main-code mutation breaks it."
+    },
+    {
+      "id": "C33-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowEmulatorSpec.scala:30-95",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionFlowSpec.scala:82-152",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:761-769"
+      ],
+      "claim": "The UtxoFlowEmulatorSpec lifecycle (init -> bid with requireSignedBy -> terminal confirm) is a subset of the AuctionFlowSpec lifecycle, whose validator adds setContinuingValue and outputs.add to the same two-await shape. The only extra assertion is that the stored initial datum equals the init datum (UtxoFlowEmulatorSpec:55-56).",
+      "action": "Move the initial-datum assertion into AuctionFlowSpec after line 104, then delete the UtxoFlowEmulatorSpec test. Keep the file as the home of the C33-5 lifecycles, or delete it and TestFlowValidator/TestFlowCompilation (UtxoFlowSpec:761-769, 796-799) if C33-5 is not done.",
+      "coverageRisk": "low: TestFlowValidator's terminal chunk has no ctx call; RecursiveAuctionSpec 'Close without bids' covers a terminal chunk with a unit body",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The 'subset' claim is false. UtxoFlowEmulatorSpec has the only shared (JVM+JS) Emulator test of a non-terminal flow advance in which the chunk does NOT call setContinuingValue. That takes the None branch at UtxoFlowDef.scala:110-112 (Value.zero) and the value-preserving branch at UtxoCellBuilder.scala:213-216 (`if outputValue.isZero then utxo.output.value`). AuctionFlowValidator (AuctionFlowSpec.scala:42) calls setContinuingValue in its only non-terminal chunk. RecursiveAuctionFlow (RecursiveAuctionSpec.scala:72,82) calls it on every PlaceBid, and its 'Close without bids' goes terminal straight from chunk 0. The only other test of the preserve-value path is jvm/CounterCellEmulatorTest.scala (Increment), which uses the cell path (UtxoCellDef.scala:135-137), not the flow path, and runs only on JVM. Also, TestFlowValidator/TestFlowCompilation are used by UtxoFlowSpec.scala:834 too, so the optional deletion would break that test. Corrected action: keep the UtxoFlowEmulatorSpec lifecycle, or first add a flow advance without setContinuingValue to AuctionFlowSpec/RecursiveAuctionSpec, with a check that the cell value is unchanged. Do not delete TestFlowValidator/TestFlowCompilation unless UtxoFlowSpec:833-838 is also handled."
+    },
+    {
+      "id": "C33-10",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:155-189",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:191-220"
+      ],
+      "claim": "'Transaction witness contains the AuctionCell script' builds the same init and first-bid transactions as the lifecycle test; only its three witness assertions (168-171, 181-188) are new.",
+      "action": "Move the three witness assertions into the lifecycle after initTx (line 201) and bidTx (line 217); delete 155-189.",
+      "coverageRisk": "none: the same transactions are built in the lifecycle",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "AuctionCellSpec.scala:155-189 and the lifecycle at 191-220 build the same transactions. Both use createEmulator() and setSlot(80). Both build the init with initUtxoCell(auctionCell, initialState, ada 5), validTo(auctionEndTime - 1000) and Alice (160-165 vs 196-201). Both build the bid with Bid(bidder1Pkh, 3_000_000) and Bob (175-179 vs 213-217). Only the three witness assertions are unique: the init script at 168-171, the bid script at 181-184, and the bid redeemers at 185-188. Submitting the init (172 vs 203-204) is already in the lifecycle. Moving the three assertions after lines 201 and 217 keeps every check on the same platforms, because both tests are in shared/."
+    },
+    {
+      "id": "C33-11",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:37-47",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:99-108",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:110-131",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:199-219",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:154-197",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:322-360",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:519-593",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:664-713"
+      ],
+      "claim": "Many macro tests cannot fail on the behavior they name. 99-108 asserts only `flowDispatch != null`. 110-131 ('returns POption.Some(Constr(1, fields))') and 199-219 ('dead variable not captured') never look at a result: noCtx throws before the dispatch returns, so a macro that captures dead variables passes. 154-197, 440-458 and 664-713 assert `!fields.isEmpty` instead of the exact fields. 322-360 only prints the two tags, so both branches could go to the same chunk. 519-593 and 595-662 only print whether seller is in the datum.",
+      "action": "Replace noCtx with a RecordingCellContext stub (records requireSignedBy keys, outputs.add pairs, setContinuingValue values; never throws). Then assert exact datums, e.g. Constr(1, [bid.toData]) for capture and Constr(1, []) for the dead-variable test, distinct tags for the two branches, seller present at the expected position, and that the recorded signer equals bid.bidder. Delete 99-108.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-12",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:308-376",
+        "scalus-utxo-cell/shared/src/main/scala/scalus/utxocells/OffChainCellContext.scala:106-118"
+      ],
+      "claim": "No AuctionCell negative test reaches the script. 'Bid after auction end' and 'Close before auction end' fail in phase 1 because the off-chain context adds ValidityEndSlot/ValidityStartSlot (OffChainCellContext.scala:110-118); 'Close without bids fails without seller signature' fails because the off-chain context adds a required signer that Bob cannot provide. 'Bid too low' and 'Seller cannot bid' fail off-chain. Deleting requireValidBefore, requireValidAfter, requireSignedBy or the bid checks from the on-chain transition (CellContextOps) keeps all five tests green.",
+      "action": "Reach the script: evaluate AuctionCellCompilation.compiled.program on a hand-built ScriptContext (as CounterCellSpec does) with a bid that is too low, a seller bid, a validity range after the end time, and a close without the seller signature; assert failure and the expected error trace. Alternatively build with spendCellCtx and drop the specific step, then assert the emulator result is a script failure, not a phase-1 error.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -50,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-13",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionFlowSpec.scala:120-151",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/RecursiveAuctionSpec.scala:154-192",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:222-261"
+      ],
+      "claim": "The flow lifecycles check only the datum tag and `!fields.isEmpty`; AuctionFlowSpec 'Verify the cell value was updated by setContinuingValue' (132-134) prints the value and asserts nothing. No lifecycle checks a payout: the refund to the outbid bidder (AuctionCell), the payment of outputs.add at close (AuctionFlow), or the locked bid (RecursiveAuction). A transition whose setContinuingValue or outputs.add is ignored off-chain still passes.",
+      "action": "Assert the cell value after each bid (lovelace == amount, beacon present), the exact chunk datum (e.g. Constr(1, [HighBid(..).toData])), and after close/outbid that the expected address holds an output with at least the paid amount.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-14",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:190-266"
+      ],
+      "claim": "The four CounterCell negative UPLC tests assert only `!result.isSuccess`. They would pass if the script failed earlier for an unrelated reason (e.g. a decoding change or a new beacon check, see C33-1), so they do not pin which guard rejects the transaction.",
+      "action": "Assert the error trace too: the scripts compile with Options.debug and withErrorTraces, so check result.logs contains 'continuing output datum mismatch', 'cannot decrement below zero', 'invalid beacon mint quantity' and 'initial state datum mismatch'.",
+      "coverageRisk": "none: assertions only get stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-15",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:174-282",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:460-519",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:306-311",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:342-347",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:372-377"
+      ],
+      "claim": "The CounterCellV2 UPLC tests (460-519) copy four CounterCell tests (174-188, 190-204, 270-282, 223-236) line for line with another compiled script, and V2 lacks the decrement, no-beacon and wrong-initial-datum negatives. The three context builders repeat the same TxId literal that dummyTxId (392-394) already holds.",
+      "action": "Run one table of cases over Seq(\"V1\" -> CounterCellCompilation.compiled, \"V2\" -> CounterCellV2Compilation.compiled) with test(s\"$name ...\"); this also gives V2 the three negatives. Use dummyTxId in the builders.",
+      "coverageRisk": "none: V1 keeps every case; V2 gains three",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-16",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:116-140",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/RecursiveAuctionSpec.scala:102-122",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionFlowSpec.scala:66-90",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowEmulatorSpec.scala:18-39",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:18-38",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:121-129",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:225-233",
+        "scalus-utxo-cell/jvm/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:18-36"
+      ],
+      "claim": "Six suites define the same genesisHash and build Emulator(initialUtxos = Map(Input(genesisHash, i) -> Output(Party.address, Value.ada(1000)), ..)) by hand, nine times in total. Emulator.withAddresses(addresses, initialValue) (scalus-cardano-ledger, JVM and JS) does the same.",
+      "action": "Replace each block with Emulator.withAddresses(Seq(Alice.address, ..), Value.ada(1000)) and delete the genesisHash vals. CounterCellEmulatorTest picks its funding UTxO with emulator.utxos.head / find(address != script), which keeps working.",
+      "coverageRisk": "low: withAddresses uses Context.testMainnet(); the AuctionCell tests depend on slot 80/100/110 with CardanoInfo.mainnet slot config, so run them once after the change",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-17",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:191-204",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:263-275",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/AuctionCellSpec.scala:295-306",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/RecursiveAuctionSpec.scala:132-139",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/RecursiveAuctionSpec.scala:198-204",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/RecursiveAuctionSpec.scala:229-235",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:54-65",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:84-93",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:177-185"
+      ],
+      "claim": "Every Emulator test repeats `TxBuilder(testEnv)...complete(..).sign(P.signer).transaction` followed by `assert(emulator.submitSync(tx).isRight, ..)` (about 25 times). AuctionCellSpec defines initAuction() (295-306) but its lifecycle tests repeat the init by hand; RecursiveAuctionSpec repeats its init three times. CounterCellEmulatorTest finds the cell by script address and decodes the datum by hand (54-65, 84-93, 177-185) where UtxoCellDef.findUtxo/currentState exist.",
+      "action": "Add a test-only trait in scalus-utxo-cell/shared/src/test (e.g. CellEmulatorSuite) with given testEnv, submitOk(emulator, tx) and a signed(builder, party) helper; use initAuction() in AuctionCellSpec, add initFlow() to RecursiveAuctionSpec, and read cell state in CounterCellEmulatorTest through a UtxoCellDef for the same compiled script.",
+      "coverageRisk": "none: same transactions and assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 110,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-18",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:63-65",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:481-506",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:545-585",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:680-712"
+      ],
+      "claim": "UtxoFlowSpec spells the same 28-byte PubKeyHash hex literal 12 times, uses `fail(..); ???` 10 times, and nests matches up to four levels deep (366-421, 664-713) to unwrap POption.Some(Data.Constr(tag, fields)). The suite is 860 lines for 21 tests.",
+      "action": "Add a private val bidder and helpers expectSome(r): Data and constrTag(d): BigInt (or match on Data.Constr in one line); flatten the pyramids into sequential vals. Do it together with C33-11.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 100,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C33-19",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-utxo-cell",
+      "evidence": [
+        "scalus-utxo-cell/jvm/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:14",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:24",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:117",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:156",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellEmulatorTest.scala:192",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/CounterCellSpec.scala:144",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:605-606",
+        "scalus-utxo-cell/shared/src/test/scala/scalus/utxocells/UtxoFlowSpec.scala:831"
+      ],
+      "claim": "jvm/.../CounterCellEmulatorTest.scala contains the class CounterCellBlockchainReaderTest, and a different CounterCellEmulatorTest.scala exists in shared/ in the same package. Several fully qualified names are written inline although the imports exist or are easy to add (scalus.cardano.address.Network.Mainnet, scalus.cardano.onchain.plutus.prelude.Option.Some/None, scalus.uplc.eval.PlutusVM, scalus.cardano.onchain.plutus.v1.Address/Value).",
+      "action": "Rename the JVM file to CounterCellBlockchainReaderTest.scala (git mv); import the names and use the short forms.",
+      "coverageRisk": "none: no behavior change",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 6 findings of scope merge-duplicate-tests, to-property or main-bug; 5 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

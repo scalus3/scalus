@@ -1,0 +1,668 @@
+{
+  "cluster": "examples.2",
+  "summary": "The cluster covers three example contracts: the one-shot Auction (with UnfixedAuction as a vulnerability demo), Betting and the bilinear-accumulator Allowlist, about 4k test lines and ~9.5 s of local test time, dominated by re-lowering applied scripts (F-19 pattern, C11-15/16). Happy paths are well pinned with exact ExUnits, but negative coverage is weak: AuctionValidator has almost no asserted rejection, most BettingValidator checks have no test, and the on-chain code is invisible to scoverage (F-9). Several assertions cannot fail: the 'FIX VERIFICATION' double-satisfaction test runs the unapplied parameterized script, so every tx fails (C11-1); the ScalaCheck command invariants cannot see an accepted attack (C11-2); the ScenarioExplorer never reaches End (C11-3); and the join-after-expiration test is rejected by the ledger's validity interval before the script runs (C11-5). One main-code defect by reading: the Betting minting policy does not bind the minted token to the bet output (C11-8). The test files also repeat large setup blocks; C9 findings remove about 1000 lines.",
+  "behaviors": [
+    {
+      "pass": "AuctionValidator.mint",
+      "name": "Start mints exactly one NFT; it goes to the single script output with the initial datum",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:26-31",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1063-1095"
+      ]
+    },
+    {
+      "pass": "AuctionValidator.mint",
+      "name": "Start rejections: one-shot not spent, seller unsigned, extra tokens, end time in the past, startingBid <= 0, NFT or datum missing",
+      "tests": []
+    },
+    {
+      "pass": "AuctionValidator.mint",
+      "name": "non-Start redeemer: only burning is allowed (onlyBurnsUnder)",
+      "tests": []
+    },
+    {
+      "pass": "AuctionValidator.spend",
+      "name": "Bid: first bid accepted",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:33-38",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:62-70",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:33-70"
+      ]
+    },
+    {
+      "pass": "AuctionValidator.spend",
+      "name": "Bid: outbid refunds the previous bidder exactly",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:40-45",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:72-80",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:859-897"
+      ]
+    },
+    {
+      "pass": "AuctionValidator.spend",
+      "name": "Bid rejections: bid too low, redirected output, corrupt datum (only as unasserted ScalaCheck variations)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1407-1490"
+      ]
+    },
+    {
+      "pass": "AuctionValidator.spend",
+      "name": "Bid rejections: after end time, bidder unsigned, seller bids, NFT dropped, lovelace below bid, refund missing/wrong/short",
+      "tests": []
+    },
+    {
+      "pass": "AuctionValidator.spend",
+      "name": "End with winner: NFT to winner, seller paid and tagged with the auction id",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:47-52",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:82-90",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:72-115"
+      ]
+    },
+    {
+      "pass": "AuctionValidator.spend",
+      "name": "End without bids: seller signs and reclaims the NFT",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:54-59",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:92-100"
+      ]
+    },
+    {
+      "pass": "AuctionValidator.spend",
+      "name": "End rejections: before end time, seller output missing, NFT to a wrong address (only as unasserted ScalaCheck variations)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1593-1650"
+      ]
+    },
+    {
+      "pass": "AuctionValidator.spend",
+      "name": "End rejections: winner == seller, bundled NFTs, seller underpaid, no-bid end without seller signature",
+      "tests": []
+    },
+    {
+      "pass": "AuctionValidator.spend",
+      "name": "same-instance double satisfaction: 'Only one auction can be ended per transaction'",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/DoubleSatisfactionAttackTest.scala:160-263"
+      ]
+    },
+    {
+      "pass": "AuctionValidator.spend",
+      "name": "cross-instance double satisfaction blocked by the seller-output id tag",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/CrossInstanceDoubleSatisfactionTest.scala:44-111"
+      ]
+    },
+    {
+      "pass": "UnfixedAuctionValidator",
+      "name": "accepts the double-satisfaction attack (demonstration)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/DoubleSatisfactionAttackTest.scala:43-158",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:271-389",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:391-579"
+      ]
+    },
+    {
+      "pass": "AuctionInstance (off-chain)",
+      "name": "startAuction, bid, endAuction, findAuctionUtxo build valid transactions",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:26-100",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1063-1095"
+      ]
+    },
+    {
+      "pass": "BettingValidator.mint",
+      "name": "mint +1: player1 signs, player2 empty, oracle != player1, expiration in the future",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:44-88",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:158-210"
+      ]
+    },
+    {
+      "pass": "BettingValidator.mint",
+      "name": "mint rejections and the minted token's placement",
+      "tests": []
+    },
+    {
+      "pass": "BettingValidator.mint",
+      "name": "burn -1 is allowed (bet end)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:407-539",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:541-665"
+      ]
+    },
+    {
+      "pass": "BettingValidator.spend",
+      "name": "Join success",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:90-163",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:212-321"
+      ]
+    },
+    {
+      "pass": "BettingValidator.spend",
+      "name": "Join rejections (player2 set, same as player1/oracle, not doubled, config changed, token dropped, after expiration)",
+      "tests": []
+    },
+    {
+      "pass": "BettingValidator.spend",
+      "name": "AnnounceWinner success",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:165-226",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:407-539"
+      ]
+    },
+    {
+      "pass": "BettingValidator.spend",
+      "name": "AnnounceWinner rejections: token not burned, before expiration",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:228-269",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:667-780"
+      ]
+    },
+    {
+      "pass": "BettingValidator.spend",
+      "name": "AnnounceWinner rejections: winner not a player, wrong payout address/amount, oracle unsigned, negative index, player2 empty",
+      "tests": []
+    },
+    {
+      "pass": "BettingValidator.spend",
+      "name": "Timeout with player2: split refund; rejected before expiration or when a player is not refunded",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:298-383",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:541-665"
+      ]
+    },
+    {
+      "pass": "BettingValidator.spend",
+      "name": "Timeout without player2, unsigned timeout, two bet inputs",
+      "tests": []
+    },
+    {
+      "pass": "BettingTransactions (off-chain)",
+      "name": "deploy, init, join, win(isJoinWin=true), timeout(joined)",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:152-665"
+      ]
+    },
+    {
+      "pass": "BettingTransactions (off-chain)",
+      "name": "win(isJoinWin=false), timeout without player2 (uncovered lines 121, 188)",
+      "tests": []
+    },
+    {
+      "pass": "AllowlistValidator",
+      "name": "a member with a valid proof spends; a non-member with a copied proof is rejected",
+      "tests": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/bilinearAccumulator/AllowlistValidatorE2ETest.scala:32-81",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/bilinearAccumulator/AllowlistValidatorE2ETest.scala:83-128"
+      ]
+    },
+    {
+      "pass": "AllowlistValidator",
+      "name": "empty signatories (tx.signatories.head)",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C11-1",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/DoubleSatisfactionAttackTest.scala:32",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/DoubleSatisfactionAttackTest.scala:160-163",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/DoubleSatisfactionAttackTest.scala:213-262",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala:443-444",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/PlutusVM.scala:64-72,208-211"
+      ],
+      "claim": "'FIX VERIFICATION' cannot fail. fixedContract = AuctionContract.compiled.withErrorTraces is the UNAPPLIED DataParameterizedValidator (PlutusV3[Data => Data => Unit]). Used as a spending script, the ledger passes the ScriptContext as the oneShot parameter, the program returns a lambda, and PlutusVM.evaluateScript throws InvalidReturnValue for every transaction. The assertion only checks that the message contains 'script' ('Plutus script evaluation failed: ...'). Removing the 'Only one auction can be ended per transaction' guard from Auction.scala:265-273 keeps the test green.",
+      "action": "Apply a one-shot parameter (AuctionContract.compiled.withErrorTraces(oneShot.toData)) and derive policyId/scriptAddress from the applied script. Replace the Try + 'contains(\"script\")' check with ScalusTest.assertScriptFail(\"Only one auction can be ended per transaction\") { ... }. Check by mutation: delete the guard and see the test fail.",
+      "coverageRisk": "none: the current test checks nothing about the fixed validator",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-2",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:51-57",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:102",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1407-1490",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1593-1650",
+        "scalus-testkit/jvm/src/main/scala/scalus/testing/ContractScalaCheckCommands.scala:184-188",
+        "scalus-testkit/jvm/src/main/scala/scalus/testing/ContractScalaCheckCommands.scala:225-227"
+      ],
+      "claim": "The ContractScalaCheckCommands tests only detect an accepted attack through the invariant (rejections pass, CSC:225-227). The bid-step invariant checks only seller and auctionEndTime, which no variation changes; the end-step test uses the default invariant Prop.passed. So if the validator accepted corruptDatum (highestBid 999_999_999), bidTooLow, stealOutput (an accepted steal keeps the old state, CSC:188), stealSeller or nftWrongAddr, all three tests stay green. Mutation example: delete 'Winner output must go to the winner' (Auction.scala:289-292); 'end step after bid' still passes.",
+      "action": "Bid step: invariant = the auction UTxO exists at scriptAddress, holds the NFT, datum.highestBidder == bidder1, datum.highestBid == bidAmount and lovelace >= highestBid (an accepted stealOutput leaves the pre-bid state, which then fails highestBid == bidAmount). End step: pass an invariant that queries the reader: no UTxO left at scriptAddress, bidder1's address holds the NFT, and the seller has an output with >= highestBid tagged with scriptHash. Run one mutation per variation to confirm detection.",
+      "coverageRisk": "none: adds checks",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-3",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:188-216",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:894-896",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:987-988",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1196-1202",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala:318-321",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala:781-787"
+      ],
+      "claim": "In 'ScenarioExplorer: multi-step auction lifecycle' the End branch is unreachable: startAuction sets slot 10, the end slot is 100, maxDepth = 3 and 'wait' sleeps 20 slots, so the latest reachable slot is 70. The test never ends an auction. The dead branch also hides a bug: buildEndTx pays the seller without the scriptHash inline-datum tag that the fixed validator requires (Auction.scala:318-321; AuctionEndStep and AuctionInstance.endAuction add it), so it would fail on AuctionValidator. In addition, every 'case _ => ()' after buildBidTx/buildEndTx (880, 893, 910, 939, 954) silently skips the check when no auction UTxO is found.",
+      "action": "Make the end reachable: 'wait' sleeps 50 slots (or maxDepth 4 with an explicit 'end' choice after the deadline). Tag the seller payout in buildEndTx: payTo(sellerAddr, lovelace, scriptHash: ByteString), as in Auction.scala:783-787 (UnfixedAuction ignores the tag, so the Unfixed tests are unaffected). Replace the silent 'case _ => ()' with Scenario.check(false, \"no auction UTxO\"). Assert that at least one explored path ends the auction (count End submissions).",
+      "coverageRisk": "none: adds coverage of the End path",
+      "ciSavingSec": -1,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:384-387",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:461-489",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:508-517",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:553-562",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:572-578"
+      ],
+      "claim": "Both UnfixedAuction detection tests accept any failure. 'ScalaCheck detects ...' asserts !result.passed, which also holds for Exhausted or a thrown exception (e.g. a TwoAuctionEndStep that cannot build). 'ScenarioExplorer finds ...' asserts violations.nonEmpty, which also holds when the 'Single end should succeed' check fails. The pre-check block (461-489) builds and submits a tx only to print the outcome.",
+      "action": "Assert result.status is org.scalacheck.Test.Failed and its labels contain 'Seller should receive'. Assert violations.exists(_.message.contains(\"Batch end with merged seller payment accepted\")) and violations.forall(!_.message.contains(\"should succeed\")). Delete the pre-check block 461-489.",
+      "coverageRisk": "none: the same behaviors, asserted precisely",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:323-405",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:374",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:398",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:402-404",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:774-779",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingTransactions.scala:102",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingValidator.scala:135-138"
+      ],
+      "claim": "'player2 joining fails after expiration' never reaches the validator. It sets the slot to the expiration slot (374) but builds the join with validTo(beforeTime) (398, BettingTransactions.scala:102), so the Emulator rejects it in phase 1 (OutsideValidityIntervalValidator); 'case Left(err) => succeed' accepts that. The validator check 'Joining must happen before the bet expiration' (BettingValidator.scala:135-138) is untested: deleting it keeps the test green. 'oracle announcing winner fails before expiration' does run the script (774-775) but checks only isFailure, and its submit part (777-779) is again a phase-1 rejection.",
+      "action": "Join after expiration: build with a validTo after the expiration (e.g. slotToTime(afterSlot)) and the constMaxBudget evaluator, then assert runValidator(...) fails with a log containing 'Joining must happen before the bet expiration'. Before-expiration announce: assert the logs contain 'The bet must have been expired'; drop the phase-1 submit block or assert its error is the validity-interval error.",
+      "coverageRisk": "none: the current join test covers only the ledger's validity-interval rule, which ledger tests cover",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:331-360",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:362-383",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/assertions/ResultAssertions.scala:128"
+      ],
+      "claim": "'reclaim before expiration fails' and 'reclaim fails if a player is not refunded' assert only result.isFailure. Any earlier failure satisfies them, e.g. a broken mint check or an input lookup error; the burn test (265-269) shows the stronger pattern with a log check.",
+      "action": "Use ResultAssertions.assertFailureWith(\"Cannot reclaim before the bet has expired\", result) and assertFailureWith(\"Player2 must be refunded their stake on timeout\", result).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-7",
+      "check": "C6",
+      "scope": "adopt-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/bilinearAccumulator/AllowlistValidatorE2ETest.scala:32-81",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/bilinearAccumulator/AllowlistValidatorE2ETest.scala:83-128",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/kit/ScalusTest.scala:42-57"
+      ],
+      "claim": "The non-member test uses assertThrows[BalancingException], which also passes for insufficient funds, non-convergence or any script error. ScalusTest.assertScriptFail checks the script logs. The two tests also copy the same 30 setup lines (party set, trusted setup, accumulator, proof, applied script, emulator).",
+      "action": "Replace assertThrows with assertScriptFail(\"Membership proof verification failed\") { ... }. Hoist the set, setup, accumulator, Alice's proof and the applied script (applied once per suite) into private vals and add a helper emulatorWith(owner: Party).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-8",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingValidator.scala:243-277",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingValidator.scala:244-248",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingValidator.scala:98-101",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingValidator.scala:103-106"
+      ],
+      "claim": "By reading (not executed): the minting branch (quantity +1) checks the config of the unique script output but never checks that this output holds the minted token. A user can mint the bet token to their own wallet next to a dummy script output, and later lock the token at the script address with a forged Config (e.g. oracle == player1, which the mint forbids). Join accepts it: it only requires value.tokens(scriptHash).nonEmpty (98-101). This contradicts the comment at 244-248 ('The token can only ever sit in a bet UTxO at the script address'), so a joiner can be paired with a self-appointed oracle.",
+      "action": "Add a test: mint +1 with the token paid to player1's address and a token-less script output carrying a valid Config; expect the minting policy to fail. Main-code note only: require scriptOutput.value.tokens(policyId) to contain the minted token (quantity 1).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-48",
+      "verification": "The mint branch (BettingValidator.scala:250-277) only finds the unique output at Address.fromScriptHash(policyId) (253-257). It then checks that output's Config: player1 signs, player2 empty, oracle !== player1, expiration. Nothing checks that this output's value holds tokens(policyId). So a player1-signed tx can mint +1 of any token name to the player's own wallet next to a token-less dummy script output with a valid Config. Later, a plain payment (no script runs on outputs) locks the token at the script address with a forged inline Config, e.g. oracle == player1 and player2 empty. Join (82-138) checks only value.tokens(scriptHash).nonEmpty (98-101), player2 empty, and a continuing-output config that keeps player1/oracle unchanged. It never checks player1 !== oracle, so the forged bet is joinable. The comment at 244-248 ('The token can only ever sit in a bet UTxO at the script address') is false. Anyone who builds their own tx (not via BettingTransactions.init) can reach this. No existing test covers it: BettingValidatorTest has only one mint test (44), and its token sits correctly. The proposed test and the main-code fix (require scriptOutput.value.tokens(policyId) to hold the minted token with quantity 1) are correct."
+    },
+    {
+      "id": "C11-9",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingValidator.scala:94-138",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingValidator.scala:142-177",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingValidator.scala:181-218",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingValidator.scala:262-277",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:44-383"
+      ],
+      "claim": "Most BettingValidator checks have no test (the on-chain code is excluded from scoverage, F-9). No test covers any Join rejection, any mint rejection, AnnounceWinner with a non-player winner, a wrong payout address or amount, a missing oracle signature or a negative index, Timeout without player2, an unsigned Timeout, or two bet inputs in one Timeout.",
+      "action": "In BettingValidatorTest add one table-driven test per redeemer: start from the valid TxInfo of the success test, apply one mutation per row (copy(...)), and assertFailureWith the expected require message. About 20 rows; each row is a ScriptContext-level evaluation (milliseconds).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -120,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala:163-244",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala:256-341",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala:368-419",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala:427-430",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:157-159",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:365-371"
+      ],
+      "claim": "AuctionValidator has no asserted negative test except the two double-satisfaction cases. AuctionValidatorTest declares Expected.Failure but no test uses it. Untested: all Start/mint rejections, the burn-only branch, Bid after end, unsigned bidder, seller self-bid, NFT dropped, lovelace below bid, missing/wrong/short refund, End before end time, winner == seller, bundled NFTs, underpaid or untagged seller output, no-bid End without seller signature.",
+      "action": "Add AuctionValidatorRejectionTest in the style of CrossInstanceDoubleSatisfactionTest: one applied instance, a valid TxInfo per action, and a table of (name, mutation, expected message) rows checked with runWithDebug and assertFailureWith. Delete the unused Expected.Failure branch in AuctionValidatorTest.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -180,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-11",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingTransactions.scala:121",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingTransactions.scala:150",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingTransactions.scala:188",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:407-665"
+      ],
+      "claim": "Coverage baseline: BettingTransactions lines 121 (win with isJoinWin = false), 150 (bet UTxO without the token) and 188 (timeout without player2) are not executed. The player1-wins payout and the unjoined-bet refund are never built.",
+      "action": "Add two emulator tests using the helpers of C11-19: oracle announces player1 as the winner; player1 reclaims an unjoined bet after expiration (full pot refunded). Line 150 needs no test.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-12",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:33-59",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:62-100",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:417-433",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:617"
+      ],
+      "claim": "The four success tests 'first bidder can place bid', 'second bidder can outbid', 'auction can end with winner', 'seller can end auction without bids' run the same flow as the four budget tests, and the budget tests already fail on any error: the off-chain call submits and throws on rejection, and runValidatorWithUtxos asserts result.isSuccess (617). Each test costs ~0.35 s (timings.csv).",
+      "action": "Delete the four success tests (keep 'seller can start auction', which has no budget twin). Rename the budget tests e.g. 'first bid succeeds within budget'.",
+      "coverageRisk": "none: the budget tests run the same transactions and assert success",
+      "ciSavingSec": 1.4,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Each success test (AuctionValidatorTest.scala:33-59) runs TestCase.run(). That wraps the final off-chain call in Try and asserts isSuccess (verifyResult 358-364). The budget twins (62-100) use the same TestAction args (Bid 3_000_000, Outbid 5_000_000, EndWithWinner, EndNoBids). They also use the same createProvider/createAuctionInstanceWithUtxo setup and identical preceding steps (startAuction, first bid 3_000_000, setSlot before/after). They call the same bid/endAuction without Try. Auction.scala:599-601, 695-697 and 796-798 throw RuntimeException on submit Left, so .await() fails the budget test on any rejection. The budget tests also re-run the validator and assert result.isSuccess (617), and they pin exact ExUnits. All four success assertions therefore survive, with stronger checks, in the same jvm/ file. 'seller can start auction' has no twin (runWithBudget throws for Start, 380), so it must stay, and the finding keeps it."
+    },
+    {
+      "id": "C11-13",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:152-156",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:158-210",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:212-262",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:126-150"
+      ],
+      "claim": "'deploy script' asserts what deployScript already asserts in every test (submit isRight, scriptRef defined). 'init bet' repeats lines 213-261 of 'player2 joins bet' verbatim; its only extra assertion is betUtxo coin == betAmount.",
+      "action": "Delete 'deploy script' and 'init bet'; move the coin == betAmount check into the init helper of C11-19 so every test asserts it.",
+      "coverageRisk": "none: the same transactions run in the join test",
+      "ciSavingSec": 0.0,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "'deploy script' (BettingTransactionTest.scala:152-156) asserts scriptRef.isDefined. deployScript (126-150) already asserts submit isRight (140) and selects the UTxO with find(out.scriptRef.isDefined).get (149), which throws if none exists. Every test calls deployScript, so the check is redundant. 'init bet' (158-210) is identical to lines 213-261 of 'player2 joins bet before expiration' (same queries, init args, submit isRight assert, and betUtxo query with coin >= betAmount). Its only extra assertion is betUtxo coin == betAmount (209). The join test then asserts that the joined coin == betAmount + betAmount (around line 320). The validator enforces output lovelace == 2 * input lovelace (BettingValidator.scala:127-130), and join pays betAmount. So the exact init coin is already implied, and moving the check into the C11-19 init helper keeps it explicit. Safe."
+    },
+    {
+      "id": "C11-14",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:271-383",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/betting/BettingValidator.scala:179-218"
+      ],
+      "claim": "The three Timeout tests are instances of one law: Timeout succeeds iff the validity range starts after the expiration, a player signs, and each player receives >= stake (the full pot to player1 when player2 is empty). The examples cover 3 points and never the player2-empty branch.",
+      "action": "Keep the success test for its ExUnits pin. Replace the two failure tests with a forAll over (validFrom before/after expiration, refund1, refund2 in {0, stake-1, stake, pot}, player2 joined or empty, signer in {player1, player2, oracle}) using timeoutTx, asserting success == the law. ScriptContext evaluation costs ~1 ms per case.",
+      "coverageRisk": "low: the two failure examples are points of the property; keep their messages via C11-6 if the property only checks success/failure",
+      "ciSavingSec": -0.3,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The Timeout branch (BettingValidator.scala:179-218) checks validRange entirely after expiration, isSignedBy(player1) || isSignedBy(player2), a unique bet input, and burn hasOnly(-1). For an empty player2 it checks totalPaidTo(player1) >= value, otherwise each player gets >= value/2. timeoutTx (BettingValidatorTest.scala:272-296) fixes one input with 6M and a burn, so the stated law holds except in one case. If player2 is empty and the generated signer is config.player2, then signatories = List(PubKeyHash(\"\")) and isSignedBy(player2) is true at line 187. The script succeeds, but the law ('a player signs') would say fail. A naive property would fail or encode a meaningless point. The replaced failures are points in the generator space: 'before expiration' uses Interval.between before expiration (331-360), and 'not refunded' is the refund2=0 point with pot+token to player1 (362-383). The player2-empty branch is indeed untested. Corrected action: do the forAll as proposed, but draw the signer from {player1, player2 (only when joined), oracle}, or exclude the empty-hash signer. Generate the 'before' ranges as Interval.between/before(expiration-δ), and keep failure-message checks per C11-6."
+    },
+    {
+      "id": "C11-15",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:136-145",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:166-167",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:375-376",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala:486-493",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala:505-511",
+        "docs/internal/test-refactor/findings.md:348-374"
+      ],
+      "claim": "Same cause as F-19: each of the 9 Emulator tests builds a fresh AuctionFactory and calls createInstance, which applies the one-shot at SIR level and lowers and optimizes the whole validator again (AuctionInstance reads compiledContract.script in its constructor). The one-shot is always the same genesis UTxO, so the applied script is identical. Each test takes ~0.35 s; AuctionValidatorTest is 3.2 s and 2.4 % of examples CPU.",
+      "action": "Cache the applied contract per one-shot in the companion (lazy val or a Map keyed by TxOutRef) and construct AuctionInstance(provider, oneShot, applied) directly (the constructor is public). Each test keeps its own Emulator.",
+      "coverageRisk": "none: same transactions",
+      "ciSavingSec": 2.0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-16",
+      "check": "C7",
+      "scope": "ci-time",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1072-1078",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:290",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:404",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/DoubleSatisfactionAttackTest.scala:31"
+      ],
+      "claim": "startAuction lowers the applied auction twice per call: AuctionFactory.createInstance applies and lowers once, then line 1075 applies the same one-shot again to get script/scriptHash/address. It runs 7 times in the suite. UnfixedAuctionValidator is also compiled at runtime twice in this suite (290, 404) and once in DoubleSatisfactionAttackTest.",
+      "action": "Apply once: val applied = AuctionContract.compiled.withErrorTraces(oneShot.toData); val instance = AuctionInstance(emulator, oneShot, applied); take script/hash/address from applied. Move the Unfixed compile into one shared lazy val (e.g. object UnfixedAuctionFixture) used by both suites.",
+      "coverageRisk": "none",
+      "ciSavingSec": 1.5,
+      "linesRemoved": 5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-17",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:42-49",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1328-1335",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1360-1364",
+        "scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala:226-241"
+      ],
+      "claim": "The bid step always bids the fixed bidAmount 3_000_000 from bidder1. After the first accepted bid every further correct bid is rejected ('not higher'), so the ScalaCheck commands never reach the previous-bidder refund branch (Auction.scala:226-241) or a second accepted bid; the generated command sequences differ only in order and slot delays.",
+      "action": "Derive the bid from the state: bidAmount = state.datum.highestBid + Gen.choose(1, 5_000_000), and alternate bidder1/bidder2 (pass both parties to the step). Then the refund branch and the refundTooLow/wrong-refund variations become reachable; add those variations.",
+      "coverageRisk": "none: widens generated inputs",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-18",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:103-124",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:588-617",
+        "docs/internal/test-refactor/repeated-defs.csv:10"
+      ],
+      "claim": "runValidator (BettingTransactionTest) and runValidatorWithUtxos (AuctionValidatorTest) are the same procedure: resolve inputs/collateral/reference UTxOs, getScriptContextV3 for ForSpend(input), find the Plutus script by hash, runWithDebug. repeated-defs.csv lists runValidator in 7 files (also Pricebet, Vault, Vesting tests and 3 ledger rule tests).",
+      "action": "Add to scalus-testkit TestUtil (next to getScriptContextV3) an extension Transaction.runSpend(utxos: Utxos, input: TransactionInput, scriptHash: ScriptHash): Result, plus an overload that resolves UTxOs from a BlockchainReader with known overrides. Replace both local defs; the other examples files follow in the same unit.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-19",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:158-237",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:248-261",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:263-287",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:411-487",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:545-617",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingTransactionTest.scala:671-747"
+      ],
+      "claim": "The init block (query player1 UTxOs + transactionCreatorFor(player1Signer).init(...)) is copied 5 times, the bet-UTxO query 5 times and the join block 4 times; each test is ~120 lines for 2-3 assertions.",
+      "action": "Add private helpers queryUtxos(address, minTotal), initBet(provider, scriptUtxo): Utxo, joinBet(provider, scriptUtxo, betUtxo, evaluatorConst = false): Transaction, and utxoOf(provider, address, txId). Each test shrinks to its distinctive steps and assertions.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 330,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-20",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:21-24",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:150-371",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionValidatorTest.scala:374-584"
+      ],
+      "claim": "AuctionValidatorTest wraps 9 tests in a TestCase/TestAction/Expected framework (~480 lines) with 8 copies of the startAuction call and 4 run*/run*WithBudget twins; Expected.Failure is never used. The size test asserts size > 0 and embeds the size in its name, which forces a compile when the suite is constructed.",
+      "action": "Replace the framework with helpers start(provider), bid(provider, party, amount), end(provider) and budgetOf(provider, tx, utxosBefore), and write each test as 3-6 lines. Delete the size test (or pin the size, as the ExUnits are pinned).",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 300,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-21",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:300-343",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:413-459",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:650-687",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:752-791",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1243-1255",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:1286-1322",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:34-35",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:65-67",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:378-388",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/AuctionTestKitTest.scala:965-973"
+      ],
+      "claim": "The two UnfixedAuction tests copy the won-datum, value and emulator setup (~45 lines each). The End redeemer builder is written 4 times (makeBaseTx, attack, buildBatchEndTx, buildEndRedeemer). Every test has resetCounters/t0/System.err timing prints; txSubmitCount is never incremented; 378-380 and 388 are commented-out code. scalus.cardano.onchain.plutus.prelude.Option.Some is written out ~20 times.",
+      "action": "Extract wonAuctionsEmulator(script, scriptHash, scriptAddress, withSellerUtxo) and one endRedeemer(utxo, sellerIdx: Transaction => Int, winnerAddr, itemId). Delete the counters, the timing prints and the commented code. Import prelude.Option as POption.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 200,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-22",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/DoubleSatisfactionAttackTest.scala:43-158",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/auction/DoubleSatisfactionAttackTest.scala:160-263"
+      ],
+      "claim": "The two tests build the same datums, auction UTxOs, Emulator and two-input attack transaction (~90 duplicated lines); only the contract and the final assertion differ.",
+      "action": "Extract attackTx(contract): Try[Transaction] (or the builder) parameterized by the compiled script; each test becomes its assertions. Do it together with C11-1.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 85,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C11-23",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-examples",
+      "evidence": [
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:23-42",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:45-55",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:91-112",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:166-178",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:82-88",
+        "scalus-examples/jvm/src/test/scala/scalus/examples/betting/BettingValidatorTest.scala:157-163"
+      ],
+      "claim": "BettingValidatorTest has a dead commented-out TestCase (23-42). Each of the 7 tests re-creates player1/player2/oracle/Config/policyId/TxOutRef, and three tests repeat the 'if result.isFailure then println' + isSuccess + budget == pattern.",
+      "action": "Delete 23-42. Hoist the parties, configs, policyId, outRef and the bet value into private vals; use ResultAssertions.assertSuccess and assertBudgetEquals.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 80,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 4 findings of scope merge-duplicate-tests, to-property or main-bug; 3 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

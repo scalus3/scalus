@@ -1,0 +1,373 @@
+{
+  "cluster": "verify",
+  "summary": "The cluster is cheap: the whole scalus-verification test run takes about 9 s locally. UplcBlasterTest (3.5 s) and PreludeProofsTest (2.5 s) spend most of it lowering SIR to UPLC, so there are no ci-time findings. Without Lean (ci-jvm), every Lean-backed test cancels. The Lean-Proofs workflow runs them. Only PreludeProofsTest keeps results, so only it replays proofs on ci-jvm. Therefore the coverage numbers for LeanServer and LeanProofs do not show a real gap. The real gaps: four SpecificationsTest tests cancel before their Lean-independent checks, the branches of Obligations path slicing (else, &&/||, match, let) are untested, and LeanExporter has no caller and 3 tests. Duplicates are some UplcBlasterTest proofs that copy PreludeProofsTest, plus small overlaps in VerifierTest and SpecificationsTest/ObligationsTest. C4 and C8 found nothing: the module has no ScalaCheck dependency and no generators, and SmtValues has no writer for a roundtrip law. The tests are mostly strong. The weak assertions are toString.nonEmpty in PropTest, isLeft in SmtValuesTest, isRight in UplcBlasterTest, and discarded results in VerifierTest.",
+  "behaviors": [
+    {
+      "pass": "Prop/PropMacro",
+      "name": "forAll/exists/existsLet/call/contract capture binders and SIR without closures; macro errors for misuse",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/PropTest.scala:13-327"
+      ]
+    },
+    {
+      "pass": "FunctionDef/FunctionTable",
+      "name": "function naming, representations, table errors",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/PropTest.scala:329-383",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:445-516"
+      ]
+    },
+    {
+      "pass": "Verifier",
+      "name": "statements, content names, lemmas, theorems import, negative controls, contracts",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/VerifierTest.scala:19-277"
+      ]
+    },
+    {
+      "pass": "KeptResults",
+      "name": "use/frozen/recalculate modes, stale reasons, former backend sides, pruning by test",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/KeptResultsTest.scala:86-464",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:1395-1479"
+      ]
+    },
+    {
+      "pass": "Obligations",
+      "name": "call obligations of contracted callees, path slicing, caller premise",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/ObligationsTest.scala:64-152",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/SpecificationsTest.scala:301-356"
+      ]
+    },
+    {
+      "pass": "Specifications",
+      "name": "contracts and guarantees read from Spec clauses in a body",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/SpecificationsTest.scala:149-299"
+      ]
+    },
+    {
+      "pass": "UplcBlaster",
+      "name": "lowering of Prop to UPLC leaves and leaf formula; unsupported fragment",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:106-179",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:312-344",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:1585-1617"
+      ]
+    },
+    {
+      "pass": "UplcBlaster",
+      "name": "verdicts, counterexample reading and replay, spurious detection, budget search",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:181-241",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:636-829",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:1176-1213",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:1337-1358"
+      ]
+    },
+    {
+      "pass": "UplcBlaster",
+      "name": "tactic settings: heartbeats, timeouts, kept checks, fingerprint, progress text",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:1102-1174",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:1360-1393",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:1481-1583"
+      ]
+    },
+    {
+      "pass": "UplcBlaster",
+      "name": "proofs over integers, Data, bytes, strings, case classes (Lean)",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:73-104",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:399-634",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:841-1050",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala:146-286"
+      ]
+    },
+    {
+      "pass": "UplcBlaster",
+      "name": "limits: loops Lean does not finish (Unfinished tag)",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterLimitsTest.scala:53-89"
+      ]
+    },
+    {
+      "pass": "SmtValues",
+      "name": "reading Z3 values: integers, Data, bytes, strings, let, renaming, defaults",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/SmtValuesTest.scala:14-182"
+      ]
+    },
+    {
+      "pass": "LeanProofs/LeanProofsSuite",
+      "name": "cancel or fail without Lean, workspace resolution, kept results by test, directory names",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/LeanProofsTest.scala:25-186",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/LeanProofsSuiteTest.scala:9-22"
+      ]
+    },
+    {
+      "pass": "LeanServer/LeanServers",
+      "name": "checks, time limits, interrupts, crashes, close (Lean)",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/lean/LeanServerTest.scala:42-239"
+      ]
+    },
+    {
+      "pass": "JsonRpcSession",
+      "name": "request/response ids, notifications, byte lengths, close",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/lean/JsonRpcSessionTest.scala:60-132"
+      ]
+    },
+    {
+      "pass": "LeanWorkspaceTool",
+      "name": "workspace init, library unpacking, disagreement notes, name checks",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/lean/LeanWorkspaceToolTest.scala:37-311"
+      ]
+    },
+    {
+      "pass": "LeanExporter",
+      "name": "Prop to Lean text",
+      "tests": [
+        "scalus-verification/src/test/scala/scalus/verify/lean/LeanExporterTest.scala:10-34"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C03-1",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/SpecificationsTest.scala:188-189,243-244,281-282,301-302",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/SpecificationsTest.scala:205-220,252-266,289-298,345-346",
+        "scalus-verification/src/main/scala/scalus/verify/uplcblaster/LeanProofs.scala:113-116"
+      ],
+      "claim": "Four SpecificationsTest tests call requireLean() as their first line, so without Lean (every ci-jvm run) they cancel before any assertion: timings.csv gives 0.0 s for all four. Their Lean-independent checks never run in CI: the guarantee names and Origin.Guarantee/Origin.Guarantees (206-209, 253-258), the leaf counts of separate and joined clauses (265-266), StatedGuarantees(Nil, Nil, None) for a function without clauses (218-220), guarantees(contract) and its IllegalArgumentException (292-298), and 'a call in a clause owes nothing' (346). The explicit call is redundant: the `lean` provider calls requireLean() when a tactic first asks for a server (LeanProofs.scala:113-116).",
+      "action": "Delete the four requireLean() calls. Move each Lean-independent assertion before the first verify/prove of its test (for example 218-220 and 346 up, and the names and origin at 289-295 before prove(alone)), or split each test into a structure test without Lean and a proof test.",
+      "coverageRisk": "none: adds coverage only; the Lean proofs are unchanged",
+      "ciSavingSec": -0.5,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C03-2",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/main/scala/scalus/verify/Obligations.scala:107-117",
+        "scalus-verification/src/main/scala/scalus/verify/Obligations.scala:141-176",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/ObligationsTest.scala:11-27"
+      ],
+      "claim": "Obligations.sites and Obligations.slice decide which calls owe a precondition and the path condition under which each call is reached. The baseline marks these branches as never run: calls under ||, Not, Select, Constr, Match and Error (sites 107-117), and slicing through a let binding, the else branch, &&/||, Not, Match cases, an argument position, Select and Constr (slice 143-176). The callers in ObligationExamples only use a plain call, an if-then branch, require, and a lambda. A wrong slice gives a wrong premise, so an obligation would be proved where it does not hold. Match is the usual shape of a validator.",
+      "action": "Add ObligationExamples callers that call Math.clamp in an else branch, on the right of && and ||, in a match case of an enum, and in a let binding's value. For each one, assert the single obligation and its name without Lean. Then lower the obligation with UplcBlaster.lower and evaluate its leaves on the CEK at one input where the call is reached and one where it is not, as PreludeProofsTest:146-157 does. Add one proved and one refuted Lean case for the match and the else shapes.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.5,
+      "linesRemoved": -60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C03-3",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/main/scala/scalus/verify/lean/LeanExporter.scala:18-51",
+        "scalus-verification/src/main/scala/scalus/verify/lean/LeanExporter.scala:59-99",
+        "scalus-verification/src/main/scala/scalus/verify/lean/LeanExporter.scala:118-162",
+        "scalus-verification/src/main/scala/scalus/verify/lean/LeanExporter.scala:182-186",
+        "scalus-verification/src/test/scala/scalus/verify/lean/LeanExporterTest.scala:10-34"
+      ],
+      "claim": "LeanExporter has 3 tests. The baseline lists 197 uncovered statements: Denotes, Equal, total and partial Call, Exists, existsLet, And and Iff (20-50), Let, LamAbs, if-then-else, Cast, the unsupported SIR nodes (70-99), all builtin calls except the ones in 'x + 1 > 0', the partial-application errors (118-162), and identifier escaping for keywords and leading digits (182-186). No main code calls LeanExporter. The design docs present it as shared infrastructure for a future lean-direct tactic.",
+      "action": "Ask the owner if LeanExporter stays. If it stays, add a table test of Prop to the expected Lean text: one row for each Prop node (call total/partial, exists, existsLet, equal, and, iff), let, if-then-else, a negative constant '(-5)', and identifier escaping ('fun' -> 'fun_', '1x' -> 'v_1x'). Also add rows that expect UnsupportedOperationException: denotes, a ByteString constant, a recursive let, and a partial builtin.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -60,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C03-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/test/scala/scalus/verify/PropTest.scala:17",
+        "scalus-verification/src/test/scala/scalus/verify/PropTest.scala:50",
+        "scalus-verification/src/test/scala/scalus/verify/PropTest.scala:67",
+        "scalus-verification/src/test/scala/scalus/verify/PropTest.scala:362"
+      ],
+      "claim": "Four assertions check `<sir or term>.toString.nonEmpty`, which no SIR or UPLC value can fail. Example mutation: if the macro captures the constant `true` in place of the leaf, or `BigInt(0)` in place of the witness or argument, all four still pass.",
+      "action": "Assert the captured value. Lines 17, 50 and 67: check the SIR type (Boolean or Integer), and lower and evaluate the leaf, or compare it with the expected constant (for example the witness evaluates to 2 and the argument to 2). Line 362: apply the clamp term to (5, 0, 3), evaluate it, and assert the result is 3.",
+      "coverageRisk": "none: the assertions become stronger",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C03-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/test/scala/scalus/verify/VerifierTest.scala:207-213",
+        "scalus-verification/src/test/scala/scalus/verify/VerifierTest.scala:229-235"
+      ],
+      "claim": "Two calls to verifier.verify drop their result, and the only check, `goal.lemmas.isEmpty`, is inside the tactic. If verify answers from an existing theorem and never runs the tactic, the test passes and checks nothing about lemmas.",
+      "action": "Wrap both calls in `assert(verifier.verify(...) == VerificationResult.Inconclusive(\"not run\"))`. This proves that the tactic ran.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C03-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/SmtValuesTest.scala:18",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/SmtValuesTest.scala:166",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/SmtValuesTest.scala:177-182",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:708-720"
+      ],
+      "claim": "The 'malformed terms' assertions check only isLeft. The tactic treats the two Left kinds differently: OutsideType gives Inconclusive and Malformed gives Failed (UplcBlasterTest:708-720). Example mutation: SmtValues reports a malformed term as OutsideType, and these tests still pass.",
+      "action": "Assert `.left.exists(_.isInstanceOf[SmtValues.Unreadable.Malformed])` at 18, 166 and 178-181, as line 60 already does.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C03-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:499-503",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:511-515"
+      ],
+      "claim": "For a function that has only a UPLC program, the test claims that strings and integers are passed in their one form. It asserts only that lowering returns Right. Example mutation: the lowering wraps the argument as Data. Lowering still succeeds, but the program then fails on the CEK.",
+      "action": "Evaluate the lowered leaf on the CEK with a concrete value, for example \"ab\" for exclaimProgram and 3 for incrementProgram, and assert the result is true, as lines 340-343 do.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C03-8",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:1039-1050",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala:196-203",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:975-981",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala:212-219",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:362-365",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:970-974",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala:100-104",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:245",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:250"
+      ],
+      "claim": "Some Lean proofs in UplcBlasterTest are exact copies of proofs in PreludeProofsTest. 'a call's continuation can call another function' (1039-1050) is the min+max statement of PreludeProofsTest:196-203: same named functions, same budget 120. The clamp range proof (975-981) is PreludeProofsTest:213-219. The closed call clamp(9, 1, 5) == 5 (970-974) is a conjunct of the clamp samples (101), and 'proves a total call of a registered function' (362-365) is the same behavior as every closed-sample test. Line 245 proves the same as line 250, and 250 also checks the ProofKind. PreludeProofsTest keeps its results, so it also runs in ci-jvm. The UplcBlasterTest copies cancel there after they lower their programs.",
+      "action": "Delete the UplcBlasterTest test at 1039-1050 and the test at 362-365. Delete lines 970-981 from 'calls a function of several parameters', but keep the arity check and the counterexample check (983-990). Delete line 245.",
+      "coverageRisk": "low: PreludeProofsTest states each deleted statement with the same functions and budgets. The kept file of PreludeProofsTest replays them without Lean.",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 30,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "Each deleted statement appears again in PreludeProofsTest with the same FunctionDef, the same budget and the same `proofs.proven` entry point. Both suites extend LeanProofsSuite and use `import proofs.*`.\n- UplcBlasterTest.scala:1039-1050 (min/max continuation, budget 120, FunctionDef.named(\"min\"/\"max\")) matches PreludeProofsTest.scala:196-203 exactly.\n- UplcBlasterTest.scala:975-981 (lo<=hi ==> clamp in range, budget 120, FunctionDef(Math.clamp)) matches PreludeProofsTest.scala:212-219.\n- UplcBlasterTest.scala:970-974 (closed clamp(9,1,5)==5, budget 80) is the first conjunct of the clamp Samples at PreludeProofsTest.scala:100-104. Those samples are also run on the CEK and are asserted to be LeanNative (:147-163).\n- UplcBlasterTest.scala:362-365 (closed call of a registered unary named function) has the same shape as the abs samples (PreludeProofsTest.scala:81-86).\n- Line 245 `proven(denotes(7/2), 40)` is repeated at line 250, which also checks ProofKind.LeanNative.\n\nKept results do not weaken this:\n- The kept fingerprint covers the statement, the programs and Lean's side, so a change of any of them makes Lean prove the statement again (README.md:409-421).\n- With SCALUS_REQUIRE_LEAN, every statement is proved by Lean again.\n- Without Lean, the UplcBlasterTest copies cancel, while PreludeProofsTest still passes on its kept results.\n\nThe kept parts are still needed and the action keeps them: the arity assert (line 969) and the unguarded counterexample check (983-990), which PreludeProofsTest only covers as a refuted control without checking the counterexample values."
+    },
+    {
+      "id": "C03-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/SpecificationsTest.scala:318-321",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/SpecificationsTest.scala:348-355",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/ObligationsTest.scala:135-147",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/ObligationsTest.scala:128-132"
+      ],
+      "claim": "In 'callers owe a precondition stated in the callee's body', the guarded caller (proved) and the passes caller (refuted alone, proved under its contract) repeat ObligationsTest:128-147. They use the same Verifier.obligations and slicing code. Only the source of the contract differs: Spec.expects in the body versus the contract DSL.",
+      "action": "In SpecificationsTest, keep the violates refutation as the end-to-end check of a contract read from the source, and keep span, spanOrdered and mentions. Delete the guarded proof (318-321) and the passes pair (348-355).",
+      "coverageRisk": "medium: a contract read from the source as the premise of a caller's own obligation (passes_expects) is then not proved anywhere. span/spanOrdered still prove obligations from inSource contracts.",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "low",
+      "verdict": "NARROWED",
+      "verification": "The guarded proof (SpecificationsTest.scala:318-321) can go:\n- ObligationsTest.scala:135-138 proves the same branch-established obligation through the same Verifier.obligations slicing.\n- A proved obligation from an inSource callee contract still exists in owedToItself(spanOrdered) (SpecificationsTest.scala:345).\n\nThe passes pair (348-355) is not a duplicate:\n- SpecifiedExamples.passes (SpecificationsTest.scala:47-50) has `Spec.expects(lo <= hi)` in its body. ObligationExamples.passes (ObligationsTest.scala:18) does not.\n- So the 'alone is Refuted' assert at line 352 is the only test that shows a caller's own Spec.expects is not taken as a runtime check (as `require` is, ObligationsTest.scala:144-146) when obligations are sliced.\n- span cannot show this: it is refuted even if Spec.expects were a check.\n- clampAtHead (SpecificationsTest.scala:280-298) shows it for guarantees only, not for obligations.\n- The inSource caller contract `passes_expects` as the premise of an obligation (353-355) is proved nowhere else, as the finding itself admits.\n\nCorrected action: delete only lines 318-321. Keep the passes pair."
+    },
+    {
+      "id": "C03-10",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/test/scala/scalus/verify/VerifierTest.scala:121-128",
+        "scalus-verification/src/test/scala/scalus/verify/VerifierTest.scala:247-253",
+        "scalus-verification/src/test/scala/scalus/verify/VerifierTest.scala:112-118"
+      ],
+      "claim": "'a confirmed refutation is returned without registering a theorem' (121-128) makes the same assertions as 247-253: prove returns Refuted(proof), and theorems stay empty. Verifier.prove does not look at a statement's expected outcome. In 'inconclusive results', the second call (112-118) repeats the first with another message.",
+      "action": "Delete the test at 121-128 and the second block at 112-118.",
+      "coverageRisk": "low: if prove later treats Valid and Falsified statements differently, the Valid refutation case is lost; restore it then",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "Verifier.prove (Verifier.scala:606-627) never reads `statement.expected`. A Refuted result is passed through without registering a theorem, whatever the outcome the statement expects.\n- prepare (Verifier.scala:523-534) only checks registration and builds the Goal.\n- Both verifiers are Verifier.empty, which keeps no results, so run calls tactic.run directly.\n\nThe test at VerifierTest.scala:121-128 (Valid statement, stub Refuted(proof), result == Refuted(proof), theorems empty) is therefore covered by VerifierTest.scala:247-252. That test makes the same two assertions on a Falsified control with the same stub and the same Proof shape.\n\nIn 'inconclusive results do not create theorems', the second block (112-118) repeats the first block (104-110) on the same statement through the same Inconclusive path (Verifier.scala:624). Only the message string differs.\n\nThe finding states the remaining risk correctly: it applies only if prove later starts to branch on `expected`."
+    },
+    {
+      "id": "C03-11",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:273-275,299-301,382-384,412-414,424-426,576-578,887-889",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:667-673,727-733",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:737,766,778,1441,1450,1476",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/SpecificationsTest.scala:335-336",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:1277-1293,1304-1320",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:340-343,351-353,1026-1028",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/PreludeProofsTest.scala:151-156"
+      ],
+      "claim": "UplcBlasterTest repeats several pieces of code. Seven tests copy a 3-line match that gets the binder of a forAll; split2 (69-71) already does this for two binders. Two tests define the same falsified(value) verdict wrapper. Seven sites cast proof.artifact to UplcBlaster.Artifact by hand. The two 'Lean reads ... as the tactic writes it' tests copy 17 lines of server, directory, writeCheck and measureSource setup. Four sites evaluate a leaf and expect Bool(true).",
+      "action": "Add private helpers to UplcBlasterTest: binder(prop), falsified(goal, value), artifactOf(result), leanCounts(goal, values) and holdsOnCek(term). Use them at every site. Put holdsOnCek and artifactOf where PreludeProofsTest and SpecificationsTest can also use them, for example in a small test object of the uplcblaster package.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C03-12",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-verification",
+      "evidence": [
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:208",
+        "scalus-verification/src/test/scala/scalus/verify/uplcblaster/UplcBlasterTest.scala:211"
+      ],
+      "claim": "Two lines of commented-out println debugging code remain.",
+      "action": "Delete them.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 3 findings of scope merge-duplicate-tests, to-property or main-bug; 2 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

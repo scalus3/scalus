@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "P2 cluster report",
+  "description": "One file per cluster: docs/internal/test-refactor/reports/<cluster>.json. Checked by scripts/check_report.py.",
+  "type": "object",
+  "required": ["cluster", "summary", "behaviors", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "cluster": {"type": "string", "description": "Cluster name from clusters.md."},
+    "summary": {"type": "string", "description": "3-5 sentences."},
+    "verification": {"type": "string", "description": "Which findings the verify agents checked, and the counts per verdict."},
+    "behaviors": {
+      "type": "array",
+      "description": "Check C1: public behaviors of the main code and the tests that check them.",
+      "items": {
+        "type": "object",
+        "required": ["pass", "name", "tests"],
+        "additionalProperties": false,
+        "properties": {
+          "pass": {"type": "string", "description": "Main-code unit, e.g. a class or an optimizer pass."},
+          "name": {"type": "string"},
+          "tests": {"type": "array", "items": {"$ref": "#/$defs/fileRef"}, "description": "Empty when no test checks the behavior."}
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "check", "scope", "module", "evidence", "claim", "action", "coverageRisk",
+                     "ciSavingSec", "linesRemoved", "confidence", "verdict"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*-[0-9]+$", "description": "Unique across all reports: the cluster prefix and a number, e.g. T-16 or C07-3."},
+          "check": {"enum": ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9"]},
+          "scope": {
+            "enum": ["ci-time", "adopt-helper", "extract-helper", "merge-duplicate-tests", "to-property",
+                     "fill-gap", "strengthen-assertion", "generator", "style", "simplify", "main-bug"],
+            "description": "Exactly one scope from the spec's scope list. main-bug findings also get an F-entry in findings.md."
+          },
+          "module": {"type": "string", "description": "Top-level module directory of the test files to change, e.g. scalus-core."},
+          "evidence": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/fileRef"}},
+          "claim": {"type": "string"},
+          "action": {"type": "string"},
+          "coverageRisk": {"type": "string"},
+          "ciSavingSec": {"type": "number", "description": "Seconds of CI time saved; negative when the change adds CI time."},
+          "linesRemoved": {"type": "integer", "description": "Estimate of test lines deleted minus lines added; negative when the action adds tests."},
+          "confidence": {"enum": ["high", "medium", "low"]},
+          "verdict": {"enum": ["CONFIRMED", "NARROWED", "DISPROVED", "UNVERIFIED"]},
+          "verification": {"type": "string", "description": "Verify agent's correction; overrides claim and action when the verdict is NARROWED."},
+          "findingsLog": {"type": "string", "pattern": "^F-[0-9]+$", "description": "Required for main-bug: the findings.md entry."}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "fileRef": {
+      "type": "string",
+      "pattern": "^[^/:][^:]*\\.[a-z]+:[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*$",
+      "description": "Repository-relative path, a colon, and a line or line range, e.g. scalus-core/shared/src/test/scala/X.scala:12-80."
+    }
+  }
+}

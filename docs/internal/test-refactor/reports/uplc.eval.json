@@ -1,0 +1,594 @@
+{
+  "cluster": "uplc.eval",
+  "summary": "The cluster is cheap: about 2 s on the JVM in total, of which PlutusConformanceJvmTest is 1.4 s, so there are no ci-time findings. The Plutus conformance corpus (1009 textual and .flat cases, exact budgets, all platforms) is the main guard of CEK semantics, and several hand-written suites repeat it: the success paths of CaseOnBuiltinsTest and the UPLC half of DropListTest duplicate corpus cases, and ConfiguredCryptoEvaluationTest compares evaluateScriptDebug with the very runWithBudgetTracking call it delegates to. Weak spots: the conformance failure arm accepts any host exception (F-32 pattern), the 'not thrown' test in ConfiguredEvaluationTest never reaches the catch-all, PlutusUseCasesBenchmarkTest and MachineParamsCostModelTest assert `!= null`, and the profiler/formatter tests check only titles and '> 0'. One main-bug candidate: MkCons promotes a non-constant head onto a (list value) to a VList, where Plutus fails (C24-1). Uncovered statements P4 need not chase: about 150 of Cek.scala's 277 are system-property-gated diagnostics (dumpCaseOnBuiltinDiag 981-1028, assertApplyDataToUc / assertCaseDataArity blocks 1300-1310, 1423-1436, 1517-1563, maxLamChainOnVar 1595-1626), 119 of ProfileFormatter's 310 are the unwired private inclusiveCosts (48-135), and BuiltinCostModel/CostModel/BuiltinValueOps belong to uplc.eval.budget and uplc.builtin.",
+  "behaviors": [
+    {
+      "pass": "CekMachine",
+      "name": "UPLC evaluation semantics and exact budgets for the Plutus corpus (textual and .flat inputs)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:87-110",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/PlutusConformanceJvmTest.scala:10",
+        "scalus-core/js/src/test/scala/scalus/uplc/eval/PlutusConformanceJsTest.scala:18-32",
+        "scalus-core/native/src/test/scala/scalus/uplc/eval/PlutusConformanceNativeTest.scala:7"
+      ]
+    },
+    {
+      "pass": "CekMachine",
+      "name": "case on builtin constants (Integer, Bool, Unit, List, Pair) at PV11; rejected before PV11",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:27-165",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:445-621",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:733-797",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:87-91"
+      ]
+    },
+    {
+      "pass": "CekMachine",
+      "name": "case on Data.Constr only from Dijkstra (PV12)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:623-731",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:112-119"
+      ]
+    },
+    {
+      "pass": "CekMachine",
+      "name": "Constr tag is unsigned 64-bit: tags above Int range give MissingCaseBranch",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:191-229"
+      ]
+    },
+    {
+      "pass": "CekMachine",
+      "name": "error source positions and inlinedFrom in EvaluationFailure / BuiltinError messages",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/CekSourcePosTest.scala:19-311"
+      ]
+    },
+    {
+      "pass": "CekMachine",
+      "name": "source trace on failure only in debug/profile runs",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SourceTraceTest.scala:13-81"
+      ]
+    },
+    {
+      "pass": "CekMachine",
+      "name": "profiling: bySourceLocation, byFunction, totals, traces with budgets",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CekProfilerTest.scala:13-106",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/TraceProfileTest.scala:19-50",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ConfiguredEvaluationTest.scala:86-105"
+      ]
+    },
+    {
+      "pass": "CekMachine",
+      "name": "de Bruijn index 0 is rejected with a MachineError (Cek.scala:1492-1496)",
+      "tests": []
+    },
+    {
+      "pass": "CekMachine",
+      "name": "dischargeCekValue of a VList result (Cek.scala:1744-1757)",
+      "tests": []
+    },
+    {
+      "pass": "PlutusVM",
+      "name": "CIP-117: V3 rejects a non-Unit result, V1/V2 accept it",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/PlutusVMTest.scala:13-56",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ConfiguredEvaluationTest.scala:72-84"
+      ]
+    },
+    {
+      "pass": "PlutusVM",
+      "name": "runWithBudgetTracking: budget limits, failures keep budget and logs, any exception becomes Result.Failure",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ConfiguredEvaluationTest.scala:33-70",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ConfiguredEvaluationTest.scala:107-164",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ConfiguredCryptoEvaluationTest.scala:15-79",
+        "scalus-core/js/src/test/scala/scalus/uplc/eval/ConfiguredCryptoEvaluationTest.scala:18-118"
+      ]
+    },
+    {
+      "pass": "PlutusVM",
+      "name": "evaluates the 89 plutus_use_cases benchmark scripts; V1 at Plomin rejects case-on-Bool",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/PlutusUseCasesBenchmarkTest.scala:58-87"
+      ]
+    },
+    {
+      "pass": "MachineParams",
+      "name": "fromCostModels: positional parameters, padding with Long.MaxValue, extra entries ignored, missing language rejected",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/MachineParamsCostModelTest.scala:23-206"
+      ]
+    },
+    {
+      "pass": "MachineParams",
+      "name": "fromCostModels for PlutusV4 falls back to the V3 model (Cek.scala:211-215, 226)",
+      "tests": []
+    },
+    {
+      "pass": "CekMachineCosts",
+      "name": "per-variant step costs; fromMap",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/MachineParamsCostModelTest.scala:137-160",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:23-41"
+      ]
+    },
+    {
+      "pass": "MemoryUsage",
+      "name": "memoryUsageInteger agrees with the Haskell-style integerLog2 formula",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/MemoryUsageTest.scala:8-33"
+      ]
+    },
+    {
+      "pass": "ProfileFormatter",
+      "name": "toText / summary / toCsv / toJson / toHtml, fees when prices are attached, Hot Paths, annotated source",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ProfileFormatterTest.scala:88-308",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CekProfilerTest.scala:77-96"
+      ]
+    },
+    {
+      "pass": "ProfileFormatter",
+      "name": "toText maxRows truncation ('... and N more', ProfileFormatter.scala:193-194, 234-235, 257-259, 271-272)",
+      "tests": []
+    },
+    {
+      "pass": "ProfileFormatter",
+      "name": "writeHtml / writeCsv / writeJson / writeTo (ProfileFormatter.scala:627-644)",
+      "tests": []
+    },
+    {
+      "pass": "Result",
+      "name": "alphaEq, success (Cek.scala:590-612)",
+      "tests": []
+    },
+    {
+      "pass": "Builtins (tested here)",
+      "name": "dropList and sliceByteString edges (Scala builtin and CEK)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/DropListTest.scala:22-206",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/SliceByteStringTest.scala:23-74"
+      ]
+    },
+    {
+      "pass": "BuiltinValueOps",
+      "name": "Value builtins; tested in the uplc.builtin cluster (BuiltinValueTest), not here",
+      "tests": []
+    }
+  ],
+  "findings": [
+    {
+      "id": "C24-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:505-521",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/Cek.scala:505-509",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/Cek.scala:1744-1757",
+        "scalus-core/shared/src/main/scala/scalus/compiler/sir/lowering/LoweredValueRepresentation.scala:534,924"
+      ],
+      "claim": "The Scalus MkCons accepts a non-constant head when the list is a `(list value)` constant and returns a VList; Plutus 1.63 MkCons (PlutusCore/Default/Builtins.hs:1669-1683) takes both arguments as SomeConstant, so the reference machine fails with an unlifting error. A script that conses a native Constr onto a (list value) succeeds in Scalus (emulator, budget estimation) but fails on chain. The compiler emits (list value) element types for native-Constr representations (LoweredValueRepresentation.scala:534,924), so this is reachable from @UplcRepr(UplcConstr) code; whether a released contract hits it is unverified. Second defect in the same case: Builtin.scala:520 builds VList(elem :: Nil) and drops every element of a non-empty (list value) constant. The VList discharge path (Cek.scala:1744-1757) has no test at all.",
+      "action": "Test-only first: add a CEK test that evaluates [(force mkCons) (constr 0 []) (con (list value) [])] and asserts an evaluation failure (Plutus behavior), and one that conses a constr onto a non-empty (list value) and asserts the old elements are not lost. Owner decision: gate the VList extension off for ledger evaluation or remove it; if it stays, add a discharge test for an all-constant VList and for the IllegalStateException path.",
+      "coverageRisk": "none: adds tests only",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-78",
+      "verification": "Builtin.scala:505-525: the first MkCons case needs both args to be VCon. A non-VCon head (VConstr) goes to case 2 or 3. Case 3 (line 520-521) matches `VCon(Constant.List(DefaultUni.BuiltinValue, _))`, ignores the tail and returns `VList(elem :: Nil)`. So consing onto a non-empty (list value) loses every old element. DefaultUni.BuiltinValue is the CIP-153 `value` type (DefaultUni.scala:39, UplcParser.scala:158), so `(con (list value) [...])` with elements is a legal, parseable constant. Plutus Builtins.hs:1669-1683 (local clone ../iohk/plutus) types MkCons as `SomeConstant uni a -> SomeConstant uni [a]`. A constr head therefore fails unlifting on chain, but Scalus returns a success. Reachability: ProdUplcConstr/SumUplcConstr.defaultUni returns BuiltinValue (LoweredValueRepresentation.scala:534,924). SumBuiltinListEmitter.genNil (typegens/SumBuiltinListEmitter.scala:51-58) and ScalusRuntime.scala:868 emit `Constant.List(elementRepr.defaultUni(..), Nil)`. annotations.scala:85 documents `@UplcRepr(SumBuiltinList(UplcConstr))` as a user-facing option. No test under scalus-core/*/src/test mentions VList or `list value`, so the discharge path (Cek.scala:1744-1757) has no test. The proposed action adds tests only."
+    },
+    {
+      "id": "C24-2",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:295-300",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:261-270",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:287-294"
+      ],
+      "claim": "Same pattern as F-32: for an 'evaluation failure' case, assertOutcome accepts any Result.Failure, and evaluateDebug turns every Exception into one, so a host crash in Scalus (ClassCastException, MatchError, NPE outside a builtin) counts as conformance. Every machine error extends MachineError (Cek.scala:245-490). Also the Left(\"no file\") budget arm silently skips the budget check, but all 1009 corpus cases have a .budget.expected file, so the arm is dead and would hide a lost budget file.",
+      "action": "In assertOutcome's failure arm, bind the exception and assert it is a MachineError (clue: class and message). Replace the Left(\"no file\") arm with fail(s\"no budget file\"); expectationOf already treats a missing budget as an error.",
+      "coverageRisk": "none: stricter only; a case that now fails reveals a host crash",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-3",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ConfiguredEvaluationTest.scala:144-164",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/PlutusVM.scala:185-197"
+      ],
+      "claim": "The test is named 'a cause the machine does not own is still reported as a failure, not thrown', but it never runs the catch-all in runWithBudgetTracking: the first half calls CekMachine.evaluateTerm and intercepts the thrown BuiltinError, the second half asserts success with the real logger. Mutation that survives: narrow PlutusVM.scala:189 to `case e: MachineError`. Only the JVM and JS ConfiguredCryptoEvaluationTest exercise this path (via a faulty platform), Native not at all.",
+      "action": "Add to the test: evaluate(integer, budgetSpender = a BudgetSpender whose spendBudget throws a sentinel IllegalStateException) and assert the result is a Result.Failure whose exception is the sentinel (eq). This is shared, so it covers JVM, JS and Native. Delete line 162-163 (asserts nothing about the claim).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-4",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ConfiguredCryptoEvaluationTest.scala:23-40",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ConfiguredCryptoEvaluationTest.scala:61-78",
+        "scalus-core/js/src/test/scala/scalus/uplc/eval/ConfiguredCryptoEvaluationTest.scala:55-74",
+        "scalus-core/js/src/test/scala/scalus/uplc/eval/ConfiguredCryptoEvaluationTest.scala:94-117",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ConfiguredEvaluationTest.scala:38",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/PlutusVM.scala:83-84"
+      ],
+      "claim": "Each test evaluates the same program twice, via evaluateScriptDebug ('legacy') and via runWithBudgetTracking(CountingBudgetSpender, tracing = true, validateResult = false), then asserts equal message, cause and budget. evaluateScriptDebug is runWithBudgetTracking(term, tracing = true, validateResult = true) with a CountingBudgetSpender (PlutusVM.scala:83-84, 142-155); validateResult only matters for a successful result, and every program here fails. The second evaluation is the same code path, so the equality assertions cannot fail. The 'legacy' naming is left over from a removed separate path. ConfiguredEvaluationTest:38 does the same for logs.",
+      "action": "In both ConfiguredCryptoEvaluationTest files keep one evaluation per test (vm.evaluateScriptDebug) with its message, cause and logs assertions; delete the runWithBudgetTracking blocks and the budget-equality asserts; rename 'legacy' to 'failure' in names and test titles. Delete ConfiguredEvaluationTest.scala:38.",
+      "coverageRisk": "none: the remaining evaluation runs the same runWithBudgetTracking code; message, cause identity and logs stay pinned",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "The claim holds. evaluateScriptDebug is `runWithBudgetTracking(program.term, tracing = true, validateResult = true)` (PlutusVM.scala:83-84), and that overload goes through a fresh CountingBudgetSpender (PlutusVM.scala:142-155) to the same private[eval] method. validateResult is read only on success (PlutusVM.scala:177). Every crypto program fails, so the two runs follow the same code path and the budget/message equality asserts cannot fail. ConfiguredEvaluationTest.scala:38 is a success case with validateResult=true on both sides, so it is the same path too. The gap: in the JVM file, the cause assertion `failure.exception.asInstanceOf[BuiltinError].cause.getMessage == diagnostic` (jvm ConfiguredCryptoEvaluationTest.scala:39) exists only on the runWithBudgetTracking result. Deleting that block as written loses the cause check. In the JS file, cause and logs are already asserted on `legacy` (js lines 57, 61), and the sentinel-identity tests assert on both results.\nCorrected action: before deleting the JVM runWithBudgetTracking block at lines 27-40, move the cause check onto `legacy`: `assert(legacy.exception.asInstanceOf[BuiltinError].cause.getMessage == diagnostic)`. The rest of the action stands: delete the duplicate evaluations, delete the budget-equality asserts and ConfiguredEvaluationTest:38, and rename 'legacy'."
+    },
+    {
+      "id": "C24-5",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:81-103",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:143-146",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:451-475",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:505-512",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:640-665",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:736-756",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:87-91"
+      ],
+      "claim": "These success-path tests assert the same result as plutus-conformance cases that PlutusConformanceTest runs on JVM, JS and Native at PV11 (PV12 for data), with exact budgets: bool false/true (bool-01, bool-02), false with one branch (bool-03), unit (unit-01), empty list -> nil branch (list-02), non-empty list -> head (list-01), single cons branch (list-03), Data.Constr tag selection and fields list (data-02), pair left/right (pair-01, pair-02).",
+      "action": "Delete CaseOnBuiltinsTest tests at lines 81-95, 97-103, 143-146, 451-461, 463-475, 505-512, 640-648, 650-665, 736-745, 747-756. Keep every assertThrows test (the corpus says only 'evaluation failure', not which Scalus exception class), every 'V3: ... NonConstrScrutinized' test (the corpus never runs before PV11), the tail-access tests (477-503), the no-fields Data test (667-673), nested pair (787-797) and the PV-gating tests.",
+      "coverageRisk": "low: the behaviors stay pinned, but afterwards only by the external plutus-conformance corpus (a nix-store symlink, absent in fresh worktrees until linked); the Scala-side tests no longer show them in a failing build without the corpus",
+      "ciSavingSec": 0,
+      "linesRemoved": 95,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The corpus is linked in this worktree. Every case runs as a test on JVM, JS and Native, with nothing ignored (PlutusConformanceJvmTest/JsTest/NativeTest; PlutusConformanceTest.scala:87-91). Cases run at PV11 with exact budgets, and term/constant-case/data runs at PV12 (lines 57-58, 172-174). Each deleted assertion against its corpus case:\n- 81-95 (false/true, 2 branches): bool-01, bool-02.\n- 97-103 (false, 1 branch): bool-03.\n- 143-146 (unit): unit-01.\n- 451-461 (empty list -> nil branch): list-02.\n- 463-475 (non-empty list -> head): list-01, with a longer list.\n- 505-512 (single cons branch): list-03.\n- 650-665 (fields list applied): data-02, with stronger fields.\n- 736-745 / 747-756 (pair left/right): pair-01, pair-02.\nThe entry point is Term.evaluateDebug on the reference-parameter VM, not evaluateDeBruijnedTerm on the default VM. Both run the same CEK Case dispatch.\nThe gap: test 640-648 also asserts that Data.Constr tag 2 selects the third of three branches. The corpus only covers tag 0 with one branch (data-01) and tag 1 with two branches (data-02). Nothing else selects a branch above index 1 on the Case-on-Data path (Cek.scala ~1440-1460).\nCorrected action: delete the listed tests except 640-648. Keep 640-648, or cut it down to its `term(2) == \"two\"` assertion."
+    },
+    {
+      "id": "C24-6",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:27-77",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:169-197",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:249-269"
+      ],
+      "claim": "Integer 0/1/2, negative, out of bounds, the 1001-branch Fibonacci table, and Constr tag 0/1/out-of-range are instances of one law: Case(scrutinee i, n branches) selects branch i iff 0 <= i < n, else fails with CaseIndexOutOfBounds (Integer) or MissingCaseBranch (Constr).",
+      "action": "Replace with two forAll properties: n <- choose(0, 1100), i <- frequency(inside [0, n), -1, n, n+k, large BigInt); branches are distinct integer constants; assert the selected constant or the exact exception class. Same for Constr(Word64(i), Nil) with i in the unsigned range, keeping the explicit >= 2^63 test at 204-229 as is.",
+      "coverageRisk": "none: covers every example value and the boundaries; keep the 2^63 and 2^32+1 Constr examples",
+      "ciSavingSec": -0.5,
+      "linesRemoved": 45,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "The law holds in main code. For Integer, Cek.scala:1314-1330 selects branch i iff `i >= 0 && i < cases.size`, else throws CaseIndexOutOfBounds. This includes n = 0 and BigInts far outside Int range. For Constr, Cek.scala:1284-1312 does an unsigned compare against maxIndexableTag, then `index < cases.size`, else throws MissingCaseBranch. The Fibonacci table (251-269, 1001 branches, n up to 1000) fits the proposed n <- 0..1100.\nThe gap: the cited range 169-197 also contains 'V4: Case on Constr with args applies them to lambda branch' (180-189). That test asserts that constructor fields are applied to a lambda branch: `Constr(1,[42])` with `\\x -> x` gives 42. The proposed property generates only `Constr(Word64(i), Nil)` with constant branches, so it cannot produce that shape.\nCorrected action: replace 27-77, 169-178, 191-197 and 251-269 with the two properties. Keep 180-189, and keep 204-229 as the finding says."
+    },
+    {
+      "id": "C24-7",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:271-290",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:301-443",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:555-621",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:17-21"
+      ],
+      "claim": "Dead and verbose code: a commented-out sieve test (271-290); three budget comparison tests (301-443) built from nested Apply/Force/Delay that print to stdout (332-336, 376-380, 432-436) and differ only in the scrutinee; a 67-line hand-nested list-length term (555-621); every branch written as Const(Constant.String(...)); evalV4/evalV3 re-implement Term.evaluate(using vm).",
+      "action": "Delete 271-290 and the println lines. Write terms with TermDSL (!IfThenElse $ c $ ~t $ ~e, string conversions); merge the two Bool budget tests into one loop over true/false; build the list-length term with a recursive Scala helper (depth 3); replace evalV4/evalV3 with term.evaluate(using vm).",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 140,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-8",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:12-15",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CaseOnBuiltinsTest.scala:231-247",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/CekSourcePosTest.scala:203-207"
+      ],
+      "claim": "'v4vm' and the 'V4:' test prefix name a PlutusV3 VM at van Rossem (PV11); 'v3vm' is PlutusV3 at Plomin. The names suggest PlutusV4 (Dijkstra), which PlutusVM also has. CekSourcePosTest repeats the 'V4 VM' comment. The test at 231-247 checks the printer, the parser and the flat codec, not evaluation.",
+      "action": "Rename v4vm -> pv11vm, v3vm -> pv10vm, and test prefixes to 'PV11:' / 'PV10:'. Move the 231-247 test to the uplc parser/flat suite (UplcParserTest or FlatTest).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/DropListTest.scala:78-171",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:87-91"
+      ],
+      "claim": "The three 'dropList UPLC' tests (drop 2 of 5, drop 0, drop -5) assert what the corpus cases builtin/semantics/dropList/dropList-01 (0), -03 (7 of 9), -07 (negative) already assert on every platform, with exact budgets; dropList-14..16 also cover maxBound-1, maxBound and maxBound+1.",
+      "action": "Delete DropListTest.scala:78-171. Keep the Scala-builtin tests (or the property in C24-10), the budget monotonicity test (173-206) and the SIR test (208-234).",
+      "coverageRisk": "low: afterwards pinned only by the external plutus-conformance corpus",
+      "ciSavingSec": 0,
+      "linesRemoved": 95,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "The deleted DropListTest.scala:78-171 tests run `term.evaluateDebug` on a default V3 VM and assert:\n- drop 2 of [1..5] gives [3,4,5].\n- drop 0 gives the list unchanged.\n- drop -5 gives the list unchanged.\nThe corpus (builtin/semantics/dropList) asserts the same through the same Term.evaluateDebug path (PlutusConformanceTest.scala:150-153), with exact budgets, on JVM, JS and Native:\n- dropList-01: 0 elements, list unchanged.\n- dropList-03: 7 of 9 gives [88,99], a strictly stronger drop-some case.\n- dropList-07: -7, list unchanged.\nCases 05/09/10/14-16 add over-length, 10^19, -1.2e19 and maxBound±1. Nothing ignores these cases. The budget test (173-206) and the SIR test (208-234) remain. The risk is as stated: these behaviors are then pinned only by the external corpus."
+    },
+    {
+      "id": "C24-10",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/DropListTest.scala:22-76",
+        "scalus-core/shared/src/main/scala/scalus/uplc/builtin/Builtins.scala:530-535",
+        "scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:1239-1257"
+      ],
+      "claim": "The nine Scala-builtin examples are instances of one oracle law: dropList(n, xs) == xs.drop(clamp(n)) with clamp(n) = 0 for n <= 0 and min(n, Int.MaxValue) otherwise. There are two implementations of dropList (the Scala-side Builtins.dropList and the CEK BuiltinRuntime) and no test checks that they agree.",
+      "action": "Replace 22-76 with one property: forAll (n: BigInt from a gen with 0, negatives, small positives, > Int.MaxValue, > Long.MaxValue; xs: List[BigInt] up to 20) assert Builtins.dropList(n, BuiltinList.from(xs)).toList == xs.drop(clamp(n)) and that the CEK result of [(force dropList) n xs] equals the same list.",
+      "coverageRisk": "none: the oracle covers every example; element-type variants (String, ByteString) do not change the code path",
+      "ciSavingSec": -0.3,
+      "linesRemoved": 35,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Both implementations equal xs.drop(clamp(n)), with clamp = 0 for n <= 0 and min(n, Int.MaxValue) otherwise:\n- Builtins.dropList (Builtins.scala:530-535): `if n.signum <= 0 then l else drop(if n.isValidInt then n.toInt else Int.MaxValue)`.\n- CEK DropList (Builtin.scala:1239-1257): `dropCount = 0 if signum <= 0, n.toInt if valid Int, else Int.MaxValue`, then `ls.drop(dropCount)`.\nThe oracle holds for every list of up to 20 elements and every BigInt. The nine examples are covered: 0, -10, 3 of 5, all, 100 > len, empty list, Long.MaxValue. The String and ByteString examples use the same generic drop in both implementations, so element type does not change the path. No existing test compares the two implementations. Caveat for the implementer: huge n costs a lot of budget (IntegerCostedLiterally). Evaluate the CEK side with an unrestricted spender, such as Term.evaluateDebug with CountingBudgetSpender. Corpus dropList-09 shows that 10^19 evaluates fine that way."
+    },
+    {
+      "id": "C24-11",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CekProfilerTest.scala:77-96",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ProfileFormatterTest.scala:88-93",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ProfileFormatterTest.scala:169-184",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CekProfilerTest.scala:24-29",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/TraceProfileTest.scala:19-26",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CekProfilerTest.scala:98-106",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/TraceProfileTest.scala:28-33"
+      ],
+      "claim": "CekProfilerTest 77-96 checks that toText and toHtml contain their section titles, which ProfileFormatterTest 88-93 and 169-184 check with more detail. 'evaluateDebug returns Result without profile' (24-29) and 'evaluateScriptProfile works' (98-106) assert the same as TraceProfileTest 19-26 and 28-33 (profile empty / profile defined with budgets).",
+      "action": "Delete CekProfilerTest.scala:24-29, 77-96 and 98-106. Before deleting 77-96, move its one unique input into ProfileFormatterTest: format a ProfilingData with every section empty and assert toText contains '(no source locations recorded)' and '(no builtins recorded)' and toHtml still renders (ProfileFormatter.scala:166 and the byFunction empty branch are covered today only by this test's unannotated Const(42) profile).",
+      "coverageRisk": "low if the empty-profile case moves as stated: the empty-section branches of toText/toHtml are otherwise covered only by CekProfilerTest:77-96 in this cluster; the other two deletions are strictly covered by TraceProfileTest",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "77-96: section titles and Total in toText/toHtml are also asserted by ProfileFormatterTest:88-93 and 169-184, with more detail. The Const(42) profile is the only test input whose bySourceLocation and byFunction are both empty, so it is the only one to reach the `(no source locations recorded)` and `(no builtins recorded)` branches of toText (ProfileFormatter.scala:166, 198). It only exercises them; no test asserts that text. ProfileFormatterTest:236 renders toHtml(chain) with byFunction=Nil, so the toHtml empty-byFunction branch is partly covered elsewhere. The proposed move is still correct.\n98-106: TraceProfileTest:28-42 uses the same entry point, vm.evaluateScriptProfile. It asserts isSuccess, profile defined and positive trace budgets, which is equal or stronger.\nThe gap is 24-29. It tests Term.evaluateDebug (Term.scala:405-428), a separate path that builds Result.Success without a profile. TraceProfileTest:19-26 asserts `profile.isEmpty` only for vm.evaluateScriptDebug. Its Term.evaluateDebug line (25) checks logs only. So no surviving test checks the same thing for this entry point.\nCorrected action: delete 77-96 (after moving the empty-profile case as stated) and 98-106. Delete 24-29 only after adding `assert(twoTraces.evaluateDebug.profile.isEmpty)` to TraceProfileTest:25."
+    },
+    {
+      "id": "C24-12",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CekProfilerTest.scala:13-22",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CekProfilerTest.scala:31-46",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/CekProfilerTest.scala:48-75"
+      ],
+      "claim": "The remaining profiler tests assert only '> 0', nonEmpty or set membership. In 'profiling tracks source locations' the Var is annotated with B.scala:20 but only A.scala is checked; a profiler that attributes the Var step to the wrong position, double-counts, or loses counts still passes. No test checks that profile.totalBudget equals result.budget.",
+      "action": "Pin the exact rows the current profiler produces (read them once; positions may be 0- or 1-based): both the A.scala and the B.scala entries with their counts and budgets, totalBudget == result.budget, and byFunction(AddInteger).count == 1.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-13",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ProfileFormatterTest.scala:95-100",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ProfileFormatterTest.scala:88-93",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ProfileFormatterTest.scala:111-119"
+      ],
+      "claim": "summary test line 99 is `s.contains(\"Foo:3\") || s.contains(\"Foo.scala:3\") || s.contains(\"Foo:\")`, which any output naming Foo satisfies; toText checks only the three section titles; toJson checks only that key names appear. Mutations that survive: wrong numbers in toText rows, wrong line in summary, swapped mem/cpu in toJson.",
+      "action": "summary: assert the exact location token (one form). toText: assert the Foo:3 row with count 5, mem 100, cpu 200. toJson: parse the output (ujson, already used in PlutusConformanceTest:28) and assert totalBudget, the first bySourceLocation entry and the transition counts by value.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-14",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/ProfileFormatter.scala:161-194",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/ProfileFormatter.scala:234-235",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/ProfileFormatter.scala:257-259",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/ProfileFormatter.scala:271-272"
+      ],
+      "claim": "toText(data, maxRows) truncates each section and appends '... and N more'; the four truncation branches are uncovered, and maxRows <= 0 is clamped to 1 (line 162) without a test.",
+      "action": "Add one test: toText(data, maxRows = 1) has '... and 1 more' under By Source Location and Transitions, and toText(data, 0) equals toText(data, 1).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-15",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/CekSourcePosTest.scala:207-233",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/CekSourcePosTest.scala:186-197",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/CekSourcePosTest.scala:19-33",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/CekSourcePosTest.scala:94-109"
+      ],
+      "claim": "Lines 215-233 copy Term.evaluateDebug (Term.scala:405-427) by hand. The extra v4vm (207) is the default VM: makePlutusV3VM() already runs at mainnet PV11. The headList test accepts any StackTraceMachineError (186-197), but headList on an empty list always throws BuiltinError, so the branch only loosens the test. Tests 19-33 and 94-109 check the same Error-term position, once thrown and once wrapped in a Result.",
+      "action": "Replace 207-233 with `val result = applied.evaluateDebug`. Delete the lenient arm 186-197. Fold 94-109 into 19-33 as a second assertion on debruijned.evaluateDebug. Use the helper from C24-16 for the Failure matches.",
+      "coverageRisk": "none: same assertions; the headList test gets stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-16",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ConfiguredEvaluationTest.scala:61-63",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ConfiguredEvaluationTest.scala:76-78",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/ConfiguredEvaluationTest.scala:124-127",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/ConfiguredCryptoEvaluationTest.scala:23",
+        "scalus-core/js/src/test/scala/scalus/uplc/eval/ConfiguredCryptoEvaluationTest.scala:55",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/CekSourcePosTest.scala:120-142",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SourceTraceTest.scala:23-35",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/Cek.scala:608-612"
+      ],
+      "claim": "About a dozen `.asInstanceOf[Result.Failure].exception.isInstanceOf[X]` casts (ConfiguredEvaluationTest, both ConfiguredCryptoEvaluationTest files) and six copies of a three-arm match `case Result.Failure(ex: X, ...) => ...; case Result.Failure(ex, ...) => fail(...); case _ => fail(...)` (CekSourcePosTest, SourceTraceTest). A success gives a ClassCastException instead of a readable failure. Result has `success` but no `failure` accessor.",
+      "action": "Add to EvalTestKit (or a small object in scalus.uplc.eval tests) `def expectFailure[E <: Throwable: ClassTag](r: Result): E` that fails with the result and the actual exception class. Use it in these files.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-17",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/PlutusVMTest.scala:58-63",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/Cek.scala:1492-1496"
+      ],
+      "claim": "'evaluateDeBruijnedTerm fails on non-debruijned term' evaluates the lambda λx.x, which is already a value; the machine never looks the variable up, and the exception comes from DeBruijn.fromDeBruijnTerm on the result. assertThrows[Exception] accepts anything. The machine's own check (Cek.scala:1493-1496, 'Got a de Bruijn index 0') is uncovered.",
+      "action": "Evaluate λ(x => x) $ Const(Constant.Integer(1)) without deBruijnTerm and intercept MachineError whose message contains 'de Bruijn index 0'; keep the lambda-only case with intercept of the exact exception type it throws today.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-18",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/PlutusUseCasesBenchmarkTest.scala:58-69"
+      ],
+      "claim": "`assert(result != null)` cannot fail: evaluateScript returns a Term or throws. The 89 real benchmark scripts pin only 'does not throw'; a cost-model or machine-step regression on real scripts goes unnoticed here (the corpus cases are small).",
+      "action": "Record (name, cpu, mem) for each script in a resource CSV next to the .flat files and assert success and that the evaluation budget equals it (regenerate on purpose when costs change). Delete the null check.",
+      "coverageRisk": "none: adds checks",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-19",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/MachineParamsCostModelTest.scala:114-122"
+      ],
+      "claim": "`assert(load(Language.PlutusV3, costs).machineCosts != null)` cannot fail; the test only shows that loading does not throw.",
+      "action": "For lengths that do not reach the machine-cost indices assert those costs are Long.MaxValue; for 349, 350 and 351 assert load(...) equals the full mainnet model on the known prefix (as line 111 does for longer models).",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-20",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/Cek.scala:206-227",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/MachineParamsCostModelTest.scala:193-206"
+      ],
+      "claim": "fromCostModels(…, PlutusV4, …) uses the V3 model when no V4 model is present and builds PlutusV4Params (lines 211-215, 226 uncovered). Not tested: the fallback, a supplied V4 model taking precedence, and the case where neither V4 nor V3 is present, which throws NoSuchElementException from Map.apply instead of the IllegalArgumentException('no cost model for …') of the V1-V3 branch.",
+      "action": "Add tests: V3-only models + PlutusV4 at dijkstraPV gives the same machineCosts as V3; an explicit V4 entry is used; an empty CostModels with PlutusV4 throws (pin the current type, and note the inconsistency for the owner).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-21",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/MemoryUsageTest.scala:22-33",
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/MemoryUsage.scala:14-28"
+      ],
+      "claim": "The property uses ScalaCheck's default Arbitrary[BigInt] (values up to about 256 bits, products of Longs), so it almost never hits the 64-bit word boundaries 2^(64k) - 1, 2^(64k), 2^(64k) + 1 where both formulas branch on bitLength / 64, and never values above 256 bits. Only k = 1 is checked by the example test (13-20).",
+      "action": "Use a local Gen mixing the default with ±(BigInt(2).pow(64 * k) + d) for k in 1..8 and d in {-1, 0, 1}, and random widths up to 1024 bits; the 2^64 example test then becomes redundant and can go.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-22",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/uplc/eval/SourceTraceTest.scala:13-81"
+      ],
+      "claim": "Three tests compile and lower the same SIR (14-20, 39-45, 64-70); the first two are identical except evaluateScriptDebug vs evaluateScriptProfile. The only assertion is trace.nonEmpty; a trace with wrong positions passes. The catch-all in 79-80 also catches the TestFailedException from line 74 and reports it as a wrong exception type.",
+      "action": "Lower the SIR once into a val; loop the first two tests over the two evaluation methods; assert that the trace contains a position in SourceTraceTest.scala at the division line; use intercept[StackTraceMachineError] in the third test.",
+      "coverageRisk": "none: same or stronger assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C24-23",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/uplc/eval/Cek.scala:590-612"
+      ],
+      "claim": "Result.alphaEq (used to compare evaluation results across backends) and Result.success have no test: the failure arm compares exception class, message, budget, costs and logs, and the mixed Success/Failure arm returns false.",
+      "action": "Add a small ResultTest: alpha-equivalent terms with equal budgets are alphaEq; a different budget or log is not; two failures with the same class and message are; Success vs Failure is not; success on a Failure throws NoSuchElementException.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -30,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 7 findings of scope merge-duplicate-tests, to-property or main-bug; 3 confirmed, 4 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

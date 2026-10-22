@@ -1,0 +1,368 @@
+{
+  "cluster": "uplc.jit",
+  "summary": "The cluster is cheap and well covered: about 14 s of suite time, of which JitConformanceTest (~1000 corpus cases, 6.6 s) and JitShapeTest's largest-corpus-script compile (4.9 s, the class-size regression guard) are almost all; the module is not the long pole of jvm/test, so no ci-time finding. Main-code coverage is 94 % of statements: the CEK-equality harness (JitCekDiff) is strong (result, failure class and cause, budget per category with distinct step costs, spend order). The gaps are the hand-written builtins' unlifting failures and toCekValue branches (C40-2), PlutusV4 acceptance and the FunctionResultError message (C40-8), the CekBridge cache bound (C40-9), and composition of shapes: no random-term JIT-vs-CEK property exists although a closed-term generator does (C40-3). Weak points: the function-result comparison ignores lam vs delay (C40-4) and one conformance test asserts nothing (C40-5). JITTest duplicates UplcCompilerTest (C40-1). C8: the cluster has no generators of its own. The six objects with `main` (JitBench, JitBenchReport, JitCodegenProbe, JitEvalProbe, JitVsCekCheck, ScalusCorpusSelect) are referenced by scripts and docs, so they are not dead code. No main-code defect found; the StagingCompilerThread failure reset (lines 77-80) stays untested because no cheap term fails to compile.",
+  "behaviors": [
+    {
+      "pass": "nativestack.JIT.jitUplc",
+      "name": "result, failure class and budget per category equal the CEK machine's, for the special term shapes (applied/unapplied/forced builtins, lets past the inlining limit, constants, constr/case, failures)",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitShapeTest.scala:83-213"
+      ]
+    },
+    {
+      "pass": "nativestack.JIT.jitUplc",
+      "name": "every builtin's semantics and costing on the Plutus conformance corpus (variant E, PV11; PV12 for case on Data)",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitConformanceTest.scala:43-48",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitConformanceTest.scala:58-88"
+      ]
+    },
+    {
+      "pass": "nativestack.JIT.jitUplc",
+      "name": "case on Data: branch selection at PV12, CaseDataNotSupportedError at PV11",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitShapeTest.scala:215-263",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:225-247"
+      ]
+    },
+    {
+      "pass": "nativestack.JIT / GenCtx / JitBudget",
+      "name": "a saturated builtin spends its steps in CEK order, each step kind with its own cost",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitShapeTest.scala:20-39",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitShapeTest.scala:273-292"
+      ]
+    },
+    {
+      "pass": "nativestack.JIT / ConstantPool",
+      "name": "the largest corpus script stays under the class constant-pool limit; equal constants and large constants",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitShapeTest.scala:137-142",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitShapeTest.scala:297-299"
+      ]
+    },
+    {
+      "pass": "nativestack.JIT",
+      "name": "a failing script keeps its trace",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JITTest.scala:14-25",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:138-145"
+      ]
+    },
+    {
+      "pass": "StagingCompilerThread",
+      "name": "jitUplc is safe from several threads (one compiler thread)",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitConcurrentCompileTest.scala:22-37"
+      ]
+    },
+    {
+      "pass": "StagingCompilerThread",
+      "name": "a failed compile drops the compiler, the next compile gets a new one",
+      "tests": []
+    },
+    {
+      "pass": "UplcCompiler.Compiled",
+      "name": "evaluate returns the CEK term, budget, costs and logs; constr result",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:83-89",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:147-150"
+      ]
+    },
+    {
+      "pass": "UplcCompiler.Compiled / NativeStackContext",
+      "name": "past the call-depth limit StackThresholdException, also for a loop through case",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:91-117"
+      ]
+    },
+    {
+      "pass": "UplcCompiler.CekFallback",
+      "name": "withFallback reruns on the CEK machine past the depth limit, with a new spender and logger",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:119-128",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:225-236"
+      ]
+    },
+    {
+      "pass": "UplcCompiler.Compiled",
+      "name": "out of budget and failing scripts: the CEK exception at the same point",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:130-145"
+      ]
+    },
+    {
+      "pass": "UplcCompiler / UplcEvaluator",
+      "name": "function result: FunctionResultError from evaluate, InvalidReturnValue from evaluateScript; unit/non-unit result of evaluateScript",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:152-165",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:180-189"
+      ]
+    },
+    {
+      "pass": "UplcCompiler.checkScope",
+      "name": "rejects a vm of another language, variant or protocol version, before it runs",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:191-215",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:249-269"
+      ]
+    },
+    {
+      "pass": "UplcCompiler.checkScope",
+      "name": "accepts a PlutusV4 machine",
+      "tests": []
+    },
+    {
+      "pass": "nativestack.JIT.jitUplc",
+      "name": "compiles only for protocol versions 11 and 12",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:271-274"
+      ]
+    },
+    {
+      "pass": "UplcCompiler.Compiled",
+      "name": "one Compiled evaluated from 8 threads at once [CT-2]",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:167-178"
+      ]
+    },
+    {
+      "pass": "BuiltinEmitter / BuiltinImpls",
+      "name": "name mapping, overrides costed by plain costing functions, method arity, no overloads",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/BuiltinImplsTest.scala:27-65"
+      ]
+    },
+    {
+      "pass": "BuiltinImpls",
+      "name": "unlifting failures of the hand-written builtins (asInteger/asString/asData/asList/asPair) and the memory of a function argument",
+      "tests": []
+    },
+    {
+      "pass": "CekBridge.builtinsFor",
+      "name": "runtimes cached per cost model and per params object",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/CekBridgeTest.scala:14-32"
+      ]
+    },
+    {
+      "pass": "CekBridge.builtinsFor",
+      "name": "cache cleared past MaxCached entries",
+      "tests": []
+    },
+    {
+      "pass": "JitCorpus (test fixture)",
+      "name": "corpus size and every script succeeds on the CEK machine",
+      "tests": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitCorpusTest.scala:14-27"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C40-1",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-uplc-jit-compiler",
+      "evidence": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JITTest.scala:14-25",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:138-145"
+      ],
+      "claim": "JITTest's only test ('a failing script fails and keeps its trace') asserts the behavior UplcCompilerTest 'a failing script: the CEK exception, budget and logs' already asserts, more strongly: both compile a Scala `throw` with error traces, run it through jitUplc, and check failure plus the trace; UplcCompilerTest also compares the exception class, budget and costs with the CEK machine. The 1-argument jitUplc overload JITTest calls is also used by JitShapeTest:290 and JitConcurrentCompileTest:27.",
+      "action": "Delete JITTest.scala. In UplcCompilerTest 'a failing script' (138-145) add `assert(run.log.getLogs.toSeq == Seq(\"boom\"))` so the trace content is pinned and the log comparison is not vacuous if the CEK machine also logged nothing.",
+      "coverageRisk": "none: the failing-script trace is still checked, now by exact content and against the CEK machine",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "JITTest.scala:14-25 makes 4 assertions. (1) The CEK machine fails: `uplc.evaluateDebug.isFailure`. (2) The JIT run fails. (3) The JIT log is exactly \"Not implemented\". (4) The code reaches the 1-arg `JIT.jitUplc(term)`. That overload runs PV11 with DefaultMaxDepth (JIT.scala:347-353).\n\nUplcCompilerTest:138-145 covers the same behavior in the same JVM-only module. It compiles a Scala `throw` with traces (`toUplc(true)`) and applies it to 1. It reaches `UplcCompiler.compile`, which calls `JIT.jitUplc(term, maxDepth, vanRossemPV)` (UplcCompiler.scala:85-90). So the generated code and the PV11 dispatch are the same; only the depth is lower (1000).\n- `Compiled.evaluate` calls `code(logger, spender, params)` like JITTest does (UplcCompiler.scala:113-120).\n- `assertSame` (UplcCompilerTest:72-81) checks that the JIT and the CEK machine both fail (covers 1 and 2). It also checks the same failure class (`sameFailure`), budget, costs and logs.\n- Assertion 3 survives only as a comparison with the CEK logs. That check is vacuous if both machines log nothing. So the proposed `assert(run.log.getLogs.toSeq == Seq(\"boom\"))` is needed, and it is sufficient.\n- `Builtins.trace(\"before\")` takes a strict argument. The `if`/throw runs first, so \"before\" is never logged. JITTest:24 shows that the trace text is the bare message, so `Seq(\"boom\")` is the expected value. If this is wrong, the test fails visibly; no coverage is lost silently.\n- Assertion 4 survives elsewhere: JitShapeTest:290 and JitConcurrentCompileTest:27 still call the 1-arg overload.\n\nThe delete-and-add action is safe."
+    },
+    {
+      "id": "C40-2",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-uplc-jit-compiler",
+      "evidence": [
+        "scalus-uplc-jit-compiler/src/main/scala/scalus/uplc/jit/BuiltinImpls.scala:44-46",
+        "scalus-uplc-jit-compiler/src/main/scala/scalus/uplc/jit/BuiltinImpls.scala:90-112",
+        "scalus-uplc-jit-compiler/src/main/scala/scalus/uplc/jit/JitRuntime.scala:176-181",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitShapeTest.scala:155-185"
+      ],
+      "claim": "Coverage marks unexecuted every unlifting failure of the hand-written builtins: asInteger, asString, asData, asList, asPair (BuiltinImpls 90-112, only asBool is reached), the memory of a non-constant argument (mem, line 46), and toCekValue of a ConstrValue or ListValue (JitRuntime 178-179). These are the JIT's own copies of CEK error paths: trace on a non-string, fstPair/sndPair on a non-pair, headList/nullList/chooseList on a non-list, chooseData on a non-data, indexArray with a non-integer index. A wrong exception class, a missing BuiltinError wrapper, or a wrong cost before the failure would go unnoticed. JitShapeTest's failure section covers only addInteger, appendString, mkCons and dropList.",
+      "action": "Add to the `terms` table of JitShapeTest (failure section): trace on (con integer 1); fstPair and sndPair on (con integer 1); headList on (con integer 1); nullList on (lam x x) (reaches mem of a function); chooseList on (con integer 1); chooseData on (con integer 1); indexArray of (con (array integer) [1]) with (con bool True); apply a constr `[(constr 0) (con integer 1)]`; appendString on `(constr 0 (lam x x))`. assertSameAsCek already compares exception class, cause class and budget per category.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.2,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C40-3",
+      "check": "C4",
+      "scope": "fill-gap",
+      "module": "scalus-uplc-jit-compiler",
+      "evidence": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitShapeTest.scala:83-213",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitCekDiff.scala:42-46",
+        "scalus-core/jvm/src/test/scala/scalus/uplc/transform/EtaReduceCekConformanceTest.scala:257-323"
+      ],
+      "claim": "The JIT's law is an oracle: for every closed term, JitCekDiff.same(runCek, runJit). It is checked only on hand-picked shapes (JitShapeTest, ~85 terms), the conformance corpus (small flat terms) and the largest corpus script. No test composes the shapes: lets inside case branches, delays of partly applied builtins, errors under lambdas, nested constr/case. A closed, env-scoped generator with exactly these shapes already exists (EtaReduceCekConformanceTest.genClosedTerm, private, line 323).",
+      "action": "Move genClosedTerm (and the genTerm/genConst/genName it needs) of EtaReduceCekConformanceTest into its companion object as `private[scalus]` (no new generator, per F-29), and add JitRandomTermTest in scalus-uplc-jit-compiler: forAll(genClosedTerm, minSuccessful(150)) { t => assert(JitCekDiff.same(JitCekDiff.runCek(vm, t), JitCekDiff.runJit(jitUplc(t, DefaultMaxDepth, vanRossemPV), vm.machineParams))) } with the per-step-kind params of JitShapeTest. Check that scalacheck is on the JIT test classpath (it depends on scalus.jvm test->test).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -3,
+      "linesRemoved": -30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C40-4",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-uplc-jit-compiler",
+      "evidence": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitCekDiff.scala:57-81",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitConformanceTest.scala:19-21",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitConformanceTest.scala:83-87"
+      ],
+      "claim": "JitCekDiff.matches compares any non-constant, non-constr expected term only with isFunction, which accepts a LamValue or a DelayValue alike. Its doc says 'a function of the same kind', but a JIT that returned a DelayValue where the corpus expects (lam ...), or a LamValue where it expects (delay ...), passes JitConformanceTest. Mutation: swap the kind of a function result; no test fails.",
+      "action": "In JitCekDiff.matches add `case _: Term.LamAbs => actual.isInstanceOf[LamValue]` and `case _: Term.Delay => actual.isInstanceOf[DelayValue]` before the fallback; keep isFunction only for builtin-headed results (partly applied builtins), whose kind depends on the builtin's signature.",
+      "coverageRisk": "none: the comparison only gets stricter",
+      "ciSavingSec": 0,
+      "linesRemoved": -2,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C40-5",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-uplc-jit-compiler",
+      "evidence": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitConformanceTest.scala:50-56"
+      ],
+      "claim": "'count of cases whose expected result is compared only as a function' has no assertion: it only calls info. No mutation fails it, so a corpus update that adds many function-result cases (checked by shape only, see C40-4) passes silently.",
+      "action": "Pin the number: `assert(functionLike == N, ...)` with N from the current info output, keeping the info line; or delete the test if the owner does not want the pin.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C40-6",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-uplc-jit-compiler",
+      "evidence": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitShapeTest.scala:221-250",
+        "scalus-uplc-jit-compiler/src/main/scala/scalus/uplc/jit/JitRuntime.scala:84-88"
+      ],
+      "claim": "The PV11 half of the case-on-Data loop registers 13 tests that all assert one behavior: code compiled for PV11 rejects every Data scrutinee with CaseDataNotSupportedError. caseIndex (JitRuntime 84-88) throws on `Constant.Data(_)` before it looks at the tag, the fields or the branch count, so the 13 data values (Constr 0..3, huge tag, Map, List, I, B, no branches, too many fields, not a function) take the same path and spend the same budget (the scrutinee constant).",
+      "action": "Run the PV11 test for 3 representatives only (Constr 0 selects the first branch, I, Constr with no branches), e.g. `if Set(...).contains(name) then test(...)`; keep all 13 PV12 tests.",
+      "coverageRisk": "low: all PV11 cases hit the same `case Constant.Data(_)` line; a future per-shape PV11 rule would need its own test",
+      "ciSavingSec": 0.1,
+      "linesRemoved": -2,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "Each PV11 test (JitShapeTest:243-250) makes 2 assertions: `assertSameAsCek(term)` (same result, budget and costs) and `CaseDataNotSupportedError`.\n\nThe JIT path is the same for all 13 data values:\n- The Case codegen (JIT.scala:211-219) spends `Case`, then `genCaseDispatch` (JIT.scala:283-313).\n- At PV11 it emits `JitRuntime.caseIndex(s, n)` *before* the branch chain (JIT.scala:304-312).\n- `caseIndex` throws on any `Constant.Data(_)` and never reads the tag, the fields or `n` (JitRuntime.scala:84-88).\n- No branch code runs. Even n=0 throws in `caseIndex`, before `chain`'s `IllegalStateException`.\n\nThe CEK side is also shape-independent. Cek.scala:1410-1416 throws `CaseDataNotSupportedError` when `caseOnDataEnabled` is false, before it matches on the data.\n\nThe spent budget is the same for all 13 (Case step plus the constant). The only difference is which code is generated for each branch shape, but those branches never run. Codegen for all 13 shapes still runs in the 13 kept PV12 tests (line 240-241).\n\nThe 3 representatives keep these cases:\n- Constr 0, a Constr that would select a branch.\n- I, a non-Constr.\n- The zero-branch case.\n\nRisk is low, as the report says."
+    },
+    {
+      "id": "C40-7",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-uplc-jit-compiler",
+      "evidence": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitConformanceTest.scala:103-113",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:165",
+        "scalus-core/shared/src/test/scala/scalus/uplc/eval/PlutusConformanceTest.scala:261-270"
+      ],
+      "claim": "JitConformanceTest copies the base suite's private BudgetRegex verbatim (line 108 vs base 165) and re-implements expected-budget and expected-term reading (103-113) next to the base's private expectedBudget/parseExpected. A change to the corpus budget format must be made twice.",
+      "action": "In PlutusConformanceTest make BudgetRegex protected and add `protected def referenceBudget(name: String): ExUnits` (fails unless the file is a budget), used by its own expectedBudget; delete JitConformanceTest's BudgetRegex and expectedBudget and call the base. Also touches scalus-core test sources.",
+      "coverageRisk": "none: same parsing, one copy",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C40-8",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-uplc-jit-compiler",
+      "evidence": [
+        "scalus-uplc-jit-compiler/src/main/scala/scalus/uplc/jit/UplcCompiler.scala:155-160",
+        "scalus-uplc-jit-compiler/src/main/scala/scalus/uplc/jit/JitRuntime.scala:184-190",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:152-157",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:191-215"
+      ],
+      "claim": "checkScope accepts a PlutusV4 machine (UplcCompiler 158), but every test uses PlutusV3 VMs or expects a rejection: deleting `|| vm.language == Language.PlutusV4` fails no test. The FunctionResultError message built by JitRuntime.describe (184-190, all branches unexecuted in the baseline) is never checked; the test at 152-157 checks only the class.",
+      "action": "In UplcCompilerTest add: compile dataCase for dijkstraPV, evaluate with PlutusVM(Language.PlutusV4, dijkstra.machineParams, BuiltinSemanticsVariant.E, platform, MajorProtocolVersion.dijkstraPV) and assertSame with the dijkstra CEK run. In the test at 152-157 assert the message contains \"a function\"; add one constr-with-a-function-field result, `(constr 0 (lam x x))`, and assert FunctionResultError.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C40-9",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-uplc-jit-compiler",
+      "evidence": [
+        "scalus-uplc-jit-compiler/src/main/scala/scalus/uplc/jit/CekBridge.scala:62-80",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/CekBridgeTest.scala:29-32"
+      ],
+      "claim": "The cache bound of CekBridge.builtinsFor (lines 73-74: clear both maps past MaxCached = 16 entries) is unexecuted, so a regression that returns runtimes of the wrong cost model after a clear would pass. Separately, 'the same params hit the fast path' (29-32) cannot see the fast path: with line 64 (`last`) removed, the byParams lookup returns the same object and the test still passes.",
+      "action": "In CekBridgeTest add: build 18 MachineParams with distinct builtin cost models (copy v3 and change one costing constant), call builtinsFor on each, then assert builtinsFor(v3).byOrdinal(AddInteger) is costed by v3's model (and v1's by v1's). Rename the test at 29 to 'the same params get the same Runtimes object'.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -15,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C40-10",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-uplc-jit-compiler",
+      "evidence": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:109-112",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:148",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:153",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:161",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:171",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:186",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:194",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/UplcCompilerTest.scala:220-223",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitShapeTest.scala:68-69"
+      ],
+      "claim": "UplcCompilerTest parses UPLC with `Term.parseUplc(...).toOption.get` seven times (a parse error becomes a bare NoSuchElementException), while JitShapeTest has a local `parse` that fails with the parser message. UplcCompilerTest:171 writes java.util.concurrent.Executors fully qualified.",
+      "action": "Move JitShapeTest's `parse` into JitCekDiff (the shared object of the package) and use it in both suites; import Executors in UplcCompilerTest.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C40-11",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-uplc-jit-compiler",
+      "evidence": [
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitCodegenProbe.scala:103",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitCorpus.scala:85",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitCodegenProbe.scala:43-54",
+        "scalus-uplc-jit-compiler/src/test/scala/scalus/uplc/jit/JitCodegenProbe.scala:90-101"
+      ],
+      "claim": "JitCodegenProbe.nodes is a second copy of JitCorpus.nodes (both forward to StagingCompilerThread.nodeCount), and its main loop (43-54) repeats the body of its own `compile` (90-101) only to time genCodeFromTerm inside staging.run.",
+      "action": "Delete JitCodegenProbe.nodes and call JitCorpus.nodes; give `compile` an optional timing callback (or return the codegen nanos) and call it from the loop.",
+      "coverageRisk": "none: bench tool, not a test",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "low",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 2 findings of scope merge-duplicate-tests, to-property or main-bug; 2 confirmed, 0 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

@@ -55,6 +55,8 @@ replaces needs a reason, or it gets the `Slow` tag.
 | `strengthen-assertion` | Fix an assertion that cannot fail, or one that checks too little. |
 | `generator` | Fix or extend an `Arbitrary`/`Gen` instance. |
 | `style` | Align a test with the style guide. |
+| `simplify` | Make test code shorter or clearer, with the same assertions. |
+| `main-bug` | A defect in main code, found while reading tests. It goes to `findings.md`, not to the backlog. |
 
 ## Phases
 
@@ -270,39 +272,59 @@ A report agent MUST perform each check below. `[P2-6]`
 | C6 | Weak assertions | For each assertion, name the code mutation that breaks it. Report the ones with no such mutation. |
 | C7 | Cost | For each slow test, name the cause and a fix. |
 | C8 | Generator fit | Report the cases that the cluster's generators never produce, and the code branches on. |
+| C9 | Simplification | Find dead test code, values built by hand that a shared builder or `scalus.uplc.DSL` makes, and tests that are much longer than what they assert. |
 
 ### Report format
 
 - A report agent MUST write one JSON file per cluster to
-  `docs/internal/test-refactor/reports/<cluster>.json`. `[P2-7]`
-- Each finding MUST cite at least one `file:line`. The coordinator MUST discard a finding
-  without one. `[P2-8]`
+  `docs/internal/test-refactor/reports/<cluster>.json`, valid against
+  `docs/internal/test-refactor/report.schema.json`. `[P2-7]`
+- The coordinator MUST run `scripts/check_report.py` on each report and fix or discard what it
+  rejects. It checks the schema, and that every `file:line` is a repository path to a line that
+  exists. `[P2-8]`
 - Each finding MUST name exactly one scope from the scope list. `[P2-9]`
 - A report agent MUST NOT edit any file except its report. `[P2-10]`
 - A verify agent MUST try to disprove each finding of scope `merge-duplicate-tests` or
   `to-property`. `[P2-11]`
 - The coordinator MUST drop a finding that its verify agent disproves. `[P2-12]`
+- The coordinator MUST log each `main-bug` finding in `findings.md` and set its `findingsLog`.
+  `[P2-13]`
 
-*Example, illustrative:*
+Fields of a finding, and what uses them:
+
+| Field | Use |
+|---|---|
+| `id`, `check` | references in chat, commits and the backlog; which checks give value |
+| `scope`, `module` | P3 groups findings into units: one scope in one module |
+| `evidence` | `[P2-8]`; the verify agent starts from it |
+| `claim`, `action` | the verify agent tests the claim; the P4 edit agent gets the action |
+| `coverageRisk` | goal 2: what a deletion or merge can lose |
+| `ciSavingSec`, `linesRemoved` | backlog order: goal 1 (CI time), then goals 4–5 (less code) |
+| `confidence`, `verdict`, `verification` | trust; `verification` overrides `claim` and `action` when the verdict is `NARROWED` |
+
+*Example, from the pilot report:*
 
 ```json
 {
-  "cluster": "scalus.uplc.transform",
-  "behaviors": [{"name": "CSE preserves CEK result", "tests": ["CseCekConformanceTest.scala:40"]}],
-  "findings": [{
-    "scope": "merge-duplicate-tests",
-    "evidence": ["CseCekConformanceTest.scala:12-80", "EtaReduceCekConformanceTest.scala:10-75"],
-    "claim": "3 files repeat the same CEK conformance harness; only the transform differs",
-    "action": "one parametrized TransformConformanceSuite(transform)",
-    "coverageRisk": "none: same generator, same assertions",
-    "ciSavingSec": 4,
-    "confidence": "high"
-  }]
+  "id": "T-16",
+  "check": "C3",
+  "scope": "merge-duplicate-tests",
+  "module": "scalus-core",
+  "evidence": ["scalus-core/shared/src/test/scala/scalus/uplc/transform/CseComputationSharingTest.scala:43-46",
+               "scalus-core/shared/src/test/scala/scalus/uplc/transform/CommonSubexpressionEliminationTest.scala:73-77"],
+  "claim": "'still rejects duplicated small values' asserts the same behavior as 'should not extract work-free terms'",
+  "action": "Move tests 15-41 into CommonSubexpressionEliminationTest; delete 43-46 and the empty file",
+  "coverageRisk": "none: both pin 'a small duplicated constant is not shared'",
+  "ciSavingSec": 0,
+  "linesRemoved": 25,
+  "confidence": "medium",
+  "verdict": "CONFIRMED"
 }
 ```
 
 **Why:** `[P2-11]`: report agents are confident and sometimes wrong. A wrong deletion loses
-coverage silently.
+coverage silently. `[P2-13]`: main code is out of scope, but a defect found in passing must not
+get lost; the pilot found two (F-33, F-34).
 
 ## P3 – Spec
 

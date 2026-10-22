@@ -1,0 +1,771 @@
+{
+  "cluster": "testing",
+  "summary": "The cluster covers the Scenario/ScenarioExplorer monad, ImmutableEmulator, Preconfiguration and ContractScalaCheckCommands in scalus-testkit, Pretty/DynJson/Utils in scalus.utils, the published test helpers (EvalTestKit, ArbitraryDerivation, TestUtil, Party, KeyPairGenerator) and EvalPlutusScriptsTest. It is cheap (about 4 s in total; slowest ContractScalaCheckCommandsTest 1.2 s, no profile hits), so C7 gives no ci-time finding; GenStatsTest's private Benchmark tag is F-8 and not re-reported. Reading the uncovered branches found three testkit defects: Scenario.provider reports every hash as Confirmed and never resolves a datum, and Preconfiguration silently drops a UTxO when an explicit idx meets an auto index (plus a low-confidence V4 envelope note). The largest gaps are published but untested APIs: StandardTxVariations (documented on the site) and the scalus.testing.eval/dsl/assertions packages (recommended by the skills) have no test anywhere. C8 shows that ArbitraryDerivation fails every size-0 sample of nested derived types, which explains v2.TxOut/TxInInfo discards and corrects F-7's attribution; the rest is duplicate ScenarioTest/PrettyTest cases, vacuous assertions (null checks, forall on empty results, contains chains) and copied fixtures that shared helpers (TestUtil.genesisHash, scalus.utils.await) already cover.",
+  "behaviors": [
+    {
+      "pass": "Scenario",
+      "name": "monad laws in practice: pure, map, flatMap thread state",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:31-56"
+      ]
+    },
+    {
+      "pass": "Scenario",
+      "name": "provider: findUtxo / findUtxos resolve through the monad",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:58-73"
+      ]
+    },
+    {
+      "pass": "Scenario",
+      "name": "provider: checkTransaction, pollForConfirmation, getDatum, submit, submitAndPoll, currentSlot, fetchLatestParams",
+      "tests": []
+    },
+    {
+      "pass": "Scenario",
+      "name": "branching: choices, fromCollection, guard, mzero, mplus of independent branches",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:79-159"
+      ]
+    },
+    {
+      "pass": "Scenario",
+      "name": "fsplit / msplit (head and tail of the result stream)",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:165-211"
+      ]
+    },
+    {
+      "pass": "Scenario",
+      "name": "msplit of an empty or failing scenario; map/flatMapTry over a FromStream node",
+      "tests": []
+    },
+    {
+      "pass": "Scenario",
+      "name": "error propagation and flatMapTry recovery",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:217-241"
+      ]
+    },
+    {
+      "pass": "Scenario",
+      "name": "runners continueAll / continueFirst (maxResults, empty)",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:247-274"
+      ]
+    },
+    {
+      "pass": "Scenario",
+      "name": "runFirst(emulator) / runAll(emulator) entry points",
+      "tests": []
+    },
+    {
+      "pass": "Scenario",
+      "name": "sample / sampleN / Gen conversion: deterministic RNG per branch, failed Gen prunes",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:348-496"
+      ]
+    },
+    {
+      "pass": "ScenarioCheck",
+      "name": "check macro: CheckFailure with predicate, message and source location",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:502-570"
+      ]
+    },
+    {
+      "pass": "Scenario",
+      "name": "action log: Submit and Wait in chronological order",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:576-638"
+      ]
+    },
+    {
+      "pass": "ScenarioExplorer",
+      "name": "explore: depth-bounded search, Violation with action path",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:644-727"
+      ]
+    },
+    {
+      "pass": "ScenarioExplorer",
+      "name": "explore: a non-CheckFailure error propagates as an error",
+      "tests": []
+    },
+    {
+      "pass": "ImmutableEmulator",
+      "name": "empty / withAddresses / advanceSlot / setSlot (incl. epoch boundary moving donations)",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:280-298",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:248-263"
+      ]
+    },
+    {
+      "pass": "ImmutableEmulator",
+      "name": "fromEmulator / toEmulator keep the whole ledger state, evaluatorMode, certState, datums, treasury; one read of the state",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:19-44",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:81-127",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:190-209",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:233-341",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:300-314"
+      ]
+    },
+    {
+      "pass": "ImmutableEmulator",
+      "name": "submit appends to the applied-tx log; original unchanged; clearAppliedTxs",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:46-79",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:129-188"
+      ]
+    },
+    {
+      "pass": "ImmutableEmulator",
+      "name": "datum store: withDatum keeps raw bytes; deprecated 1.3 apply",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:343-388"
+      ]
+    },
+    {
+      "pass": "Preconfiguration",
+      "name": "JSON parse; party/bech32 resolution; tx_id/idx; genesis hash; datum/datum_cbor/datum_hash; Shelley vs Babbage",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:13-202"
+      ]
+    },
+    {
+      "pass": "Preconfiguration",
+      "name": "explicit idx mixed with auto-assigned idx on the genesis hash",
+      "tests": []
+    },
+    {
+      "pass": "ContractScalaCheckCommands",
+      "name": "genInitialState, genCommand, newSut, SubmitTxCommand, AdvanceSlotCommand, property() with invariants",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:133-428"
+      ]
+    },
+    {
+      "pass": "ContractScalaCheckCommands",
+      "name": "genCommand with no actions (Gen.fail); postCondition on a thrown exception",
+      "tests": []
+    },
+    {
+      "pass": "ContractStepVariations",
+      "name": "allActions: Submit per variation plus Wait per slot delay",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:434-456"
+      ]
+    },
+    {
+      "pass": "StandardTxVariations / TxVariations.standard",
+      "name": "attack variations (removeContractOutput, stealPartialValue, corruptDatum, wrongOutputAddress, duplicateOutput, unauthorizedMint, mintExtra, aroundDeadline, validity ranges, wrongRedeemer, aroundThreshold, reference inputs)",
+      "tests": []
+    },
+    {
+      "pass": "scalus.testing.eval / dsl / assertions",
+      "name": "Evaluator multi-backend evaluation, EvalTestBuilder fluent DSL, Expected/ResultAssertions",
+      "tests": []
+    },
+    {
+      "pass": "StreamingEmulator",
+      "name": "streaming facade conformance (StreamProviderConformance)",
+      "tests": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/stream/StreamingEmulatorConformanceTest.scala:18-62"
+      ]
+    },
+    {
+      "pass": "Pretty",
+      "name": "formatAda, primitive, ByteString, Option, Seq, Map instances",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:24-51",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:333-389"
+      ]
+    },
+    {
+      "pass": "Pretty",
+      "name": "ledger type instances (hashes, Coin, Value, MultiAsset, Credential, Address, Input, DatumOption, Script, VKeyWitness, Redeemer, DRep, Anchor, Certificate, Language, AssetName)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:55-302"
+      ]
+    },
+    {
+      "pass": "Pretty",
+      "name": "Pretty[(A, B)] tuple instance",
+      "tests": []
+    },
+    {
+      "pass": "Pretty",
+      "name": "derived instances for case classes, case objects and enums; manual instance precedence; XTerm styling",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:306-329",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:393-516"
+      ]
+    },
+    {
+      "pass": "DynJson",
+      "name": "dynamic field/index access, typed and Opt accessors, toString, errors",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/utils/DynJsonTest.scala:23-101"
+      ]
+    },
+    {
+      "pass": "DynJson",
+      "name": "arrOpt / objOpt",
+      "tests": []
+    },
+    {
+      "pass": "Utils",
+      "name": "Plutus text envelope write/read; unknown envelope type and Plutus Core version rejected; 1.1.0 in a V1 envelope",
+      "tests": [
+        "scalus-core/jvm/src/test/scala/scalus/utils/UtilsTest.scala:19-62"
+      ]
+    },
+    {
+      "pass": "scalajs.internal Numbers",
+      "name": "Long/bigint conversion and TypeError on out-of-range values (JS only)",
+      "tests": [
+        "scalus-core/js/src/test/scala/scalus/utils/scalajs/internal/NumbersTest.scala:15-39"
+      ]
+    },
+    {
+      "pass": "PlutusScriptEvaluator",
+      "name": "evaluates a mainnet tx; report dumps (.flat + manifest), profile HTML/CSV/JSON + profile-manifest, overwrite on re-evaluation",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:12-157"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C12-1",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/shared/src/main/scala/scalus/testing/Scenario.scala:357-369",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/ImmutableEmulator.scala:117-118",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/ImmutableEmulator.scala:79",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/EmulatorBase.scala:317-320",
+        "scalus-testkit/jvm/src/main/scala/scalus/testing/stream/StreamProviderConformance.scala:240"
+      ],
+      "claim": "By reading (not executed): Scenario.provider.checkTransaction maps `s.emulator.findUtxos(UtxoQuery(FromTransaction(txHash)))` with `case Right(_) => Confirmed`, but ImmutableEmulator.findUtxos always returns Right (line 118: `Right(EmulatorBase.evalQuery(...))`). So every hash, including one never submitted, is reported Confirmed; pollForConfirmation (371-376) inherits it. The mutable Emulator answers with hasTx (EmulatorBase:317-320), ImmutableEmulator has hasTx too (line 79), and the streaming conformance suite pins exactly this contract (StreamProviderConformance:240). Lines 357-376 are uncovered in the baseline.",
+      "action": "Add a ScenarioTest case: through Scenario.provider, checkTransaction(TransactionHash.fromHex(\"ab\" * 32)) must be NotFound; after Scenario.submit(tx) it must be Confirmed for tx.id, also when every output of tx has been spent. Main-code note only: use `if s.emulator.hasTx(txHash) then Confirmed else NotFound`.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-69",
+      "verification": "Scenario.scala:356-369: checkTransaction maps s.emulator.findUtxos(UtxoQuery(FromTransaction(txHash))) with Right(_) => Confirmed. ImmutableEmulator.scala:117-118 always returns Right(EmulatorBase.evalQuery(...)), and evalQuery FromTransaction (EmulatorBase.scala:690-691) only filters, so it yields Right(empty) for an unknown hash. Result: every hash is Confirmed. pollForConfirmation (371-376) delegates to it. ImmutableEmulator.hasTx exists (line 79), and the mutable emulator overrides checkTransaction with hasTx (EmulatorBase.scala:317-320); its doc comment names this exact pitfall. Reachable through the public Scenario.provider (line 326), e.g. provider.flatMap(_.checkTransaction(TransactionHash.fromHex(\"ab\"*32))) returns Confirmed."
+    },
+    {
+      "id": "C12-2",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/shared/src/main/scala/scalus/testing/Scenario.scala:352-355",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/ImmutableEmulator.scala:90",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/ImmutableEmulator.scala:135-136",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:179-182"
+      ],
+      "claim": "Scenario.provider.getDatum always returns pure(None), while the ImmutableEmulator it wraps retains datums: ImmutableEmulator.getDatum (90) and asReader.getDatum (135-136) resolve them, and ImmutableEmulatorTest:179-182 asserts the reader resolves a datum ('was always None before'). So Scenario.snapshotReader and Scenario.provider disagree on the same state: a datum-hash lookup from inside a Scenario step via the provider never succeeds.",
+      "action": "Add a ScenarioTest case: submit a tx paying to Bob with an inline datum (payTo(..., (_: Transaction) => Data.unit)), then via Scenario.provider assert getDatum(hash) == Some(Data.unit), and that it equals snapshotReader.getDatum. Main-code note only: `leaf(s => Done(s, s.emulator.getDatum(datumHash)))`.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -15,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-70",
+      "verification": "Scenario.scala:351-354: provider.getDatum is scenarioLogicMonad.pure(None) for every hash. ImmutableEmulator.submit adds the tx datums (ImmutableEmulator.scala:70, binaryDatums ++ binaryDatumsOf(tx), which includes inline datums, EmulatorBase.scala:795-800). getDatum (line 90) and asReader.getDatum (135-136) resolve them. ImmutableEmulatorTest.scala:176-181 pins the reader behavior. snapshotReader (Scenario.scala:389-390) uses asReader. So in one Scenario state, provider.getDatum(h) returns None and snapshotReader.getDatum(h) returns Some(d). Any public use of Scenario.provider.getDatum reaches this."
+    },
+    {
+      "id": "C12-3",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/shared/src/main/scala/scalus/testing/Preconfiguration.scala:71-89",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:63-87"
+      ],
+      "claim": "Preconfiguration.resolveUtxos assigns auto indices from one counter starting at 0, ignoring explicit `idx` values that share the genesis hash, then builds the result with `.toMap`, so a collision silently drops a UTxO. Input {\"utxo\":{\"alice\":[{\"ada\":1,\"idx\":0}],\"bob\":[{\"ada\":2}]}} gives Alice Input(genesis,0) and Bob Input(genesis,0): one UTxO instead of two, whichever map order upickle yields. The same happens for two explicit entries with the same tx_id and idx. PreconfigurationTest only checks distinct auto indices (63-78) and an explicit tx_id/idx alone (80-87).",
+      "action": "Add a PreconfigurationTest case with the JSON above asserting resolveUtxos returns 2 UTxOs (or, if the owner prefers, that it throws IllegalArgumentException on a duplicate input). Main-code note only: skip auto indices already taken by explicit idx on the same tx hash, and require no duplicate inputs before `.toMap`.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-71",
+      "verification": "Preconfiguration.scala:71-89: one autoIdx counter starts at 0 and ignores explicit idx values. The genesis hash is the default when tx_id is absent. The result is keyed by Input (Map flatMap plus .toMap), so equal keys collapse. {\"utxo\":{\"alice\":[{\"ada\":1,\"idx\":0}],\"bob\":[{\"ada\":2}]}} gives Input(genesis,0) twice, so only 1 UTxO is left, silently. Two entries with the same tx_id and idx collapse the same way. PreconfigurationTest.scala:63-78 checks only auto indices, and 80-87 checks one explicit entry, so no test catches this. Reachable from user JSON through fromJson + resolveUtxos."
+    },
+    {
+      "id": "C12-4",
+      "check": "C2",
+      "scope": "main-bug",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/utils/Utils.scala:44-49",
+        "scalus-core/shared/src/main/scala/scalus/utils/Utils.scala:51-52"
+      ],
+      "claim": "programToPlutusFileContent writes a PlutusV4 script under the envelope type \"PlutusScriptV3\" (line 48, uncovered), so a V4 (Dijkstra) script file claims to be V3 and a tool that reads the envelope evaluates it under the wrong language; the reader accepts only V1-V3 envelopes. The owner may already track this as the stale V4 envelope type; whether a PlutusScriptV4 envelope name exists upstream yet is not verified.",
+      "action": "Decide the V4 envelope name (or make programToPlutusFileContent reject PlutusV4) and pin it with a UtilsTest case: programToPlutusFileContent(p, Language.PlutusV4) yields the decided type, and readPlutusFileContent accepts it.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "low",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-72",
+      "verification": "Utils.scala:44-48 maps PlutusV4 to \"PlutusScriptV3\". supportedEnvelopeTypes (51-52) holds V1-V3 only, so a V4 envelope is not readable, and a V4 script is written with a V3 label. Reachable through the public Program.writePlutusFile(path, Language.PlutusV4) (Program.scala:126-127, 353-354) and Utils.programToPlutusFileContent. No test passes PlutusV4 (UtilsTest uses only V1, V2 and V3). The owner already tracks this as the 'stale V4 envelope type'. The upstream V4 envelope name is not verified, so the action needs an owner decision, as the finding says."
+    },
+    {
+      "id": "C12-5",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/shared/src/main/scala/scalus/testing/StandardTxVariations.scala:47-410",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/TxVariations.scala:53-61",
+        "scalus-site/content/testing/boundary-testing.mdx:118"
+      ],
+      "claim": "StandardTxVariations (483 lines of published attack variations: removeContractOutput, stealPartialValue, corruptDatum, wrongOutputAddress, duplicateOutput, unauthorizedMint, mintExtra, aroundDeadline, noValidityRange, wideValidityRange, wrongRedeemer, aroundThreshold, removeReferenceInput, wrongReferenceInput, default/defaultExtended) has no caller in any test in the repository; the testkit baseline leaves 224 of its statements uncovered. The site documents TxVariations.standard.default as the recommended entry point (boundary-testing.mdx:118, 137), so a variation that silently produces the unmodified base tx would make users' attack tests vacuous.",
+      "action": "Add StandardTxVariationsTest (scalus-testkit/jvm): build a TxTemplate that pays to an always-ok script address with an inline datum and a reference input on an Emulator.withAddresses(Alice, Bob); for each variation, enumerate/gen its transactions and assert the intended difference from the base tx (contract output removed or duplicated, value at the script lower, datum or address changed, mint field non-empty, validity interval absent/wide/around the deadline, redeemer data changed, reference input removed/replaced), and that default/defaultExtended contain the listed variations.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -2,
+      "linesRemoved": -180,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-6",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/shared/src/main/scala/scalus/testing/eval/Evaluator.scala:21-109",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/dsl/EvalTestDsl.scala:15-40",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/assertions/ResultAssertions.scala:9-40",
+        "scalus-skills/skills/contract-test/SKILL.md:52",
+        "scalus-skills/skills/optimize-contract/SKILL.md:258-261"
+      ],
+      "claim": "The published packages scalus.testing.eval (Evaluator, EvalConfig, MultiEvalResult), scalus.testing.dsl (EvalTestBuilder) and scalus.testing.assertions (Expected, ResultAssertions) have no user and no test anywhere in the repository (baseline coverage 0 %, 0 % and 5.4 %), yet the scalus-skills contract-test and optimize-contract skills tell users to use EvalTestDsl budget assertions.",
+      "action": "Add one shared suite in scalus-testkit (e.g. EvalTestDslTest): eval a small compiled SIR that succeeds and one that fails; assert expectSuccess / Expected.success(value) / Expected.failureWith(msg) pass and fail as expected (intercept TestFailedException for the negative case), onAllBackends gives SuccessSame, and assertBudgetWithin rejects a too-small budget. Keep UplcCli off.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -2,
+      "linesRemoved": -100,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-7",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/jvm/src/main/scala/scalus/testing/ContractScalaCheckCommands.scala:138",
+        "scalus-testkit/jvm/src/main/scala/scalus/testing/ContractScalaCheckCommands.scala:228-229",
+        "scalus-testkit/jvm/src/main/scala/scalus/testing/ContractScalaCheckCommands.scala:256-257",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/ScenarioExplorer.scala:68-69",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/Scenario.scala:143-146",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/Scenario.scala:173-176",
+        "scalus-testkit/shared/src/main/scala/scalus/testing/Scenario.scala:197-204"
+      ],
+      "claim": "Error paths of the testkit are uncovered: genCommand with no actions returns Gen.fail (138); both postConditions turn a thrown exception into Prop.exception (228-229, 256-257); ScenarioExplorer re-raises a non-CheckFailure error (68-69); Scenario.map/flatMapTry over a FromStream node (146, 173-176) and msplit of an empty or failing scenario (197, 203-204) never run.",
+      "action": "ContractScalaCheckCommandsTest: a step with an empty `variations` and no slot delays -> genCommand(state).sample is None; SubmitTxCommand/AdvanceSlotCommand.postCondition(state, Failure(e)) is not Prop.passed (check via Prop result status). ScenarioTest: explore with a step that throws RuntimeException -> continueAll fails with that exception; msplit(Scenario.fail) yields None; msplit(Scenario.error(e)) yields Some((Failure(e), _)); map and flatMapTry over the tail returned by fsplit give the mapped values.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -50,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-8",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:48-56",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:114-119",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:79-84",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:247-253",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:348-356",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:404-416",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:427-464",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:514-552"
+      ],
+      "claim": "Five ScenarioTest pairs assert the same behavior: 'sleep advances slot' (114-119) is the same program and assertion as 'flatMap threads state' (48-56: flatMap(sleep(n))(_ => now) == slot + n); 'runAll collects all branches' (247-253) repeats 'choices produces all alternatives' (79-84) with an extra size check; 'sample generates value from Gen' (348-356) is subsumed by the range check in 'sample 10 times' (427-444); 'sample across branches produces different values per branch' (404-416) only checks the range and its name contradicts 446-464, which asserts all branches sample the same value; 'check captures source location' (538-552) and 'check fails with CheckFailure' (514-536) run the same failing check and assert the location twice.",
+      "action": "Delete 114-119, 348-356 and 404-416; merge 247-253 into 79-84 (keep `results.size == 3`); merge 538-552 into 514-536, keeping its stronger `location.file == \"ScenarioTest.scala\"` assertion.",
+      "coverageRisk": "none: every deleted assertion is kept by the surviving test of its pair",
+      "ciSavingSec": 0,
+      "linesRemoved": 40,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "All of these are in one file, jvm ScenarioTest. (1) 114-119 is flatMap(sleep(10))(_=>now) == slot+10, the same program as 48-56 with 5. 121-131 also covers sleep. (2) 247-253 is choices(a,b,c) with continueAll: size==3 and set equality. 79-84 is the same with ints and no size check, and the merge keeps size. (3) 348-356 is a bare sample(Gen.choose(1,10)) with continueFirst: isDefined and range. 427-444 calls the same Scenario.sample with continueFirst and checks isDefined, range and RNG advance. The async .await lowers to the same flatMap. (4) 404-416 checks only size==2 and range. 446-464 checks size==10, range and same value per branch, so the 404 name is wrong and the test is subsumed. (5) 538-552 uses check(false,..) and asserts location.file == \"ScenarioTest.scala\" and line>0. 514-536 asserts endsWith(\".scala\"), line>0, message and predicate. The merge keeps the stronger file assertion. Note: the predicates differ (a literal false vs x+1==y), but 538 asserts nothing about the predicate, so no assertion is lost."
+    },
+    {
+      "id": "C12-9",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:280-314",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:305-341"
+      ],
+      "claim": "ScenarioTest's ImmutableEmulator section tests a different class than the suite. 'fromEmulator captures snapshot' (300-308) and 'toEmulator round-trips' (310-314) assert only utxos equality, which ImmutableEmulatorTest:305-341 asserts for both directions together with every other ledger field. 'empty', 'withAddresses' and 'advanceSlot' (280-298) have no other test.",
+      "action": "Delete ScenarioTest 300-314; move 280-298 into ImmutableEmulatorTest unchanged.",
+      "coverageRisk": "low: 305-341 builds its emulator via EmulatorBase.fromState rather than createInitialUtxos/withAddresses, but the conversion code under test is the same",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Both suites are jvm tests in scalus-testkit. ScenarioTest 300-308 only checks that fromEmulator(mutable).utxos == mutable.utxos. ImmutableEmulatorTest.scala:305-341 calls the same ImmutableEmulator.fromEmulator and asserts utxos and every other ledger field. It builds the emulator with EmulatorBase.fromState, not Emulator(initialUtxos=...), but the conversion code under test is the same. ScenarioTest 310-314 checks that toEmulator.utxos == original.utxos. 305-341 checks fromEmulator(immutable.toEmulator).state.utxos == ledger.utxos, which is a stronger round trip. 81-101 and 233-246 also cover the conversions. One small error: the finding says advanceSlot has 'no other test', but ImmutableEmulatorTest:248-258 calls advanceSlot (across an epoch). That test does not check that the original is unchanged, so moving 280-298 unchanged is still correct."
+    },
+    {
+      "id": "C12-10",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:644-668",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:703-727",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:554-570",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:514-536"
+      ],
+      "claim": "Four ScenarioTest assertions miss the mutation they claim to catch: 667 and 726 assert `results.forall(_._2.isEmpty)`, which is true when explore returns no results at all (a mutation making exploreRec return mzero passes); 'with sleep actions in path' (703-727) never inspects a path, so a mutation that drops StepAction.Wait passes; 'check in async block captures correct location' (554-570) asserts only the message, not the location; 527 accepts `predicate.contains(\"x\") || predicate.contains(\"==\")`, which any non-empty predicate rendering of a comparison passes.",
+      "action": "At 667/726 also assert results.nonEmpty and that the final state's actionLog has maxDepth Submit entries (726: alternating Wait(10)/Submit). At 569 assert caught.get.location.line equals the line of the check call (capture a org.scalactic.source.Position on the same source line as the Scenario.check call and compare location.line with its lineNumber; no hardcoded line literal). At 527 assert the exact predicate string the macro produces.",
+      "coverageRisk": "none: adds assertions only",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-11",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:47-48",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:104",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:130",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:158",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:193",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:217",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:284",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:306",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:92",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/testing/kit/TestUtil.scala:55-56",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:24-25",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:329",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:334",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:437-438"
+      ],
+      "claim": "The genesis hash `TransactionHash.fromByteString(ByteString.fromHex(\"0\" * 64))` is rebuilt 9 times in ImmutableEmulatorTest and PreconfigurationTest although scalus.testing.kit.TestUtil.genesisHash (copied into scalus-testkit main) is exactly that value. ScenarioTest and ContractScalaCheckCommandsTest wrap futures in Await.result(_, Duration.Inf) (a local awaitResult in ScenarioTest) while ImmutableEmulatorTest and the streaming fixture use the shared scalus.utils.await extension.",
+      "action": "Replace the 9 inline genesis hashes with TestUtil.genesisHash; replace awaitResult and Await.result(..., Duration.Inf) with `.await()` from scalus.utils (drop the scala.concurrent.duration imports).",
+      "coverageRisk": "none: same values",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-12",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:325-333",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:580-588",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:618-626",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:649-657",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:675-683",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala:709-717",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:49-64",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:105-117",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:131-143",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ImmutableEmulatorTest.scala:159-171"
+      ],
+      "claim": "The 'Alice pays Bob 10 ADA' transaction is built by the same 7-9 lines six times in ScenarioTest (TxBuilder.payTo(Bob, ada(10)).complete(reader, Alice).sign(Alice.signer)) and four times in ImmutableEmulatorTest, each time preceded in ImmutableEmulatorTest by the same one-UTxO genesis fixture (Alice, 100 ADA).",
+      "action": "Add a test-only object in scalus-testkit/jvm/src/test/scala/scalus/testing (e.g. TestkitFixtures) with `aliceUtxos: Utxos` (Input(TestUtil.genesisHash, 0) -> Output(Alice.address, ada(100))), `aliceOnly: ImmutableEmulator` and `payBob(reader: BlockchainReader, withDatum: Boolean = false): Transaction` (signed); use it at all ten sites.",
+      "coverageRisk": "none: same transactions",
+      "ciSavingSec": 0,
+      "linesRemoved": 55,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-13",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:101-127",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:214",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:218-229",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:183-199"
+      ],
+      "claim": "ContractScalaCheckCommandsTest has assertions that cannot fail: the three construction tests (101-127) assert `commands != null` and line 214 `sut != null` (a constructor never returns null); 'destroySut is a no-op' (218-229) asserts nothing. 'genCommand with multiple variations selects from all' (183-199) asserts only cmds.nonEmpty, so a mutation of genCommand to `Gen.const(commands.head)` passes.",
+      "action": "Delete 101-127 and 218-229 (construction is exercised by every other test); drop line 214; in 183-199 sample 50 commands and assert the set of Bob payment amounts equals {5, 10, 15} ADA (miss probability 3 * (2/3)^50 < 1e-8).",
+      "coverageRisk": "none: the deleted assertions are vacuous",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-14",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:134-138",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:151-156",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:236-244",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:255-263",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:275-283",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:296-304",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:321-326",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:339-344",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/ContractScalaCheckCommandsTest.scala:354-359"
+      ],
+      "claim": "Fifteen ContractScalaCheckCommandsTest tests open with the same 5-8 lines: Emulator.withAddresses(Alice, Bob), a step, ContractScalaCheckCommands(emulator, step)(), genInitialState.sample, assert(isDefined), often followed by genCommand(...).sample + assert(isDefined) + asInstanceOf[SubmitTxCommand].",
+      "action": "Add private helpers `fixture(step = SimpleTransferStep()): (commands, state)` and `firstSubmit(commands, state): commands.SubmitTxCommand` (returns the sampled command or fails with a clue) and use them in every test.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-15",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-testkit",
+      "evidence": [
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:15-21",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:38",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:49",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:58",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:73",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:83",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:91",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:110",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:117",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:121-167",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:97-106",
+        "scalus-testkit/jvm/src/test/scala/scalus/testing/PreconfigurationTest.scala:114-119"
+      ],
+      "claim": "`Preconfiguration.resolveUtxos(Preconfiguration.fromJson(json), network)` is repeated in 17 tests; the six datum tests (121-167) are one table of JSON entry -> expected DatumOption/output format; 'output with datum uses Babbage format' (162-167) is implied by 121-126 (an Inline datum only exists on a Babbage output). 'ImmutableEmulator.fromJson creates working emulator' asserts only utxos.size == 2, and 'unknown party name throws' accepts any Exception.",
+      "action": "Add `private def resolve(json: String): Utxos`; fold 121-167 into one table-driven test (keep the non-minimal CBOR byte check 137-144 separate); delete 162-167; in 97-106 also assert each party's address and value; narrow assertThrows[Exception] at 116 to the exception Address.fromString throws.",
+      "coverageRisk": "none: same cases",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-16",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:47-51",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:76-82",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:104-131",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:173-178",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:227-235",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:258-282",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:353-358",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:368-389",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:393-465"
+      ],
+      "claim": "Most PrettyTest assertions are `contains` chains on fully deterministic output, so formatting regressions pass: Value ADA-only checks contains(\"{\") and contains(\"}\") (80-81); the SortedMap test says 'SortedMap maintains order' but checks only that both pairs occur (383-389); the derived-instance tests accept any separator or bracket. Line 50 asserts `\"test\".showHighlighted.nonEmpty`, which Pretty[String] (Pretty.scala:251-252, no styling) satisfies for any non-empty string.",
+      "action": "Replace each contains chain with `==` on the full rendered string (render once, paste the result after checking it by eye), including the SortedMap order \"a\" before \"z\"; delete line 50 unless C12-17 already removed it.",
+      "coverageRisk": "none: tighter assertions only; risk is only of pinning a currently wrong rendering, so review each pinned string",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-17",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:393-408",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:442-452",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:489-516",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:34-51"
+      ],
+      "claim": "Derived-instance tests repeat each other: 'single field' (402-408) is the same code path as 'case class shows constructor and field names' (393-400) with one field; 'deeply nested structures' (505-516) repeats 'nested case classes' (442-452) one level deeper; 'BigInt field' and 'Boolean field' (489-503) re-test the primitive instances (34-40) through the same ProductPretty path. 'Pretty extension methods work' (47-51) repeats `\"test\".show` from 34-35.",
+      "action": "Delete 402-408, 489-503, 505-516 and 47-51 after C12-16 pins exact strings in 393-400 and 442-452 (add a BigInt field to the Person case to keep the BigInt instance reached through derivation).",
+      "coverageRisk": "low: BigInt via derivation is kept by the added field; Boolean is covered at 38-39",
+      "ciSavingSec": 0,
+      "linesRemoved": 35,
+      "confidence": "medium",
+      "verdict": "NARROWED",
+      "verification": "Shared PrettyTest; all derived products go through prettyProduct (Pretty.scala:61-83), which has no single-field branch, so 402-408 duplicates 393-400 and 505-516 is 442-452 one level deeper. Line 47-51: `.show` is `pretty.render(80)` (Pretty.scala:313) so 48-49 are covered by 35; `showHighlighted` is exercised at 308-327 and 484. Boolean via derivation is plain instance summoning, Boolean instance covered at 38-39. But the claim is wrong that 489-495 re-tests a primitive from 34-40: no Pretty[BigInt] (Pretty.scala:260-261) assertion exists elsewhere in PrettyTest (BigInt appears only inside Data.I at 189/228). Corrected action: delete 402-408, 497-503, 505-516 and 47-51 after C12-16 pins exact strings; delete 489-495 only once the BigInt field added to Person uses a value beyond Long range (e.g. BigInt(\"12345678901234567890\")) with an exact-string assertion, since that test is the sole Pretty[BigInt] coverage."
+    },
+    {
+      "id": "C12-18",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:197-209",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:239-254",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:306-329",
+        "scalus-core/shared/src/test/scala/scalus/utils/PrettyTest.scala:481-487"
+      ],
+      "claim": "Several PrettyTest groups are one assertion per test over a list of values: the five XTerm tests (306-329, 481-487) each assert the rendered string contains ESC[ for a different type; the two Script tests (197-209) and three DRep tests (239-254) differ only in the input.",
+      "action": "Turn each group into one table-driven test (value -> expected rendering / ESC presence) with a clue per row.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 30,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-19",
+      "check": "C8",
+      "scope": "generator",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/testing/ArbitraryDerivation.scala:26-37",
+        "scalus-core/shared/src/test/scala/scalus/testing/ArbitraryDerivation.scala:43-53",
+        "scalus-core/shared/src/test/scala/scalus/testing/ArbitraryDerivation.scala:61-63",
+        "scalus-core/shared/src/test/scala/scalus/testing/ArbitraryDerivation.scala:73",
+        "scalus-core/shared/src/test/scala/scalus/ledger/api/v2/ArbitraryInstances.scala:20",
+        "scalus-core/shared/src/test/scala/scalus/cardano/ledger/ArbitraryInstances.scala:335",
+        "scalus-core/jvm/src/test/scala/scalus/testing/GenStatsTest.scala:58-60"
+      ],
+      "claim": "ArbitraryDerivation discards samples whenever the size budget runs out inside a nested derived type: join falls back at size < 0 and split at size <= 0 to the default Fallback, NoFallback = Gen.fail. gen-stats samples size i % 101 for 10 000 seeds, so exactly 100 samples have size 0, and v2.TxOut and TxInInfo discard exactly 100: a derived TxOut at size 0 asks for a derived v1.Address at size -1, which fails. TransactionOutput (a derived sum: 325 discards) fails at size 0 and again one level down. This corrects F-7, which attributes the TransactionOutput row to suchThat filters; forAll also starts at size 0, so every property over these types silently loses its smallest cases.",
+      "action": "Check that none of the autoDerived types (v1 IntervalBound/Address, v2 TxOut, Language, ExUnitPrices, CostModels, Constitution, Value, ScriptRef, TransactionOutput, RewardAccount, AuxiliaryData, RedeemerTag) is recursive; then make join always construct with Gen.resize((size - 1).max(0), ...) and split choose among subtypes at any size unless a non-default Fallback is in scope. Re-run GenStatsTest and assert v2.TxOut/TxInInfo discards drop to 0.",
+      "coverageRisk": "none: widens the generated inputs; existing properties may meet new size-0 cases",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-20",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/jvm/src/test/scala/scalus/utils/UtilsTest.scala:19-29",
+        "scalus-core/jvm/src/test/scala/scalus/utils/UtilsTest.scala:13-17",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:147-158"
+      ],
+      "claim": "'programToPlutusFileContent/readPlutusFileContent work' is a round-trip law tested on one unseeded random Term (`Arbitrary.arbitrary[Term].sample.get`), so each run checks a different term and a failure cannot be reproduced. The Term generator emits no BLS constants (the DefaultUni generator 147-158 has none), so the flat round trip is not exposed to the BLS limitation from the pilot's T-1. The suite also mixes in both uplc.test.ArbitraryInstances and v1.ArbitraryInstances, and v1 already extends the first (F-8).",
+      "action": "Replace with forAll { (t: Term) => readPlutusFileContent(programToPlutusFileContent(t.plutusV2.deBruijnedProgram, PlutusV2)) == t.plutusV2.deBruijnedProgram.toProgram } in memory, keep one temp-file write/read for writePlutusFile/readPlutusFile; drop the redundant ArbitraryInstances mixin.",
+      "coverageRisk": "none: one case becomes many",
+      "ciSavingSec": -0.5,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "UtilsTest.scala:19-29 samples one unseeded Term (Arbitrary.arbitrary[Term].sample.get). The law holds for every generated term. term.plutusV2 is Program(minVersionFor(term), term) (Program.scala:204-215). That gives (1,0,0) or (1,1,0), and both are in the reader's supportedVersions (Utils.scala:66). The generator emits only bound vars (ArbitraryInstances.scala:259,300), so deBruijn does not fail. The DefaultUni generator (147-158) has no BLS, String, Array or BuiltinValue, so arbConstantByType never reaches BLS. Both sides of the comparison go through toProgram (Program.scala:151-152), so the names match. ProgramFlatTest.scala:28-34 already runs flat decode(encode(p)) under forAll for all Programs. The replaced example pins no shape. Mixin: v1.ArbitraryInstances extends uplc.test.ArbitraryInstances (scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ArbitraryInstances.scala:12), so the extra mixin at UtilsTest:16-17 is redundant."
+    },
+    {
+      "id": "C12-21",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:14-23",
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:159-164",
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:33-34",
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:64-67",
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:71-72",
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:105-109",
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:113",
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:152-156",
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:1"
+      ],
+      "claim": "EvalPlutusScriptsTest's first test re-reads the two CBOR files that the lazy vals tx7430/utxo7430 (159-164) already hold, and the three report tests copy the same temp-directory create/cleanup block. The suite sits in package `eval` under src/test/scala/eval, outside the scalus package tree.",
+      "action": "Use tx7430/utxo7430 in the first test; add `private def withTempDir(prefix: String)(body: Path => Unit)` with the cleanup; move the file to scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/ledger/ and its package.",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-22",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:26-29",
+        "scalus-cardano-ledger/jvm/src/test/scala/eval/EvalPlutusScriptsTest.scala:166-187"
+      ],
+      "claim": "'evalPlutusScripts with CBOR files' asserts only `redeemers.length == 2`; the evaluator runs in EvaluateAndComputeCost mode, so a mutation that returns the tx's redeemers unchanged, or with zero ExUnits, passes.",
+      "action": "Pin the two computed ExUnits (memory, steps) for this mainnet tx exactly and assert each is non-zero. Do not compare with the ExUnits the tx declares: the test uses today's mainnet cost models, not those of the tx's epoch.",
+      "coverageRisk": "none: adds assertions only",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-23",
+      "check": "C5",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:111-123",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:139-151",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:176-187",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:213-227",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:256-270",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:291-307",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:331-347"
+      ],
+      "claim": "EvalTestKit repeats the same 12-16 line `evaluateDebug match { Success => check budget, check term α_== expected; Failure => fail(budget, costs) }` block seven times across assertEvalWithinBudget, assertEvalWithBudget (x2), assertEvalWithBudgets (x2) and assertEvalWithBudgetAndFee (x2); they differ only in the budget predicate and the message suffix.",
+      "action": "Add one non-inline `protected final def checkBudgetResult(result: Result, expected: => Term, budgetOk: ExUnits => Boolean, mismatch: ExUnits => String, label: String): Unit` and call it from the seven methods. It must be protected (not private): the callers are inline and expand in the suite. EvalTestKit is copied into scalus-testkit main (build.sbt:699), so keep every existing signature.",
+      "coverageRisk": "none: same assertions and messages",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-24",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:426-443",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:386-402"
+      ],
+      "claim": "assertEvalFailsWithMessage checks expectedMessage only on the JVM run (426-429). On the UPLC side, when the script logs nothing it asserts only that the failure mentions the exception class name (438-443), so an on-chain failure with a different message passes; assertEvalFails (391-397) does check the message in that branch.",
+      "action": "In the None branch of assertEvalFailsWithMessage assert `failure.exception.getMessage.contains(expectedMessage)` when expectedMessage is non-empty, as assertEvalFails does; run the 45 callers and fix or document any that break.",
+      "coverageRisk": "none: tighter helper; may expose existing tests whose on-chain message differs",
+      "ciSavingSec": 0,
+      "linesRemoved": -5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C12-25",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-core",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/utils/DynJsonTest.scala:34-48",
+        "scalus-core/shared/src/test/scala/scalus/utils/DynJsonTest.scala:63-76",
+        "scalus-core/shared/src/test/scala/scalus/utils/DynJsonTest.scala:91-101",
+        "scalus-core/shared/src/main/scala/scalus/utils/DynJson.scala:42-43"
+      ],
+      "claim": "'apply indexes into array value' (40-43) repeats an index already asserted in 34-38; the three *Opt tests (63-76) are one table; arrOpt/objOpt (DynJson:42-43) are the only uncovered members of DynJson; the two error tests accept any Exception.",
+      "action": "Merge 40-43 into 34-38; fold 63-76 into one table that also covers arrOpt and objOpt (Some for scores/address, None for name); assert the concrete ujson exception types in 91-101.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 8 findings of scope merge-duplicate-tests, to-property or main-bug; 7 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

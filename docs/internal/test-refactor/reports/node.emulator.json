@@ -1,0 +1,536 @@
+{
+  "cluster": "node.emulator",
+  "summary": "The cluster is cheap: on the JVM about 1.8 s per run (EmulatorTest 0.96 s, EmulatorParityTest 0.58 s, EmulatorConcurrencyTest 0.24 s wall at 6.5 % of ledger CPU, the rest under 0.02 s), so there are no ci-time findings. The shared EmulatorParityTest is the strongest suite, and the JVM EmulatorTest and SubmitErrorTest re-test much of what it pins: four double-spend tests, three applied-log/clearAppliedTxs tests, a property whose generators reach no emulator branch, and three copies of the pre-registered stake credential test (one of them in the JS facade suite, testing the Scala Emulator). Several assertions cannot catch the defect they name: the parity test's evaluatorMode check passes after a Context rebuild, a 'missing reward accounts' message check matches every WithdrawalsNotInRewards rejection, and many rejections assert only isLeft. Gaps: the Java API members that JavaEmulatorInterop.java never calls, JEmulator.submitTx with debug scripts (no runtime test at all), SubmitError.fromHttpResponse for 4xx, and UtxoSource.Or in evalQuery. One main-code inconsistency: SubmitError documents and tests that a missing collateral or reference input reports its own rule, but with the default validators AllInputsMustBeInUtxoValidator always fires first and reports UtxoNotAvailable.",
+  "behaviors": [
+    {
+      "pass": "EmulatorBase.submitSync",
+      "name": "a valid tx is applied: inputs consumed, outputs added, log/index/hash set updated with the slot and the resolved spent inputs",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:73-111",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:80-152",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:500-555"
+      ]
+    },
+    {
+      "pass": "EmulatorBase.submitSync",
+      "name": "a rejected tx leaves the state unchanged and names the rule (double spend -> UtxoNotAvailable)",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:113-144",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:557-584",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:918-939",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:357-400"
+      ]
+    },
+    {
+      "pass": "EmulatorBase.submitSync(tx, debugScripts)",
+      "name": "debug scripts are used for the replay of one submission and do not leak into later submissions",
+      "tests": []
+    },
+    {
+      "pass": "Emulator (JVM) modifyState",
+      "name": "concurrent submissions: compare-and-set re-validates, exactly one contender wins, views stay coherent, slots monotone in log order",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorConcurrencyTest.scala:140-242"
+      ]
+    },
+    {
+      "pass": "EmulatorState",
+      "name": "derived index/hash set cannot be desynchronised (private constructor, copy); re-application appends to the log only",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorStateInvariantTest.scala:32-52",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:312-348"
+      ]
+    },
+    {
+      "pass": "EmulatorBase.clearAppliedTxs / snapshot",
+      "name": "clear keeps ledger and datums; snapshot copies the whole state incl. fees, donations, treasury and evolves independently",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:146-172",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:194-220",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:464-474",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:154-187"
+      ]
+    },
+    {
+      "pass": "EmulatorBase.setSlot / tick / atSlot",
+      "name": "slot moves keep the rest of the context; a forward epoch boundary moves donations into the treasury once, backwards moves nothing",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:174-192",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:370-462",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:877-891"
+      ]
+    },
+    {
+      "pass": "EmulatorBase datum store",
+      "name": "witness, inline, seeded and addDatum datums are stored with their original bytes under the hash of those bytes; removeUtxo keeps them",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:291-310",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:476-646"
+      ]
+    },
+    {
+      "pass": "EmulatorBase.addUtxo / removeUtxo / addRewards",
+      "name": "direct ledger edits; addRewards rejects unregistered credentials and negative amounts",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:245-289",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:920-934"
+      ]
+    },
+    {
+      "pass": "EmulatorBase.evalQuery / findUtxosSync",
+      "name": "query sources FromAddress, FromAsset, FromInputs, FromTransaction, FromPaymentCredential, And, Or; filters and pagination",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:22-78",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:476-620"
+      ]
+    },
+    {
+      "pass": "Emulator factories (withAddresses, withState, withRegisteredStakeCredentials) and EmulatorInitialState.Builder",
+      "name": "seeded UTxOs, pre-registered stake credentials with deposit, pool and DRep registrations",
+      "tests": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:222-271",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:189-242",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:451-474",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/JavaEmulatorInteropTest.scala:60-69"
+      ]
+    },
+    {
+      "pass": "Emulator + ledger rules (certs, withdrawals, phase-2 invalid)",
+      "name": "stake/pool/DRep certificates, withdrawals, deposits and refunds, isValid=false takes only collateral",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:268-498",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:620-916"
+      ]
+    },
+    {
+      "pass": "EmulatorBase.stakeDistribution / getDelegation",
+      "name": "per-credential stake from UTxOs plus reward balance and pool, registered-only and UTxO-only credentials included",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:408-462",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:222-243",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:1099-1137"
+      ]
+    },
+    {
+      "pass": "SubmitError",
+      "name": "fromHttpResponse status mapping, parseValidationError message classification, fromException mapping and rule names",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:14-353"
+      ]
+    },
+    {
+      "pass": "EmulatorJavaApi / SubmitResult",
+      "name": "Java-facing accessors, trySubmit, submitAsync, findUtxosForAddress, builder",
+      "tests": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/JavaEmulatorInteropTest.scala:19-69",
+        "scalus-cardano-ledger/jvm/src/test/java/scalus/cardano/node/JavaEmulatorInterop.java:16-59"
+      ]
+    },
+    {
+      "pass": "JEmulator (JS facade)",
+      "name": "create options and their TypeErrors, protocolParams overrides, submitTx result shape, evaluateTx, getUtxos filters, datums, accounts, clocks",
+      "tests": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:111-1137"
+      ]
+    },
+    {
+      "pass": "JEmulator.submitTx(bytes, debugScripts)",
+      "name": "debug build replay for a failing release script; unknown hash ignored with a warning",
+      "tests": []
+    },
+    {
+      "pass": "npm differential fixture",
+      "name": "committed fixtures.ts matches the generator; the fixture budget depends on redeemer and context",
+      "tests": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/DifferentialFixtureGenTest.scala:162-225"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C17-1",
+      "check": "C6",
+      "scope": "main-bug",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockchainProvider.scala:598-604,616-622",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/AllInputsMustBeInUtxoValidator.scala:15-28",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/DefaultValidators.scala:10-11",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/FeesOkValidator.scala:139-142",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:146-160,168-185,341-353"
+      ],
+      "claim": "SubmitError.fromException documents (598-604) that a missing collateral input or reference input is 'not that condition' and keeps its own rule name (BadCollateralInputsUTxO / BadReferenceInputsUTxO), and SubmitErrorTest:168-185 and 341-353 pin that on hand-built exceptions. But DefaultValidators is a SortedSet ordered by name, so AllInputsMustBeInUtxoValidator always runs first, and Validator.validate stops at the first Left. That validator checks spend, collateral and reference inputs together and throws BadAllInputsUTxOException, which fromException maps to UtxoNotAvailable (the 'race a caller retries on') with the collateral/reference inputs in unavailableInputs; SubmitErrorTest:146-160 pins exactly that for a collateral-only miss. So with the default rules the documented own-name branches are unreachable from the Emulator, and the FeesOkValidator 'order independent' fallback (139-142) never fires. The observable behavior matches the Haskell ledger (Babbage BadInputsUTxO covers all inputs); the doc, the two tests and the 'not a retry' promise do not. Found by reading, not executed.",
+      "action": "Add an EmulatorParityTest case: submit through the default rules (1) a tx whose only missing input is a collateral input and (2) one whose only missing input is a reference input; assert the rule each gets and the unavailableInputs set. Main-code note only: the owner decides whether the doc at BlockchainProvider.scala:598-604 changes to say all missing inputs are UtxoNotAvailable through the default rules, or fromException splits BadAllInputsUTxOException by which set is non-empty; then align SubmitErrorTest:146-185 with the decision.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -25,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "findingsLog": "F-60",
+      "verification": "The finding is real. DefaultValidators.all is a SortedSet ordered by name (DefaultValidators.scala:10,43). Validator.name is the class simple name (Entities.scala:86), so AllInputsMustBeInUtxoValidator sorts first. Validator.validate folds with flatMap and stops at the first Left (Entities.scala:136-137). Validators run before mutators (Entities.scala:220). Both JVM and JS Emulator default to DefaultValidators.all (jvm Emulator.scala:69, js Emulator.scala:57). AllInputsMustBeInUtxoValidator checks spend, collateral and reference inputs together and returns BadAllInputsUTxOException (AllInputsMustBeInUtxoValidator.scala:15-26). fromException maps that exception to UtxoNotAvailable, with the collateral and reference inputs added to unavailableInputs (BlockchainProvider.scala:617-620). So under the default rules nothing can raise BadCollateralInputsUTxOException or BadReferenceInputsUTxOException. That includes FeesOkValidator.extractCollateralUtxos (FeesOkValidator.scala:139-142) and the phase-2 collateral path in PlutusScriptsTransactionMutator (PlutusScriptsTransactionMutator.scala:84-91). The doc at BlockchainProvider.scala:597-604 is therefore wrong for the default emulator. So is the comment at 582-584, which says a provider naming BadCollateralInputsUTxO reports 'the same rule the emulator does'. SubmitErrorTest:146-160 pins the actual behavior; 168-185 and 341-353 pin the documented behavior on hand-built exceptions. One reach note: with validators = Set.empty, a missing input makes AllResolvedScripts throw inside the mutator, and NonFatal wraps that as IllegalArgumentException (PlutusScriptsTransactionMutator.scala:105-110). The own-name rules stay unreachable in that config too. The proposed EmulatorParityTest cases need hand-built transactions."
+    },
+    {
+      "id": "C17-2",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:113-144",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:557-584",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:918-939",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:357-400"
+      ],
+      "claim": "Four tests assert that a double spend is rejected. EmulatorParityTest:113-144 (shared, both platforms, default rules) is the strongest: rule == UtxoNotAvailable, UTxO set and all three views unchanged. EmulatorTest:918-939 asserts the same rule on the JVM only. EmulatorTest:557-584 is a property whose only varying input (the genesis ADA amount) reaches no emulator branch and asserts only isLeft. SubmitErrorTest:357-400 asserts UtxoNotAvailable with unavailableInputs.nonEmpty, using a one-validator emulator; nonEmpty is the only assertion the parity test lacks.",
+      "action": "In EmulatorParityTest:130-136 also assert error matches SubmitError.UtxoNotAvailable(_, inputs) with inputs == first.body.value.inputs.toSet. Delete EmulatorTest:557-584, EmulatorTest:918-939 and SubmitErrorTest:355-400.",
+      "coverageRisk": "low: the unavailableInputs check moves into the parity test (and becomes an equality, stronger than nonEmpty). The deleted JVM tests use the async TxBuilder.complete(emulator, addr).await() overload; that path stays exercised by JavaEmulatorInteropTest:19-26 and the remaining EmulatorTest cases that call complete(emulator, ...).",
+      "ciSavingSec": 0,
+      "linesRemoved": 95,
+      "confidence": "high",
+      "verdict": "NARROWED",
+      "verification": "EmulatorTest:918-939 asserts rule == UtxoNotAvailable for a resubmitted signed tx under default rules. EmulatorParityTest:113-144 covers this on both platforms, and the precondition at :125-128 makes it spend the same input. No code dedupes by tx id, so a second tx with the same inputs takes the same path (EmulatorBase.scala:154-168). SubmitErrorTest:357-400 uses validators = Set(AllInputsMustBeInUtxoValidator), which gives the same first-failing rule as the defaults. Its nonEmpty check is subsumed once the proposed equality assertion is added to the parity test. EmulatorTest:557-584 is NOT a duplicate: it runs with validators = Set.empty (line 568). There the double spend is caught only by the mutator path: AllResolvedScripts/AllNeededScriptHashes returns BadInputsUTxO, which is thrown (PlutusScriptEvaluator.scala:197-204,579-585) and wrapped by the NonFatal catch into IllegalArgumentException (PlutusScriptsTransactionMutator.scala:105-110). No other test checks double-spend rejection with no validators. The only other empty-validator tests (EmulatorTest:624,791,860,897, TxBuilderTest:599, EmulatorParityTest:554) assert certificates, chaining or datums. Corrected action: add the unavailableInputs equality to EmulatorParityTest and delete EmulatorTest:918-939 and SubmitErrorTest:355-400. Keep EmulatorTest:557-584 as a single example (drop the forAll over the ADA amount, which reaches no branch) or move it into the parity test. Then Gen/ScalaCheckPropertyChecks become unused only if C17-3 also removes 500-555."
+    },
+    {
+      "id": "C17-3",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:73-111,146-172",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:80-112",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:114-152",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:154-187",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:500-555"
+      ],
+      "claim": "EmulatorTest:114-152 (applied log with slot 42 and spent inputs, getTransaction/getAppliedTx/hasTx/appliedTxs) asserts the same facts as EmulatorParityTest:73-111, line for line. EmulatorTest:154-187 (clearAppliedTxs keeps utxos and datums) is EmulatorParityTest:146-172. EmulatorTest:80-112 asserts less than either (utxos.size >= 2, some key from tx1). EmulatorTest:500-555 is a property over Gen.choose(100,1000) x Gen.choose(10,50) ADA amounts: whenever(initial > payment + 1) at 505 is always true for those ranges, and no amount reaches an emulator branch (C8: the cluster's only generators); its one extra fact is that every output lands at Input(tx.id, idx) with its own value, which the parity test checks only for Bob's output.",
+      "action": "In EmulatorParityTest:101-110 replace the 'every remaining UTxO comes from the tx' and 'Bob was paid' checks with: for each (out, idx) in tx.body.value.outputs.zipWithIndex assert emulator.utxos.get(Input(tx.id, idx)).contains(out.value), and assert emulator.utxos.size == tx.body.value.outputs.size. Delete EmulatorTest:80-112, 114-152, 154-187 and 500-555 (and the then-unused Gen and ScalaCheckPropertyChecks imports).",
+      "coverageRisk": "low: every deleted assertion is in the parity test after the action, and the parity test runs on JS too; EmulatorTest:80-112's 0.23 s is first-test warm-up and moves to another test.",
+      "ciSavingSec": 0.1,
+      "linesRemoved": 155,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "EmulatorTest:114-152 assertions map one-to-one to EmulatorParityTest:73-111: slot 42, applied.tx.id, applied.spent == initialUtxos, genesis input gone, getTransaction found/unknown, appliedTxIndex, getAppliedTx, hasTx, appliedTxs. EmulatorTest:154-187 (inline datum, then clearAppliedTxs empties log, index and set; utxos and datums preserved) maps to EmulatorParityTest:146-172, which is stronger: it also checks datums == extractDatums(tx). The deleted tests use validators = Set.empty with unsigned txs. The parity test uses the default rules with signed txs, which is a superset path for these bookkeeping facts. EmulatorTest:80-112: its only unique assertion is provider.utxos == initialUtxos before any submit (line 93). The proposed utxos.size == outputs.size check, with applied.spent == initialUtxos on a one-UTxO genesis, implies that the initial set held exactly that UTxO, so this is covered. EmulatorTest:500-555: amounts reach no branch, and whenever(initial > payment+1) is always true for 100-1000 vs 10-50. Its per-output Input(tx.id, idx) -> value check and its inputs-consumed check are covered by the proposed loop plus parity :100. Caveat: drop the Gen and ScalaCheckPropertyChecks imports only if 557-584 also goes (see C17-2, which keeps it)."
+    },
+    {
+      "id": "C17-4",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:189-217",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:277-286",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:219-242",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:451-474",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:222-243"
+      ],
+      "claim": "EmulatorTest:189-217 (one zero withdrawal from a pre-registered always-ok stake credential succeeds) is the first half of EmulatorTest:277-286, which builds the same emulator through emulatorWithReward(Coin.zero) and withdraws zero twice. EmulatorTest:219-242 and EmulatorJsTest:451-474 are the same test verbatim (the JS copy tests the Scala Emulator, not the JS facade); EmulatorParityTest:222-243 checks the same pre-registration on both platforms but lacks the deposit check (ConwayAccountState(reward, stakeAddressDeposit, None, None)).",
+      "action": "In EmulatorParityTest:236-242 assert emulator.certState.dstate.accounts.get(stakeCredential).contains(ConwayAccountState(Coin(1_000_000L), Coin(testEnv.protocolParams.stakeAddressDeposit), None, None)). Delete EmulatorTest:189-242 and EmulatorJsTest:451-474.",
+      "coverageRisk": "none: the deposit assertion moves into the shared test; the zero withdrawal stays in EmulatorTest:277-286 and in EmulatorJsTest:111-118 via JEmulator",
+      "ciSavingSec": 0.2,
+      "linesRemoved": 75,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "EmulatorTest:189-217 builds Emulator.withRegisteredStakeCredentials(alice 5000 ADA, script cred -> Coin.zero) and withdraws zero once. EmulatorTest:277-286 builds the same thing through emulatorWithReward(Coin.zero) (lines 268-273) and withdraws zero twice, a strict superset. EmulatorTest:219-242 and EmulatorJsTest:451-474 are the same test (42 ADA as Coin(42_000_000L) vs Coin.ada(42L)), and both use the Scala Emulator. The JVM and JS withRegisteredStakeCredentials both delegate to the shared EmulatorBase.certStateWithRegisteredCredentials (EmulatorBase.scala:852-863). That function builds ConwayAccountState(rewards, Coin(params.stakeAddressDeposit), None, None) for every credential, with no branch on KeyHash vs ScriptHash. So the parity test's KeyHash credential is equivalent, and the added deposit assertion (testEnv = CardanoInfo.mainnet, the same params as Context.testMainnet) covers both platforms."
+    },
+    {
+      "id": "C17-5",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:162-221",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:226-318",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:119-123",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:320-324"
+      ],
+      "claim": "The seven single-case fromException tests at 162-221 (BadInputs, BadCollateral, BadReference, OutsideValidityInterval, ValueNotConserved, NativeScripts, EmptyInputs) are each a row of the two tables at 226-291 (unclassified, asserts ValidationError class, rule and errorCode) and 293-318 (classified, asserts rule). The only thing the single tests add for the classified rows is the class check: the table at 316-317 asserts only .rule, which a ValidationError whose errorCode equals the case name would also pass. 119-123 (unknown message -> ValidationError) is 320-324 minus its rule assertion.",
+      "action": "In the table loop at 316-317 also assert SubmitError.fromException(ex).getClass.getSimpleName == expectedRule (the classified case classes are named after their rule). Move the two rationale comments at 169-171 and 179-180 to the table rows at 274-277. Delete 162-221 and 119-123.",
+      "coverageRisk": "none after the class assertion is added to the classified table",
+      "ciSavingSec": 0,
+      "linesRemoved": 60,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "Mapping of SubmitErrorTest:162-221:\n- BadInputs isInstanceOf UtxoNotAvailable (162-166): classified table row 294.\n- BadCollateral and BadReference, ValidationError plus rule (168-185): unclassified table 274-277, which also checks ValidationError class and errorCode at 280-289.\n- OutsideValidityInterval -> TransactionExpired, ValueNotConserved, NativeScripts -> ScriptFailure: classified rows 301-311.\n- EmptyInputs -> ValidationError: unclassified row 228.\nThe classified table at 315-316 checks only .rule. ValidationError.rule = errorCode.getOrElse(productPrefix) (BlockchainProvider.scala:466), so the class check is the only lost fact, as claimed. The classified cases define rule = productPrefix (BlockchainProvider.scala:430,435,440,450), so asserting getClass.getSimpleName == expectedRule is valid for UtxoNotAvailable, TransactionExpired, ValueNotConserved and ScriptFailure on the JVM; the test is in jvm/. SubmitErrorTest:119-123 calls the same parseValidationError fallback with a different unknown message, and 320-324 checks isInstanceOf[ValidationError] plus rule. Covered."
+    },
+    {
+      "id": "C17-6",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:174-192",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:877-891",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/EmulatorBase.scala:418-425"
+      ],
+      "claim": "EmulatorParityTest:188-191 says it guards against setSlot rebuilding the Context instead of copying it, but it starts from Context.testMainnet() and compares evaluatorMode to Context.testMainnet().evaluatorMode and network to Mainnet. Mutation that passes it: EmulatorState.withSlot building Context.testMainnet(slot) with the old slotConfig. Only EmulatorTest:877-891 (starts from EvaluateAndComputeCost) catches that, and only on the JVM, so the JS Emulator is unguarded.",
+      "action": "Build the emulator in EmulatorParityTest:176 with initialContext = Context.testMainnet().copy(evaluatorMode = EvaluatorMode.EvaluateAndComputeCost) and assert emulator.evaluatorMode == EvaluatorMode.EvaluateAndComputeCost after setSlot and after tick. Then delete EmulatorTest:877-891.",
+      "coverageRisk": "none: the JVM assertion moves into the shared test and now runs on JS too",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-7",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:464-498",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/Entities.scala:329-337",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:245-252"
+      ],
+      "claim": "'doesn't allow stake registration and withdrawal in the same tx' asserts message.contains(\"missing reward accounts\"), but every WithdrawalsNotInRewardsException message contains that literal, even when missingRewardAccounts is empty (Entities.scala:335), so a rejection for a non-draining withdrawal passes too. It also builds a Network.Testnet stake address (475) for a mainnet emulator, so the account is missing for two reasons; the test passes only because WithdrawalsDelegated/WithdrawalsNotInRewards sort before WrongNetworkWithdrawalValidator. It rebuilds the always-ok stake triple that the alwaysOkStake object at 245-252 already provides.",
+      "action": "Use alwaysOkStake.address/.script/.witness (Mainnet). Assert result.left.map(_.rule) == Left(\"WithdrawalsNotInRewards\") and that the message names alwaysOkStake.address's reward account (or, on the Left, pattern-match ValidationError and check errorCode). Delete the local triple at 472-481.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-8",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:640-649",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:802-833",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:907-911",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:1065-1072"
+      ],
+      "claim": "Eight certificate rejections in EmulatorTest (unknown pool retirement 644, non-future epoch 649, premature DRep deregistration 804, wrong DRep deposit 810, double DRep registration 821, wrong refund 833, past epoch 908, too-far epoch 911) and the manual-clock rejection in EmulatorJsTest:1069 assert only isLeft / !isSuccess. certTx (611-618) builds a tx with no inputs and zero fee, and validators = Set.empty, so a mutator that rejected these txs for any other reason (for example a StakePoolCertificates check firing on the wrong field) passes every one of them.",
+      "action": "Assert the rule of each rejection: result.left.map(_.rule) == Left(<expected rule>) with the rule name taken from TransactionException.ruleName of the exception each case is meant to hit (pool cases from the pool certificate mutator, DRep cases 'DRepCertificates' or the current name); in EmulatorJsTest:1069 assert result.errorRule.toOption.contains(\"TransactionExpired\").",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-9",
+      "check": "C6",
+      "scope": "merge-duplicate-tests",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorStateInvariantTest.scala:48-52",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:332-348"
+      ],
+      "claim": "'initial derives both caches from the log it is given' checks the derivation on an empty log only: an EmulatorState.initial that always set appliedTxIndex = Map.empty and appliedTxs = Set.empty passes it. EmulatorParityTest:332-348 pins the same derivation on a non-empty log (restored index, hash set and datums equal the original's), through the public constructor, on both platforms.",
+      "action": "Delete EmulatorStateInvariantTest:48-52 (keep the three compile-time tests).",
+      "coverageRisk": "none: the non-empty derivation is pinned by EmulatorParityTest:332-348",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "high",
+      "verdict": "CONFIRMED",
+      "verification": "EmulatorStateInvariantTest:48-52 checks only an empty log against empty caches, so it cannot detect a derivation that always returns empty. Both the JVM and JS Emulator constructors call the same 5-arg EmulatorState.initial overload (jvm Emulator.scala:39-44, js Emulator.scala:31-36; EmulatorBase.scala:484-516). That overload derives appliedTxIndex, appliedTxs and binaryDatums from the log. EmulatorParityTest:332-348 restores from a non-empty log through that constructor and asserts that index, set and datums equal the original's. An always-empty derivation would fail it. It runs on both platforms. The three compile-time tests (31-46) stay."
+    },
+    {
+      "id": "C17-10",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/main/scala/scalus/cardano/node/EmulatorJavaApi.scala:31-55",
+        "scalus-cardano-ledger/jvm/src/main/scala/scalus/cardano/node/EmulatorJavaApi.scala:68-72",
+        "scalus-cardano-ledger/jvm/src/main/scala/scalus/cardano/node/EmulatorJavaApi.scala:89-99",
+        "scalus-cardano-ledger/jvm/src/main/scala/scalus/cardano/node/Emulator.scala:101-105",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/EmulatorBase.scala:598-616",
+        "scalus-cardano-ledger/jvm/src/test/java/scalus/cardano/node/JavaEmulatorInterop.java:11-59"
+      ],
+      "claim": "JavaEmulatorInterop.java is 'the compile-time proof that the Emulator is usable from real Java', but it never calls getDatums, getAppliedTxLog, getAppliedTxHashes, getAppliedTxOrNull, getDatumOrNull, getProtocolParams, trySubmit(tx, debugScripts), findUtxosForInputs, findUtxosForAddressAsync, Emulator.withAddresses(List, Value), or the Builder's datums/addStakeRegistration/addPoolRegistration/addDRepRegistration; the JVM coverage baseline marks all of them unexecuted, along with SubmitResult.toEither/toString. A Java-hostile signature change to any of them (an Option return, a Scala Seq parameter, a default argument) would not fail the build.",
+      "action": "Add static methods to JavaEmulatorInterop.java that call each listed member with Java types (java.util.Map/Set/List, CompletableFuture.join), and assertions in JavaEmulatorInteropTest: after a submit, getAppliedTxLog().size() == 1, getAppliedTxHashes() contains the hash, getAppliedTxOrNull(unknown) == null, getDatumOrNull of an inline datum returns it, findUtxosForInputs of a spent input is empty, findUtxosForAddressAsync(...).join() equals findUtxosForAddress, getProtocolParams() == CardanoInfo.mainnet.protocolParams, and a Builder with one stake registration yields certState with that account.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -60,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-11",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockchainProvider.scala:510-519",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockchainProvider.scala:376-404",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/BlockchainProvider.scala:554-569",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:14-48"
+      ],
+      "claim": "fromHttpResponse's 4xx branch (517-519), which forwards to parseValidationError and is the path every Blockfrost 400 rejection takes, is never called by a test (uncovered in the baseline); SubmitErrorTest only calls parseValidationError directly. The rule of the network cases (ConnectionError .. InternalError, 378-404) is never asserted, and tryParseInputs' catch (565) is unreached: an out-of-range index such as '#99999999999' throws NumberFormatException and must be skipped, not fail the classification.",
+      "action": "Add to SubmitErrorTest: fromHttpResponse(400, \"BadInputsUTxO (<hash>#0)\") is UtxoNotAvailable with that input; fromHttpResponse(400, \"something\") is ValidationError; the rule of every fromHttpResponse network result equals its case name; parseValidationError(s\"BadInputsUTxO ${\"a\" * 64}#99999999999\") is UtxoNotAvailable with no inputs. Fold into the status table proposed in C17-12.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -20,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-12",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:14-48",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:52-117"
+      ],
+      "claim": "Seven fromHttpResponse tests (14-48) and ten parseValidationError tests (52-117) are one-line input -> class mappings, each a 4-6 line test with the same shape; 16-17 also uses isInstanceOf plus asInstanceOf where a pattern match does.",
+      "action": "Replace 14-48 with one table test of (status, message) -> (expected case name), asserting the class name and rule (and message for one row), and 52-62 plus 77-117 with one table of message -> expected case name. Keep 64-75 (input extraction) as is.",
+      "coverageRisk": "none: same inputs and stronger assertions (rule as well as class)",
+      "ciSavingSec": 0,
+      "linesRemoved": 45,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-13",
+      "check": "C1",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/js/src/main/scala/scalus/cardano/node/JEmulator.scala:185-221",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/EmulatorBase.scala:148-168",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/EmulatorBase.scala:261-272"
+      ],
+      "claim": "JEmulator.submitTx(bytes, debugScripts) has no runtime test in the repository: EmulatorJsTest never calls it and the npm tests reference it only in the type-check consumer (scalus-dts.consumer.ts). Its language resolution from the tx's scripts, the PlutusV1/V2/V3 mapping and the unknown-hash warning path are unexercised. On both platforms the guarantee in submitWith's doc (151-153) that debug scripts are used for one submission only and do not leak into later ones is untested; EmulatorBase.submit(tx, debugScripts) (261-265) is also unexecuted in the JVM baseline.",
+      "action": "In EmulatorJsTest add: a release PlutusV3 script that fails without traces, its debug build with a trace, submitTx(bytes, {hash: debugDoubleCborHex}) -> !isSuccess and logs non-empty; the same tx with an entry under an unknown hash -> logs empty and no exception. In EmulatorParityTest add: submitSync(failingTx, debugScripts) has logs, then submitSync(otherFailingTx) without debug scripts has empty logs.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -50,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-14",
+      "check": "C2",
+      "scope": "fill-gap",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/EmulatorBase.scala:701-702",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/EmulatorBase.scala:803-838",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:22-78"
+      ],
+      "claim": "In the (JVM-only) coverage baseline, evalQuery's UtxoSource.Or branch (701-702) is unexecuted, and JEmulator.toQuery never builds an Or, so no test of this cluster on either platform reaches it. buildInitialState's stake, pool and DRep registration mappings (812-831) are unexecuted on the JVM; the JS suite reaches them only through JEmulator.create, never through the shared Emulator.withState(EmulatorInitialState(...)) that both platforms expose.",
+      "action": "Add to EmulatorParityTest: findUtxosSync(UtxoQuery(UtxoSource.FromAddress(alice) || UtxoSource.FromAddress(bob))) returns the union and nothing else; Emulator.withState(EmulatorInitialState(stakeRegistrations = Seq(EmulatorStakeRegistration(cred, rewards, Some(pool))), poolRegistrations = Seq(...), drepRegistrations = Seq(EmulatorDRepRegistration(drep, deposit)))) yields the account with stakeAddressDeposit and the pool, the pool with stakePoolDeposit, and the DRep state.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": 0,
+      "linesRemoved": -35,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-15",
+      "check": "C5",
+      "scope": "adopt-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/testing/kit/TestUtil.scala:51-56",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:19-20",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorConcurrencyTest.scala:26-27",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/JavaEmulatorInteropTest.scala:16-17",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/SubmitErrorTest.scala:364",
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:33-34",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:23-24,695",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/DifferentialFixtureGenTest.scala:101"
+      ],
+      "claim": "Every file of the cluster except EmulatorStateInvariantTest redefines the all-zeros genesis hash, TransactionHash.fromByteString(ByteString.fromHex(\"0\" * 64)), which TestUtil.genesisHash in the shared test sources of the same module already provides for exactly this use ('for creating initial UTxOs in tests ... with Emulator').",
+      "action": "Import scalus.testing.kit.TestUtil.genesisHash in the seven files and delete the local definitions (EmulatorJsTest:695 uses TransactionHash.fromHex(\"0\" * 64) inline: replace it too).",
+      "coverageRisk": "none: same value",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-16",
+      "check": "C5",
+      "scope": "extract-helper",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:39-42",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:264,328,344,376,675,761",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:866-867",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorConcurrencyTest.scala:48-51"
+      ],
+      "claim": "Seeding 'Alice holds N ADA at genesis#i' is written out by hand about 16 times in EmulatorTest (Map(Input(genesisHash, 0) -> Output(Alice.address(Network.Mainnet), Value.ada(5000))) six times verbatim) and again in EmulatorJsTest and EmulatorConcurrencyTest, while EmulatorParityTest has a private genesisUtxos(values*) helper that does it.",
+      "action": "Move genesisUtxos(address, values*) next to TestUtil.genesisHash and use it in EmulatorTest, EmulatorParityTest, EmulatorJsTest:866-867 and EmulatorConcurrencyTest:48-51.",
+      "coverageRisk": "none: same values",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-17",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:620-662",
+        "scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/node/EmulatorTest.scala:893-916"
+      ],
+      "claim": "Both pool tests register mkPoolRegistration(params), then check that a retirement at a non-future epoch is rejected and one at the next epoch is accepted and recorded in pstate.retiring; 893-916 does it at a slot-derived epoch 250 and adds the too-far bound, 620-662 does it at the clamped epoch 208 and adds unknown-pool and re-registration. The shared steps are written twice.",
+      "action": "Merge into one test: register, setSlot(firstSlotOfEpoch(250)), reject unknown pool, reject epoch 250, reject 250 + poolRetireMaxEpoch + 1, accept 251 and check retiring, re-register and check the retirement is cancelled and futureStakePoolParams set. Drop the epoch-208 clamp assertion at 636-638 or keep it as one line.",
+      "coverageRisk": "low: the retirement checks at the clamped slot-0 epoch become checks at epoch 250; the clamp itself stays asserted if line 638 is kept",
+      "ciSavingSec": 0,
+      "linesRemoved": 15,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-18",
+      "check": "C9",
+      "scope": "simplify",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:58-62",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:94,177,828,874,1027",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:425-428,478-480,733-737,1085-1088",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:663,676,703,215"
+      ],
+      "claim": "EmulatorJsTest has an optionsWith(utxos) helper (58-62) but still writes js.Array(utxos.map { case (i, o) => JsUtxo.wrap(i, o) }*) by hand five more times inside other option literals, spells out address.encode.getOrElse(fail(\"test address must encode to bech32\")) six times, and converts a Uint8Array to hex with ByteString.fromArray(b.toByteArray).toHex four times.",
+      "action": "Add jsUtxos(utxos) returning the js.Array, bech32(address), and hexOf(Uint8Array) private helpers, and use them at the listed lines (aliceStakeEmulator and clockedEmulator then share the js.Object.assign merge already at 886-888).",
+      "coverageRisk": "none: same assertions",
+      "ciSavingSec": 0,
+      "linesRemoved": 20,
+      "confidence": "medium",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-19",
+      "check": "C9",
+      "scope": "style",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/DifferentialFixtureGenTest.scala:139-141",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/DifferentialFixtureGenTest.scala:175-179",
+        "scalus-cardano-ledger/js/src/test/scala/scalus/cardano/node/EmulatorJsTest.scala:111"
+      ],
+      "claim": "DifferentialFixtureGenTest prints five FIXTURE_* lines on every CI run (175-179), although each failing assertion's regenerate message already carries the value to copy; and it hand-rolls a hex encoder with a sign-extension comment (139-141) where ByteString.fromArray(bytes).toHex does the same. EmulatorJsTest:111 is titled 'Emulator.withRegisteredStakeCredentials allows zero-withdrawal' but drives JEmulator.create with stakeRegistrations.",
+      "action": "Drop the printlns (or print only the budget inside the budget assertion's clue); replace hex(...) with ByteString.fromArray(...).toHex; rename EmulatorJsTest:111 to 'Emulator.create with a stake registration allows a zero withdrawal without a registration tx'.",
+      "coverageRisk": "none",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high",
+      "verdict": "UNVERIFIED"
+    },
+    {
+      "id": "C17-20",
+      "check": "C4",
+      "scope": "to-property",
+      "module": "scalus-cardano-ledger",
+      "evidence": [
+        "scalus-cardano-ledger/shared/src/test/scala/scalus/cardano/node/EmulatorParityTest.scala:416-462",
+        "scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/node/EmulatorBase.scala:650-670"
+      ],
+      "claim": "The three examples 'a slot change within an epoch leaves the donations pending' (416-425), 'a move to an earlier epoch leaves ...' (438-447) and 'a donation made after a move back moves into the treasury once' (449-462) are instances of one law of EmulatorBase.atSlot: after setSlot(s) from slot p with donation d and treasury t, treasury' = t + d and donation' = 0 if epochOf(s) > epochOf(p), else both unchanged; the slot is s. Each example builds and signs a donation tx just to put d in the state. None of them tests the exact boundary (firstSlotOfEpoch(e) - 1 vs firstSlotOfEpoch(e)).",
+      "action": "Replace the three tests with one property: start from EmulatorBase.fromState(EmulatorState.initial(State(donation = d), context at slot p with treasury t, Map.empty, Vector.empty), ...), generate a sequence of target slots biased to firstSlotOfEpoch(e) - 1, firstSlotOfEpoch(e) and earlier epochs, apply setSlot/tick, and compare treasury, donation and slot to a fold of the law. Keep 370-390 (donation via a real tx and TreasuryValueMismatch) and 427-436 (tick across three boundaries) as end-to-end examples.",
+      "coverageRisk": "low: the deleted examples reach the donation through a submitted tx; that path stays covered by 370-390 and 427-436",
+      "ciSavingSec": 0,
+      "linesRemoved": 5,
+      "confidence": "medium",
+      "verdict": "CONFIRMED",
+      "verification": "The law matches EmulatorBase.atSlot (EmulatorBase.scala:657-670). If epochOf(s) > epochOf(env.slot), donation becomes 0, treasury becomes t + d, and slot becomes s; otherwise only the slot changes. setSlot goes through withSlot -> atSlot (EmulatorBase.scala:111,423-424), and tick(n) = setSlot(env.slot + n) (line 176). So all three examples are instances: tick(100) inside the epoch, setSlot back to epoch-1, and back-then-forward crossings, where p is the current env.slot, not a high-water mark. fromState is private[scalus] and in the shared source (EmulatorBase.scala:640), so it is reachable from the shared test package. Caveats for the property:\n(1) The model must use slotConfig.epochOf, not the generator's epoch label. epochOf clamps every slot <= zeroSlot to zeroEpoch (SlotConfig.scala:26-28; mainnet zeroEpoch 208), so firstSlotOfEpoch(e) for e < zeroEpoch does not map back to e.\n(2) The claim that no example hits the exact boundary is half right. Example 449-462 sets firstSlotOfEpoch(epoch) exactly, but no example checks firstSlotOfEpoch(e)-1.\n(3) The examples also exercise one end-to-end fact that the kept tests lack: after a move back, a donation tx stating treasury 1000 is accepted (452-454). That is minor, because the property asserts the same env.treasury directly."
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 7 findings of scope merge-duplicate-tests, to-property or main-bug; 6 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}

@@ -1,0 +1,382 @@
+{
+  "cluster": "prelude.list",
+  "summary": "One suite, ListTest (3210 lines, 195 tests), against prelude List.scala (1761 lines). C7: the suite takes 5.1 s; the slowest test is findUniqueOrFail at 0.14 s, almost all time is about 18 ms of lowering per budget pin, and the JVM properties cost about 1 ms each, so there is no ci-time finding; removing alias tests saves about 0.5 s. Coverage data does not exist for List.scala (F-9 excludes @Compile prelude files), so C2 is by reading. The main weakness: every property runs only on the JVM, while on-chain List[BigInt] ops lower to separate intrinsics checked at 2-6 tiny inputs (C23-3); several pins use closed expressions whose budget does not depend on the input (C23-5), and fold, foreach and groupBy properties cannot see element order (C23-6, C23-7). One main-code defect: Show[List] renders a trailing \", \" (C23-1). The per-case test split (commit 8dc0493c8) is deliberate and is not re-proposed; the indexOf/deleteFirst/distinct/diff pins stay because C10-11 relies on them.",
+  "behaviors": [
+    {
+      "pass": "List object",
+      "name": "empty, singleton, apply, from(IterableOnce), from(java.lang.Iterable)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:17-23",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:25-44",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:122-141",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:143-161"
+      ]
+    },
+    {
+      "pass": "List object",
+      "name": "range (inclusive), rangeUntil (exclusive), fill (times <= 0 gives Nil)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:163-196",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:198-239",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:241-291"
+      ]
+    },
+    {
+      "pass": "List object",
+      "name": "map2 truncates to the shorter list",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:293-332"
+      ]
+    },
+    {
+      "pass": "List object",
+      "name": "unboxedNil native element representation (only outside the cluster: UnboxedNilTest)",
+      "tests": []
+    },
+    {
+      "pass": "List codecs",
+      "name": "listToData / listFromData roundtrip (see C23-5: on-chain pins never traverse)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:334-368"
+      ]
+    },
+    {
+      "pass": "List codecs",
+      "name": "listPairToData / listPairsFromData (map encoding of List[BuiltinPair])",
+      "tests": []
+    },
+    {
+      "pass": "List typeclasses",
+      "name": "listEq, listOrd (lexicographic)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:370-416",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:418-466"
+      ]
+    },
+    {
+      "pass": "List typeclasses",
+      "name": "showList renders [a, b] (see C23-1: renders [a, b, ])",
+      "tests": []
+    },
+    {
+      "pass": "List sorting",
+      "name": "sort (stable merge sort), quicksort alias, insertionSort, sortWith, isSorted, isStrictlyAscending, isSortedWith",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:468-580"
+      ]
+    },
+    {
+      "pass": "List indexing",
+      "name": "isEmpty, nonEmpty, isDefinedAt, get, at, !! (negative and out-of-range indexes)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:625-839"
+      ]
+    },
+    {
+      "pass": "List indexing",
+      "name": "at at vanRossemPV lowers through dropList (see C23-5: constant input)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:3179-3209"
+      ]
+    },
+    {
+      "pass": "List indexing",
+      "name": "head, headOption, last, lastOption, tail, init (empty list fails)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2170-2393",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:3047-3072"
+      ]
+    },
+    {
+      "pass": "List search",
+      "name": "contains, find, findMap, exists, forall, count, indexOf, indexOfOption",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:841-854",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1801-1871",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1945-2168"
+      ]
+    },
+    {
+      "pass": "List search",
+      "name": "findUniqueOrFail / singleOrFail fail with the given message; findUniqueOrElse (fallback value path untested)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:46-120"
+      ]
+    },
+    {
+      "pass": "List grouping",
+      "name": "groupBy, groupMap, groupMapReduce into SortedMap (in-group order unchecked, see C23-6)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:856-985"
+      ]
+    },
+    {
+      "pass": "List concat family",
+      "name": "prepended/+:, prependedAll/++:, appended/:+, appendedAll/:++/concat/++",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1062-1588"
+      ]
+    },
+    {
+      "pass": "List transforms",
+      "name": "map, flatMap, filter, filterNot, filterMap, flatten, zip, reverse, foreach",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:582-623",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:987-1060",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1590-1799",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:3074-3156"
+      ]
+    },
+    {
+      "pass": "List folds",
+      "name": "foldLeft, foldRight, length, size (fold order unchecked, see C23-7)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1873-1943",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2297-2367"
+      ]
+    },
+    {
+      "pass": "List slicing",
+      "name": "drop, dropRight, dropWhile, take, takeRight, takeWhile (n <= 0, n > length)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2395-2610",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2690-2904"
+      ]
+    },
+    {
+      "pass": "List set ops",
+      "name": "deleteFirst, distinct, diff (intrinsified on-chain)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2611-2688",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2906-3045"
+      ]
+    },
+    {
+      "pass": "List interop",
+      "name": "asScala, asScalus roundtrip; toScalaList (only outside the cluster)",
+      "tests": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:3158-3163"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "C23-1",
+      "module": "scalus-core",
+      "verdict": "CONFIRMED",
+      "check": "C2",
+      "scope": "main-bug",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:309-316",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/Show.scala:45-55",
+        "scalus-core/jvm/src/test/scala/scalus/cardano/onchain/plutus/prelude/ShowTest.scala:43-46"
+      ],
+      "claim": "By reading (not executed): showList appends \", \" after every element, including the last, so List(1, 2).show is \"[1, 2, ]\" and List(1).show is \"[1, ]\". Show[Data] for a Data list (Show.scala:45-55) puts the separator only between elements and ShowTest pins \"[0, \\\"0011\\\"]\". No test in the repository calls Show[List[T]].",
+      "action": "Add a ListTest case: assertEvalEq(List.empty[BigInt].show, \"[]\"), assertEvalEq(List.singleton(BigInt(1)).show, \"[1]\"), assertEvalEq(Cons(BigInt(1), Cons(BigInt(2), Nil)).show, \"[1, 2]\"). Main-code note only: emit the separator before every element except the first, as Show[Data] does.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.05,
+      "linesRemoved": -10,
+      "confidence": "high",
+      "findingsLog": "F-66",
+      "verification": "List.scala:309-316: `go` adds `head.show` and then \", \" for every Cons, with no special case for the last element. The final result is \"[\" + go + \"]\", so List(1,2).show gives \"[1, 2, ]\" and List(1).show gives \"[1, ]\". Nil gives \"[]\". Show[Data] in Show.scala:44-55 (showBuiltinList) puts \", \" only between elements, and ShowTest.scala:43-46 pins \"[0, \\\"0011\\\"]\". The bug is reachable: `showList` is a public given in the List companion, so any `xs.show` on a List[T: Show] uses it, on-chain (log/trace messages) and off-chain (the JVM evaluates the same Scala code). A repo-wide grep finds no other definition of Show[List] and no test that calls it. Adding the three assertEvalEq cases is pure new coverage. They fail on the current main code until the separator is fixed."
+    },
+    {
+      "id": "C23-2",
+      "module": "scalus-core",
+      "verdict": "UNVERIFIED",
+      "check": "C2",
+      "scope": "fill-gap",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:237-255",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:267-282",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:1139-1150",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:602-608",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:81-87",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:535-536"
+      ],
+      "claim": "Three List behaviors have no or almost no test. (1) listPairToData and listPairsFromData (List[BuiltinPair] encoded as a Data map): no test source uses List[BuiltinPair]. (2) findUniqueOrElse with a non-failing fallback: the only call (81-87) takes the success path; the zero-match and two-match paths are reached only through findUniqueOrFail, where orElse fails. (3) isSortedWith has two on-chain examples (535-536) and no property, unlike isSorted.",
+      "action": "Add: a JVM roundtrip property for List[BuiltinPair[BigInt, ByteString]] through toData/fromData plus one on-chain assertEvalEq; two assertEvalEq cases for findUniqueOrElse(_ === 5, _ => BigInt(0)) on lists with zero and two matches (expect 0); add isSortedWith(_ < _) to the existing isSorted property at 498-508 (it must equal isSorted).",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -0.1,
+      "linesRemoved": -30,
+      "confidence": "medium"
+    },
+    {
+      "id": "C23-3",
+      "module": "scalus-core",
+      "verdict": "UNVERIFIED",
+      "check": "C2",
+      "scope": "fill-gap",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/compiler/intrinsics/IntrinsicsNativeList.scala:27-95",
+        "scalus-core/shared/src/main/scala/scalus/compiler/intrinsics/BuiltinListSupport.scala:28-87",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2611-2622",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2906-2913",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2970-2977",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:484-507"
+      ],
+      "claim": "Every property in ListTest uses check, which runs only the Scala method bodies on the JVM. On-chain, List[BigInt] uses the native list representation and many ops lower to separate intrinsic code (IntrinsicsNativeList: isEmpty, head, tail, map, filter, foldLeft, foldRight, find, contains, indexOf, deleteFirst, distinct, diff; BuiltinListSupport bodies for contains/indexOf/deleteFirst/distinct/diff). That code is checked only at 2-6 hand-picked inputs per op (lists of at most 3 elements, values 1-3). A bug in an intrinsic that shows only on longer lists, duplicates or negative values passes the whole suite.",
+      "action": "Add a differential helper to EvalTestKit (additive only; the file is copied into scalus-testkit main, build.sbt:699): checkEvalAgrees[A1: ToData: FromData, T: ToData](inline code: A1 => T)(using Arbitrary[A1]) that compiles `(d: Data) => code(d.to[A1]).toData` once and, per sample, asserts the evaluated term equals Term.Const(code(sample).toData). In ListTest, add one property per intrinsified op (map, filter, foldLeft, foldRight, find, contains, indexOf, deleteFirst, distinct, diff, length, reverse, appendedAll, drop, dropRight, init on non-empty), with a local size-capped generator (0-10 elements, values Gen.choose(-3, 3), the pattern of 583-589) so duplicates and hits are frequent and CEK cost stays low.",
+      "coverageRisk": "none: adds coverage only",
+      "ciSavingSec": -2,
+      "linesRemoved": -80,
+      "confidence": "medium"
+    },
+    {
+      "id": "C23-4",
+      "module": "scalus-core",
+      "verdict": "NARROWED",
+      "check": "C3",
+      "scope": "merge-duplicate-tests",
+      "evidence": [
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:322",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:442",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:611",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:937",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:958-964",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:1377",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:767-802",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:804-839",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2297-2331",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2333-2367",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1062-1096",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1098-1132",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1262-1296",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1298-1332",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1334-1396",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1398-1460",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1462-1524",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1526-1588"
+      ],
+      "claim": "These operators are `inline def` forwarders: !! = at, size = length, quicksort = sort, +: = prepended, :+ = appended, :++ = concat = ++ = appendedAll. They inline to the same SIR, so their tests repeat the target's test: the '!!' test is the 'at' test with the same six pins (1464/244143), 'size' repeats 'length' with the same three pins, ':+' and '+:' repeat the pins of 'appended' and 'prepended' (1264/274395 x3, 3264/594395, 4696/890757, 6128/1187119), and the ':++', 'concat' and '++' groups (6 tests each) repeat 'appendedAll' with the same pins (for example 6328/1221190 at 1393, 1457, 1521, 1585).",
+      "action": "Delete the '!!' and 'size' tests; add one line each to 'at' and 'length' (assertEvalEq(xs.!!(1), xs.at(1)) style). Keep the '+:' property (right-associative operand order is worth pinning) and delete its three pins; same for ':+'. Replace the ':++', 'concat' and '++' groups with one JVM property `a :++ b === a.appendedAll(b) && a.concat(b) === a.appendedAll(b) && (a ++ b) === a.appendedAll(b)` and one assertEvalEq per operator. Rename the 'quicksort' test to 'sort' (it holds the only sort pins) with one quicksort alias line. Do not touch ++: (its pins use other inputs) or contains/exists/indexOf/isDefinedAt/head/last (own lowering or own intrinsics).",
+      "coverageRisk": "low: an alias that stops forwarding still fails the alias property; only a budget difference of an alias would go unseen. Keep the appendedAll, prepended, appended, at, length pins and the indexOf/deleteFirst/distinct/diff pins that C10-11 (compiler.lowering.intrinsics) relies on.",
+      "ciSavingSec": 0.5,
+      "linesRemoved": 295,
+      "confidence": "high",
+      "verification": "The aliases are confirmed as inline forwarders: !! at List.scala:937, :+ at 958, :++/concat/++ at 961-967, size at 1377, quicksort at 442, and +: at 322. The SIR plugin phase runs after firstTransform (Plugin.scala:169), so the inlines are already expanded before the plugin sees them. Each pin matches its target: !! (ListTest:804-839) repeats `at` (767-802) case for case, with 1464/244143 x3 and the same 6 assertEvalFails. size (2333-2367) repeats length (2297-2331): 2264/382777, 4930/936028, 7596/1489279. +: repeats prepended (1264/274395 x3), and :+ repeats appended (3264/594395, 4696/890757, 6128/1187119). quicksort (546-579) holds the only sort pins. The gap: `:++ - empty :++ single` (ListTest ~1398-1410) and `++ - empty ++ single` (~1526-1538) evaluate `List.empty[BigInt] :++ list`, with a literal empty on the left and the argument on the right, pinned at 2964/548466. No appendedAll or concat test has this shape. `appendedAll - empty append single` uses list=empty and appends a literal singleton (3264/596466). So the proposed one-property-plus-one-assertEvalEq replacement would lose this pin."
+    },
+    {
+      "id": "C23-5",
+      "module": "scalus-core",
+      "verdict": "UNVERIFIED",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:776-799",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:813-836",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2215-2230",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2278-2285",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2377-2384",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:3056-3071",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:3179-3209",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:342-367"
+      ],
+      "claim": "Pins that cannot see the operation. The no-argument assertEvalWithBudgets form compiles a closed expression, and the budgets show the work is gone: at(0) and at(1) on a two-element list cost the same 1464/244143 (also for !!), last on one and two elements costs the same 632/100844, head and tail of a singleton cost 200/16100 (one constant), init on one and two elements costs the same 400/48100. A mutation that makes at, last or init walk the list twice keeps every pin green. The 'at with vanRossemPV uses dropList intrinsic' test compiles the same closed expression, asserts only v11 <= v9 steps, and never checks for DropList. The three ToData <-> FromData pins (347, 356, 365) are all 432/74033 for 0, 1 and 3 elements: the round trip is an identity on the native representation, so none of them exercises listToData or listFromData.",
+      "action": "Switch these pins to the argument form `(list: List[BigInt]) => list.at(1)` with the list passed as Data (as the get tests do) and re-pin; keep the closed-expression assertEvalFails cases. In the vanRossemPV test, pass the list as an argument, assert containsBuiltin(term, DefaultFun.DropList) (the pattern of IntrinsicResolverTest.scala:341, 385) and strict `<` on steps. Keep one ToData pin and delete the other two, or replace them with a List[(BigInt, BigInt)] or case-class element list that really converts.",
+      "coverageRisk": "none: the same behaviors are pinned against runtime input",
+      "ciSavingSec": 0,
+      "linesRemoved": 10,
+      "confidence": "high"
+    },
+    {
+      "id": "C23-6",
+      "module": "scalus-core",
+      "verdict": "UNVERIFIED",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:856-870",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:902-913",
+        "scalus-core/shared/src/main/scala/scalus/cardano/onchain/plutus/prelude/List.scala:778-797"
+      ],
+      "claim": "The groupBy and groupMap properties compare `scalusList.quicksort === scalaList.asScalus.quicksort`, so the element order inside a group is never asserted, and the on-chain pins have at most one element per group. groupMap prepends and then reverses every group (`.mapValues { _.reverse }`, List.scala:797) to keep input order, as Scala's groupMap does. Mutation: delete the reverse; all tests still pass.",
+      "action": "Compare the groups directly, without quicksort: `scalusList === scalaList.asScalus`. Add one on-chain pin with two elements in one group, e.g. List(1, 3, 2) grouped by _ % 2 gives {0 -> [2], 1 -> [1, 3]}.",
+      "coverageRisk": "none: stronger check of the same behavior",
+      "ciSavingSec": -0.02,
+      "linesRemoved": -10,
+      "confidence": "high"
+    },
+    {
+      "id": "C23-7",
+      "module": "scalus-core",
+      "verdict": "UNVERIFIED",
+      "check": "C6",
+      "scope": "strengthen-assertion",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1873-1878",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:1909-1914",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:3119-3127"
+      ],
+      "claim": "foldLeft, foldRight and foreach are checked only with `_ + _` / a running sum, which is commutative and associative: a foldRight that folds from the left, or a foreach that visits in reverse, passes every property and every pin (the pins also use _ + _ from 0). Both fold properties also draw an unused `value: BigInt`.",
+      "action": "Use an order-sensitive combiner: foldLeft with (acc, x) => acc * 3 + x, foldRight with (x, acc) => acc * 3 + x (or build a list and compare to the Scala result); for foreach append to a ListBuffer and compare to list.asScala. Drop the unused value parameter. Optionally change one on-chain pin per fold to the same non-commutative combiner and re-pin.",
+      "coverageRisk": "none: stronger check of the same behavior",
+      "ciSavingSec": 0,
+      "linesRemoved": 0,
+      "confidence": "high"
+    },
+    {
+      "id": "C23-8",
+      "module": "scalus-core",
+      "verdict": "UNVERIFIED",
+      "check": "C8",
+      "scope": "generator",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:841-847",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2039-2049",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2106-2113",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2611-2622",
+        "scalus-core/shared/src/test/scala/scalus/uplc/test/ArbitraryInstances.scala:360-364"
+      ],
+      "claim": "contains, indexOfOption, indexOf and deleteFirst draw `value: BigInt` independently of the list from ScalaCheck's arbBigInt (9 special values at weight 5/19, else wide random). A distribution simulation (not a test run) gives about 11% of samples where the value is in the list, so about 89 of 100 cases test only 'not found'; found-at-head versus found-later is rarer still. arbList also has no size cap, which is why the flatten test defines its own capped generator (583-589).",
+      "action": "Add a local Gen[(List[BigInt], BigInt)] that draws the value from the list half the time (Gen.oneOf(arbitrary[BigInt], Gen.oneOf(list.asScala)) for a non-empty list) and use it in these four properties with forAll; reuse it for the C23-3 differential properties.",
+      "coverageRisk": "none: wider coverage of the same properties",
+      "ciSavingSec": 0,
+      "linesRemoved": -10,
+      "confidence": "medium"
+    },
+    {
+      "id": "C23-9",
+      "module": "scalus-core",
+      "verdict": "UNVERIFIED",
+      "check": "C9",
+      "scope": "simplify",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:126-195",
+        "scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala:197-271",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:36-43",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:679-688",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:2395-2414"
+      ],
+      "claim": "All 217 assertEvalWithBudgets calls in ListTest pass a one-element Seq(compilerOptions -> ExUnits(...)). With one entry equal to the suite's given Options this is the same check as assertEvalWithBudget(code, arg, expected, ExUnits(...)) (same compile, same lowering, same budget and term assertions); each call spends two extra lines on `Seq(` and `)`. The per-case test split (commit 8dc0493c8, so that one run reports every budget mismatch) is deliberate and stays.",
+      "action": "Mechanically rewrite each `assertEvalWithBudgets(code, arg, expected, Seq(compilerOptions -> ExUnits(m, s)))` to `assertEvalWithBudget(code, arg, expected, ExUnits(m, s))` (and the closed-expression form likewise); budgets do not change. Keep the per-case test methods. Check that scripts/update-budgets.py still parses the failure message (the two helpers differ only by the ' for $opts' suffix).",
+      "coverageRisk": "none: same assertions, same budgets",
+      "ciSavingSec": 0,
+      "linesRemoved": 430,
+      "confidence": "high"
+    },
+    {
+      "id": "C23-10",
+      "module": "scalus-core",
+      "verdict": "UNVERIFIED",
+      "check": "C5",
+      "scope": "simplify",
+      "evidence": [
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:127",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:148",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:163-170",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:856-870",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:902-913",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:946-957",
+        "scalus-core/shared/src/test/scala/scalus/cardano/onchain/plutus/prelude/ListTest.scala:3158-3163"
+      ],
+      "claim": "Small repeats in ListTest. 43 properties assert both `scalaResult.asScalus === scalusResult` and `scalusResult.asScala == scalaResult`; one direction implies the other given the asScala/asScalus roundtrip property at 3158-3163. The groupBy, groupMap and groupMapReduce properties copy the same 9-line size-plus-forall-get comparison.",
+      "action": "Keep one direction (scalusResult.asScala == scalaResult) in each property; in the forAll properties delete the second assert line. Add a private helper sameGroups(scalus: SortedMap[K, V], scala: Map[K, V]) and use it in the three group properties (together with C23-6).",
+      "coverageRisk": "none: the dropped direction is implied by the roundtrip property",
+      "ciSavingSec": 0,
+      "linesRemoved": 25,
+      "confidence": "medium"
+    }
+  ],
+  "verification": "Verify agent, read-only, 2026-10-22: 2 findings of scope merge-duplicate-tests, to-property or main-bug; 1 confirmed, 1 narrowed, 0 disproved and dropped [P2-12]. Other findings are unverified."
+}
