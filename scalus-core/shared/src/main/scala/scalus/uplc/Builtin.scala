@@ -514,12 +514,11 @@ class CardanoBuiltins(
                   case (VCon(aCon), VCon(Constant.List(tp, l))) =>
                       if aCon.tpe != tp then throw new KnownTypeUnliftingError(tp, args(0))
                       else VCon(Constant.List(tp, aCon :: l))
-                  case (elem, VList(elems)) =>
-                      VList(elem :: elems)
-                  // BuiltinValue-typed list: promote to VList on first cons
-                  case (elem, VCon(Constant.List(DefaultUni.BuiltinValue, _))) =>
-                      VList(elem :: Nil)
-                  case _ => throw new DeserializationError(DefaultFun.MkCons, args(1))
+                  // The tail is not a list constant.
+                  case (VCon(_), _) => throw new DeserializationError(DefaultFun.MkCons, args(1))
+                  // The head is not a constant, such as a `constr` value. Plutus unlifts both
+                  // arguments as constants, so this fails even on a `(list value)`.
+                  case _ => throw new DeserializationError(DefaultFun.MkCons, args(0))
           ,
           builtinCostModel.mkCons
         )
@@ -528,11 +527,7 @@ class CardanoBuiltins(
     val HeadList: BuiltinRuntime =
         mkMeaning(
           All("a", (DefaultUni.ProtoList $ "a") ->: TVar("a")),
-          (_: Logger, args: Seq[CekValue]) =>
-              args(0) match
-                  case VList(elems) => elems.head
-                  case other        => VCon(other.asList.head)
-          ,
+          (_: Logger, args: Seq[CekValue]) => VCon(args(0).asList.head),
           builtinCostModel.headList
         )
 
@@ -542,7 +537,6 @@ class CardanoBuiltins(
           All("a", (DefaultUni.ProtoList $ "a") ->: (DefaultUni.ProtoList $ "a")),
           (_: Logger, args: Seq[CekValue]) =>
               args(0) match
-                  case VList(elems)                 => VList(elems.tail)
                   case VCon(Constant.List(tpe, ls)) => VCon(Constant.List(tpe, ls.tail))
                   case _ => throw new DeserializationError(DefaultFun.TailList, args(0))
           ,
@@ -553,11 +547,7 @@ class CardanoBuiltins(
     val NullList: BuiltinRuntime =
         mkMeaning(
           All("a", (DefaultUni.ProtoList $ "a") ->: Type(Bool)),
-          (_: Logger, args: Seq[CekValue]) =>
-              args(0) match
-                  case VList(elems) => VCon(asConstant(elems.isEmpty))
-                  case other        => VCon(asConstant(other.asList.isEmpty))
-          ,
+          (_: Logger, args: Seq[CekValue]) => VCon(asConstant(args(0).asList.isEmpty)),
           builtinCostModel.nullList
         )
 

@@ -52,8 +52,8 @@ object JitRuntime {
       *   - pair constant: 0, with exactly 1 branch.
       *
       * Anything else fails: a `Data` constant (case on `Data` is a PV12 feature, see
-      * [[caseIndexOnData]]), any other constant, a `ListValue` (the CEK machine does not case on a
-      * `VList`) and a function. The fields that the branch takes are applied by [[applyFields]].
+      * [[caseIndexOnData]]), any other constant and a function. The fields that the branch takes
+      * are applied by [[applyFields]].
       *
       * Code compiled for PV11 calls this method; code compiled for PV12 calls [[caseIndexOnData]]
       * (`JIT.genCaseDispatch` chooses at JIT-compile time).
@@ -167,24 +167,22 @@ object JitRuntime {
 
     /** The `CekValue` the CEK machine would hold for `v`.
       *
-      * A constant becomes `VCon`, a `ConstrValue` `VConstr`, a `ListValue` `VList`. A function has
-      * no `CekValue` form: a `LamValue` becomes a `VLamAbs` and a `DelayValue` a `VDelay` of the
-      * `error` term, stand-ins with the same memory usage (1, `MemoryUsage.memoryUsage`) and the
-      * same failure when a builtin unlifts them as a constant. Used by the bridge for the arguments
-      * of a builtin, and for the values in error messages.
+      * A constant becomes `VCon` and a `ConstrValue` `VConstr`. A function has no `CekValue` form:
+      * a `LamValue` becomes a `VLamAbs` and a `DelayValue` a `VDelay` of the `error` term,
+      * stand-ins with the same memory usage (1, `MemoryUsage.memoryUsage`) and the same failure
+      * when a builtin unlifts them as a constant. Used by the bridge for the arguments of a
+      * builtin, and for the values in error messages.
       */
     def toCekValue(v: UplcValue): CekValue = v match
         case c: Constant          => CekValue.VCon(c)
         case ConstrValue(tag, as) => CekValue.VConstr(Word64(tag), as.map(toCekValue))
-        case ListValue(elems)     => CekValue.VList(elems.map(toCekValue))
         case _: LamValue          => CekValue.VLamAbs("jit", Term.Error(), Nil)
         case _: DelayValue        => CekValue.VDelay(Term.Error(), Nil)
 
     /** A short description of a value for an error message. */
     def describe(v: UplcValue): String = v match
-        case c: Constant      => c.toString.take(80)
-        case c: ConstrValue   => s"constr ${c.tag} with ${c.args.size} fields"
-        case ListValue(elems) => s"list of ${elems.size} values"
-        case _: LamValue      => "a function"
-        case _: DelayValue    => "a delayed term"
+        case c: Constant    => c.toString.take(80)
+        case c: ConstrValue => s"constr ${c.tag} with ${c.args.size} fields"
+        case _: LamValue    => "a function"
+        case _: DelayValue  => "a delayed term"
 }

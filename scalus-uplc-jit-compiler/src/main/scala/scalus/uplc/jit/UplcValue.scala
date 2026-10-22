@@ -9,27 +9,21 @@ import scalus.uplc.eval.{BudgetSpender, Logger, MachineParams}
   * |:--------------|:-----------------------------------------------------------|
   * | `Constant`    | `VCon`                                                     |
   * | `ConstrValue` | `VConstr`                                                  |
-  * | `ListValue`   | `VList`                                                    |
   * | `LamValue`    | `VLamAbs`, or a `VBuiltin` that takes a term argument next |
   * | `DelayValue`  | `VDelay`, or a `VBuiltin` that takes a force next          |
   *
   * A constant is the `scalus.uplc.Constant` the CEK machine holds in `VCon`, so it keeps its type:
   * a list constant knows its element type also when it is empty, and `mkCons` checks it as the CEK
-  * machine does. `ConstrValue` and `ListValue` exist only because their fields can hold JIT
-  * functions, which no `CekValue` can hold. The erasure of the union is `Object`, so generated code
-  * passes values without casts.
+  * machine does. `ConstrValue` exists only because its fields can hold JIT functions, which no
+  * `CekValue` can hold. The erasure of the union is `Object`, so generated code passes values
+  * without casts.
   */
-type UplcValue = Constant | ConstrValue | ListValue | LamValue | DelayValue
+type UplcValue = Constant | ConstrValue | LamValue | DelayValue
 
 /** The value of `(constr tag a1 .. an)`, as `CekValue.VConstr`. `tag` is the `Word64` of the term,
   * held in a signed `Long`.
   */
 final case class ConstrValue(tag: Long, args: List[UplcValue])
-
-/** A list whose elements are not all constants, as `CekValue.VList`: `mkCons` builds one when it
-  * prepends to a `ListValue` or to a list constant of element type `BuiltinValue`.
-  */
-final case class ListValue(elems: List[UplcValue])
 
 /** A function value: a compiled `(lam x body)`, or a partly applied builtin that takes a term
   * argument next. A lambda of generated code compiles to this interface through

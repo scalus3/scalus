@@ -36,12 +36,20 @@
   it) or 3.3.8.** The `_3` libraries are unchanged. The sbt 2 build of `scalus-sbt-plugin` still
   uses Scala 3.8.4, because sbt 2.0.x requires it.
 
+### Deprecated
+
+- `CekValue.VList`. Plutus has no list of non-constant values, and since the `mkCons` fix below
+  nothing creates one. The experimental JIT drops its counterpart, `ListValue`.
+
 ### Fixed
 
 - **`equalsData` and `Data` equality compare `Data.Map` entries in order, as Plutus does. Before, two
   maps with the same entries in a different order, or with a repeated entry, were equal, so the
   CEK and the Emulator returned `True` where the node returns `False`. Scala code that compares
   `Data` maps with `==` now sees the order.**
+- `mkCons` fails for a non-constant head, such as a `constr` value, as Plutus does, on the CEK machine
+  and in the JIT. Before, consing onto a `(list value)` constant succeeded, and dropped the elements
+  of a non-empty one.
 - `Term.~=~` compares the number of `Constr` fields and `Case` branches.
 - `Transaction.fromCbor` accepts a transaction without the `isValid` flag, `[body, witnesses,
   auxiliary data]`, as cardano-node 11.1.3 does, with `isValid = true`. A decoded transaction

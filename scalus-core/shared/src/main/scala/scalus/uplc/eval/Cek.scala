@@ -7,7 +7,7 @@ import scalus.cardano.ledger.*
 import scalus.uplc.Term.*
 import scalus.utils.ScalusSourcePos
 
-import scala.annotation.{switch, tailrec}
+import scala.annotation.{nowarn, switch, tailrec}
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.{immutable, mutable}
@@ -502,12 +502,16 @@ enum CekValue {
     )
     case VConstr(tag: Word64, args: Seq[CekValue])
 
-    /** A list of arbitrary CekValues. Analogous to VConstr for constructors. Used for lists with
-      * non-constant elements (e.g., native Constr values). Created by MkCons/Nil on
-      * BuiltinValue-typed lists.
+    /** A list of arbitrary CekValues. Plutus has no such value: a builtin list holds constants
+      * only, and `mkCons` fails for a non-constant head. Nothing creates a `VList` since 1.4.1.
       */
-    case VList(elems: scala.List[CekValue])
+    @deprecated(
+      "Plutus has no list of non-constant values; nothing creates VList",
+      "1.4.0"
+    ) case VList(elems: scala.List[CekValue])
 
+    // The match must name the deprecated VList to stay exhaustive.
+    @nowarn("cat=deprecation")
     override def toString: String = this match
         case VCon(const)              => s"VCon($const)"
         case VDelay(term, _)          => s"VDelay($term)"
@@ -1741,20 +1745,8 @@ class CekMachine(
             case VLamAbs(name, term, env) => dischargeCekValEnv(env, LamAbs(name, term))
             case b: VBuiltin              => builtinTerm(b)
             case VConstr(tag, args)       => Constr(tag, args.map(dischargeCekValue).toList)
-            case VList(elems)             =>
-                // Best-effort discharge: when every element discharges to a Constant, emit a
-                // Constant.List. If any element is non-constant (closure / partial), there is
-                // no faithful Constant.List representation, so fail explicitly rather than
-                // silently substituting `Bool(false)` (which can produce ill-typed terms and
-                // mask bugs).
-                val discharged = elems.map(dischargeCekValue)
-                val constants = discharged.collect { case Term.Const(c, _) => c }
-                if constants.length != discharged.length then
-                    throw new IllegalStateException(
-                      s"VList contains non-constant elements; cannot discharge to a Constant.List " +
-                          s"(${discharged.length} elements, ${constants.length} are constants)"
-                    )
-                Term.Const(Constant.List(DefaultUni.BuiltinValue, constants))
+            // Only the deprecated VList, which nothing creates, reaches this case.
+            case other => throw new IllegalStateException(s"Cannot discharge $other")
     }
 
     private def spendBudget(

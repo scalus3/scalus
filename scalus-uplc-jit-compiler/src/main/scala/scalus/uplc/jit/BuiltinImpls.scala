@@ -229,19 +229,18 @@ object BuiltinImpls {
                 case (c: Constant, Constant.List(tp, elems)) =>
                     if c.tpe != tp then throw new KnownTypeUnliftingError(tp, toCekValue(x))
                     else Constant.List(tp, c :: elems)
-                case (elem, ListValue(elems)) => ListValue(elem :: elems)
-                // a list of element type BuiltinValue becomes a ListValue on the first cons
-                case (elem, Constant.List(DefaultUni.BuiltinValue, _)) => ListValue(elem :: Nil)
-                case _ => throw new DeserializationError(MkCons, toCekValue(xs))
+                // The tail is not a list constant.
+                case (_: Constant, _) => throw new DeserializationError(MkCons, toCekValue(xs))
+                // The head is not a constant, such as a `constr` value. As in the CEK machine and
+                // Plutus, this fails even on a `(list value)`.
+                case _ => throw new DeserializationError(MkCons, toCekValue(x))
         }
     }
 
     def headList(l: Logger, b: BudgetSpender, p: MachineParams, xs: UplcValue): UplcValue = {
         constCost(b, HeadList, p.builtinCostModel.headList)
         run(HeadList) {
-            xs match
-                case ListValue(elems) => elems.head
-                case other            => asList(other).head
+            asList(xs).head
         }
     }
 
@@ -249,7 +248,6 @@ object BuiltinImpls {
         constCost(b, TailList, p.builtinCostModel.tailList)
         run(TailList) {
             xs match
-                case ListValue(elems)          => ListValue(elems.tail)
                 case Constant.List(tpe, elems) => Constant.List(tpe, elems.tail)
                 case _ => throw new DeserializationError(TailList, toCekValue(xs))
         }
@@ -258,9 +256,7 @@ object BuiltinImpls {
     def nullList(l: Logger, b: BudgetSpender, p: MachineParams, xs: UplcValue): UplcValue = {
         constCost(b, NullList, p.builtinCostModel.nullList)
         run(NullList) {
-            xs match
-                case ListValue(elems) => bool(elems.isEmpty)
-                case other            => bool(asList(other).isEmpty)
+            bool(asList(xs).isEmpty)
         }
     }
 
@@ -283,8 +279,7 @@ object BuiltinImpls {
 
     /** Costs the count as a literal, as `DropListCostingFun`, which matches the count as an integer
       * constant before the builtin runs: another first argument fails there, with a `MatchError`. A
-      * count outside `Int` drops `Int.MaxValue` elements, as the CEK machine and Plutus do. Only a
-      * list constant is accepted: the CEK machine fails on a `VList`.
+      * count outside `Int` drops `Int.MaxValue` elements, as the CEK machine and Plutus do.
       */
     def dropList(
         l: Logger,

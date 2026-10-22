@@ -3,7 +3,7 @@ package scalus.uplc.jit
 import scalus.cardano.ledger.{Language, MajorProtocolVersion, Word64}
 import scalus.uplc.eval.*
 import scalus.uplc.jit.nativestack.StackThresholdException
-import scalus.uplc.{BuiltinSemanticsVariant, Constant, DeBruijn, DefaultUni, Term}
+import scalus.uplc.{BuiltinSemanticsVariant, Constant, DeBruijn, Term}
 
 /** Evaluates a UPLC term on the calling thread, as the CEK machine of `vm` does: the same result
   * term, the same exception and the same spent budget.
@@ -170,20 +170,14 @@ object UplcCompiler {
     }
 
     /** The result term of a JIT value, as the CEK machine discharges its result ([EV-7]): a
-      * constant becomes `Term.Const`, a `ConstrValue` `Term.Constr` of its fields, a `ListValue` of
-      * constants a list constant of element type `BuiltinValue` (`Cek.scala` `dischargeCekValue`).
-      * `None` for a value with a function in it, or a list with a non-constant element.
+      * constant becomes `Term.Const`, a `ConstrValue` `Term.Constr` of its fields (`Cek.scala`
+      * `dischargeCekValue`). `None` for a value with a function in it.
       */
     private def toTerm(v: UplcValue): Option[Term] = v match
         case c: Constant => Some(Term.Const(c))
         case ConstrValue(tag, as) =>
             val fields = as.map(toTerm)
             if fields.forall(_.isDefined) then Some(Term.Constr(Word64(tag), fields.map(_.get)))
-            else None
-        case ListValue(elems) =>
-            val constants = elems.collect { case c: Constant => c }
-            if constants.size == elems.size then
-                Some(Term.Const(Constant.List(DefaultUni.BuiltinValue, constants)))
             else None
         case _ => None
 }

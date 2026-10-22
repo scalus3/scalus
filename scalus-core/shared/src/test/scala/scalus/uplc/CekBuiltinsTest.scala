@@ -5,7 +5,7 @@ import scalus.*
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.compile
-import scalus.cardano.ledger.MajorProtocolVersion
+import scalus.cardano.ledger.{MajorProtocolVersion, Word64}
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.Constant.{asConstant, Pair}
@@ -245,6 +245,14 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
         // should throw if constant types don't match
         assertTermEvalThrows[Exception](
           !MkCons $ Constant.Unit $ Constant.List(DefaultUni.Integer, Nil)
+        )
+        // Plutus unlifts the head as a constant, so a `constr` value fails, also on a `(list value)`
+        val constr = Constr(Word64.Zero, Nil)
+        assertTermEvalThrows[BuiltinError](
+          !MkCons $ constr $ Const(Constant.List(DefaultUni.BuiltinValue, Nil))
+        )
+        assertTermEvalThrows[BuiltinError](
+          !MkCons $ constr $ Const(Constant.List(DefaultUni.Integer, Nil))
         )
     }
 
