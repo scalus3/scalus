@@ -38,6 +38,7 @@
 
 ### Fixed
 
+- `Term.~=~` compares the number of `Constr` fields and `Case` branches.
 - `Transaction.fromCbor` accepts a transaction without the `isValid` flag, `[body, witnesses,
   auxiliary data]`, as cardano-node 11.1.3 does, with `isValid = true`. A decoded transaction
   encodes back to its original bytes until it is changed. The Emulator's `maxTxSize` check counts

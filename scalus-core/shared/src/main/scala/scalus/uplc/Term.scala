@@ -359,9 +359,11 @@ enum Term:
         case (Const(c1, _), Const(c2, _))           => c1 == c2
         case (Builtin(b1, _), Builtin(b2, _))       => b1 == b2
         case (Error(_), Error(_))                   => true
-        case (Constr(t1, a1, _), Constr(t2, a2, _)) => t1 == t2 && a1.zip(a2).forall(_ ~=~ _)
-        case (Case(a1, c1, _), Case(a2, c2, _))     => (a1 ~=~ a2) && c1.zip(c2).forall(_ ~=~ _)
-        case _                                      => false
+        case (Constr(t1, a1, _), Constr(t2, a2, _)) =>
+            t1 == t2 && a1.size == a2.size && a1.zip(a2).forall(_ ~=~ _)
+        case (Case(a1, c1, _), Case(a2, c2, _)) =>
+            (a1 ~=~ a2) && c1.size == c2.size && c1.zip(c2).forall(_ ~=~ _)
+        case _ => false
 
     /** Position-ignoring structural inequality. Negation of `~=~`. */
     infix def ~!=~(that: Term): Boolean = !(this ~=~ that)
