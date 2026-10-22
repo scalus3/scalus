@@ -4,6 +4,7 @@ import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import io.bullet.borer.derivation.key
 import org.typelevel.paiges.Doc
+import scalus.serialization.cbor.Cbor as ScalusCbor
 import scalus.uplc.builtin.{platform, ByteString}
 import scalus.uplc.{DeBruijnedProgram, Program, ProgramFlatCodec}
 import scalus.utils.{Pretty, Style}
@@ -25,12 +26,16 @@ sealed trait PlutusScript extends Script {
     /** Cached in-memory program, set via companion factory to avoid CBOR round-trip. */
     @transient @volatile private[ledger] var _cachedProgram: Program | Null = null
 
-    /** Get the program, preferring the cached in-memory version over CBOR deserialization. */
+    /** Get the program, preferring the cached in-memory version over CBOR deserialization.
+      *
+      * Bytes after the script's CBOR byte string are ignored. Whether the language allows them is
+      * [[isWellFormed]]'s question.
+      */
     def program: Program = {
         val p = _cachedProgram
         if p != null then p
         else
-            val deserialized = Program.fromCborByteString(script)
+            val deserialized = DeBruijnedProgram.fromCborPrefix(script.bytes).program.toProgram
             _cachedProgram = deserialized
             deserialized
     }
@@ -41,7 +46,8 @@ sealed trait PlutusScript extends Script {
     /** Get the De Bruijn-indexed program, preserving source annotations when available.
       *
       * A script decoded from CBOR has no annotations to preserve, so it is decoded straight to the
-      * De Bruijn form the evaluator runs, without a round trip through named variables.
+      * De Bruijn form the evaluator runs, without a round trip through named variables. Bytes after
+      * the script's CBOR byte string are ignored, as in [[program]].
       */
     def deBruijnedProgram: DeBruijnedProgram = {
         val p = _cachedProgram
@@ -50,7 +56,7 @@ sealed trait PlutusScript extends Script {
             val d = _cachedDeBruijned
             if d != null then d
             else
-                val decoded = DeBruijnedProgram.fromCbor(script.bytes)
+                val decoded = DeBruijnedProgram.fromCborPrefix(script.bytes).program
                 _cachedDeBruijned = decoded
                 decoded
     }
@@ -63,6 +69,15 @@ sealed trait PlutusScript extends Script {
 }
 
 object PlutusScript {
+
+    /** Whether the ledger can deserialise `script` as a `language` script in
+      * `majorProtocolVersion`, as `deserialiseScript` in plutus-ledger-api does.
+      *
+      * The script must start with a definite-length CBOR byte string that holds exactly one
+      * flat-encoded program and its padding, and the program may use only the builtins available to
+      * the language in that protocol version. Bytes after the byte string are allowed in Plutus V1
+      * and V2 scripts and rejected in later languages.
+      */
     def isWellFormed(
         script: ByteString,
         language: Language,
@@ -70,12 +85,18 @@ object PlutusScript {
     ): Boolean = {
         if majorProtocolVersion < language.introducedInVersion then return false
 
-        val ProgramFlatCodec.DecodeResult(DeBruijnedProgram(_, term), remaining) =
-            try DeBruijnedProgram.fromCborWithRemainingBytes(script.bytes)
+        val (flatEncoded, afterScript) =
+            try ScalusCbor.splitByteString(script.bytes)
             catch case NonFatal(_) => return false
 
-        if language != Language.PlutusV1 && language != Language.PlutusV2 && remaining.nonEmpty
+        if language != Language.PlutusV1 && language != Language.PlutusV2 && afterScript.nonEmpty
         then return false
+
+        val ProgramFlatCodec.DecodeResult(DeBruijnedProgram(_, term), afterProgram) =
+            try ProgramFlatCodec.decodeFlatWithRemainingBytes(flatEncoded)
+            catch case NonFatal(_) => return false
+
+        if afterProgram.nonEmpty then return false
 
         val collectedBuiltins = term.collectBuiltins
         val foundBuiltinsIntroducedIn =
