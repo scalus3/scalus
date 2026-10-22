@@ -1,0 +1,329 @@
+Source: https://scalus.org/docs/testing/local-devnet
+
+# Local Cardano Devnet with Yaci DevKit
+
+[Yaci DevKit](https://github.com/bloxbean/yaci-devkit) is a configurable local Cardano devnet running in Docker. It provides full ledger validation and Plutus script execution without external dependencies — no testnet ADA, no network latency, no third-party API limits.
+
+## Prerequisites
+
+- **Docker** — Running locally ([Install Docker](https://docs.docker.com/get-docker/))
+- **scalus-testkit** — Add to your test dependencies:
+
+```scala
+libraryDependencies += "org.scalus" %% "scalus-testkit" % scalusVersion % Test
+```
+
+  First run pulls the Yaci DevKit image (~1GB). Subsequent runs start in seconds.
+
+## Quick Start
+
+```scala
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.testing.yaci.YaciDevKit
+
+class MyTest extends AnyFunSuite with YaciDevKit {
+  test("submit transaction") {
+    val ctx = createTestContext()
+    // ctx.cardanoInfo, ctx.provider, ctx.alice.address, ctx.alice.signer ready to use
+  }
+}
+```
+
+Run with `sbt test` — the container starts automatically.
+
+## Why Yaci DevKit
+
+Running integration tests against preview/preprod testnets introduces:
+- Network latency (seconds per transaction)
+- Testnet ADA requirements
+- External infrastructure dependencies
+
+The Scalus [Emulator](/docs/testing/emulator) is excellent for fast development cycles — it runs Plutus scripts, validates transactions using Cardano ledger rules, and operates entirely in-memory with instant feedback. For most unit tests and rapid iteration, the Emulator is the right choice.
+
+Yaci DevKit complements the Emulator for scenarios requiring **complete Cardano node semantics**: the real Haskell node implementation, actual block production, consensus timing, and the full ledger rule set. Use it when you need confidence that your code works exactly as it will on mainnet.
+
+## Provider
+
+The `IntegrationTestContext` includes a `BlockchainProvider` connected to the container's Yaci Store API. This provides a Blockfrost-compatible interface locally — your [transaction building](/docs/transactions) code works the same against local devnet and real networks:
+
+```scala
+val ctx = createTestContext()
+
+// Same API as production Blockfrost
+val utxos = ctx.provider.findUtxos(ctx.alice.address).await()
+val params = ctx.provider.fetchLatestParams.await()
+```
+
+No API key needed — Yaci Store runs locally without authentication.
+
+## YaciDevKit Trait
+
+The `YaciDevKit` trait handles container lifecycle automatically via ScalaTest's `BeforeAndAfterAll` hooks. Extend it in your test suite to get a running devnet:
+
+```scala
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.testing.yaci.YaciDevKit
+import scalus.cardano.txbuilder.TxBuilder
+import scalus.cardano.ledger.Value
+import scalus.utils.await
+import scala.concurrent.duration.*
+
+class MyIntegrationTest extends AnyFunSuite with YaciDevKit {
+
+  test("submit transaction to local devnet") {
+    val ctx = createTestContext()
+
+    val tx = TxBuilder(ctx.cardanoInfo)
+      .payTo(recipientAddress, Value.ada(10))
+      .complete(ctx.provider, ctx.alice.address)
+      .await(30.seconds)
+      .sign(ctx.alice.signer)
+      .transaction
+
+    ctx.submitTx(tx) match {
+      case Right(txHash) =>
+        println(s"Transaction submitted: $txHash")
+        ctx.waitForBlock()
+      case Left(error) =>
+        fail(s"Submission failed: $error")
+    }
+  }
+}
+```
+
+## IntegrationTestContext
+
+`createTestContext()` returns an `IntegrationTestContext` containing everything needed for transaction building and submission:
+
+```scala
+trait IntegrationTestContext {
+  def cardanoInfo: CardanoInfo          // Protocol params + network + slot config
+  def provider: BlockchainProvider      // BlockfrostProvider to Yaci Store
+  def parties: IndexedSeq[TestParty]    // Pre-funded test parties
+  def alice: TestParty                  // First test party
+  def bob: TestParty                    // Second test party
+  def eve: TestParty                    // Third test party
+}
+
+case class TestParty(
+  party: Party,
+  address: ShelleyAddress,
+  addrKeyHash: AddrKeyHash,
+  signer: TransactionSigner
+)
+```
+
+The helper methods `submitTx()` and `waitForBlock()` handle common operations:
+
+```scala
+// Submit and wait for confirmation
+ctx.submitTx(tx) match {
+  case Right(txHash) => ctx.waitForBlock()
+  case Left(error) => // handle error
+}
+```
+
+Yaci DevKit produces blocks approximately every 2 seconds, so `waitForBlock()` is a simple sleep-based wait suitable for test scenarios.
+
+## Container Lifecycle
+
+Container management uses reference counting to allow multiple test suites to share a single container instance. The first suite to start acquires the container (starting it if needed), and the last suite to finish releases it:
+
+```scala
+override def beforeAll(): Unit = {
+  super.beforeAll()
+  _container = YaciContainer.acquire(yaciConfig)
+}
+
+override def afterAll(): Unit = {
+  YaciContainer.release()
+  super.afterAll()
+}
+```
+
+Container cleanup is automatic — [Testcontainers](https://www.testcontainers.org/) stops containers when the JVM exits. Enable `reuseContainer` to keep containers running between test executions.
+
+## Configuration
+
+Override `yaciConfig` to customize container behavior:
+
+```scala
+import scalus.testing.yaci.{YaciDevKit, YaciConfig}
+
+class MyIntegrationTest extends AnyFunSuite with YaciDevKit {
+  override def yaciConfig = YaciConfig(
+    enableLogs = true,           // Print container logs to console
+    reuseContainer = true,       // Reuse container across test runs
+    containerName = "my-devkit"  // Custom container name (for reuse)
+  )
+}
+```
+
+Setting `reuseContainer = true` significantly speeds up development iteration by keeping the container running between test executions. The container continues running with the same state, eliminating startup time.
+
+## Pre-funded Wallet
+
+Yaci DevKit provides a pre-funded test wallet using a fixed mnemonic:
+
+```
+test test test test test test test test test test test test
+test test test test test test test test test test test sauce
+```
+
+This 24-word mnemonic produces deterministic addresses that Yaci DevKit pre-funds with test ADA. The `TestContext` automatically creates a wallet using HD derivation path `m/1852'/1815'/0'/0/0`.
+
+  This is a **test-only** mnemonic. Never use it for real funds.
+
+## Additional Signing
+
+Some operations require multiple signers. The default `ctx.alice.signer` only includes the payment key. For stake operations or governance actions, construct a signer with additional keys from the `Party` object:
+
+```scala
+// Stake delegation requires both payment and stake keys
+val stakeSigner = new TransactionSigner(
+  Set(Party.Alice.account.paymentKeyPair, Party.Alice.account.stakeKeyPair)
+)
+
+TxBuilder(ctx.cardanoInfo)
+  .delegateTo(stakeAddress, poolId)
+  .complete(ctx.provider, ctx.alice.address)
+  .await(30.seconds)
+  .sign(stakeSigner)
+  .transaction
+```
+
+The `Party` account provides key pairs for different purposes:
+- `paymentKeyPair` - For transaction fees and payments
+- `stakeKeyPair` - For stake registration and delegation
+
+## Example: Minting Tokens
+
+Here's a complete example demonstrating minting tokens with a Plutus script:
+
+```scala
+import scalus.compiler.compile
+import scalus.uplc.builtin.Data
+import scalus.cardano.ledger.{Script, AssetName, Coin}
+import scalus.{toUplc, plutusV2}
+
+test("mint tokens with PlutusV2 script") {
+  val ctx = createTestContext()
+
+  // Always-succeeds minting policy
+  val mintingPolicy = compile { (_: Data, _: Data) => () }
+  val script = Script.PlutusV2(
+    mintingPolicy.toUplc().plutusV2.cborByteString
+  )
+  val policyId = script.scriptHash
+
+  val assetName = AssetName.fromString("TestToken")
+  val mintAmount = 1000L
+
+  val tx = TxBuilder(ctx.cardanoInfo)
+    .mint(script, Map(assetName -> mintAmount), ())
+    .payTo(ctx.alice.address, Value.asset(policyId, assetName, mintAmount, Coin.ada(2)))
+    .complete(ctx.provider, ctx.alice.address)
+    .await(30.seconds)
+    .sign(ctx.alice.signer)
+    .transaction
+
+  ctx.submitTx(tx) match {
+    case Right(txHash) =>
+      println(s"Minted $mintAmount tokens: $txHash")
+      ctx.waitForBlock()
+
+      // Verify minted tokens appear in wallet
+      val utxos = ctx.provider.findUtxos(ctx.alice.address).await()
+      val hasMintedTokens = utxos.exists { utxo =>
+        utxo.value.value.multiAsset.exists { case (pid, assets) =>
+          pid == policyId && assets.get(assetName).contains(mintAmount)
+        }
+      }
+      assert(hasMintedTokens, "Minted tokens should appear in wallet")
+
+    case Left(error) =>
+      fail(s"Minting failed: $error")
+  }
+}
+```
+
+## When to Use Which
+
+| Scenario | Emulator | Yaci DevKit |
+|----------|:--------:|:-----------:|
+| Unit tests for transaction logic | ✓ | |
+| Plutus script validation | ✓ | ✓ |
+| Fast development iteration | ✓ | |
+| Full Cardano node semantics | | ✓ |
+| Real block production timing | | ✓ |
+| Pre-deployment confidence testing | | ✓ |
+| CI/CD pipelines (speed matters) | ✓ | |
+| CI/CD pipelines (accuracy matters) | | ✓ |
+
+**Use Emulator** for rapid development cycles. It runs Plutus scripts and validates transactions using Scalus's ledger rule implementations — instant feedback, no Docker required.
+
+**Use Yaci DevKit** when you need the real Cardano node: complete ledger rules, actual block production, and mainnet-identical behavior. Ideal for final validation before deployment.
+
+## Multiplatform Support
+
+`scalus-testkit` is structured as a cross-platform module with shared abstractions in `shared/` and JVM-specific implementation in `jvm/`:
+
+```
+scalus-testkit/
+├── shared/src/main/scala/scalus/testing/
+│   ├── yaci/YaciConfig.scala           # Configuration (cross-platform)
+│   └── kit/Party.scala                  # Test party definitions
+│
+└── jvm/src/main/scala/scalus/testing/
+    ├── integration/
+    │   ├── IntegrationTestContext.scala  # Test context trait
+    │   └── YaciTestContext.scala         # Yaci implementation
+    └── yaci/
+        ├── YaciContainer.scala          # Docker container management (JVM-only)
+        └── YaciDevKit.scala             # ScalaTest integration (JVM-only)
+```
+
+This split exists because Yaci DevKit requires Docker/testcontainers (JVM-only) and Bloxbean Cardano Client libraries (JVM-only). The cross-platform abstractions like `TestContext` allow future alternative implementations for other platforms if suitable devnet solutions emerge for JavaScript or Native.
+
+## Troubleshooting
+
+### Container fails to start
+
+**Docker not running**: Ensure Docker Desktop (or daemon) is running:
+```bash
+docker info
+```
+
+**Port conflicts**: Yaci DevKit uses ports 3001, 8080, 10000. Check for conflicts:
+```bash
+docker ps
+```
+
+**Image pull fails**: Manually pull the image to see detailed errors:
+```bash
+docker pull bloxbean/yaci-devkit:latest
+```
+
+### Tests hang or timeout
+
+**Slow first run**: First execution downloads the ~1GB image. Set longer timeout or pre-pull the image.
+
+**Container reuse issues**: If using `reuseContainer = true` and tests fail unexpectedly, stop and remove the container:
+```bash
+docker stop my-devkit && docker rm my-devkit
+```
+
+### Transaction submission fails
+
+**Insufficient funds**: The pre-funded wallet has limited test ADA. For tests that consume many UTxOs, consider splitting operations across multiple test runs.
+
+**Script validation errors**: Enable container logs to see detailed Plutus execution traces:
+```scala
+override def yaciConfig = YaciConfig(enableLogs = true)
+```
+
+## See Also
+
+- [Emulator](/docs/testing/emulator) — In-memory Cardano node with Plutus execution and ledger validation
+- [Transaction Builder](/docs/transactions) — Building and submitting transactions
+- [Unit Testing](/docs/testing/unit-testing) — Property-based testing with ScalaCheck

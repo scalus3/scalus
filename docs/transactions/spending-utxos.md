@@ -1,0 +1,283 @@
+Source: https://scalus.org/docs/transactions/spending-utxos
+
+# Spending UTxOs: Inputs, Scripts, and Collateral
+
+This guide covers how to spend different types of UTxOs: from regular addresses, from script addresses, and using reference inputs.
+
+## Spending from Wallet / Public Key Address
+
+The simplest case is spending a UTxO locked by a public key:
+
+```scala copy
+val utxo: Utxo = // ... UTxO from a regular address
+
+TxBuilder(env)
+  .spend(utxo)  // Add as input
+  .payTo(recipient, Value.ada(10))
+  .build(changeTo = changeAddress)
+  .sign(signer)  // Must be signed by the address owner
+```
+
+You can also spend multiple UTxOs at once:
+
+```scala copy
+val utxos: Utxos = Map(
+  input1 -> output1,
+  input2 -> output2
+)
+
+TxBuilder(env)
+  .spend(utxos)  // Spend all UTxOs
+  .payTo(recipient, Value.ada(20))
+  .build(changeTo = changeAddress)
+```
+
+## Spending from Script Address
+
+When spending UTxOs locked by a validator script, you must provide a redeemer and the script itself:
+
+```scala copy
+import scalus.uplc.builtin.Data
+
+val scriptUtxo: Utxo = // ... UTxO at script address
+val redeemer = MyRedeemer(...)  // Your redeemer type
+
+// Spend with inline script
+TxBuilder(env)
+  .spend(scriptUtxo, redeemer, script)
+  .collaterals(collateralUtxo)  // Required for script execution
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+```
+
+  Script transactions require collateral inputs. These are only consumed if the script fails validation.
+
+### With Required Signers
+
+If your validator requires additional signatures:
+
+```scala copy
+TxBuilder(env)
+  .spend(scriptUtxo, redeemer, script)
+  .requireSignature(pubKeyHash1)
+  .requireSignature(pubKeyHash2)
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+  .sign(signer1)
+  .sign(signer2)  // Must provide all required signatures
+```
+
+Required signers appear in `TxInfo.signatories`, so on-chain validators can verify these signatures.
+
+## Spending with Attached Scripts
+
+You can attach a script multiple times, it will be reused for all inputs that reference it:
+
+```scala copy
+TxBuilder(env)
+  .spend(scriptUtxo1, redeemer1, script)  // attach a script
+  .spend(scriptUtxo2, redeemer2, script)  // Can reuse for multiple inputs
+  .collaterals(collateralUtxo)
+  .payTo(recipient, totalValue)
+  .build(changeTo = changeAddress)
+```
+
+TxBuilder will automatically find the script in the attached scripts map and use it for validation.
+
+## Delayed Redeemers
+
+For advanced cases where the redeemer depends on the final transaction structure,
+you can provide a function that computes the redeemer from the assembled transaction:
+
+```scala copy
+def buildRedeemer(tx: Transaction): Data = {
+  // Compute redeemer based on final transaction
+  val outputCount = tx.body.value.outputs.size
+  MyRedeemer(outputCount).toData
+}
+
+TxBuilder(env)
+  .spend(scriptUtxo, buildRedeemer, script)  // Redeemer computed after assembly
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+```
+
+The redeemer function is called after the transaction is assembled but before script evaluation, allowing self-referential validation logic.
+
+### Use Cases for Delayed Redeemers
+
+Delayed redeemers are useful when:
+
+1. **Input index validation**: Your validator needs to verify its position in the transaction inputs
+2. **Output verification**: The redeemer contains indices of outputs to validate
+3. **Self-referencing logic**: The script needs to know properties of the final transaction
+
+```scala copy
+// Example: Validator that checks its input index
+val buildIndexRedeemer: Transaction => Data = { tx =>
+  val myInputIndex = tx.body.value.inputs.indexWhere(_.transactionId == scriptUtxo.input.transactionId)
+  Data.I(myInputIndex)
+}
+
+TxBuilder(env)
+  .spend(scriptUtxo, buildIndexRedeemer, script)
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+```
+
+  When using `complete()`, delayed redeemers are automatically recomputed after inputs are selected and the transaction is balanced.
+
+## Reference Inputs
+
+Reference inputs allow scripts to read UTxOs without consuming them:
+
+```scala copy
+val referenceUtxo: Utxo = // ... UTxO with reference data
+
+TxBuilder(env)
+  .spend(myUtxo)
+  .references(referenceUtxo)  // Add as reference input
+  .payTo(recipient, Value.ada(10))
+  .build(changeTo = changeAddress)
+```
+
+Multiple reference inputs can be added:
+
+```scala copy
+TxBuilder(env)
+  .spend(myUtxo)
+  .references(refUtxo1, refUtxo2, refUtxo3)
+  .payTo(recipient, Value.ada(10))
+  .build(changeTo = changeAddress)
+```
+
+Reference inputs are visible in the script context but are not spent.
+
+## Collateral Inputs
+
+Script transactions require collateral to cover fees if validation fails:
+
+```scala copy
+val collateral: Utxo = // ... Pure ADA UTxO
+
+TxBuilder(env)
+  .spend(scriptUtxo, redeemer, script)
+  .collaterals(collateral)  // Add single collateral
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+```
+
+Multiple collateral inputs:
+
+```scala copy
+TxBuilder(env)
+  .spend(scriptUtxo, redeemer, script)
+  .collaterals(collateral1, collateral2)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+```
+
+  When using `complete()`, collateral inputs are automatically selected and added if the transaction includes script execution.
+  TxBuilder also automatically creates collateral return outputs when needed and respects the protocol's collateral requirements.
+
+## Reference Scripts
+
+CIP-33 reference scripts allow you to store a script in a UTxO and reference it in transactions, reducing transaction size and fees.
+
+### Using a Reference Script
+
+When spending a script UTxO, you can reference a script stored in another UTxO instead of including it in the transaction:
+
+```scala copy
+// UTxO containing the reference script
+val refScriptUtxo: Utxo = // ... UTxO with scriptRef field
+
+// UTxO locked by the script
+val scriptUtxo: Utxo = // ... UTxO to spend
+
+TxBuilder(env)
+  .references(refScriptUtxo)  // Add as reference input
+  .spend(scriptUtxo, redeemer)  // Script resolved from reference
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+```
+
+### Creating Outputs with Reference Scripts
+
+You can attach a script to an output for others to reference:
+
+```scala copy
+import scalus.cardano.ledger.{Output, Script}
+
+val outputWithScript = Output(
+  address = scriptAddress,
+  value = Value.ada(10),
+  datumOption = None,
+  scriptRef = Some(Script.PlutusV3(myScript))  // Attach reference script
+)
+
+TxBuilder(env)
+  .spend(utxo)
+  .output(outputWithScript)
+  .build(changeTo = changeAddress)
+```
+
+  Reference scripts are particularly useful for complex validators, as they significantly reduce transaction fees by not including the full script in each transaction.
+
+## Unified Spend API with Script Witness
+
+For consistency with other script operations (minting, staking, governance), you can use the unified spend API with explicit script witnesses using factory methods:
+
+```scala copy
+import scalus.cardano.txbuilder.ThreeArgumentPlutusScriptWitness.*
+import scalus.cardano.txbuilder.Datum.DatumInlined
+
+// With attached script and immediate redeemer
+val tx = TxBuilder(env)
+  .spend(scriptUtxo, attached(validatorScript, redeemer, DatumInlined))
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+
+// With reference script and immediate redeemer
+val tx = TxBuilder(env)
+  .references(refScriptUtxo)
+  .spend(scriptUtxo, reference(redeemer, DatumInlined))
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+
+// With delayed redeemer (computed from final transaction)
+val tx = TxBuilder(env)
+  .spend(scriptUtxo, attached(validatorScript, tx => computeRedeemer(tx), DatumInlined))
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+```
+
+### Factory Method Reference
+
+The `ThreeArgumentPlutusScriptWitness` companion object provides these factory methods:
+
+| Method | Description |
+|--------|-------------|
+| `attached(script, redeemer, datum)` | Attach script with immediate redeemer |
+| `attached(script, redeemerBuilder, datum)` | Attach script with delayed redeemer |
+| `reference(redeemer, datum)` | Use reference script with immediate redeemer |
+| `reference(redeemerBuilder, datum)` | Use reference script with delayed redeemer |
+
+The `datum` parameter specifies how the datum is provided:
+- `DatumInlined` - The datum is stored inline in the UTxO (most common)
+- `DatumValue(data)` - Provide the datum value explicitly (for UTxOs with datum hashes)
+
+  The factory methods automatically convert your redeemer type to `Data` using the `ToData` typeclass.
+
+## Next Steps
+
+- **[Minting & Burning](/docs/transactions/mint-burn-assets)** - Create and destroy native tokens
+- **[Validator Interactions](/docs/transactions/validator-interactions)** - Detailed guide on working with validators
+- **[Advanced Features](/docs/transactions/advanced-features)** - Learn about `complete()` and automatic input selection

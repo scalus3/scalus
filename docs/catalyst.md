@@ -1,0 +1,12 @@
+Source: https://scalus.org/docs/catalyst
+
+## Catalyst 
+
+This section covers Catalyst projects that were funded by the Cardano community.
+
+### Fund 11
+- Close-out report: [1100252 - Scalus - multiplatform Scala implementation of Cardano Plutus](/docs/catalyst/scalus-1100252)
+- Close-out report: [1100198 - Multiplatform Plutus Script Cost & Evaluation Library](/docs/catalyst/multiplatform-1100198)
+
+### Fund 13
+- Close-out report: [1300009 - Scalus: Multiplatform Tx Builder API](/docs/catalyst/txbuilder-1300009)

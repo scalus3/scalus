@@ -1,0 +1,501 @@
+Source: https://scalus.org/docs/language-guide/builtin-functions
+
+# Builtin Functions
+
+Cardano Plutus provides built-in functions optimized for blockchain execution. Scalus exposes these functions through the [`Builtins`](https://scalus.org/api/scalus/uplc/builtin/Builtins$.html) object with familiar Scala syntax.
+
+These builtin functions are automatically recognized by the Scalus compiler and compiled to their corresponding Plutus operations for efficient on-chain execution.
+
+## Plutus Versions
+
+Builtin functions are available in different Plutus versions:
+- **Plutus V1** - Original builtins (integers, bytestrings, lists, data, basic crypto)
+- **Plutus V2** - Added `serialiseData`, SECP256k1 signatures
+- **Plutus V3** - Added BLS12-381, Keccak-256, bitwise operations
+- **Plutus V3 (Protocol Version 11+)** - Added array operations, `dropList`, `ripemd_160`, BuiltinValue operations
+
+## Integer Operations
+
+Arithmetic and comparison operations on arbitrary-precision integers (`BigInt`).
+
+```scala
+import scalus.uplc.builtin.Builtins
+
+// Arithmetic
+val sum = Builtins.addInteger(BigInt(10), BigInt(20))
+val diff = Builtins.subtractInteger(BigInt(100), BigInt(30))
+val product = Builtins.multiplyInteger(BigInt(5), BigInt(7))
+val quotient = Builtins.divideInteger(BigInt(20), BigInt(4))      // floor division
+val quot = Builtins.quotientInteger(BigInt(20), BigInt(4))         // truncated division
+val remainder = Builtins.remainderInteger(BigInt(17), BigInt(5))
+val modulo = Builtins.modInteger(BigInt(17), BigInt(5))
+
+// Comparison
+val eq = Builtins.equalsInteger(BigInt(42), BigInt(42))
+val lt = Builtins.lessThanInteger(BigInt(3), BigInt(7))
+val lte = Builtins.lessThanEqualsInteger(BigInt(5), BigInt(5))
+
+// Or use operators
+val sumOp = BigInt(10) + BigInt(20)
+val eqOp = BigInt(42) == BigInt(42)
+```
+
+`divideInteger` uses floor division (rounds toward negative infinity), while `quotientInteger` uses truncated division (rounds toward zero). The difference matters for negative numbers.
+
+## ByteString Operations
+
+Operations on immutable byte arrays, organized by category.
+
+### Constructing
+
+```scala
+import scalus.uplc.builtin.{Builtins, ByteString}
+
+// Append two ByteStrings
+val concatenated = Builtins.appendByteString(
+  ByteString.fromHex("dead"),
+  ByteString.fromHex("beef")
+)
+
+// Prepend a byte (0-255)
+val withPrefix = Builtins.consByteString(BigInt(0xFF), ByteString.fromHex("1234"))
+```
+
+### Inspecting
+
+```scala
+// Length of ByteString
+val length = Builtins.lengthOfByteString(ByteString.fromHex("deadbeef"))  // 4
+
+// Get byte at index
+val byte = Builtins.indexByteString(ByteString.fromHex("deadbeef"), BigInt(0))  // 0xDE
+
+// Slice ByteString
+val slice = Builtins.sliceByteString(BigInt(1), BigInt(2), ByteString.fromHex("deadbeef"))  // hex"adbe"
+```
+
+### Comparing
+
+```scala
+// Equality
+val eq = Builtins.equalsByteString(
+  ByteString.fromHex("deadbeef"),
+  ByteString.fromHex("deadbeef")
+)  // true
+
+// Lexicographic comparison
+val lt = Builtins.lessThanByteString(
+  ByteString.fromHex("1234"),
+  ByteString.fromHex("5678")
+)  // true
+
+val lte = Builtins.lessThanEqualsByteString(
+  ByteString.fromHex("1234"),
+  ByteString.fromHex("1234")
+)  // true
+```
+
+### Bitwise Operations (Plutus V3+)
+
+Perform bitwise operations on ByteStrings. The `shouldPad` parameter controls behavior when ByteStrings have different lengths.
+
+See [CIP-122](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0122) for specification.
+
+```scala
+// Bitwise AND
+val and = Builtins.andByteString(false, ByteString.fromHex("0FFF"), ByteString.fromHex("FF"))  // hex"0F"
+val andPad = Builtins.andByteString(true, ByteString.fromHex("0FFF"), ByteString.fromHex("FF"))  // hex"0FFF"
+
+// Bitwise OR
+val or = Builtins.orByteString(false, ByteString.fromHex("0FFF"), ByteString.fromHex("FF"))  // hex"FF"
+
+// Bitwise XOR
+val xor = Builtins.xorByteString(false, ByteString.fromHex("0FFF"), ByteString.fromHex("FF"))  // hex"F0"
+
+// Bitwise complement (NOT)
+val complement = Builtins.complementByteString(ByteString.fromHex("FF"))  // hex"00"
+```
+
+### Bit Manipulation (Plutus V3+)
+
+See [CIP-122](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0122) and [CIP-123](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0123) for specifications.
+
+Bit indexing uses LSB (Least Significant Bit) ordering, meaning index 0 refers to the rightmost bit. For example, in `0x04` (binary `00000100`), bit 2 is set.
+
+```scala
+// Read a bit at index (index 0 is the rightmost/least significant bit)
+// Example: 0x0004 = binary 0000000000000100, so bit at index 2 is set
+val bit = Builtins.readBit(ByteString.fromHex("0004"), BigInt(2))  // true
+
+// Write bits at indices
+val modified = Builtins.writeBits(ByteString.fromHex("0000"), BuiltinList(BigInt(0), BigInt(1)), true)  // hex"0003"
+
+// Replicate a byte n times
+val repeated = Builtins.replicateByte(BigInt(4), BigInt(0xFF))  // hex"FFFFFFFF"
+```
+
+### Shifting and Rotating (Plutus V3+)
+
+See [CIP-123](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0123) for specification.
+
+```scala
+// Shift bits left (positive) or right (negative)
+val shiftLeft = Builtins.shiftByteString(ByteString.fromHex("000F"), BigInt(4))  // hex"00F0"
+val shiftRight = Builtins.shiftByteString(ByteString.fromHex("000F"), BigInt(-4))  // hex"0000"
+
+// Rotate bits
+val rotateLeft = Builtins.rotateByteString(ByteString.fromHex("000F"), BigInt(4))  // hex"00F0"
+val rotateRight = Builtins.rotateByteString(ByteString.fromHex("000F"), BigInt(-4))  // hex"F000"
+
+// Count set bits (population count)
+val popcount = Builtins.countSetBits(ByteString.fromHex("000F"))  // 4
+
+// Find first set bit index (-1 if none)
+val firstSet = Builtins.findFirstSetBit(ByteString.fromHex("0002"))  // 1
+```
+
+### Integer/ByteString Conversion (Plutus V2+)
+
+See [CIP-121](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0121) for specification.
+
+```scala
+// Convert ByteString to integer (big-endian or little-endian)
+val toIntBE = Builtins.byteStringToInteger(true, ByteString.fromHex("1234"))   // 4660 (big-endian)
+val toIntLE = Builtins.byteStringToInteger(false, ByteString.fromHex("3412"))  // 4660 (little-endian)
+
+// Convert integer to ByteString with specified length
+val fromIntBE = Builtins.integerToByteString(true, BigInt(2), BigInt(4660))   // hex"1234"
+val fromIntLE = Builtins.integerToByteString(false, BigInt(2), BigInt(4660))  // hex"3412"
+val minimal = Builtins.integerToByteString(true, BigInt(0), BigInt(4660))     // hex"1234" (minimal length)
+```
+
+## String Operations
+
+UTF-8 string operations.
+
+```scala
+// Concatenate strings
+val greeting = Builtins.appendString("Hello, ", "Cardano!")
+
+// Equality
+val eq = Builtins.equalsString("test", "test")
+
+// Convert to/from UTF-8 ByteString
+val encoded = Builtins.encodeUtf8("Hello")
+val decoded = Builtins.decodeUtf8(encoded)
+```
+
+## List Operations
+
+Operations on immutable linked lists (`BuiltinList`).
+
+```scala
+import scalus.uplc.builtin.{Builtins, BuiltinList}
+
+// Choose based on empty/non-empty
+val result = Builtins.chooseList(BuiltinList(1, 2, 3), "empty", "not empty")  // "not empty"
+
+// Construct list
+val list = Builtins.mkCons(BigInt(0), BuiltinList(BigInt(1), BigInt(2), BigInt(3)))
+
+// Deconstruct list
+val head = Builtins.headList(list)  // 0
+val tail = Builtins.tailList(list)  // [1, 2, 3]
+val isEmpty = Builtins.nullList(list)  // false
+
+// Drop first n elements (Plutus V3, PV 11+)
+val dropped = Builtins.dropList(BigInt(2), list)  // [2, 3]
+```
+
+## Array Operations (Plutus V3, PV 11+)
+
+O(1) indexed access to elements. See [CIP-156](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0156) for specification.
+
+Arrays are created from lists and provide efficient random access, unlike linked lists which require O(n) traversal.
+
+```scala
+import scalus.uplc.builtin.{Builtins, BuiltinList, BuiltinArray}
+
+// Convert list to array
+val list = BuiltinList(Builtins.iData(BigInt(10)), Builtins.iData(BigInt(20)), Builtins.iData(BigInt(30)))
+val array = Builtins.listToArray(list)
+
+// Get array length
+val len = Builtins.lengthOfArray(array)  // 3
+
+// Access element by index (O(1))
+val first = Builtins.indexArray(array, BigInt(0))   // iData(10)
+val second = Builtins.indexArray(array, BigInt(1))  // iData(20)
+```
+
+## Pair Operations
+
+Operations on pairs (2-tuples).
+
+```scala
+import scalus.uplc.builtin.{Builtins, BuiltinPair}
+
+val pair = BuiltinPair(BigInt(42), ByteString.fromHex("deadbeef"))
+
+// Extract elements
+val first = Builtins.fstPair(pair)   // 42
+val second = Builtins.sndPair(pair)  // hex"deadbeef"
+```
+
+## Data Operations
+
+Operations for Plutus's universal `Data` type, used for serialization and interoperability.
+
+### Creating Data
+
+```scala
+import scalus.uplc.builtin.{Builtins, Data}
+
+// Create Data from primitives
+val intData = Builtins.iData(BigInt(42))
+val bytesData = Builtins.bData(ByteString.fromHex("deadbeef"))
+val listData = Builtins.listData(BuiltinList(intData, bytesData))
+val mapData = Builtins.mapData(BuiltinList(Builtins.mkPairData(intData, bytesData)))
+val constrData = Builtins.constrData(BigInt(0), BuiltinList(intData, bytesData))
+```
+
+### Deconstructing Data
+
+```scala
+// Extract Data values
+val int = Builtins.unIData(intData)
+val bytes = Builtins.unBData(bytesData)
+val list = Builtins.unListData(listData)
+val map = Builtins.unMapData(mapData)
+val (tag, fields) = Builtins.unConstrData(constrData)
+```
+
+### Data Operations
+
+```scala
+// Choose based on Data variant
+val result = Builtins.chooseData(
+  someData,
+  constrCase = "constructor",
+  mapCase = "map",
+  listCase = "list",
+  iCase = "integer",
+  bCase = "bytestring"
+)
+
+// Compare Data values
+val eq = Builtins.equalsData(data1, data2)
+
+// Serialize Data to CBOR (Plutus V2+)
+val serialized = Builtins.serialiseData(someData)
+```
+
+### Monomorphic Constructors
+
+```scala
+// Create pairs and lists of Data
+val pairData = Builtins.mkPairData(intData, bytesData)
+val emptyList = Builtins.mkNilData()
+val emptyPairList = Builtins.mkNilPairData()
+```
+
+## Cryptographic Hash Functions
+
+### Hashing
+
+```scala
+// SHA-2 and SHA-3 (Plutus V1+)
+val sha2 = Builtins.sha2_256(ByteString.fromString("message"))    // 32 bytes
+val sha3 = Builtins.sha3_256(ByteString.fromString("message"))    // 32 bytes
+
+// BLAKE2b (Plutus V1+) - used extensively in Cardano
+val blake256 = Builtins.blake2b_256(ByteString.fromString("message"))  // 32 bytes
+val blake224 = Builtins.blake2b_224(ByteString.fromString("message"))  // 28 bytes
+
+// Keccak-256 (Plutus V3+) - Ethereum compatible
+// Note: This is original Keccak, not NIST SHA-3
+val keccak = Builtins.keccak_256(ByteString.fromString("message"))  // 32 bytes
+
+// RIPEMD-160 (Plutus V3, PV 11+) - Bitcoin compatible
+val ripemd = Builtins.ripemd_160(ByteString.fromString("message"))  // 20 bytes
+```
+
+See [CIP-158](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0158) for Keccak-256 and [CIP-127](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0127) for RIPEMD-160.
+
+### Digital Signatures
+
+```scala
+// Ed25519 signature verification (Plutus V1+)
+// publicKey: 32 bytes, message: any length, signature: 64 bytes
+val validEd = Builtins.verifyEd25519Signature(publicKey, message, signature)
+
+// ECDSA SECP256k1 signature verification (Plutus V2+)
+// publicKey: 33 bytes (compressed), messageHash: 32 bytes (pre-hashed!), signature: 64 bytes
+val validEcdsa = Builtins.verifyEcdsaSecp256k1Signature(publicKey, messageHash, signature)
+
+// Schnorr SECP256k1 signature verification (Plutus V2+)
+// publicKey: 32 bytes (x-only), message: any length, signature: 64 bytes
+val validSchnorr = Builtins.verifySchnorrSecp256k1Signature(publicKey, message, signature)
+```
+
+For `verifyEcdsaSecp256k1Signature`, the message must be pre-hashed (32 bytes). For Ed25519 and Schnorr, pass the original message.
+
+## BLS12-381 Pairing Operations (Plutus V3+)
+
+Advanced cryptographic operations for zero-knowledge proofs and pairing-based cryptography. See [CIP-381](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381) for specification.
+
+Scalus provides convenient wrappers in `scalus.cardano.onchain.plutus.prelude.bls12_381`:
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.bls12_381.{G1, G2, Scalar}
+
+// G1 operations (48-byte compressed points)
+val g1Zero = G1.zero
+val g1Gen = G1.generator
+val g1Sum = g1Point1 + g1Point2       // addition
+val g1Neg = -g1Point1                 // negation
+val g1Scaled = g1Point1.scale(scalar) // scalar multiplication
+val g1Compressed = g1Point1.compress  // to ByteString
+val g1FromHash = G1.hashToGroup(message, dst)
+
+// G2 operations (96-byte compressed points)
+val g2Zero = G2.zero
+val g2Gen = G2.generator
+val g2Sum = g2Point1 + g2Point2
+val g2Neg = -g2Point1
+val g2Scaled = g2Point1.scale(scalar)
+val g2Compressed = g2Point1.compress
+val g2FromHash = G2.hashToGroup(message, dst)
+```
+
+### Low-level Builtin Functions
+
+```scala
+import scalus.uplc.builtin.Builtins
+
+// G1 Group operations
+val g1Sum = Builtins.bls12_381_G1_add(g1Point1, g1Point2)
+val g1Neg = Builtins.bls12_381_G1_neg(g1Point1)
+val g1Scaled = Builtins.bls12_381_G1_scalarMul(scalar, g1Point1)
+val g1Equal = Builtins.bls12_381_G1_equal(g1Point1, g1Point2)
+
+// G1 Serialization
+val g1Compressed = Builtins.bls12_381_G1_compress(g1Point)      // 48 bytes
+val g1Uncompressed = Builtins.bls12_381_G1_uncompress(bytes)
+
+// G1 Hash to curve
+val g1FromHash = Builtins.bls12_381_G1_hashToGroup(message, dst)
+
+// G2 Group operations (same pattern as G1)
+val g2Sum = Builtins.bls12_381_G2_add(g2Point1, g2Point2)
+val g2Neg = Builtins.bls12_381_G2_neg(g2Point1)
+val g2Scaled = Builtins.bls12_381_G2_scalarMul(scalar, g2Point1)
+val g2Equal = Builtins.bls12_381_G2_equal(g2Point1, g2Point2)
+
+// G2 Serialization
+val g2Compressed = Builtins.bls12_381_G2_compress(g2Point)      // 96 bytes
+val g2Uncompressed = Builtins.bls12_381_G2_uncompress(bytes)
+
+// G2 Hash to curve
+val g2FromHash = Builtins.bls12_381_G2_hashToGroup(message, dst)
+```
+
+### Pairing Operations
+
+Used for verifying pairing equations like `e(P1, Q1) == e(P2, Q2)`:
+
+```scala
+// Miller loop computes intermediate pairing result
+val ml1 = Builtins.bls12_381_millerLoop(g1Point1, g2Point1)
+val ml2 = Builtins.bls12_381_millerLoop(g1Point2, g2Point2)
+
+// Multiply Miller loop results (for multi-pairing)
+val mlProduct = Builtins.bls12_381_mulMlResult(ml1, ml2)
+
+// Final verification: checks if e(P1,Q1) == e(P2,Q2)
+val isValid = Builtins.bls12_381_finalVerify(ml1, ml2)
+```
+
+## Control Flow
+
+```scala
+// Conditional execution
+val result = Builtins.ifThenElse(condition, thenValue, elseValue)
+
+// Force evaluation after unit
+val forced = Builtins.chooseUnit()(computeValue)
+```
+
+## Debugging
+
+```scala
+// Trace a message (collected during evaluation, doesn't affect result)
+val result = Builtins.trace("Debug message")(computeValue)
+```
+
+Trace messages are collected during script execution and can be viewed in transaction evaluation logs. They don't affect the script result but do consume execution units.
+
+## Practical Examples
+
+This section shows how builtin functions can be used in smart contracts.
+
+### Bit Manipulation for Compact State
+
+Using bitwise operations for space-efficient on-chain state:
+
+```scala
+import scalus.*
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.ByteString
+
+@Compile
+object BitFlags {
+    // Store up to 256 boolean flags in a 32-byte ByteString
+
+    /** Check if flag at position is set */
+    def isSet(flags: ByteString, position: BigInt): Boolean =
+        readBit(flags, position)
+
+    /** Set a flag at position */
+    def setFlag(flags: ByteString, position: BigInt): ByteString =
+        writeBits(flags, BuiltinList(position), true)
+
+    /** Clear a flag at position */
+    def clearFlag(flags: ByteString, position: BigInt): ByteString =
+        writeBits(flags, BuiltinList(position), false)
+
+    /** Toggle a flag at position using XOR */
+    def toggleFlag(flags: ByteString, position: BigInt): ByteString = {
+        // Create a mask with only the target bit set
+        val byteIndex = position / BigInt(8)
+        val bitIndex = position % BigInt(8)
+        val mask = replicateByte(byteIndex, BigInt(0)) ++
+            ByteString.fromArray(Array((1 << bitIndex.toInt).toByte)) ++
+            replicateByte(BigInt(32) - byteIndex - BigInt(1), BigInt(0))
+        xorByteString(false, flags, mask)
+    }
+
+    /** Count how many flags are set */
+    def countFlags(flags: ByteString): BigInt =
+        countSetBits(flags)
+}
+```
+
+## Usage Notes
+
+- All builtin functions are type-safe and validated at compile time
+- Most builtins have convenient operator syntax (e.g., `+`, `==`, `++`)
+- Builtin functions compile directly to Plutus opcodes for maximum efficiency
+- Check Plutus version compatibility when using newer builtins
+- See the [Builtins API documentation](https://scalus.org/api/scalus/uplc/builtin/Builtins$.html) for complete details
+- Refer to the [Plutus specification](https://plutus.cardano.intersectmbo.org/resources/plutus-core-spec.pdf) for formal semantics
+
+## Related CIPs
+
+- [CIP-121](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0121) - Integer/ByteString conversions
+- [CIP-122](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0122) - Bitwise primitives
+- [CIP-123](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0123) - Bitwise shifts and rotations
+- [CIP-127](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0127) - RIPEMD-160 hash
+- [CIP-156](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0156) - Array builtins
+- [CIP-158](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0158) - Keccak-256 hash
+- [CIP-381](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381) - BLS12-381 primitives

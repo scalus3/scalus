@@ -1,0 +1,213 @@
+Source: https://scalus.org/docs/transactions/governance
+
+# Cardano Governance: Delegate to DRep, Vote
+
+Scalus TxBuilder provides comprehensive support for Cardano's Conway era governance features. ADA holders can participate in on-chain governance by delegating voting power to Delegated Representatives (DReps) or by becoming DReps themselves.
+
+  Governance operations are part of the Conway era upgrade. These features enable decentralized decision-making for the Cardano protocol.
+
+## Delegating Voting Power to DReps
+
+Delegate your voting power to a Delegated Representative (DRep) to participate in Cardano governance decisions.
+
+```scala copy
+val drep = DRep.KeyHash(drepKeyHash)
+
+val tx = TxBuilder(env)
+  .delegateVoteToDRep(stakeAddress, drep)
+  .complete(provider, sponsorAddress)
+```
+
+### DRep Types
+
+Scalus supports multiple DRep delegation options:
+
+```scala copy
+DRep.KeyHash(keyHash)           // Specific DRep
+DRep.ScriptHash(scriptHash)     // Script-based DRep
+DRep.Abstain                    // Abstain from voting
+DRep.NoConfidence               // Vote no confidence
+```
+
+**Script-based DReps** enable programmatic voting aligned with community policies or institutional strategies, allowing automated governance participation.
+
+## Registering Stake Keys and Delegating to DRep
+
+Combine stake registration and DRep delegation in a single transaction:
+
+```scala copy
+val drep = DRep.KeyHash(drepKeyHash)
+
+val tx = TxBuilder(env)
+  .registerAndDelegateVoteToDRep(stakeAddress, drep)
+  .complete(provider, sponsorAddress)
+```
+
+  This requires the standard 2 ADA stake registration deposit, which is refundable upon deregistration.
+
+## Delegating to Stake Pool and DRep
+
+Delegate both your staking power (to a stake pool) and voting power (to a DRep) simultaneously:
+
+```scala copy
+val poolId = PoolKeyHash.fromHex("pool1...")
+val drep = DRep.KeyHash(drepKeyHash)
+
+val tx = TxBuilder(env)
+  .delegateToPoolAndDRep(stakeAddress, poolId, drep)
+  .complete(provider, sponsorAddress)
+```
+
+  **Post-Chang Era**: Delegating to a DRep is required to withdraw staking rewards. See [Staking & Rewards](/docs/transactions/staking-rewards) for more details.
+
+## Registering and Delegating to Both
+
+Register your stake key and delegate to both a stake pool and DRep in one efficient transaction:
+
+```scala copy
+val poolId = PoolKeyHash.fromHex("pool1...")
+val drep = DRep.KeyHash(drepKeyHash)
+
+val tx = TxBuilder(env)
+  .registerAndDelegateToPoolAndDRep(stakeAddress, poolId, drep)
+  .complete(provider, sponsorAddress)
+```
+
+  Combining operations saves transaction fees and simplifies the user experience.
+
+## Becoming a Delegated Representative (DRep)
+
+### Registering as a DRep
+
+To become a DRep and accept voting delegation, you need to register with a credential:
+
+```scala copy
+val drepCredential = Credential.KeyHash(yourKeyHash)
+val anchor = Some(Anchor(
+  url = "https://example.com/drep-metadata.json",
+  dataHash = metadataHash
+))
+
+val tx = TxBuilder(env)
+  .registerDRep(drepCredential, anchor)
+  .complete(provider, sponsorAddress)
+```
+
+  DRep registration requires a deposit (currently 500 ADA), which is automatically taken from protocol parameters. This deposit is refundable upon deregistration.
+
+The `anchor` parameter is optional but recommended. It should point to metadata describing your governance positions, credentials, and voting philosophy.
+
+### Updating DRep Metadata
+
+Update your DRep metadata to reflect changes in your governance positions or credentials:
+
+```scala copy
+val newAnchor = Some(Anchor(
+  url = "https://example.com/updated-metadata.json",
+  dataHash = newMetadataHash
+))
+
+val tx = TxBuilder(env)
+  .updateDRep(drepCredential, newAnchor)
+  .complete(provider, sponsorAddress)
+```
+
+### Unregistering as DRep
+
+Unregister your DRep credential and reclaim your 500 ADA deposit:
+
+```scala copy
+val tx = TxBuilder(env)
+  .unregisterDRep(drepCredential, Coin.ada(500))
+  .complete(provider, sponsorAddress)
+```
+
+## Script-Based Governance Operations
+
+Scalus supports script-based stake credentials and DRep credentials for governance operations. Use the `ScriptWitness` factory methods to authorize operations from script-controlled addresses.
+
+### Delegating Voting Power from Script Stake Address
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+// With attached script
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .delegateVoteToDRep(scriptStakeAddress, drep, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// With reference script
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .references(scriptRefUtxo)
+  .delegateVoteToDRep(scriptStakeAddress, drep, reference(redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+### Combined Registration and Delegation with Script
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+// Register stake and delegate to DRep
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .registerAndDelegateVoteToDRep(scriptStakeAddress, drep, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// Delegate to both pool and DRep
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .delegateToPoolAndDRep(scriptStakeAddress, poolId, drep, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// Register and delegate to both pool and DRep
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .registerAndDelegateToPoolAndDRep(scriptStakeAddress, poolId, drep, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+### Script-Based DRep Operations
+
+Script-based DReps enable programmatic, automated governance participation:
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+val scriptDrepCredential = Credential.ScriptHash(drepScript.scriptHash)
+
+// Register script-based DRep
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .registerDRep(scriptDrepCredential, anchor, attached(drepScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// Update script-based DRep metadata
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .updateDRep(scriptDrepCredential, newAnchor, attached(drepScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// Unregister script-based DRep
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .unregisterDRep(scriptDrepCredential, Coin.ada(500), attached(drepScript, redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+  For delayed redeemers (computed from the final transaction), pass a lambda: `attached(script, tx => computeRedeemer(tx))`
+
+## See Also
+
+- [Staking & Rewards](/docs/transactions/staking-rewards)
+- [Building Your First Transaction](/docs/transactions/building-first-transaction)

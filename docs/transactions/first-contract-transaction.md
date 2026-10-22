@@ -1,0 +1,148 @@
+Source: https://scalus.org/docs/transactions/first-contract-transaction
+
+# How to Use a Compiled Validator in Transactions
+
+This guide shows how to lock funds at a script address and spend them using a compiled validator. It builds on the [First Transaction](/docs/transactions/building-first-transaction) guide, adding script interactions with datums and redeemers.
+
+## Compile the Validator
+
+Start with a simple spending validator that checks whether the transaction is signed by the owner stored in the datum:
+
+```scala copy
+import scalus.Compiler.compile
+import scalus.uplc.builtin.Data
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.uplc.Compiled.*
+
+object OwnerValidator {
+    val validate = compile {
+        (datum: Data, redeemer: Data, ctxData: Data) =>
+            val ctx = ctxData.to[ScriptContext]
+            val owner = datum.to[PubKeyHash]
+            val signatories = ctx.txInfo.signatories
+            List.findOrFail(signatories) { sig => sig.hash == owner.hash }
+    }
+}
+```
+
+Compile it to a Plutus V3 script:
+
+```scala copy
+import scalus.uplc.Compiled.*
+
+val compiled = PlutusV3.compile(OwnerValidator.validate)
+```
+
+`PlutusV3.compile` returns a `PlutusV3[A]` — a compiled script that carries both the on-chain Plutus script and the SIR (Scalus Intermediate Representation) used for diagnostic replay.
+
+## Lock Funds at the Script Address
+
+Send ADA to the script address with an inline datum. The datum stores the owner's public key hash — whoever holds the corresponding signing key can later unlock the funds:
+
+```scala copy
+import scalus.cardano.txbuilder.*
+import scalus.cardano.address.Address.addr
+
+given CardanoInfo = CardanoInfo.preprod
+
+val ownerPkh: PubKeyHash = // ... owner's public key hash
+val sponsorAddress = addr"addr_test1qz..."
+
+val lockTx = txBuilder
+    .payTo(compiled, Value.ada(10), ownerPkh)  // 10 ADA with inline datum
+    .complete(provider, sponsorAddress)
+    .await(30.seconds)
+    .sign(signer)
+    .transaction
+```
+
+The `payTo(compiled, value, datum)` overload derives the script address automatically and attaches the datum as an inline datum on the output. It also registers the debug script, enabling diagnostic replay if the script fails — the same behavior as `spend(utxo, redeemer, compiled)`.
+
+`payTo` also accepts a plain `Address` instead of a `CompiledPlutus` — use `payTo(address, value, datum)` when you need a manually constructed address or when sending to a non-script address.
+
+## Spend from the Script Address
+
+To spend a UTxO locked at the script address, provide a redeemer and the compiled script. Pass the `compiled` object directly — not `compiled.script`:
+
+```scala copy
+val lockedUtxo: Utxo = // ... the UTxO locked at the script address
+
+val spendTx = txBuilder
+    .spend(lockedUtxo, (), compiled, Set(ownerPkh.hash))  // redeemer is Unit, owner must sign
+    .complete(provider, sponsorAddress)
+    .await(30.seconds)
+    .sign(signer)
+    .transaction
+```
+
+**Why pass `compiled` instead of `compiled.script`?**
+
+The `spend` overload accepting `CompiledPlutus` registers a debug script automatically. If the on-chain script was compiled with `Options.release` (no error traces) and fails during evaluation, TxBuilder recompiles from SIR with traces enabled and replays the execution — giving you a detailed error message instead of a cryptic failure.
+
+You *can* use `compiled.script` and a raw script address, but you lose this diagnostic replay capability.
+
+## Complete Example
+
+Here's the full lock-then-spend flow:
+
+```scala copy
+import scalus.Compiler.compile
+import scalus.uplc.builtin.Data
+import scalus.cardano.address.Address.addr
+import scalus.cardano.ledger.*
+import scalus.cardano.node.BlockfrostProvider
+import scalus.cardano.txbuilder.*
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.uplc.Compiled.*
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
+
+// 1. Compile the validator
+val compiled = PlutusV3.compile(compile {
+    (datum: Data, redeemer: Data, ctxData: Data) =>
+        val ctx = ctxData.to[ScriptContext]
+        val owner = datum.to[PubKeyHash]
+        val signatories = ctx.txInfo.signatories
+        List.findOrFail(signatories) { sig => sig.hash == owner.hash }
+})
+
+// 2. Setup
+given CardanoInfo = CardanoInfo.preprod
+val provider = BlockfrostProvider.preprod("your-api-key").await(30.seconds)
+val sponsorAddress = addr"addr_test1qz..."
+val ownerPkh: PubKeyHash = // ... owner's public key hash
+
+// 3. Lock funds at the script address
+val lockTx = txBuilder
+    .payTo(compiled, Value.ada(10), ownerPkh)
+    .complete(provider, sponsorAddress)
+    .await(30.seconds)
+    .sign(signer)
+    .transaction
+
+provider.submit(lockTx).await(30.seconds)
+
+// 4. Query the locked UTxO
+val scriptUtxos = provider.findUtxos(compiled.address(cardanoInfo.network)).await(30.seconds).getOrElse(Map.empty)
+val lockedUtxo = scriptUtxos.head  // (Input, Output) pair
+
+// 5. Spend from the script address
+val spendTx = txBuilder
+    .spend(lockedUtxo, (), compiled, Set(ownerPkh.hash))
+    .complete(provider, sponsorAddress)
+    .await(30.seconds)
+    .sign(signer)
+    .transaction
+
+provider.submit(spendTx).await(30.seconds)
+```
+
+## Next Steps
+
+- **[Spending UTxOs](/docs/transactions/spending-utxos)** — Manual input selection and script UTxO patterns
+- **[Minting & Burning](/docs/transactions/minting-burning-assets)** — Create and destroy native tokens using minting policies
+- **[HTLC Tutorial](/docs/smart-contracts/htlc-tutorial)** — End-to-end Hash Time-Locked Contract with transactions and tests
+- **[Debugging Guide](/docs/testing/debugging)** — Deep dive into debugging failed script execution

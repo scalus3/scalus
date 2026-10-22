@@ -1,0 +1,51 @@
+Source: https://scalus.org/docs/smart-contracts
+
+# Cardano Smart Contract Development
+
+Write type-safe smart contracts for Cardano using Scala. Debug validators with breakpoints in your IDE, test with ScalaCheck, and compile to Plutus Core.
+
+```scala
+@Compile
+object MyValidator extends Validator:
+
+    inline override def spend(
+        datum: Option[Data], 
+        redeemer: Data, 
+        tx: TxInfo, 
+        outRef: TxOutRef
+    ): Unit =
+        val owner = datum.getOrFail("No datum").to[PubKeyHash]
+        require(tx.signatories.contains(owner), "Not signed by owner")
+```
+
+## Tutorials
+
+- **[Build Your First Validator](/docs/smart-contracts/developing-smart-contracts)** — Create a spending validator, write tests, and debug step-by-step
+- **[HTLC Tutorial](/docs/smart-contracts/htlc-tutorial)** — Complete Hash Time-Locked Contract with tests and transactions
+- **[Compiling to Plutus](/docs/smart-contracts/compiling)** — Compile validators, configure options, and prepare for deployment
+
+## Validators
+
+- **[Validator Types](/docs/smart-contracts/validators)** — Spending, minting, rewarding, and certifying validators
+- **[Parameterized Validators](/docs/smart-contracts/parameterized-validators)** — Reusable validators with compile-time configuration
+- **[Plutus Data](/docs/smart-contracts/plutus-data)** — Type-safe conversion between Scala and Plutus Data
+
+## Testing & Debugging
+
+- **[Unit Testing](/docs/testing/unit-testing)** — ScalusTest trait and property-based testing with ScalaCheck
+- **[Debugging](/docs/testing/debugging)** — Breakpoints, logging, and IDE debugger integration
+
+## Production
+
+- **[Security](/docs/security)** — Common vulnerabilities and how to avoid them
+- **[Optimisations](/docs/smart-contract-optimisations)** — Reduce script size and execution costs
+- **[Design Patterns](/docs/design-patterns)** — Patterns for multi-input validators
+
+## Deploying
+
+- **[Blueprint Generation](/docs/dapp-development/sbt-plugin#blueprint-generation)** — Generate CIP-57 blueprints with the sbt plugin and verify on-chain script hashes
+- **[Deploying Contracts](/docs/dapp-development/sbt-plugin#deploying-contracts)** — Publish compiled contracts as reference script UTxOs via Blockfrost
+- **[Working with Contract](/docs/dapp-development/working-with-contract)** — Compilation options, blueprints, and script addresses
+- **[First Contract Transaction](/docs/transactions/first-contract-transaction)** — Lock funds and spend from a script address with TxBuilder
+- **[Building Transactions](/docs/transactions/building-first-transaction)** — Build and submit simple ADA transfers
+- **[DApp Development](/docs/dapp-development)** — Full application development

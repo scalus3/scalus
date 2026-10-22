@@ -1,0 +1,208 @@
+Source: https://scalus.org/docs/transactions/staking-rewards
+
+# Cardano Staking: Delegate to Stake Pool, Withdraw Rewards
+
+Scalus TxBuilder provides a type-safe API for managing Cardano staking operations. This guide covers the four core staking operations: registering stake keys, delegating to pools, withdrawing rewards, and deregistering stake keys.
+
+  Staking operations require interaction with Cardano's stake address system. All operations support both Byron-era and Conway-era protocol parameters.
+
+## Registering Stake Keys
+
+Registering a stake key is the first step to participate in Cardano staking. This operation requires a **2 ADA deposit** that is refundable when you deregister the stake key.
+
+```scala copy
+val tx = TxBuilder(env)
+  .registerStake(stakeAddress)
+  .complete(provider, sponsorAddress)
+```
+
+The deposit amount is automatically taken from protocol parameters (`env.protocolParams.stakeAddressDeposit`).
+
+  The 2 ADA deposit is held by the protocol and will be returned when you deregister your stake key.
+
+## Delegating to Stake Pools
+
+After registering a stake key, you can delegate it to a stake pool using the pool's unique Pool ID. Your delegated ADA helps secure the network and earns staking rewards.
+
+```scala copy
+val poolId = PoolKeyHash.fromHex("pool1...")
+
+val tx = TxBuilder(env)
+  .delegateTo(stakeAddress, poolId)
+  .complete(provider, sponsorAddress)
+```
+
+## Registering and Delegating in One Transaction
+
+For efficiency, you can combine registration and delegation into a single transaction:
+
+```scala copy
+val poolId = PoolKeyHash.fromHex("pool1...")
+
+val tx = TxBuilder(env)
+  .stakeAndDelegate(stakeAddress, poolId)
+  .complete(provider, sponsorAddress)
+```
+
+The deposit is automatically taken from protocol parameters.
+
+  Combining operations saves transaction fees and reduces the number of blockchain interactions required.
+
+## Withdrawing Staking Rewards
+
+Claim your accumulated staking rewards to your wallet.
+
+```scala copy
+val tx = TxBuilder(env)
+  .withdrawRewards(stakeAddress, rewardAmount)
+  .complete(provider, sponsorAddress)
+```
+
+  **Post-Vasil Era**: Stake rewards must be withdrawn fully. Partial withdrawals are not supported.
+
+  **Post-Chang Era**: Rewards are only withdrawable if you have delegated your voting power to a DRep (Delegated Representative). See the [Governance](/docs/transactions/governance) guide for more information.
+
+## Deregistering Stake Keys
+
+Deregistering a stake key returns your initial 2 ADA deposit and removes your stake key from the blockchain.
+
+```scala copy
+val tx = TxBuilder(env)
+  .deregisterStake(stakeAddress)
+  .complete(provider, sponsorAddress)
+```
+
+With explicit refund:
+
+```scala copy
+val tx = TxBuilder(env)
+  .deregisterStake(stakeAddress, Coin.ada(2))
+  .complete(provider, sponsorAddress)
+```
+
+## Working with Stake Addresses
+
+### Creating Stake Addresses from Key Hash
+
+To perform staking operations, you need a properly formatted stake address. Here's how to create one from a stake key hash:
+
+```scala copy
+import scalus.cardano.address.{StakeAddress, StakePayload}
+
+val stakeAddress = StakeAddress(
+  Network.Mainnet,
+  StakePayload.Stake(stakeKeyHash)
+)
+```
+
+### Extracting Stake Address from Payment Address
+
+You can extract the stake address from a Shelley payment address:
+
+```scala copy
+val stakeAddress = shelleyAddress.delegation match {
+  case ShelleyDelegationPart.Key(keyHash) =>
+    StakeAddress(shelleyAddress.network, StakePayload.Stake(keyHash))
+  case _ => throw new Exception("No stake key")
+}
+```
+
+## Script-Based Staking Operations
+
+Scalus supports script-based stake credentials (post-Conway). Use the `ScriptWitness` factory methods to authorize operations from script-controlled stake addresses.
+
+### Creating Script Stake Addresses
+
+```scala copy
+import scalus.cardano.address.{StakeAddress, StakePayload}
+
+// Create a stake address controlled by a script
+val scriptStakeAddress = StakeAddress(
+  Network.Mainnet,
+  StakePayload.Script(stakingScript.scriptHash)
+)
+```
+
+### Withdrawing Rewards from Script Stake Address
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+// With attached script (included in transaction)
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .withdrawRewards(scriptStakeAddress, rewardAmount, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// With reference script (script already deployed on-chain)
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .references(scriptRefUtxo)
+  .withdrawRewards(scriptStakeAddress, rewardAmount, reference(redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+### Delegating Script Stake Address
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .delegateTo(scriptStakeAddress, poolId, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+### Registering Script Stake Key
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .registerStake(scriptStakeAddress, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+### Deregistering Script Stake Key
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .deregisterStake(scriptStakeAddress, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// With explicit refund amount
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .deregisterStake(scriptStakeAddress, Some(Coin.ada(2)), attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+  For delayed redeemers (computed from the final transaction), pass a lambda: `attached(script, tx => computeRedeemer(tx))`
+
+### Native Script Staking
+
+You can also use native scripts for staking operations:
+
+```scala copy
+import scalus.cardano.txbuilder.NativeScriptWitness.*
+
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .withdrawRewards(nativeScriptStakeAddress, rewardAmount, attached(nativeScript))
+  .complete(provider, sponsorAddress)
+```
+
+## See Also
+
+- [Governance](/docs/transactions/governance)
+- [Building Your First Transaction](/docs/transactions/building-first-transaction)

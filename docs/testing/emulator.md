@@ -1,0 +1,321 @@
+Source: https://scalus.org/docs/testing/emulator
+
+# Cardano Emulator for Fast Smart Contract Development
+
+The `Emulator` is an in-memory Cardano node that **validates transactions** and **executes Plutus scripts** — just like a real node, but instantly. No Docker, no network, no waiting.
+
+It performs both **Phase 1 validation** (transaction structure, signatures, fees, value conservation) and **Phase 2 validation** (Plutus script execution with cost tracking).
+
+## Quick Start
+
+```scala
+import scalus.cardano.node.Emulator
+import scalus.cardano.ledger.rules.Context
+
+// Create emulator with pre-funded addresses
+val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
+
+// Or with custom initial UTxOs
+val emulator = Emulator(
+  initialUtxos = Map(
+    input(0) -> Output(Alice.address, Value.ada(1000)),
+    input(1) -> Output(Bob.address, Value.ada(500))
+  )
+)
+```
+
+Use it with `TxBuilder` just like any other `Provider`:
+
+```scala
+val tx = TxBuilder(testEnv)
+  .payTo(Bob.address, Value.ada(10))
+  .complete(emulator, Alice.address)
+  .await()
+  .sign(Alice.signer)
+  .transaction
+
+emulator.submit(tx).await() match {
+  case Right(txHash) => println(s"Success: $txHash")
+  case Left(error)   => println(s"Failed: $error")
+}
+```
+
+## What It Does
+
+The Emulator provides **real transaction validation** and **real script execution**:
+
+| Feature | Description |
+|---------|-------------|
+| **Validates Transactions** | Runs 20+ Cardano ledger rules — fees, signatures, value conservation, execution limits |
+| **Executes Plutus Scripts** | Runs V1, V2, V3 scripts via the Scalus UPLC interpreter with full cost model evaluation |
+| **Tracks Execution Costs** | Reports CPU and memory usage against protocol limits |
+| **Manages UTxO State** | Updates inputs/outputs atomically on successful transactions |
+| **Handles Collateral** | Processes collateral correctly when scripts fail (isValid=false) |
+| **Validates Native Scripts** | Checks multisig and timelock native scripts |
+
+### Ledger Rules
+
+The Emulator uses the [Scalus Ledger Rules Framework](/docs/ledger/ledger-rules) — the same validators and mutators that implement Cardano's UTXOW state transition rules.
+
+  Rules are auto-discovered at startup. You can customize which rules run by passing custom `validators` and `mutators` to the constructor.
+
+## API Reference
+
+### Constructor
+
+```scala
+class Emulator(
+    initialUtxos: Utxos = Map.empty,
+    initialContext: Context = Context.testMainnet(),
+    val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
+    val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
+    initialCertState: CertState = CertState.empty,
+    initialDatums: Map[DataHash, Data] = Map.empty,
+    initialAppliedTxLog: Vector[AppliedTx] = Vector.empty
+) extends EmulatorBase // which extends BlockchainProvider
+```
+
+### Factory Methods
+
+```scala
+// Quick setup with funded addresses (10,000 ADA each by default)
+val emulator = Emulator.withAddresses(Seq(addr1, addr2))
+
+// Custom initial value per address
+val emulator = Emulator.withAddresses(Seq(addr1, addr2), Value.ada(50_000))
+```
+
+### Methods
+
+| Method | Description |
+|--------|-------------|
+| `submit(tx)` | Submit transaction, returns `Future[Either[SubmitError, TransactionHash]]` |
+| `findUtxo(input)` | Look up single UTxO by transaction input |
+| `findUtxos(address, ...)` | Query UTxOs by address with optional filters |
+| `setSlot(slot)` | Advance the current slot (for time-based validation) |
+| `snapshot()` | Create a point-in-time copy of the emulator |
+| `utxos` | Get current UTxO set |
+
+### Error Handling
+
+When a transaction fails validation, you get detailed error information:
+
+```scala
+emulator.submit(tx).await() match {
+  case Right(txHash) =>
+    println(s"Transaction submitted: $txHash")
+  case Left(error: NodeSubmitError) =>
+    println(s"Rejected by ledger rules: ${error.message}")
+  case Left(error) =>
+    println(s"Error: ${error.message}")
+}
+```
+
+## Working with Time
+
+Use `setSlot()` to test time-dependent validators:
+
+```scala
+// Set slot to test validity intervals
+emulator.setSlot(1000L)
+
+// Transaction with validity range [500, 1500] will pass
+val tx = TxBuilder(testEnv)
+  .validFrom(500L)
+  .validTo(1500L)
+  .payTo(Bob.address, Value.ada(10))
+  .complete(emulator, Alice.address)
+  .await()
+  .transaction
+
+// Transaction with validity range [2000, 3000] will fail
+val invalidTx = TxBuilder(testEnv)
+  .validFrom(2000L)
+  .validTo(3000L)
+  // ...
+```
+
+## Thread Safety
+
+The `Emulator` is thread-safe using `AtomicReference` for state management. Concurrent transaction submissions use compare-and-swap for atomic updates:
+
+```scala
+// Safe to use from multiple threads
+val futures = (1 to 10).map { i =>
+  Future {
+    val tx = buildTransaction(i)
+    emulator.submit(tx).await()
+  }
+}
+```
+
+## Customizing Rules
+
+Run with a subset of validators for specific test scenarios:
+
+```scala
+import scalus.cardano.ledger.rules.*
+
+// Only run Plutus script execution, skip other validations
+val minimalEmulator = Emulator(
+  initialUtxos = myUtxos,
+  validators = Set.empty,  // No validators
+  mutators = Set(PlutusScriptsTransactionMutator)  // Only script execution
+)
+
+// Add custom validators
+val customEmulator = Emulator(
+  validators = Emulator.defaultValidators + MyCustomValidator,
+  mutators = Emulator.defaultMutators
+)
+```
+
+## Using the Emulator from Java
+
+The Emulator has a Java-friendly surface: factories take `java.util.List`, state accessors return
+Java collections, lookups return `null` instead of `Option`, and submission reports a
+`SubmitResult` instead of `Either` — so expected failures need no try/catch. `CompletableFuture`
+variants (`submitAsync`, `findUtxosForAddressAsync`) mirror the asynchronous
+`BlockchainProvider` shape; for the Emulator they complete immediately.
+
+```java
+import scalus.cardano.address.Address;
+import scalus.cardano.ledger.*;
+import scalus.cardano.node.*;
+import java.util.List;
+import java.util.Map;
+
+// Create an emulator with two funded addresses (10,000 ADA each)
+Emulator emulator = Emulator.withAddresses(List.of(alice, bob));
+
+// Or build the initial state explicitly
+EmulatorInitialState state = EmulatorInitialState.builder()
+        .putUtxo(input, output)
+        .addStakeRegistration(EmulatorStakeRegistration.of(credential, Coin.zero()))
+        .build();
+Emulator emulator2 = Emulator.withState(state);
+
+// Submit and inspect the outcome — no Either, no exceptions for rejections
+SubmitResult result = emulator.trySubmit(signedTx);
+if (result.isSuccess()) {
+    System.out.println("Applied: " + result.getTxHashOrNull().toHex());
+} else {
+    System.out.println("Rejected: " + result.getErrorMessageOrNull());
+}
+
+// Query state with Java collections
+Map<TransactionInput, TransactionOutput> utxos = emulator.getUtxos();
+List<Utxo> aliceUtxos = emulator.findUtxosForAddress(alice);
+Transaction applied = emulator.getTransactionOrNull(result.getTxHashOrNull());
+
+// Control time
+emulator.setSlot(1000L);
+emulator.tick(5);
+long slot = emulator.getCurrentSlot();
+
+// CompletableFuture variant — same shape as asynchronous providers
+emulator.submitAsync(anotherTx).thenAccept(r ->
+    System.out.println("async result: " + r.isSuccess()));
+```
+
+## When to Use Emulator
+
+Both Emulator and Yaci DevKit **validate transactions** and **execute Plutus scripts**. The difference is implementation:
+
+| Scenario | Emulator | Yaci DevKit |
+|----------|:--------:|:-----------:|
+| Transaction validation | ✓ | ✓ |
+| Plutus script execution | ✓ | ✓ |
+| Unit tests | ✓ | |
+| Rapid development iteration | ✓ | |
+| CI/CD (speed matters) | ✓ | |
+| Real Haskell Cardano node | | ✓ |
+| Complete ledger rule set | | ✓ |
+| Pre-deployment confidence | | ✓ |
+
+**Use Emulator** for fast feedback during development. Instant script execution, real validation, no setup overhead.
+
+**Use [Local Devnet](/docs/testing/local-devnet)** when you need the actual Haskell Cardano node for final validation before deployment.
+
+## Example: Testing a Minting Policy
+
+```scala
+import scalus.compiler.compile
+import scalus.cardano.node.Emulator
+import scalus.cardano.txbuilder.TxBuilder
+
+test("minting policy validates token name") {
+  val emulator = Emulator.withAddresses(Seq(Alice.address))
+
+  // Compile minting policy
+  val policy = compile { (redeemer: Data, ctx: Data) =>
+    val sc = ctx.to[ScriptContext]
+    val tokenName = redeemer.to[TokenName]
+    // Validate only "MyToken" can be minted
+    require(tokenName == TokenName.fromString("MyToken"))
+  }
+  val script = Script.PlutusV3(policy.toUplc().plutusV3.cborByteString)
+
+  // Valid mint - should succeed
+  val validTx = TxBuilder(testEnv)
+    .mint(script, Map(AssetName.fromString("MyToken") -> 100L), TokenName.fromString("MyToken"))
+    .payTo(Alice.address, Value.asset(script.scriptHash, AssetName.fromString("MyToken"), 100))
+    .complete(emulator, Alice.address)
+    .await()
+    .sign(Alice.signer)
+    .transaction
+
+  emulator.submit(validTx).await() shouldBe a[Right[_, _]]
+
+  // Invalid mint - should fail
+  val invalidTx = TxBuilder(testEnv)
+    .mint(script, Map(AssetName.fromString("WrongToken") -> 100L), TokenName.fromString("WrongToken"))
+    // ...
+
+  emulator.submit(invalidTx).await() shouldBe a[Left[_, _]]
+}
+```
+
+## Pre-initializing UTxOs from JSON
+
+You can initialize the emulator with UTxOs declared in a JSON file using `Preconfiguration`. Address keys can be test party names (`"alice"`, `"bob"`) or raw bech32 addresses:
+
+```json
+{
+  "utxo": {
+    "alice": [
+      { "ada": 10000 },
+      { "ada": 5, "datum": { "int": 42 } }
+    ],
+    "bob": [{ "ada": 5000, "datum_hash": "abcd..." }],
+    "addr_test1qz...": [{ "ada": 100, "tx_id": "abcd...", "idx": 0 }]
+  }
+}
+```
+
+Each UTxO entry supports:
+- `ada` (required) — amount in ADA
+- `datum` — inline datum as a Plutus JSON Data value
+- `datum_cbor` — inline datum as a CBOR hex string
+- `datum_hash` — datum hash hex (produces a datum-hash reference, not inline)
+- `tx_id`, `idx` — explicit transaction input; if absent, a genesis hash and auto-index are used
+
+```scala
+import scalus.testing.{ImmutableEmulator, Preconfiguration}
+
+// From a JSON string
+val emulator = ImmutableEmulator.fromJson(json)
+
+// Or parse and resolve separately
+val config = Preconfiguration.fromJson(json)
+val utxos = Preconfiguration.resolveUtxos(config)
+val emulator = Emulator(initialUtxos = utxos)
+```
+
+## See Also
+
+- [JS/TS Emulator](/docs/testing/js-emulator) — Emulator for JavaScript and TypeScript
+- [Local Devnet](/docs/testing/local-devnet) — Docker-based devnet for integration testing
+- [Provider](/docs/ledger/provider) — The Provider interface
+- [Ledger Rules](/docs/ledger/ledger-rules) — Transaction validation rules
+- [Transaction Builder](/docs/transactions) — Building transactions

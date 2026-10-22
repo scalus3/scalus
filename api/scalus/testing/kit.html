@@ -1,0 +1,784 @@
+<!DOCTYPE html><html data-pathToRoot="../../" data-rawLocation="scalus/testing/kit" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>scalus.testing.kit</title><link rel="shortcut icon" type="image/x-icon" href="../../favicon.ico"></link><script type="text/javascript" src="../../scripts/theme.js"></script><script type="text/javascript" src="../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../styles/nord-light.css"></link><link rel="stylesheet" href="../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../styles/searchbar.css"></link><link rel="stylesheet" href="../../styles/social-links.css"></link><link rel="stylesheet" href="../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../styles/fontawesome.css"></link><script type="text/javascript" src="../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../styles/apistyles.css"></link><script>var pathToRoot = "../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../index.html">Scalus</a>/<a href="../../scalus.html">scalus</a>/<a href="../testing.html">scalus.testing</a>/<a href="kit.html">scalus.testing.kit</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon pa"></span></span>
+ <h1 class="h600 single">scalus.testing.kit</h1>
+</div>
+<div class="fqname body-large">
+ <span></span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">package </span></span><a href="kit.html" t="n" class="documentableName ">scalus.testing.kit</a>
+ </div>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Type-members">
+     <div data-togglable="Type members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Type members" class="h400">Type members</h3>
+      </div>
+      <section id="Classlikes">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Classlikes</h4>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="kit/ArbitraryInstances.html" t="n" class="documentableName ">ArbitraryInstances</a><span t="k"> extends </span><a href="../cardano/onchain/plutus/v3/ArbitraryInstances.html" t="t">ArbitraryInstances</a><span t="k">, </span></span><span class="signature-long"><a href="../uplc/test/ArbitraryInstances.html" t="t">ArbitraryInstances</a></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="../cardano/onchain/plutus/v3/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 trait <a href="../cardano/onchain/plutus/v2/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 trait <a href="../cardano/onchain/plutus/v1/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 trait <a href="../uplc/test/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="abstract">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"><span t="k">abstract </span></span><span class="kind"><span t="k">class </span></span><a href="kit/BaseValidatorTest.html" t="n" class="documentableName ">BaseValidatorTest</a><span t="k"> extends </span><span data-unresolved-link="" t="t">AnyFunSuite</span><span t="k">, </span></span><span class="signature-long"><span data-unresolved-link="" t="t">ScalaCheckPropertyChecks</span><span t="k">, </span><a href="../cardano/onchain/plutus/v1/ArbitraryInstances.html" t="t">ArbitraryInstances</a></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Base test class for validator testing.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Base test class for validator testing.</p>
+              <p>Provides assertion methods for evaluating Programs and checking results. This base class works on all platforms (JVM/JS/Native).</p>
+              <p>For JVM-only testing with UplcCli support, use <code>BaseValidatorTestJvm</code> instead.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="../cardano/onchain/plutus/v1/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 trait <a href="../uplc/test/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">ScalaCheckPropertyChecks</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">ScalaCheckDrivenPropertyChecks</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Configuration</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TableDrivenPropertyChecks</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Tables</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Whenever</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">AnyFunSuite</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">AnyFunSuiteLike</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Documenting</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Alerting</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Notifying</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Informing</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TestRegistration</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TestSuite</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Suite</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Assertions</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TripleEquals</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TripleEqualsSupport</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 class <a href="kit/BaseValidatorTestJvm.html" t="n">BaseValidatorTestJvm</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="abstract">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"><span t="k">abstract </span></span><span class="kind"><span t="k">class </span></span><a href="kit/BaseValidatorTestJvm.html" t="n" class="documentableName ">BaseValidatorTestJvm</a><span t="k"> extends </span><a href="kit/BaseValidatorTest.html" t="t">BaseValidatorTest</a></span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>JVM-specific base test class for validator testing.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>JVM-specific base test class for validator testing.</p>
+              <p>Extends BaseValidatorTest with UplcCli support for comparing results across different evaluators.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <a href="kit/BaseValidatorTest.html" t="n">BaseValidatorTest</a>
+                </div>
+                <div>
+                 trait <a href="../cardano/onchain/plutus/v1/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 trait <a href="../uplc/test/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">ScalaCheckPropertyChecks</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">ScalaCheckDrivenPropertyChecks</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Configuration</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TableDrivenPropertyChecks</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Tables</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Whenever</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">AnyFunSuite</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">AnyFunSuiteLike</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Documenting</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Alerting</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Notifying</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Informing</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TestRegistration</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TestSuite</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Suite</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Assertions</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TripleEquals</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TripleEqualsSupport</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="kit/EvalTestKit.html" t="n" class="documentableName ">EvalTestKit</a><span t="k"> extends </span><span data-unresolved-link="" t="t">Assertions</span><span t="k">, </span></span><span class="signature-long"><span data-unresolved-link="" t="t">ScalaCheckPropertyChecks</span><span t="k">, </span><a href="../uplc/test/ArbitraryInstances.html" t="t">ArbitraryInstances</a></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>ScalaTest integration trait for evaluation testing.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>ScalaTest integration trait for evaluation testing.</p>
+              <p>Provides:</p>
+              <ul>
+               <li>Inline compilation via <code>assertEval*</code> methods using <code>PlutusV3.compile</code></li>
+               <li>Given-based configuration injection</li>
+               <li>Property-based testing support via <code>checkEval</code></li>
+               <li>Configurable PlutusVM via <code>using</code> parameters</li>
+              </ul>
+              <p>This trait provides the core functionality for testing Scalus code evaluation.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="../uplc/test/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">ScalaCheckPropertyChecks</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">ScalaCheckDrivenPropertyChecks</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Configuration</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TableDrivenPropertyChecks</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Tables</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Whenever</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Assertions</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TripleEquals</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TripleEqualsSupport</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="kit/KeyPairGenerator$.html" t="n" class="documentableName ">KeyPairGenerator</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Platform-specific Ed25519 key pair generation for tests (JVM implementation using BouncyCastle).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Platform-specific Ed25519 key pair generation for tests (JVM implementation using BouncyCastle).</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="kit/KeyPairGenerator$.html" t="n">KeyPairGenerator</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="kit/Party$.html" t="n" class="documentableName ">Party</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="kit/Party.html">enum</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="kit/Party$.html" t="n">Party</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">enum </span></span><a href="kit/Party.html" t="n" class="documentableName ">Party</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Test parties for smart contract testing.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Test parties for smart contract testing.</p>
+              <p>Each party has a deterministic wallet derived from a test mnemonic, providing:</p>
+              <ul>
+               <li><code>hdAccount</code>: HdAccount for CIP-1852 compatible key management</li>
+               <li><code>address</code>: Shelley address for receiving funds</li>
+               <li><code>signer</code>: TransactionSigner for signing transactions</li>
+              </ul>
+              <p>Many names reference classic cryptographic roles (Alice, Bob, Eve, Mallory, etc.) or notable figures in cryptography and blockchain (Hal Finney, Nick Szabo).</p>
+              <p>There are exactly 20 parties to match Yaci Devkit's default configuration, which creates 20 funded addresses from the same test mnemonic. This allows the same test code to work with both the in-memory <a href="../cardano/node/Emulator.html">scalus.cardano.node.Emulator</a> (for fast unit tests) and Yaci Devkit (for integration tests).</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="kit/Party$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Enum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">trait </span></span><a href="kit/ScalusTest.html" t="n" class="documentableName ">ScalusTest</a><span t="k"> extends </span><a href="../cardano/onchain/plutus/v3/ArbitraryInstances.html" t="t">ArbitraryInstances</a><span t="k">, </span></span><span class="signature-long"><span data-unresolved-link="" t="t">Assertions</span></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="kit/ScalusTest$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Assertions</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TripleEquals</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">TripleEqualsSupport</span>
+                </div>
+                <div>
+                 trait <a href="../cardano/onchain/plutus/v3/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 trait <a href="../cardano/onchain/plutus/v2/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 trait <a href="../cardano/onchain/plutus/v1/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 trait <a href="../uplc/test/ArbitraryInstances.html" t="n">ArbitraryInstances</a>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 trait <a href="integration/IntegrationTest.html" t="n">IntegrationTest</a>
+                </div>
+                <div>
+                 trait <a href="yaci/YaciDevKit.html" t="n">YaciDevKit</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="kit/ScalusTest$.html" t="n" class="documentableName ">ScalusTest</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="kit/ScalusTest.html">trait</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="kit/ScalusTest$.html" t="n">ScalusTest</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="kit/TestUtil$.html" t="n" class="documentableName ">TestUtil</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="kit/TestUtil$.html" t="n">TestUtil</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#members-list">Members list</a><ul><li><a href="#Type-members">Type members</a><ul><li><a href="#Classlikes">Classlikes</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

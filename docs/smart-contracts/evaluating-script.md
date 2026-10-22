@@ -1,0 +1,80 @@
+Source: https://scalus.org/docs/smart-contracts/evaluating-script
+
+# Evaluating script
+
+Scalus provides a high-level API to evaluate UPLC scripts.
+
+```scala mdoc
+compile(BigInt(2) + 2).toUplc().evaluateDebug.toString
+```
+
+You get a `Result` object that contains the result of the evaluation, the execution budget, the execution costs, and the logs.
+
+You can also use the low-level API to evaluate scripts.
+
+```scala mdoc:compile-only
+import scalus.cardano.ledger.Language
+import scalus.cardano.onchain.plutus.*
+import scalus.uplc.*, eval.*
+
+def evaluation() = {
+    import scalus.*
+    import scalus.uplc.eval.PlutusVM
+    val sir = compile {
+        def usefulFunction(a: BigInt): BigInt = a + 1
+        usefulFunction(1)
+    }
+    val term = sir.toUplc()
+    // setup a given PlutusVM for the PlutusV2 language and default parameters
+    given v2VM: PlutusVM = PlutusVM.makePlutusV2VM()
+    // simply evaluate the term with CEK machine
+    term.evaluate.show // (con integer 2)
+
+    // you can get the actual execution costs from protocol parameters JSON from cardano-cli
+    lazy val machineParams = MachineParams.fromCardanoCliProtocolParamsJson(
+      "JSON with protocol parameters",
+      Language.PlutusV3
+    )
+    // or from blockfrost API
+    lazy val machineParams2 = MachineParams.fromBlockfrostProtocolParamsJson(
+      "JSON with protocol parameters",
+      Language.PlutusV3
+    )
+    // use latest PlutusV3 VM with explicit machine parameters
+    val v3vm: PlutusVM = PlutusVM.makePlutusV3VM(machineParams)
+    // evaluate a Plutus V3 script considering CIP-117
+    // calculate the execution budget, all builtins costs, and collect logs
+    val script = term.plutusV3
+    script.evaluateDebug(using v3vm) match
+        case r @ Result.Success(evaled, budget, costs, logs) =>
+            println(r)
+        case Result.Failure(exception, budget, costs, logs) =>
+            println(s"Exception: $exception, logs: $logs")
+
+    // evaluate a flat encoded script and calculate the execution budget and logs
+
+    // TallyingBudgetSpender is a budget spender that counts the costs of each operation
+    val tallyingBudgetSpender = TallyingBudgetSpender(CountingBudgetSpender())
+    val logger = Log()
+    // use NoLogger to disable logging
+    val noopLogger = NoLogger
+    try {
+        v3vm.evaluateScript(script, tallyingBudgetSpender, logger)
+    } catch {
+        case e: StackTraceMachineError =>
+            println(s"Error: ${e.getMessage}")
+            println(s"Stacktrace: ${e.getCekStack}")
+            println(s"Env: ${e.env}")
+    }
+    println(s"Execution budget: ${tallyingBudgetSpender.budgetSpender.getSpentBudget}")
+    println(s"Logs: ${logger.getLogs.mkString("\n")}")
+    println(
+      s"Execution stats:\n${tallyingBudgetSpender.costs.toArray
+              .sortBy(_._1.toString())
+              .map { case (k, v) =>
+                  s"$k: $v"
+              }
+              .mkString("\n")}"
+    )
+}
+```

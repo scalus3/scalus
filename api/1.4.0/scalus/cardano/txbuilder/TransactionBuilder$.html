@@ -1,0 +1,1003 @@
+<!DOCTYPE html><html data-pathToRoot="../../../" data-rawLocation="scalus/cardano/txbuilder/TransactionBuilder$" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>TransactionBuilder</title><link rel="shortcut icon" type="image/x-icon" href="../../../favicon.ico"></link><script type="text/javascript" src="../../../scripts/theme.js"></script><script type="text/javascript" src="../../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../../styles/nord-light.css"></link><link rel="stylesheet" href="../../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../../styles/searchbar.css"></link><link rel="stylesheet" href="../../../styles/social-links.css"></link><link rel="stylesheet" href="../../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../../styles/fontawesome.css"></link><script type="text/javascript" src="../../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../../styles/apistyles.css"></link><script>var pathToRoot = "../../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../../index.html">Scalus</a>/<a href="../../../scalus.html">scalus</a>/<a href="../../cardano.html">scalus.cardano</a>/<a href="../txbuilder.html">scalus.cardano.txbuilder</a>/<a href="TransactionBuilder$.html">TransactionBuilder</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon ob"></span></span>
+ <h1 class="h600 single">TransactionBuilder</h1>
+</div>
+<div class="fqname body-large">
+ <span>scalus.cardano.txbuilder.TransactionBuilder</span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="TransactionBuilder$.html" t="n" class="documentableName ">TransactionBuilder</a>
+ </div>
+</div>
+<div class="cover">
+ <div class="doc"></div>
+ <section id="attributes">
+  <h2 class="h500">Attributes</h2>
+  <dl class="attributes">
+   <dt class="body-small">
+    Graph
+   </dt>
+   <dd class="body-medium">
+    <div id="inheritance-diagram" class="diagram-class showGraph">
+     <button type="button" class="label-only-button" onclick="zoomOut()">Reset zoom</button><button type="button" class="label-only-button" onclick="hideGraph()">Hide graph</button><button type="button" class="label-only-button" onclick="showGraph()">Show graph</button>
+     <svg id="graph"></svg>
+     <script type="text/dot" id="dot"> digraph g {
+ node0 [id=node0, label="<span style=\"color: #FFFFFF;\">object <a href=\"TransactionBuilder$.html\" t=\"n\">TransactionBuilder</a></span>", class="object vertex"];
+node1 [id=node1, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Object</span></span>", class="class vertex"];
+node2 [id=node2, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Any</span></span>", class="class vertex"];
+node3 [id=node3, label="<span style=\"color: #FFFFFF;\">trait <span data-unresolved-link=\"\" t=\"n\">Matchable</span></span>", class="trait vertex"];
+
+
+ node0 -> node1;
+node1 -> node2;
+node1 -> node3;
+node3 -> node2;
+
+}
+</script>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Supertypes
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <div>
+      class <span data-unresolved-link="" t="n">Object</span>
+     </div>
+     <div>
+      trait <span data-unresolved-link="" t="n">Matchable</span>
+     </div>
+     <div>
+      class <span data-unresolved-link="" t="n">Any</span>
+     </div><span></span>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Self type
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <span></span>
+     <div>
+      <a href="TransactionBuilder$.html" t="n">TransactionBuilder</a>.<span t="k">type</span>
+     </div>
+    </div>
+   </dd>
+  </dl>
+ </section>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Type-members">
+     <div data-togglable="Type members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Type members" class="h400">Type members</h3>
+      </div>
+      <section id="Classlikes">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Classlikes</h4>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="TransactionBuilder$$Context.html" t="n" class="documentableName ">Context</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">transaction</span>: <a href="../ledger/Transaction.html" t="t">Transaction</a>, <span t="k"></span><span data-unresolved-link="" t="n">redeemers</span>: <span data-unresolved-link="" t="t">Seq</span>[<a href="DetachedRedeemer.html" t="t">DetachedRedeemer</a>], <span t="k"></span><span data-unresolved-link="" t="n">network</span>: <a href="../address/Network.html" t="t">Network</a>, <span t="k"></span><span data-unresolved-link="" t="n">expectedSigners</span>: <span data-unresolved-link="" t="t">Set</span>[<a href="../ledger.html#AddrKeyHash-0" t="t">AddrKeyHash</a>], <span t="k"></span><span data-unresolved-link="" t="n">resolvedUtxos</span>: <a href="TransactionBuilder$$ResolvedUtxos.html" t="t">ResolvedUtxos</a>, <span t="k"></span><span data-unresolved-link="" t="n">delayedRedeemerSpecs</span>: <span data-unresolved-link="" t="t">Seq</span>[<a href="DelayedRedeemerSpec.html" t="t">DelayedRedeemerSpec</a>] = ..., <span t="k"></span><span data-unresolved-link="" t="n">delayedDatumSpecs</span>: <span data-unresolved-link="" t="t">Seq</span>[<a href="DelayedDatumSpec.html" t="t">DelayedDatumSpec</a>] = ..., <span t="k"></span><span data-unresolved-link="" t="n">collateralReturnAddress</span>: <span data-unresolved-link="" t="t">Option</span>[<a href="../address/Address.html" t="t">Address</a>] = ...)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>An opaque context in which the builder operates.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>An opaque context in which the builder operates.</p>
+              <p>TODO: make a class, remove toTuple()?</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="TransactionBuilder$$Context$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="TransactionBuilder$$Context$.html" t="n" class="documentableName ">Context</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="TransactionBuilder$$Context.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="TransactionBuilder$$Context$.html" t="n">Context</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="TransactionBuilder$$Operation$.html" t="n" class="documentableName ">Operation</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="TransactionBuilder$$Operation.html">trait</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Sum</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="TransactionBuilder$$Operation$.html" t="n">Operation</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="sealed">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">sealed </span></span><span class="kind"><span t="k">trait </span></span><a href="TransactionBuilder$$Operation.html" t="n" class="documentableName ">Operation</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Represents different types of authorized operations (except the spending, which goes separately).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Represents different types of authorized operations (except the spending, which goes separately).</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="TransactionBuilder$$Operation$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Known subtypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block subtypes">
+                <div>
+                 class <a href="TransactionBuilder$$Operation$$CertificateOperation.html" t="n">CertificateOperation</a>
+                </div>
+                <div>
+                 class <a href="TransactionBuilder$$Operation$$Minting.html" t="n">Minting</a>
+                </div>
+                <div>
+                 class <a href="TransactionBuilder$$Operation$$Proposing.html" t="n">Proposing</a>
+                </div>
+                <div>
+                 class <a href="TransactionBuilder$$Operation$$Voting.html" t="n">Voting</a>
+                </div>
+                <div>
+                 class <a href="TransactionBuilder$$Operation$$Withdraw.html" t="n">Withdraw</a>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="TransactionBuilder$$ResolvedUtxos.html" t="n" class="documentableName ">ResolvedUtxos</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>A wrapper around a UTxO set that prevents adding conflicting pairs</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>A wrapper around a UTxO set that prevents adding conflicting pairs</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="TransactionBuilder$$ResolvedUtxos$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="TransactionBuilder$$ResolvedUtxos$.html" t="n" class="documentableName ">ResolvedUtxos</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="TransactionBuilder$$ResolvedUtxos.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="TransactionBuilder$$ResolvedUtxos$.html" t="n">ResolvedUtxos</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Concrete-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete methods</h4>
+        </div>
+        <div class="documentableElement" id="balanceFeeAndChange-421">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#balanceFeeAndChange-421" t="n" class="documentableName ">balanceFeeAndChange</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">initial</span>: <a href="../ledger/Transaction.html" t="t">Transaction</a>, <span t="k"></span><span data-unresolved-link="" t="n">changeOutputIdx</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">protocolParams</span>: <a href="../ledger/ProtocolParams.html" t="t">ProtocolParams</a>, <span t="k"></span><span data-unresolved-link="" t="n">resolvedUtxo</span>: <a href="../ledger.html#Utxos-0" t="t">Utxos</a>, <span t="k"></span><span data-unresolved-link="" t="n">evaluator</span>: <a href="../ledger/PlutusScriptEvaluator.html" t="t">PlutusScriptEvaluator</a>, <span t="k"></span><span data-unresolved-link="" t="n">debugScripts</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="../ledger.html#ScriptHash-0" t="t">ScriptHash</a>, <a href="../../uplc/DebugScript.html" t="t">DebugScript</a>] = ...): <span data-unresolved-link="" t="t">Either</span>[<a href="TxBalancingError.html" t="t">TxBalancingError</a>, <a href="../ledger/Transaction.html" t="t">Transaction</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Balances the transaction using a diff handler to adjust the transaction.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Balances the transaction using a diff handler to adjust the transaction.</p>
+              <p>Invariants:</p>
+              <ul>
+               <li>both ADA and native tokens are adjusted by the diff handler</li>
+               <li>fees never go below the initial fee</li>
+              </ul>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="balanceFeeAndChange-b58">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#balanceFeeAndChange-b58" t="n" class="documentableName ">balanceFeeAndChange</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">initial</span>: <a href="../ledger/Transaction.html" t="t">Transaction</a>, <span t="k"></span><span data-unresolved-link="" t="n">changeOutputIdx</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">protocolParams</span>: <a href="../ledger/ProtocolParams.html" t="t">ProtocolParams</a>, <span t="k"></span><span data-unresolved-link="" t="n">resolvedUtxo</span>: <a href="../ledger.html#Utxos-0" t="t">Utxos</a>, <span t="k"></span><span data-unresolved-link="" t="n">evaluator</span>: <a href="../ledger/PlutusScriptEvaluator.html" t="t">PlutusScriptEvaluator</a>, <span t="k"></span><span data-unresolved-link="" t="n">debugScripts</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="../ledger.html#ScriptHash-0" t="t">ScriptHash</a>, <a href="../../uplc/DebugScript.html" t="t">DebugScript</a>], <span t="k"></span><span data-unresolved-link="" t="n">certState</span>: <a href="../ledger/CertState.html" t="t">CertState</a>): <span data-unresolved-link="" t="t">Either</span>[<a href="TxBalancingError.html" t="t">TxBalancingError</a>, <a href="../ledger/Transaction.html" t="t">Transaction</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p><a href="TransactionBuilder$.html#balanceFeeAndChange-b58">balanceFeeAndChange</a> against <code>certState</code>: a pool registration pays no pool deposit for a pool that <code>certState</code> registers.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p><a href="TransactionBuilder$.html#balanceFeeAndChange-b58">balanceFeeAndChange</a> against <code>certState</code>: a pool registration pays no pool deposit for a pool that <code>certState</code> registers.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="balanceFeeAndChangeWithTokens-fffffa8c">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#balanceFeeAndChangeWithTokens-fffffa8c" t="n" class="documentableName ">balanceFeeAndChangeWithTokens</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">initial</span>: <a href="../ledger/Transaction.html" t="t">Transaction</a>, <span t="k"></span><span data-unresolved-link="" t="n">diffHandler</span>: (<a href="../ledger/Value.html" t="t">Value</a>, <a href="../ledger/Transaction.html" t="t">Transaction</a>)<span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Either</span>[<a href="TxBalancingError.html" t="t">TxBalancingError</a>, <a href="../ledger/Transaction.html" t="t">Transaction</a>], <span t="k"></span><span data-unresolved-link="" t="n">protocolParams</span>: <a href="../ledger/ProtocolParams.html" t="t">ProtocolParams</a>, <span t="k"></span><span data-unresolved-link="" t="n">resolvedUtxo</span>: <a href="../ledger.html#Utxos-0" t="t">Utxos</a>, <span t="k"></span><span data-unresolved-link="" t="n">evaluator</span>: <a href="../ledger/PlutusScriptEvaluator.html" t="t">PlutusScriptEvaluator</a>, <span t="k"></span><span data-unresolved-link="" t="n">debugScripts</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="../ledger.html#ScriptHash-0" t="t">ScriptHash</a>, <a href="../../uplc/DebugScript.html" t="t">DebugScript</a>] = ...): <span data-unresolved-link="" t="t">Either</span>[<a href="TxBalancingError.html" t="t">TxBalancingError</a>, <a href="../ledger/Transaction.html" t="t">Transaction</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Balances the transaction using a diff handler to adjust the transaction.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Balances the transaction using a diff handler to adjust the transaction.</p>
+              <p>Invariants:</p>
+              <ul>
+               <li>both ADA and native tokens are adjusted by the diff handler</li>
+               <li>fees never go below the initial fee</li>
+              </ul>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               resolvedUtxo
+              </dt>
+              <dd class="body-medium">
+               <p>The resolved UTXOs for inputs in the transaction.</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="balanceFeeAndChangeWithTokens-fffff78d">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#balanceFeeAndChangeWithTokens-fffff78d" t="n" class="documentableName ">balanceFeeAndChangeWithTokens</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">initial</span>: <a href="../ledger/Transaction.html" t="t">Transaction</a>, <span t="k"></span><span data-unresolved-link="" t="n">diffHandler</span>: (<a href="../ledger/Value.html" t="t">Value</a>, <a href="../ledger/Transaction.html" t="t">Transaction</a>)<span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Either</span>[<a href="TxBalancingError.html" t="t">TxBalancingError</a>, <a href="../ledger/Transaction.html" t="t">Transaction</a>], <span t="k"></span><span data-unresolved-link="" t="n">protocolParams</span>: <a href="../ledger/ProtocolParams.html" t="t">ProtocolParams</a>, <span t="k"></span><span data-unresolved-link="" t="n">resolvedUtxo</span>: <a href="../ledger.html#Utxos-0" t="t">Utxos</a>, <span t="k"></span><span data-unresolved-link="" t="n">evaluator</span>: <a href="../ledger/PlutusScriptEvaluator.html" t="t">PlutusScriptEvaluator</a>, <span t="k"></span><span data-unresolved-link="" t="n">debugScripts</span>: <span data-unresolved-link="" t="t">Map</span>[<a href="../ledger.html#ScriptHash-0" t="t">ScriptHash</a>, <a href="../../uplc/DebugScript.html" t="t">DebugScript</a>], <span t="k"></span><span data-unresolved-link="" t="n">certState</span>: <a href="../ledger/CertState.html" t="t">CertState</a>): <span data-unresolved-link="" t="t">Either</span>[<a href="TxBalancingError.html" t="t">TxBalancingError</a>, <a href="../ledger/Transaction.html" t="t">Transaction</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p><a href="TransactionBuilder$.html#balanceFeeAndChangeWithTokens-fffff78d">balanceFeeAndChangeWithTokens</a> against <code>certState</code>: a pool registration pays no pool deposit for a pool that <code>certState</code> registers.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p><a href="TransactionBuilder$.html#balanceFeeAndChangeWithTokens-fffff78d">balanceFeeAndChangeWithTokens</a> against <code>certState</code>: a pool registration pays no pool deposit for a pool that <code>certState</code> registers.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="build-a1b">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#build-a1b" t="n" class="documentableName ">build</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">network</span>: <a href="../address/Network.html" t="t">Network</a>, <span t="k"></span><span data-unresolved-link="" t="n">steps</span>: <span data-unresolved-link="" t="t">Seq</span>[<a href="TransactionBuilderStep.html" t="t">TransactionBuilderStep</a>]): <span data-unresolved-link="" t="t">Either</span>[<a href="SomeBuildError.html" t="t">SomeBuildError</a>, <a href="TransactionBuilder$$Context.html" t="t">Context</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Build a transaction from scratch, starting with an "empty" transaction and no signers.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Build a transaction from scratch, starting with an "empty" transaction and no signers.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="calculateChangeValue-bd9">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#calculateChangeValue-bd9" t="n" class="documentableName ">calculateChangeValue</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">tx</span>: <a href="../ledger/Transaction.html" t="t">Transaction</a>, <span t="k"></span><span data-unresolved-link="" t="n">utxo</span>: <a href="../ledger.html#Utxos-0" t="t">Utxos</a>, <span t="k"></span><span data-unresolved-link="" t="n">params</span>: <a href="../ledger/ProtocolParams.html" t="t">ProtocolParams</a>): <a href="../ledger/Value.html" t="t">Value</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>The change of <code>tx</code>: what it consumes minus what it produces, as if no pool is registered, so every pool registration pays the pool deposit.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>The change of <code>tx</code>: what it consumes minus what it produces, as if no pool is registered, so every pool registration pays the pool deposit.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="calculateChangeValue-48">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#calculateChangeValue-48" t="n" class="documentableName ">calculateChangeValue</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">tx</span>: <a href="../ledger/Transaction.html" t="t">Transaction</a>, <span t="k"></span><span data-unresolved-link="" t="n">utxo</span>: <a href="../ledger.html#Utxos-0" t="t">Utxos</a>, <span t="k"></span><span data-unresolved-link="" t="n">params</span>: <a href="../ledger/ProtocolParams.html" t="t">ProtocolParams</a>, <span t="k"></span><span data-unresolved-link="" t="n">certState</span>: <a href="../ledger/CertState.html" t="t">CertState</a>): <a href="../ledger/Value.html" t="t">Value</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>The change of <code>tx</code> against <code>certState</code>: a pool registration pays no pool deposit for a pool that <code>certState</code> registers, as the ledger charges none for a pool update.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>The change of <code>tx</code> against <code>certState</code>: a pool registration pays no pool deposit for a pool that <code>certState</code> registers, as the ledger charges none for a pool update.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="ensureCollateralReturn-fffff2c8">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#ensureCollateralReturn-fffff2c8" t="n" class="documentableName ">ensureCollateralReturn</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">tx</span>: <a href="../ledger/Transaction.html" t="t">Transaction</a>, <span t="k"></span><span data-unresolved-link="" t="n">resolvedUtxos</span>: <a href="../ledger.html#Utxos-0" t="t">Utxos</a>, <span t="k"></span><span data-unresolved-link="" t="n">collateralReturnAddress</span>: <span data-unresolved-link="" t="t">Option</span>[<a href="../address/Address.html" t="t">Address</a>], <span t="k"></span><span data-unresolved-link="" t="n">protocolParams</span>: <a href="../ledger/ProtocolParams.html" t="t">ProtocolParams</a>): <span data-unresolved-link="" t="t">Either</span>[<a href="TxBalancingError.html" t="t">TxBalancingError</a>, <a href="../ledger/Transaction.html" t="t">Transaction</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Ensure collateral return output is set when beneficial.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Ensure collateral return output is set when beneficial.</p>
+              <p>Per Babbage spec (Figure 4), if script validation FAILS without collateralReturnOutput, ALL collateral ADA is taken as fees. With collateralReturnOutput set, only the difference (inputs - return) is taken as fees, and the return output is created.</p>
+              <p>This method creates a collateral return output when:</p>
+              <ol>
+               <li>Collateral contains tokens (MUST be returned per protocol)</li>
+               <li>Excess ADA above required collateral can cover min ADA for return output AND required collateral exceeds the threshold (5 ADA)</li>
+              </ol>
+              <p>For small ADA-only collateral (≤5 ADA), we skip creating a return output to save ~50 bytes of transaction size and associated fees. This is a reasonable trade-off since the potential loss from script failure is small.</p>
+              <p>This prevents users from losing their entire collateral UTXO if a script fails.</p>
+              <p>This is the transaction-level version used within the balancing loop.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="ensureMinAda-fffffa4e">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#ensureMinAda-fffffa4e" t="n" class="documentableName ">ensureMinAda</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">candidateOutput</span>: <a href="../ledger/TransactionOutput.html" t="t">TransactionOutput</a>, <span t="k"></span><span data-unresolved-link="" t="n">params</span>: <a href="../ledger/ProtocolParams.html" t="t">ProtocolParams</a>): <a href="../ledger/TransactionOutput.html" t="t">TransactionOutput</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Update the given transaction output to have the minimum required ada, only changing its Coin.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Update the given transaction output to have the minimum required ada, only changing its Coin.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="modify-fffff13e">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#modify-fffff13e" t="n" class="documentableName ">modify</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">ctx</span>: <a href="TransactionBuilder$$Context.html" t="t">Context</a>, <span t="k"></span><span data-unresolved-link="" t="n">steps</span>: <span data-unresolved-link="" t="t">Seq</span>[<a href="TransactionBuilderStep.html" t="t">TransactionBuilderStep</a>]): <span data-unresolved-link="" t="t">Either</span>[<a href="SomeBuildError.html" t="t">SomeBuildError</a>, <a href="TransactionBuilder$$Context.html" t="t">Context</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Modify a transaction within a context.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Modify a transaction within a context.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="replaceDelayedDatums-fffffe94">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#replaceDelayedDatums-fffffe94" t="n" class="documentableName ">replaceDelayedDatums</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">tx</span>: <a href="../ledger/Transaction.html" t="t">Transaction</a>, <span t="k"></span><span data-unresolved-link="" t="n">specs</span>: <span data-unresolved-link="" t="t">Seq</span>[<a href="DelayedDatumSpec.html" t="t">DelayedDatumSpec</a>]): <span data-unresolved-link="" t="t">Either</span>[<a href="StepError.html" t="t">StepError</a>, <a href="../ledger/Transaction.html" t="t">Transaction</a>]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Replace delayed datum placeholders in the transaction outputs with their computed values.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Replace delayed datum placeholders in the transaction outputs with their computed values.</p>
+              <p>Called after <a href="TransactionBuilder$.html#replaceDelayedRedeemers-fffff575">replaceDelayedRedeemers</a> so that datum builders see the same finalized transaction as redeemer builders.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="replaceDelayedRedeemers-fffff575">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#replaceDelayedRedeemers-fffff575" t="n" class="documentableName ">replaceDelayedRedeemers</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">redeemers</span>: <span data-unresolved-link="" t="t">Seq</span>[<a href="DetachedRedeemer.html" t="t">DetachedRedeemer</a>], <span t="k"></span><span data-unresolved-link="" t="n">specs</span>: <span data-unresolved-link="" t="t">Seq</span>[<a href="DelayedRedeemerSpec.html" t="t">DelayedRedeemerSpec</a>], <span t="k"></span><span data-unresolved-link="" t="n">sortedTx</span>: <a href="../ledger/Transaction.html" t="t">Transaction</a>): <span data-unresolved-link="" t="t">Either</span>[<a href="StepError.html" t="t">StepError</a>, <span data-unresolved-link="" t="t">Seq</span>[<a href="DetachedRedeemer.html" t="t">DetachedRedeemer</a>]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="totalCollateralValue-aab">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="TransactionBuilder$.html#totalCollateralValue-aab" t="n" class="documentableName ">totalCollateralValue</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">tx</span>: <a href="../ledger/Transaction.html" t="t">Transaction</a>, <span t="k"></span><span data-unresolved-link="" t="n">utxos</span>: <a href="../ledger.html#Utxos-0" t="t">Utxos</a>): <a href="../ledger/Value.html" t="t">Value</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Calculates the total value of all collateral inputs.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Calculates the total value of all collateral inputs.</p>
+              <p>This helper is shared between TransactionBuilder and TxBuilder to avoid code duplication.</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               tx
+              </dt>
+              <dd class="body-medium">
+               <p>the transaction containing collateral inputs</p>
+              </dd>
+              <dt class="body-small">
+               utxos
+              </dt>
+              <dd class="body-medium">
+               <p>resolved UTXOs to look up collateral input values</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Returns
+              </dt>
+              <dd class="body-medium">
+               <p>the sum of all collateral input values</p>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+      <section id="Concrete-fields">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete fields</h4>
+        </div>
+        <div class="documentableElement" id="MaxBalancingIterations-0">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">val </span></span><a href="TransactionBuilder$.html#MaxBalancingIterations-0" t="n" class="documentableName ">MaxBalancingIterations</a>: <span data-unresolved-link="" t="t">Int</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Maximum number of iterations for the transaction balancing loop.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Maximum number of iterations for the transaction balancing loop.</p>
+              <p>The balancing loop adjusts fees and change outputs until the transaction is balanced. Typical transactions converge in 2-3 iterations. If this limit is exceeded, it indicates a problem with the transaction structure or diff handler.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="unsafeCtxBodyL-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">val </span></span><a href="TransactionBuilder$.html#unsafeCtxBodyL-0" t="n" class="documentableName ">unsafeCtxBodyL</a>: <span data-unresolved-link="" t="t">Lens</span>[<a href="TransactionBuilder$$Context.html" t="t">Context</a>, <a href="../ledger/TransactionBody.html" t="t">TransactionBody</a>]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="unsafeCtxTxOutputsL-0">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">val </span></span><a href="TransactionBuilder$.html#unsafeCtxTxOutputsL-0" t="n" class="documentableName ">unsafeCtxTxOutputsL</a>: <span data-unresolved-link="" t="t">Lens</span>[<a href="TransactionBuilder$$Context.html" t="t">Context</a>, <span data-unresolved-link="" t="t">IndexedSeq</span>[<a href="../ledger/Sized.html" t="t">Sized</a>[<a href="../ledger/TransactionOutput.html" t="t">TransactionOutput</a>]]]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Modifications of tx's outputs (so far) is relatively "safe" operation in terms that it can't break the transaction validity as long as outputs are correct. Moreover, the DiffHandler to some extend does the same thing, so this lens is the only way to manually edit the tx' outputs in the context, which may be useful together with <a href="TransactionBuilder$.html#modify-fffff13e">modify</a>.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Modifications of tx's outputs (so far) is relatively "safe" operation in terms that it can't break the transaction validity as long as outputs are correct. Moreover, the DiffHandler to some extend does the same thing, so this lens is the only way to manually edit the tx' outputs in the context, which may be useful together with <a href="TransactionBuilder$.html#modify-fffff13e">modify</a>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="unsafeCtxTxReferenceInputsL-0">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">val </span></span><a href="TransactionBuilder$.html#unsafeCtxTxReferenceInputsL-0" t="n" class="documentableName ">unsafeCtxTxReferenceInputsL</a>: <span data-unresolved-link="" t="t">Lens</span>[<a href="TransactionBuilder$$Context.html" t="t">Context</a>, <a href="../ledger.html#TaggedSortedSet-0" t="t">TaggedSortedSet</a>[<a href="../ledger/TransactionInput.html" t="t">TransactionInput</a>]]
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Hydrozoa use case: tx upgrade that requires promoting a reference input into a spent input.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Hydrozoa use case: tx upgrade that requires promoting a reference input into a spent input.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="unsafeCtxWitnessL-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">val </span></span><a href="TransactionBuilder$.html#unsafeCtxWitnessL-0" t="n" class="documentableName ">unsafeCtxWitnessL</a>: <span data-unresolved-link="" t="t">Lens</span>[<a href="TransactionBuilder$$Context.html" t="t">Context</a>, <a href="../ledger/TransactionWitnessSet.html" t="t">TransactionWitnessSet</a>]
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#attributes">Attributes</a></li><li><a href="#members-list">Members list</a><ul><li><a href="#Type-members">Type members</a><ul><li><a href="#Classlikes">Classlikes</a></li></ul></li><li><a href="#Value-members">Value members</a><ul><li><a href="#Concrete-methods">Concrete methods</a></li><li><a href="#Concrete-fields">Concrete fields</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

@@ -1,0 +1,748 @@
+<!DOCTYPE html><html data-pathToRoot="../../../../" data-rawLocation="scalus/compiler/sir/lowering/LoweredValue$$Builder$" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>Builder</title><link rel="shortcut icon" type="image/x-icon" href="../../../../favicon.ico"></link><script type="text/javascript" src="../../../../scripts/theme.js"></script><script type="text/javascript" src="../../../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../../../styles/nord-light.css"></link><link rel="stylesheet" href="../../../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../../../styles/searchbar.css"></link><link rel="stylesheet" href="../../../../styles/social-links.css"></link><link rel="stylesheet" href="../../../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../../../styles/fontawesome.css"></link><script type="text/javascript" src="../../../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../../../styles/apistyles.css"></link><script>var pathToRoot = "../../../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../../../index.html">Scalus</a>/<a href="../../../../scalus.html">scalus</a>/<a href="../../../compiler.html">scalus.compiler</a>/<a href="../../sir.html">scalus.compiler.sir</a>/<a href="../lowering.html">scalus.compiler.sir.lowering</a>/<a href="LoweredValue$.html">LoweredValue</a>/<a href="LoweredValue$$Builder$.html">Builder</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon ob"></span></span>
+ <h1 class="h600 single">Builder</h1>
+</div>
+<div class="fqname body-large">
+ <span>scalus.compiler.sir.lowering.LoweredValue.Builder</span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="LoweredValue$$Builder$.html" t="n" class="documentableName ">Builder</a>
+ </div>
+</div>
+<div class="cover">
+ <div class="doc">
+  <p>Builder for LoweredValue, to avoid boilerplate code. Import this object to make available</p>
+ </div>
+ <section id="attributes">
+  <h2 class="h500">Attributes</h2>
+  <dl class="attributes">
+   <dt class="body-small">
+    Graph
+   </dt>
+   <dd class="body-medium">
+    <div id="inheritance-diagram" class="diagram-class showGraph">
+     <button type="button" class="label-only-button" onclick="zoomOut()">Reset zoom</button><button type="button" class="label-only-button" onclick="hideGraph()">Hide graph</button><button type="button" class="label-only-button" onclick="showGraph()">Show graph</button>
+     <svg id="graph"></svg>
+     <script type="text/dot" id="dot"> digraph g {
+ node0 [id=node0, label="<span style=\"color: #FFFFFF;\">object <a href=\"LoweredValue$$Builder$.html\" t=\"n\">Builder</a></span>", class="object vertex"];
+node1 [id=node1, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Object</span></span>", class="class vertex"];
+node2 [id=node2, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Any</span></span>", class="class vertex"];
+node3 [id=node3, label="<span style=\"color: #FFFFFF;\">trait <span data-unresolved-link=\"\" t=\"n\">Matchable</span></span>", class="trait vertex"];
+
+
+ node0 -> node1;
+node1 -> node2;
+node1 -> node3;
+node3 -> node2;
+
+}
+</script>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Supertypes
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <div>
+      class <span data-unresolved-link="" t="n">Object</span>
+     </div>
+     <div>
+      trait <span data-unresolved-link="" t="n">Matchable</span>
+     </div>
+     <div>
+      class <span data-unresolved-link="" t="n">Any</span>
+     </div><span></span>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Self type
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <span></span>
+     <div>
+      <a href="LoweredValue$$Builder$.html" t="n">Builder</a>.<span t="k">type</span>
+     </div>
+    </div>
+   </dd>
+  </dl>
+ </section>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Concrete-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete methods</h4>
+        </div>
+        <div class="documentableElement" id="lvApply-e9d">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvApply-e9d" t="n" class="documentableName ">lvApply</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">f</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">arg</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>, <span t="k"></span><span data-unresolved-link="" t="n">resTp</span>: <span data-unresolved-link="" t="t">Option</span>[<a href="../SIRType.html" t="t">SIRType</a>] = ..., <span t="k"></span><span data-unresolved-link="" t="n">resRepr</span>: <span data-unresolved-link="" t="t">Option</span>[<a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>] = ...)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvApplyDirect-fffff342">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvApplyDirect-fffff342" t="n" class="documentableName ">lvApplyDirect</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">f</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">arg</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">resType</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">resRepr</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Low-level apply that skips automatic type/representation conversion.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Low-level apply that skips automatic type/representation conversion.</p>
+              <p>Use when the caller explicitly manages argument types and representations, e.g., in runtime conversion functions where arguments are intentionally in non-default representations.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvAsIdentifiable-fffffd39">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvAsIdentifiable-fffffd39" t="n" class="documentableName ">lvAsIdentifiable</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">lv</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">nameHint</span>: <span data-unresolved-link="" t="t">String</span>, <span t="k"></span><span data-unresolved-link="" t="n">tp</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">repr</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): (<a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>, <span data-unresolved-link="" t="t">Boolean</span>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>If <code>lv</code> is already identifiable, return it unchanged with <code>false</code>. Otherwise wrap it in a fresh lazy let-binding (<code>lvNewLazyIdVar</code>) with <code>nameHint</code> (uniqued), <code>tp</code>, and <code>repr</code>, returning the new identifiable plus <code>true</code> to signal the caller that it must add the binding to scope (e.g., via <code>ScopeBracketsLoweredValue</code>).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>If <code>lv</code> is already identifiable, return it unchanged with <code>false</code>. Otherwise wrap it in a fresh lazy let-binding (<code>lvNewLazyIdVar</code>) with <code>nameHint</code> (uniqued), <code>tp</code>, and <code>repr</code>, returning the new identifiable plus <code>true</code> to signal the caller that it must add the binding to scope (e.g., via <code>ScopeBracketsLoweredValue</code>).</p>
+              <p><code>tp</code> / <code>repr</code> are passed explicitly because some callers wrap the result of a <code>toRepresentation</code> conversion whose runtime type/repr differs from the source value's stored ones.</p>
+              <p>Note: when <code>lv</code> is already identifiable, <code>tp</code> and <code>repr</code> are ignored — the existing binding's stored shape is returned as-is. Callers that pass values different from <code>lv.sirType</code> / <code>lv.representation</code> must already have ensured the existing binding's shape matches what they need; otherwise the identifiable branch would silently mask a mismatch.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvBoolConstant-fffff5fb">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvBoolConstant-fffff5fb" t="n" class="documentableName ">lvBoolConstant</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">value</span>: <span data-unresolved-link="" t="t">Boolean</span>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="ConstantLoweredValue.html" t="t">ConstantLoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvBuiltinApply-fffff079">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvBuiltinApply-fffff079" t="n" class="documentableName ">lvBuiltinApply</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">fun</span>: <a href="../SIR$$Builtin.html" t="t">Builtin</a>, <span t="k"></span><span data-unresolved-link="" t="n">arg</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">tp</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">lvr</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvBuiltinApply2-fffff9f9">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvBuiltinApply2-fffff9f9" t="n" class="documentableName ">lvBuiltinApply2</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">fun</span>: <a href="../SIR$$Builtin.html" t="t">Builtin</a>, <span t="k"></span><span data-unresolved-link="" t="n">arg1</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">arg2</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">tp</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">lvr</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvCaseBoolean-8c8">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvCaseBoolean-8c8" t="n" class="documentableName ">lvCaseBoolean</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">scrutinee</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">falseBranch</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">trueBranch</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>, <span t="k"></span><span data-unresolved-link="" t="n">optTargetType</span>: <span data-unresolved-link="" t="t">Option</span>[<a href="../SIRType.html" t="t">SIRType</a>] = ...)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Generate a case expression on a boolean value (PlutusV4 feature).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Generate a case expression on a boolean value (PlutusV4 feature).</p>
+              <p>In PlutusV4, <code>Case</code> can be used directly on boolean constants: Case(bool, [falseBranch, trueBranch]) where False = index 0 and True = index 1.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvCaseDataConstr-648">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvCaseDataConstr-648" t="n" class="documentableName ">lvCaseDataConstr</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">scrutinee</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">fieldsVars</span>: <span data-unresolved-link="" t="t">List</span>[<a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>], <span t="k"></span><span data-unresolved-link="" t="n">branches</span>: <span data-unresolved-link="" t="t">List</span>[<a href="LoweredValue.html" t="t">LoweredValue</a>], <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>, <span t="k"></span><span data-unresolved-link="" t="n">optTargetType</span>: <span data-unresolved-link="" t="t">Option</span>[<a href="../SIRType.html" t="t">SIRType</a>] = ...)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Create a Case on Data (dijkstraPV+): branch <code>i</code> handles the <code>Data.Constr</code> tag <code>i</code> and binds <code>fieldsVars(i)</code> to the constructor fields (List[Data]). The scrutinee has to be a Data.Constr at runtime.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Create a Case on Data (dijkstraPV+): branch <code>i</code> handles the <code>Data.Constr</code> tag <code>i</code> and binds <code>fieldsVars(i)</code> to the constructor fields (List[Data]). The scrutinee has to be a Data.Constr at runtime.</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               branches
+              </dt>
+              <dd class="body-medium">
+               <p>per-tag branches, ordered 0..n-1</p>
+              </dd>
+              <dt class="body-small">
+               fieldsVars
+              </dt>
+              <dd class="body-medium">
+               <p>per-branch lambda-bound variable receiving the constructor fields</p>
+              </dd>
+              <dt class="body-small">
+               scrutinee
+              </dt>
+              <dd class="body-medium">
+               <p>the Data value to match on, in a packed-Data representation</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvCaseInteger-fffff39a">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvCaseInteger-fffff39a" t="n" class="documentableName ">lvCaseInteger</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">scrutinee</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">branches</span>: <span data-unresolved-link="" t="t">List</span>[<a href="LoweredValue.html" t="t">LoweredValue</a>], <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>, <span t="k"></span><span data-unresolved-link="" t="n">optTargetType</span>: <span data-unresolved-link="" t="t">Option</span>[<a href="../SIRType.html" t="t">SIRType</a>] = ...)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Generate a case expression on an integer value (PlutusV4 feature).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Generate a case expression on an integer value (PlutusV4 feature).</p>
+              <p>In PlutusV4, <code>Case</code> can be used directly on integer constants when cases form a contiguous sequence starting from 0: Case(int, [branch0, branch1, ..., branchN]).</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               branches
+              </dt>
+              <dd class="body-medium">
+               <p>list of branches indexed by integer value (0 -&gt; branches(0), 1 -&gt; branches(1), etc.)</p>
+              </dd>
+              <dt class="body-small">
+               inPos
+              </dt>
+              <dd class="body-medium">
+               <p>source position</p>
+              </dd>
+              <dt class="body-small">
+               optTargetType
+              </dt>
+              <dd class="body-medium">
+               <p>optional target type for the result</p>
+              </dd>
+              <dt class="body-small">
+               scrutinee
+              </dt>
+              <dd class="body-medium">
+               <p>the integer value to match on</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvCaseList-19d">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvCaseList-19d" t="n" class="documentableName ">lvCaseList</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">scrutinee</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">consHead</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">consTail</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">consBranch</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">optNilBranch</span>: <span data-unresolved-link="" t="t">Option</span>[<a href="LoweredValue.html" t="t">LoweredValue</a>], <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>, <span t="k"></span><span data-unresolved-link="" t="n">optTargetType</span>: <span data-unresolved-link="" t="t">Option</span>[<a href="../SIRType.html" t="t">SIRType</a>] = ...)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Generate a case expression on a list value (PlutusV4 feature).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Generate a case expression on a list value (PlutusV4 feature).</p>
+              <p>In PlutusV4, <code>Case</code> can be used directly on list constants: Case(list, [consBranch, nilBranch]) where Cons = index 0 (receives head and tail as arguments) and Nil = index 1 (no arguments).</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               consBranch
+              </dt>
+              <dd class="body-medium">
+               <p>the branch to execute for non-empty list (Cons)</p>
+              </dd>
+              <dt class="body-small">
+               consHead
+              </dt>
+              <dd class="body-medium">
+               <p>variable for the head element in cons branch</p>
+              </dd>
+              <dt class="body-small">
+               consTail
+              </dt>
+              <dd class="body-medium">
+               <p>variable for the tail list in cons branch</p>
+              </dd>
+              <dt class="body-small">
+               inPos
+              </dt>
+              <dd class="body-medium">
+               <p>source position</p>
+              </dd>
+              <dt class="body-small">
+               nilBranch
+              </dt>
+              <dd class="body-medium">
+               <p>the branch to execute for empty list (Nil)</p>
+              </dd>
+              <dt class="body-small">
+               optTargetType
+              </dt>
+              <dd class="body-medium">
+               <p>optional target type for the result</p>
+              </dd>
+              <dt class="body-small">
+               scrutinee
+              </dt>
+              <dd class="body-medium">
+               <p>the list value to match on</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvCasePair-fffff7d7">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvCasePair-fffff7d7" t="n" class="documentableName ">lvCasePair</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">scrutinee</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">fstVar</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">sndVar</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">body</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Create a Case on Pair for PlutusV4+.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Create a Case on Pair for PlutusV4+.</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               body
+              </dt>
+              <dd class="body-medium">
+               <p>the body expression using fstVar and sndVar</p>
+              </dd>
+              <dt class="body-small">
+               fstVar
+              </dt>
+              <dd class="body-medium">
+               <p>variable to bind to the first element</p>
+              </dd>
+              <dt class="body-small">
+               inPos
+              </dt>
+              <dd class="body-medium">
+               <p>source position</p>
+              </dd>
+              <dt class="body-small">
+               scrutinee
+              </dt>
+              <dd class="body-medium">
+               <p>the pair to match on</p>
+              </dd>
+              <dt class="body-small">
+               sndVar
+              </dt>
+              <dd class="body-medium">
+               <p>variable to bind to the second element</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvCast-fffffd8b">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvCast-fffffd8b" t="n" class="documentableName ">lvCast</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">expr</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">targetType</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>, <span t="k"></span><span data-unresolved-link="" t="n">isTypeProxy</span>: <span data-unresolved-link="" t="t">Boolean</span> = ...)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvChooseData-492">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvChooseData-492" t="n" class="documentableName ">lvChooseData</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">scrutinee</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">constrTagVar</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">constrArgsVar</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">constrBranch</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">mapEntriesVar</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">mapBranch</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">listElementsVar</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">listBranch</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">iValueVar</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">iBranch</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">bValueVar</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">bBranch</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>, <span t="k"></span><span data-unresolved-link="" t="n">optTargetType</span>: <span data-unresolved-link="" t="t">Option</span>[<a href="../SIRType.html" t="t">SIRType</a>] = ...)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Dispatch on the five Data variants via the chooseData builtin. The bound variables are expected to carry their un*Data extraction of the scrutinee as rhs.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Dispatch on the five Data variants via the chooseData builtin. The bound variables are expected to carry their un*Data extraction of the scrutinee as rhs.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvDataDataListNil-fffff597">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvDataDataListNil-fffff597" t="n" class="documentableName ">lvDataDataListNil</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Nil for a BuiltinList[Data] with DataData element repr.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Nil for a BuiltinList[Data] with DataData element repr.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvDataNil-982">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvDataNil-982" t="n" class="documentableName ">lvDataNil</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>, <span t="k"></span><span data-unresolved-link="" t="n">tp</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">repr</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvDelay-fffffea5">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvDelay-fffffea5" t="n" class="documentableName ">lvDelay</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">value</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvEqualsInteger-d57">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvEqualsInteger-d57" t="n" class="documentableName ">lvEqualsInteger</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">x</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">y</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvForce-fffffea5">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvForce-fffffea5" t="n" class="documentableName ">lvForce</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">value</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvIfThenElse-8c8">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvIfThenElse-8c8" t="n" class="documentableName ">lvIfThenElse</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">cond</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">thenBranch</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">elseBranch</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>, <span t="k"></span><span data-unresolved-link="" t="n">optTargetType</span>: <span data-unresolved-link="" t="t">Option</span>[<a href="../SIRType.html" t="t">SIRType</a>] = ...)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvIntConstant-fffff014">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvIntConstant-fffff014" t="n" class="documentableName ">lvIntConstant</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">value</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="ConstantLoweredValue.html" t="t">ConstantLoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvLamAbs-700">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvLamAbs-700" t="n" class="documentableName ">lvLamAbs</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">name</span>: <span data-unresolved-link="" t="t">String</span>, <span t="k"></span><span data-unresolved-link="" t="n">tp</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">inputRepresentation</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>, <span t="k"></span><span data-unresolved-link="" t="n">f</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a><span t="k"> =&gt; </span><a href="LoweringContext.html" t="t">LoweringContext</a><span t="k"> ?=&gt; </span><a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvLamAbs-638">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvLamAbs-638" t="n" class="documentableName ">lvLamAbs</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">sirVar</span>: <a href="../SIR$$Var.html" t="t">Var</a>, <span t="k"></span><span data-unresolved-link="" t="n">inputRepresentation</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>, <span t="k"></span><span data-unresolved-link="" t="n">f</span>: <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a><span t="k"> =&gt; </span><a href="LoweringContext.html" t="t">LoweringContext</a><span t="k"> ?=&gt; </span><a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvLetRec-b2">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvLetRec-b2" t="n" class="documentableName ">lvLetRec</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">name</span>: <span data-unresolved-link="" t="t">String</span>, <span t="k"></span><span data-unresolved-link="" t="n">tp</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">repr</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>, <span t="k"></span><span data-unresolved-link="" t="n">rhs</span>: <a href="LoweringContext.html" t="t">LoweringContext</a><span t="k"> ?=&gt; </span><a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a><span t="k"> =&gt; </span><a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">body</span>: <a href="LoweringContext.html" t="t">LoweringContext</a><span t="k"> ?=&gt; </span><a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a><span t="k"> =&gt; </span><a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LetRecLoweredValue.html" t="t">LetRecLoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvNewLazyIdVar-fffff1f6">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvNewLazyIdVar-fffff1f6" t="n" class="documentableName ">lvNewLazyIdVar</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">id</span>: <span data-unresolved-link="" t="t">String</span>, <span t="k"></span><span data-unresolved-link="" t="n">tp</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">lvr</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>, <span t="k"></span><span data-unresolved-link="" t="n">rhs</span>: <a href="LoweringContext.html" t="t">LoweringContext</a><span t="k"> ?=&gt; </span><a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>create let and add it to the current scope.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>create let and add it to the current scope.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvNewLazyNamedVar-fffff1f6">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvNewLazyNamedVar-fffff1f6" t="n" class="documentableName ">lvNewLazyNamedVar</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">name</span>: <span data-unresolved-link="" t="t">String</span>, <span t="k"></span><span data-unresolved-link="" t="n">tp</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">lvr</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>, <span t="k"></span><span data-unresolved-link="" t="n">rhs</span>: <a href="LoweringContext.html" t="t">LoweringContext</a><span t="k"> ?=&gt; </span><a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="IdentifiableLoweredValue.html" t="t">IdentifiableLoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvPairDataNil-982">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvPairDataNil-982" t="n" class="documentableName ">lvPairDataNil</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>, <span t="k"></span><span data-unresolved-link="" t="n">tp</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">repr</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvProdDataListNil-fffff597">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvProdDataListNil-fffff597" t="n" class="documentableName ">lvProdDataListNil</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">inPos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Nil for a BuiltinList[Data] used as product case constructor fields.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Nil for a BuiltinList[Data] used as product case constructor fields.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvStringConstant-296">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvStringConstant-296" t="n" class="documentableName ">lvStringConstant</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">value</span>: <span data-unresolved-link="" t="t">String</span>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="ConstantLoweredValue.html" t="t">ConstantLoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvTrace-338">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvTrace-338" t="n" class="documentableName ">lvTrace</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">message</span>: <span data-unresolved-link="" t="t">String</span>, <span t="k"></span><span data-unresolved-link="" t="n">value</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>)(<span t="k">using </span><span t="k"></span><a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lvTypedNil-fffff334">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#lvTypedNil-fffff334" t="n" class="documentableName ">lvTypedNil</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>, <span t="k"></span><span data-unresolved-link="" t="n">elemSirType</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">listType</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">repr</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>)(<span t="k">using </span><span t="k"></span><a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="sirTypeToDefaultUni-8c0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#sirTypeToDefaultUni-8c0" t="n" class="documentableName ">sirTypeToDefaultUni</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">tp</span>: <a href="../SIRType.html" t="t">SIRType</a>): <a href="../../../uplc/DefaultUni.html" t="t">DefaultUni</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="via-74b">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="LoweredValue$$Builder$.html#via-74b" t="n" class="documentableName ">via</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">intermediate</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>)(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">input</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">target</span>: <a href="LoweredValueRepresentation.html" t="t">LoweredValueRepresentation</a>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Convert <code>input</code> to <code>target</code> via a static <code>intermediate</code> repr — i.e., <code>input.toRepresentation(intermediate, pos).toRepresentation(target, pos)</code>. Replaces per-emitter <code>viaXxx</code> helpers (Phase 5).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Convert <code>input</code> to <code>target</code> via a static <code>intermediate</code> repr — i.e., <code>input.toRepresentation(intermediate, pos).toRepresentation(target, pos)</code>. Replaces per-emitter <code>viaXxx</code> helpers (Phase 5).</p>
+              <p>For intermediates that depend on <code>input.sirType</code> (e.g. <code>SumBuiltinList(defaultDataRep(elemType))</code>), keep the per-emitter helper since the intermediate computation needs sirType context — this <code>via</code> only wraps the static case.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#attributes">Attributes</a></li><li><a href="#members-list">Members list</a><ul><li><a href="#Value-members">Value members</a><ul><li><a href="#Concrete-methods">Concrete methods</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

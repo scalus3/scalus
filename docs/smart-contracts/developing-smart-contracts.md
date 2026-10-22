@@ -1,0 +1,222 @@
+Source: https://scalus.org/docs/smart-contracts/developing-smart-contracts
+
+# Build Your First Cardano Smart Contract
+
+In this tutorial, you'll write, test, and debug your first Cardano smart contract using Scalus. You'll learn the fundamentals of spending validators, datums, and redeemers while experiencing Scalus's unique advantage: debugging smart contracts as regular Scala code with your favorite IDE.
+
+By the end, you'll have a working validator that locks funds and only unlocks them when specific conditions are met—all tested locally before deploying on-chain.
+
+## Creating a new validator from the template
+Let's seed a new Scalus validator:
+
+```sh copy
+sbt new scalus3/validator.g8
+```
+When prompted, name the application `hello cardano`. This command scaffolds a simple Scalus validator project.
+```console
+sbt new scalus3/validator.g8
+
+name [MyValidator]: hello cardano
+
+Template applied in ./hello-cardano
+```
+## Project structure
+Let’s take a look at what just got generated:
+
+```ansi
+ hello-cardano/
+    ├── HelloCardano.scala          # Simple validator
+    ├── HelloCardano.test.scala     # Simple tests
+    ├── project.scala               # Project configuration
+    └── README.md
+```
+
+Let's test our validator
+```sh copy
+cd hello-cardano
+sbt test
+```
+
+If you see this message, everything is going fine!
+```sh {2}
+HelloCardanoTest:
+- HelloCardano should work correctly *** FAILED ***
+```
+It's time to implement the spending logic, but before that - let's learn the key concepts. 
+
+## Key concepts
+
+1. A **spending validator** is a program that controls when funds can be unlocked from a UTxO (Unspent Transaction Output) on the Cardano blockchain. Think of it as a lock that requires specific conditions to be met before allowing access.
+
+2. **Datum** - Configuration data attached when locking funds in the contract. It's like setting the combination on a lock. In our example, the datum stores the public key hash of the authorized owner.
+
+3. **Redeemer** - Data provided when spending the funds. It's like entering the combination to open the lock. Our example requires the redeemer to contain the message "Hello, Cardano!"
+
+## Writing Your First Validator
+
+Let's write a simple validator that demonstrates these concepts, update the spending validator:
+
+```scala copy {4-9, 11, 14-15, 18-19}
+@Compile
+object HelloCardano extends Validator:
+    
+    inline override def spend(
+        datum: Option[Data],    
+        redeemer: Data,         
+        tx: TxInfo,             
+        outRef: TxOutRef        
+    ): Unit =
+        // Extract the owner's public key hash from the datum
+        val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
+
+        // Check that the transaction is signed by the owner
+        val signed = tx.signatories.contains(owner)
+        require(signed, "Must be signed")
+
+        // Verify the redeemer contains the correct message
+        val saysHello = redeemer.to[String] == "Hello, Cardano!"
+        require(saysHello, "Invalid redeemer")
+```
+
+**How It Works in Practice**
+
+To spend a UTxO locked by this validator:
+
+1. **Lock**: Create a UTxO with funds and attach a datum containing the owner's public key hash
+2. **Unlock**: Provide a redeemer with "Hello, Cardano!", sign the transaction, and both checks must pass
+
+Learn more about [Cardano Validators](/docs/smart-contracts/validators).
+
+## Let's test our Validator
+
+Now that we've written our validator, let's test it to ensure it works correctly.
+Scalus provides the `ScalusTest` trait with helper methods to create test scenarios.
+
+**Test 1: Success case** - Validates that when both conditions are met (correct message and owner signature), the validator succeeds.
+
+```scala copy lines {1, 3, 5, 7, 10, 18, 21}
+class HelloCardanoTest extends AnyFunSuite with ScalusTest:
+
+    test("HelloCardano validates correct message and signature") {
+        // 1. Setup: Create a public key hash for the owner
+        val ownerPubKey = PubKeyHash(hex"1234567890abcdef1234567890abcdef1234567890abcdef12345678")
+
+        // 2. Prepare the redeemer with the correct message
+        val message = "Hello, Cardano!".toData
+
+        // 3. Create a script context with the owner in signatories
+        val context = makeSpendingScriptContext(
+          datum = ownerPubKey.toData,
+          redeemer = message,
+          signatories = List(ownerPubKey)
+        )
+
+        // 4. Compile and run the validator
+        val result = compile(HelloCardano.spend).runScript(context)
+
+        // 5. Assert the validation succeeded
+        assert(result.isSuccess)
+    }
+```
+**How it works?**
+
+1. **`compile()`** - Transforms your Scala validator code into Plutus UPLC (Untyped Plutus Core), the low-level language that runs on Cardano. This happens at compile-time using the Scalus compiler plugin.
+2. **`runScript()`** - Executes the compiled validator with the provided `ScriptContext`, simulating on-chain execution. Returns a `Result` indicating success or failure with execution costs.
+3. **`assert()`** - A standard Scala test assertion that verifies the condition is true. If false, the test fails. Here we check if the validator execution succeeded (`result.isSuccess`).
+4. **`makeSpendingScriptContext()`** - A helper from `ScalusTest` that creates a properly structured `ScriptContext` for spending validators, so you don't need to manually construct complex context objects.
+
+## What about negative scenario?
+
+**Test 2: Wrong message** - Ensures the validator fails when the redeemer contains an incorrect message, even if signed by the owner.
+
+```scala copy lines {1, 3, 14}
+    test("HelloCardano fails with wrong message") {
+        val ownerPubKey = PubKeyHash(hex"1234567890abcdef1234567890abcdef1234567890abcdef12345678")
+        val wrongMessage = "Wrong message".toData
+
+        val context = makeSpendingScriptContext(
+          datum = ownerPubKey.toData,
+          redeemer = wrongMessage,
+          signatories = List(ownerPubKey)
+        )
+
+        val result = compile(HelloCardano.spend).runScript(context)
+
+        // Validator should fail due to incorrect message
+        assert(result.isFailure)
+    }
+```
+
+## Running the Tests
+
+```sh copy
+scala-cli test hello-cardano
+```
+
+You should see output showing all tests passing:
+```
+HelloCardanoTest:
+  - HelloCardano validates correct message and signature
+  - HelloCardano fails with wrong message
+```
+
+Learn more about [Testing Smart Contracts](/docs/testing/unit-testing).
+
+## Debugging
+
+One of Scalus's biggest advantages is that you can debug validators as regular Scala code before deploying them on-chain.
+
+**Debug as Regular Scala Code**
+
+Your validator is just Scala code until it's compiled to UPLC. This means you can:
+
+1. **Use your IDE's debugger** - Set breakpoints, step through execution, inspect variables
+2. **Call validators directly from the test** - Run in the debug mode.
+
+Look how simple it is!
+
+<iframe width="800" height="450" src="https://www.youtube.com/embed/YW5cMnH2b14?si=MBwq2gu-ii4qtdrS&amp;" title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin" allowFullScreen></iframe>
+
+Learn more about [Debugging Smart Contracts](/docs/testing/debugging).
+
+## Compiling into Plutus script
+
+Use `PlutusV3.compile` to transform your Scala validator into a Plutus script:
+
+```scala
+import scalus.compiler.Options
+import scalus.uplc.PlutusV3
+
+// Compile your validator to Plutus V3
+private given Options = Options.release
+val compiled = PlutusV3.compile(HelloCardano.validate)
+
+// Get the script hex for use in transactions
+val scriptHex = compiled.script.doubleCborHex
+```
+
+Learn more about [Compiling Smart Contracts](/docs/smart-contracts/compiling).
+
+## What's Next?
+
+Congratulations! You've successfully created, tested, and debugged your first Cardano smart contract. You now understand:
+
+- How spending validators control access to locked funds
+- The role of datums, redeemers, and script context
+- How to write type-safe validators in Scala
+- How to test validators with different scenarios
+- How to debug validators using standard Scala tooling
+- How to compile validator into Plutus script
+- How to use the compiled validator in transactions
+
+### Continue Your Journey
+
+- **[HTLC Tutorial](/docs/smart-contracts/htlc-tutorial)** - Build a complete Hash Time-Locked Contract with transactions and tests
+- **[Validators in Depth](/docs/smart-contracts/validators)** - Learn about different validator types and patterns
+- **[Testing Smart Contracts](/docs/testing/unit-testing)** - Advanced testing techniques and property-based testing
+- **[Debugging and Troubleshooting](/docs/testing/debugging)** - Deep dive into debugging strategies
+- **[Compiling Smart Contracts](/docs/smart-contracts/compiling)** - Generate Plutus script and configure compilation options
+- **[Working with Contract](/docs/dapp-development/working-with-contract)** - Set options, generate blueprints, and get script addresses
+- **[First Contract Transaction](/docs/transactions/first-contract-transaction)** - Lock funds and spend from a script address
+- **[Building Transactions](/docs/transactions/building-first-transaction)** - Build and submit simple ADA transfers
+- **[Examples Repository](https://github.com/scalus3/scalus/tree/master/scalus-examples)** - Real-world validator examples
