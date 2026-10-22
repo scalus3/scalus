@@ -83,6 +83,13 @@ class Emulator(
 ) extends EmulatorBase // which extends BlockchainProvider
 ```
 
+This constructor builds the default [`ChainConfig.instant`](#blocks-mempool-and-forks) preset.
+`initialAppliedTxLog` is deprecated: the log has no blocks, so `txStatus` and `checkTransaction`
+report its transactions `NotFound`. Use `snapshot()` to copy an emulator with its blocks. The
+constructor that takes a `ChainConfig` (in place of the log) has no default arguments – Java and
+JavaScript cannot use Scala defaults – so a Scala caller either gives every argument or uses a
+factory such as `Emulator.withAddresses(addresses, value, chainConfig)` below.
+
 ### Factory Methods
 
 ```scala
@@ -103,6 +110,11 @@ val emulator = Emulator.withAddresses(Seq(addr1, addr2), Value.ada(50_000))
 | `setSlot(slot)` | Advance the current slot (for time-based validation) |
 | `snapshot()` | Create a point-in-time copy of the emulator |
 | `utxos` | Get current UTxO set |
+| `produceBlock()` | Forge a block from the mempool; see [Blocks, mempool and forks](#blocks-mempool-and-forks) |
+| `rollback(n)` | Remove the last `n` blocks of the selected chain |
+| `txStatus(hash)` | Where a transaction stands: `Pending`, `Confirmed`, `Dropped`, `RolledBack` or `NotFound` |
+| `tip` | The `ChainTip` of the selected chain, or `ChainTip.origin` before the first block |
+| `findUtxos(query, view)` | Query a specific `ChainView`: `Tip`, `Mempool` or `Stable(depth)` |
 
 ### Error Handling
 
@@ -142,6 +154,209 @@ val invalidTx = TxBuilder(testEnv)
   .validTo(3000L)
   // ...
 ```
+
+## Blocks, mempool and forks
+
+The `Emulator` behaves like a small Cardano node: a submitted transaction waits in a mempool, a
+block makes it visible, and a fork can roll it back. `ChainConfig.blockProduction` picks the
+preset:
+
+```scala
+import scalus.cardano.node.{ChainConfig, Emulator}
+
+// The default: every submit forges a block at once, so every example above still holds.
+val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address), Value.ada(1000), ChainConfig.instant)
+
+// Only an explicit produceBlock() forges a block; a submitted tx waits in the mempool.
+// Only Alice is funded, so Bob's address shows a payment only once a block holds it.
+val manual = Emulator.withAddresses(Seq(Alice.address), Value.ada(1000), ChainConfig.manual)
+```
+
+`ChainConfig`'s constructor is private: build one from `ChainConfig.instant` or
+`ChainConfig.manual` and change a field with its `with` method, for example
+`ChainConfig.manual.withSecurityParam(10)`, `withAwaitTx(...)` or `withOrphanTxs(...)`. Pass it to
+a factory such as `Emulator.withAddresses(addresses, value, chainConfig)` or
+`Emulator.withState(initState, context, chainConfig)`.
+
+In `Manual`, `setSlot` below the tip slot throws `IllegalArgumentException`: a forge moves the
+current slot to the block's slot, so a test cannot go back before it.
+
+### The delay case
+
+With `ChainConfig.manual`, a query keeps showing the old state until `produceBlock()` makes the
+submitted transaction's outputs real:
+
+```scala
+val tx = TxBuilder(testEnv)
+  .payTo(Bob.address, Value.ada(10))
+  .complete(manual, Alice.address)
+  .await()
+  .sign(Alice.signer)
+  .transaction
+
+manual.submitSync(tx)                                            // Right(tx.id)
+manual.findUtxosSync(UtxoQuery(UtxoSource.FromAddress(Bob.address))) // still empty
+manual.txStatus(tx.id)                                            // TxStatus.Pending
+
+val point = manual.produceBlock()
+manual.findUtxosSync(UtxoQuery(UtxoSource.FromAddress(Bob.address))) // the payment is there
+manual.txStatus(tx.id)                                            // TxStatus.Confirmed(1, point)
+```
+
+This is the behaviour a real provider has: Blockfrost, Koios and Kupo show only block-confirmed
+state, so dApp code that reads right after `submit` must cope with the old state still showing.
+
+### Tx status
+
+`txStatus(hash): TxStatus` answers where a transaction stands:
+
+| Case | Meaning |
+|---|---|
+| `Pending` | in the mempool |
+| `Confirmed(depth, point)` | in a block on the selected chain; the tip is depth 1 |
+| `Dropped(reason)` | removed from the mempool; `reason` is `Expired`, `InputsSpent` or `Invalid(error)` |
+| `RolledBack` | was in a block that left the chain, under the `Drop` orphan policy |
+| `NotFound` | in neither the mempool nor a block |
+
+`checkTransaction`, the method off-the-shelf dApp code already calls, maps `Pending` and
+`Confirmed` to themselves and every other case to `NotFound`. A transaction known only from an
+applied-tx log the Emulator was built with has no block, so both report it `NotFound`; `hasTx` and
+`getTransaction` read the log and still find it.
+
+### Views
+
+A query normally reads the tip – the selected chain's last block, what a real provider shows.
+`findUtxos(query, view)` (and its synchronous twin `findUtxosSync`) reads something else instead:
+
+```scala
+manual.findUtxosSync(query, ChainView.Tip)       // the chain; same as findUtxosSync(query)
+manual.findUtxosSync(query, ChainView.Mempool)   // the chain plus the pending txs
+manual.findUtxosSync(query, ChainView.Stable(2)) // the block two deep; the tip is depth 1
+```
+
+`Stable(d)` returns `Left(ChainViewError.DepthOutOfRange(...))` for a `d` below 1 or past genesis,
+and `Left(ChainViewError.SnapshotDropped(d))` once a rollback or the chain's growth has pruned that
+block's snapshot past `securityParam`.
+
+### TTL drop
+
+Revalidation removes a mempool transaction once it is no longer valid – most often because its
+validity interval ended:
+
+```scala
+manual.setSlot(99)
+val tx = TxBuilder(testEnv)
+  .payTo(Bob.address, Value.ada(10))
+  .validTo(Instant.ofEpochMilli(testEnv.slotConfig.slotToTime(100)))
+  .complete(manual, Alice.address)
+  .await()
+  .sign(Alice.signer)
+  .transaction
+
+manual.submitSync(tx)      // Right(tx.id)
+manual.setSlot(100)
+manual.txStatus(tx.id)     // TxStatus.Dropped(DropReason.Expired)
+```
+
+### A rival double spend
+
+`produceBlock(on, txs)` forges a block anywhere in the block tree, not from the mempool – this is
+how a test builds a rival chain. Once a branch grows past the current chain, the Emulator switches
+to it, and the transactions the switch orphans follow `ChainConfig.orphanTxs`:
+
+```scala
+// paymentFrom and doubleSpendOf are test helpers: each builds and signs a payment that spends
+// the given input. input0 and input1 are two UTxOs of Alice's.
+val p1 = manual.produceBlock()
+val txA = paymentFrom(input0)
+val txB = paymentFrom(input1)
+manual.submitSync(txA)
+manual.submitSync(txB)
+val p2 = manual.produceBlock()          // A and B are confirmed in p2
+
+// A rival that double-spends B's input, forged on the branch at p1 instead of the tip.
+val rival = doubleSpendOf(input1)
+val Right(r2) = manual.produceBlock(p1, Seq(rival))
+manual.tip.point // still p2: the rival branch (height 2) only ties the current chain
+
+val Right(r3) = manual.produceBlock(r2, Seq.empty) // the rival branch is now longer
+manual.tip.point // r3: the Emulator switched
+
+// With the default ReturnToMempool:
+manual.txStatus(txB.id)     // TxStatus.Dropped(DropReason.InputsSpent): B's input is now rival's
+manual.txStatus(txA.id)     // TxStatus.Pending: A is back in the mempool
+manual.txStatus(rival.id)   // TxStatus.Confirmed(2, r2)
+```
+
+With `ChainConfig.manual.withOrphanTxs(OrphanTxPolicy.Drop)` instead, A and B end up
+`TxStatus.RolledBack` rather than returning to the mempool.
+
+### rollback(n)
+
+```scala
+manual.rollback(1)     // removes the last block; its txs follow orphanTxs
+manual.rollback(0)     // Left(RollbackError.NotPositive(0))
+manual.rollback(10_000) // Left(RollbackError.TooDeep(10_000, securityParam))
+```
+
+`rollback` never moves the current slot, and a switch that follows it can make the tip a block
+that was never the old tip. The Emulator keeps the last `securityParam` (`k`, default 2160)
+blocks' snapshots plus one more as the anchor, the same bound a real node's LedgerDB has, so a
+rollback past that point fails with `TooDeep`.
+
+In `Instant`, with the default `ReturnToMempool`, `rollback(1)` at an unchanged slot changes
+nothing you can see: the removed block's transactions return to the mempool, and `Instant` forges
+them at once into the same block, with the same hash. To see a rollback, use `ChainConfig.manual`,
+use `withOrphanTxs(OrphanTxPolicy.Drop)`, or move the slot first:
+
+```scala
+val instant = Emulator.withAddresses(Seq(Alice.address), Value.ada(1000), ChainConfig.instant)
+instant.submitSync(tx)
+val before = instant.tip
+instant.rollback(1)    // Right(before.point): the same block again
+instant.tick(1)
+instant.rollback(1)    // Right(p): a new block, one slot later, with the same transactions
+```
+
+### awaitTx and pollForConfirmation
+
+`pollForConfirmation` and `submitAndPoll` never sleep – the Emulator has virtual time – so
+off-the-shelf dApp code that already calls them keeps working against `ChainConfig.manual`.
+`ChainConfig.awaitTx` controls what they do while a transaction is pending:
+
+- `AwaitTxPolicy.ProduceBlock` (the default): forge a block, up to `maxAttempts` times, until the
+  transaction is no longer `Pending`.
+- `AwaitTxPolicy.WaitOnly`: report the status as it is and forge nothing – for a test that drives
+  blocks itself and wants to see a transaction sit in the mempool.
+
+### Watching the chain
+
+`StreamingEmulator` turns the Emulator's transitions into ChainSync-style events: a block forged
+on the tip is a `RollForward` carrying the real `Block`; a fork switch or a `rollback` is a
+`RollBackward` to the common ancestor, then a `RollForward` per block of the new chain.
+`EmulatorBase.diff(from, to)` computes the same events between any two tips directly, without a
+subscription.
+
+`StreamingEmulator(emulator, n)` advertises `Some(n)` (default `Some(0)`) as its rollback
+horizon, so a `noRollback` subscriber waits `n` blocks. It still keeps up to the Emulator's k
+(`ChainConfig.securityParam`, default 2160) blocks, so a `rollback` or a fork within that depth
+sends `RolledBack` to every subscription that got an event past the rollback point, `noRollback`
+subscriptions included.
+
+### Documented deviations from a real node
+
+- In `Instant`, two blocks can share a slot: several `submit` calls at the same slot each get
+  their own block, so a test does not need to tick between them.
+- In `Instant`, moving the slot backward with `setSlot` before an epoch boundary no block has
+  crossed restores the donations that boundary moved into the treasury – the boundary never
+  happened on the stored chain. A `setSlot` back below the tip slot, followed by a `submit`, still
+  forges the next block at the tip's later slot, so that block's recorded `AppliedTx.slot` can be
+  earlier than the block itself, and in a different epoch.
+- A forged block carries fixed placeholder bytes for the consensus fields a node checks
+  (`issuerVkey`, `vrfVkey`, `vrfResult`, `operationalCert`, `bodySignature`); nothing in the
+  Emulator verifies them.
+- When several branches are longer than the current chain, chain selection picks the tallest, then
+  the lowest block hash. A real node breaks that tie by VRF, which the Emulator does not model.
 
 ## Thread Safety
 
@@ -224,6 +439,34 @@ long slot = emulator.getCurrentSlot();
 // CompletableFuture variant — same shape as asynchronous providers
 emulator.submitAsync(anotherTx).thenAccept(r ->
     System.out.println("async result: " + r.isSuccess()));
+```
+
+### Blocks and forks from Java
+
+Java builds a `ChainConfig` from the static `ChainConfig.instant()` or `ChainConfig.manual()` and
+its `with` methods. Java sees a case of a Scala 3 enum only as a static field of its module class,
+so the enums of the chain add static methods for their cases: `ChainView.tip()`, `mempool()` and
+`stable(depth)`; `TxStatus.pending()`, `rolledBack()` and `notFound()`; `DropReason.expired()` and
+`inputsSpent()`. The methods whose Scala form returns an `Either` or takes a `Seq` have a Java form
+that returns an `EmulatorResult` or takes a `java.util.List`:
+
+```java
+ChainConfig config = ChainConfig.manual().withSecurityParam(10L);
+Emulator manual = Emulator.withAddresses(List.of(alice, bob), Value.ada(1000), config);
+
+ChainPoint point = manual.produceBlock();
+EmulatorResult<ForgeError, ChainPoint> onBranch = manual.tryProduceBlock(point, List.of(rivalTx));
+EmulatorResult<RollbackError, ChainPoint> rolledBack = manual.tryRollback(1);
+
+List<Transaction> pending = manual.getMempoolTxs();
+List<ChainEvent> events = manual.getDiff(ChainTip.origin(), manual.tip());
+
+boolean isPending = manual.txStatus(txHash) == TxStatus.pending();
+TxStatus status = manual.txStatus(txHash);
+boolean expired = status instanceof TxStatus.Dropped
+        && ((TxStatus.Dropped) status).reason() == DropReason.expired();
+EmulatorResult<ChainViewError, List<Utxo>> atDepth =
+    manual.findUtxosForAddress(alice, ChainView.stable(2));
 ```
 
 ## When to Use Emulator

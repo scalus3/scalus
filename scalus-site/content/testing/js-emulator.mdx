@@ -226,6 +226,116 @@ const custom = new SlotConfig(zeroTime, zeroSlot, slotLength);
 No blocks are produced between two slots and no rewards are paid out: only validity intervals and
 time-aware scripts see the difference.
 
+## Blocks, mempool and forks
+
+The emulator behaves like a small Cardano node: a submitted transaction waits in a mempool, a
+block makes it visible, and a fork can roll it back. `blockProduction` picks the preset:
+
+```typescript
+// The default: every submitTx forges a block at once, so every example above still holds.
+const instant = Emulator.create(CardanoInfo.preview(), { utxos });
+
+// Only produceBlock() or awaitTx forges a block; a submitted transaction waits in the mempool.
+const manual = Emulator.create(CardanoInfo.preview(), { utxos, blockProduction: "manual" });
+```
+
+`awaitTx` (`"produceBlock"`, the default, or `"waitOnly"`), `orphanTxs` (`"returnToMempool"`, the
+default, or `"drop"`) and `securityParam` (`k`, default 2160) are options of the same call.
+
+### The delay case
+
+With `blockProduction: "manual"`, a query keeps showing the old state until `produceBlock()` (or
+`awaitTx`) makes the submitted transaction's outputs real:
+
+```typescript
+const result = manual.submitTx(txCborBytes);
+manual.getUtxos({ address: bob });        // []: still pending
+manual.getTransactionStatus(result.txHash!); // "Pending"
+
+manual.produceBlock();
+manual.getUtxos({ address: bob });        // the payment is there
+manual.getTransactionStatus(result.txHash!); // "Confirmed"
+```
+
+A Lucid Evolution provider's `awaitTx` forges for you, the way this adapter's does:
+
+```typescript
+async awaitTx(txHash: string): Promise<boolean> {
+  return this.emulator.awaitTx(txHash); // forges blocks while pending, then reports confirmed
+}
+```
+
+### Tx status
+
+`getTxStatus(hash)` returns `{ status, depth?, point?, reason?, error? }`, where `status` is one
+of `"Pending" | "Confirmed" | "Dropped" | "RolledBack" | "NotFound"`. `getTransactionStatus(hash)`
+is just the `status` field.
+
+### Views
+
+`getUtxos(filter, view)` reads something other than the tip – the selected chain's last block,
+what a real provider shows:
+
+```typescript
+manual.getUtxos({ address: bob }, "tip");        // the chain; same as getUtxos({ address: bob })
+manual.getUtxos({ address: bob }, "mempool");    // the chain plus the pending transactions
+manual.getUtxos({ address: bob }, { stable: 2 }); // the block two deep; the tip is depth 1
+```
+
+An unrecognised `view` throws `TypeError`. A `stable` depth below 1, above the tip height plus 1
+(genesis), or deeper than the `securityParam + 1` blocks the emulator keeps throws `RangeError`.
+
+### A rival double spend and rollback
+
+```typescript
+const p1 = manual.produceBlock();
+manual.submitTx(txACbor);
+manual.submitTx(txBCbor);
+const p2 = manual.produceBlock(); // A and B are confirmed in p2
+
+// A rival that double-spends B's input, forged on the branch at p1 instead of the tip.
+const r2 = manual.produceBlockOn(p1, [rivalTxCbor]);
+manual.getTip().height; // still 2: the rival branch (height 2) only ties p2's height
+
+const r3 = manual.produceBlockOn(r2.point!, []); // the rival branch is now longer
+manual.getTip().height; // 3: the emulator switched
+
+manual.rollback(1);     // removes the last block; its transactions follow orphanTxs
+manual.rollback(0);     // { isSuccess: false, errorKind: "NotPositive", ... }
+```
+
+`produceBlockOn` and `rollback` return `{ isSuccess, point? }` on success, or `{ isSuccess: false,
+error, errorKind }` otherwise, where `errorKind` is the stable name to branch on and `error` is a
+sentence for a person, such as `"rollback(0): n must be at least 1"`.
+
+With `blockProduction: "instant"` and the default `orphanTxs: "returnToMempool"`, `rollback(1)` at
+an unchanged slot changes nothing you can see: the removed block's transactions return to the
+mempool, and the emulator forges them at once into the same block, with the same hash. To see a
+rollback, use `blockProduction: "manual"`, use `orphanTxs: "drop"`, or move the slot first:
+
+```typescript
+const instant = Emulator.create(CardanoInfo.preview(), { utxos });
+instant.submitTx(txCborBytes);
+instant.rollback(1);                    // the same block again, at the same point
+instant.tick(1);
+instant.rollback(1);                    // a new block, one slot later, with the same transactions
+```
+
+`hasTx(hash)` is `true` only for a confirmed transaction, one in a block on the chain. A pending
+transaction reads `false`; use `getTxStatus` to tell it from an unknown one.
+
+### Documented deviations from a real node
+
+- With `blockProduction: "instant"`, two blocks can share a slot: several `submitTx` calls at the
+  same slot each get their own block.
+- With `blockProduction: "instant"`, moving the slot backward with `setSlot` before an epoch
+  boundary no block has crossed restores the donations that boundary moved into the treasury – the
+  boundary never happened on the stored chain.
+- A forged block carries fixed placeholder bytes for the consensus fields a node checks; nothing
+  in the emulator verifies them.
+- When several branches are longer than the current chain, chain selection picks the tallest, then
+  the lowest block hash, where a real node breaks the tie by VRF.
+
 ## Editing the ledger directly
 
 ```typescript
@@ -270,8 +380,8 @@ import {
 } from "@lucid-evolution/lucid";
 import type { Emulator, Utxo } from "scalus";
 
-// The mechanical conversions the adapter carries. `__tests__/provider-lucid.test.ts` has all four
-// in full; each is field renaming, and the two UTxO ones refuse the shapes the two sides do not
+// The mechanical conversions the adapter carries. `__tests__/lucid-provider.ts` has all four in
+// full; each is field renaming, and the two UTxO ones refuse the shapes the two sides do not
 // share rather than dropping a datum or a reference script in silence.
 declare function hexToBytes(hex: string): Uint8Array;
 declare function bytesToHex(bytes: Uint8Array): string;
@@ -354,7 +464,9 @@ class EmulatorProvider implements Provider {
   }
 
   async awaitTx(txHash: string): Promise<boolean> {
-    return this.emulator.hasTx(txHash);
+    // Forges blocks for a pending transaction under `blockProduction: "manual"`; with the
+    // default `"instant"` it only confirms what is already there.
+    return this.emulator.awaitTx(txHash);
   }
 
   async evaluateTx(txHex: string, additionalUTxOs: UTxO[] = []): Promise<EvalRedeemer[]> {
@@ -405,9 +517,11 @@ async evaluateTx(txHex: string, additionalUtxos = []) {
 ```
 
 <Callout type="info">
-  The complete, runnable versions of both adapters live in the package's own test suite, at
-  `__tests__/provider-lucid.test.ts` and `__tests__/provider-mesh.test.ts`. Each one builds, signs
-  and submits a real transaction against the emulator.
+  The complete, runnable lucid-evolution adapter lives at `__tests__/lucid-provider.ts`; the Mesh
+  one is inline in `__tests__/provider-mesh.test.ts`. `__tests__/provider-lucid.test.ts` and
+  `__tests__/emulator-chain.test.ts` drive the lucid-evolution adapter, each one building, signing
+  and submitting a real transaction against the emulator, the second one through a `"manual"`
+  emulator with `awaitTx`.
 </Callout>
 
 ## Script evaluation without an emulator

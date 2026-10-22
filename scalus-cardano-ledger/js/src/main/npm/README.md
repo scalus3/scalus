@@ -218,7 +218,7 @@ from the wall clock holds. The default, `"manual"`, moves the slot only when you
 
 ```typescript
 emulator.hasTx(txHashHex);                // boolean
-emulator.getTransactionStatus(txHashHex); // "Confirmed" | "NotFound"
+emulator.getTransactionStatus(txHashHex); // "Pending" | "Confirmed" | "Dropped" | "RolledBack" | "NotFound"
 emulator.getTransaction(txHashHex);       // Uint8Array | undefined
 emulator.getAppliedTxs();                 // [{ txHash, slot }, ...], oldest first
 ```
