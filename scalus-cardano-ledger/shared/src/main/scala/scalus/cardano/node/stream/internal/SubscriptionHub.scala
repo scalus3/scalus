@@ -34,14 +34,22 @@ import scala.collection.mutable
   * indivisible step, so a subscriber can never see a live `Spent` before the `Created` it belongs
   * after. Delivering outside it is what keeps a consumer's continuation — which may cancel, and so
   * re-enter this hub — from running while the monitor is held.
+  *
+  * @param securityParam
+  *   how many blocks back this hub can roll back, so how many it keeps. The gating of `noRollback`
+  *   subscribers does not read it: it reads `capabilities`, as the classifier does, so the two
+  *   cannot disagree. A provider whose rollbacks reach deeper than it advertises, such as
+  *   [[scalus.cardano.node.stream.StreamingEmulator]], passes a larger value.
   */
-final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: StreamCapabilities) {
+final class SubscriptionHub(
+    val cardanoInfo: CardanoInfo,
+    val capabilities: StreamCapabilities,
+    val securityParam: Int
+) {
 
-    /** Depth at which a block counts as settled. Taken from the provider's own declaration rather
-      * than a separate constructor parameter, so the classifier deciding whether a subscription is
-      * serviceable and the hub deciding when to release it cannot disagree.
-      */
-    val securityParam: Int = capabilities.rollbackHorizon.getOrElse(0)
+    /** A hub that keeps as many blocks as the provider advertises it can roll back. */
+    def this(cardanoInfo: CardanoInfo, capabilities: StreamCapabilities) =
+        this(cardanoInfo, capabilities, capabilities.rollbackHorizon.getOrElse(0))
 
     private final class UtxoSubscription(
         val query: UtxoEventQuery,
@@ -249,6 +257,12 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
     /** A transaction entered the mempool. */
     def notifySubmit(txHash: TransactionHash): Unit = {
         val touched = synchronized(setStatusLocked(txHash, TransactionStatus.Pending))
+        touched.foreach(_.flush())
+    }
+
+    /** A transaction left the mempool without reaching a block: it is no longer anywhere. */
+    def notifyDropped(txHash: TransactionHash): Unit = {
+        val touched = synchronized(setStatusLocked(txHash, TransactionStatus.NotFound))
         touched.foreach(_.flush())
     }
 

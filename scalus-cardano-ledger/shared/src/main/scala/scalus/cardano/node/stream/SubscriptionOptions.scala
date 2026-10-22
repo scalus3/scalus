@@ -19,6 +19,11 @@ case class SubscriptionOptions(
       * implement rollback handling; costs latency proportional to the depth.
       *
       * When both are set the provider uses `max(confirmations, securityParam)`.
+      *
+      * The guarantee holds up to the provider's advertised [[StreamCapabilities.rollbackHorizon]].
+      * A provider can roll back deeper than it advertises: a `StreamingEmulator` does on an
+      * explicit `rollback(n)` or a fork switch within the Emulator's k, and then a `noRollback`
+      * subscription gets `RolledBack` too.
       */
     noRollback: Boolean = false,
 

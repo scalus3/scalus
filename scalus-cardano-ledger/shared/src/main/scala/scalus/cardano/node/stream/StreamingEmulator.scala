@@ -2,9 +2,10 @@ package scalus.cardano.node.stream
 
 import scalus.cardano.ledger.*
 import scalus.cardano.node.*
-import scalus.cardano.node.stream.internal.{AppliedBlock, AppliedTransaction, Mailbox, SubscriptionHub}
+import scalus.cardano.node.stream.internal.{ChainEvent, Mailbox, SubscriptionHub}
 import scalus.uplc.builtin.{ByteString, Data}
 
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 
 /** A streaming view of an [[scalus.cardano.node.EmulatorBase]].
@@ -13,30 +14,51 @@ import scala.concurrent.{ExecutionContext, Future}
   * there is literally one ledger behind both. Submission additionally drives the subscription hub,
   * so code that subscribes and reacts runs unchanged against a simulated chain.
   *
-  * **One transaction, one block.** The emulator has no notion of a block, so this wrapper
-  * synthesises one per accepted transaction and one per [[newEmptyBlock]]. Block *identity* is
-  * synthetic too — derived from the block number — which is why block subscriptions are declared
-  * unsupported rather than served with a fabricated header. UTxO and transaction subscriptions,
-  * which is what an application actually reacts to, are fully served.
+  * **The real chain.** Subscribers see the emulator's own blocks, spec section 12.1: after each
+  * operation of this wrapper, the `diff` from the tip it last delivered to the emulator's tip goes
+  * to the hub, one `RollForward` per block and a `RollBackward` on a branch switch or a rollback,
+  * spec [SY-5]. The wrapper builds no blocks, spec [SY-7]. A transition made on the wrapped
+  * emulator directly reaches subscribers at the next operation of this wrapper.
   *
-  * **Events only follow acceptance.** A block reaches the hub only on `Right(hash)` from
-  * `submitSync`, that is, only after the emulator's validators and mutators have passed and the new
-  * state is committed. A rejected transaction produces no events.
+  * **Events only follow acceptance.** A rejected transaction changes no tip, so it produces no
+  * events. A transaction in the mempool reads `Pending`, spec [SY-8].
+  *
+  * **Callbacks run under a lock.** `submit`, `pollForConfirmation`, `produceBlock`, `rollback` and
+  * `newEmptyBlock` deliver the events while they hold this wrapper's lock, so a subscriber callback
+  * that runs inline on delivery runs under it too. Such a callback may call this wrapper again on
+  * its own thread, but it must not wait for another thread that calls this wrapper: that thread
+  * blocks on the lock, and the two deadlock.
   *
   * @param securityParam
-  *   settlement depth this emulator claims. `0` — the default — matches its behaviour: a linear
-  *   emulator never forks, so nothing ever needs to settle. Raise it to exercise a subscriber's
-  *   confirmation gating.
+  *   the rollback horizon this stream advertises, spec [SY-6]: `noRollback` subscribers wait this
+  *   many blocks, none with the default `0`, as before the emulator had a chain. The hub still
+  *   keeps `max(securityParam, k)` blocks, so a rollback or a fork the emulator makes within its
+  *   own k reaches subscribers as `RolledBack`, also when it is deeper than this value, and also
+  *   `noRollback` subscribers.
   */
 class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
     extends BlockchainStreamProvider {
 
-    private val capabilities: StreamCapabilities =
-        StreamingEmulator.capabilities(securityParam)
+    /** The emulator state whose tip the hub has last been given. */
+    private var synced: EmulatorState = EmulatorBase.stateOf(emulator)
 
-    private val hub = new SubscriptionHub(emulator.cardanoInfo, capabilities)
+    private val capabilities: StreamCapabilities = StreamingEmulator.capabilities(securityParam)
 
-    private var blockNo: BlockNo = 0L
+    // spec [SY-6]: split horizon. The hub keeps k blocks too, so a rollback the emulator makes
+    // never throws, while `noRollback` subscribers wait only the advertised `securityParam`.
+    private val hub = new SubscriptionHub(
+      emulator.cardanoInfo,
+      capabilities,
+      math.max(securityParam.toLong, synced.config.securityParam).min(Int.MaxValue).toInt
+    )
+
+    /** Events computed but not yet given to the hub, and whether a call is giving them. */
+    private val undelivered = mutable.Queue.empty[ChainEvent]
+    private var delivering: Boolean = false
+
+    /** The txs the hub was last told are in the mempool. */
+    private var reportedPending: Set[TransactionHash] = Set.empty
+
     @volatile private var closed: Boolean = false
 
     def executionContext: ExecutionContext = emulator.executionContext
@@ -65,7 +87,9 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
             case Some(status) => Future.successful(status)
             case None         => emulator.checkTransaction(txHash)
 
-    /** The tip as the stream sees it — synthetic block height, and the emulator's own slot. */
+    /** The tip as the stream sees it: the emulator's tip as of the last operation of this wrapper,
+      * or [[ChainTip.origin]] before the first block it delivered.
+      */
     def currentTip: ChainTip = hub.currentTip
 
     // ── submission ──────────────────────────────────────────────────────────
@@ -76,29 +100,50 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
               Left(NetworkSubmitError.ConnectionError("provider is closed", None))
             )
         else
-            // Ledger commit and block production are one step. The wrapped emulator serialises its
-            // own state, but block numbering lives here: two concurrent submits that interleaved
-            // between the two would mint two blocks with the same height and hash, and the hub
-            // would silently drop the second one's events as already-delivered.
-            val applied = synchronized {
-                emulator.submitSync(transaction) match
-                    case Left(error) => Left(error)
-                    case Right(hash) => Right(hash -> buildBlock(Seq(transaction -> hash)))
-            }
-            applied match
-                case Left(error) => Future.successful(Left(error))
-                case Right((hash, block)) =>
-                    hub.notifySubmit(hash)
-                    hub.applyBlock(block)
-                    Future.successful(Right(hash))
+            Future.successful(driven {
+                val result = emulator.submitSync(transaction)
+                // Pending before the block that may confirm it at once, as before the real chain
+                result.foreach(hub.notifySubmit)
+                result
+            })
 
-    /** Advance the tip without a transaction. */
-    def newEmptyBlock(): Unit = {
-        val block = synchronized {
-            emulator.tick(1)
-            buildBlock(Seq.empty)
-        }
-        hub.applyBlock(block)
+    /** Forge while the tx is pending, see `EmulatorBase.pollForConfirmation`, so subscribers get
+      * the blocks, spec [SF-3], [SY-5].
+      */
+    override def pollForConfirmation(
+        txHash: TransactionHash,
+        maxAttempts: Int,
+        delayMs: Long
+    ): Future[TransactionStatus] = {
+        driven(emulator.forgeWhilePending(txHash, maxAttempts))
+        checkTransaction(txHash)
+    }
+
+    /** Forge a block from the mempool, see `EmulatorBase.produceBlock()`. */
+    def produceBlock(): ChainPoint = driven(emulator.produceBlock())
+
+    /** Forge a block of `txs` on `on`, see `EmulatorBase.produceBlock`. */
+    def produceBlock(on: ChainPoint, txs: Seq[Transaction]): Either[ForgeError, ChainPoint] =
+        driven(emulator.produceBlock(on, txs))
+
+    /** Forge a block of `txs` at `slot` on `on`, see `EmulatorBase.produceBlock`. */
+    def produceBlock(
+        on: ChainPoint,
+        slot: SlotNo,
+        txs: Seq[Transaction]
+    ): Either[ForgeError, ChainPoint] =
+        driven(emulator.produceBlock(on, slot, txs))
+
+    /** Remove the last `n` blocks, see `EmulatorBase.rollback`. */
+    def rollback(n: Int): Either[RollbackError, ChainPoint] = driven(emulator.rollback(n))
+
+    /** Advance the slot by one, then forge `produceBlock()` of the mempool, empty unless the
+      * emulator is in the `Manual` preset, spec [FG-8].
+      */
+    def newEmptyBlock(): Unit = driven {
+        emulator.tick(1)
+        emulator.produceBlock()
+        ()
     }
 
     // ── subscriptions ───────────────────────────────────────────────────────
@@ -193,58 +238,64 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
                 if seedHeadroom > Int.MaxValue - n then Int.MaxValue else n + seedHeadroom
             case DeltaBufferPolicy.Unbounded => Int.MaxValue
 
-    private def buildBlock(txs: Seq[(Transaction, TransactionHash)]): AppliedBlock = {
-        blockNo += 1
-        val applied = txs.map { case (tx, hash) =>
-            val created: Utxos = tx.body.value.outputs.zipWithIndex.map { case (out, index) =>
-                TransactionInput(hash, index) -> out.value
-            }.toMap
-            // The emulator resolved the consumed outputs while validating; reuse that rather than
-            // re-resolving against a UTxO set the transaction has already mutated. Absence is not
-            // "nothing was spent" — it means the applied-tx index has been cleared or is not
-            // maintained, and defaulting to empty would silently stop emitting Spent events while
-            // subscribers went on believing their UTxO set was complete.
-            val spent: Utxos = emulator
-                .getAppliedTx(hash)
-                .map(_.spent)
-                .getOrElse(
-                  throw new IllegalStateException(
-                    s"emulator has no applied-transaction record for ${hash.toHex}; streaming " +
-                        "cannot report what it spent. Do not call clearAppliedTxs() on an emulator " +
-                        "wrapped by StreamingEmulator."
-                  )
-                )
-            AppliedTransaction(tx, created, spent)
-        }
-        AppliedBlock(
-          ChainPoint(emulator.currentSlotSync, StreamingEmulator.syntheticBlockHash(blockNo)),
-          blockNo,
-          applied
-        )
+    /** Run `op` on the emulator, then give the hub the events of its tip change, spec [SY-5].
+      *
+      * One lock holds the emulator change and the delivery, so two calls cannot give the hub their
+      * events out of order. A subscriber's continuation can run inline on delivery and call this
+      * wrapper again on the same thread: that call queues its events behind the ones being
+      * delivered, so the hub still sees the heights in order (`AppliedBlock` requires it). The hub
+      * never calls back into this wrapper, so the lock order is always wrapper, then hub.
+      *
+      * The deadlock hazard this leaves for callbacks is in the class scaladoc.
+      */
+    private def driven[A](op: => A): A = synchronized {
+        val result = op
+        val now = EmulatorBase.stateOf(emulator)
+        undelivered ++= EmulatorState.diff(synced, synced.tip, now, now.tip)
+        synced = now
+        if !delivering then
+            delivering = true
+            try
+                while undelivered.nonEmpty do
+                    undelivered.dequeue() match
+                        case ChainEvent.RollForward(block) => hub.applyBlock(block)
+                        case ChainEvent.RollBackward(to)   => hub.rollbackTo(to)
+                // the hub marks the txs of a rolled-back block NotFound; those back in the
+                // mempool are Pending, spec [SY-8], [OR-3]; those that left it without a block
+                // are NotFound, as `EmulatorBase.checkTransaction` reports them
+                val pending = synced.mempool.map(_.applied.txHash).toSet
+                (reportedPending -- pending)
+                    .filter(hub.statusOf(_).contains(TransactionStatus.Pending))
+                    .foreach(hub.notifyDropped)
+                pending.foreach(hub.notifySubmit)
+                reportedPending = pending
+            finally delivering = false
+        result
     }
 }
 
 object StreamingEmulator {
 
     /** What an emulator honestly offers: the whole ledger is in memory, so every source is indexed
-      * and a scan costs nothing either; there is no history to replay; and there are no real blocks
-      * to hand to a block subscription.
+      * and a scan costs nothing either; there is no history to replay; and its blocks are real, so
+      * a block subscription gets them.
       *
-      * `rollbackHorizon` follows `securityParam`, and `0` means `None` — a linear emulator never
-      * forks, so a subscriber is entitled to assume `RolledBack` never arrives. A non-zero
-      * `securityParam` is what a test uses to say "pretend blocks settle this deep", and it becomes
-      * the declared horizon so the hub and the classifier agree on the depth.
+      * `rollbackHorizon` is `Some(securityParam)`, also for `0`: the emulator rolls back on
+      * `rollback(n)` and on a fork switch, so `None`, "never signals rollbacks", would not be true.
+      * `Some(0)` lets a `noRollback` subscriber wait for nothing. A [[StreamingEmulator]] passes
+      * its own `securityParam` argument, spec [SY-6].
       */
     def capabilities(securityParam: Int): StreamCapabilities = StreamCapabilities(
       kinds = Set(
         SubscriptionKind.Utxo,
         SubscriptionKind.Transaction,
-        SubscriptionKind.TransactionStatus
+        SubscriptionKind.TransactionStatus,
+        SubscriptionKind.Block
       ),
       pushdown = PushdownKind.all,
       scanning = ScanSupport.Free,
       replay = ReplaySupport.NoReplay,
-      rollbackHorizon = if securityParam > 0 then Some(securityParam) else None,
+      rollbackHorizon = Some(securityParam),
       maxConfirmations = None,
       idleSignals = true
     )
@@ -252,6 +303,10 @@ object StreamingEmulator {
     /** Block identity derived from height. Distinct per block and stable across runs, which is what
       * a subscriber correlating or checkpointing needs; it is not a hash of anything.
       */
+    @deprecated(
+      "the stream delivers the emulator's real blocks, named by their header hash",
+      "1.4.1"
+    )
     def syntheticBlockHash(blockNo: BlockNo): BlockHash = {
         val bytes = new Array[Byte](32)
         var i = 0
