@@ -14,7 +14,7 @@ object FieldAnnotationTestDefs {
 
     case class WithNativeList(
         name: BigInt,
-        @UplcRepr(UplcRepresentation.SumBuiltinList(UplcRepresentation.UplcConstr))
+        @UplcRepr(UplcRepresentation.SumBuiltinList(UplcRepresentation.Constant))
         items: scalus.cardano.onchain.plutus.prelude.List[BigInt]
     )
 

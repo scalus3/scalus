@@ -50,6 +50,9 @@
 - `mkCons` fails for a non-constant head, such as a `constr` value, as Plutus does, on the CEK machine
   and in the JIT. Before, consing onto a `(list value)` constant succeeded, and dropped the elements
   of a non-empty one.
+- The compiler plugin rejects `@UplcRepr(SumBuiltinList(UplcConstr))`: a builtin list holds constants
+  only, so such a list fails on chain at the first `mkCons`. Annotate the list with `UplcConstr` for
+  a list of native `constr` values.
 - `Term.~=~` compares the number of `Constr` fields and `Case` branches.
 - `Transaction.fromCbor` accepts a transaction without the `isValid` flag, `[body, witnesses,
   auxiliary data]`, as cardano-node 11.1.3 does, with `isValid = true`. A decoded transaction

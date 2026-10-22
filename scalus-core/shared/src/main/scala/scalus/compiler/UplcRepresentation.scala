@@ -13,6 +13,10 @@ enum UplcRepresentation {
     // Primitive/data representations (used in typeProxyRepr and field annotations)
     case DataData, Constant, PackedData, DataConstr, PackedSumDataList
     // Parameterized representations
+    /** A builtin list. A builtin list holds constants only, so `elemRepr` is a `Data`, primitive or
+      * pair representation. The compiler rejects `SumBuiltinList(UplcConstr)`: for a list of native
+      * `constr` values, annotate the list with `UplcConstr`.
+      */
     case SumBuiltinList(elemRepr: UplcRepresentation)
     case ProdBuiltinPair(fstRepr: UplcRepresentation, sndRepr: UplcRepresentation)
     // Type-level representations (used in @UplcRepr annotations on types/fields)

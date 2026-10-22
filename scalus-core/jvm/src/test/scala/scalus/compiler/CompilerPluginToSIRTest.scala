@@ -913,7 +913,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
           s"Expected uplcRepr in field annotations, got: ${fieldAnns.data.keys}"
         )
         val reprSir = fieldAnns.data("uplcRepr")
-        // Should be SIR.Constr for SumBuiltinList with UplcConstr arg
+        // Should be SIR.Constr for SumBuiltinList with a Constant arg
         reprSir match
             case SIR.Constr(name, _, args, _, _) =>
                 assert(name.contains("SumBuiltinList"), s"Expected SumBuiltinList, got $name")

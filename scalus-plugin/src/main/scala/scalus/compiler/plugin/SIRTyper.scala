@@ -149,6 +149,7 @@ class SIRTyper(using Context) {
                 if !tree.tpe.derivesFrom(uplcRepresentationClass) then return None
                 val constrName = tree.tpe.classSymbol.fullName.show
                 val encodedArgs = args.flatMap(encodeReprTag)
+                UplcReprChecks.checkReprConstr(constrName, encodedArgs, tree.srcPos)
                 val constrDecl = scalus.compiler.sir.ConstrDecl(
                   constrName,
                   encodedArgs.map(_ =>

@@ -82,7 +82,7 @@ trait SIRModuleAnnotation extends StaticAnnotation
   *   @UplcRepr(UplcRepresentation.UplcConstr)
   *   case class ChessSet(
   *       size: BigInt,
-  *       @UplcRepr(UplcRepresentation.SumBuiltinList(UplcRepresentation.UplcConstr))
+  *       @UplcRepr(UplcRepresentation.UplcConstr)
   *       visited: List[Tile]
   *   )
   *   }}}

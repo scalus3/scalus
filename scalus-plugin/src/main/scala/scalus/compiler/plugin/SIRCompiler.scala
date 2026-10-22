@@ -713,6 +713,7 @@ final class SIRCompiler(
             case Apply(fun, args) if tree.tpe.derivesFrom(uplcRepresentationClass) =>
                 val constrName = tree.tpe.classSymbol.fullName.show
                 val encodedArgs = args.flatMap(encodeUplcRepresentation)
+                UplcReprChecks.checkReprConstr(constrName, encodedArgs, tree.srcPos)
                 val constrDecl = scalus.compiler.sir.ConstrDecl(
                   constrName,
                   encodedArgs.map(_ =>
