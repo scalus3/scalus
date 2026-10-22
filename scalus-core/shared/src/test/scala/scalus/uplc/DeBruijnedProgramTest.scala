@@ -17,6 +17,39 @@ class DeBruijnedProgramTest extends AnyFunSuite {
         assert(result._2 sameElements suffix)
     }
 
+    test("fromCborPrefix returns the bytes after the CBOR byte string") {
+        val script = Cbor.encode(flatEncoded)
+        val suffix = Arbitrary.arbitrary[Array[Byte]].sample.get
+        val result = DeBruijnedProgram.fromCborPrefix(script ++ suffix)
+
+        assert(result.program == DeBruijnedProgram.fromFlatEncoded(flatEncoded))
+        assert(result.afterCborByteString sameElements suffix)
+    }
+
+    test("fromCborPrefix reads the CBOR byte string as the ledger does") {
+        val program = DeBruijnedProgram.fromFlatEncoded(flatEncoded)
+        // a length that takes more bytes than it needs is accepted
+        val longHeader = Array(0x59, flatEncoded.length >> 8, flatEncoded.length).map(_.toByte)
+        assert(DeBruijnedProgram.fromCborPrefix(longHeader ++ flatEncoded).program == program)
+        // an indefinite-length byte string is not
+        val indefinite = Array(0x5f.toByte) ++ Cbor.encode(flatEncoded) :+ 0xff.toByte
+        assertThrows[IllegalArgumentException](DeBruijnedProgram.fromCborPrefix(indefinite))
+        // nor is a byte string cut short, a 64-bit length above Long.MaxValue or another CBOR item
+        assertThrows[IllegalArgumentException](
+          DeBruijnedProgram.fromCborPrefix(Cbor.encode(flatEncoded).dropRight(1))
+        )
+        assertThrows[IllegalArgumentException](
+          DeBruijnedProgram.fromCborPrefix(Array(0x5b.toByte) ++ Array.fill(8)(0xff.toByte))
+        )
+        assertThrows[IllegalArgumentException](DeBruijnedProgram.fromCborPrefix(Cbor.encode(1)))
+        assertThrows[IllegalArgumentException](DeBruijnedProgram.fromCborPrefix(Array.empty))
+    }
+
+    test("fromCbor requires exactly one CBOR byte string") {
+        val script = Cbor.encode(flatEncoded)
+        assertThrows[Exception](DeBruijnedProgram.fromCbor(script :+ 0.toByte))
+    }
+
     test("Constr.tag should be unsigned") {
         val bs = ByteString.fromHex(
           "590715010100332323232323232323232323232323232323232323232323232223259323255333573466e1d2" +

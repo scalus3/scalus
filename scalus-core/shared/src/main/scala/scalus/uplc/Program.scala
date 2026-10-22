@@ -171,6 +171,11 @@ object Program:
         DeBruijnedProgram.fromCbor(cbor).toProgram
 
     /** Deserializes a program from a CBOR-encoded [[scalus.uplc.builtin.ByteString]].
+      *
+      * `cbor` must be exactly one CBOR byte string. A script taken from a transaction can have
+      * bytes after its byte string; read it with [[scalus.cardano.ledger.PlutusScript.program]] or
+      * [[DeBruijnedProgram.fromCborPrefix]].
+      *
       * @param cbor
       *   the CBOR-encoded ByteString
       * @return
@@ -392,6 +397,9 @@ object DeBruijnedProgram {
 
     /** Deserializes a program from a CBOR-encoded byte array.
       *
+      * `cbor` must be exactly one CBOR byte string. A script taken from a transaction can have
+      * bytes after its byte string; read it with [[fromCborPrefix]].
+      *
       * @param cbor
       *   the CBOR-encoded byte array
       * @return
@@ -399,12 +407,46 @@ object DeBruijnedProgram {
     def fromCbor(cbor: Array[Byte]): DeBruijnedProgram =
         fromFlatEncoded(Cbor.decode(cbor).to[Array[Byte]].value)
 
-    /** Deserializes a program from a CBOR-encoded byte array, returning any remaining bytes.
+    /** A program read from the CBOR byte string at the start of some bytes.
+      *
+      * @param program
+      *   the program
+      * @param afterCborByteString
+      *   the bytes after the CBOR byte string. These are not the bytes after the program inside the
+      *   byte string, which [[ProgramFlatCodec.DecodeResult]] holds.
+      */
+    case class PrefixDecodeResult(program: DeBruijnedProgram, afterCborByteString: Array[Byte])
+
+    /** Deserializes a program from the CBOR byte string at the start of `cbor`, returning the bytes
+      * after that byte string.
+      *
+      * This is how the ledger reads a Plutus script. It ignores the bytes after the byte string in
+      * Plutus V1 and V2 scripts and rejects them in later languages;
+      * [[scalus.cardano.ledger.PlutusScript.isWellFormed]] applies that rule. As in [[fromCbor]],
+      * the program's padding and any bytes after the program inside the byte string are not
+      * checked.
+      *
+      * @param cbor
+      *   bytes that start with a definite-length CBOR byte string holding a flat-encoded program
+      * @return
+      *   the program and the bytes after the CBOR byte string
+      */
+    def fromCborPrefix(cbor: Array[Byte]): PrefixDecodeResult = {
+        val (flatEncoded, afterCborByteString) =
+            scalus.serialization.cbor.Cbor.unwrapCborByteString(cbor)
+        PrefixDecodeResult(fromFlatEncoded(flatEncoded), afterCborByteString)
+    }
+
+    /** Deserializes a program from a CBOR-encoded byte array, returning the bytes after the program
+      * inside the CBOR byte string.
+      *
+      * `cbor` must be exactly one CBOR byte string. For the bytes after the byte string, use
+      * [[fromCborPrefix]].
       *
       * @param cbor
       *   the CBOR-encoded byte array
       * @return
-      *   ProgramFlatCodec.DecodeResult
+      *   the program, with the bytes after its padding as the remainder
       */
     def fromCborWithRemainingBytes(
         cbor: Array[Byte]

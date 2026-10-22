@@ -50,4 +50,39 @@ object Cbor {
     def decode[A: Decoder](data: Array[Byte]): A = {
         Cborer.decode(data).to[A].value
     }
+
+    /** Unwraps the CBOR byte string that `data` starts with: returns its content, without the
+      * header, and the bytes after that byte string.
+      *
+      * Reads the byte string as cborg's `decodeBytes` does, which is how the ledger reads a Plutus
+      * script: the length must be definite, and may be encoded in more bytes than it needs.
+      *
+      * @throws IllegalArgumentException
+      *   if `data` does not start with a definite-length byte string
+      */
+    private[scalus] def unwrapCborByteString(data: Array[Byte]): (Array[Byte], Array[Byte]) = {
+        require(data.nonEmpty, "Expected a CBOR byte string, got end of input")
+        // the length follows the header byte as a big-endian unsigned integer of `size` bytes
+        def length(size: Int): Long = {
+            require(data.length > size, "CBOR byte string header is cut short")
+            (1 to size).foldLeft(0L)((n, i) => (n << 8) | (data(i) & 0xff))
+        }
+        val (headerSize, contentSize) = data(0) & 0xff match
+            case h if h >= 0x40 && h <= 0x57 => (1, (h - 0x40).toLong)
+            case 0x58                        => (2, length(1))
+            case 0x59                        => (3, length(2))
+            case 0x5a                        => (5, length(4))
+            case 0x5b                        => (9, length(8))
+            case h =>
+                throw new IllegalArgumentException(
+                  f"Expected a definite-length CBOR byte string, got header byte 0x$h%02x"
+                )
+        // a 64-bit length above Long.MaxValue reads as negative
+        require(
+          contentSize >= 0 && contentSize <= data.length - headerSize,
+          s"CBOR byte string of $contentSize bytes, but only ${data.length - headerSize} bytes follow its header"
+        )
+        val end = headerSize + contentSize.toInt
+        (data.slice(headerSize, end), data.drop(end))
+    }
 }

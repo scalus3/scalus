@@ -14,6 +14,8 @@
   `former` section of the `*.proofs.json` file. A budget search starts at the old budget, also in
   a later run, and a kept refutation is replayed on the Scalus CEK without Lean. A kept entry that
   no longer stands, such as an edited one, is stale with a reason, and no longer fails the suite.
+- `DeBruijnedProgram.fromCborPrefix` reads a program from the CBOR byte string that the input
+  starts with, and returns it with the bytes after that byte string as a `PrefixDecodeResult`.
 
 ### Changed
 
@@ -48,6 +50,15 @@
   64 bits, so it accepted a script with a `constr` tag of 2^64 that Plutus rejects. It now fails to
   decode, as Plutus does. A variable index above `Int.MaxValue` kept its low 32 bits, so an index
   of 2^32 + 1 became 1 and passed the scope check. It is now out of scope, as in Plutus.
+- `PlutusScript.isWellFormed` rejected a Plutus V1 or V2 script with bytes after its CBOR byte
+  string, which the ledger ignores, so Scalus rejected transactions that are on chain (#397). It
+  also accepted a V1 or V2 script with bytes after the program inside the byte string, which the
+  ledger rejects in every language. It now reads a script as `deserialiseScript` in
+  plutus-ledger-api does, and also rejects an indefinite-length byte string, as cborg does.
+  `PlutusScript.program` and `deBruijnedProgram` read the byte string by the same rules: they
+  ignore the bytes after it in a V1 or V2 script, so such a script also evaluates, and still fail
+  on them in a V3 or V4 script. They now also fail on an indefinite-length byte string, which they
+  used to read.
 
 ## 1.4.0 (2026-10-20)
 
