@@ -47,6 +47,18 @@ fi
 (cd "$SRC" && sbt --batch -Dsbt.supershell=false "${SBT_CMDS[@]}")
 [ -f "$WORK/api/index.html" ] || { echo "build-version: unidoc wrote no index.html" >&2; exit 1; }
 
+# Fix the side-menu links [VB-15]. Scaladoc's renderDynamicSideMenu (unfixed up to 3.10.0) builds
+#   const baseUrl = window.location.pathname.split("/").slice(0, ...)   // an array
+#   `${baseUrl}/${loc.join("/")}.html`
+# so under /api/ every link becomes ",api/scalus/builtin.html" and clicking it loads nothing. It only
+# works for docs at the domain root, where the array is [""]. Join the array.
+UX=$WORK/api/scripts/ux.js
+perl -pi -e 's/\$\{baseUrl\}\//\$\{baseUrl.join("\/")\}\//g' "$UX"
+if grep -qF '${baseUrl}/' "$UX" || ! grep -qF '${baseUrl.join("/")}/' "$UX"; then
+    echo "build-version: the side-menu link fix did not apply to $UX; check renderDynamicSideMenu" >&2
+    exit 1
+fi
+
 LLMS=$WORK/llms
 mkdir -p "$LLMS"
 if [ -f "$SRC/scalus-site/public/llms-api.txt" ]; then

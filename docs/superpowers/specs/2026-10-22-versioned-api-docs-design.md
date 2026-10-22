@@ -107,6 +107,21 @@ Checks enforced here:
 - When an input of `[VB-5]`, `[VB-6]` or `[VB-8]` is absent, the build script MUST print a warning and continue. `[VB-12]`
 - When unidoc fails, the build script MUST exit with a non-zero status. `[VB-13]`
 - The build script MUST remove the worktree on exit, also on failure. `[VB-14]`
+- The build script MUST make the side-menu links in `scripts/ux.js` absolute paths to the docs root. `[VB-15]`
+- When `[VB-15]` cannot be applied, the build script MUST exit with a non-zero status. `[VB-16]`
+
+**Why `[VB-15]`:** Scaladoc's `renderDynamicSideMenu` (unfixed up to 3.10.0) puts an unjoined
+array into the link: `${baseUrl}/${loc.join("/")}.html`. Under `/api/`, `baseUrl` is
+`["", "api"]`, so every side-menu link becomes `,api/scalus/builtin.html` and a click loads
+nothing. Docs at the domain root escape the bug, because `[""]` prints as an empty string. The
+first deploy (2026-10-22) shipped this bug; the fix joins the array.
+
+*Example, illustrative.* For the side-menu entry of `scalus/builtin.html`:
+
+| Page | Link before `[VB-15]` | Link after |
+|---|---|---|
+| `/api/index.html` | `,api/scalus/builtin.html` | `/api/scalus/builtin.html` |
+| `/api/1.4.0/scalus/uplc/Term.html` | `,api,1.4.0/scalus/builtin.html` | `/api/1.4.0/scalus/builtin.html` |
 
 **Why `[VB-3]` passes `-project-version`:** the tag's own `scalusStableVersion` is the MiMa
 baseline, so v1.4.0 would label itself 1.3.0. The unidoc project also does not inherit the root
@@ -216,6 +231,7 @@ The same workflow adds older versions later, for example `versions: v1.3.0`. Tag
    Do not use a running sbtn server: a warm server on JDK 25 crashed Scaladoc 3/3 on 2026-10-22.
 2. Write `versions.json` as `[VW-7]` does, serve `/tmp/site` over HTTP and check in a browser:
    - the side menu renders on a deep page, for example `/api/1.3.0/scalus/uplc/Term.html`;
+   - a click on a side-menu link loads that page, both under `/api/` and under `/api/<version>/`;
    - search finds `TxBuilder`;
    - the dropdown lists 1.4.0 and 1.3.0 and switches between them;
    - the header shows the right version on each.
