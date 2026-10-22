@@ -8,7 +8,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.STS
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
-import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.{ByteString, Data}
 
 import java.time.Instant
 
@@ -69,6 +69,7 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         case Tick(slots: Long)
         case AddUtxo(index: Int)
         case RemoveUtxo(index: Int)
+        case AddDatum(value: Int)
         case ProduceBlock
     }
 
@@ -80,6 +81,7 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
           .map(Op.Tick(_)),
       1 -> Gen.choose(10, 12).map(Op.AddUtxo(_)),
       1 -> Gen.choose(0, 3).map(Op.RemoveUtxo(_)),
+      1 -> Gen.choose(0, 1000).map(Op.AddDatum(_)),
       1 -> Gen.const(Op.ProduceBlock)
     )
 
@@ -91,6 +93,7 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             case Op.Tick(n)                 => e.tick(n)
             case Op.AddUtxo(i)    => e.addUtxo(Input(genesisHash, i), Output(alice, Value.ada(7)))
             case Op.RemoveUtxo(i) => e.removeUtxo(Input(genesisHash, i))
+            case Op.AddDatum(n)   => e.addDatum(Data.I(n))
             case Op.ProduceBlock  => e.produceBlock()
         }
         e
@@ -161,6 +164,23 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(stateOf(e).selectedChain.last.txs.isEmpty)
     }
 
+    test("Manual: produceBlock revalidates at the forge slot even when the slot does not move") {
+        // spec [FG-3], [RV-2]: a tx on the selected chain leaves the mempool before the forge, so
+        // a confirmed tx submitted again after a direct edit is not forged a second time
+        val e = emulator(ChainConfig.manual)
+        val tx = payment(e.utxos, 2_000_000)
+        val inputs = tx.body.value.inputs.toSeq.map(i => i -> e.utxos(i))
+        assert(e.submitSync(tx).isRight)
+        val first = e.produceBlock()
+        e.setSlot(10)
+        inputs.foreach(e.addUtxo)
+        assert(e.submitSync(tx).isRight)
+        assert(e.produceBlock().slot == 10L, "the forge slot is the current slot")
+        assert(stateOf(e).selectedChain.last.txs.isEmpty)
+        assert(e.mempoolTxs.isEmpty)
+        assert(e.txStatus(tx.id) == TxStatus.Confirmed(2, first))
+    }
+
     test("Manual: produceBlock with an empty mempool forges an empty block") {
         // spec [FG-8]
         val e = emulator(ChainConfig.manual)
@@ -175,6 +195,8 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val e = emulator(ChainConfig.instant)
         e.setSlot(30)
         assert(e.produceBlock() == e.tip.point)
+        assert(e.tip.blockNo == 1L)
+        assert(stateOf(e).selectedChain.last.txs.isEmpty)
         assert(e.tip.slot == 30L)
         assert(e.currentSlotSync == 30L)
     }
@@ -408,5 +430,67 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val e = emulator(ChainConfig.manual)
         val tx = payment(e.utxos, 2_000_000)
         assert(e.submitAndPoll(tx).value.get.get == Right(tx.id))
+    }
+
+    /** A payment from the genesis input `index` alone, so the txs do not conflict. */
+    private def paymentFrom(index: Int, lovelace: Long): Transaction = {
+        val utxo = Input(genesisHash, index) -> initialUtxos(Input(genesisHash, index))
+        TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .payTo(bob, Value.lovelace(lovelace))
+            .complete(Map(utxo), alice)
+            .sign(Alice.signer)
+            .transaction
+    }
+
+    private def manualWithBlockBodySize(maxBlockBodySize: Long): Emulator = {
+        val context = rules.Context.testMainnet()
+        val params = context.env.params.copy(maxBlockBodySize = maxBlockBodySize)
+        Emulator(
+          initialUtxos = initialUtxos,
+          initialContext = context.copy(env = context.env.copy(params = params)),
+          chainConfig = ChainConfig.manual
+        )
+    }
+
+    test("a mempool that needs two blocks: the first takes the prefix that fits") {
+        // spec [TE-8], [FG-4], [FG-7]
+        val txs = (0 until 3).map(i => paymentFrom(i, 2_000_000L + i))
+        val e = manualWithBlockBodySize(BlockForge.bodySize(txs.take(2)))
+        txs.foreach(tx => assert(e.submitSync(tx) == Right(tx.id)))
+        e.produceBlock()
+        assert(stateOf(e).selectedChain.last.txs.map(_.tx) == txs.take(2))
+        assert(e.mempoolTxs == txs.drop(2))
+        e.produceBlock()
+        assert(stateOf(e).selectedChain.last.txs.map(_.tx) == txs.drop(2))
+        assert(e.mempoolTxs.isEmpty)
+    }
+
+    test("pollForConfirmation forges as many blocks as the tx needs") {
+        // spec [SF-3], [FG-4]
+        val txs = (0 until 3).map(i => paymentFrom(i, 2_000_000L + i))
+        val e = manualWithBlockBodySize(BlockForge.bodySize(txs.take(2)))
+        txs.foreach(tx => assert(e.submitSync(tx).isRight))
+        assert(e.pollForConfirmation(txs(2).id, 5, 0L).value.get.get == TransactionStatus.Confirmed)
+        assert(e.tip.blockNo == 2L)
+    }
+
+    test("a valid tx that would push the mempool past two blocks is rejected with MempoolFull") {
+        // spec [MP-4]: capacity 2 * limit holds 3 txs, the 4th does not fit
+        val txs = (0 until 4).map(i => paymentFrom(i, 2_000_000L + i))
+        val limit = (BlockForge.bodySize(txs.take(3)) + 1) / 2
+        assert(BlockForge.bodySize(txs) > 2 * limit)
+        val e = manualWithBlockBodySize(limit)
+        txs.take(3).foreach(tx => assert(e.submitSync(tx).isRight))
+        assert(e.submitSync(txs(3)).left.map(_.rule) == Left("MempoolFull"))
+        assert(e.mempoolTxs == txs.take(3))
+    }
+
+    test("an invalid tx gets the error of its rule even when the mempool is full") {
+        // spec [MP-3], [MP-4]
+        val txs = (0 until 3).map(i => paymentFrom(i, 2_000_000L + i))
+        val e = manualWithBlockBodySize((BlockForge.bodySize(txs.take(2)) + 1) / 2)
+        txs.take(2).foreach(tx => assert(e.submitSync(tx).isRight))
+        assert(e.submitSync(txs(0)).left.map(_.rule) == Left("UtxoNotAvailable"))
     }
 }

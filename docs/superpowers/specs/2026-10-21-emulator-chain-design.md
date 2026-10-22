@@ -176,6 +176,8 @@ Checks enforced here:
 
 *Implementation status (M1):* `[MP-5]` is enforced by the ledger rules, with no membership check of its own. By `[MP-1]` a tx is validated on the mempool tail or the tip, where the inputs of a pending or confirmed duplicate are spent, so the ledger rejects it with `UtxoNotAvailable`. A tx whose inputs a direct edit put back is accepted again, as today (`EmulatorParityTest`, "re-applying a transaction").
 
+*Implementation status (M2):* `[MP-4]` measures the mempool as one block of the mempool txs and the new tx, by the measure of `[FG-5]`: the encoded body size, and the declared execution units. The check runs after the ledger rules, so an invalid tx still gets the error of `[MP-3]`.
+
 *Example, illustrative,* for `[MP-4]`. Block limit 90 112 bytes, so the mempool capacity is 180 224 bytes. Each tx is 16 000 bytes:
 
 | Mempool before | `submit` result |
@@ -212,7 +214,7 @@ Checks enforced here:
 - In the `Instant` preset, the automatic forge of `[MP-8]` and `[FG-9]` MUST NOT forge an empty block. An explicit `produceBlock()` follows `[FG-8]`. `[FG-10]`
 
 
-*Implementation status (M1):* the block limits of `[FG-4]` and `[FG-5]` come in M2. Until then one block takes the whole mempool, so the repeat of `[FG-9]` ends after one block.
+*Implementation status (M2):* the prefix of `[FG-4]` always takes the first mempool tx, even if its block would exceed a limit. A valid tx fits an empty block, since `maxTxSize` and `maxTxExecutionUnits` are below the block limits, so this only matters with odd parameters, and it keeps the repeat of `[FG-9]` from spinning. The execution units of `[FG-5]` are the ones the redeemers declare. The forge does not revalidate the mempool txs after the prefix: they were validated on top of it at the same slot, so the result is the same. `[FG-3]` revalidates before every `Manual` forge, also when the forge slot is the current slot.
 
 *Example, illustrative,* for `[FG-4]`. Block limit 90 112 bytes. Mempool txs, oldest first: 40 000, 40 000, 16 000, 5 000 bytes:
 
@@ -264,6 +266,8 @@ Tx 4 fits in block 1 but stays behind tx 3. The forge takes a prefix, not a best
 - `ChainView.Stable(d)` for `d` equal to the tip height plus 1 MUST read genesis, if its snapshot is kept. `[VW-8]`
 - `currentSlot` MUST return the current slot. `[VW-9]`
 
+*Implementation status (M2):* `findUtxosSync(query, view)` returns `Either[ChainViewError, Utxos]`, and `findUtxos(query, view)` the same in a `Future`. The failures of `[VW-6]` and `[VW-7]` are `ChainViewError.DepthOutOfRange` and `ChainViewError.SnapshotDropped`. `UtxoQueryError` is unchanged.
+
 *Example, illustrative.* Tip at height 5. Tx A is in block 4. Tx B is in the mempool:
 
 | View | Sees A's outputs | Sees B's outputs |
@@ -290,6 +294,8 @@ Tx 4 fits in block 1 but stays behind tx 3. The forge takes a prefix, not a best
 - For any other failed rule, the drop reason MUST be `Invalid`, with the `SubmitError`. `[RV-6]`
 - Revalidation MUST replace the snapshot of each kept tx. `[RV-7]`
 - In the `Manual` preset, `setSlot` MUST reject a slot below the tip slot. `[RV-8]`
+
+*Implementation status (M2):* revalidation runs after every direct edit of `[DE-3]`, `addDatum` included, and after `setSlot` and `tick`. `setSlot` returns `Unit`, so `[RV-8]` throws `IllegalArgumentException`. `[RV-2]` checks membership of the whole selected chain. So in `Manual`, a tx that was confirmed, and then submitted again after a direct edit put its inputs back, leaves the mempool at the next revalidation, at the latest before the next forge (`[FG-3]`), and its status is the `Confirmed` of its first application. `Instant` forges such a tx again at once, as before M2.
 
 *Example, illustrative,* for `[RV-4]`. A mempool tx has `invalidHereafter = 100`. The ledger accepts the tx when `slot < 100`:
 
@@ -385,6 +391,8 @@ Tx 4 fits in block 1 but stays behind tx 3. The forge takes a prefix, not a best
 - The `slot` of an `AppliedTx` MUST be the slot at which the ledger last validated the tx. `[TS-6]`
 - The Emulator MUST derive `Confirmed` from membership of the selected chain, not from a stored status. `[TS-7]`
 
+*Implementation status (M2):* a tx of the imported log has no block, so `txStatus` is `NotFound` for it. `checkTransaction` still reports it as `Confirmed`, as before M2, so a restored Emulator keeps its answer. A tx below the `clearAppliedTxs` cursor is in a block, so `txStatus` and `checkTransaction` report it as `Confirmed`; before M2 `checkTransaction` said `NotFound`.
+
 *Example, illustrative,* for `[TS-6]`. The tip is at slot 50:
 
 | Case | `AppliedTx.slot` |
@@ -417,6 +425,8 @@ Tx 4 fits in block 1 but stays behind tx 3. The forge takes a prefix, not a best
 - With `ProduceBlock`, `pollForConfirmation` MUST forge until the tx is no longer `Pending`, at most `maxAttempts` blocks. `[SF-3]`
 - With `WaitOnly`, `pollForConfirmation` MUST return the status as it is. `[SF-4]`
 - `EmulatorJavaApi` MUST expose the members of `[SF-1]` with Java types. `[SF-5]`
+
+*Implementation status (M2):* `pollForConfirmation` ignores `delayMs`. `[SF-1]` is met for `submit`, `produceBlock()`, `txStatus`, `findUtxos(query, view)`, `mempoolTxs` and `tip`; the branch `produceBlock` overloads, `rollback` and `diff` come in M3 and M4.
 
 **Why:** `[SF-2]`: the Emulator has virtual time, and a sleep only slows tests. `[SF-3]`: off-the-shelf dApp code calls `awaitTx`, so with `Manual` it must still finish. `[SF-4]`: a test that drives blocks itself can observe a pending tx.
 

@@ -97,9 +97,10 @@ case class EmulatorState private (
       *
       * The tx is validated on the snapshot of the last mempool entry, or the tip snapshot if the
       * mempool is empty, at the current slot, spec [MP-1], [MP-2]. A duplicate fails there, because
-      * its inputs are spent, spec [MP-5]. On success the tx and its snapshot join the mempool, spec
-      * [MP-6], and in the `Instant` preset the mempool is forged at once, spec [MP-8]. One
-      * transition, so one atomic swap, spec [MP-9].
+      * its inputs are spent, spec [MP-5]. A valid tx that does not fit the mempool capacity is
+      * rejected with `MempoolFull`, spec [MP-4]. On success the tx and its snapshot join the
+      * mempool, spec [MP-6], and in the `Instant` preset the mempool is forged at once, spec
+      * [MP-8]. One transition, so one atomic swap, spec [MP-9].
       *
       * @param validationContext
       *   derives the context the tx is validated under, for a per-submit concern such as debug
@@ -113,10 +114,24 @@ case class EmulatorState private (
         val base = validationBase
         validate(validationContext(base.context), base.ledger, tx) match
             case Left(error) => (this, Left(SubmitError.fromException(error)))
+            case Right(_) if !fitsMempool(tx, base.context.env.params) =>
+                (this, Left(NetworkSubmitError.MempoolFull(s"the mempool is full: ${tx.id.toHex}")))
             case Right(newLedger) =>
                 val spent = EmulatorBase.resolveSpent(base.ledger.utxos, tx)
                 (accepted(base, newLedger, AppliedTx(tx, currentSlot, spent)), Right(tx.id))
     }
+
+    /** Whether the mempool with `tx` stays within the mempool capacity, two times the block limits
+      * per dimension, spec [MP-4]. It is measured as one block of the mempool txs, as the block
+      * limits are, spec [FG-5]. The check runs after the ledger rules, so an invalid tx still gets
+      * the error of the rule it fails, spec [MP-3].
+      */
+    private def fitsMempool(tx: Transaction, params: ProtocolParams): Boolean =
+        BlockForge.fits(
+          mempool.map(_.applied.tx) :+ tx,
+          2 * params.maxBlockBodySize,
+          params.maxBlockExecutionUnits + params.maxBlockExecutionUnits
+        )
 
     /** The snapshot a new tx is validated on: the last mempool entry's, or the tip's if the mempool
       * is empty, at the current slot, spec [MP-1], [MP-2].
@@ -165,19 +180,22 @@ case class EmulatorState private (
         val forged = config.blockProduction match
             case BlockProduction.Manual =>
                 val slot = math.max(currentSlot, tip.slot + 1)
-                // the mempool is valid at the current slot already, spec [TE-2]
-                val ready =
-                    if slot == currentSlot then this else withSlot(slot).revalidated(validate)
-                ready.forgePrefix(slot)
+                withSlot(slot).revalidated(validate).forgePrefix(slot)
             case BlockProduction.Instant => forgePrefix(math.max(currentSlot, tip.slot))
         (forged, forged.tip.point)
     }
 
-    /** The state with a block of the mempool txs at `slot` on the tip; they leave the mempool, spec
-      * [FG-7].
+    /** The state with a block at `slot` on the tip, of the longest mempool prefix that fits the
+      * block limits, spec [FG-4], [FG-5]; the prefix leaves the mempool, spec [FG-7].
       */
     private def forgePrefix(slot: SlotNo): EmulatorState = {
-        val (prefix, rest) = mempool.splitAt(mempool.size)
+        val params = context.env.params
+        val size = BlockForge.prefixThatFits(
+          mempool.map(_.applied.tx),
+          params.maxBlockBodySize,
+          params.maxBlockExecutionUnits
+        )
+        val (prefix, rest) = mempool.splitAt(size)
         forge(prefix, slot).copy(mempool = rest)
     }
 
@@ -219,14 +237,18 @@ case class EmulatorState private (
     private[node] def txStatus(hash: TransactionHash): TxStatus =
         if mempool.exists(_.applied.txHash == hash) then TxStatus.Pending
         else
-            // ceiling: a scan from the tip back. Add a tx index if long chains make it slow.
-            chain.indices.reverseIterator.find(i =>
-                blocks(chain(i)).txs.exists(_.txHash == hash)
-            ) match
-                case Some(i) =>
-                    val node = blocks(chain(i))
-                    TxStatus.Confirmed(chain.size - i, ChainPoint(node.block.slot, node.id))
-                case None => dropped.get(hash).fold(TxStatus.NotFound)(TxStatus.Dropped(_))
+            // The log holds every selected-chain tx above `logStart`, so a hash out of the log can
+            // only sit in a block at or below `logStart`, which clearAppliedTxs moved up.
+            // ceiling: a scan from the tip back, or from `logStart` back for a hash out of the log.
+            // Add a tx index if long chains make it slow.
+            val inBlock = (id: BlockHash) => blocks(id).txs.exists(_.txHash == hash)
+            val i =
+                if appliedTxs.contains(hash) then chain.lastIndexWhere(inBlock)
+                else chain.lastIndexWhere(inBlock, logStart.toInt - 1)
+            if i >= 0 then
+                val node = blocks(chain(i))
+                TxStatus.Confirmed(chain.size - i, ChainPoint(node.block.slot, node.id))
+            else dropped.get(hash).fold(TxStatus.NotFound)(TxStatus.Dropped(_))
 
     /** The snapshot `view` reads, spec section 9. */
     private[node] def snapshotOf(view: ChainView): Either[ChainViewError, LedgerSnapshot] =

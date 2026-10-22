@@ -273,6 +273,17 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(stateOf(e).selectedChain.size == 2)
     }
 
+    test("txStatus finds a tx below the clearAppliedTxs cursor") {
+        // spec [TS-2]: the log is not the chain, a tx out of the log is still Confirmed
+        val e = emulator(ChainConfig.instant)
+        val before = payment(e.utxos, 2_000_000)
+        assert(e.submitSync(before).isRight)
+        val point = e.tip.point
+        clear(e)
+        assert(e.submitSync(payment(e.utxos, 3_000_000)).isRight)
+        assert(e.txStatus(before.id) == TxStatus.Confirmed(2, point))
+    }
+
     @nowarn("msg=clearAppliedTxs") // deprecated, spec [DE-5]; this test pins what it still does
     private def clear(e: Emulator): Unit = e.clearAppliedTxs()
 

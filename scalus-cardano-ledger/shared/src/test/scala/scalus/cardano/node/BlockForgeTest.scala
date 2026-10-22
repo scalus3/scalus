@@ -6,7 +6,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.serialization.cbor.Cbor
 import scalus.testing.kit.Party.{Alice, Bob}
-import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.{ByteString, Data}
 
 class BlockForgeTest extends AnyFunSuite {
 
@@ -94,5 +94,61 @@ class BlockForgeTest extends AnyFunSuite {
         val b = BlockForge.forge(Some(other), 7L, 42L, IndexedSeq(first), version)
         assert(a.hash != b.hash)
         assert(forge(IndexedSeq(first)).hash == a.hash, "the same inputs forge the same block")
+    }
+
+    private val third = payment(2, 4_000_000)
+    private val big = payment(3, 5_000_000).copy(auxiliaryData =
+        Some(
+          KeepRaw(
+            AuxiliaryData.Metadata(
+              Map(Word64(1L) -> Metadatum.Bytes(ByteString.fromArray(new Array[Byte](2000))))
+            )
+          )
+        )
+    )
+
+    private def prefix(txs: IndexedSeq[Transaction], maxBodySize: Long): Int =
+        BlockForge.prefixThatFits(txs, maxBodySize, ExUnits(Long.MaxValue, Long.MaxValue))
+
+    test("the prefix stops at the first tx that does not fit: a prefix, not a best fit") {
+        // spec [FG-4], section 8.1 example: tx 4 fits after tx 2 but stays behind tx 3
+        val txs = IndexedSeq(first, second, big, third)
+        val limit = BlockForge.bodySize(IndexedSeq(first, second, third))
+        assert(BlockForge.bodySize(IndexedSeq(first, second, big)) > limit)
+        assert(prefix(txs, limit) == 2)
+    }
+
+    test("the body size limit holds for the encoded body of the whole prefix") {
+        // spec [FG-4], [FG-5], [BH-4]
+        val txs = IndexedSeq(first, second, third)
+        val two = BlockForge.bodySize(txs.take(2))
+        assert(two == forge(txs.take(2)).header.headerBody.blockBodySize)
+        assert(prefix(txs, two) == 2)
+        assert(prefix(txs, two - 1) == 1)
+        assert(prefix(txs, Long.MaxValue) == 3)
+    }
+
+    private def withExUnits(tx: Transaction, memory: Long, steps: Long): Transaction = {
+        val redeemer = Redeemer(RedeemerTag.Spend, 0, Data.I(0), ExUnits(memory, steps))
+        tx.withWitness(_.copy(redeemers = Some(KeepRaw(Redeemers.Array(IndexedSeq(redeemer))))))
+    }
+
+    test("memory units and CPU steps are each a block limit on their own") {
+        // spec [FG-5]
+        val limit = ExUnits(10, 10)
+        def fit(units: (Long, Long)*): Int = BlockForge.prefixThatFits(
+          units.toIndexedSeq.map((m, s) => withExUnits(first, m, s)),
+          Long.MaxValue,
+          limit
+        )
+        assert(fit((6, 1), (6, 1)) == 1, "memory")
+        assert(fit((1, 6), (1, 6)) == 1, "steps")
+        assert(fit((5, 5), (5, 5), (1, 0)) == 2)
+    }
+
+    test("the first tx is always taken, so a forge from a non-empty mempool makes progress") {
+        // spec [FG-4], [FG-9] implementation status: one tx always fits
+        assert(prefix(IndexedSeq(big, first), 1L) == 1)
+        assert(prefix(IndexedSeq.empty, 1L) == 0)
     }
 }

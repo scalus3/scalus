@@ -35,16 +35,7 @@ private[node] object BlockForge {
         txs: IndexedSeq[Transaction],
         protocolVersion: ProtocolVersion
     ): Block = {
-        val bodies = txs.map(_.body)
-        val witnessSets = txs.map(_.witnessSetRaw)
-        val auxiliaryData = TreeMap.from(txs.zipWithIndex.flatMap { (tx, i) =>
-            tx.auxiliaryData.map(i -> _)
-        })
-        // spec [BH-9]
-        val invalid = txs.zipWithIndex.collect { case (tx, i) if !tx.isValid => i }
-        // spec [BH-4]: the body is the four segments, encoded one after another
-        val bodySize = Cbor.encode(bodies).length + Cbor.encode(witnessSets).length +
-            Cbor.encode(auxiliaryData).length + Cbor.encode(invalid).length
+        val body = Segments.of(txs)
         val headerBody = BlockHeaderBody(
           blockNumber = height,
           slot = slot,
@@ -52,12 +43,78 @@ private[node] object BlockForge {
           issuerVkey = zeros(32),
           vrfVkey = zeros(32),
           vrfResult = vrfCert,
-          blockBodySize = bodySize.toLong,
+          blockBodySize = body.size,
           // spec [BH-3]
-          blockBodyHash = Block.bodyHash(bodies, witnessSets, auxiliaryData, invalid),
+          blockBodyHash =
+              Block.bodyHash(body.bodies, body.witnessSets, body.auxiliaryData, body.invalid),
           operationalCert = operationalCert,
           protocolVersion = protocolVersion
         )
-        Block(BlockHeader(headerBody, bodySignature), bodies, witnessSets, auxiliaryData, invalid)
+        Block(
+          BlockHeader(headerBody, bodySignature),
+          body.bodies,
+          body.witnessSets,
+          body.auxiliaryData,
+          body.invalid
+        )
+    }
+
+    /** The byte size of the body of a block of `txs`, spec [BH-4]. */
+    def bodySize(txs: IndexedSeq[Transaction]): Long = Segments.of(txs).size
+
+    /** Whether a block of `txs` fits `maxBodySize` and `maxExUnits`: the body size, the memory
+      * units and the CPU steps, each on its own, spec [FG-5]. The execution units are those the
+      * redeemers declare.
+      */
+    def fits(txs: IndexedSeq[Transaction], maxBodySize: Long, maxExUnits: ExUnits): Boolean =
+        !txs.foldLeft(ExUnits.zero)(_ + exUnitsOf(_)).exceeds(maxExUnits) &&
+            bodySize(txs) <= maxBodySize
+
+    /** The length of the longest prefix of `txs` that [[fits]] the block limits, spec [FG-4]. The
+      * first tx is always taken: the ledger's `maxTxSize` and `maxTxExecutionUnits` are below the
+      * block limits, so a valid tx fits an empty block, and a forge from a non-empty mempool makes
+      * progress.
+      */
+    def prefixThatFits(
+        txs: IndexedSeq[Transaction],
+        maxBodySize: Long,
+        maxExUnits: ExUnits
+    ): Int =
+        // ceiling: encodes each longer prefix again, quadratic in its length. A mempool holds
+        // about two blocks of txs; measure each tx once if a mempool grows large.
+        if txs.isEmpty then 0
+        else
+            (2 to txs.size)
+                .takeWhile(n => fits(txs.take(n), maxBodySize, maxExUnits))
+                .lastOption
+                .getOrElse(1)
+
+    /** The execution units `tx` declares in its redeemers. */
+    private def exUnitsOf(tx: Transaction): ExUnits =
+        tx.witnessSet.redeemers.fold(ExUnits.zero)(_.value.totalExUnits)
+
+    /** The four body segments of a block, in block order. */
+    private final case class Segments(
+        bodies: IndexedSeq[KeepRaw[TransactionBody]],
+        witnessSets: IndexedSeq[KeepRaw[TransactionWitnessSet]],
+        auxiliaryData: TreeMap[Int, KeepRaw[AuxiliaryData]],
+        invalid: IndexedSeq[Int]
+    ) {
+
+        /** spec [BH-4]: the body is the four segments, encoded one after another. */
+        def size: Long =
+            (Cbor.encode(bodies).length + Cbor.encode(witnessSets).length +
+                Cbor.encode(auxiliaryData).length + Cbor.encode(invalid).length).toLong
+    }
+
+    private object Segments {
+        def of(txs: IndexedSeq[Transaction]): Segments = {
+            val auxiliaryData = TreeMap.from(txs.zipWithIndex.flatMap { (tx, i) =>
+                tx.auxiliaryData.map(i -> _)
+            })
+            // spec [BH-9]
+            val invalid = txs.zipWithIndex.collect { case (tx, i) if !tx.isValid => i }
+            Segments(txs.map(_.body), txs.map(_.witnessSetRaw), auxiliaryData, invalid)
+        }
     }
 }
