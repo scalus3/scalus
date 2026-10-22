@@ -9,6 +9,7 @@ import scalus.cardano.address.{Address, StakeAddress, StakePayload}
 import scalus.cardano.ledger.rules.{Context, UtxoEnv}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
+import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 
 import scala.annotation.nowarn
 import scala.util.control.NonFatal
@@ -289,6 +290,26 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     def getUtxos(filter: JsUtxoFilter): js.Array[JsUtxo] =
         wrapAll(emulator.findUtxosSync(toQuery(filter)))
 
+    /** The UTxOs matching `filter`, in the ledger state `view` names: `"tip"`, the chain's last
+      * block, as `getUtxos(filter)` reads; `"mempool"`, after the pending transactions too; or `{
+      * stable: n }`, after the block of depth `n`, where the tip has depth 1 and `height + 1` is
+      * genesis. Pass `{}` as the filter for every UTxO.
+      *
+      * @throws TypeError
+      *   if `view` is none of these shapes.
+      * @throws RangeError
+      *   if `stable` is below 1 or above the tip height plus 1, or its block is deeper than
+      *   `securityParam + 1`, whose ledger state the emulator no longer keeps.
+      */
+    def getUtxos(
+        filter: JsUtxoFilter,
+        @TsType("\"tip\" | \"mempool\" | { stable: number }") view: js.Any
+    ): js.Array[JsUtxo] =
+        emulator.findUtxosSync(toQuery(filter), JEmulator.viewOf(view)) match
+            case Right(utxos) => wrapAll(utxos)
+            case Left(error) =>
+                throw js.JavaScriptException(new js.RangeError(JEmulator.message(error)))
+
     private def wrapAll(utxos: Utxos): js.Array[JsUtxo] = {
         val out = js.Array[JsUtxo]()
         utxos.foreach { case (input, output) => out.push(JsUtxo.wrap(input, output)) }
@@ -403,7 +424,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     def getTreasury(): js.BigInt = emulator.treasury.value.toJsBigInt
 
     /** The current slot number of the emulator. With clock `"wall"`, reading it does not move the
-      * clock: only `submitTx` and `evaluateTx` do.
+      * clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
       */
     def getSlot(): Double = emulator.currentContext.env.slot.toDouble
 
@@ -412,7 +433,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
 
     /** POSIX time in milliseconds at which the emulator's current slot starts. Equivalent to
       * `getCardanoInfo().slotConfig.slotToTime(getSlot())`. With clock `"wall"`, reading it does
-      * not move the clock: only `submitTx` and `evaluateTx` do.
+      * not move the clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
       */
     def getTime(): Double =
         emulator.currentContext.slotConfig.slotToTime(emulator.currentContext.env.slot).toDouble
@@ -431,16 +452,94 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     def hasTx(txHashHex: String): Boolean =
         emulator.hasTx(TransactionHash.fromHex(txHashHex))
 
-    /** Whether a transaction with this hash was accepted by this emulator, as a status string
-      * rather than a boolean. Always one of the two values below: with no mempool and immediate
-      * application, there is no pending state to report.
+    /** Where a transaction stands, as one word: `"Pending"` in the mempool, `"Confirmed"` in a
+      * block of the chain, `"Dropped"` when it left the mempool without a block, `"RolledBack"`
+      * when its block left the chain under `orphanTxs: "drop"`, `"NotFound"` if this emulator never
+      * saw it. `getTxStatus` gives the details. With the default `blockProduction: "instant"`, an
+      * accepted transaction is `"Confirmed"` at once.
       *
       * @param txHashHex
       *   Hex-encoded 32-byte transaction hash.
       */
-    @TsType("\"Confirmed\" | \"NotFound\"")
-    def getTransactionStatus(txHashHex: String): String =
-        if hasTx(txHashHex) then "Confirmed" else "NotFound"
+    @TsType("\"Pending\" | \"Confirmed\" | \"Dropped\" | \"RolledBack\" | \"NotFound\"")
+    def getTransactionStatus(txHashHex: String): String = getTxStatus(txHashHex).status
+
+    /** Where a transaction stands, with the details: the depth and the block of a confirmed
+      * transaction (the tip has depth 1), the reason of a dropped one.
+      *
+      * @param txHashHex
+      *   Hex-encoded 32-byte transaction hash.
+      */
+    def getTxStatus(txHashHex: String): JTxStatusInfo =
+        JEmulator.txStatusInfo(emulator.txStatus(TransactionHash.fromHex(txHashHex)))
+
+    /** Forges a block from the mempool and returns its point. With `blockProduction: "manual"` this
+      * is the only way a block appears: at slot `max(getSlot(), tip slot + 1)`, with the oldest
+      * pending transactions that fit the block limits, after the clock moves to that slot and the
+      * mempool is checked again. An empty mempool forges an empty block.
+      */
+    def produceBlock(): JsChainPoint = {
+        syncClock()
+        JEmulator.pointOf(emulator.produceBlock())
+    }
+
+    /** Forges a block of `txs`, as CBOR, on the block `on`, at slot `on.slot + 1`: a block from
+      * another pool, so the mempool is not read. A branch longer than the chain becomes the chain,
+      * and the transactions of the blocks it replaces follow `orphanTxs`. `on` is a block of this
+      * emulator, or the genesis point `{ slot: 0, blockHash: "00".repeat(32) }`.
+      *
+      * @return
+      *   `{ isSuccess: true, point }`, or `{ isSuccess: false, error, errorKind }`, and then
+      *   nothing changed.
+      * @throws TypeError
+      *   if `on` is not a point, or an element of `txs` is not a transaction.
+      */
+    def produceBlockOn(on: JsChainPoint, txs: js.Array[Uint8Array]): JChainResult = {
+        val parent = JEmulator.chainPointOf(on)
+        JEmulator.chainResult(emulator.produceBlock(parent, JEmulator.txsOf(txs)))
+    }
+
+    /** As above, at `slot`, which must be greater than `on.slot`. */
+    def produceBlockOn(on: JsChainPoint, txs: js.Array[Uint8Array], slot: Double): JChainResult = {
+        val parent = JEmulator.chainPointOf(on)
+        val at = longOf(slot, "slot")
+        JEmulator.chainResult(emulator.produceBlock(parent, at, JEmulator.txsOf(txs)))
+    }
+
+    /** Removes the last `n` blocks of the chain, and returns the new tip. Their transactions follow
+      * `orphanTxs`, and the clock stays. `n` can be at most `securityParam`.
+      *
+      * @return
+      *   `{ isSuccess: true, point }`, or `{ isSuccess: false, error, errorKind }`, and then
+      *   nothing changed.
+      */
+    def rollback(n: Double): JChainResult =
+        JEmulator.chainResult(emulator.rollback(intOf(n, "n")))
+
+    /** The hashes of the pending transactions, oldest first. */
+    def getMempool(): js.Array[String] = js.Array(emulator.mempoolTxs.map(_.id.toHex)*)
+
+    /** The last block of the chain, with its height. Before the first block it is genesis:
+      * `{ slot: 0, blockHash: "00".repeat(32), height: 0 }`.
+      */
+    def getTip(): JsChainTip = JEmulator.tipOf(emulator.tip)
+
+    /** Waits for a pending transaction, as a provider's `awaitTx` does, and says if it is
+      * confirmed. With `awaitTx: "produceBlock"`, the default, it forges blocks while the
+      * transaction is pending; with `"waitOnly"` it forges nothing and reports the status as it is.
+      *
+      * @param txHashHex
+      *   Hex-encoded 32-byte transaction hash.
+      */
+    def awaitTx(txHashHex: String): Boolean = {
+        syncClock()
+        val hash = TransactionHash.fromHex(txHashHex)
+        // Each forge takes at least the oldest pending tx (spec [FG-4]), so a pending tx is forged
+        // or dropped within as many blocks as the mempool holds. `pollForConfirmation` without its
+        // `Future`, which would link `scala.concurrent` into the bundle.
+        emulator.forgeWhilePending(hash, emulator.mempoolTxs.size)
+        emulator.transactionStatus(hash) == TransactionStatus.Confirmed
+    }
 
     /** Looks up a previously applied transaction by hash.
       *
@@ -890,10 +989,94 @@ trait JsEmulatorOptions extends js.Object {
     /** `"manual"`, the default: the slot moves only when you move it. `"wall"`: before it validates
       * or evaluates a transaction, the emulator moves to the slot that contains `Date.now()`, never
       * backwards, so a validity interval built from the wall clock holds. `getSlot` and `getTime`
-      * do not move the clock: only `submitTx` and `evaluateTx` do.
+      * do not move the clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
       */
     @TsType("\"manual\" | \"wall\"")
     val clock: js.UndefOr[String] = js.undefined
+
+    /** `"instant"`, the default: every accepted transaction is in a block at once. `"manual"`: an
+      * accepted transaction waits in the mempool, and only `produceBlock` or `awaitTx` forges a
+      * block, so `getUtxos` shows its outputs only then, as a real provider does.
+      */
+    @TsType("\"instant\" | \"manual\"")
+    val blockProduction: js.UndefOr[String] = js.undefined
+
+    /** What `awaitTx` does while the transaction is pending: `"produceBlock"`, the default, forges
+      * blocks; `"waitOnly"` forges nothing.
+      */
+    @TsType("\"produceBlock\" | \"waitOnly\"")
+    val awaitTx: js.UndefOr[String] = js.undefined
+
+    /** What happens to the transactions of a block that leaves the chain: `"returnToMempool"`, the
+      * default, puts them back in the mempool; `"drop"` drops them, and their status is
+      * `"RolledBack"`.
+      */
+    @TsType("\"returnToMempool\" | \"drop\"")
+    val orphanTxs: js.UndefOr[String] = js.undefined
+
+    /** The deepest rollback the emulator allows, at least 1. Defaults to 2160. */
+    val securityParam: js.UndefOr[Double] = js.undefined
+}
+
+/** A block of the emulator's chain: its slot and its block id, the hex hash of its header. The
+  * genesis point is `{ slot: 0, blockHash: "00".repeat(32) }`.
+  */
+@TsName("ChainPoint")
+trait JsChainPoint extends js.Object {
+    val slot: Double
+    val blockHash: String
+}
+
+/** The last block of the chain, with its height, the number of blocks from genesis. A tip is also a
+  * `ChainPoint`.
+  */
+@TsName("ChainTip")
+trait JsChainTip extends JsChainPoint {
+    val height: Double
+}
+
+/** Result of `produceBlockOn` and `rollback`. Read `isSuccess` first: `point` is present only on
+  * success, `error` and `errorKind` only on failure.
+  */
+@TsName("ChainResult")
+trait JChainResult extends js.Object {
+    val isSuccess: Boolean
+
+    /** The new block, or the tip after a rollback; present on success. */
+    val point: js.UndefOr[JsChainPoint]
+
+    /** What went wrong, in prose; present on failure. */
+    val error: js.UndefOr[String]
+
+    /** Why nothing changed; present on failure. Stable enough to assert on, unlike `error`. */
+    @TsType(
+      "\"SlotNotAfterParent\" | \"UnknownPoint\" | \"TooDeep\" | \"InvalidTx\" | \"BlockTooBig\" | \"NotPositive\" | \"PastGenesis\""
+    )
+    val errorKind: js.UndefOr[String]
+}
+
+/** Result of `getTxStatus`. */
+@TsName("TxStatusInfo")
+trait JTxStatusInfo extends js.Object {
+    @TsType("\"Pending\" | \"Confirmed\" | \"Dropped\" | \"RolledBack\" | \"NotFound\"")
+    val status: String
+
+    /** The depth of the block that holds the transaction, the tip being 1; present when
+      * `"Confirmed"`.
+      */
+    val depth: js.UndefOr[Double]
+
+    /** The block that holds the transaction; present when `"Confirmed"`. */
+    val point: js.UndefOr[JsChainPoint]
+
+    /** Why the transaction left the mempool; present when `"Dropped"`. `"Expired"`: its validity
+      * interval ended. `"InputsSpent"`: an input is gone. `"Invalid"`: another rule failed.
+      */
+    @TsType("\"Expired\" | \"InputsSpent\" | \"Invalid\"")
+    val reason: js.UndefOr[String]
+
+    /** The message of the rule that failed; present when `reason` is `"Invalid"`. */
+    val error: js.UndefOr[String]
 }
 
 /** Identifies one transaction output: the pair a `TransactionInput` is made of. */
@@ -1047,6 +1230,145 @@ object JEmulator {
             hash -> datum
         }.toMap
 
+    /** The chain options of `options`, spec [SF-6]. An unknown value throws a `TypeError`. */
+    private def chainConfigOf(options: JsEmulatorOptions): ChainConfig = {
+        def choice[A](value: js.UndefOr[String], name: String, default: A, cases: (String, A)*): A =
+            value.toOption.fold(default) { value =>
+                cases.toMap.getOrElse(
+                  value,
+                  typeError(
+                    s"$name must be ${cases.map(c => s"\"${c._1}\"").mkString(" or ")}, got: \"$value\""
+                  )
+                )
+            }
+        val defaults = ChainConfig.instant
+        defaults
+            .withBlockProduction(
+              choice(
+                options.blockProduction,
+                "blockProduction",
+                defaults.blockProduction,
+                "instant" -> BlockProduction.Instant,
+                "manual" -> BlockProduction.Manual
+              )
+            )
+            .withAwaitTx(
+              choice(
+                options.awaitTx,
+                "awaitTx",
+                defaults.awaitTx,
+                "produceBlock" -> AwaitTxPolicy.ProduceBlock,
+                "waitOnly" -> AwaitTxPolicy.WaitOnly
+              )
+            )
+            .withOrphanTxs(
+              choice(
+                options.orphanTxs,
+                "orphanTxs",
+                defaults.orphanTxs,
+                "returnToMempool" -> OrphanTxPolicy.ReturnToMempool,
+                "drop" -> OrphanTxPolicy.Drop
+              )
+            )
+            .withSecurityParam(
+              options.securityParam.toOption.fold(defaults.securityParam) { value =>
+                  val k = longOf(value, "securityParam")
+                  if k < 1 then typeError(s"securityParam must be at least 1, got: $k")
+                  k
+              }
+            )
+    }
+
+    private def pointOf(point: ChainPoint): JsChainPoint =
+        js.Dynamic
+            .literal(slot = point.slot.toDouble, blockHash = point.blockHash.toHex)
+            .asInstanceOf[JsChainPoint]
+
+    private def tipOf(tip: ChainTip): JsChainTip =
+        js.Dynamic
+            .literal(
+              slot = tip.slot.toDouble,
+              blockHash = tip.blockHash.toHex,
+              height = tip.blockNo.toDouble
+            )
+            .asInstanceOf[JsChainTip]
+
+    /** The point `point` names. Throws a `TypeError` for anything else. */
+    private def chainPointOf(point: JsChainPoint): ChainPoint = {
+        val hash =
+            try BlockHash.fromHex(point.blockHash)
+            catch
+                case NonFatal(e) => typeError(s"on.blockHash is not a block hash: ${e.getMessage}")
+        ChainPoint(longOf(point.slot, "on.slot"), hash)
+    }
+
+    /** The transactions in `txs`. Throws a `TypeError` for an element that is not one. */
+    private def txsOf(txs: js.Array[Uint8Array]): Seq[Transaction] =
+        txs.toSeq.zipWithIndex.map { (bytes, index) =>
+            try Transaction.fromCbor(bytes.toByteArray)
+            catch
+                case NonFatal(e) => typeError(s"txs[$index] is not a transaction: ${e.getMessage}")
+        }
+
+    /** A forge or rollback result. `errorKind` is the name of the error case. */
+    private def chainResult(result: Either[ForgeError | RollbackError, ChainPoint]): JChainResult =
+        result match
+            case Right(point) =>
+                js.Dynamic
+                    .literal(isSuccess = true, point = pointOf(point))
+                    .asInstanceOf[JChainResult]
+            case Left(error) =>
+                val message = error match
+                    case ForgeError.InvalidTx(index, e) => s"txs[$index] is invalid: ${e.message}"
+                    case other                          => other.toString
+                js.Dynamic
+                    .literal(isSuccess = false, error = message, errorKind = error.productPrefix)
+                    .asInstanceOf[JChainResult]
+
+    private def txStatusInfo(status: TxStatus): JTxStatusInfo = {
+        val info = status match
+            case TxStatus.Pending => js.Dynamic.literal(status = "Pending")
+            case TxStatus.Confirmed(depth, point) =>
+                js.Dynamic.literal(
+                  status = "Confirmed",
+                  depth = depth.toDouble,
+                  point = pointOf(point)
+                )
+            case TxStatus.Dropped(DropReason.Invalid(error)) =>
+                js.Dynamic.literal(status = "Dropped", reason = "Invalid", error = error.message)
+            case TxStatus.Dropped(DropReason.Expired) =>
+                js.Dynamic.literal(status = "Dropped", reason = "Expired")
+            case TxStatus.Dropped(DropReason.InputsSpent) =>
+                js.Dynamic.literal(status = "Dropped", reason = "InputsSpent")
+            case TxStatus.RolledBack => js.Dynamic.literal(status = "RolledBack")
+            case TxStatus.NotFound   => js.Dynamic.literal(status = "NotFound")
+        info.asInstanceOf[JTxStatusInfo]
+    }
+
+    /** The view `view` names, spec [SF-9]. Throws a `TypeError` for any other shape. */
+    private def viewOf(view: js.Any): ChainView = {
+        def invalid: Nothing =
+            typeError("view must be \"tip\", \"mempool\" or { stable: n }")
+        js.typeOf(view) match
+            case "string" =>
+                view.asInstanceOf[String] match
+                    case "tip"     => ChainView.Tip
+                    case "mempool" => ChainView.Mempool
+                    case _         => invalid
+            case "object"
+                if view != null && js.Object.keys(view.asInstanceOf[js.Object]).toSeq == Seq(
+                  "stable"
+                ) =>
+                ChainView.Stable(intOf(view.asInstanceOf[js.Dynamic].stable, "view.stable"))
+            case _ => invalid
+    }
+
+    private def message(error: ChainViewError): String = error match
+        case ChainViewError.DepthOutOfRange(depth, tipHeight) =>
+            s"view { stable: $depth } is outside 1 .. ${tipHeight + 1}"
+        case ChainViewError.SnapshotDropped(depth) =>
+            s"the ledger state at depth $depth is deeper than securityParam + 1, and is not kept"
+
     // The deprecated constructor is still the only way to obtain a `JEmulator` instance to write
     // the real, already-built `Emulator` into - see `JsUtxo.wrap`'s doc for the same placeholder
     // pattern. Internal use is intentional, hence the suppression.
@@ -1138,7 +1460,7 @@ object JEmulator {
           datums = Map.empty
         )
         val context = Context(env = env, slotConfig = cardanoInfo.slotConfig)
-        val scalaEmulator = Emulator.withState(initState, context)
+        val scalaEmulator = Emulator.withState(initState, context, chainConfigOf(options))
         scalaEmulator.seedDatums(parseDatums(options.datums))
         val wrapper = wrapScalaEmulator(scalaEmulator, JsSlotConfig.wrap(cardanoInfo.slotConfig))
         if wall then wrapper.wallClock = Some(now)

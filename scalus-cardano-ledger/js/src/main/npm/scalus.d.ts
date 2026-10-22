@@ -91,6 +91,39 @@ export class CardanoInfo {
 }
 
 /**
+ * A block of the emulator's chain: its slot and its block id, the hex hash of its header. The
+ * genesis point is `{ slot: 0, blockHash: "00".repeat(32) }`.
+ */
+export interface ChainPoint {
+  readonly slot: number;
+  readonly blockHash: string;
+}
+
+/**
+ * Result of `produceBlockOn` and `rollback`. Read `isSuccess` first: `point` is present only on
+ * success, `error` and `errorKind` only on failure.
+ */
+export interface ChainResult {
+  readonly isSuccess: boolean;
+  /** The new block, or the tip after a rollback; present on success. */
+  readonly point?: ChainPoint;
+  /** What went wrong, in prose; present on failure. */
+  readonly error?: string;
+  /** Why nothing changed; present on failure. Stable enough to assert on, unlike `error`. */
+  readonly errorKind?: "SlotNotAfterParent" | "UnknownPoint" | "TooDeep" | "InvalidTx" | "BlockTooBig" | "NotPositive" | "PastGenesis";
+}
+
+/**
+ * The last block of the chain, with its height, the number of blocks from genesis. A tip is also a
+ * `ChainPoint`.
+ */
+export interface ChainTip {
+  readonly height: number;
+  readonly slot: number;
+  readonly blockHash: string;
+}
+
+/**
  * The three Plutus cost models, by language rather than by position - so a caller reads
  * `costModels.PlutusV3`, never `Object.values(costModels)[2]` and a comment explaining why.
  */
@@ -237,6 +270,16 @@ export class Emulator {
    */
   getUtxos(filter: UtxoFilter): Utxo[];
   /**
+   * The UTxOs matching `filter`, in the ledger state `view` names: `"tip"`, the chain's last
+   * block, as `getUtxos(filter)` reads; `"mempool"`, after the pending transactions too; or `{
+   * stable: n }`, after the block of depth `n`, where the tip has depth 1 and `height + 1` is
+   * genesis. Pass `{}` as the filter for every UTxO.
+   *
+   * @throws TypeError if `view` is none of these shapes.
+   * @throws RangeError if `stable` is below 1 or above the tip height plus 1, or its block is deeper than `securityParam + 1`, whose ledger state the emulator no longer keeps.
+   */
+  getUtxos(filter: UtxoFilter, view: "tip" | "mempool" | { stable: number }): Utxo[];
+  /**
    * The reward balance of a stake credential, key or script.
    *
    * @param rewardAddressBech32 The reward (stake) address in bech32 form, for example `stake1...` or `stake_test1...`. The address carries which kind of credential it names, so this works for a key credential too - unlike the deprecated `Uint8Array` form this replaces, which only ever built a script credential.
@@ -257,7 +300,7 @@ export class Emulator {
   getTreasury(): bigint;
   /**
    * The current slot number of the emulator. With clock `"wall"`, reading it does not move the
-   * clock: only `submitTx` and `evaluateTx` do.
+   * clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
    */
   getSlot(): number;
   /** Advance the current slot by `n` slots. */
@@ -265,7 +308,7 @@ export class Emulator {
   /**
    * POSIX time in milliseconds at which the emulator's current slot starts. Equivalent to
    * `getCardanoInfo().slotConfig.slotToTime(getSlot())`. With clock `"wall"`, reading it does
-   * not move the clock: only `submitTx` and `evaluateTx` do.
+   * not move the clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
    */
   getTime(): number;
   /**
@@ -280,13 +323,63 @@ export class Emulator {
    */
   hasTx(txHashHex: string): boolean;
   /**
-   * Whether a transaction with this hash was accepted by this emulator, as a status string
-   * rather than a boolean. Always one of the two values below: with no mempool and immediate
-   * application, there is no pending state to report.
+   * Where a transaction stands, as one word: `"Pending"` in the mempool, `"Confirmed"` in a
+   * block of the chain, `"Dropped"` when it left the mempool without a block, `"RolledBack"`
+   * when its block left the chain under `orphanTxs: "drop"`, `"NotFound"` if this emulator never
+   * saw it. `getTxStatus` gives the details. With the default `blockProduction: "instant"`, an
+   * accepted transaction is `"Confirmed"` at once.
    *
    * @param txHashHex Hex-encoded 32-byte transaction hash.
    */
-  getTransactionStatus(txHashHex: string): "Confirmed" | "NotFound";
+  getTransactionStatus(txHashHex: string): "Pending" | "Confirmed" | "Dropped" | "RolledBack" | "NotFound";
+  /**
+   * Where a transaction stands, with the details: the depth and the block of a confirmed
+   * transaction (the tip has depth 1), the reason of a dropped one.
+   *
+   * @param txHashHex Hex-encoded 32-byte transaction hash.
+   */
+  getTxStatus(txHashHex: string): TxStatusInfo;
+  /**
+   * Forges a block from the mempool and returns its point. With `blockProduction: "manual"` this
+   * is the only way a block appears: at slot `max(getSlot(), tip slot + 1)`, with the oldest
+   * pending transactions that fit the block limits, after the clock moves to that slot and the
+   * mempool is checked again. An empty mempool forges an empty block.
+   */
+  produceBlock(): ChainPoint;
+  /**
+   * Forges a block of `txs`, as CBOR, on the block `on`, at slot `on.slot + 1`: a block from
+   * another pool, so the mempool is not read. A branch longer than the chain becomes the chain,
+   * and the transactions of the blocks it replaces follow `orphanTxs`. `on` is a block of this
+   * emulator, or the genesis point `{ slot: 0, blockHash: "00".repeat(32) }`.
+   *
+   * @returns `{ isSuccess: true, point }`, or `{ isSuccess: false, error, errorKind }`, and then nothing changed.
+   * @throws TypeError if `on` is not a point, or an element of `txs` is not a transaction.
+   */
+  produceBlockOn(on: ChainPoint, txs: readonly Uint8Array[]): ChainResult;
+  /** As above, at `slot`, which must be greater than `on.slot`. */
+  produceBlockOn(on: ChainPoint, txs: readonly Uint8Array[], slot: number): ChainResult;
+  /**
+   * Removes the last `n` blocks of the chain, and returns the new tip. Their transactions follow
+   * `orphanTxs`, and the clock stays. `n` can be at most `securityParam`.
+   *
+   * @returns `{ isSuccess: true, point }`, or `{ isSuccess: false, error, errorKind }`, and then nothing changed.
+   */
+  rollback(n: number): ChainResult;
+  /** The hashes of the pending transactions, oldest first. */
+  getMempool(): string[];
+  /**
+   * The last block of the chain, with its height. Before the first block it is genesis:
+   * `{ slot: 0, blockHash: "00".repeat(32), height: 0 }`.
+   */
+  getTip(): ChainTip;
+  /**
+   * Waits for a pending transaction, as a provider's `awaitTx` does, and says if it is
+   * confirmed. With `awaitTx: "produceBlock"`, the default, it forges blocks while the
+   * transaction is pending; with `"waitOnly"` it forges nothing and reports the status as it is.
+   *
+   * @param txHashHex Hex-encoded 32-byte transaction hash.
+   */
+  awaitTx(txHashHex: string): boolean;
   /**
    * Looks up a previously applied transaction by hash.
    *
@@ -427,9 +520,28 @@ export interface EmulatorOptions {
    * `"manual"`, the default: the slot moves only when you move it. `"wall"`: before it validates
    * or evaluates a transaction, the emulator moves to the slot that contains `Date.now()`, never
    * backwards, so a validity interval built from the wall clock holds. `getSlot` and `getTime`
-   * do not move the clock: only `submitTx` and `evaluateTx` do.
+   * do not move the clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
    */
   readonly clock?: "manual" | "wall";
+  /**
+   * `"instant"`, the default: every accepted transaction is in a block at once. `"manual"`: an
+   * accepted transaction waits in the mempool, and only `produceBlock` or `awaitTx` forges a
+   * block, so `getUtxos` shows its outputs only then, as a real provider does.
+   */
+  readonly blockProduction?: "instant" | "manual";
+  /**
+   * What `awaitTx` does while the transaction is pending: `"produceBlock"`, the default, forges
+   * blocks; `"waitOnly"` forges nothing.
+   */
+  readonly awaitTx?: "produceBlock" | "waitOnly";
+  /**
+   * What happens to the transactions of a block that leaves the chain: `"returnToMempool"`, the
+   * default, puts them back in the mempool; `"drop"` drops them, and their status is
+   * `"RolledBack"`.
+   */
+  readonly orphanTxs?: "returnToMempool" | "drop";
+  /** The deepest rollback the emulator allows, at least 1. Defaults to 2160. */
+  readonly securityParam?: number;
 }
 
 /**
@@ -1096,6 +1208,25 @@ export interface TxEvaluatorOptions {
    * given to several evaluators. Without it, every evaluation hashes and decodes its scripts.
    */
   readonly scriptCache?: ScriptCache;
+}
+
+/** Result of `getTxStatus`. */
+export interface TxStatusInfo {
+  readonly status: "Pending" | "Confirmed" | "Dropped" | "RolledBack" | "NotFound";
+  /**
+   * The depth of the block that holds the transaction, the tip being 1; present when
+   * `"Confirmed"`.
+   */
+  readonly depth?: number;
+  /** The block that holds the transaction; present when `"Confirmed"`. */
+  readonly point?: ChainPoint;
+  /**
+   * Why the transaction left the mempool; present when `"Dropped"`. `"Expired"`: its validity
+   * interval ended. `"InputsSpent"`: an input is gone. `"Invalid"`: another rule failed.
+   */
+  readonly reason?: "Expired" | "InputsSpent" | "Invalid";
+  /** The message of the rule that failed; present when `reason` is `"Invalid"`. */
+  readonly error?: string;
 }
 
 /**

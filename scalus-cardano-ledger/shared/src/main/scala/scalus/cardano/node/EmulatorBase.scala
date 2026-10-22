@@ -388,22 +388,25 @@ trait EmulatorBase extends BlockchainProvider {
         Future.successful(Right(findUtxosSync(query)))
 
     /** Where the transaction stands, from [[txStatus]]: `Pending` and `Confirmed` map to
-      * themselves, every other status to `NotFound`, spec [TS-3], [TS-4]. A tx of the imported log,
-      * which has no block, is `Confirmed`, as before.
+      * themselves, every other status to `NotFound`, spec [TS-3], [TS-4]. A tx known only from the
+      * applied-tx log the emulator was built with has no block, so it is `NotFound`, as on a node.
       *
       * Authoritative, unlike the inherited default, which infers status from the UTxOs a
       * transaction produced: `findUtxos` here answers `Right(empty)` for a transaction it has never
       * seen, and an emulator that has applied a transaction whose outputs are all since spent
       * produces none either.
       */
-    override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] = {
-        val state = readState
-        val status = state.txStatus(txHash) match
-            case TxStatus.Pending                           => TransactionStatus.Pending
-            case _: TxStatus.Confirmed                      => TransactionStatus.Confirmed
-            case _ if state.appliedTxIndex.contains(txHash) => TransactionStatus.Confirmed
-            case _                                          => TransactionStatus.NotFound
-        Future.successful(status)
+    override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
+        Future.successful(transactionStatus(txHash))
+
+    /** [[checkTransaction]] without the `Future`. The JavaScript facade calls it, so the bundle
+      * does not link `scala.concurrent`.
+      */
+    private[node] def transactionStatus(txHash: TransactionHash): TransactionStatus = {
+        readState.txStatus(txHash) match
+            case TxStatus.Pending      => TransactionStatus.Pending
+            case _: TxStatus.Confirmed => TransactionStatus.Confirmed
+            case _                     => TransactionStatus.NotFound
     }
 
     /** Wait for the transaction to leave the mempool, without sleeping, spec [SF-2]: with
@@ -416,13 +419,17 @@ trait EmulatorBase extends BlockchainProvider {
         maxAttempts: Int,
         delayMs: Long
     ): Future[TransactionStatus] = {
+        forgeWhilePending(txHash, maxAttempts)
+        checkTransaction(txHash)
+    }
+
+    /** The forging of [[pollForConfirmation]], without the `Future`, spec [SF-3], [SF-4]. */
+    private[node] def forgeWhilePending(txHash: TransactionHash, maxAttempts: Int): Unit =
         if readState.config.awaitTx == AwaitTxPolicy.ProduceBlock then
             var attempts = 0
             while attempts < maxAttempts && txStatus(txHash) == TxStatus.Pending do
                 produceBlock()
                 attempts += 1
-        checkTransaction(txHash)
-    }
 
     protected def processTransaction(
         context: Context,

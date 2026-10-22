@@ -11,6 +11,7 @@ import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.builtin.{ByteString, Data}
 
 import java.time.Instant
+import scala.annotation.nowarn
 
 /** The `Manual` preset with its mempool, milestone M2 of the spec: revalidation, block limits,
   * mempool capacity, views and tx status.
@@ -181,6 +182,21 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(e.txStatus(tx.id) == TxStatus.Confirmed(2, first))
     }
 
+    test("Manual: a confirmed tx below the clearAppliedTxs cursor is not forged again either") {
+        // spec [RV-2]: the revalidation finds a tx out of the log in the blocks below the cursor
+        val e = emulator(ChainConfig.manual)
+        val tx = payment(e.utxos, 2_000_000)
+        val inputs = tx.body.value.inputs.toSeq.map(i => i -> e.utxos(i))
+        assert(e.submitSync(tx).isRight)
+        val first = e.produceBlock()
+        clear(e)
+        inputs.foreach(e.addUtxo)
+        assert(e.submitSync(tx).isRight)
+        e.produceBlock()
+        assert(stateOf(e).selectedChain.last.txs.isEmpty)
+        assert(e.txStatus(tx.id) == TxStatus.Confirmed(2, first))
+    }
+
     test("Manual: produceBlock with an empty mempool forges an empty block") {
         // spec [FG-8]
         val e = emulator(ChainConfig.manual)
@@ -307,8 +323,8 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(check(dropped.id) == TransactionStatus.NotFound)
     }
 
-    test("checkTransaction reports a tx of the imported log as Confirmed, as before") {
-        // spec [TS-4] implementation status: the imported log has no block
+    test("a tx of the imported log has no block, so it is NotFound everywhere") {
+        // spec [TS-4] implementation status: a tx is known only through a block, as on a node
         val source = emulator(ChainConfig.instant)
         val tx = payment(source.utxos, 2_000_000)
         assert(source.submitSync(tx).isRight)
@@ -322,9 +338,28 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
           source.appliedTxLog,
           ChainConfig.manual
         )
-        assert(restored.checkTransaction(tx.id).value.get.get == TransactionStatus.Confirmed)
+        assert(restored.checkTransaction(tx.id).value.get.get == TransactionStatus.NotFound)
         assert(restored.txStatus(tx.id) == TxStatus.NotFound)
+        assert(restored.hasTx(tx.id), "the log still holds it")
     }
+
+    test(
+      "checkTransaction reports a tx below the clearAppliedTxs cursor Confirmed: it is in a block"
+    ) {
+        // spec [TS-2], [TS-4]
+        val e = emulator(ChainConfig.instant)
+        val before = payment(e.utxos, 2_000_000)
+        assert(e.submitSync(before).isRight)
+        val point = e.tip.point
+        clear(e)
+        assert(e.submitSync(payment(e.utxos, 3_000_000)).isRight)
+        assert(!e.hasTx(before.id), "the log forgot it")
+        assert(e.txStatus(before.id) == TxStatus.Confirmed(2, point))
+        assert(e.checkTransaction(before.id).value.get.get == TransactionStatus.Confirmed)
+    }
+
+    @nowarn("msg=clearAppliedTxs") // deprecated, spec [DE-5]; the only way to move the log cursor
+    private def clear(e: Emulator): Unit = e.clearAppliedTxs()
 
     private val toBobQuery = UtxoQuery(UtxoSource.FromAddress(bob))
 

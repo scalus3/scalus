@@ -442,6 +442,8 @@ Tx 4 fits in block 1 but stays behind tx 3. The forge takes a prefix, not a best
 
 *Implementation status (M4):* `diff(from, to)` exists, so every member of `[SF-1]` exists. `StreamingEmulator` also exposes the three `produceBlock` overloads and `rollback`, so a stream test can drive the chain through it (`[SY-5]`).
 
+*Implementation status (M5):* `[SF-5]` `produceBlock()`, `tip` and `txStatus` already take and return Java-usable types, so they stay as they are. `EmulatorJavaApi` adds `tryProduceBlock(on, txs)`, `tryProduceBlock(on, slot, txs)` with a `java.util.List`, `tryRollback(n)`, `getMempoolTxs`, `getDiff(from, to)` and `findUtxosForAddress(address, view)`. The failing ones return `EmulatorResult[E, A]`, a null-based view over `Either` in the style of `SubmitResult`. Java names a case of a Scala 3 enum only as a static field of its module class, such as `TxStatus$.Pending`, and `ChainView$.Stable` can be null while that class initialises, so `ChainView` gains `tip`, `mempool` and `stable(depth)` in its companion. The constructor of the JVM and JS `Emulator` that takes a `ChainConfig` has no default arguments (M1 review). The defaults stay on the 1.4 constructor, so MiMa needs no filter, and a Scala caller that sets a `ChainConfig` passes every argument or uses a factory.
+
 **Why:** `[SF-2]`: the Emulator has virtual time, and a sleep only slows tests. `[SF-3]`: off-the-shelf dApp code calls `awaitTx`, so with `Manual` it must still finish. `[SF-4]`: a test that drives blocks itself can observe a pending tx.
 
 ### 13.2 JS
@@ -452,12 +454,16 @@ Tx 4 fits in block 1 but stays behind tx 3. The forge takes a prefix, not a best
 - `getUtxos` MUST accept an optional view: `"tip"`, `"mempool"` or `{ stable: n }`. `[SF-9]`
 - `scalus.d.ts` MUST be regenerated, not edited by hand. `[SF-10]`
 
+*Implementation status (M5):* `[SF-6]` the values are `"instant" | "manual"`, `"produceBlock" | "waitOnly"` and `"returnToMempool" | "drop"`, with the defaults of section 5. A wrong value throws a `TypeError`, as the other options do. `[SF-7]` a point is `{ slot, blockHash }` and a tip `{ slot, blockHash, height }`, with genesis `{ slot: 0, blockHash: "00".repeat(32) }`. `produceBlockOn(on, txs)` and `produceBlockOn(on, txs, slot)` take the txs as CBOR. `produceBlockOn` and `rollback` return `{ isSuccess, point?, error?, errorKind? }`, where `errorKind` is the name of the `ForgeError` or `RollbackError` case. `getMempool` returns the tx hashes. `getTxStatus` returns `{ status, depth?, point?, reason?, error? }`. `awaitTx(hash)` returns `true` when the tx is confirmed, as a Lucid provider's `awaitTx` does. It forges at most as many blocks as the mempool holds: each forge takes the oldest pending tx (`[FG-4]`), so that bound always reaches the tx. `produceBlock` and `awaitTx` move a wall clock first, as `submitTx` does. `[SF-8]` `getTransactionStatus` reads `txStatus`, so it also reports `"Pending"`, `"Dropped"` and `"RolledBack"`. `[SF-9]` the view is the second argument of `getUtxos(filter, view)`. A single-argument form cannot tell `{ stable: n }` from a filter, so a caller who wants every UTxO passes `{}` as the filter. A malformed view throws a `TypeError`, a `ChainViewError` a `RangeError`.
+
 ### 13.3 ImmutableEmulator
 
 - `ImmutableEmulator` MUST wrap an `EmulatorState`. `[SF-11]`
 - `ImmutableEmulator` MUST keep its validators and mutators as parameters. `[SF-12]`
 - The existing `ImmutableEmulator` factories MUST keep running only `PlutusScriptsTransactionMutator`. `[SF-13]`
 - `ImmutableEmulator` MUST expose `produceBlock` and `rollback` as pure methods. `[SF-14]`
+
+*Implementation status (M5):* `[SF-11]` `ImmutableEmulator` is a case class of `emulatorState: EmulatorState`, `validators` and `mutators`, with a private constructor. The 1.4 parameter list stays as a companion `apply`, which builds the state with `EmulatorState.initial` in the `Instant` preset, and the old fields stay as accessors. `appliedTxIndex` is derived from the log: the `apply` argument must be empty or equal that index. `copy` and `unapply` of the old fields are gone, a source change for the CHANGELOG. `fromEmulator` keeps the chain, the mempool and the preset, and `toEmulator` gives them back; a `Manual` emulator comes from `fromEmulator` or `fromState`. `setSlot` and `withDatum` revalidate the mempool (`[DE-3]`), as the mutable edits do. `[SF-14]` `produceBlock()` returns `(ChainPoint, ImmutableEmulator)`, the branch forge and `rollback` `Either[error, (ChainPoint, ImmutableEmulator)]`, as `submit` does. `txStatus` is also exposed, since a `Manual` caller needs it to see a pending or dropped tx.
 
 **Why:** `[SF-11]` removes the second copy of the state machine. `[SF-13]`: `Scenario` depends on today's mutator list.
 
@@ -494,6 +500,8 @@ This spec does not change the Lucid repo. The table is input for a revision of t
 - A scenario test MUST cover a mempool that needs two blocks, as in the example of `[FG-4]`. `[TE-8]`
 - A stream test MUST check that a branch switch delivers `RollBackward` to a subscriber. `[TE-9]`
 - A JS test MUST run the delay case of `[TE-5]` through a Lucid-style provider and `awaitTx`. `[TE-10]`
+
+*Implementation status (M5):* `[TE-10]` is `npm/__tests__/emulator-chain.test.ts`. It drives real Lucid through the adapter of `provider-lucid.test.ts`, now in `lucid-provider.ts`, whose `awaitTx` calls `Emulator.awaitTx` (section 14).
 - A test MUST check `[BH-1]` against the header and the block hash of a mainnet block. `[TE-11]`
 - A test MUST recompute `blockBodyHash` of a decoded mainnet block and compare it with its header, for `[BH-3]`. `[TE-13]`
 - Tests MUST cite the rule IDs they check, as `// spec [XX-n]`. `[TE-12]`

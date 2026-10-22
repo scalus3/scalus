@@ -54,14 +54,19 @@ describe("scalus.js bundle", () => {
         expect(Object.values(result.metafile!.outputs).flatMap(o => o.imports)).toEqual([]);
     });
 
-    test("should be smaller than 2.3MB", () => {
-        // About 2.19 MiB since the tzdb exclusion (lever 5); the 2.3 MiB cap leaves ~110 KiB of
-        // headroom. `ProtocolParams.fromBlockfrostJson`/`toBlockfrostJson` still re-link upickle
-        // and ujson for ~117 KB, which is a deliberate, recorded trade (the jsoniter port that
-        // would have recovered it broke scalus-native and was reverted). The limit guards the next
-        // regression, not that one.
+    test("should be smaller than 2.4MB", () => {
+        // About 2.19 MiB since the tzdb exclusion (lever 5). `ProtocolParams.fromBlockfrostJson`/
+        // `toBlockfrostJson` still re-link upickle and ujson for ~117 KB, which is a deliberate,
+        // recorded trade (the jsoniter port that would have recovered it broke scalus-native and
+        // was reverted). The limit guards the next regression, not that one.
+        //
+        // The emulator chain (blocks, mempool, forks, rollback: emulator-chain spec) raised the
+        // cap from 2.3 MiB: 2,391,744 bytes before it, 2,474,457 after (+82.7 KB). The facade now
+        // reaches EmulatorState's forge, chain selection and rollback, BlockForge, and the ledger's
+        // Block/BlockHeader types. `awaitTx` calls the emulator synchronously, so the bundle does
+        // not link `scala.concurrent` (17 KB).
         const sizeInBytes = Buffer.byteLength(bundle, "utf8");
-        const limit = 2.3 * 1024 * 1024;
+        const limit = 2.4 * 1024 * 1024;
         expect(sizeInBytes).toBeLessThan(limit);
     });
 });

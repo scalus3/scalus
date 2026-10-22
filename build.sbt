@@ -1086,6 +1086,33 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // _6 was the applied-tx hash set, now the imported log:
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.node.EmulatorState._6"
+        ),
+        // JsEmulatorOptions (Scala.js only) gains the chain options of emulator-chain spec [SF-6]. It
+        // is a JS-object facade that callers build as a JS literal, never a Scala subclass, so a new
+        // optional field cannot break a caller.
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.blockProduction"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$blockProduction_="
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.awaitTx"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$awaitTx_="
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.orphanTxs"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$orphanTxs_="
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.securityParam"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$securityParam_="
         )
       ),
       crossScalaVersions := supportedScalaVersions,
