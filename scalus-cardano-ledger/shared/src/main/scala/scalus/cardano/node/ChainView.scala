@@ -26,3 +26,19 @@ enum ChainViewError {
     /** The block of depth `depth` is deeper than k, so its snapshot was dropped, spec [VW-7]. */
     case SnapshotDropped(depth: Int)
 }
+
+object ChainView {
+
+    // Java names a case of a Scala 3 enum only through the module class, `ChainView$.Tip`, and
+    // `ChainView$.Stable` can still be null while that class initialises. These forward as static
+    // methods, `ChainView.tip()`, spec [SF-5].
+
+    /** [[Tip]], for Java. */
+    def tip: ChainView = Tip
+
+    /** [[Mempool]], for Java. */
+    def mempool: ChainView = Mempool
+
+    /** [[Stable]], for Java. */
+    def stable(depth: Int): ChainView = Stable(depth)
+}

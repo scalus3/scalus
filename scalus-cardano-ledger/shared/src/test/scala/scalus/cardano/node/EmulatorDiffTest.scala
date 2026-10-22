@@ -25,7 +25,11 @@ class EmulatorDiffTest extends AnyFunSuite {
     }.toMap
 
     private def manual(): Emulator =
-        Emulator(initialUtxos = initialUtxos, chainConfig = ChainConfig.manual)
+        Emulator.withState(
+          EmulatorInitialState(initialUtxos),
+          rules.Context.testMainnet(),
+          ChainConfig.manual
+        )
 
     /** A payment that spends exactly the genesis UTxO `i`. */
     private def pay(i: Int, lovelace: Long): Transaction =

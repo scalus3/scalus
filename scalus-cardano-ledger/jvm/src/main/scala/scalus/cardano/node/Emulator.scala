@@ -22,26 +22,30 @@ import scala.annotation.tailrec
   *   [[scalus.cardano.ledger.rules]] for the ledger rules
   */
 class Emulator(
-    initialUtxos: Utxos = Map.empty,
-    initialContext: Context = Context.testMainnet(),
-    val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
-    val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
-    initialCertState: CertState = CertState.empty,
-    initialDatums: Map[DataHash, Data] = Map.empty,
-    initialAppliedTxLog: Vector[AppliedTx] = Vector.empty,
-    chainConfig: ChainConfig = ChainConfig.instant
+    initialUtxos: Utxos,
+    initialContext: Context,
+    val validators: Iterable[STS.Validator],
+    val mutators: Iterable[STS.Mutator],
+    initialCertState: CertState,
+    initialDatums: Map[DataHash, Data],
+    initialAppliedTxLog: Vector[AppliedTx],
+    chainConfig: ChainConfig
 ) extends EmulatorBase
     with EmulatorJavaApi {
 
-    /** The 1.4 constructor, in the `Instant` preset, spec [CF-4]. */
+    /** The 1.4 constructor, in the `Instant` preset, spec [CF-4]. It keeps its default arguments,
+      * so Scala callers can name only the fields they set. The constructor with a [[ChainConfig]]
+      * has none: Scala allows default arguments on one overload only, and Java and JavaScript
+      * cannot use them, spec [CF-1].
+      */
     def this(
-        initialUtxos: Utxos,
-        initialContext: Context,
-        validators: Iterable[STS.Validator],
-        mutators: Iterable[STS.Mutator],
-        initialCertState: CertState,
-        initialDatums: Map[DataHash, Data],
-        initialAppliedTxLog: Vector[AppliedTx]
+        initialUtxos: Utxos = Map.empty,
+        initialContext: Context = Context.testMainnet(),
+        validators: Iterable[STS.Validator] = Emulator.defaultValidators,
+        mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
+        initialCertState: CertState = CertState.empty,
+        initialDatums: Map[DataHash, Data] = Map.empty,
+        initialAppliedTxLog: Vector[AppliedTx] = Vector.empty
     ) = this(
       initialUtxos,
       initialContext,
@@ -115,11 +119,15 @@ object Emulator {
         initialValue: Value,
         chainConfig: ChainConfig
     ): Emulator = {
-        Emulator(
-          initialUtxos = EmulatorBase.createInitialUtxos(addresses, initialValue),
-          initialContext = Context.testMainnet(),
-          mutators = defaultMutators,
-          chainConfig = chainConfig
+        new Emulator(
+          EmulatorBase.createInitialUtxos(addresses, initialValue),
+          Context.testMainnet(),
+          defaultValidators,
+          defaultMutators,
+          CertState.empty,
+          Map.empty,
+          Vector.empty,
+          chainConfig
         )
     }
 
@@ -156,12 +164,15 @@ object Emulator {
         chainConfig: ChainConfig
     ): Emulator = {
         val (certState, datums) = EmulatorBase.buildInitialState(initState, context)
-        Emulator(
-          initialUtxos = initState.utxos,
-          initialContext = context,
-          initialCertState = certState,
-          initialDatums = datums,
-          chainConfig = chainConfig
+        new Emulator(
+          initState.utxos,
+          context,
+          defaultValidators,
+          defaultMutators,
+          certState,
+          datums,
+          Vector.empty,
+          chainConfig
         )
     }
 
@@ -205,14 +216,15 @@ object Emulator {
         initialContext: Context,
         chainConfig: ChainConfig
     ): Emulator = {
-        Emulator(
-          initialUtxos = initialUtxos,
-          initialContext = initialContext,
-          initialCertState = EmulatorBase.certStateWithRegisteredCredentials(
-            initialStakeRewards,
-            initialContext
-          ),
-          chainConfig = chainConfig
+        new Emulator(
+          initialUtxos,
+          initialContext,
+          defaultValidators,
+          defaultMutators,
+          EmulatorBase.certStateWithRegisteredCredentials(initialStakeRewards, initialContext),
+          Map.empty,
+          Vector.empty,
+          chainConfig
         )
     }
 }

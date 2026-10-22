@@ -32,7 +32,7 @@ class EmulatorForkTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     private val manual = ChainConfig.manual
 
     private def emulator(config: ChainConfig): Emulator =
-        Emulator(initialUtxos = initialUtxos, chainConfig = config)
+        Emulator.withState(EmulatorInitialState(initialUtxos), rules.Context.testMainnet(), config)
 
     private def stateOf(emulator: Emulator): EmulatorState = EmulatorBase.stateOf(emulator)
 
@@ -135,10 +135,10 @@ class EmulatorForkTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val txs = Vector(pay(0, 2_000_000), pay(1, 2_000_000))
         val context = rules.Context.testMainnet()
         val params = context.env.params.copy(maxBlockBodySize = BlockForge.bodySize(txs.take(1)))
-        val e = Emulator(
-          initialUtxos = initialUtxos,
-          initialContext = context.copy(env = context.env.copy(params = params)),
-          chainConfig = manual
+        val e = Emulator.withState(
+          EmulatorInitialState(initialUtxos),
+          context.copy(env = context.env.copy(params = params)),
+          manual
         )
         val before = stateOf(e)
         assert(e.produceBlock(ChainPoint.origin, txs) == Left(ForgeError.BlockTooBig))
@@ -423,10 +423,10 @@ class EmulatorForkTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         // spec [FG-15], [NL-2]: a later slot change does not tick the stored snapshot of `on`
         val start = testEnv.slotConfig.firstSlotOfEpoch(500) + 10
         val context = rules.Context.testMainnet(start)
-        val e = Emulator(
-          initialUtxos = initialUtxos,
-          initialContext = context.copy(env = context.env.copy(treasury = Coin(1000))),
-          chainConfig = manual
+        val e = Emulator.withState(
+          EmulatorInitialState(initialUtxos),
+          context.copy(env = context.env.copy(treasury = Coin(1000))),
+          manual
         )
         assert(e.submitSync(donation(e.utxos, 5, Coin(1000))).isRight)
         val p1 = e.produceBlock()
@@ -458,10 +458,10 @@ class EmulatorForkTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         // spec [TE-3], [RB-6], [NL-2]: the rollback does not tick the stored snapshot of the tip
         val start = testEnv.slotConfig.firstSlotOfEpoch(500) + 10
         val context = rules.Context.testMainnet(start)
-        val e = Emulator(
-          initialUtxos = initialUtxos,
-          initialContext = context.copy(env = context.env.copy(treasury = Coin(1000))),
-          chainConfig = manual.withOrphanTxs(OrphanTxPolicy.Drop)
+        val e = Emulator.withState(
+          EmulatorInitialState(initialUtxos),
+          context.copy(env = context.env.copy(treasury = Coin(1000))),
+          manual.withOrphanTxs(OrphanTxPolicy.Drop)
         )
         assert(e.submitSync(donation(mempoolUtxos(e), 5, Coin(1000))).isRight)
         val p1 = e.produceBlock()

@@ -31,7 +31,7 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     }.toMap
 
     private def emulator(config: ChainConfig): Emulator =
-        Emulator(initialUtxos = initialUtxos, chainConfig = config)
+        Emulator.withState(EmulatorInitialState(initialUtxos), rules.Context.testMainnet(), config)
 
     private def stateOf(emulator: Emulator): EmulatorState = EmulatorBase.stateOf(emulator)
 
@@ -248,10 +248,15 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val source = emulator(ChainConfig.instant)
         val imported = payment(source.utxos, 2_000_000)
         assert(source.submitSync(imported).isRight)
-        val restored = Emulator(
-          initialUtxos = source.utxos,
-          initialAppliedTxLog = source.appliedTxLog,
-          chainConfig = ChainConfig.instant
+        val restored = new Emulator(
+          source.utxos,
+          rules.Context.testMainnet(),
+          Emulator.defaultValidators,
+          Emulator.defaultMutators,
+          CertState.empty,
+          Map.empty,
+          source.appliedTxLog,
+          ChainConfig.instant
         )
         val next = payment(restored.utxos, 3_000_000)
         assert(restored.submitSync(next).isRight)
