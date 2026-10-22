@@ -3,6 +3,7 @@ package scalus.cardano.node
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, State}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
+import scalus.cardano.node.stream.internal.{AppliedBlock, AppliedTransaction, ChainEvent}
 import scalus.uplc.builtin.Data
 
 import scala.annotation.tailrec
@@ -424,12 +425,17 @@ case class EmulatorState private (
         revalidated.pruned.forgedInInstant
     }
 
+    /** The block of the tree that `tip` names, or `None` for [[ChainTip.origin]]. */
+    private def nodeOf(tip: ChainTip): Option[BlockNode] =
+        if tip == ChainTip.origin then None
+        else
+            val node = blocks.get(tip.blockHash).filter(n => EmulatorState.tipOf(n) == tip)
+            require(node.isDefined, s"$tip is not a block of the block tree")
+            node
+
     /** The tip of the selected chain, or [[ChainTip.origin]] at genesis. */
     private[node] def tip: ChainTip =
-        chain.lastOption.fold(ChainTip.origin) { id =>
-            val node = blocks(id)
-            ChainTip(ChainPoint(node.block.slot, id), node.height)
-        }
+        chain.lastOption.fold(ChainTip.origin)(id => EmulatorState.tipOf(blocks(id)))
 
     /** The status of the tx `hash`, spec [TS-1]: `Pending` in the mempool; `Confirmed` in a block
       * of the selected chain, with the depth of that block now, spec [TS-2], [TS-7]; else the
@@ -637,6 +643,56 @@ case class EmulatorState private (
 }
 
 object EmulatorState {
+
+    /** The ChainSync events from `from`, a tip of `before`, to `to`, a tip of `after`, spec [SY-1]
+      * .. [SY-4]. With two states, `from` can be a block that a rollback or pruning has since
+      * removed, as the last tip a stream delivered.
+      *
+      * A block id is the hash of a header that holds the parent id, so a block with the same id in
+      * both trees has the same ancestors. The walk steps the higher tip down to its parent until
+      * both tips are the same block: the common ancestor. It costs the distance to that ancestor,
+      * so one block forged on the tip costs one step.
+      */
+    private[node] def diff(
+        before: EmulatorState,
+        from: ChainTip,
+        after: EmulatorState,
+        to: ChainTip
+    ): Seq[ChainEvent] = {
+        val start = before.nodeOf(from)
+        type Path = (Option[BlockNode], List[BlockNode])
+        // the common ancestor of `a` and `b`, and the blocks above it up to `to`, lowest first
+        @tailrec
+        def walk(a: Option[BlockNode], b: Option[BlockNode], up: List[BlockNode]): Path =
+            if a.map(_.id) == b.map(_.id) then (a, up)
+            else if heightOf(b) >= heightOf(a) then
+                walk(a, b.get.parent.map(after.blocks), b.get :: up)
+            else walk(a.get.parent.map(before.blocks), b, up)
+        val (ancestor, forward) = walk(start, after.nodeOf(to), Nil)
+        val back =
+            if ancestor.map(_.id) == start.map(_.id) then Nil
+            else List(ChainEvent.RollBackward(ancestor.fold(ChainTip.origin)(tipOf)))
+        back ++ forward.map(n => ChainEvent.RollForward(appliedBlock(n)))
+    }
+
+    private def heightOf(node: Option[BlockNode]): Long = node.fold(0L)(_.height)
+
+    private def tipOf(node: BlockNode): ChainTip =
+        ChainTip(ChainPoint(node.block.slot, node.id), node.height)
+
+    /** The block as ChainSync delivers it, spec [SY-4]. Each tx carries the outputs it created and
+      * the UTxOs it spent, resolved when the ledger applied it.
+      */
+    private def appliedBlock(node: BlockNode): AppliedBlock = {
+        val txs = node.txs.map { applied =>
+            val hash = applied.txHash
+            val created: Utxos = applied.tx.body.value.outputs.zipWithIndex.map { (out, index) =>
+                TransactionInput(hash, index) -> out.value
+            }.toMap
+            AppliedTransaction(applied.tx, created, applied.spent)
+        }
+        AppliedBlock(tipOf(node).point, node.height, txs, Some(node.block))
+    }
 
     /** How a transition validates a tx: the overridable `EmulatorBase.processTransaction`. */
     private[node] type Validate =

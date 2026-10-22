@@ -9,8 +9,10 @@ import scalus.cardano.node.stream.{ChainTip, ScalusAsyncSource}
   * is that everything downstream of this type is written once. Backend-shaped payloads are still
   * worth keeping where they earn their place: recorded at the HTTP/WebSocket boundary, as test
   * fixtures.
+  *
+  * Public, since `EmulatorBase.diff` returns it, spec [SY-1].
   */
-private[stream] enum ChainEvent {
+enum ChainEvent {
 
     /** The chain advanced. See [[AppliedBlock]] for what a partial observation must state. */
     case RollForward(block: AppliedBlock)

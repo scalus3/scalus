@@ -6,6 +6,7 @@ import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, STS, State, UtxoEnv}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
+import scalus.cardano.node.stream.internal.ChainEvent
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -351,6 +352,23 @@ trait EmulatorBase extends BlockchainProvider {
 
     /** The tip of the selected chain, or [[ChainTip.origin]] before the first block. */
     def tip: ChainTip = readState.tip
+
+    /** The ChainSync events that take a follower from `from` to `to`, two tips of the block tree,
+      * spec section 12.1: one `RollBackward` to their common ancestor when `from` is not an
+      * ancestor of `to`, then one `RollForward` per block up to `to`, in height order.
+      * [[ChainTip.origin]] is genesis.
+      *
+      * Experimental: `ChainEvent`, `AppliedBlock` and `AppliedTransaction` live in
+      * `scalus.cardano.node.stream.internal`, outside the binary-compatibility check, and may
+      * change in a minor release.
+      *
+      * @throws IllegalArgumentException
+      *   if a tip is not a block of the tree, with the same slot and height
+      */
+    def diff(from: ChainTip, to: ChainTip): Seq[ChainEvent] = {
+        val state = readState
+        EmulatorState.diff(state, from, state, to)
+    }
 
     /** The UTxOs that match `query` in the ledger state `view` reads, spec [VW-3]. */
     def findUtxosSync(query: UtxoQuery, view: ChainView): Either[ChainViewError, Utxos] =

@@ -68,10 +68,9 @@ object BlockCoverage {
 
 /** A block as the subscription hub consumes it.
   *
-  * `block` is the raw ledger block when the provider has one. Providers that synthesise blocks — an
-  * emulator applying one transaction at a time — have nothing truthful to put here, which is why it
-  * is optional and why such providers declare that they do not serve `Block` subscriptions rather
-  * than fabricating a header.
+  * `block` is the raw ledger block when the provider has one. A provider that synthesises blocks
+  * has nothing truthful to put here, which is why it is optional and why such a provider declares
+  * that it does not serve `Block` subscriptions rather than fabricating a header.
   *
   * ## The contract for partial coverage
   *
