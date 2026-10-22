@@ -23,7 +23,7 @@ class DeBruijnedProgramTest extends AnyFunSuite {
         val result = DeBruijnedProgram.fromCborPrefix(script ++ suffix)
 
         assert(result.program == DeBruijnedProgram.fromFlatEncoded(flatEncoded))
-        assert(result.remainder sameElements suffix)
+        assert(result.afterByteString sameElements suffix)
     }
 
     test("fromCborPrefix reads the CBOR byte string as the ledger does") {

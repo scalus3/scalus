@@ -15,7 +15,7 @@
   a later run, and a kept refutation is replayed on the Scalus CEK without Lean. A kept entry that
   no longer stands, such as an edited one, is stale with a reason, and no longer fails the suite.
 - `DeBruijnedProgram.fromCborPrefix` reads a program from the CBOR byte string that the input
-  starts with, and returns the bytes after that byte string.
+  starts with, and returns it with the bytes after that byte string as a `PrefixDecodeResult`.
 
 ### Changed
 
@@ -55,8 +55,10 @@
   also accepted a V1 or V2 script with bytes after the program inside the byte string, which the
   ledger rejects in every language. It now reads a script as `deserialiseScript` in
   plutus-ledger-api does, and also rejects an indefinite-length byte string, as cborg does.
-  `PlutusScript.program` and `deBruijnedProgram` ignore the bytes after the byte string, so such
-  a script also evaluates.
+  `PlutusScript.program` and `deBruijnedProgram` read the byte string by the same rules: they
+  ignore the bytes after it in a V1 or V2 script, so such a script also evaluates, and still fail
+  on them in a V3 or V4 script. They now also fail on an indefinite-length byte string, which they
+  used to read.
 
 ## 1.4.0 (2026-10-20)
 

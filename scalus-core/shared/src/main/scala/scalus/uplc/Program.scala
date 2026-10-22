@@ -171,6 +171,11 @@ object Program:
         DeBruijnedProgram.fromCbor(cbor).toProgram
 
     /** Deserializes a program from a CBOR-encoded [[scalus.uplc.builtin.ByteString]].
+      *
+      * `cbor` must be exactly one CBOR byte string. A script taken from a transaction can have
+      * bytes after its byte string; read it with [[scalus.cardano.ledger.PlutusScript.program]] or
+      * [[DeBruijnedProgram.fromCborPrefix]].
+      *
       * @param cbor
       *   the CBOR-encoded ByteString
       * @return
@@ -402,6 +407,16 @@ object DeBruijnedProgram {
     def fromCbor(cbor: Array[Byte]): DeBruijnedProgram =
         fromFlatEncoded(Cbor.decode(cbor).to[Array[Byte]].value)
 
+    /** A program read from the CBOR byte string at the start of some bytes.
+      *
+      * @param program
+      *   the program
+      * @param afterByteString
+      *   the bytes after the CBOR byte string. These are not the bytes after the program inside the
+      *   byte string, which [[ProgramFlatCodec.DecodeResult]] holds.
+      */
+    case class PrefixDecodeResult(program: DeBruijnedProgram, afterByteString: Array[Byte])
+
     /** Deserializes a program from the CBOR byte string at the start of `cbor`, returning the bytes
       * after that byte string.
       *
@@ -414,11 +429,11 @@ object DeBruijnedProgram {
       * @param cbor
       *   bytes that start with a definite-length CBOR byte string holding a flat-encoded program
       * @return
-      *   the program, with the bytes after the CBOR byte string as the remainder
+      *   the program and the bytes after the CBOR byte string
       */
-    def fromCborPrefix(cbor: Array[Byte]): ProgramFlatCodec.DecodeResult = {
+    def fromCborPrefix(cbor: Array[Byte]): PrefixDecodeResult = {
         val (flatEncoded, afterByteString) = scalus.serialization.cbor.Cbor.splitByteString(cbor)
-        ProgramFlatCodec.DecodeResult(fromFlatEncoded(flatEncoded), afterByteString)
+        PrefixDecodeResult(fromFlatEncoded(flatEncoded), afterByteString)
     }
 
     /** Deserializes a program from a CBOR-encoded byte array, returning the bytes after the program
