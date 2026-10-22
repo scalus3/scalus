@@ -369,15 +369,11 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         )
     }
 
-    test("Stable(d) fails for a block whose snapshot is deeper than k") {
+    test("Stable(d) fails for a block deeper than k + 1, whose snapshot is dropped") {
         // spec [VW-7], [ST-4]
         val e = emulator(ChainConfig.manual.withSecurityParam(2))
         (1 to 3).foreach(_ => e.produceBlock())
-        assert(e.findUtxosSync(toBobQuery, ChainView.Stable(2)).isRight)
-        assert(
-          e.findUtxosSync(toBobQuery, ChainView.Stable(3)) ==
-              Left(ChainViewError.SnapshotDropped(3))
-        )
+        assert(e.findUtxosSync(toBobQuery, ChainView.Stable(3)).isRight, "the anchor")
         assert(
           e.findUtxosSync(toBobQuery, ChainView.Stable(4)) ==
               Left(ChainViewError.SnapshotDropped(4))

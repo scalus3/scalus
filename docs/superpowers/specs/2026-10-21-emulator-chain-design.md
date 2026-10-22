@@ -73,7 +73,7 @@ The public API maps to the local mini-protocols of a node:
 - The `tick` transition MUST do what `EmulatorBase.atSlot` does today, and nothing more. `[NL-2]`
 - A transition MUST NOT write `Context.fee`. `[NL-3]`
 
-*Implementation status (M1):* `[NL-2]` `setSlot` and `tick` tick the tip snapshot in place, like a direct edit. The current slot is the slot of the tip snapshot (the "ticked tip"), so `treasury` and `donation` change at once, as today. So the stored snapshot of a block can carry a later slot than the block, after ticks. M2 and M3 must tick a snapshot they roll back to, or revalidate on, to the current slot.
+*Implementation status (M3, replaces the M1 note):* `[NL-2]` the current slot is a field of `EmulatorState`. `setSlot` and `tick` move only that field. Every stored snapshot, of a block, of genesis or of a mempool tx, stays at the slot its ledger state was produced at. The tip view is the stored tip snapshot ticked to the current slot, as the node's ticked ledger state, and it is computed, not stored. The readers (`ledger`, `context`, `binaryDatums`, `treasury`, `donation`, `ChainView.Tip`), submit and revalidation all see it, so `treasury` and `donation` change at once on a boundary, as before. A direct edit (`[DE-1]`) changes the stored tip snapshot, and it commutes with the tick, which changes only the treasury and the donations. Two consequences: a block forged on an older block, or again after a rollback, sees the treasury and the donations of its own slot (`[FG-15]`). In `Instant`, a `setSlot` back before an epoch boundary that no block has crossed undoes the move of the donations, as for a node. Before, the move could not be undone. `ChainView.Stable(1)` reads the stored tip block snapshot, without the tick.
 
 **Why:** `[NL-2]`: `tick` is where the epoch transition plugs in later (section 18). `[NL-3]`: a snapshot shares its `Context` with later snapshots, so one write would leak into every snapshot. Today no rule writes `fee`.
 
@@ -132,6 +132,8 @@ The public API maps to the local mini-protocols of a node:
 - Each mempool entry MUST hold the tx and the snapshot after it. `[ST-7]`
 - `EmulatorState.ledger`, `context` and `binaryDatums` MUST return the values of the tip snapshot. `[ST-8]`
 - Every transition MUST be a pure function from `EmulatorState` to `EmulatorState`. `[ST-9]`
+
+*Implementation status (M3):* `[ST-4]` keeps the snapshots of depth at most k + 1, and drops the deeper ones. Depth k + 1 is the anchor of the node's LedgerDB, which holds the anchor and k states. Without it, `rollback(k)` of `[RB-2]` would have no snapshot to go back to. `[ST-2]` holds while the chain grows. After a rollback, a block can be within k and have no snapshot, as in the node, whose immutable tip does not move back. `[ST-6]` and the snapshot pruning run after a forge on the tip and after every switch or rollback (`[CS-7]`). A branch forge without a switch changes no depth, so it needs no pruning.
 
 **Why:** `[ST-2]`, `[ST-3]`: a rollback or a branch switch needs the snapshot at the fork point. Immutable maps share structure, so a snapshot per block costs little. `[ST-5]`: `getTransaction` and the history still need old txs. `[ST-8]` keeps today's readers working. `[ST-9]`: `EmulatorBase.modifyState` may re-run a transition on the JVM.
 
@@ -250,6 +252,8 @@ Tx 4 fits in block 1 but stays behind tx 3. The forge takes a prefix, not a best
 - `produceBlock(on, …)` MUST NOT read or change the mempool, except through chain selection. `[FG-20]`
 - `produceBlock(on, …)` MUST NOT move the current slot backwards. `[FG-21]`
 
+*Implementation status (M3):* genesis is `ChainPoint.origin`. A point whose hash is in the tree but whose slot differs is `UnknownPoint`. The depth of `[FG-14]` is the depth of the fork point of `on`: its own depth on the selected chain, the tip height + 1 for genesis. By `[ST-6]` every branch block forks within k, so only a selected-chain block or genesis is `TooDeep`, and also a block whose snapshot an earlier rollback left dropped. The checks run in rule order: slot, point, depth, block limits, txs. `[FG-15]` ticks the stored snapshot of `on` to the forge slot. That snapshot never carries a later slot than `on` (`[NL-2]`), so the tick only moves forward. A block already in the tree (section 4 "Consequence") is a no-op that returns its point. The error payloads: `SlotNotAfterParent(slot, parentSlot)`, `UnknownPoint(point)`, `TooDeep(depth, securityParam)`, `InvalidTx(index, error)`, `BlockTooBig`.
+
 **Why:** a branch block models a block from another pool. Its txs come from the test, not from this node's mempool. The typical case is a rival tx that double-spends an input of a pending tx.
 
 ## 9. Views
@@ -318,6 +322,8 @@ Tx 4 fits in block 1 but stays behind tx 3. The forge takes a prefix, not a best
 - After a switch, the Emulator MUST run revalidation. `[CS-6]`
 - Chain selection MUST run after every change to the block tree: a forge, a rollback and a pruning. `[CS-7]`
 
+*Implementation status (M3):* `[CS-2]` covers a tie with the current chain. When several candidates are longer than the current chain, for example after a rollback, the highest wins, then the lowest block id (hex). The node breaks such ties by VRF. `[CS-3]` holds by construction: `[FG-14]` refuses a block on a fork point deeper than k, and `[ST-6]` removes a branch once its fork point is deeper than k. A forge on the tip is a switch without orphan txs, so it runs `[CS-4]` to `[CS-6]` too. The orphan txs of `[CS-5]` are the txs of the old chain above the fork point that are not on the new chain above it.
+
 *Example, illustrative.* Selected chain G–1–2–3. A test forges block 2' on block 1:
 
 | Step | Selected chain | Why |
@@ -366,6 +372,8 @@ Tx 4 fits in block 1 but stays behind tx 3. The forge takes a prefix, not a best
 - `rollback(n)` MUST NOT change the current slot. `[RB-6]`
 - After `rollback(n)`, the Emulator MUST handle the txs of the removed blocks as orphan txs (section 11.2). `[RB-7]`
 - After `rollback(n)`, the Emulator MUST run revalidation. `[RB-8]`
+
+*Implementation status (M3):* `rollback(n)` also returns `RollbackError.TooDeep` when the snapshot of the block of depth n + 1 is gone. This happens only after an earlier rollback went back to the anchor: the node cannot roll back past its immutable tip either. The error payloads: `NotPositive(n)`, `TooDeep(n, securityParam)`, `PastGenesis(n, tipHeight)`. The txs of the removed blocks and the txs of a switch that chain selection then makes are one set of orphan txs, in the order of the old chain (`[OR-2]`). The log cursor of `[DE-4]` moves down to the fork point, so the blocks forged again join the log.
 
 *Example, illustrative,* for `[OR-5]` with `[RB-7]`. In the `Instant` preset with `ReturnToMempool`, `rollback(1)` removes block 3 with tx A, then the forge puts A in a new block 3. The UTxO set looks the same, and the stream sees `RollBackward` then `RollForward`. To see A disappear, use `Drop`.
 
@@ -427,6 +435,8 @@ Tx 4 fits in block 1 but stays behind tx 3. The forge takes a prefix, not a best
 - `EmulatorJavaApi` MUST expose the members of `[SF-1]` with Java types. `[SF-5]`
 
 *Implementation status (M2):* `pollForConfirmation` ignores `delayMs`. `[SF-1]` is met for `submit`, `produceBlock()`, `txStatus`, `findUtxos(query, view)`, `mempoolTxs` and `tip`; the branch `produceBlock` overloads, `rollback` and `diff` come in M3 and M4.
+
+*Implementation status (M3):* `produceBlock(on, txs)`, `produceBlock(on, slot, txs)` and `rollback(n)` exist, with `Seq[Transaction]`; the Java types are M5 (`[SF-5]`). Only `diff` (M4) is left.
 
 **Why:** `[SF-2]`: the Emulator has virtual time, and a sleep only slows tests. `[SF-3]`: off-the-shelf dApp code calls `awaitTx`, so with `Manual` it must still finish. `[SF-4]`: a test that drives blocks itself can observe a pending tx.
 

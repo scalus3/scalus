@@ -314,6 +314,35 @@ trait EmulatorBase extends BlockchainProvider {
       */
     def produceBlock(): ChainPoint = modifyState(_.produceBlock(processTransaction))
 
+    /** Forge a block of `txs` on `on`, at slot `on.slot + 1`, spec [FG-11]. See the overload with a
+      * slot.
+      */
+    def produceBlock(on: ChainPoint, txs: Seq[Transaction]): Either[ForgeError, ChainPoint] =
+        produceBlock(on, on.slot + 1, txs)
+
+    /** Forge a block of `txs` at `slot` on `on`, a block anywhere in the block tree, or
+      * [[ChainPoint.origin]] for genesis, and return its point, spec section 8.2. It models a block
+      * from another pool: the txs come from the caller, not from the mempool, spec [FG-20].
+      *
+      * The txs are applied in order to the ledger after `on`, spec [FG-15]. Then chain selection
+      * runs, spec [FG-19]: a branch longer than the selected chain becomes the selected chain, and
+      * the txs of the blocks it replaces follow the `orphanTxs` policy, spec section 11. On an
+      * error nothing changes, spec [FG-17].
+      */
+    def produceBlock(
+        on: ChainPoint,
+        slot: SlotNo,
+        txs: Seq[Transaction]
+    ): Either[ForgeError, ChainPoint] =
+        modifyState(_.produceBlock(on, slot, txs, processTransaction))
+
+    /** Remove the last `n` blocks of the selected chain, and every block that descends from them,
+      * and return the tip after chain selection, spec section 11.3. The txs of the removed blocks
+      * follow the `orphanTxs` policy, and the current slot stays, spec [RB-6], [RB-7].
+      */
+    def rollback(n: Int): Either[RollbackError, ChainPoint] =
+        modifyState(_.rollback(n, processTransaction))
+
     /** The status of the tx `txHash`, spec [TS-1]. */
     def txStatus(txHash: TransactionHash): TxStatus = readState.txStatus(txHash)
 

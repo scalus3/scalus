@@ -221,8 +221,8 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(stateOf(e).ledger == tip.snapshot.get.ledger)
     }
 
-    test("snapshots older than k are dropped, the blocks are kept") {
-        // spec [ST-2], [ST-4], [ST-5]
+    test("snapshots deeper than k + 1 are dropped, the blocks are kept") {
+        // spec [ST-2], [ST-4], [ST-5]: k states and the anchor, as the node's LedgerDB
         val e = emulator(ChainConfig.instant.withSecurityParam(2))
         val txs = (1 to 4).map { i =>
             val tx = payment(e.utxos, 1_000_000L * (i + 1))
@@ -230,7 +230,7 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             tx
         }
         val state = stateOf(e)
-        assert(state.selectedChain.map(_.snapshot.isDefined) == Vector(false, false, true, true))
+        assert(state.selectedChain.map(_.snapshot.isDefined) == Vector(false, true, true, true))
         assert(state.genesisSnapshot.isEmpty)
         assert(state.selectedChain.size == 4)
         assert(e.getTransaction(txs.head.id).contains(txs.head))
