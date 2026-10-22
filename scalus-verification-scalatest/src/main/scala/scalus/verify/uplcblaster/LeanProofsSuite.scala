@@ -30,9 +30,17 @@ object Unfinished extends Tag("scalus.verify.uplcblaster.Unfinished")
   * class HtlcProofsTest extends AnyFunSuite with LeanProofsSuite {
   *     import proofs.*
   *
-  *     test("x + 0 is x") { proven(forAll[BigInt](x => x + BigInt(0) == x), 40) }
+  *     private val plusZero =
+  *         verifier.statement("plus_zero", forAll[BigInt](x => x + BigInt(0) == x))
+  *
+  *     test("x + 0 is x") { check(plusZero, 40) }
   * }
   * }}}
+  *
+  * Statements declared in the suite's body, as here, make `proofs` while the suite is constructed:
+  * override its hooks (`leanWorkspace`, `keptResultsFile`, `keptChecksDirectory`) as `def`, since a
+  * `val` of the suite is not set yet then, and an error in making `proofs`, as a workspace that is
+  * not there, fails the whole suite rather than one test.
   */
 trait LeanProofsSuite extends TestSuiteMixin with BeforeAndAfterAll { this: TestSuite =>
 

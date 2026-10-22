@@ -14,7 +14,7 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{toData, FromData, ToData}
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.{LeanProofs, LeanProofsSuite}
+import scalus.verify.uplcblaster.{Budget, LeanProofs, LeanProofsSuite, UplcBlaster}
 
 import java.nio.file.Path
 import scala.concurrent.duration.*
@@ -102,6 +102,11 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     /** The validator's entry point, compiled with the tactic's options. */
     private val validator =
         FunctionDef.named("htlc", (context: Data) => HtlcValidator.validate(context))
+
+    // The statements are declared by name in the suite's verifier, each before the test that
+    // checks it, and call the validator. One declared with `refute` is a negative control: it is
+    // expected to be refuted.
+    verifier.addFunction(validator)
 
     /** The steps Lean's CEK may make per test of a statement about a refund or a reveal. The
       * validator has no loop but its search of the signatures, which here are two at most: a refund
@@ -191,369 +196,389 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         )
     }
 
+    private val outputWithoutADatumIsRejected = verifier.statement(
+      "htlc.context.output_without_a_datum_is_rejected",
+      forAll[Data, Data, Data]((txInfo, redeemer, ref) =>
+          fails(validator, scriptContext(txInfo, redeemer, spendingInfo(ref, noDatum)))
+      )
+    )
+
     test("an output without a datum cannot be spent") {
-        proven(
-          forAll[Data, Data, Data]((txInfo, redeemer, ref) =>
-              fails(validator, scriptContext(txInfo, redeemer, spendingInfo(ref, noDatum)))
-          ),
-          rejectionBudget,
-          validator
-        )
+        check(outputWithoutADatumIsRejected, rejectionBudget)
     }
+
+    private val onlySpendingIsValidated = verifier.statement(
+      "htlc.context.only_spending_is_validated",
+      forAll[Data, Data, Data]((txInfo, redeemer, scriptInfo) =>
+          !Prop(unConstrData(scriptInfo).fst == BigInt(1)) ==>
+              fails(validator, scriptContext(txInfo, redeemer, scriptInfo))
+      )
+    )
 
     test("the script validates nothing but spending") {
         // Spending is the script info of tag 1. For a script info that is not a constructor the
         // premise's test fails, so its negation holds, and the validator fails as well.
-        proven(
-          forAll[Data, Data, Data]((txInfo, redeemer, scriptInfo) =>
-              !Prop(unConstrData(scriptInfo).fst == BigInt(1)) ==>
-                  fails(validator, scriptContext(txInfo, redeemer, scriptInfo))
-          ),
-          rejectionBudget,
-          validator
-        )
+        check(onlySpendingIsValidated, rejectionBudget)
     }
+
+    private val redeemerOfNeitherActionIsRejected = verifier.statement(
+      "htlc.context.redeemer_of_neither_action_is_rejected",
+      forAll[Data, Data, Data]((txInfo, ref, datum) =>
+          forAll[Data](redeemer =>
+              !Prop(
+                unConstrData(redeemer).fst == BigInt(0)
+                    || unConstrData(redeemer).fst == BigInt(1)
+              ) ==> fails(
+                validator,
+                scriptContext(txInfo, redeemer, spendingInfo(ref, someDatum(datum)))
+              )
+          )
+      )
+    )
 
     test("a redeemer that is neither action is rejected") {
         // `Timeout` is the redeemer of tag 0 and `Reveal` the one of tag 1.
-        proven(
-          forAll[Data, Data, Data]((txInfo, ref, datum) =>
-              forAll[Data](redeemer =>
-                  !Prop(
-                    unConstrData(redeemer).fst == BigInt(0)
-                        || unConstrData(redeemer).fst == BigInt(1)
-                  ) ==> fails(
-                    validator,
-                    scriptContext(txInfo, redeemer, spendingInfo(ref, someDatum(datum)))
-                  )
-              )
-          ),
-          rejectionBudget,
-          validator
-        )
+        check(redeemerOfNeitherActionIsRejected, rejectionBudget)
     }
 
     // A refund
 
+    private val refundRejectedWhenAnotherKeySigns = verifier.statement(
+      "htlc.refund.rejected_when_another_key_signs",
+      forAll[Unread](rest =>
+          forAll[Config, BigInt, ByteString]((config, from, signer) =>
+              !Prop(signer == config.committer.hash) ==>
+                  fails(validator, refund(config, from, signedBy(PubKeyHash(signer)), rest))
+          )
+      )
+    )
+    private val refundRejectedWhenUnsigned = verifier.statement(
+      "htlc.refund.rejected_when_unsigned",
+      forAll[Unread, Config, BigInt]((rest, config, from) =>
+          fails(validator, refund(config, from, unsigned, rest))
+      )
+    )
+    private val refundRejectedWhenTwoOtherKeysSign = verifier.statement(
+      "htlc.refund.rejected_when_two_other_keys_sign",
+      forAll[Unread, Config, BigInt]((rest, config, from) =>
+          forAll[ByteString, ByteString]((first, second) =>
+              !Prop(first == config.committer.hash || second == config.committer.hash) ==>
+                  fails(
+                    validator,
+                    refund(
+                      config,
+                      from,
+                      signedByBoth(PubKeyHash(first), PubKeyHash(second)),
+                      rest
+                    )
+                  )
+          )
+      )
+    )
+    private val refundRejectedWhoeverSigns = verifier.refute(
+      "htlc.refund.rejected_whoever_signs",
+      forAll[Unread](rest =>
+          forAll[Config, BigInt, ByteString]((config, from, signer) =>
+              fails(validator, refund(config, from, signedBy(PubKeyHash(signer)), rest))
+          )
+      )
+    )
+
     test("nobody but the committer refunds") {
         // For every datum and time, and whatever else the transaction has: one that another key
         // signed, one that nobody signed, and one that two other keys signed.
-        proven(
-          forAll[Unread](rest =>
-              forAll[Config, BigInt, ByteString]((config, from, signer) =>
-                  !Prop(signer == config.committer.hash) ==>
-                      fails(validator, refund(config, from, signedBy(PubKeyHash(signer)), rest))
+        check(refundRejectedWhenAnotherKeySigns, budget)
+        check(refundRejectedWhenUnsigned, budget)
+        check(refundRejectedWhenTwoOtherKeysSign, budget)
+        // negative control: with any signature, the solver finds a refund that is accepted
+        check(refundRejectedWhoeverSigns, budget)
+    }
+
+    private val refundRejectedBeforeTheTimeout = verifier.statement(
+      "htlc.refund.rejected_before_the_timeout",
+      forAll[Unread](rest =>
+          forAll[Config, BigInt, ByteString]((config, from, signer) =>
+              (from < config.timeout) ==>
+                  fails(validator, refund(config, from, signedBy(PubKeyHash(signer)), rest))
+          )
+      )
+    )
+    private val refundRejectedAtTheTimeout = verifier.refute(
+      "htlc.refund.rejected_at_the_timeout",
+      forAll[Unread](rest =>
+          forAll[Config, BigInt, ByteString]((config, from, signer) =>
+              (from <= config.timeout) ==>
+                  fails(validator, refund(config, from, signedBy(PubKeyHash(signer)), rest))
+          )
+      )
+    )
+
+    test("a refund is rejected before the timeout") {
+        // Whoever signs it: the committer too waits for the timeout.
+        check(refundRejectedBeforeTheTimeout, budget)
+        // negative control: at the timeout itself a refund is accepted
+        check(refundRejectedAtTheTimeout, budget)
+    }
+
+    private val refundRejectedFromNegInf = verifier.statement(
+      "htlc.refund.rejected_from_neg_inf",
+      forAll[Unread, Config]((rest, config) =>
+          fails(
+            validator,
+            spending(
+              config,
+              Action.Timeout.toData,
+              IntervalBound.negInf.toData,
+              rest.otherBound,
+              signedBy(config.committer),
+              rest
+            )
+          )
+      )
+    )
+    private val refundRejectedFromPosInf = verifier.statement(
+      "htlc.refund.rejected_from_pos_inf",
+      forAll[Unread, Config]((rest, config) =>
+          fails(
+            validator,
+            spending(
+              config,
+              Action.Timeout.toData,
+              IntervalBound.posInf.toData,
+              rest.otherBound,
+              signedBy(config.committer),
+              rest
+            )
+          )
+      )
+    )
+
+    test("a refund needs the lower bound of its validity range") {
+        // A transaction whose range starts at no time says nothing of when it is not valid yet,
+        // whatever its upper bound is.
+        check(refundRejectedFromNegInf, budget)
+        check(refundRejectedFromPosInf, budget)
+    }
+
+    private val committerRefundsFromTheTimeout = verifier.statement(
+      "htlc.refund.committer_refunds_from_the_timeout",
+      forAll[Unread, Config, BigInt]((rest, config, from) =>
+          (config.timeout <= from) ==>
+              succeeds(validator, refund(config, from, signedBy(config.committer), rest))
+      )
+    )
+    private val committerRefundsAfterAnotherSignature = verifier.statement(
+      "htlc.refund.committer_refunds_after_another_signature",
+      forAll[Unread](rest =>
+          forAll[Config, BigInt, ByteString]((config, from, other) =>
+              (config.timeout <= from) ==> succeeds(
+                validator,
+                refund(config, from, signedByBoth(PubKeyHash(other), config.committer), rest)
               )
-          ),
-          budget,
-          validator
-        )
-        proven(
-          forAll[Unread, Config, BigInt]((rest, config, from) =>
-              fails(validator, refund(config, from, unsigned, rest))
-          ),
-          budget,
-          validator
-        )
-        proven(
-          forAll[Unread, Config, BigInt]((rest, config, from) =>
+          )
+      )
+    )
+    private val committerRefundsAtAnyTime = verifier.refute(
+      "htlc.refund.committer_refunds_at_any_time",
+      forAll[Unread, Config, BigInt]((rest, config, from) =>
+          succeeds(validator, refund(config, from, signedBy(config.committer), rest))
+      )
+    )
+
+    test("from the timeout on, the committer refunds") {
+        // The funds are not stuck with a receiver who does not reveal, whatever else the
+        // transaction has: an upper bound of its validity range too.
+        check(committerRefundsFromTheTimeout, budget)
+        // The committer's signature is found after another one.
+        check(committerRefundsAfterAnotherSignature, budget)
+        // negative control: not at every time
+        check(committerRefundsAtAnyTime, budget)
+    }
+
+    // A reveal
+
+    private val revealRejectedWhenAnotherKeySigns = verifier.statement(
+      "htlc.reveal.rejected_when_another_key_signs",
+      forAll[Unread](rest =>
+          forAll[Config, ByteString, BigInt]((config, preimage, to) =>
+              forAll[ByteString](signer =>
+                  !Prop(signer == config.receiver.hash) ==> fails(
+                    validator,
+                    reveal(config, preimage, to, signedBy(PubKeyHash(signer)), rest)
+                  )
+              )
+          )
+      )
+    )
+    private val revealRejectedWhenUnsigned = verifier.statement(
+      "htlc.reveal.rejected_when_unsigned",
+      forAll[Unread](rest =>
+          forAll[Config, ByteString, BigInt]((config, preimage, to) =>
+              fails(validator, reveal(config, preimage, to, unsigned, rest))
+          )
+      )
+    )
+    private val revealRejectedWhenTwoOtherKeysSign = verifier.statement(
+      "htlc.reveal.rejected_when_two_other_keys_sign",
+      forAll[Unread](rest =>
+          forAll[Config, ByteString, BigInt]((config, preimage, to) =>
               forAll[ByteString, ByteString]((first, second) =>
-                  !Prop(first == config.committer.hash || second == config.committer.hash) ==>
+                  !Prop(first == config.receiver.hash || second == config.receiver.hash) ==>
                       fails(
                         validator,
-                        refund(
+                        reveal(
                           config,
-                          from,
+                          preimage,
+                          to,
                           signedByBoth(PubKeyHash(first), PubKeyHash(second)),
                           rest
                         )
                       )
               )
-          ),
-          budget,
-          validator
-        )
-        // negative control: with any signature, the solver finds a refund that is accepted
-        refuted(
-          forAll[Unread](rest =>
-              forAll[Config, BigInt, ByteString]((config, from, signer) =>
-                  fails(validator, refund(config, from, signedBy(PubKeyHash(signer)), rest))
-              )
-          ),
-          budget,
-          validator
-        )
-    }
-
-    test("a refund is rejected before the timeout") {
-        // Whoever signs it: the committer too waits for the timeout.
-        proven(
-          forAll[Unread](rest =>
-              forAll[Config, BigInt, ByteString]((config, from, signer) =>
-                  (from < config.timeout) ==>
-                      fails(validator, refund(config, from, signedBy(PubKeyHash(signer)), rest))
-              )
-          ),
-          budget,
-          validator
-        )
-        // negative control: at the timeout itself a refund is accepted
-        refuted(
-          forAll[Unread](rest =>
-              forAll[Config, BigInt, ByteString]((config, from, signer) =>
-                  (from <= config.timeout) ==>
-                      fails(validator, refund(config, from, signedBy(PubKeyHash(signer)), rest))
-              )
-          ),
-          budget,
-          validator
-        )
-    }
-
-    test("a refund needs the lower bound of its validity range") {
-        // A transaction whose range starts at no time says nothing of when it is not valid yet,
-        // whatever its upper bound is.
-        proven(
-          forAll[Unread, Config]((rest, config) =>
-              fails(
-                validator,
-                spending(
-                  config,
-                  Action.Timeout.toData,
-                  IntervalBound.negInf.toData,
-                  rest.otherBound,
-                  signedBy(config.committer),
-                  rest
-                )
-              )
-          ),
-          budget,
-          validator
-        )
-        proven(
-          forAll[Unread, Config]((rest, config) =>
-              fails(
-                validator,
-                spending(
-                  config,
-                  Action.Timeout.toData,
-                  IntervalBound.posInf.toData,
-                  rest.otherBound,
-                  signedBy(config.committer),
-                  rest
-                )
-              )
-          ),
-          budget,
-          validator
-        )
-    }
-
-    test("from the timeout on, the committer refunds") {
-        // The funds are not stuck with a receiver who does not reveal, whatever else the
-        // transaction has: an upper bound of its validity range too.
-        proven(
-          forAll[Unread, Config, BigInt]((rest, config, from) =>
-              (config.timeout <= from) ==>
-                  succeeds(validator, refund(config, from, signedBy(config.committer), rest))
-          ),
-          budget,
-          validator
-        )
-        // The committer's signature is found after another one.
-        proven(
-          forAll[Unread](rest =>
-              forAll[Config, BigInt, ByteString]((config, from, other) =>
-                  (config.timeout <= from) ==> succeeds(
+          )
+      )
+    )
+    private val revealRejectedWhoeverSigns = verifier.refute(
+      "htlc.reveal.rejected_whoever_signs",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
+              forAll[BigInt, BigInt, ByteString]((timeout, to, signer) =>
+                  fails(
                     validator,
-                    refund(config, from, signedByBoth(PubKeyHash(other), config.committer), rest)
+                    reveal(
+                      locked(committer, receiver, sha3_256(preimage), timeout),
+                      preimage,
+                      to,
+                      signedBy(PubKeyHash(signer)),
+                      rest
+                    )
                   )
               )
-          ),
-          budget,
-          validator
-        )
-        // negative control: not at every time
-        refuted(
-          forAll[Unread, Config, BigInt]((rest, config, from) =>
-              succeeds(validator, refund(config, from, signedBy(config.committer), rest))
-          ),
-          budget,
-          validator
-        )
-    }
-
-    // A reveal
+          )
+      )
+    )
 
     test("nobody but the receiver reveals") {
         // For every datum, preimage and time, also a preimage of the image, and whatever else the
         // transaction has: one that another key signed, one that nobody signed, and one that two
         // other keys signed.
-        proven(
-          forAll[Unread](rest =>
-              forAll[Config, ByteString, BigInt]((config, preimage, to) =>
-                  forAll[ByteString](signer =>
-                      !Prop(signer == config.receiver.hash) ==> fails(
-                        validator,
-                        reveal(config, preimage, to, signedBy(PubKeyHash(signer)), rest)
-                      )
-                  )
-              )
-          ),
-          budget,
-          validator
-        )
-        proven(
-          forAll[Unread](rest =>
-              forAll[Config, ByteString, BigInt]((config, preimage, to) =>
-                  fails(validator, reveal(config, preimage, to, unsigned, rest))
-              )
-          ),
-          budget,
-          validator
-        )
-        proven(
-          forAll[Unread](rest =>
-              forAll[Config, ByteString, BigInt]((config, preimage, to) =>
-                  forAll[ByteString, ByteString]((first, second) =>
-                      !Prop(first == config.receiver.hash || second == config.receiver.hash) ==>
-                          fails(
-                            validator,
-                            reveal(
-                              config,
-                              preimage,
-                              to,
-                              signedByBoth(PubKeyHash(first), PubKeyHash(second)),
-                              rest
-                            )
-                          )
-                  )
-              )
-          ),
-          budget,
-          validator
-        )
+        check(revealRejectedWhenAnotherKeySigns, budget)
+        check(revealRejectedWhenUnsigned, budget)
+        check(revealRejectedWhenTwoOtherKeysSign, budget)
         // negative control: with any signature, the solver finds a reveal that is accepted. The
         // image is written as the hash of the preimage: a counterexample is replayed with the
         // real hash, of which the solver cannot name a preimage.
-        refuted(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
-                  forAll[BigInt, BigInt, ByteString]((timeout, to, signer) =>
-                      fails(
-                        validator,
-                        reveal(
-                          locked(committer, receiver, sha3_256(preimage), timeout),
-                          preimage,
-                          to,
-                          signedBy(PubKeyHash(signer)),
-                          rest
-                        )
-                      )
+        check(revealRejectedWhoeverSigns, budget)
+    }
+
+    private val revealRejectedAfterTheTimeout = verifier.statement(
+      "htlc.reveal.rejected_after_the_timeout",
+      forAll[Unread](rest =>
+          forAll[Config, ByteString, BigInt]((config, preimage, to) =>
+              forAll[ByteString](signer =>
+                  (config.timeout < to) ==> fails(
+                    validator,
+                    reveal(config, preimage, to, signedBy(PubKeyHash(signer)), rest)
                   )
               )
-          ),
-          budget,
-          validator
-        )
-    }
+          )
+      )
+    )
+    private val revealRejectedAtTheTimeout = verifier.refute(
+      "htlc.reveal.rejected_at_the_timeout",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
+              forAll[BigInt, BigInt]((timeout, to) =>
+                  (timeout <= to) ==> fails(
+                    validator,
+                    reveal(
+                      locked(committer, receiver, sha3_256(preimage), timeout),
+                      preimage,
+                      to,
+                      signedBy(PubKeyHash(receiver)),
+                      rest
+                    )
+                  )
+              )
+          )
+      )
+    )
 
     test("a reveal is rejected when its validity range ends after the timeout") {
         // Whoever signs it, and whatever is revealed.
-        proven(
-          forAll[Unread](rest =>
-              forAll[Config, ByteString, BigInt]((config, preimage, to) =>
-                  forAll[ByteString](signer =>
-                      (config.timeout < to) ==> fails(
-                        validator,
-                        reveal(config, preimage, to, signedBy(PubKeyHash(signer)), rest)
-                      )
-                  )
-              )
-          ),
-          budget,
-          validator
-        )
+        check(revealRejectedAfterTheTimeout, budget)
         // negative control: a range that ends at the timeout is accepted
-        refuted(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
-                  forAll[BigInt, BigInt]((timeout, to) =>
-                      (timeout <= to) ==> fails(
-                        validator,
-                        reveal(
-                          locked(committer, receiver, sha3_256(preimage), timeout),
-                          preimage,
-                          to,
-                          signedBy(PubKeyHash(receiver)),
-                          rest
-                        )
-                      )
-                  )
-              )
-          ),
-          budget,
-          validator
-        )
+        check(revealRejectedAtTheTimeout, budget)
     }
+
+    private val revealRejectedUpToPosInf = verifier.statement(
+      "htlc.reveal.rejected_up_to_pos_inf",
+      forAll[Unread, Config, ByteString]((rest, config, preimage) =>
+          fails(
+            validator,
+            spending(
+              config,
+              Action.Reveal(preimage).toData,
+              rest.otherBound,
+              IntervalBound.posInf.toData,
+              signedBy(config.receiver),
+              rest
+            )
+          )
+      )
+    )
+    private val revealRejectedUpToNegInf = verifier.statement(
+      "htlc.reveal.rejected_up_to_neg_inf",
+      forAll[Unread, Config, ByteString]((rest, config, preimage) =>
+          fails(
+            validator,
+            spending(
+              config,
+              Action.Reveal(preimage).toData,
+              rest.otherBound,
+              IntervalBound.negInf.toData,
+              signedBy(config.receiver),
+              rest
+            )
+          )
+      )
+    )
 
     test("a reveal needs the upper bound of its validity range") {
         // A transaction whose range ends at no time could be included after the timeout, whatever
         // its lower bound is.
-        proven(
-          forAll[Unread, Config, ByteString]((rest, config, preimage) =>
-              fails(
-                validator,
-                spending(
-                  config,
-                  Action.Reveal(preimage).toData,
-                  rest.otherBound,
-                  IntervalBound.posInf.toData,
-                  signedBy(config.receiver),
-                  rest
-                )
-              )
-          ),
-          budget,
-          validator
-        )
-        proven(
-          forAll[Unread, Config, ByteString]((rest, config, preimage) =>
-              fails(
-                validator,
-                spending(
-                  config,
-                  Action.Reveal(preimage).toData,
-                  rest.otherBound,
-                  IntervalBound.negInf.toData,
-                  signedBy(config.receiver),
-                  rest
-                )
-              )
-          ),
-          budget,
-          validator
-        )
+        check(revealRejectedUpToPosInf, budget)
+        check(revealRejectedUpToNegInf, budget)
     }
+
+    private val revealRejectedWithoutAPreimage = verifier.statement(
+      "htlc.reveal.rejected_without_a_preimage",
+      forAll[Unread](rest =>
+          forAll[Config, ByteString, BigInt]((config, preimage, to) =>
+              forAll[ByteString](signer =>
+                  !Prop(sha3_256(preimage) == config.image) ==> fails(
+                    validator,
+                    reveal(config, preimage, to, signedBy(PubKeyHash(signer)), rest)
+                  )
+              )
+          )
+      )
+    )
 
     test("a reveal of what is not a preimage of the image is rejected") {
         // Whoever signs it, and whenever. That a reveal is not rejected for another reason is the
         // statement of the test after the next: no counterexample shows it here.
-        proven(
-          forAll[Unread](rest =>
-              forAll[Config, ByteString, BigInt]((config, preimage, to) =>
-                  forAll[ByteString](signer =>
-                      !Prop(sha3_256(preimage) == config.image) ==> fails(
-                        validator,
-                        reveal(config, preimage, to, signedBy(PubKeyHash(signer)), rest)
-                      )
-                  )
-              )
-          ),
-          budget,
-          validator
-        )
+        check(revealRejectedWithoutAPreimage, budget)
     }
+
+    private val noRevealIsAccepted = verifier.statement(
+      "htlc.reveal.no_reveal_is_accepted",
+      forAll[Unread](rest =>
+          forAll[Config, ByteString, BigInt]((config, preimage, to) =>
+              fails(validator, reveal(config, preimage, to, signedBy(config.receiver), rest))
+          )
+      )
+    )
 
     test("a counterexample cannot name a preimage of an image") {
         // Why the negative controls write the image as the hash of the preimage. The solver
@@ -562,225 +587,238 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // real hash, that reveal is rejected: the counterexample is spurious, and the statement
         // is not refuted. The tactic says that the budget is not at fault, and names the hash.
         val spurious = inconclusive(
-          forAll[Unread](rest =>
-              forAll[Config, ByteString, BigInt]((config, preimage, to) =>
-                  fails(validator, reveal(config, preimage, to, signedBy(config.receiver), rest))
-              )
-          ),
-          budget,
-          2.minutes,
-          validator
+          noRevealIsAccepted,
+          UplcBlaster(Budget.LeanSteps(budget), lean, 2.minutes)
         )
         assert(spurious.contains("is spurious"), spurious)
         assert(spurious.contains("The programs apply sha3_256"), spurious)
         assert(!spurious.contains("needs more than"), spurious)
     }
 
+    private val receiverRevealsUpToTheTimeout = verifier.statement(
+      "htlc.reveal.receiver_reveals_up_to_the_timeout",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
+              forAll[BigInt, BigInt]((timeout, to) =>
+                  (to <= timeout) ==> succeeds(
+                    validator,
+                    reveal(
+                      locked(committer, receiver, sha3_256(preimage), timeout),
+                      preimage,
+                      to,
+                      signedBy(PubKeyHash(receiver)),
+                      rest
+                    )
+                  )
+              )
+          )
+      )
+    )
+    private val receiverRevealsAfterAnotherSignature = verifier.statement(
+      "htlc.reveal.receiver_reveals_after_another_signature",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
+              forAll[BigInt, BigInt, ByteString]((timeout, to, other) =>
+                  (to <= timeout) ==> succeeds(
+                    validator,
+                    reveal(
+                      locked(committer, receiver, sha3_256(preimage), timeout),
+                      preimage,
+                      to,
+                      signedByBoth(PubKeyHash(other), PubKeyHash(receiver)),
+                      rest
+                    )
+                  )
+              )
+          )
+      )
+    )
+    private val receiverRevealsAtAnyTime = verifier.refute(
+      "htlc.reveal.receiver_reveals_at_any_time",
+      forAll[Unread](rest =>
+          forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
+              forAll[BigInt, BigInt]((timeout, to) =>
+                  succeeds(
+                    validator,
+                    reveal(
+                      locked(committer, receiver, sha3_256(preimage), timeout),
+                      preimage,
+                      to,
+                      signedBy(PubKeyHash(receiver)),
+                      rest
+                    )
+                  )
+              )
+          )
+      )
+    )
+
     test("up to the timeout, the receiver reveals any preimage of the image") {
         // The receiver who knows the secret is paid: for every committer, receiver and secret,
         // and whatever else the transaction has, a lower bound of its validity range too.
-        proven(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
-                  forAll[BigInt, BigInt]((timeout, to) =>
-                      (to <= timeout) ==> succeeds(
-                        validator,
-                        reveal(
-                          locked(committer, receiver, sha3_256(preimage), timeout),
-                          preimage,
-                          to,
-                          signedBy(PubKeyHash(receiver)),
-                          rest
-                        )
-                      )
-                  )
-              )
-          ),
-          budget,
-          validator
-        )
+        check(receiverRevealsUpToTheTimeout, budget)
         // The receiver's signature is found after another one.
-        proven(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
-                  forAll[BigInt, BigInt, ByteString]((timeout, to, other) =>
-                      (to <= timeout) ==> succeeds(
-                        validator,
-                        reveal(
-                          locked(committer, receiver, sha3_256(preimage), timeout),
-                          preimage,
-                          to,
-                          signedByBoth(PubKeyHash(other), PubKeyHash(receiver)),
-                          rest
-                        )
-                      )
-                  )
-              )
-          ),
-          budget,
-          validator
-        )
+        check(receiverRevealsAfterAnotherSignature, budget)
         // negative control: not at every time
-        refuted(
-          forAll[Unread](rest =>
-              forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
-                  forAll[BigInt, BigInt]((timeout, to) =>
-                      succeeds(
-                        validator,
-                        reveal(
-                          locked(committer, receiver, sha3_256(preimage), timeout),
-                          preimage,
-                          to,
-                          signedBy(PubKeyHash(receiver)),
-                          rest
-                        )
-                      )
-                  )
-              )
-          ),
-          budget,
-          validator
-        )
+        check(receiverRevealsAtAnyTime, budget)
     }
 
     // A refund and a reveal
+
+    private val revealEndsBeforeRefundBegins = verifier.statement(
+      "htlc.reveal_and_refund.reveal_ends_before_refund_begins",
+      forAll[Unread, Unread]((revealed, refunded) =>
+          forAll[Config, ByteString, ByteString]((config, preimage, revealer) =>
+              forAll[ByteString, BigInt, BigInt]((refunder, to, from) =>
+                  (from < to) ==> (fails(
+                    validator,
+                    reveal(config, preimage, to, signedBy(PubKeyHash(revealer)), revealed)
+                  ) || fails(
+                    validator,
+                    refund(config, from, signedBy(PubKeyHash(refunder)), refunded)
+                  ))
+              )
+          )
+      )
+    )
+    private val revealEndsStrictlyBeforeRefundBegins = verifier.refute(
+      "htlc.reveal_and_refund.reveal_ends_strictly_before_refund_begins",
+      forAll[Unread, Unread]((revealed, refunded) =>
+          forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
+              forAll[BigInt, BigInt, BigInt]((timeout, to, from) =>
+                  (from <= to) ==> (fails(
+                    validator,
+                    reveal(
+                      locked(committer, receiver, sha3_256(preimage), timeout),
+                      preimage,
+                      to,
+                      signedBy(PubKeyHash(receiver)),
+                      revealed
+                    )
+                  ) || fails(
+                    validator,
+                    refund(
+                      locked(committer, receiver, sha3_256(preimage), timeout),
+                      from,
+                      signedBy(PubKeyHash(committer)),
+                      refunded
+                    )
+                  ))
+              )
+          )
+      )
+    )
 
     test("an accepted reveal ends before any accepted refund begins") {
         // Two runs of the validator on one datum: two transactions, each with what it has
         // besides, signed by any two keys. A transaction is valid at a time before the end of its
         // range and not before its start, so there is no time at which both a reveal and a
         // refund are valid.
-        proven(
-          forAll[Unread, Unread]((revealed, refunded) =>
-              forAll[Config, ByteString, ByteString]((config, preimage, revealer) =>
-                  forAll[ByteString, BigInt, BigInt]((refunder, to, from) =>
-                      (from < to) ==> (fails(
-                        validator,
-                        reveal(config, preimage, to, signedBy(PubKeyHash(revealer)), revealed)
-                      ) || fails(
-                        validator,
-                        refund(config, from, signedBy(PubKeyHash(refunder)), refunded)
-                      ))
-                  )
-              )
-          ),
-          budget,
-          validator
-        )
+        check(revealEndsBeforeRefundBegins, budget)
         // negative control: a reveal that ends at the timeout and a refund that begins at it are
         // both accepted
-        refuted(
-          forAll[Unread, Unread]((revealed, refunded) =>
-              forAll[ByteString, ByteString, ByteString]((committer, receiver, preimage) =>
-                  forAll[BigInt, BigInt, BigInt]((timeout, to, from) =>
-                      (from <= to) ==> (fails(
-                        validator,
-                        reveal(
-                          locked(committer, receiver, sha3_256(preimage), timeout),
-                          preimage,
-                          to,
-                          signedBy(PubKeyHash(receiver)),
-                          revealed
-                        )
-                      ) || fails(
-                        validator,
-                        refund(
-                          locked(committer, receiver, sha3_256(preimage), timeout),
-                          from,
-                          signedBy(PubKeyHash(committer)),
-                          refunded
-                        )
-                      ))
+        check(revealEndsStrictlyBeforeRefundBegins, budget)
+    }
+
+    private val refundIgnoresWhetherItsLowerBoundIsInclusive = verifier.statement(
+      "htlc.bounds.refund_ignores_whether_its_lower_bound_is_inclusive",
+      forAll[Unread](rest =>
+          forAll[Config, BigInt, ByteString]((config, from, signer) =>
+              succeeds(
+                validator,
+                refundFrom(config, from, true, signedBy(PubKeyHash(signer)), rest)
+              ) <=> succeeds(
+                validator,
+                refundFrom(config, from, false, signedBy(PubKeyHash(signer)), rest)
+              )
+          )
+      )
+    )
+    private val revealIgnoresWhetherItsUpperBoundIsInclusive = verifier.statement(
+      "htlc.bounds.reveal_ignores_whether_its_upper_bound_is_inclusive",
+      forAll[Unread](rest =>
+          forAll[Config, ByteString, BigInt]((config, preimage, to) =>
+              forAll[ByteString](signer =>
+                  succeeds(
+                    validator,
+                    revealUpTo(config, preimage, to, true, signedBy(PubKeyHash(signer)), rest)
+                  ) <=> succeeds(
+                    validator,
+                    revealUpTo(config, preimage, to, false, signedBy(PubKeyHash(signer)), rest)
                   )
               )
-          ),
-          budget,
-          validator
-        )
-    }
+          )
+      )
+    )
 
     test("whether a bound of the validity range is inclusive does not matter to the validator") {
         // It accepts a transaction with the one closure of a bound where it accepts it with the
         // other. That a refund's lower bound is inclusive, and a reveal's upper one exclusive, is
         // how the ledger gives them, and what the comparisons with the timeout rely on.
-        proven(
-          forAll[Unread](rest =>
-              forAll[Config, BigInt, ByteString]((config, from, signer) =>
-                  succeeds(
-                    validator,
-                    refundFrom(config, from, true, signedBy(PubKeyHash(signer)), rest)
-                  ) <=> succeeds(
-                    validator,
-                    refundFrom(config, from, false, signedBy(PubKeyHash(signer)), rest)
-                  )
-              )
-          ),
-          budget,
-          validator
-        )
-        proven(
-          forAll[Unread](rest =>
-              forAll[Config, ByteString, BigInt]((config, preimage, to) =>
-                  forAll[ByteString](signer =>
-                      succeeds(
-                        validator,
-                        revealUpTo(config, preimage, to, true, signedBy(PubKeyHash(signer)), rest)
-                      ) <=> succeeds(
-                        validator,
-                        revealUpTo(config, preimage, to, false, signedBy(PubKeyHash(signer)), rest)
-                      )
-                  )
-              )
-          ),
-          budget,
-          validator
-        )
+        check(refundIgnoresWhetherItsLowerBoundIsInclusive, budget)
+        check(revealIgnoresWhetherItsUpperBoundIsInclusive, budget)
     }
 
     // Samples
 
+    private val sampleRevealIsAccepted = verifier.statement(
+      "htlc.samples.reveal_is_accepted",
+      succeeds(
+        validator,
+        sampleSpending(
+          Action.Reveal(hex"cafe").toData,
+          Interval.entirelyBefore(BigInt(900)),
+          signedBy(receiver)
+        )
+      )
+    )
+    private val sampleRefundIsAccepted = verifier.statement(
+      "htlc.samples.refund_is_accepted",
+      succeeds(
+        validator,
+        sampleSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), signedBy(committer))
+      )
+    )
+    private val unsignedSampleRevealIsRejected = verifier.statement(
+      "htlc.samples.unsigned_reveal_is_rejected",
+      fails(
+        validator,
+        sampleSpending(
+          Action.Reveal(hex"cafe").toData,
+          Interval.entirelyBefore(BigInt(900)),
+          unsigned
+        )
+      )
+    )
+    private val unsignedSampleRefundIsRejected = verifier.statement(
+      "htlc.samples.unsigned_refund_is_rejected",
+      fails(
+        validator,
+        sampleSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), unsigned)
+      )
+    )
+    private val sampleRevealOfAnotherSecretIsRejected = verifier.statement(
+      "htlc.samples.reveal_of_another_secret_is_rejected",
+      fails(
+        validator,
+        sampleSpending(
+          Action.Reveal(hex"beef").toData,
+          Interval.entirelyBefore(BigInt(900)),
+          signedBy(receiver)
+        )
+      )
+    )
+
     test("a sample reveal and a sample refund are accepted on the Lean machine, and not unsigned") {
         // Closed statements: Lean decides them by running the validator, with the real hash, on
         // a transaction that the ledger's types build.
-        def kind(statement: Prop): ProofKind = proven(statement, budget, validator)
-        val revealed = succeeds(
-          validator,
-          sampleSpending(
-            Action.Reveal(hex"cafe").toData,
-            Interval.entirelyBefore(BigInt(900)),
-            signedBy(receiver)
-          )
-        )
-        assert(kind(revealed) == ProofKind.LeanNative)
-        val refunded = succeeds(
-          validator,
-          sampleSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), signedBy(committer))
-        )
-        assert(kind(refunded) == ProofKind.LeanNative)
-        val unsignedReveal = fails(
-          validator,
-          sampleSpending(
-            Action.Reveal(hex"cafe").toData,
-            Interval.entirelyBefore(BigInt(900)),
-            unsigned
-          )
-        )
-        assert(kind(unsignedReveal) == ProofKind.LeanNative)
-        val unsignedRefund = fails(
-          validator,
-          sampleSpending(Action.Timeout.toData, Interval.after(BigInt(1000)), unsigned)
-        )
-        assert(kind(unsignedRefund) == ProofKind.LeanNative)
+        def kind(statement: Statement): ProofKind = artifactOf(check(statement, budget)).kind
+        assert(kind(sampleRevealIsAccepted) == ProofKind.LeanNative)
+        assert(kind(sampleRefundIsAccepted) == ProofKind.LeanNative)
+        assert(kind(unsignedSampleRevealIsRejected) == ProofKind.LeanNative)
+        assert(kind(unsignedSampleRefundIsRejected) == ProofKind.LeanNative)
         // The receiver's reveal of another secret is not accepted either.
-        val wrong = fails(
-          validator,
-          sampleSpending(
-            Action.Reveal(hex"beef").toData,
-            Interval.entirelyBefore(BigInt(900)),
-            signedBy(receiver)
-          )
-        )
-        assert(kind(wrong) == ProofKind.LeanNative)
+        assert(kind(sampleRevealOfAnotherSecretIsRejected) == ProofKind.LeanNative)
     }
 }
 

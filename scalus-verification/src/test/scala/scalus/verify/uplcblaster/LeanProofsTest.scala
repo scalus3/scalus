@@ -88,7 +88,8 @@ class LeanProofsTest extends AnyFunSuite {
             val failed = intercept[AssertionError] {
                 proven(forAll[BigInt](x => x + BigInt(1) == x), 40)
             }
-            assert(failed.getMessage.startsWith("expected a proof, got"))
+            // The message names the statement: an unnamed one by its content's hash.
+            assert(failed.getMessage.matches("#[0-9a-f]+: expected a proof, got .*"), failed)
 
             val server = leanServer
             close()

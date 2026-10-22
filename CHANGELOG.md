@@ -18,6 +18,9 @@
 ### Changed
 
 - `scalus-verification` pins Lean-blaster to `main` at `6c27ff9`.
+- `LeanProofs.check(statement)` and `check(statement, budget: Budget)` are one method,
+  `check(statement, budget: Budget = Budget.Auto)`. Calls compile as before; code compiled against
+  1.4.0 that calls `check(statement)` must be recompiled.
 - **Breaking (experimental `scalus-verification`): `Tactic.run(prepared)` and
   `Tactic.run(prepared, earlier: Kept)` are one method, `run(prepared, earlier: Option[Kept] =
   None)`, and `Tactic.restore` returns `Either[String, ExecutionResult]` instead of an `Option`. A
