@@ -4,6 +4,7 @@ import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator, STS, State, UtxoEnv}
 import scalus.cardano.node.*
+import scalus.cardano.node.stream.ChainPoint
 import scalus.uplc.builtin.Data
 
 import scala.annotation.targetName
@@ -12,32 +13,46 @@ import scala.concurrent.{ExecutionContext, Future}
 /** An immutable emulator for Cardano transactions.
   *
   * Unlike [[scalus.cardano.node.Emulator]], this emulator is fully immutable: every state-changing
-  * operation (submit, advanceSlot) returns a new [[ImmutableEmulator]] instance, leaving the
-  * original unchanged.
+  * operation (submit, produceBlock, rollback, setSlot) returns a new [[ImmutableEmulator]]
+  * instance, leaving the original unchanged.
+  *
+  * It wraps the same [[EmulatorState]] the mutable emulator runs on, so the chain, the mempool and
+  * the presets of [[ChainConfig]] behave the same way, spec [SF-11]. The validators and mutators
+  * stay parameters, spec [SF-12]. Every transition goes through the `EmulatorState` transitions
+  * that revalidate the mempool, spec [DE-3].
   *
   * This makes it suitable for use in functional state-threading patterns such as the [[Scenario]]
   * monad, where branching and backtracking require independent state copies.
+  *
+  * @param emulatorState
+  *   the chain, the mempool and the ledger state
   */
-case class ImmutableEmulator(
-    state: State,
-    env: UtxoEnv,
-    slotConfig: SlotConfig = SlotConfig.mainnet,
-    evaluatorMode: EvaluatorMode = EvaluatorMode.Validate,
-    validators: Iterable[STS.Validator] = Emulator.defaultValidators,
-    mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
-    /** Ordered log of applied transactions (oldest first); maintained by [[submit]]. */
-    appliedTxLog: Vector[AppliedTx] = Vector.empty,
-    /** By-hash index of [[appliedTxLog]] for O(1) lookup. Invariant: the by-hash view of
-      * `appliedTxLog`; both advance together in [[submit]]. Build it via
-      * `EmulatorBase.indexAppliedTxs` rather than setting it independently.
-      */
-    appliedTxIndex: Map[TransactionHash, AppliedTx] = Map.empty,
-    /** Datum resolution cache (inline + witness datums of applied transactions), with the bytes
-      * each datum arrived in. Maintained by [[submit]] so [[getDatum]] and [[asReader]] can resolve
-      * datum-hash references.
-      */
-    binaryDatums: Map[DataHash, KeepRaw[Data]] = Map.empty
+final case class ImmutableEmulator private (
+    emulatorState: EmulatorState,
+    validators: Iterable[STS.Validator],
+    mutators: Iterable[STS.Mutator]
 ) {
+
+    /** The ledger state of the tip. */
+    def state: State = emulatorState.ledger
+
+    /** The environment of the tip, at the current slot. */
+    def env: UtxoEnv = emulatorState.context.env
+
+    def slotConfig: SlotConfig = emulatorState.context.slotConfig
+
+    def evaluatorMode: EvaluatorMode = emulatorState.context.evaluatorMode
+
+    /** The applied-transaction log, oldest first: the imported log, then the txs of the selected
+      * chain, spec [TS-5].
+      */
+    def appliedTxLog: Vector[AppliedTx] = emulatorState.appliedTxLog
+
+    /** [[appliedTxLog]] by transaction hash. */
+    def appliedTxIndex: Map[TransactionHash, AppliedTx] = emulatorState.appliedTxIndex
+
+    /** The datum store, with the bytes each datum arrived in. */
+    def binaryDatums: Map[DataHash, KeepRaw[Data]] = emulatorState.binaryDatums
 
     /** [[binaryDatums]], decoded. */
     def datums: Map[DataHash, Data] = binaryDatums.view.mapValues(_.value).toMap
@@ -54,26 +69,64 @@ case class ImmutableEmulator(
     /** Current CardanoInfo snapshot. */
     def cardanoInfo: CardanoInfo = CardanoInfo(env.params, env.network, slotConfig)
 
+    /** How a transition validates a tx: the ledger rules of this emulator. */
+    private def validate(
+        context: Context,
+        ledger: State,
+        tx: Transaction
+    ): Either[TransactionException, State] =
+        STS.Mutator.transit(validators, mutators, context, ledger, tx)
+
+    private def withState(next: EmulatorState): ImmutableEmulator = copy(emulatorState = next)
+
     /** Submit a transaction, returning the transaction hash and a new emulator with updated state.
+      * In the `Instant` preset the tx is in a block at once; in `Manual` it waits in the mempool
+      * until [[produceBlock]], spec section 7.
       *
       * The original emulator is not modified.
       */
     def submit(tx: Transaction): Either[SubmitError, (TransactionHash, ImmutableEmulator)] = {
-        val context = Context(env = env, slotConfig = slotConfig, evaluatorMode = evaluatorMode)
-        STS.Mutator.transit(validators, mutators, context, state, tx) match {
-            case Right(newState) =>
-                val applied = AppliedTx(tx, env.slot, EmulatorBase.resolveSpent(state.utxos, tx))
-                val next = copy(
-                  state = newState,
-                  appliedTxLog = appliedTxLog :+ applied,
-                  appliedTxIndex = appliedTxIndex + (applied.txHash -> applied),
-                  binaryDatums = binaryDatums ++ EmulatorBase.binaryDatumsOf(tx)
-                )
-                Right((tx.id, next))
-            case Left(e: TransactionException) =>
-                Left(SubmitError.fromException(e))
-        }
+        val (next, result) = emulatorState.submit(tx, identity, validate)
+        result.map(hash => (hash, withState(next)))
     }
+
+    /** Forge a block from the mempool, spec section 8.1, and return its point and the new emulator.
+      * The original emulator is not modified, spec [SF-14].
+      */
+    def produceBlock(): (ChainPoint, ImmutableEmulator) = {
+        val (next, point) = emulatorState.produceBlock(validate)
+        (point, withState(next))
+    }
+
+    /** Forge a block of `txs` on `on`, at slot `on.slot + 1`, spec [FG-11], [SF-14]. */
+    def produceBlock(
+        on: ChainPoint,
+        txs: Seq[Transaction]
+    ): Either[ForgeError, (ChainPoint, ImmutableEmulator)] =
+        produceBlock(on, on.slot + 1, txs)
+
+    /** Forge a block of `txs` at `slot` on `on`, a block of the tree or [[ChainPoint.origin]], then
+      * run chain selection, spec section 8.2, [SF-14].
+      */
+    def produceBlock(
+        on: ChainPoint,
+        slot: SlotNo,
+        txs: Seq[Transaction]
+    ): Either[ForgeError, (ChainPoint, ImmutableEmulator)] = {
+        val (next, result) = emulatorState.produceBlock(on, slot, txs, validate)
+        result.map(point => (point, withState(next)))
+    }
+
+    /** Remove the last `n` blocks of the selected chain, and return the tip after chain selection
+      * and the new emulator, spec section 11.3, [SF-14].
+      */
+    def rollback(n: Int): Either[RollbackError, (ChainPoint, ImmutableEmulator)] = {
+        val (next, result) = emulatorState.rollback(n, validate)
+        result.map(point => (point, withState(next)))
+    }
+
+    /** The status of the tx `txHash`, spec [TS-1]. */
+    def txStatus(txHash: TransactionHash): TxStatus = emulatorState.txStatus(txHash)
 
     /** True if the given transaction has been applied to this emulator. */
     def hasTx(txHash: TransactionHash): Boolean = appliedTxIndex.contains(txHash)
@@ -93,25 +146,28 @@ case class ImmutableEmulator(
       * The immutable form of `EmulatorBase.addDatum`.
       */
     def withDatum(datum: KeepRaw[Data]): ImmutableEmulator =
-        copy(binaryDatums = binaryDatums + (datum.dataHash -> datum))
+        withState(
+          emulatorState.withSeededDatums(Map(datum.dataHash -> datum)).revalidated(validate)
+        )
 
     /** `withDatum` for a datum without its original bytes: the store keeps its canonical CBOR. */
     def withDatum(data: Data): ImmutableEmulator = withDatum(KeepRaw(data))
 
-    /** Clear the applied-transaction bookkeeping (log + index), keeping ledger state. */
-    def clearAppliedTxs: ImmutableEmulator =
-        copy(appliedTxLog = Vector.empty, appliedTxIndex = Map.empty)
+    /** Clear the applied-transaction log, keeping ledger state, see `EmulatorBase.clearAppliedTxs`.
+      */
+    def clearAppliedTxs: ImmutableEmulator = withState(emulatorState.withClearedAppliedTxs)
 
     /** Advance the slot by the given number of slots. See [[setSlot]] for an epoch boundary. */
     def advanceSlot(n: Long): ImmutableEmulator = setSlot(env.slot + n)
 
-    /** Set the slot to a specific value. Crossing an epoch boundary forwards moves the donations
-      * into the treasury, as the mutable emulator does.
+    /** Set the slot to a specific value, then revalidate the mempool, spec [DE-3]. Crossing an
+      * epoch boundary forwards moves the donations into the treasury, as the mutable emulator does.
+      *
+      * @throws IllegalArgumentException
+      *   in the `Manual` preset, for a slot below the slot of the tip block, spec [RV-8]
       */
-    def setSlot(slot: SlotNo): ImmutableEmulator = {
-        val (newState, newEnv) = EmulatorBase.atSlot(state, env, slotConfig, slot)
-        copy(state = newState, env = newEnv)
-    }
+    def setSlot(slot: SlotNo): ImmutableEmulator =
+        withState(emulatorState.withSlot(slot).revalidated(validate))
 
     /** Find UTxOs matching the given query. */
     def findUtxos(query: UtxoQuery): Either[UtxoQueryError, Utxos] =
@@ -136,20 +192,51 @@ case class ImmutableEmulator(
             Future.successful(ImmutableEmulator.this.getDatum(datumHash))
     }
 
-    /** Convert to a mutable [[scalus.cardano.node.Emulator]], keeping the whole ledger state and
-      * the treasury.
+    /** Convert to a mutable [[scalus.cardano.node.Emulator]] with the same state: the chain, the
+      * mempool, the preset and the whole ledger state.
       */
-    def toEmulator: Emulator = {
+    def toEmulator: Emulator = EmulatorBase.fromState(emulatorState, validators, mutators)
+}
+
+object ImmutableEmulator {
+
+    /** An emulator that starts from `state` at `env.slot`, in the `Instant` preset, spec [CF-4].
+      *
+      * @param appliedTxIndex
+      *   derived from `appliedTxLog`; kept for source compatibility. A non-empty index must equal
+      *   the index of `appliedTxLog`.
+      */
+    def apply(
+        state: State,
+        env: UtxoEnv,
+        slotConfig: SlotConfig = SlotConfig.mainnet,
+        evaluatorMode: EvaluatorMode = EvaluatorMode.Validate,
+        validators: Iterable[STS.Validator] = Emulator.defaultValidators,
+        mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
+        appliedTxLog: Vector[AppliedTx] = Vector.empty,
+        appliedTxIndex: Map[TransactionHash, AppliedTx] = Map.empty,
+        binaryDatums: Map[DataHash, KeepRaw[Data]] = Map.empty
+    ): ImmutableEmulator = {
+        require(
+          appliedTxIndex.isEmpty || appliedTxIndex == EmulatorBase.indexAppliedTxs(appliedTxLog),
+          "appliedTxIndex must be the index of appliedTxLog"
+        )
         val context = Context(env = env, slotConfig = slotConfig, evaluatorMode = evaluatorMode)
-        EmulatorBase.fromState(
+        new ImmutableEmulator(
           EmulatorState.initial(state, context, binaryDatums, appliedTxLog),
           validators,
           mutators
         )
     }
-}
 
-object ImmutableEmulator {
+    /** An emulator on `state`, with these ledger rules, spec [SF-11]. A `Manual` emulator starts
+      * from an `EmulatorState` built with [[ChainConfig.manual]], or from [[fromEmulator]].
+      */
+    def fromState(
+        state: EmulatorState,
+        validators: Iterable[STS.Validator],
+        mutators: Iterable[STS.Mutator]
+    ): ImmutableEmulator = new ImmutableEmulator(state, validators, mutators)
 
     /** The 1.3 parameter list: the datums decoded, without their original bytes. Each datum keeps
       * the bytes of its canonical encoding.
@@ -180,27 +267,12 @@ object ImmutableEmulator {
 
     /** Create an ImmutableEmulator from a mutable [[scalus.cardano.node.EmulatorBase]].
       *
-      * Captures a snapshot of the emulator's current state, the whole ledger state and the treasury
-      * included. The state is read once, so a concurrent epoch crossing cannot split the donations
-      * between two states.
+      * Captures a snapshot of the emulator's current state: the chain, the mempool, the preset, and
+      * the whole ledger state with the treasury. The state is read once, so a concurrent epoch
+      * crossing cannot split the donations between two states.
       */
-    def fromEmulator(emulator: EmulatorBase): ImmutableEmulator = {
-        val snapshot = EmulatorBase.stateOf(emulator)
-        val context = snapshot.context
-        ImmutableEmulator(
-          state = snapshot.ledger,
-          // ledger rules read cert state from `state.certState`, not `env.certState`; mirror the
-          // mutable Emulator and keep this empty (the real cert state lives in `state`)
-          env = context.env.copy(certState = CertState.empty),
-          slotConfig = context.slotConfig,
-          evaluatorMode = context.evaluatorMode,
-          validators = emulator.validators,
-          mutators = emulator.mutators,
-          appliedTxLog = snapshot.appliedTxLog,
-          appliedTxIndex = snapshot.appliedTxIndex,
-          binaryDatums = snapshot.binaryDatums
-        )
-    }
+    def fromEmulator(emulator: EmulatorBase): ImmutableEmulator =
+        fromState(EmulatorBase.stateOf(emulator), emulator.validators, emulator.mutators)
 
     /** An empty ImmutableEmulator with no UTxOs and default test-mainnet parameters. */
     def empty: ImmutableEmulator = ImmutableEmulator(

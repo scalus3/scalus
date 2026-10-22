@@ -120,7 +120,7 @@ case class EmulatorState private (
       *   derives the context the tx is validated under, for a per-submit concern such as debug
       *   scripts. The snapshot keeps the context it had, so the concern cannot leak.
       */
-    private[node] def submit(
+    private[scalus] def submit(
         tx: Transaction,
         validationContext: Context => Context,
         validate: EmulatorState.Validate
@@ -182,7 +182,7 @@ case class EmulatorState private (
       * `Instant` preset the mempool is empty here, and the slot is that of [FG-2]. An empty mempool
       * forges an empty block, spec [FG-8].
       */
-    private[node] def produceBlock(
+    private[scalus] def produceBlock(
         validate: EmulatorState.Validate
     ): (EmulatorState, ChainPoint) = {
         val forged = config.blockProduction match
@@ -231,7 +231,7 @@ case class EmulatorState private (
       * is this one, spec [FG-17]. A block already in the tree is the same block, spec section 4, so
       * the state is this one too.
       */
-    private[node] def produceBlock(
+    private[scalus] def produceBlock(
         on: ChainPoint,
         slot: SlotNo,
         txs: Seq[Transaction],
@@ -310,7 +310,7 @@ case class EmulatorState private (
       * chain selection runs, spec [CS-7], [RB-9], with the orphan txs and the revalidation of a
       * switch, spec [RB-7], [RB-8]. The current slot stays, spec [RB-6].
       */
-    private[node] def rollback(
+    private[scalus] def rollback(
         n: Int,
         validate: EmulatorState.Validate
     ): (EmulatorState, Either[RollbackError, ChainPoint]) = {
@@ -434,28 +434,36 @@ case class EmulatorState private (
             node
 
     /** The tip of the selected chain, or [[ChainTip.origin]] at genesis. */
-    private[node] def tip: ChainTip =
+    private[scalus] def tip: ChainTip =
         chain.lastOption.fold(ChainTip.origin)(id => EmulatorState.tipOf(blocks(id)))
 
     /** The status of the tx `hash`, spec [TS-1]: `Pending` in the mempool; `Confirmed` in a block
       * of the selected chain, with the depth of that block now, spec [TS-2], [TS-7]; else the
       * `Dropped` or `RolledBack` recorded when it left; else `NotFound`.
       */
-    private[node] def txStatus(hash: TransactionHash): TxStatus =
+    private[scalus] def txStatus(hash: TransactionHash): TxStatus =
         if mempool.exists(_.applied.txHash == hash) then TxStatus.Pending
         else
-            // The log holds every selected-chain tx above `logStart`, so a hash out of the log can
-            // only sit in a block at or below `logStart`, which clearAppliedTxs moved up.
-            // ceiling: a scan from the tip back, or from `logStart` back for a hash out of the log.
-            // Add a tx index if long chains make it slow.
-            val inBlock = (id: BlockHash) => blocks(id).txs.exists(_.txHash == hash)
-            val i =
-                if appliedTxs.contains(hash) then chain.lastIndexWhere(inBlock)
-                else chain.lastIndexWhere(inBlock, logStart.toInt - 1)
+            val i = chainIndexOf(hash)
             if i >= 0 then
                 val node = blocks(chain(i))
                 TxStatus.Confirmed(chain.size - i, ChainPoint(node.block.slot, node.id))
             else statuses.getOrElse(hash, TxStatus.NotFound)
+
+    /** The index in `chain` of the last selected-chain block that holds the tx `hash`, or -1.
+      *
+      * The log holds every selected-chain tx above `logStart`, so a hash out of the log can only
+      * sit in a block at or below `logStart`, which clearAppliedTxs moved up. A hash in no block
+      * costs one lookup in the log, and a scan of the blocks up to `logStart`, none unless
+      * clearAppliedTxs ran.
+      */
+    private def chainIndexOf(hash: TransactionHash): Int = {
+        // ceiling: a scan from the tip back for a hash in the log, or from `logStart` back for one
+        // out of it. Add a tx-to-block index if long chains make it slow.
+        val inBlock = (id: BlockHash) => blocks(id).txs.exists(_.txHash == hash)
+        if appliedTxs.contains(hash) then chain.lastIndexWhere(inBlock)
+        else chain.lastIndexWhere(inBlock, logStart.toInt - 1)
+    }
 
     /** The snapshot `view` reads, spec section 9. */
     private[node] def snapshotOf(view: ChainView): Either[ChainViewError, LedgerSnapshot] =
@@ -528,7 +536,7 @@ case class EmulatorState private (
       *
       * With an empty mempool, as always in the `Instant` preset, this is the same state.
       */
-    private[node] def revalidated(validate: EmulatorState.Validate): EmulatorState =
+    private[scalus] def revalidated(validate: EmulatorState.Validate): EmulatorState =
         if mempool.isEmpty then this else withMempoolOf(mempool.map(_.applied.tx), validate)
 
     /** The state with the mempool rebuilt from `txs` by the rules of revalidation, spec [RV-1] ..
@@ -538,12 +546,17 @@ case class EmulatorState private (
         txs: Vector[Transaction],
         validate: EmulatorState.Validate
     ): EmulatorState = {
-        // ceiling: a scan of the selected chain. Add a tx index if long chains make it slow.
-        val onChain = selectedChain.iterator.flatMap(_.txs.map(_.txHash)).toSet
+        // The txs of the blocks below the clearAppliedTxs cursor, built once per call and only if
+        // a tx is out of the log; empty unless clearAppliedTxs ran. A tx in the log can be an
+        // imported one, with no block, so `chainIndexOf` scans the blocks for it.
+        lazy val belowCursor =
+            chain.iterator.take(logStart.toInt).flatMap(blocks(_).txs.map(_.txHash)).toSet
+        def onChain(hash: TransactionHash): Boolean =
+            if appliedTxs.contains(hash) then chainIndexOf(hash) >= 0 else belowCursor(hash)
         var base = tipSnapshot
         val kept = Vector.newBuilder[MempoolEntry]
         var drops = statuses
-        for tx <- txs if !onChain.contains(tx.id) do
+        for tx <- txs if !onChain(tx.id) do
             validate(base.context, base.ledger, tx) match
                 case Left(error) =>
                     val reason = DropReason.of(SubmitError.fromException(error))
@@ -695,7 +708,7 @@ object EmulatorState {
     }
 
     /** How a transition validates a tx: the overridable `EmulatorBase.processTransaction`. */
-    private[node] type Validate =
+    private[scalus] type Validate =
         (Context, State, Transaction) => Either[TransactionException, State]
 
     /** The state an emulator starts from — the only public way to build one — in the `Instant`
