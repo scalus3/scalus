@@ -38,6 +38,10 @@
 
 ### Fixed
 
+- **`equalsData` and `Data` equality compare `Data.Map` entries in order, as Plutus does. Before, two
+  maps with the same entries in a different order, or with a repeated entry, were equal, so the
+  CEK and the Emulator returned `True` where the node returns `False`. Scala code that compares
+  `Data` maps with `==` now sees the order.**
 - `Term.~=~` compares the number of `Constr` fields and `Case` branches.
 - `Transaction.fromCbor` accepts a transaction without the `isValid` flag, `[body, witnesses,
   auxiliary data]`, as cardano-node 11.1.3 does, with `isValid = true`. A decoded transaction

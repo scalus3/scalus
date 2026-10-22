@@ -138,6 +138,22 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
         }
     }
 
+    test("EqualsData compares map entries in order, as Plutus does") {
+        def map(entries: (Data, Data)*): Data = Data.Map(PList.from(entries))
+        def equalsData(a: Data, b: Data): Term =
+            EqualsData $ Const(Constant.Data(a)) $ Const(Constant.Data(b))
+        val one = Data.I(1) -> Data.B(hex"aa")
+        val two = Data.I(2) -> Data.B(hex"bb")
+
+        assertTermEvalEq(equalsData(map(one, two), map(one, two)), Const(asConstant(true)))
+        // Plutus derives Eq for Data, so `Map` compares its list of pairs in order.
+        assertTermEvalEq(equalsData(map(one, two), map(two, one)), Const(asConstant(false)))
+        assertTermEvalEq(equalsData(map(one, one), map(one)), Const(asConstant(false)))
+        val nested = Data.Constr(0, PList(map(one, two)))
+        val nestedSwapped = Data.Constr(0, PList(map(two, one)))
+        assertTermEvalEq(equalsData(nested, nestedSwapped), Const(asConstant(false)))
+    }
+
     test("UnConstrData") {
         assert(
           (UnConstrData $ Data.Constr(12, PList(Data.I(1)))).evaluate ==

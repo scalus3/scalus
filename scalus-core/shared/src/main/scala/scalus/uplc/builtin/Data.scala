@@ -3,8 +3,6 @@ package scalus.uplc.builtin
 import scalus.uplc.builtin.Data.{B, Constr, I, List, Map}
 import scalus.cardano.onchain.plutus.prelude.List as PList
 
-import scala.compiletime.asMatchable
-
 /** The universal data type for Plutus smart contracts.
   *
   * `Data` is the core serializable type used throughout Cardano for representing:
@@ -146,7 +144,8 @@ object Data extends DataApi:
     /** Key-value mapping - represents associative data structures.
       *
       * Used to encode `Map[K, V]` types where both keys and values are Data. Note that duplicate
-      * keys are allowed (this is a list of pairs, not a true map).
+      * keys are allowed (this is a list of pairs, not a true map). Equality compares the pairs in
+      * order, as Plutus does: maps with the same entries in a different order are not equal.
       *
       * Corresponds to UPLC builtins `mapData` and `unMapData`.
       *
@@ -159,13 +158,7 @@ object Data extends DataApi:
       *   Map(List((I(1), B(hex"aa")), (I(2), B(hex"bb"))))
       *   }}}
       */
-    case class Map(values: PList[(Data, Data)]) extends Data {
-        override def hashCode(): Int = values.toScalaList.toSet.hashCode()
-        override def equals(x: Any): Boolean = x.asMatchable match {
-            case Map(otherValues) => values.toScalaList.toSet == otherValues.toScalaList.toSet
-            case _                => false
-        }
-    }
+    case class Map(values: PList[(Data, Data)]) extends Data
 
     /** Ordered sequence - represents list types.
       *
