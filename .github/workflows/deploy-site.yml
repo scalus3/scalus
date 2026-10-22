@@ -1,16 +1,14 @@
 name: Deploy Site
 
+# Versioned API docs and llms files: docs/superpowers/specs/2026-10-22-versioned-api-docs-design.md
 on:
   workflow_dispatch:
     inputs:
-      api_mode:
-        description: 'API Documentation'
-        required: true
-        type: choice
-        options:
-          - preserve
-          - regenerate
-        default: preserve
+      versions:
+        description: 'Tags to (re)build, space-separated, e.g. "v1.3.0 v1.4.0". Empty = the newest v* tag. Other versions already on gh-pages are kept.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -23,7 +21,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          fetch-depth: 0  # Full history needed for gh-pages
+          fetch-depth: 0  # Full history and tags, needed for the version worktrees
 
       - name: Setup Node.js
         uses: actions/setup-node@v5
@@ -46,39 +44,34 @@ jobs:
       - name: Setup sbt
         uses: sbt/setup-sbt@v1
 
-      - name: Generate Scaladoc API documentation
-        if: inputs.api_mode == 'regenerate'
-        run: sbt docs/unidoc
-
-      - name: Generate llms-api.txt from the latest release tag
-        # The cheatsheet documents the RELEASED API, so it is generated from the newest tag
-        # rather than from this branch - master is normally ahead of what users can depend on.
-        # It is a build artifact: Next.js copies public/ into out/, so it ships with the site
-        # and is never committed.
+      - name: Restore version folders from gh-pages
+        # Only api/<version>/ and llms/<version>/ [VW-1]. The root API is rebuilt from the latest
+        # version [VW-2], so a stale page of the old unversioned layout never comes back.
         run: |
           set -euo pipefail
-          TAG=$(git describe --tags --abbrev=0 --match 'v*')
-          echo "Generating llms-api.txt from $TAG"
-          git worktree add ../release-src "$TAG"
-          (cd ../release-src && sbt --batch generateLlmsApi)
-          mkdir -p scalus-site/public
-          cp ../release-src/scalus-site/public/llms-api.txt scalus-site/public/llms-api.txt
-          git worktree remove --force ../release-src
-          head -1 scalus-site/public/llms-api.txt
-
-      - name: Preserve /api folder from gh-pages
-        if: inputs.api_mode == 'preserve'
-        run: |
-          git fetch origin gh-pages:gh-pages || echo "gh-pages branch does not exist yet"
-          if git rev-parse --verify gh-pages > /dev/null 2>&1; then
-            git checkout gh-pages -- api || echo "No /api folder found in gh-pages"
-            if [ -d "api" ]; then
-              mkdir -p scalus-site/public
-              cp -r api scalus-site/public/
-              echo "Copied /api folder from gh-pages to scalus-site/public/"
+          if git fetch origin gh-pages; then
+            PATHS=$(git ls-tree -d --name-only origin/gh-pages api/ llms/ | grep -E '^(api|llms)/[0-9]' || true)
+            if [ -n "$PATHS" ]; then
+              git archive origin/gh-pages $PATHS | tar -x -C scalus-site/public
+              echo "Restored: $(echo $PATHS)"
             fi
-            git checkout ${{ github.ref_name }}
+          else
+            echo "gh-pages branch does not exist yet"
           fi
+
+      - name: Build the requested versions
+        env:
+          VERSIONS: ${{ inputs.versions }}
+        run: |
+          set -euo pipefail
+          if [ -z "$VERSIONS" ]; then
+            VERSIONS=$(git describe --tags --abbrev=0 --match 'v*')
+          fi
+          for TAG in $VERSIONS; do
+            echo "::group::$TAG"
+            scalus-site/scripts/build-version.sh "$TAG"
+            echo "::endgroup::"
+          done
 
       - name: Install dependencies
         working-directory: scalus-site
@@ -88,14 +81,19 @@ jobs:
         working-directory: scalus-site
         run: pnpm build
 
+      - name: Add the root API, versions.json and the root llms files
+        working-directory: scalus-site
+        run: scripts/finalize-versions.sh out
+
       - name: Configure git
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Deploy to gh-pages
+        # --no-history: one commit, so the branch does not grow by hundreds of MB per deploy [VW-10]
         working-directory: scalus-site
         run: |
-          npx gh-pages -d out -b gh-pages -r https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git --cname scalus.org
+          npx gh-pages --no-history -d out -b gh-pages -r https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git --cname scalus.org
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

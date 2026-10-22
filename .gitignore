@@ -54,8 +54,9 @@ scalus-examples/jvm/src/test/resources/scalus/examples/AikenMpfData/aiken.lock
 
 # Generated at site-deploy time from the latest release tag (deploy-site.yml)
 scalus-site/public/llms-api.txt
-# Scaladoc from `docs/unidoc` (sbt ci, Deploy Site)
+# Scaladoc from `docs/unidoc` (sbt ci) and per-version folders from build-version.sh (Deploy Site)
 scalus-site/public/api/
+scalus-site/public/llms/
 
 # Local-only working notes, never committed
 docs/internal/local/

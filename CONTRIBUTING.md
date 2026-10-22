@@ -83,7 +83,9 @@ This makes the compiler wait for a debugger to attach on port 5005.
 
 ### Deploy to GitHub Pages
 
-Run GitHub Actions "Deploy site" workflow.
+Run GitHub Actions "Deploy site" workflow. Its `versions` input names the release tags whose API
+docs and llms files it builds; see "When you release" below. To check one version locally:
+`OUT=/tmp/site scalus-site/scripts/build-version.sh v1.4.0`.
 
 ## Releasing Scalus
 
@@ -248,8 +250,9 @@ AI coding agents get Scalus knowledge from three places. Each has its own update
 | Artifact | Source | Reaches users when |
 |---|---|---|
 | `scalus` Claude Code plugin (skills, session-start routing) | `scalus-skills/` | `version` in `scalus-skills/.claude-plugin/plugin.json` changes and users update the plugin |
-| `llms.txt`, `llms-full.txt`, `llms-examples.txt` | `scalus-site/content/`, `scalus-examples/` | the Deploy Site workflow runs (`yarn build` generates them) |
-| `llms-api.txt` | public API of the **latest release tag** | the Deploy Site workflow runs |
+| `llms.txt` | `scalus-site/public/llms.txt` on the deployed branch, plus a generated Versions section | the Deploy Site workflow runs |
+| `llms-api.txt`, `llms-examples.txt`, `llms-full.txt` | the **latest release tag** (`scalus-site/scripts/build-version.sh`) | the Deploy Site workflow runs |
+| `/llms/<version>/*.txt`, `/api/<version>/` | that release tag | the Deploy Site workflow builds that tag; other versions stay as they are on gh-pages |
 
 The `.claude/skills/` copies in the `scalus3/hello.g8` and `scalus3/validator.g8` templates are
 retired: the templates enable the plugin instead (`.claude/settings.json`).
@@ -270,10 +273,12 @@ retired: the templates enable the plugin instead (`.claude/settings.json`).
 
 1. Update version-bound text in the skills (for example "needs Scalus 1.2.0 or newer") if the
    release adds or removes API the skills name. Bump the plugin version if you change anything.
-2. After the tag is pushed and published, run the **Deploy Site** workflow with
-   `api_mode: regenerate`. It regenerates the Scaladoc, `llms-api.txt` from the new tag, and the
-   other `llms*.txt` files from `master`.
-3. Check that the first line of https://scalus.org/llms-api.txt names the new tag.
+2. After the tag is pushed and published, run the **Deploy Site** workflow. With an empty
+   `versions` input it builds the newest `v*` tag into `/api/<version>/` and `/llms/<version>/`,
+   makes it the latest version at `/api/` and the root `llms-*.txt` files, and keeps the older
+   versions. To add or rebuild other versions, list their tags, for example `v1.3.0 v1.4.0`.
+3. Check that the first line of https://scalus.org/llms-api.txt names the new tag, and that
+   https://scalus.org/api/versions.json lists it.
 4. Bump the Scalus version in the `hello.g8` and `validator.g8` templates.
 
 ## Run benchmarks
