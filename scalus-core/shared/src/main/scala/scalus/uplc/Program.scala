@@ -411,11 +411,11 @@ object DeBruijnedProgram {
       *
       * @param program
       *   the program
-      * @param afterByteString
+      * @param afterCborByteString
       *   the bytes after the CBOR byte string. These are not the bytes after the program inside the
       *   byte string, which [[ProgramFlatCodec.DecodeResult]] holds.
       */
-    case class PrefixDecodeResult(program: DeBruijnedProgram, afterByteString: Array[Byte])
+    case class PrefixDecodeResult(program: DeBruijnedProgram, afterCborByteString: Array[Byte])
 
     /** Deserializes a program from the CBOR byte string at the start of `cbor`, returning the bytes
       * after that byte string.
@@ -432,8 +432,9 @@ object DeBruijnedProgram {
       *   the program and the bytes after the CBOR byte string
       */
     def fromCborPrefix(cbor: Array[Byte]): PrefixDecodeResult = {
-        val (flatEncoded, afterByteString) = scalus.serialization.cbor.Cbor.splitByteString(cbor)
-        PrefixDecodeResult(fromFlatEncoded(flatEncoded), afterByteString)
+        val (flatEncoded, afterCborByteString) =
+            scalus.serialization.cbor.Cbor.unwrapCborByteString(cbor)
+        PrefixDecodeResult(fromFlatEncoded(flatEncoded), afterCborByteString)
     }
 
     /** Deserializes a program from a CBOR-encoded byte array, returning the bytes after the program

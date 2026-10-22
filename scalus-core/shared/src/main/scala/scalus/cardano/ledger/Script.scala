@@ -120,7 +120,7 @@ object PlutusScript {
       *   that `language` does not allow
       */
     private def flatEncodedProgram(script: Array[Byte], language: Language): Array[Byte] = {
-        val (flatEncoded, afterScript) = ScalusCbor.splitByteString(script)
+        val (flatEncoded, afterScript) = ScalusCbor.unwrapCborByteString(script)
         require(
           afterScript.isEmpty || language == Language.PlutusV1 || language == Language.PlutusV2,
           s"A $language script has ${afterScript.length} bytes after its CBOR byte string, " +

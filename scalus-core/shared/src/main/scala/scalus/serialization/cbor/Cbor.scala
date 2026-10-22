@@ -51,8 +51,8 @@ object Cbor {
         Cborer.decode(data).to[A].value
     }
 
-    /** Splits `data` into the content of the CBOR byte string it starts with and the bytes after
-      * that byte string.
+    /** Unwraps the CBOR byte string that `data` starts with: returns its content, without the
+      * header, and the bytes after that byte string.
       *
       * Reads the byte string as cborg's `decodeBytes` does, which is how the ledger reads a Plutus
       * script: the length must be definite, and may be encoded in more bytes than it needs.
@@ -60,7 +60,7 @@ object Cbor {
       * @throws IllegalArgumentException
       *   if `data` does not start with a definite-length byte string
       */
-    private[scalus] def splitByteString(data: Array[Byte]): (Array[Byte], Array[Byte]) = {
+    private[scalus] def unwrapCborByteString(data: Array[Byte]): (Array[Byte], Array[Byte]) = {
         require(data.nonEmpty, "Expected a CBOR byte string, got end of input")
         // the length follows the header byte as a big-endian unsigned integer of `size` bytes
         def length(size: Int): Long = {
