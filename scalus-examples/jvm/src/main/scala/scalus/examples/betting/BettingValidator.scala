@@ -236,7 +236,7 @@ object BettingValidator extends Validator {
     ): Unit =
         // Exactly one token type under this policy, either minted (+1, a new bet) or burned (-1, a
         // bet ending). (V003/V011 fix.)
-        val (_, quantity) = tx.mint
+        val (tokenName, quantity) = tx.mint
             .tokens(policyId)
             .singleOrFail("Must mint or burn exactly one token type under this policy")
 
@@ -250,15 +250,19 @@ object BettingValidator extends Validator {
         else
             require(quantity === BigInt(1), "Must mint exactly one token")
             val scriptAddress = Address.fromScriptHash(policyId)
-            val Config(player1, player2, oracle, expiration) = tx.outputs
-                .findUniqueOrFail(
-                  _.address === scriptAddress,
-                  "There must be a single output with inline initial betting config that goes to the script"
-                )
-                .datum
-                .inlineOrFail[Config](
-                  "The initial bet output must carry the betting config as an inline datum"
-                )
+            val betOutput = tx.outputs.findUniqueOrFail(
+              _.address === scriptAddress,
+              "There must be a single output with inline initial betting config that goes to the script"
+            )
+            // The minted token must land in the bet output; otherwise it could later be locked at
+            // the script with a config that skipped the checks below.
+            require(
+              betOutput.value.hasNft(policyId, tokenName),
+              "The initial bet output must hold the minted bet token"
+            )
+            val Config(player1, player2, oracle, expiration) = betOutput.datum.inlineOrFail[Config](
+              "The initial bet output must carry the betting config as an inline datum"
+            )
             require(
               tx.isSignedBy(player1),
               "Player1 must sign the transaction (they're creating the bet)"

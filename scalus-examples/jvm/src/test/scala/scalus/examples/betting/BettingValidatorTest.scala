@@ -84,7 +84,49 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for initial minting")
         assert(
-          result.budget == (ExUnits(memory = 61499, steps = 20_710_633))
+          result.budget == ScalaCompilerVersion.baseline(
+            pre38 = ExUnits(memory = 67489, steps = 23_432519),
+            since38 = ExUnits(memory = 65329, steps = 22_719832)
+          )
+        )
+
+    test("Fail: minting the bet token outside the script output"):
+        val player1 = TestUtil.mockPubKeyHash(1)
+        val config = Config(
+          player1,
+          player2 = pkh"",
+          oracle = TestUtil.mockPubKeyHash(3),
+          expiration = 1753939940
+        )
+        val policyId = TestUtil.mockScriptHash(1)
+        // The script output carries a valid config but no token; the minted token goes to
+        // player1's wallet, from where it could later be locked at the script with a forged config.
+        val testTransaction = TxInfo.placeholder.copy(
+          outputs = List(
+            TxOut(
+              address = Address.fromScriptHash(policyId),
+              value = Value.lovelace(3_000_000),
+              datum = OutputDatum.OutputDatum(config.toData)
+            ),
+            TxOut(
+              address = Address.fromPubKeyHash(player1),
+              value = Value.lovelace(2_000_000) + Value(policyId, utf8"lucky_number_slevin", 1)
+            )
+          ),
+          mint = Value(policyId, utf8"lucky_number_slevin", 1),
+          signatories = List(player1),
+          validRange = Interval.between(1752989540, 1752990020)
+        )
+        val result = contract.program.runWithDebug(
+          ScriptContext(
+            txInfo = testTransaction,
+            scriptInfo = ScriptInfo.MintingScript(policyId = policyId)
+          )
+        )
+        assert(result.isFailure, "Minting the bet token outside the script output must fail")
+        assert(
+          result.logs.exists(_.contains("must hold the minted bet token")),
+          s"Expected bet token error, got: ${result.logs.mkString(", ")}"
         )
 
     test("Verify that player2 can join an existing bet"):
