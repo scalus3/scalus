@@ -1,8 +1,9 @@
 package scalus.cardano.onchain.plutus.v1
 
-import org.scalacheck.Arbitrary
+import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.testing.kit.EvalTestKit
 
 import scala.annotation.nowarn
@@ -248,6 +249,62 @@ class IntervalTest
     test("nonNever") {
         assertEval {
             Interval.between(BigInt(100), BigInt(200)).nonNever
+        }
+    }
+
+    test("intersection keeps an exclusive lower bound at a shared time") {
+        assertEval {
+            val i1 = Interval.between(BigInt(5), BigInt(10))
+            val i2 = Interval(IntervalBound.finiteExclusive(5), IntervalBound.finiteInclusive(10))
+            Interval.intersection(i1, i2) === i2 && Interval.intersection(i2, i1) === i2
+        }
+    }
+
+    test("hull keeps an inclusive lower bound at a shared time") {
+        assertEval {
+            val i1 = Interval.between(BigInt(5), BigInt(10))
+            val i2 = Interval(IntervalBound.finiteExclusive(5), IntervalBound.finiteInclusive(10))
+            Interval.hull(i1, i2) === i1 && Interval.hull(i2, i1) === i1
+        }
+    }
+
+    test("isNever is true for a half-open interval at one time") {
+        assertEval {
+            Interval(IntervalBound.finiteExclusive(5), IntervalBound.finiteInclusive(5)).isNever &&
+            Interval(IntervalBound.finiteInclusive(5), IntervalBound.finiteExclusive(5)).isNever &&
+            Interval(IntervalBound.negInf, IntervalBound.negInf).isNever &&
+            Interval(IntervalBound.posInf, IntervalBound.posInf).isNever
+        }
+    }
+
+    // Bound times in 0..3 with a random inclusivity and no ordering, so bounds at one time with
+    // mixed inclusivity, open intervals (t, t+1) and never-intervals are all common.
+    // Every interval then changes membership only inside -1..4, so `probes` decides it.
+    private val genSmallBound: Gen[IntervalBound] =
+        for
+            boundType <- Gen.frequency(
+              (1, Gen.const(IntervalBoundType.NegInf)),
+              (1, Gen.const(IntervalBoundType.PosInf)),
+              (8, Gen.choose(0, 3).map(t => IntervalBoundType.Finite(BigInt(t))))
+            )
+            isInclusive <- Arbitrary.arbitrary[Boolean]
+        yield IntervalBound(boundType, isInclusive)
+
+    private val smallIntervals: Arbitrary[Interval] = Arbitrary(
+      for from <- genSmallBound; to <- genSmallBound yield Interval(from, to)
+    )
+
+    test("intersection, hull and isNever agree with contains") {
+        given Arbitrary[Interval] = smallIntervals
+        checkEval { (a: Interval, b: Interval) =>
+            val probes = PList(BigInt(-1), BigInt(0), BigInt(1), BigInt(2), BigInt(3), BigInt(4))
+            val intersection = Interval.intersection(a, b)
+            val hull = Interval.hull(a, b)
+            probes.forall { t =>
+                intersection.contains(t) === (a.contains(t) && b.contains(t)) &&
+                (!(a.contains(t) || b.contains(t)) || hull.contains(t))
+            } &&
+            a.isNever === !probes.exists(t => a.contains(t))
         }
     }
 }

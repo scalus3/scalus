@@ -109,7 +109,8 @@ object IntervalBound {
         IntervalBound(IntervalBoundType.Finite(time), false)
 
     /** Returns the minimum of two interval bounds. If the bounds are equal, returns the left-hand
-      * side bound.
+      * side bound. Uses `Ord[IntervalBound]`, which orders upper bounds: at the same time an
+      * exclusive bound is the smaller.
       */
     def min(lhs: IntervalBound, rhs: IntervalBound): IntervalBound =
         lhs <=> rhs match
@@ -118,7 +119,8 @@ object IntervalBound {
             case Order.Greater => rhs
 
     /** Returns the maximum of two interval bounds. If the bounds are equal, returns the left-hand
-      * side bound.
+      * side bound. Uses `Ord[IntervalBound]`, which orders upper bounds: at the same time an
+      * inclusive bound is the larger.
       */
     def max(lhs: IntervalBound, rhs: IntervalBound): IntervalBound =
         lhs <=> rhs match
@@ -206,19 +208,26 @@ object Interval:
       * intervals, if any.
       */
     def hull(lhs: Interval, rhs: Interval): Interval =
-        Interval(
-          IntervalBound.min(lhs.from, rhs.from),
-          IntervalBound.max(lhs.to, rhs.to)
-        )
+        val from = compareLower(lhs.from, rhs.from) match
+            case Order.Greater => rhs.from
+            case _             => lhs.from
+        Interval(from, IntervalBound.max(lhs.to, rhs.to))
 
     /** Returns the intersection of two intervals, i.e., the largest interval that is contained in
       * both input intervals, if any.
       */
     def intersection(lhs: Interval, rhs: Interval): Interval =
-        Interval(
-          IntervalBound.max(lhs.from, rhs.from),
-          IntervalBound.min(lhs.to, rhs.to)
-        )
+        val from = compareLower(lhs.from, rhs.from) match
+            case Order.Less => rhs.from
+            case _          => lhs.from
+        Interval(from, IntervalBound.min(lhs.to, rhs.to))
+
+    /** Compares two lower bounds. At the same time an inclusive lower bound admits one more value
+      * than an exclusive one, so it is the smaller. `Ord[IntervalBound]` breaks the tie the other
+      * way, which is right only for upper bounds.
+      */
+    private def compareLower(x: IntervalBound, y: IntervalBound): Order =
+        (x.boundType <=> y.boundType) ifEqualThen (y.isInclusive <=> x.isInclusive)
 
     extension (self: Interval)
 
@@ -279,9 +288,15 @@ object Interval:
           * IntervalTest should hold regardless of the implementation.
           */
         def isNever: Boolean =
-            self.from <=> self.to match
+            self.from.boundType <=> self.to.boundType match
                 case Order.Greater => true
-                case Order.Equal   => !(self.from.isInclusive && self.to.isInclusive)
+                case Order.Equal   =>
+                    // `contains` admits no time at an infinite bound, and one finite time only
+                    // when both bounds include it
+                    self.from.boundType match
+                        case IntervalBoundType.Finite(_) =>
+                            !(self.from.isInclusive && self.to.isInclusive)
+                        case _ => true
                 case Order.Less =>
                     val isOpenInterval = !self.from.isInclusive && !self.to.isInclusive
                     if isOpenInterval then
