@@ -51,7 +51,8 @@ case class PricebetTransactions(
         sponsor: OffchainAddress,
         signer: TransactionSigner
     ): Transaction = {
-        val mintRedeemer = MintOracleRedeemer.Mint
+        // The oracle output is the first output: payTo below, before the change
+        val mintRedeemer = MintOracleRedeemer.Mint(oracleOutputIndex = 0)
 
         val datum = OracleState(
           timestamp = initialTimestamp,

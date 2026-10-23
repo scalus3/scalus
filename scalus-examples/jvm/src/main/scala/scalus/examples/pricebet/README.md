@@ -13,6 +13,8 @@ tracks both players, the deadline, and the target rate.
   oracle data is read from a reference input (the oracle UTxO is not consumed). The oracle is authenticated by its
   **beacon NFT**: being at the oracle script address is not enough — anyone can pay a forged datum there — so `Win`
   requires the referenced UTxO to carry the oracle's one-shot beacon token, which only the genuine oracle holds.
+  The oracle keeps that true by induction: its mint puts the beacon in an output at the oracle script with a valid
+  inline rate, and every `Update` keeps the beacon in the continuing output.
 - **Timeout** — after the deadline, if no opponent joined, the owner reclaims the deposit.
 
 `PricebetValidator.scala` is the on-chain spending validator. `OracleValidator.scala` is the oracle's data feed

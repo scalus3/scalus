@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.EvaluatorMode.EvaluateAndComputeCost
+import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.RedeemerPurpose
@@ -281,7 +282,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(updateSlot)
         val updateResult = assertSuccess(provider, updateTx, oracleUtxo._1)
         assert(
-          updateResult.budget == (ExUnits(memory = 48713, steps = 20_684_954))
+          updateResult.budget == (ExUnits(memory = 52447, steps = 22_737_257))
         )
     }
 
@@ -317,6 +318,112 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(updateSlot)
         assertFailure(provider, updateTx, oracleUtxo._1, "Must be signed by the authorized signer")
+    }
+
+    // An Update to a zero rate or a zero denominator would lock the oracle UTxO and its beacon:
+    // no later Update or Burn could spend it. The validator checks the new state instead.
+    test("Fail: Oracle update to a zero rate") {
+        assertUpdateRejected(Rational(0, 1), "Zero rate is not allowed")
+    }
+
+    test("Fail: Oracle update to a zero denominator") {
+        assertUpdateRejected(Rational(1, 0), "Division by zero in Rational")
+    }
+
+    // The beacon lifecycle: the mint puts the beacon in a valid oracle UTxO and Update keeps it
+    // there, so every UTxO that holds the beacon is a valid oracle (Pricebet trusts exactly that).
+    test("Fail: mint sends the beacon to a wallet") {
+        assertMintRejected(
+          (txCreator, beacon) => (Oracle.address, beacon, Some(oracleState(initialRate))),
+          OracleValidator.BeaconToOracle
+        )
+    }
+
+    test("Fail: the Mint redeemer names an output without the beacon") {
+        // Index 1 is the change output
+        assertMintRejected(
+          (txCreator, beacon) =>
+              (txCreator.oracleScriptAddress, beacon, Some(oracleState(initialRate))),
+          OracleValidator.BeaconToOracle,
+          oracleOutputIndex = 1
+        )
+    }
+
+    test("Fail: mint puts the beacon at the oracle script without a datum") {
+        assertMintRejected(
+          (txCreator, beacon) => (txCreator.oracleScriptAddress, beacon, None),
+          OracleValidator.OracleOutputDatum
+        )
+    }
+
+    test("Fail: mint creates an oracle with a zero rate") {
+        assertMintRejected(
+          (txCreator, beacon) =>
+              (
+                txCreator.oracleScriptAddress,
+                beacon,
+                Some(oracleState(Rational(0, 1)))
+              ),
+          OracleValidator.ZeroRate
+        )
+    }
+
+    test("Fail: Update moves the beacon out of the oracle") {
+        val provider = createProvider()
+        val txCreator = createTxCreator(provider)
+        val oracleUtxo = createAndSubmitOracleUtxo(provider, txCreator, initialRate)
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val beacon = Value.asset(
+          ScriptHash.fromByteString(txCreator.beaconPolicyId),
+          AssetName(beaconTokenName),
+          1
+        )
+        import scalus.cardano.txbuilder.TxBuilder
+        val updateTx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+            .spend(oracleUtxo, SpendOracleRedeemer.Update(0), txCreator.oracleScript)
+            .requireSignature(Oracle.addrKeyHash)
+            // A valid datum at the oracle address, but the beacon goes to the signer's wallet
+            .payTo(txCreator.oracleScriptAddress, Value.ada(2), oracleState(winningRate))
+            .payTo(Oracle.address, Value.ada(2) + beacon)
+            .validFrom(updateValidFrom)
+            .validTo(updateValidTo)
+            .complete(availableUtxos = utxos, Alice.address)
+            .sign(Oracle.signer)
+            .sign(Alice.signer)
+            .transaction
+        provider.setSlot(updateSlot)
+        val result = runValidator(provider, updateTx, oracleUtxo._1)
+        assert(result.isFailure, "Moving the beacon out must fail")
+        assert(result.logs.exists(_.contains(OracleValidator.BeaconMustStay)), result.logs)
+    }
+
+    test("Fail: the Burn redeemer cannot mint a beacon") {
+        val provider = createProvider()
+        val txCreator = createTxCreator(provider)
+        val oracleUtxos = provider.findUtxos(Oracle.address).await().toOption.get
+        import scalus.cardano.txbuilder.{TxBuilder, TwoArgumentPlutusScriptWitness}
+        val tx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+            .mint(
+              ScriptHash.fromByteString(txCreator.beaconPolicyId),
+              Map(AssetName(beaconTokenName) -> 1L),
+              TwoArgumentPlutusScriptWitness.attached(
+                txCreator.oracleScript,
+                MintOracleRedeemer.Burn
+              )
+            )
+            .requireSignature(Oracle.addrKeyHash)
+            .payTo(
+              Oracle.address,
+              Value.ada(2) + Value.asset(
+                ScriptHash.fromByteString(txCreator.beaconPolicyId),
+                AssetName(beaconTokenName),
+                1
+              )
+            )
+            .complete(availableUtxos = oracleUtxos, Oracle.address)
+            .sign(Oracle.signer)
+            .transaction
+        assert(provider.submit(tx).await().isLeft, "The Burn redeemer must not mint")
     }
 
     test("Oracle discovery via beacon token") {
@@ -714,6 +821,77 @@ object PricebetValidatorTest extends ScalusTest {
             .find { case (_, out) => out.value.assets.assets.isEmpty }
             .getOrElse(fail("Fake oracle UTxO not found"))
         Utxo(fake)
+    }
+
+    private def oracleState(rate: Rational) =
+        OracleState(timestamp = oracleTimestamp.toEpochMilli, exchangeRate = rate)
+
+    /** A mint of the beacon that spends the seed and is signed, but whose beacon output is
+      * `output(txCreator, beaconValue)`: (address, value, inline datum), fails with
+      * `expectedError`.
+      */
+    def assertMintRejected(
+        output: (PricebetTransactions, Value) => (Address, Value, Option[OracleState]),
+        expectedError: String,
+        oracleOutputIndex: BigInt = 0
+    ): Unit = {
+        val provider = createProvider()
+        val txCreator = createTxCreator(provider)
+        val utxos = provider.findUtxos(Oracle.address).await().toOption.get
+        val seed = Utxo(utxos.head)
+        val beacon = Value.ada(2) + Value.asset(
+          ScriptHash.fromByteString(txCreator.beaconPolicyId),
+          AssetName(beaconTokenName),
+          1
+        )
+        val (address, value, datum) = output(txCreator, beacon)
+        import scalus.cardano.txbuilder.{TxBuilder, TwoArgumentPlutusScriptWitness}
+        val builder = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+            .spend(seed)
+            .collaterals(seed)
+            .mint(
+              ScriptHash.fromByteString(txCreator.beaconPolicyId),
+              Map(AssetName(beaconTokenName) -> 1L),
+              TwoArgumentPlutusScriptWitness.attached(
+                txCreator.oracleScript,
+                MintOracleRedeemer.Mint(oracleOutputIndex)
+              )
+            )
+            .requireSignature(Oracle.addrKeyHash)
+        val tx = datum
+            .fold(builder.payTo(address, value))(d => builder.payTo(address, value, d))
+            .complete(availableUtxos = utxos, Oracle.address)
+            .sign(Oracle.signer)
+            .transaction
+        provider.submit(tx).await() match
+            case Left(e)  => assert(e.toString.contains(expectedError), s"Unexpected error: $e")
+            case Right(_) => fail("The mint must be rejected")
+    }
+
+    /** An authorized Update of a valid oracle to `newRate` fails with `expectedError`. */
+    def assertUpdateRejected(newRate: Rational, expectedError: String): Unit = {
+        val provider = createProvider()
+        val txCreator = createTxCreator(provider)
+        val oracleUtxo = createAndSubmitOracleUtxo(provider, txCreator, initialRate)
+
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val updateTx = txCreator.updateOracle(
+          utxos = utxos,
+          oracleUtxo = oracleUtxo,
+          newTimestamp = updateTimestamp.toEpochMilli,
+          newExchangeRate = newRate,
+          sponsor = Alice.address,
+          validFrom = updateValidFrom,
+          validTo = updateValidTo,
+          oracleSigner = Oracle.signer,
+          sponsorSigner = Alice.signer
+        )
+
+        provider.setSlot(updateSlot)
+        val result = runValidator(provider, updateTx, oracleUtxo._1)
+        assert(result.isFailure, s"Update to $newRate must fail")
+        assert(result.logs.exists(_.contains(expectedError)), s"Unexpected logs: ${result.logs}")
+        assert(provider.submit(updateTx).await().isLeft, "Emulator must reject the update")
     }
 
     def assertSuccess(

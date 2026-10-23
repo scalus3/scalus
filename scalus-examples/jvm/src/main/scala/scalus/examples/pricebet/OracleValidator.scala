@@ -3,7 +3,7 @@ package scalus.examples.pricebet
 import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.examples.pricebet.MintOracleRedeemer.{Burn, Mint}
-import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, PolicyId, TxInfo, TxOutRef}
 import scalus.cardano.onchain.plutus.prelude.*
@@ -25,7 +25,7 @@ case class OracleState(
       ToData
 
 enum MintOracleRedeemer derives FromData, ToData:
-    case Mint
+    case Mint(oracleOutputIndex: BigInt)
     case Burn
 
 enum SpendOracleRedeemer derives FromData, ToData:
@@ -44,12 +44,10 @@ object OracleValidator extends DataParameterizedValidator {
         policyId: PolicyId,
         tx: TxInfo
     ): Unit = {
-        val mintRedeemer = redeemer.to[MintOracleRedeemer]
         val config = param.to[OracleConfig]
-
-        require(tx.isSignedBy(config.authorizedSigner), MustBeSigned)
-        mintRedeemer match {
-            case Mint =>
+        redeemer.to[MintOracleRedeemer] match {
+            case Mint(oracleOutputIndex) =>
+                require(tx.isSignedBy(config.authorizedSigner), MustBeSigned)
                 // Verify the seed UTXO is being spent
                 tx.findInputOrFail(config.seedUtxo, "Must spend seed utxo to mint the beacon")
 
@@ -59,13 +57,24 @@ object OracleValidator extends DataParameterizedValidator {
                   tx.mint.hasOnly(policyId, config.beaconName, 1),
                   "Must mint exactly 1 beacon token and nothing else"
                 )
-            case Burn =>
-                // Verify exactly one beacon token is burned (quantity = -1) and nothing else
-                // under this policy
+
+                // Base case of the beacon invariant: the beacon starts in a valid oracle UTxO, at
+                // this script, with an inline OracleState that an Update would accept. Pricebet
+                // trusts any UTxO at the oracle script that holds the beacon.
+                val oracleOutput = tx.outputs.at(oracleOutputIndex)
+                require(oracleOutput.value.hasNft(policyId, config.beaconName), BeaconToOracle)
                 require(
-                  tx.mint.hasOnly(policyId, config.beaconName, -1),
-                  "Must burn exactly 1 beacon token and nothing else"
+                  oracleOutput.address.credential === Credential.ScriptCredential(policyId),
+                  BeaconToOracle
                 )
+                requireValidRate(
+                  oracleOutput.datum.inlineOrFail[OracleState](OracleOutputDatum).exchangeRate
+                )
+            case Burn =>
+                // Only burning. The beacon is only ever in the oracle UTxO (the mint puts it there
+                // and Update keeps it), so burning it spends that UTxO with the Burn redeemer, and
+                // the spend branch checks the signature and the exact quantity.
+                require(tx.onlyBurnsUnder(policyId), "Burn redeemer must only burn")
         }
     }
 
@@ -81,12 +90,9 @@ object OracleValidator extends DataParameterizedValidator {
     ): Unit = {
         val config = param.to[OracleConfig]
         val r = redeemer.to[SpendOracleRedeemer]
-        val state = datum.getOrFail("Must have inline datum").to[OracleState]
         val ownInput = tx.findInputOrFail(ownRef)
-
-        // Verify exchange rate is non-zero
-        state.exchangeRate.checkDenominator()
-        require(!state.exchangeRate.isZero, "Zero rate is not allowed")
+        val ownScriptHash =
+            ownInput.resolved.address.credential.scriptHashOrFail("Own input must be a script")
 
         // Verify authorized signer
         require(
@@ -103,10 +109,20 @@ object OracleValidator extends DataParameterizedValidator {
                   "Continuation output must be at the same script address"
                 )
 
+                // Step of the beacon invariant: the continuation keeps the beacon
+                require(
+                  continuationOutput.value.hasNft(ownScriptHash, config.beaconName),
+                  BeaconMustStay
+                )
+
                 // Extract new state and verify timestamp is within validity window
                 val newState = continuationOutput.datum.inlineOrFail[OracleState](
                   "Continuation must have inline datum"
                 )
+
+                // Checking the new state, not the input, keeps a bad rate from locking the oracle
+                // UTxO: Burn has no rate check.
+                requireValidRate(newState.exchangeRate)
 
                 // Verify timestamp is within tx validity window
                 val validRange = tx.validRange
@@ -120,9 +136,6 @@ object OracleValidator extends DataParameterizedValidator {
 
             case SpendOracleRedeemer.Burn =>
                 // Verify the beacon token is being burned in this transaction
-                val ownScriptHash =
-                    ownInput.resolved.address.credential
-                        .scriptHashOrFail("Own input must be a script")
                 require(
                   tx.mint.hasOnly(ownScriptHash, config.beaconName, -1),
                   "Must burn the beacon token"
@@ -130,6 +143,17 @@ object OracleValidator extends DataParameterizedValidator {
         }
     }
 
-    private inline val ZeroExchangeRateError = "Nominator and denominator must be non-zero"
+    /** A rate an oracle may publish: a non-zero denominator and a non-zero numerator. Public: the
+      * plugin cannot link a private def that the inline handlers call.
+      */
+    def requireValidRate(rate: Rational): Unit = {
+        rate.checkDenominator()
+        require(!rate.isZero, ZeroRate)
+    }
+
     private inline val MustBeSigned = "Must be signed by the authorized signer"
+    inline val BeaconToOracle = "Beacon must go to the oracle script"
+    inline val OracleOutputDatum = "Oracle output must have an inline datum"
+    inline val ZeroRate = "Zero rate is not allowed"
+    inline val BeaconMustStay = "Beacon must stay in the oracle"
 }
