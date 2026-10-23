@@ -9,7 +9,9 @@ import scalus.cardano.ledger.rules.*
 import scalus.utils.Hex
 
 import java.io.{FileInputStream, FileOutputStream}
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.{FileSystemException, Files, Path, Paths, StandardCopyOption}
+import java.security.MessageDigest
+import java.util.Comparator
 import scala.jdk.CollectionConverters.*
 import scala.util.{Try, Using}
 
@@ -108,41 +110,75 @@ object CardanoLedgerVectors {
               vector.newLedgerState.map(hex => LedgerState.fromCbor(Hex.hexToBytes(hex)))
             )
 
-    // Extract vectors.tar.gz to a temporary directory
+    // Extract vectors.tar.gz to a temporary directory, shared by all test runs
     lazy val conformanceVectorsPath: Path = {
         val vectorsTarGz = getClass.getClassLoader.getResource("vectors.tar.gz")
         if vectorsTarGz == null then {
             null
         } else {
-            val tempDir = Files.createTempDirectory("cardano-ledger-vectors")
+            extractOnce(Paths.get(vectorsTarGz.toURI)).resolve("eras/conway/impl/dump")
+        }
+    }
 
-            Using.resource(new FileInputStream(Paths.get(vectorsTarGz.toURI).toFile)) { fis =>
-                Using.resource(new GzipCompressorInputStream(fis)) { gzis =>
-                    Using.resource(new TarArchiveInputStream(gzis)) { tis =>
-                        var entry = tis.getNextEntry
-                        while entry != null do {
-                            val outputFile = tempDir.resolve(entry.getName).toFile
-                            if entry.isDirectory then {
-                                outputFile.mkdirs()
-                            } else {
-                                outputFile.getParentFile.mkdirs()
-                                Using.resource(new FileOutputStream(outputFile)) { fos =>
-                                    val buffer = new Array[Byte](8192)
-                                    var len = tis.read(buffer)
-                                    while len != -1 do {
-                                        fos.write(buffer, 0, len)
-                                        len = tis.read(buffer)
-                                    }
+    /** Extracts `archive` into `<tmpdir>/cardano-ledger-vectors-<hash of archive>` and reuses that
+      * directory in later runs. A fresh temp directory per run leaked ~10 MB per test JVM.
+      *
+      * The extraction goes to a staging directory first, then an atomic rename publishes it. So a
+      * run never sees a half-extracted directory, and two JVMs that extract at the same time do not
+      * corrupt each other.
+      */
+    private def extractOnce(archive: Path): Path = {
+        val digest = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(archive))
+        val target = Paths.get(
+          System.getProperty("java.io.tmpdir"),
+          s"cardano-ledger-vectors-${Hex.bytesToHex(digest.take(8))}"
+        )
+        if !Files.isDirectory(target) then {
+            val staging = Files.createTempDirectory("cardano-ledger-vectors-staging")
+            try {
+                extractTarGz(archive, staging)
+                Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE)
+            } catch {
+                // Another JVM published the same archive first
+                case _: FileSystemException if Files.isDirectory(target) => ()
+            } finally deleteRecursively(staging)
+        }
+        target
+    }
+
+    private def extractTarGz(archive: Path, dir: Path): Unit = {
+        Using.resource(new FileInputStream(archive.toFile)) { fis =>
+            Using.resource(new GzipCompressorInputStream(fis)) { gzis =>
+                Using.resource(new TarArchiveInputStream(gzis)) { tis =>
+                    var entry = tis.getNextEntry
+                    while entry != null do {
+                        val outputFile = dir.resolve(entry.getName).toFile
+                        if entry.isDirectory then {
+                            outputFile.mkdirs()
+                        } else {
+                            outputFile.getParentFile.mkdirs()
+                            Using.resource(new FileOutputStream(outputFile)) { fos =>
+                                val buffer = new Array[Byte](8192)
+                                var len = tis.read(buffer)
+                                while len != -1 do {
+                                    fos.write(buffer, 0, len)
+                                    len = tis.read(buffer)
                                 }
                             }
-                            entry = tis.getNextEntry
                         }
+                        entry = tis.getNextEntry
                     }
                 }
             }
-
-            tempDir.resolve("eras/conway/impl/dump")
         }
+    }
+
+    /** Deletes `dir` and its contents. Does nothing if `dir` does not exist. */
+    private def deleteRecursively(dir: Path): Unit = {
+        if Files.exists(dir) then
+            Using.resource(Files.walk(dir)) { paths =>
+                paths.sorted(Comparator.reverseOrder()).forEach(p => Files.delete(p))
+            }
     }
 
     // Skip tests if vectors directory doesn't exist
