@@ -115,6 +115,48 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
         ).run()
     }
 
+    test("failure: one payee paid twice stands in for an unpaid payee") {
+        // B gets two outputs, the redeemer claims three payees were paid: C gets nothing
+        TestCase(
+          payees = scala.List(A, B, C),
+          contractInputs = scala.List(30L),
+          feePayerInput = (A, 10L),
+          outputs = scala.List(A -> 18L, B -> 10L, B -> 10L),
+          fee = 2L,
+          splitPerPayee = 10L,
+          overrideNPayed = scala.Some(3L),
+          expectedResult = failure("Output must be to a payee not paid yet")
+        ).run()
+    }
+
+    test("failure: change payee paid twice stands in for an unpaid payee") {
+        // The fee payer pays itself twice and claims two payees were paid: B gets nothing
+        TestCase(
+          payees = scala.List(A, B),
+          contractInputs = scala.List(30L),
+          feePayerInput = (A, 10L),
+          outputs = scala.List(A -> 23L, A -> 15L),
+          fee = 2L,
+          splitPerPayee = 15L,
+          overrideNPayed = scala.Some(2L),
+          expectedResult = failure("Not all payees were paid")
+        ).run()
+    }
+
+    test("failure: contract input carries a native token") {
+        // Outputs reconcile lovelace only, so the fee payer could take the token in its change
+        TestCase(
+          payees = scala.List(A, B),
+          contractInputs = scala.List(30L),
+          feePayerInput = (A, 10L),
+          outputs = scala.List(A -> 23L, B -> 15L),
+          fee = 2L,
+          splitPerPayee = 15L,
+          firstContractInputTokens = Value(genByteStringOfN(28).sample.get, ByteString.empty, 1),
+          expectedResult = failure("Contract input must contain only ADA")
+        ).run()
+    }
+
     test("failure: payee receives wrong split amount") {
         TestCase(
           payees = scala.List(A, B, C),
@@ -190,6 +232,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
         splitPerPayee: Long,
         overrideSumContractInputs: scala.Option[Long] = scala.None,
         overrideNPayed: scala.Option[Long] = scala.None,
+        firstContractInputTokens: Value = Value.zero,
         expectedResult: (String | Unit, POption[ExUnits])
     ) {
         def run(): Unit = {
@@ -216,7 +259,9 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
                       ScriptCredential(scriptHash),
                       scalus.cardano.onchain.plutus.prelude.Option.None
                     ),
-                    value = Value.lovelace(BigInt(value))
+                    value =
+                        if idx == 0 then Value.lovelace(BigInt(value)) + firstContractInputTokens
+                        else Value.lovelace(BigInt(value))
                   )
                 )
             }

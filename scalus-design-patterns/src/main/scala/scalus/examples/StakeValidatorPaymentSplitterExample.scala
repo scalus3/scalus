@@ -50,7 +50,7 @@ import scalus.uplc.PlutusV3
   * @param splitPerPayee
   *   Equal split amount each payee receives
   * @param nPayed
-  *   Number of payees being paid
+  *   Number of payees being paid: every payee, each counted once
   */
 case class SplitVerificationRedeemer(
     payeeWithChange: PubKeyHash,
@@ -123,6 +123,12 @@ object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator
                         (true, sum)
                     else fail("Payee input must be from payeeWithChange")
                 else if inputCredential === ownScriptCredential then
+                    // Only ADA is split; reject contract inputs carrying native tokens, otherwise
+                    // the fee payer could pocket them for free (outputs reconcile lovelace only).
+                    require(
+                      input.resolved.value.withoutLovelace.isZero,
+                      "Contract input must contain only ADA"
+                    )
                     (foundPayer, sum + input.resolved.value.getLovelace)
                 else fail("Input not from the contract or fee payer")
             }
@@ -133,28 +139,34 @@ object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator
           "sumContractInputs mismatch"
         )
 
-        // Verify outputs match the claimed split
-        val (actualNPayed, sumPayeeOutputs, payeeWithChangeSum) =
-            tx.outputs.foldLeft((BigInt(0), BigInt(0), BigInt(0))) {
-                case ((n, sum, changeSum), output) =>
-                    val outputCredential = output.address.credential
-                    val value = output.value.getLovelace
+        // Verify outputs match the claimed split. Count each payee once: `unpaid` holds the payees
+        // not paid yet, so two outputs to one payee cannot stand for two payees. The change payee
+        // is a payee (its input says so) and may get several outputs, so it starts out removed and
+        // its outputs only add up.
+        val othersToPay = payees.deleteFirst(payeeWithChangeCredential)
+        val (unpaid, payeeWithChangeSum) =
+            tx.outputs.foldLeft((othersToPay, BigInt(0))) { case ((unpaid, changeSum), output) =>
+                val outputCredential = output.address.credential
+                val value = output.value.getLovelace
 
-                    val pkh = outputCredential.pubKeyHashOrFail("Output to script is not allowed")
-                    require(payees.contains(outputCredential), "Output must be to a payee")
-                    if pkh === verification.payeeWithChange then
-                        (n + 1, sum + value, changeSum + value)
-                    else
-                        // Non-change payee must receive exactly splitPerPayee
-                        require(
-                          value === verification.splitPerPayee,
-                          "Payee must receive exact split"
-                        )
-                        (n + 1, sum + value, changeSum)
+                val pkh = outputCredential.pubKeyHashOrFail("Output to script is not allowed")
+                if pkh === verification.payeeWithChange then (unpaid, changeSum + value)
+                else
+                    val stillUnpaid = removePayeeOrFail(unpaid, outputCredential)
+                    // Non-change payee must receive exactly splitPerPayee
+                    require(
+                      value === verification.splitPerPayee,
+                      "Payee must receive exact split"
+                    )
+                    (stillUnpaid, changeSum)
             }
 
-        require(actualNPayed === verification.nPayed, "nPayed mismatch")
-        require(payees.length === actualNPayed, "Not all payees were paid")
+        // The change payee is paid when its outputs reach the split, the others by their output
+        require(
+          unpaid.isEmpty && payeeWithChangeSum >= verification.splitPerPayee,
+          "Not all payees were paid"
+        )
+        require(payees.length === verification.nPayed, "nPayed mismatch")
 
         // Verify the split math:
         // sumContractInputs should be distributed as:
@@ -164,13 +176,19 @@ object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator
         val expectedMinOutput = verification.nPayed * verification.splitPerPayee
         val remainder = verification.sumContractInputs - expectedMinOutput
         require(remainder >= 0 && remainder < verification.nPayed, "Split calculation invalid")
-
-        // Change payee should have received at least splitPerPayee
-        require(
-          payeeWithChangeSum >= verification.splitPerPayee,
-          "Change payee received less than split"
-        )
     }
+
+    /** `payees` without the first occurrence of `payee`, in one scan. Fails if `payee` is not
+      * there, that is, if it is not a payee or was paid already.
+      *
+      * Not private: `reward` is inline, and the plugin does not link the accessor of a private def.
+      */
+    def removePayeeOrFail(payees: List[Credential], payee: Credential): List[Credential] =
+        payees match
+            case List.Nil => fail("Output must be to a payee not paid yet")
+            case List.Cons(head, tail) =>
+                if head === payee then tail
+                else List.Cons(head, removePayeeOrFail(tail, payee))
 }
 
 private object StakeValidatorPaymentSplitterCompilation:
