@@ -92,7 +92,10 @@ State
 
 * **Commitment-reveal flow** – the preimage must hash to the committed secret (`sha2_256(preimage) == secret`).
 * **State continuity** – on a reveal from `Empty`, exactly one continuation output must exist at the contract
-  address with an inline datum; secrets and deadline must be unchanged.
+  address with an inline datum, the same tokens and at least the lovelace of the lottery input (a reveal may add
+  ADA for the larger datum); secrets and deadline must be unchanged.
+* **One lottery per transaction** – a reveal from `Empty`, `Lose` and `Timeout` fail if the transaction spends
+  another lottery input, so one output cannot settle two games.
 * **Signature checks** – the revealing player's public-key hash must be among the transaction signatories.
 * **Winner selection** – on the second reveal, `(storedLength + preimage.length) mod 2 == 0` means the revealer
   wins; if odd, the validator fails with `"Unlucky"` and the player must use `Lose` instead.

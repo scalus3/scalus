@@ -3,7 +3,7 @@ package scalus.examples.lottery
 import scalus.uplc.builtin.Builtins.sha2_256
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime, PubKeyHash}
-import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef, Validator}
+import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef, Validator}
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.compiler.Compile
 
@@ -66,6 +66,9 @@ enum Action derives ToData, FromData:
 @Compile
 object LotteryValidator extends Validator {
 
+    inline val OneLotteryInput = "Must spend exactly one lottery input"
+    inline val PotMustStay = "Continuing output must keep the whole pot"
+
     inline def spend(
         datum: Option[Data],
         redeemer: Data,
@@ -94,6 +97,17 @@ object LotteryValidator extends Validator {
 
                         val newState = continuationOutput.datum.inlineOrFail[State](
                           "continuation out must have an inline datum"
+                        )
+
+                        // The reveal does not pay anyone: the whole pot stays in the lottery, so
+                        // Lose and Timeout later pay out the full stakes. It may add ADA: the
+                        // revealed datum is larger and can need more min-ADA than the pot holds.
+                        requireSingleLotteryInput(tx, ownInput)
+                        require(
+                          continuationOutput.value.hasSameTokensAndAtLeastAda(
+                            ownInput.resolved.value
+                          ),
+                          PotMustStay
                         )
 
                         // Verify state transition is valid
@@ -130,6 +144,17 @@ object LotteryValidator extends Validator {
                         )
                         val newState = continuationOutput.datum.inlineOrFail[State](
                           "continuation out must have an inline datum"
+                        )
+
+                        // The reveal does not pay anyone: the whole pot stays in the lottery, so
+                        // Lose and Timeout later pay out the full stakes. It may add ADA: the
+                        // revealed datum is larger and can need more min-ADA than the pot holds.
+                        requireSingleLotteryInput(tx, ownInput)
+                        require(
+                          continuationOutput.value.hasSameTokensAndAtLeastAda(
+                            ownInput.resolved.value
+                          ),
+                          PotMustStay
                         )
 
                         // Verify state transition is valid
@@ -189,6 +214,7 @@ object LotteryValidator extends Validator {
                             sha2_256(playerTwoPreimage) === state.playerTwoSecret
                         require(isReallyPlayerTwo, "Fraudulent attempt")
 
+                        requireSingleLotteryInput(tx, ownInput)
                         // Verify output to player one contains all the money
                         val supposedWinnerOutput = tx.outputs.at(winnerOutputIdx)
                         val winnerPkh = supposedWinnerOutput.address.credential
@@ -209,6 +235,7 @@ object LotteryValidator extends Validator {
                           tx.validRange.isEntirelyAfter(state.revealDeadline),
                           "Deadline not reached"
                         )
+                        requireSingleLotteryInput(tx, ownInput)
                         // playerOnePreimage is already public (revealed when reaching this state),
                         // so anyone can submit this Timeout. Pin the pot to the revealer (player
                         // one) so a third party cannot redirect it to themselves.
@@ -243,6 +270,7 @@ object LotteryValidator extends Validator {
                           sha2_256(playerOnePreimage) === state.playerOneSecret,
                           "Fraudulent attempt"
                         )
+                        requireSingleLotteryInput(tx, ownInput)
                         val supposedWinnerOutput = tx.outputs.at(winnerOutputIdx)
                         val winnerPkh = supposedWinnerOutput.address.credential
                             .pubKeyHashOrFail("Winner must be pubkey")
@@ -263,6 +291,7 @@ object LotteryValidator extends Validator {
                           tx.validRange.isEntirelyAfter(state.revealDeadline),
                           "Deadline not reached"
                         )
+                        requireSingleLotteryInput(tx, ownInput)
                         // playerTwoPreimage is already public (revealed when reaching this state),
                         // so anyone can submit this Timeout. Pin the pot to the revealer (player
                         // two) so a third party cannot redirect it to themselves.
@@ -273,6 +302,19 @@ object LotteryValidator extends Validator {
                 }
         }
     }
+
+    /** Fails unless `ownInput` is the only input at the lottery script.
+      *
+      * A first reveal finds its continuing output by address only, and Lose and Timeout check only
+      * that one output covers this input's lovelace. With two lottery inputs, one output would
+      * satisfy both script runs and the submitter would keep the second pot (double satisfaction).
+      */
+    private inline def requireSingleLotteryInput(tx: TxInfo, ownInput: TxInInfo): Unit =
+        val ownCredential = ownInput.resolved.address.credential
+        tx.inputs.findUniqueOrFail(
+          _.resolved.address.credential === ownCredential,
+          OneLotteryInput
+        )
 
     /** True if some output pays at least `amount` lovelace to the public-key `pkh`. */
     private inline def paysAtLeast(tx: TxInfo, pkh: PubKeyHash, amount: BigInt): Boolean =
