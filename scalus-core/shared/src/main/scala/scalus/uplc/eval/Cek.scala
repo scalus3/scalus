@@ -7,7 +7,7 @@ import scalus.cardano.ledger.*
 import scalus.uplc.Term.*
 import scalus.utils.ScalusSourcePos
 
-import scala.annotation.{nowarn, switch, tailrec}
+import scala.annotation.nowarn
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.{immutable, mutable}
@@ -730,7 +730,16 @@ private enum Context {
 //    case Compute(ctx: Context, env: CekValEnv, term: Term)
 //    case Done(term: Term)
 //}
+/** What the machine does next: compute a term, return a value to the continuation, or stop. One of
+  * the constants in the `CekState` object.
+  */
 private type CekState = Int
+
+private object CekState {
+    final val Computing = 0
+    final val Returning = 1
+    final val Halted = 2
+}
 
 trait Logger {
     def log(msg: String): Unit
@@ -1216,43 +1225,202 @@ class CekMachine(
       * @throws StackTraceMachineError
       */
     def evaluateTerm(term: Term): Term = {
-        @tailrec
-        def loop(state: CekState): Term = {
-            (state: @switch) match
-                case 0 => loop(computeCek(ctx, env, this.term))
-                case 1 => loop(returnCek(ctx, env, value))
-                case 2 => this.term
-        }
-
         spendBudget(ExBudgetCategory.Startup, params.machineCosts.startupCost, CekEnv.empty)
-        loop(Compute(NoFrame, CekEnv.empty, term))
+        run(term)
     }
 
-    private inline def Compute(ctx: Context, env: CekValEnv, term: Term): Int = {
-        this.ctx = ctx
-        this.env = env
-        this.term = term
-        0
-    }
-    private inline def Return(ctx: Context, env: CekValEnv, value: CekValue): Int = {
-        this.ctx = ctx
-        this.env = env
-        this.value = value
-        1
-    }
-    private inline def Done(term: Term): Int = {
-        this.term = term
-        2
+    /** The machine loop.
+      *
+      * State in locals: The state is `ctx` (the continuation), `env`, the term `t` to compute in
+      * `CekState.Computing` and the value `v` to return in `CekState.Returning`. It lives in
+      * locals, not in the fields of the machine: the field loop wrote three references per step,
+      * and each store pays the GC write barrier; it also read them back after every call, because a
+      * call may change a field. Moving the state to locals made eval about 12% faster. The
+      * variable, lambda, delay, constant, application, `force` and `case` steps run inline here.
+      * The rest (builtin applications, `constr`, errors, `case` on a constant) call the field-based
+      * `computeCek`/`returnCek` and their helpers, which leave the next state in the fields
+      * (`Compute`/`Return`/`Done`); `delegate` copies it into the locals.
+      *
+      * Step fusion: Like plutigo, the loop fuses a step with its subterm when the subterm is
+      * immediate (`isImmediate`: a variable, lambda, delay, constant or builtin, which takes one
+      * step and pushes no frame). `[f a]`, `force x` and `case x ...` then compute the subterm in
+      * place instead of pushing a frame and going round the loop, and `[(lam x b) a]` and
+      * `force (delay b)` also skip the closure. A fused step charges the same steps, in the same
+      * order and with the same environment, as the unfused machine, so the budget, the step that
+      * runs out of budget and every error are the same.
+      *
+      * Errors: The helpers report an error at `lastSourcePos`, the last computed term, which they
+      * read from `this.term`. A fused step sets `t` to the subterm it computed in place (see
+      * "errors report the last computed term" below), and `delegate` writes `t` to `this.term`
+      * before the call, so the error names the same term as in the unfused machine.
+      *
+      * Profiling and tracing: With either on, every compute step goes through `computeCek`, which
+      * records its source position, and nothing is fused on the compute side or in
+      * `FrameAwaitFunTerm`, because a fused subterm would not be recorded. With profiling on, every
+      * application also goes through `applyEvaluate`, which records the call edge.
+      */
+    private def run(term: Term): Term = {
+        val costs = params.machineCosts
+        var ctx: Context = NoFrame
+        var env: CekValEnv = CekEnv.empty
+        var t: Term = term
+        var v: CekValue | Null = null
+        var state: CekState = CekState.Computing
+
+        // Runs a field-based helper and copies the state it leaves in the fields into the locals.
+        // `this.term = t` first, because the helper's errors read it (`lastSourcePos`).
+        inline def delegate(inline call: CekState): Unit =
+            this.term = t
+            state = call
+            ctx = this.ctx
+            env = this.env
+            t = this.term.nn
+            v = this.value
+
+        // Applies a function value to an argument value; `ctx` is the continuation. A lambda is
+        // entered here. Everything else (builtins, errors) goes through `applyEvaluate`, and so does
+        // a lambda when profiling (`applyEvaluate` records the call edge) or when the diagnostic
+        // `-Dscalus.assert.apply.data.to.uc` is on (`applyEvaluate` runs it).
+        inline def applyValues(
+            fun: CekValue,
+            arg: CekValue,
+            inline callPos: ScalusSourcePos
+        ): Unit =
+            fun match
+                case VLamAbs(name, body, lenv) if !profiling && !assertApplyDataToUc =>
+                    env = extendEnv(lenv, name, arg)
+                    t = body
+                    state = CekState.Computing
+                case _ => delegate(applyEvaluate(ctx, env, fun, arg, callPos))
+
+        // Forces a value; `ctx` is the continuation. A delay is entered here; a builtin waiting for a
+        // type argument, and the error for anything else, go through `forceEvaluate`.
+        inline def forceValue(value: CekValue): Unit =
+            value match
+                case VDelay(body, denv) =>
+                    env = denv
+                    t = body
+                    state = CekState.Computing
+                case _ => delegate(forceEvaluate(ctx, env, value))
+
+        // Selects the branch for a `case` scrutinee; `ctx` is the continuation. Only a `Constr` whose
+        // tag has a branch is handled here, with the tag check of `returnCek`'s `FrameCases`. Every
+        // other scrutinee (a constant, with case on builtins), every error and the diagnostic
+        // `-Dscalus.assert.apply.data.to.uc` go through `returnCek`.
+        inline def caseValue(scrut: CekValue, cases: Seq[Term], cenv: CekValEnv): Unit =
+            scrut match
+                case VConstr(tag, args)
+                    if !assertApplyDataToUc && tag.compareUnsigned(maxIndexableTag) <= 0 &&
+                        tag.value.toInt < cases.size =>
+                    ctx = transferArgStack(args, ctx)
+                    env = cenv
+                    t = cases(tag.value.toInt)
+                    state = CekState.Computing
+                case _ => delegate(returnCek(FrameCases(cenv, cases, ctx), cenv, scrut))
+
+        while state != CekState.Halted do
+            if state == CekState.Computing then
+                if trackPositions then delegate(computeCek(ctx, env, t))
+                else
+                    t match
+                        case Var(name, _) =>
+                            spendBudget(CekBudgetCategories.Var, costs.varCost, env)
+                            v = lookupVarName(env, name, t)
+                            state = CekState.Returning
+                        case Apply(fun, arg, _) =>
+                            spendBudget(CekBudgetCategories.Apply, costs.applyCost, env)
+                            fun match
+                                case LamAbs(name, body, _) =>
+                                    // `[(lam x body) arg]`: when `arg` is immediate, bind it
+                                    // directly, with no closure for the lambda. The diagnostic in
+                                    // `applyEvaluate` needs the closure, so it takes the long way.
+                                    spendBudget(CekBudgetCategories.LamAbs, costs.lamCost, env)
+                                    if isImmediate(arg) && !assertApplyDataToUc then
+                                        env = extendEnv(env, name, immediateValue(arg, env))
+                                        t = body
+                                    else
+                                        ctx = FrameAwaitArg(VLamAbs(name, body, env), ctx, NoPos)
+                                        t = arg
+                                case _ if isImmediate(fun) =>
+                                    val f = immediateValue(fun, env)
+                                    if isImmediate(arg) then
+                                        val a = immediateValue(arg, env)
+                                        t = arg // errors report the last computed term
+                                        applyValues(f, a, NoPos)
+                                    else
+                                        ctx = FrameAwaitArg(f, ctx, NoPos)
+                                        t = arg
+                                case _ =>
+                                    ctx = FrameAwaitFunTerm(env, arg, ctx, NoPos)
+                                    t = fun
+                        case LamAbs(name, body, _) =>
+                            spendBudget(CekBudgetCategories.LamAbs, costs.lamCost, env)
+                            v = VLamAbs(name, body, env)
+                            state = CekState.Returning
+                        case Force(inner, _) =>
+                            spendBudget(CekBudgetCategories.Force, costs.forceCost, env)
+                            inner match
+                                case Delay(body, _) =>
+                                    // `force (delay body)`: no closure is needed.
+                                    spendBudget(CekBudgetCategories.Delay, costs.delayCost, env)
+                                    t = body
+                                case _ if isImmediate(inner) =>
+                                    val x = immediateValue(inner, env)
+                                    t = inner // errors report the last computed term
+                                    forceValue(x)
+                                case _ =>
+                                    ctx = FrameForce(ctx)
+                                    t = inner
+                        case Delay(body, _) =>
+                            spendBudget(CekBudgetCategories.Delay, costs.delayCost, env)
+                            v = VDelay(body, env)
+                            state = CekState.Returning
+                        case Const(const, _) =>
+                            spendBudget(CekBudgetCategories.Const, costs.constCost, env)
+                            v = VCon(const)
+                            state = CekState.Returning
+                        case Case(scrut, cases, _) if isImmediate(scrut) =>
+                            spendBudget(CekBudgetCategories.Case, costs.caseCost, env)
+                            val s = immediateValue(scrut, env)
+                            // `returnCek` reports errors at the last computed term, the scrutinee
+                            t = scrut
+                            caseValue(s, cases, env)
+                        case _ => delegate(computeCek(ctx, env, t))
+            else
+                ctx match
+                    // `v` is the function; the argument is computed next, in the frame's env.
+                    case FrameAwaitFunTerm(fenv, arg, k, callPos) =>
+                        if !trackPositions && isImmediate(arg) then
+                            val a = immediateValue(arg, fenv)
+                            ctx = k
+                            env = fenv
+                            t = arg // errors report the last computed term
+                            applyValues(v.nn, a, callPos)
+                        else
+                            ctx = FrameAwaitArg(v.nn, k, callPos)
+                            env = fenv
+                            t = arg
+                            state = CekState.Computing
+                    case FrameAwaitArg(fun, k, callPos) =>
+                        ctx = k
+                        applyValues(fun, v.nn, callPos)
+                    case FrameAwaitFunValue(arg, k) =>
+                        ctx = k
+                        applyValues(v.nn, arg, NoPos)
+                    case FrameForce(k) =>
+                        ctx = k
+                        forceValue(v.nn)
+                    case FrameCases(cenv, cases, k) =>
+                        ctx = k
+                        caseValue(v.nn, cases, cenv)
+                    // `NoFrame` (the result) and `FrameConstr`
+                    case _ => delegate(returnCek(ctx, env, v.nn))
+        // `Done` left the result in `this.term`
+        this.term.nn
     }
 
     /** The call position of a frame when positions are not tracked: only the profiler reads it. */
     private inline def NoPos: ScalusSourcePos = ScalusSourcePos.empty
-
-    // Step fusion, as in plutigo: `[f a]`, `force x` and `case x ...` compute an "immediate"
-    // subterm (a variable, lambda, delay, constant or builtin, which takes one step) in place
-    // instead of pushing a frame and going round the loop. A fused step charges the same steps in
-    // the same order as the unfused machine, so budgets and errors are the same. With profiling or
-    // tracing on, nothing is fused, so every compute step records its source position.
 
     /** Whether computing `t` takes one step and pushes no frame. */
     private def isImmediate(t: Term): Boolean = t match
@@ -1288,6 +1456,23 @@ class CekMachine(
         try VBuiltin(bn, term, getBuiltinRuntime(bn), Nil, 0)
         catch case _: Exception => throw new UnknownBuiltin(bn, env, term.sourcePos)
 
+    private inline def Compute(ctx: Context, env: CekValEnv, term: Term): CekState = {
+        this.ctx = ctx
+        this.env = env
+        this.term = term
+        CekState.Computing
+    }
+    private inline def Return(ctx: Context, env: CekValEnv, value: CekValue): CekState = {
+        this.ctx = ctx
+        this.env = env
+        this.value = value
+        CekState.Returning
+    }
+    private inline def Done(term: Term): CekState = {
+        this.term = term
+        CekState.Halted
+    }
+
     private final def computeCek(ctx: Context, env: CekValEnv, term: Term): CekState = {
         recordSourcePos(term.sourcePos)
         val costs = params.machineCosts
@@ -1301,45 +1486,11 @@ class CekMachine(
             case Apply(fun, arg, _) =>
                 spendBudget(CekBudgetCategories.Apply, costs.applyCost, env)
                 // only the profiler reads `callPos`; see `trackPositions`
-                if trackPositions then
-                    Compute(FrameAwaitFunTerm(env, arg, ctx, term.sourcePos), env, fun)
-                else
-                    fun match
-                        case LamAbs(name, body, _) =>
-                            // `[(lam x body) arg]`: when `arg` is immediate, bind it directly,
-                            // with no closure for the lambda. The diagnostic in `applyEvaluate`
-                            // needs the closure, so it takes the long way.
-                            spendBudget(CekBudgetCategories.LamAbs, costs.lamCost, env)
-                            if isImmediate(arg) && !assertApplyDataToUc then
-                                Compute(ctx, extendEnv(env, name, immediateValue(arg, env)), body)
-                            else
-                                Compute(
-                                  FrameAwaitArg(VLamAbs(name, body, env), ctx, NoPos),
-                                  env,
-                                  arg
-                                )
-                        case _ if isImmediate(fun) =>
-                            val f = immediateValue(fun, env)
-                            if isImmediate(arg) then
-                                val a = immediateValue(arg, env)
-                                this.term = arg // errors report the last computed term
-                                applyEvaluate(ctx, env, f, a, NoPos)
-                            else Compute(FrameAwaitArg(f, ctx, NoPos), env, arg)
-                        case _ => Compute(FrameAwaitFunTerm(env, arg, ctx, NoPos), env, fun)
-            case Force(inner, _) =>
+                val callPos = if trackPositions then term.sourcePos else ScalusSourcePos.empty
+                Compute(FrameAwaitFunTerm(env, arg, ctx, callPos), env, fun)
+            case Force(term, _) =>
                 spendBudget(CekBudgetCategories.Force, costs.forceCost, env)
-                if trackPositions then Compute(FrameForce(ctx), env, inner)
-                else
-                    inner match
-                        case Delay(body, _) =>
-                            // `force (delay body)`: no closure is needed.
-                            spendBudget(CekBudgetCategories.Delay, costs.delayCost, env)
-                            Compute(ctx, env, body)
-                        case _ if isImmediate(inner) =>
-                            val x = immediateValue(inner, env)
-                            this.term = inner // errors report the last computed term
-                            forceEvaluate(ctx, env, x)
-                        case _ => Compute(FrameForce(ctx), env, inner)
+                Compute(FrameForce(ctx), env, term)
             case Delay(term, _) =>
                 spendBudget(CekBudgetCategories.Delay, costs.delayCost, env)
                 Return(ctx, env, VDelay(term, env))
@@ -1358,11 +1509,7 @@ class CekMachine(
                     case Nil => Return(ctx, env, VConstr(tag, Nil))
             case Case(scrut, cases, _) =>
                 spendBudget(CekBudgetCategories.Case, costs.caseCost, env)
-                if !trackPositions && isImmediate(scrut) then
-                    val v = immediateValue(scrut, env)
-                    this.term = scrut // errors report the last computed term
-                    caseEvaluate(ctx, env, cases, v)
-                else Compute(FrameCases(env, cases, ctx), env, scrut)
+                Compute(FrameCases(env, cases, ctx), env, scrut)
     }
 
     private def returnCek(ctx: Context, env: CekValEnv, value: CekValue): CekState = {
@@ -1370,11 +1517,7 @@ class CekMachine(
             case NoFrame         => Done(dischargeCekValue(value))
             case FrameForce(ctx) => forceEvaluate(ctx, env, value)
             case FrameAwaitFunTerm(env, arg, ctx, callPos) =>
-                if !trackPositions && isImmediate(arg) then
-                    val a = immediateValue(arg, env)
-                    this.term = arg // errors report the last computed term
-                    applyEvaluate(ctx, env, value, a, callPos)
-                else Compute(FrameAwaitArg(value, ctx, callPos), env, arg)
+                Compute(FrameAwaitArg(value, ctx, callPos), env, arg)
             case FrameAwaitArg(fun, ctx, callPos) => applyEvaluate(ctx, env, fun, value, callPos)
             case FrameAwaitFunValue(arg, ctx) =>
                 applyEvaluate(ctx, env, value, arg, ScalusSourcePos.empty)
@@ -1384,219 +1527,210 @@ class CekMachine(
                     case arg :: rest =>
                         Compute(FrameConstr(env, tag, rest, newEvaled, ctx), env, arg)
                     case Nil => Return(ctx, env, VConstr(tag, newEvaled))
-            case FrameCases(env, cases, ctx) => caseEvaluate(ctx, env, cases, value)
-    }
-
-    /** Selects the branch of `cases` for the scrutinee `value`, the `FrameCases` return. */
-    private def caseEvaluate(
-        ctx: Context,
-        env: CekValEnv,
-        cases: Seq[Term],
-        value: CekValue
-    ): CekState = {
-        value match
-            case VConstr(tag, args) =>
-                // A tag is a Word64 held in a signed Long, so compare unsigned: 2^63
-                // and above are negative Longs, and a signed check would let `toInt`
-                // truncate one to a live branch index. Rejecting everything above
-                // Int.MaxValue is safe because branches are static syntax, never
-                // built at run time (PlutusCore Note [Constr tag type]), and no
-                // script can carry 2^31 of them. Plutus does the same at its own Int
-                // width (Cek/Internal.hs: `i > maxBound::Int` before indexing).
-                if tag.compareUnsigned(maxIndexableTag) > 0 then
-                    throw new MissingCaseBranch(tag, env, lastSourcePos)
-                val index = tag.value.toInt
-                if index < cases.size then
-                    // Session-18 diagnostic (gated by -Dscalus.assert.apply.data.to.uc=1):
-                    // catch wrong-arity VConstr → branch mismatch at the actual eval
-                    // moment, BEFORE residual lambdas leak out. lastSourcePos points to
-                    // the surrounding Term we last visited.
-                    if assertApplyDataToUc then
-                        val branchArity = lamChainDepth(cases(index), 0)
-                        if branchArity > args.size then
-                            System.err.println(
-                              s"[CASE-VCONSTR-ARITY-MISMATCH] VConstr(tag=$tag, args.size=${args.size}) " +
-                                  s"matched against branch[$index] with arity=$branchArity. " +
-                                  s"residual=${branchArity - args.size}. lastSourcePos=$lastSourcePos"
-                            )
-                            System.err.println(
-                              s"  branch=${cases(index).pretty.render(200).take(600)}"
-                            )
-                    Compute(transferArgStack(args, ctx), env, cases(index))
-                else throw new MissingCaseBranch(tag, env, lastSourcePos)
-            case VCon(const) if caseOnBuiltinsEnabled =>
-                const match
-                    case Constant.Integer(i) =>
-                        if i >= 0 && i < cases.size then Compute(ctx, env, cases(i.toInt))
-                        else
-                            if diagCaseOnBuiltin then
-                                dumpCaseOnBuiltinDiag(
-                                  "CaseIndexOutOfBounds",
-                                  s"VCon(Integer($i)) — caller likely fed a primitive integer where a Constr was expected",
-                                  cases,
-                                  env
-                                )
-                            throw new CaseIndexOutOfBounds(
-                              i,
-                              cases.size,
-                              env,
-                              lastSourcePos,
-                              getSourceTrace
-                            )
-                    case Constant.Bool(b) =>
-                        // Bool has exactly 2 constructors (False=0, True=1)
-                        // Valid: 1 or 2 branches. Invalid: 0 or 3+ branches
-                        if cases.size == 0 || cases.size > 2 then
-                            if diagCaseOnBuiltin then
-                                dumpCaseOnBuiltinDiag(
-                                  "CaseBoolBranchMissing",
-                                  s"VCon(Bool($b)) — branch count $cases.size invalid",
-                                  cases,
-                                  env
-                                )
-                            throw new CaseBoolBranchMissing(
-                              b,
-                              cases.size,
-                              env,
-                              lastSourcePos
-                            )
-                        val index = if b then 1 else 0
-                        if index < cases.size then Compute(ctx, env, cases(index))
-                        else
-                            if diagCaseOnBuiltin then
-                                dumpCaseOnBuiltinDiag(
-                                  "CaseBoolBranchMissing",
-                                  s"VCon(Bool($b)) — index=$index out of $cases.size",
-                                  cases,
-                                  env
-                                )
-                            throw new CaseBoolBranchMissing(
-                              b,
-                              cases.size,
-                              env,
-                              lastSourcePos
-                            )
-                    case Constant.Unit =>
-                        // Unit has exactly 1 constructor (Unit=0)
-                        // Valid: exactly 1 branch
-                        if cases.size == 1 then Compute(ctx, env, cases(0))
-                        else
-                            if diagCaseOnBuiltin then
-                                dumpCaseOnBuiltinDiag(
-                                  "CaseUnitBranchMissing",
-                                  s"VCon(Unit) — branch count $cases.size != 1",
-                                  cases,
-                                  env
-                                )
-                            throw new CaseUnitBranchMissing(cases.size, env, lastSourcePos)
-                    case list @ Constant.List(elemType, elements) =>
-                        // List has 2 constructors: Cons=0 (head, tail), Nil=1
-                        // Valid: 1 or 2 branches. Invalid: 0 or 3+ branches
-                        if cases.size == 0 || cases.size > 2 then
-                            if diagCaseOnBuiltin then
-                                dumpCaseOnBuiltinDiag(
-                                  "CaseListBranchError",
-                                  s"VCon(List(elemType=$elemType, elements.size=${elements.size})) — branch count ${cases.size} invalid",
-                                  cases,
-                                  env
-                                )
-                            throw new CaseListBranchError(cases.size, env, lastSourcePos)
-                        elements match
-                            case head :: tail =>
-                                // Non-empty list -> Cons branch (index 0)
-                                // Apply head and tail as arguments to the cons branch
-                                // Order: head first, then tail (like transferArgStack foldRight)
-                                val headVal = VCon(head)
-                                val tailVal = VCon(Constant.List(elemType, tail))
-                                val newCtx = FrameAwaitFunValue(
-                                  headVal,
-                                  FrameAwaitFunValue(tailVal, ctx)
-                                )
-                                Compute(newCtx, env, cases(0))
-                            case Nil =>
-                                // Empty list -> Nil branch (index 1), no arguments
-                                if cases.size < 2 then
-                                    throw new CaseListBranchError(
-                                      cases.size,
-                                      env,
-                                      lastSourcePos
+            case FrameCases(env, cases, ctx) =>
+                value match
+                    case VConstr(tag, args) =>
+                        // A tag is a Word64 held in a signed Long, so compare unsigned: 2^63
+                        // and above are negative Longs, and a signed check would let `toInt`
+                        // truncate one to a live branch index. Rejecting everything above
+                        // Int.MaxValue is safe because branches are static syntax, never
+                        // built at run time (PlutusCore Note [Constr tag type]), and no
+                        // script can carry 2^31 of them. Plutus does the same at its own Int
+                        // width (Cek/Internal.hs: `i > maxBound::Int` before indexing).
+                        if tag.compareUnsigned(maxIndexableTag) > 0 then
+                            throw new MissingCaseBranch(tag, env, lastSourcePos)
+                        val index = tag.value.toInt
+                        if index < cases.size then
+                            // Session-18 diagnostic (gated by -Dscalus.assert.apply.data.to.uc=1):
+                            // catch wrong-arity VConstr → branch mismatch at the actual eval
+                            // moment, BEFORE residual lambdas leak out. lastSourcePos points to
+                            // the surrounding Term we last visited.
+                            if assertApplyDataToUc then
+                                val branchArity = lamChainDepth(cases(index), 0)
+                                if branchArity > args.size then
+                                    System.err.println(
+                                      s"[CASE-VCONSTR-ARITY-MISMATCH] VConstr(tag=$tag, args.size=${args.size}) " +
+                                          s"matched against branch[$index] with arity=$branchArity. " +
+                                          s"residual=${branchArity - args.size}. lastSourcePos=$lastSourcePos"
                                     )
-                                Compute(ctx, env, cases(1))
-                    case Constant.Data(data) =>
-                        // Casing on Data is available from Dijkstra (PV12) on, and only
-                        // for Data.Constr: the branch is selected by the constructor tag
-                        // and receives the list of fields as its single argument.
-                        if !caseOnDataEnabled then
-                            throw new CaseDataNotSupportedError(env, lastSourcePos)
-                        data match
-                            case Data.Constr(tag, args) =>
-                                if tag >= 0 && tag < cases.size then
-                                    // Diagnostic (gated by -Dscalus.assert.case.data.arity=1):
-                                    // the matched branch should expect at most 1 binding
-                                    // (the fields list). A deeper lambda chain is almost
-                                    // certainly a native-UC ProductCase selector (λf0..fn)
-                                    // misdispatched on a Data-encoded value.
-                                    if assertCaseDataArity then {
-                                        val depth = lamChainDepth(cases(tag.toInt), 0)
-                                        if depth > 1 then
-                                            System.err.println(
-                                              s"[CASE-DATA-ARITY-MISMATCH] Data.Constr(tag=$tag, " +
-                                                  s"args.size=${args.toScalaList.size}) → branch[$tag] " +
-                                                  s"has lambda depth=$depth (>1). Likely a native-UC " +
-                                                  s"selector applied to Data. lastSourcePos=$lastSourcePos"
-                                            )
-                                            System.err.println(
-                                              s"  branch[$tag] = ${cases(tag.toInt).pretty.render(200).take(800)}"
-                                            )
-                                    }
-                                    val argsVal = VCon(
-                                      Constant.List(
-                                        DefaultUni.Data,
-                                        args.toScalaList.map(Constant.Data.apply)
-                                      )
+                                    System.err.println(
+                                      s"  branch=${cases(index).pretty.render(200).take(600)}"
                                     )
-                                    Compute(
-                                      FrameAwaitFunValue(argsVal, ctx),
-                                      env,
-                                      cases(tag.toInt)
-                                    )
+                            Compute(transferArgStack(args, ctx), env, cases(index))
+                        else throw new MissingCaseBranch(tag, env, lastSourcePos)
+                    case VCon(const) if caseOnBuiltinsEnabled =>
+                        const match
+                            case Constant.Integer(i) =>
+                                if i >= 0 && i < cases.size then Compute(ctx, env, cases(i.toInt))
                                 else
                                     if diagCaseOnBuiltin then
                                         dumpCaseOnBuiltinDiag(
                                           "CaseIndexOutOfBounds",
-                                          s"VCon(Data.Constr(tag=$tag)) — no branch for the constructor tag",
+                                          s"VCon(Integer($i)) — caller likely fed a primitive integer where a Constr was expected",
                                           cases,
                                           env
                                         )
                                     throw new CaseIndexOutOfBounds(
-                                      tag,
+                                      i,
                                       cases.size,
                                       env,
                                       lastSourcePos,
                                       getSourceTrace
                                     )
-                            case other =>
-                                throw new CaseDataNonConstrError(other, env, lastSourcePos)
-                    case Constant.Pair(left, right) =>
-                        // Pair has exactly 1 constructor that receives both elements
-                        if cases.size != 1 then
-                            throw new CasePairBranchError(cases.size, env, lastSourcePos)
-                        val leftVal = VCon(left)
-                        val rightVal = VCon(right)
-                        val newCtx = FrameAwaitFunValue(
-                          leftVal,
-                          FrameAwaitFunValue(rightVal, ctx)
-                        )
-                        Compute(newCtx, env, cases(0))
+                            case Constant.Bool(b) =>
+                                // Bool has exactly 2 constructors (False=0, True=1)
+                                // Valid: 1 or 2 branches. Invalid: 0 or 3+ branches
+                                if cases.size == 0 || cases.size > 2 then
+                                    if diagCaseOnBuiltin then
+                                        dumpCaseOnBuiltinDiag(
+                                          "CaseBoolBranchMissing",
+                                          s"VCon(Bool($b)) — branch count $cases.size invalid",
+                                          cases,
+                                          env
+                                        )
+                                    throw new CaseBoolBranchMissing(
+                                      b,
+                                      cases.size,
+                                      env,
+                                      lastSourcePos
+                                    )
+                                val index = if b then 1 else 0
+                                if index < cases.size then Compute(ctx, env, cases(index))
+                                else
+                                    if diagCaseOnBuiltin then
+                                        dumpCaseOnBuiltinDiag(
+                                          "CaseBoolBranchMissing",
+                                          s"VCon(Bool($b)) — index=$index out of $cases.size",
+                                          cases,
+                                          env
+                                        )
+                                    throw new CaseBoolBranchMissing(
+                                      b,
+                                      cases.size,
+                                      env,
+                                      lastSourcePos
+                                    )
+                            case Constant.Unit =>
+                                // Unit has exactly 1 constructor (Unit=0)
+                                // Valid: exactly 1 branch
+                                if cases.size == 1 then Compute(ctx, env, cases(0))
+                                else
+                                    if diagCaseOnBuiltin then
+                                        dumpCaseOnBuiltinDiag(
+                                          "CaseUnitBranchMissing",
+                                          s"VCon(Unit) — branch count $cases.size != 1",
+                                          cases,
+                                          env
+                                        )
+                                    throw new CaseUnitBranchMissing(cases.size, env, lastSourcePos)
+                            case list @ Constant.List(elemType, elements) =>
+                                // List has 2 constructors: Cons=0 (head, tail), Nil=1
+                                // Valid: 1 or 2 branches. Invalid: 0 or 3+ branches
+                                if cases.size == 0 || cases.size > 2 then
+                                    if diagCaseOnBuiltin then
+                                        dumpCaseOnBuiltinDiag(
+                                          "CaseListBranchError",
+                                          s"VCon(List(elemType=$elemType, elements.size=${elements.size})) — branch count ${cases.size} invalid",
+                                          cases,
+                                          env
+                                        )
+                                    throw new CaseListBranchError(cases.size, env, lastSourcePos)
+                                elements match
+                                    case head :: tail =>
+                                        // Non-empty list -> Cons branch (index 0)
+                                        // Apply head and tail as arguments to the cons branch
+                                        // Order: head first, then tail (like transferArgStack foldRight)
+                                        val headVal = VCon(head)
+                                        val tailVal = VCon(Constant.List(elemType, tail))
+                                        val newCtx = FrameAwaitFunValue(
+                                          headVal,
+                                          FrameAwaitFunValue(tailVal, ctx)
+                                        )
+                                        Compute(newCtx, env, cases(0))
+                                    case Nil =>
+                                        // Empty list -> Nil branch (index 1), no arguments
+                                        if cases.size < 2 then
+                                            throw new CaseListBranchError(
+                                              cases.size,
+                                              env,
+                                              lastSourcePos
+                                            )
+                                        Compute(ctx, env, cases(1))
+                            case Constant.Data(data) =>
+                                // Casing on Data is available from Dijkstra (PV12) on, and only
+                                // for Data.Constr: the branch is selected by the constructor tag
+                                // and receives the list of fields as its single argument.
+                                if !caseOnDataEnabled then
+                                    throw new CaseDataNotSupportedError(env, lastSourcePos)
+                                data match
+                                    case Data.Constr(tag, args) =>
+                                        if tag >= 0 && tag < cases.size then
+                                            // Diagnostic (gated by -Dscalus.assert.case.data.arity=1):
+                                            // the matched branch should expect at most 1 binding
+                                            // (the fields list). A deeper lambda chain is almost
+                                            // certainly a native-UC ProductCase selector (λf0..fn)
+                                            // misdispatched on a Data-encoded value.
+                                            if assertCaseDataArity then {
+                                                val depth = lamChainDepth(cases(tag.toInt), 0)
+                                                if depth > 1 then
+                                                    System.err.println(
+                                                      s"[CASE-DATA-ARITY-MISMATCH] Data.Constr(tag=$tag, " +
+                                                          s"args.size=${args.toScalaList.size}) → branch[$tag] " +
+                                                          s"has lambda depth=$depth (>1). Likely a native-UC " +
+                                                          s"selector applied to Data. lastSourcePos=$lastSourcePos"
+                                                    )
+                                                    System.err.println(
+                                                      s"  branch[$tag] = ${cases(tag.toInt).pretty.render(200).take(800)}"
+                                                    )
+                                            }
+                                            val argsVal = VCon(
+                                              Constant.List(
+                                                DefaultUni.Data,
+                                                args.toScalaList.map(Constant.Data.apply)
+                                              )
+                                            )
+                                            Compute(
+                                              FrameAwaitFunValue(argsVal, ctx),
+                                              env,
+                                              cases(tag.toInt)
+                                            )
+                                        else
+                                            if diagCaseOnBuiltin then
+                                                dumpCaseOnBuiltinDiag(
+                                                  "CaseIndexOutOfBounds",
+                                                  s"VCon(Data.Constr(tag=$tag)) — no branch for the constructor tag",
+                                                  cases,
+                                                  env
+                                                )
+                                            throw new CaseIndexOutOfBounds(
+                                              tag,
+                                              cases.size,
+                                              env,
+                                              lastSourcePos,
+                                              getSourceTrace
+                                            )
+                                    case other =>
+                                        throw new CaseDataNonConstrError(other, env, lastSourcePos)
+                            case Constant.Pair(left, right) =>
+                                // Pair has exactly 1 constructor that receives both elements
+                                if cases.size != 1 then
+                                    throw new CasePairBranchError(cases.size, env, lastSourcePos)
+                                val leftVal = VCon(left)
+                                val rightVal = VCon(right)
+                                val newCtx = FrameAwaitFunValue(
+                                  leftVal,
+                                  FrameAwaitFunValue(rightVal, ctx)
+                                )
+                                Compute(newCtx, env, cases(0))
+                            case _ =>
+                                throw new NonConstrScrutinized(
+                                  value,
+                                  env,
+                                  lastSourcePos,
+                                  getSourceTrace
+                                )
                     case _ =>
-                        throw new NonConstrScrutinized(
-                          value,
-                          env,
-                          lastSourcePos,
-                          getSourceTrace
-                        )
-            case _ =>
-                throw new NonConstrScrutinized(value, env, lastSourcePos, getSourceTrace)
+                        throw new NonConstrScrutinized(value, env, lastSourcePos, getSourceTrace)
     }
 
     private def transferArgStack(args: ArgStack, ctx: Context): Context = {
