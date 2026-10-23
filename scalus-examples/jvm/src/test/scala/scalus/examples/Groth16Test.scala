@@ -13,6 +13,7 @@ import scalus.uplc.eval.PlutusVM
 import scalus.uplc.{Constant, Term}
 
 import scala.language.implicitConversions
+import scala.util.Try
 
 class Groth16Test extends AnyFunSuite:
     // Common verification key used in factorial tests (n! problem)
@@ -54,32 +55,35 @@ class Groth16Test extends AnyFunSuite:
         // println(s"Compiled Groth16 validator script (UPLC): \n ${uplc.pretty.render(100)}")
         uplc
 
+    private val factorial3Proof = Proof(
+      piA =
+          hex"8b84d092731c653b1accdda79c51e3f5d289bed7311189d927deadef0470e437e6d1d400634726512a79a015867424e3",
+      piB =
+          hex"92cb1c125816e4b522c7f430a5d74a61116b6189de7b2341f040194c02f10d9ef0cf081f4029444a65ea74e69d98b1cf08d3864087d5d2dee2ed6ab102f9b78e65d341f0824341a9fc25d0ea9dacccc5d355b4eddb0057949370a19c47135b0e",
+      piC =
+          hex"a4ef633c858a3ff194db50eacdf715f7296fb3d1202c54b543284e9656b69aa90f33ac0e2572d3ab847b88268dcd1f7e"
+    )
+
     test("verify factorial proof - 3! = 6") {
-        val proof = Proof(
-          piA =
-              hex"8b84d092731c653b1accdda79c51e3f5d289bed7311189d927deadef0470e437e6d1d400634726512a79a015867424e3",
-          piB =
-              hex"92cb1c125816e4b522c7f430a5d74a61116b6189de7b2341f040194c02f10d9ef0cf081f4029444a65ea74e69d98b1cf08d3864087d5d2dee2ed6ab102f9b78e65d341f0824341a9fc25d0ea9dacccc5d355b4eddb0057949370a19c47135b0e",
-          piC =
-              hex"a4ef633c858a3ff194db50eacdf715f7296fb3d1202c54b543284e9656b69aa90f33ac0e2572d3ab847b88268dcd1f7e"
-        )
         val publicValues = List(BigInt(561), BigInt(3))
 
-        assert(checkGroth16Verify(factorialVK, proof, publicValues))
+        assert(checkGroth16Verify(factorialVK, factorial3Proof, publicValues))
     }
 
     test("detect invalid factorial proof - 3! = 6 (tampered)") {
-        val proof = Proof(
-          piA =
-              hex"a4ef633c858a3ff194db50eacdf715f7296fb3d1202c54b543284e9656b69aa90f33ac0e2572d3ab847b88268dcd1f7e",
-          piB =
-              hex"92cb1c125816e4b522c7f430a5d74a61116b6189de7b2341f040194c02f10d9ef0cf081f4029444a65ea74e69d98b1cf08d3864087d5d2dee2ed6ab102f9b78e65d341f0824341a9fc25d0ea9dacccc5d355b4eddb0057949370a19c47135b0e",
-          piC =
-              hex"8b84d092731c653b1accdda79c51e3f5d289bed7311189d927deadef0470e437e6d1d400634726512a79a015867424e3"
-        )
+        // piA and piC swapped
+        val proof = factorial3Proof.copy(piA = factorial3Proof.piC, piC = factorial3Proof.piA)
         val publicValues = List(BigInt(561), BigInt(3))
 
         assert(!checkGroth16Verify(factorialVK, proof, publicValues))
+    }
+
+    test("Fail: a valid proof with an extra public input the proof does not bind") {
+        assertVerifyFails(factorialVK, factorial3Proof, List(BigInt(561), BigInt(3), BigInt(999)))
+    }
+
+    test("Fail: a valid proof with too few public inputs") {
+        assertVerifyFails(factorialVK, factorial3Proof, List(BigInt(561)))
     }
 
     test("verify factorial proof - 7! = 5040") {
@@ -265,6 +269,24 @@ class Groth16Test extends AnyFunSuite:
 
         assert(!checkGroth16Verify(mastermindVK, proof, publicValues))
     }
+
+    /** Both the off-chain call and the compiled script must fail (not return false). */
+    private def assertVerifyFails(
+        vk: SnarkVerificationKey,
+        proof: Proof,
+        public: List[BigInt]
+    ): Unit =
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        val offchain = Try(grothVerify(vk, proof, public))
+        assert(
+          offchain.failed.toOption.exists(_.getMessage == "Invalid input"),
+          s"Off-chain verify must fail with 'Invalid input', got $offchain"
+        )
+        val result = (validator $ vk.toData $ proof.toData $ public.toData).evaluateDebug
+        assert(
+          result.isFailure && result.logs.contains("Invalid input"),
+          s"On-chain verify must fail with 'Invalid input', got $result"
+        )
 
     private def checkGroth16Verify(
         vk: SnarkVerificationKey,

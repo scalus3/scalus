@@ -32,7 +32,8 @@ object Groth16:
       * BLS12-381 curve
       *
       * @param nPublic
-      *   Number of public inputs
+      *   Number of public inputs. Not read on-chain: `grothVerify` requires exactly one public
+      *   input per `vkIC` point after the first
       * @param vkAlpha
       *   Alpha parameter in G1
       * @param vkBeta
@@ -103,14 +104,18 @@ object Groth16:
       * @return
       *   Final G1 element representing the linear combination
       * @throws RuntimeException
-      *   if lists have incompatible lengths
+      *   if `public` and `vk_ic` have different lengths
       */
     def derive(
         vk_ic: List[ByteString],
         public: List[BigInt],
         result: G1Element
     ): G1Element = vk_ic match
-        case List.Nil => result
+        case List.Nil =>
+            // Every public input must be bound by an IC point: extra inputs are rejected
+            public match
+                case List.Nil => result
+                case _        => fail("Invalid input")
         case List.Cons(i, rest) =>
             public match
                 case List.Cons(scalar, publicRest) =>
