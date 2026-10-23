@@ -13,7 +13,9 @@ current state, the requested amount, the wait time, and the finalization deadlin
   between Idle and Pending).
 - **InitiateWithdrawal** — the owner requests a withdrawal. The state transitions to Pending and the finalization
   deadline is set to the request transaction's validity **upper** bound plus the wait time. (Anchoring to the upper
-  bound, which the ledger forces to be ≥ now, stops the requester from backdating the deadline to finalize early.)
+  bound, which the ledger forces to be ≥ now, stops the requester from backdating the deadline to finalize early.) The
+  wait time must stay the same, so a stolen owner key cannot shorten the wait for a later request. The request may add
+  lovelace (the Pending datum can need more min-ADA) but no tokens, and the datum amount must equal the new lovelace.
 - **FinalizeWithdrawal** — after the deadline has passed, the withdrawal completes and the funds go to the owner.
 - **Cancel** — while Pending, the **recovery key** holder cancels the request. The state returns to Idle and the funds
   stay locked. The owner's key alone cannot cancel — that is the point, since the threat model is a stolen owner key.

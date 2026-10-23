@@ -259,8 +259,9 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
   `import scalus.*` / `ScriptCredential` / `Interval` / `Value` imports.
 - Tests: added `recovery key cancels` + `owner cannot cancel` (recovery-key feature); added a `cancel` builder
   + `lockAndRequest` helper; reworked `validTo` timing; re-baselined 3 ExUnits. 7 tests pass.
-- **Still open** (deferred): typed `PubKeyHash` owner/recovery instead of raw `ByteString`; one-own-input guard in
-  finalize (double satisfaction across same-owner vaults); a `cancel`-only-during-wait-time bound.
+- **Still open** (deferred): typed `PubKeyHash` owner/recovery instead of raw `ByteString`; a
+  `cancel`-only-during-wait-time bound. (The one-own-input guard is done: `spend` requires exactly one vault input
+  for every action, finalize included.)
 
 ### vesting — ✅ DONE (template, this branch)
 - Structure: removed dead `given Eq[Config]` + redundant imports (`scalus.*`, `v3.Validator`); hoisted all error

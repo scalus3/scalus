@@ -1,12 +1,12 @@
 package scalus.examples.vault
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.platform
+import scalus.uplc.builtin.{platform, ByteString}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
-import scalus.cardano.node.Emulator
-import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner}
+import scalus.cardano.node.{Emulator, SubmitError}
+import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner, TxBuilder}
 import scalus.examples.vault.State
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -50,6 +50,16 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
           signer = signer,
           contract = contract
         )
+
+    // Skips script evaluation in the builder for a transaction with two vault inputs. Each run
+    // gets half the transaction limit, so the emulator runs the scripts instead of failing the
+    // transaction on its total budget.
+    private val twoScriptsEvaluator = PlutusScriptEvaluator.const(
+      ExUnits(
+        memory = env.protocolParams.maxTxExecutionUnits.memory / 2,
+        steps = env.protocolParams.maxTxExecutionUnits.steps / 2
+      )
+    )
 
     // Provider factory
     private def createProvider(): Emulator = {
@@ -150,7 +160,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(result.isSuccess)
         assert(
-          result.budget == (ExUnits(memory = 63548, steps = 26_641_144))
+          result.budget == (ExUnits(memory = 88441, steps = 39_154_861))
         )
 
         provider.setSlot(currentSlot)
@@ -247,7 +257,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, depositTx, vaultUtxo.input)
         assert(result.isSuccess, s"Deposit should succeed: $result")
         assert(
-          result.budget == (ExUnits(memory = 63239, steps = 27_431_942))
+          result.budget == (ExUnits(memory = 75913, steps = 33_608_789))
         )
 
         assert(provider.submit(depositTx).await().isRight)
@@ -403,7 +413,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val withdrawResult = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
         assert(
-          withdrawResult.budget == (ExUnits(memory = 63548, steps = 26_641_144))
+          withdrawResult.budget == (ExUnits(memory = 88441, steps = 39_154_861))
         )
 
         provider.setSlot(withdrawSlot)
@@ -450,7 +460,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo.input)
         assert(finalizeResult.isSuccess, s"Finalize should succeed: $finalizeResult")
         assert(
-          finalizeResult.budget == (ExUnits(memory = 74551, steps = 29_960_222))
+          finalizeResult.budget == (ExUnits(memory = 87125, steps = 36_121_069))
         )
 
         provider.setSlot(finalizeSlot)
@@ -578,34 +588,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
     /** Locks a vault and moves it to Pending via a withdrawal request; returns the pending UTxO. */
     private def lockAndRequest(provider: Emulator): Utxo = {
-        val lockUtxos = provider
-            .queryUtxos { u => u.output.address == ownerAddress }
-            .minTotal(defaultInitialAmount + commissionAmount)
-            .execute()
-            .await()
-            .toOption
-            .get
-        val lockTx = transactionCreatorFor(ownerSigner)
-            .lock(
-              lockUtxos,
-              defaultInitialAmount,
-              defaultWaitTime,
-              ownerAddress,
-              recoveryAddress,
-              ownerAddress
-            )
-        assert(provider.submit(lockTx).await().isRight)
-        val vaultUtxo = Utxo(
-          provider
-              .queryUtxos { u =>
-                  u.output.address == scriptAddress && u.input.transactionId == lockTx.id
-              }
-              .execute()
-              .await()
-              .toOption
-              .get
-              .head
-        )
+        val vaultUtxo = lockVault(provider, defaultInitialAmount)
 
         val withdrawSlot = 1000L
         val withdrawTime = env.slotConfig.slotToTime(withdrawSlot + 1)
@@ -688,5 +671,162 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, cancelTx, pendingVaultUtxo.input)
         assert(result.isFailure, "Owner-signed cancel must fail")
         assert(result.logs.last.contains(VaultValidator.RecoveryKeyMustSign))
+    }
+
+    /** Locks a fresh Idle vault of `amount` for the owner; returns its UTxO. */
+    private def lockVault(provider: Emulator, amount: Coin): Utxo = {
+        val utxos = provider
+            .queryUtxos { u => u.output.address == ownerAddress }
+            .minTotal(amount + commissionAmount)
+            .execute()
+            .await()
+            .toOption
+            .get
+        val lockTx = transactionCreatorFor(ownerSigner)
+            .lock(utxos, amount, defaultWaitTime, ownerAddress, recoveryAddress, ownerAddress)
+        assert(provider.submit(lockTx).await().isRight)
+        Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress && u.input.transactionId == lockTx.id
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
+    }
+
+    test("Fail: one deposit output cannot satisfy two vault inputs (double satisfaction)") {
+        val provider = createProvider()
+        // Two vaults of one owner with one wait time: their datums differ only in `amount`.
+        val vaultA = lockVault(provider, Coin.ada(10))
+        val vaultB = lockVault(provider, Coin.ada(5))
+
+        // A non-owner spends both with Deposit and pays back one output of max(A, B) + 1
+        // lovelace. Each input alone sees a valid deposit; the attacker keeps about B.
+        val mergedAmount = Coin.ada(10) + Coin(1)
+        val mergedDatum = State(
+          owner = ByteString.fromArray(ownerPkh.bytes),
+          recoveryKey = ByteString.fromArray(recoveryPkh.bytes),
+          status = Status.Idle,
+          amount = BigInt(mergedAmount.value),
+          waitTime = defaultWaitTime,
+          finalizationDeadline = BigInt(0)
+        )
+        val utxos = provider
+            .queryUtxos { u => u.output.address == recoveryAddress }
+            .minTotal(commissionAmount)
+            .execute()
+            .await()
+            .toOption
+            .get
+        val attackTx = TxBuilder(env, twoScriptsEvaluator)
+            .spend(utxos)
+            .collaterals(utxos)
+            .spend(vaultA, Action.Deposit, contract)
+            .spend(vaultB, Action.Deposit, contract)
+            .payTo(scriptAddress, Value(mergedAmount), mergedDatum)
+            .build(changeTo = recoveryAddress)
+            .sign(recoverySigner)
+            .transaction
+
+        for vault <- Seq(vaultA, vaultB) do
+            val result = runValidator(provider, attackTx, vault.input)
+            assert(result.isFailure, s"Deposit spending two vaults must fail: $result")
+            assert(result.logs.last.contains(VaultValidator.MultipleVaultInputs))
+        provider.submit(attackTx).await() match
+            case Left(SubmitError.ScriptFailure(message, logs, _, _)) =>
+                assert(
+                  (message +: logs).exists(_.contains(VaultValidator.MultipleVaultInputs)),
+                  s"Unexpected script failure: $message"
+                )
+            case other => fail(s"The emulator must reject the scripts, got $other")
+    }
+
+    /** An owner-signed InitiateWithdrawal of a fresh vault, whose continuing datum is
+      * `tamper(honest Pending datum)`, fails with `expectedError`. The transaction is built without
+      * evaluation, so the validator decides.
+      */
+    private def assertInitiateRejected(tamper: State => State, expectedError: String): Unit =
+        assertInitiateRejected(tamper, identity, expectedError)
+
+    /** As above, and the continuing output holds `tamperValue(vault value)`. */
+    private def assertInitiateRejected(
+        tamper: State => State,
+        tamperValue: Value => Value,
+        expectedError: String
+    ): Unit = {
+        val result = runInitiate(tamper, tamperValue)
+        assert(result.isFailure, s"Tampered withdrawal request must fail: $result")
+        assert(result.logs.last.contains(expectedError))
+    }
+
+    /** Runs the vault script on a withdrawal request whose continuing output holds
+      * `tamperValue(vault value)` and the datum `tamper(honest Pending datum)`.
+      */
+    private def runInitiate(tamper: State => State, tamperValue: Value => Value): Result = {
+        val provider = createProvider()
+        val vault = lockVault(provider, defaultInitialAmount)
+        val validityEndTime = env.slotConfig.slotToTime(1001L)
+        val datum = State(
+          owner = ByteString.fromArray(ownerPkh.bytes),
+          recoveryKey = ByteString.fromArray(recoveryPkh.bytes),
+          status = Status.Pending,
+          amount = BigInt(defaultInitialAmount.value),
+          waitTime = defaultWaitTime,
+          finalizationDeadline = BigInt(validityEndTime) + defaultWaitTime
+        )
+        val utxos = provider
+            .queryUtxos { u => u.output.address == ownerAddress }
+            .minTotal(commissionAmount)
+            .execute()
+            .await()
+            .toOption
+            .get
+        val tx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+            .spend(utxos)
+            .collaterals(utxos)
+            .spend(vault, Action.InitiateWithdrawal, contract)
+            .requireSignature(ownerPkh)
+            .validTo(java.time.Instant.ofEpochMilli(validityEndTime))
+            .payTo(scriptAddress, tamperValue(vault.output.value), tamper(datum))
+            .build(changeTo = ownerAddress)
+            .sign(ownerSigner)
+            .transaction
+        runValidator(provider, tx, vault.input)
+    }
+
+    test("Fail: a withdrawal request cannot set the wait time to zero") {
+        // A stolen owner key writes waitTime = 0; cancel keeps it, so a second request
+        // could be finalized in the next slot, leaving the recovery key no window.
+        assertInitiateRejected(_.copy(waitTime = BigInt(0)), VaultValidator.WaitTimeChanged)
+    }
+
+    test("Fail: a withdrawal request cannot change the datum amount") {
+        // A lower amount lets the cancel signer take the difference and makes finalize fail.
+        assertInitiateRejected(
+          d => d.copy(amount = d.amount - 5_000_000),
+          VaultValidator.VaultAmountChanged
+        )
+    }
+
+    test("Fail: a withdrawal request cannot take value out of the vault") {
+        // The datum is honest, but the continuing output holds 5 ADA less: a stolen owner key
+        // would take that 5 ADA in the request itself, before any wait time.
+        assertInitiateRejected(identity, _ - Value.ada(5), VaultValidator.ValueNotConserved)
+    }
+
+    test("a withdrawal request may add lovelace that the datum amount records") {
+        // The Pending datum is larger than the Idle one and can need more min-ADA, so the owner
+        // must be able to top up the vault in the request.
+        val result = runInitiate(d => d.copy(amount = d.amount + 1_000_000), _ + Value.ada(1))
+        assert(result.isSuccess, s"Withdrawal request with a top-up must succeed: $result")
+    }
+
+    test("Fail: a withdrawal request cannot add lovelace that the datum amount does not record") {
+        // Cancel and finalize pay out the datum amount, so unrecorded lovelace would be stranded
+        assertInitiateRejected(identity, _ + Value.ada(1), VaultValidator.VaultAmountChanged)
     }
 }
