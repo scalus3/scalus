@@ -16,10 +16,10 @@ object PubKeyValidator {
         val signatories = unListData(txinfo.tail.tail.tail.tail.tail.tail.tail.head)
 
         def findSignatureOrFail(sigs: scalus.uplc.builtin.BuiltinList[Data]): Unit =
-            if signatories.isEmpty then throw new RuntimeException("Signature not found")
-            else if unBData(signatories.head) == hex"deadbeef"
+            if sigs.isEmpty then throw new RuntimeException("Signature not found")
+            else if unBData(sigs.head) == hex"deadbeef"
             then ()
-            else findSignatureOrFail(signatories.tail)
+            else findSignatureOrFail(sigs.tail)
 
         findSignatureOrFail(signatories)
     }
@@ -31,10 +31,10 @@ object PubKeyValidator {
 
         def findSignatureOrFail(sigs: scalus.uplc.builtin.BuiltinList[Data]): Unit =
             log("check sigs")
-            if signatories.isEmpty then throw new RuntimeException("Signature not found")
-            else if signatories.head.toByteString == pubKey
+            if sigs.isEmpty then throw new RuntimeException("Signature not found")
+            else if sigs.head.toByteString == pubKey
             then log("found!")
-            else trace("nope")(findSignatureOrFail(signatories.tail))
+            else trace("nope")(findSignatureOrFail(sigs.tail))
 
         findSignatureOrFail(signatories)
     }
@@ -46,10 +46,10 @@ object PubKeyValidator {
 
         def findSignatureOrFail(sigs: scalus.uplc.builtin.BuiltinList[Data]): Unit =
             log("check sigs")
-            if signatories.isEmpty then throw new RuntimeException("Signature not found")
-            else if signatories.head.toByteString == pubKey
+            if sigs.isEmpty then throw new RuntimeException("Signature not found")
+            else if sigs.head.toByteString == pubKey
             then log("found!")
-            else trace("nope")(findSignatureOrFail(signatories.tail))
+            else trace("nope")(findSignatureOrFail(sigs.tail))
 
         findSignatureOrFail(signatories)
     }
