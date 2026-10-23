@@ -161,7 +161,11 @@
         default =
           let
             jdk = pkgs.openjdk25;
-            graalvm = pkgs.graalvmPackages.graalvm-ce;
+            # nixpkgs has no GraalVM for some platforms (e.g. x86_64-darwin); use the JDK there.
+            graalvm =
+              if pkgs.lib.meta.availableOn pkgs.stdenv.hostPlatform pkgs.graalvmPackages.graalvm-ce
+              then pkgs.graalvmPackages.graalvm-ce
+              else jdk;
             metals = pkgs.metals.override { jre = graalvm; };
             bloop = pkgs.bloop.override { jre = graalvm; };
             sbt = pkgs.sbt.override { jre = jdk; };
