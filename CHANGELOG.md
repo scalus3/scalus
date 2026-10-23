@@ -43,6 +43,37 @@
 
 ### Fixed
 
+- `Interval.intersection` and `Interval.hull` order lower bounds correctly when two bounds share a
+  time: `intersection([5,10], (5,10])` is `(5,10]`. `Interval.isNever` is true for intervals that
+  contain no time, such as `(5,5]`.
+- `Math.log(x, 1)` fails with a message: there is no logarithm in base 1. Before, it looped forever
+  on the JVM and ran out of budget on chain.
+- UtxoCell: a cell spend keeps the beacon. A non-terminal spend requires one input of the cell
+  script, no mint or burn under the cell policy and the same cell-policy tokens on the continuing
+  output; a terminal spend also requires a single cell input. Before, the beacon could leave the
+  cell while the cell continued.
+- `UtxoFlow.define` reads variables bound outside the flow body, such as script parameters, from
+  the closure instead of the datum, and the flow mint requires an empty initial datum. Before, the
+  initial datum could replace a parameter checked in the first step. A flow that does not start
+  with an await, or whose first chunk has datum fields, is a compile error.
+- Example and pattern validators:
+  - `LotteryValidator`: `Lose` and `Timeout` require exactly one lottery input, so one payout no
+    longer settles two pots (double satisfaction). A first reveal keeps the tokens and at least
+    the lovelace of the pot in the lottery; it may add ADA for the larger datum.
+  - Payment splitters (`OptimizedPaymentSplitterValidator`, `StakeValidatorPaymentSplitterValidator`)
+    count each payee once, so two outputs to one payee no longer stand in for another payee. The
+    design-pattern splitter also rejects contract inputs with native tokens, as the examples do.
+  - Vault: a transaction spends one vault input. A withdrawal request keeps the wait time; it may
+    add lovelace but no tokens, and the datum amount must record the new lovelace.
+  - Groth16: `grothVerify` fails when there are more public inputs than the verification key
+    binds.
+  - Betting: the mint requires the bet output to hold the minted bet token.
+  - `OracleValidator`: `Update` checks the new exchange rate, not the input one, so an update can
+    no longer lock the oracle. The mint puts the beacon in an output at the oracle script with a
+    valid inline rate, and `Update` keeps it there, so every UTxO that holds the beacon is a valid
+    oracle.
+  - `PubKeyValidator`: `findSignatureOrFail` walks the list it is given; a signer after the first
+    signatory is found.
 - **`equalsData` and `Data` equality compare `Data.Map` entries in order, as Plutus does. Before, two
   maps with the same entries in a different order, or with a repeated entry, were equal, so the
   CEK and the Emulator returned `True` where the node returns `False`. Scala code that compares

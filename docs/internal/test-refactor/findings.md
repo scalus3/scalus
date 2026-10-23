@@ -637,7 +637,7 @@ regression test with a user binder `__HeadList` and one with a free `__HeadList`
 Logged from the cluster reports `[P2-13]`. Each entry repeats the report's claim and evidence;
 the report has the full action. "By reading" means no test or run confirmed it yet.
 
-### F-35 By reading, Address.fromBytes claims to be 'the ledger's decodeAddr' (1218-1219) but accepts bytes that decode – open
+### F-35 `Address.fromBytes` and `Cip1852.parsePath` accept input the ledger or the spec rejects – open
 Cluster `address-wallet-blueprint`, report finding C35-1, verdict CONFIRMED.
 
 By reading, Address.fromBytes claims to be 'the ledger's decodeAddr' (1218-1219) but accepts bytes
@@ -681,7 +681,7 @@ or 1; in TransactionOutput read the address with a variant that rejects StakeAdd
 Tests: add the three negative cases to CardanoAddressTest and a TransactionOutput decode test; then
 apply C35-9 to the generator.
 
-### F-36  – open
+### F-36 JSON codecs that cannot read their own output (Timelock Blockfrost, `DataReadWriter`, blueprint `Purpose`) – open
 Cluster `address-wallet-blueprint`, report finding C35-2, verdict CONFIRMED.
 
 By reading (lines 485-501 never executed in the baseline): the Purpose JSON codec is incomplete
@@ -706,7 +706,7 @@ input. Test: in BlueprintTest, round-trip a TypeDescription for each Purpose cas
 OneOf(Seq(Spend, Mint)), parse a CIP-57 oneOf object, and assert a decode error
 (JsonReaderException) for an unknown purpose string.
 
-### F-37  – open
+### F-37 BIP-39 seed: passphrase not NFKD-normalized; a non-ASCII passphrase gives a different wallet than other tools – open
 Cluster `address-wallet-blueprint`, report finding C35-3, verdict NARROWED.
 
 By reading: BIP-39 derives the seed with PBKDF2 over the mnemonic 'in UTF-8 NFKD' and salt
@@ -736,7 +736,7 @@ on Scala.js; it needs a platform shim or a documented ASCII-only restriction) an
 toLowerCase(Locale.ROOT). Test: add the trezor vectors with a non-ASCII passphrase (the Japanese
 vector file) on JVM.
 
-### F-38  – open
+### F-38 `Address.fromBytes` and `Cip1852.parsePath` accept input the ledger or the spec rejects – open
 Cluster `address-wallet-blueprint`, report finding C35-4, verdict CONFIRMED.
 
 By reading: Cip1852.parsePath accepts invalid paths and disagrees with Bip32Ed25519.parsePath.
@@ -761,7 +761,7 @@ Bip32Ed25519.parsePath. Test: extend Cip1852Test 'parsePath - invalid paths' (71
 role/index/account, a non-hardened purpose "m/1852/1815'/0'/0/0" (reaches the NonFatal catch at
 175-177) and the h suffix.
 
-### F-39  – open
+### F-39 Bloxbean interop: `Data.Map` goes through a Scala `HashMap`, so entry order changes and the datum hash differs – open
 Cluster `benchmarks-bloxbean-sbt`, report finding C15-5, verdict NARROWED.
 
 By reading (not executed): Interop.toPlutusData(Data.Map(items)) builds the CCL map with
@@ -894,7 +894,7 @@ explicit Env option used only by callers that need it). Test side: add a SIRUnif
 Recursivity) ~=~ Let(..., None) is false; then run scalusJVM/test and fix the expected SIR of any
 test that turns red.
 
-### F-44  – open
+### F-44 Error-trace abbreviation misses errors under `Cast` and `Select` – open
 Cluster `compiler.sir`, report finding C13-23, verdict CONFIRMED.
 
 By reading (not executed): AbbreviateErrorTraces.transformAnnotatedSIR has no Cast or Select case
@@ -919,7 +919,7 @@ field) are abbreviated; also cover the uncovered LamAbs, Apply, And/Or/Not, Cons
 transformModule branches with one tree each. Main-code note: add Cast and Select cases, or delete
 the class if it has no user.
 
-### F-45  – open
+### F-45 `SirDSL.lam` types each parameter with the body's type – open
 Cluster `compiler.sir`, report finding C13-28, verdict CONFIRMED.
 
 By reading (not executed): SirDSL.lam(names*)(term) (and its alias λ) types each parameter Var as
@@ -940,7 +940,7 @@ lam/λ needs per-symbol MiMa filters, or a deprecation.
 Action: Main-code note only: delete SirDSL.lam/λ, or take typed params (lam(params: SIR.Var*)(body)). Test
 side: the shared SirTestDsl of C13-18 must not delegate to it.
 
-### F-46 In all three validators, findSignatureOrFail(sigs) ignores its parameter – open
+### F-46 In all three validators, findSignatureOrFail(sigs) ignores its parameter – fixed
 Cluster `examples.1`, report finding C25-5, verdict NARROWED.
 
 In all three validators, findSignatureOrFail(sigs) ignores its parameter: it tests
@@ -976,7 +976,9 @@ signatories [other, deadbeef] (must succeed) and one with [other] (must fail wit
 found'). Optionally drop the unused validator def from the bloxbean copy (only validatorV2/V3 are
 used there).
 
-### F-47 SnarkVerificationKey.nPublic is never read, and derive returns as soon as vk_ic is Nil, ignoring any remaining – open
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(examples): PubKeyValidator walks the signatories list it is given".
+
+### F-47 SnarkVerificationKey.nPublic is never read, and derive returns as soon as vk_ic is Nil, ignoring any remaining – fixed
 Cluster `examples.1`, report finding C25-6, verdict CONFIRMED.
 
 SnarkVerificationKey.nPublic is never read, and derive returns as soon as vk_ic is Nil, ignoring any
@@ -1003,7 +1005,9 @@ Action: Main code: in grothVerify require public.length == vk.nPublic and vkIC.l
 make derive fail when vk_ic is Nil and public is not). Tests: add to Groth16Test a case with one
 extra public input (must fail both on- and off-chain) and one with a short list ('Invalid input').
 
-### F-48  – open
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(examples): reject Groth16 public inputs the verification key does not bind".
+
+### F-48 Betting: the mint branch does not check that the script output holds the minted token – fixed
 Cluster `examples.2`, report finding C11-8, verdict CONFIRMED.
 
 By reading (not executed): the minting branch (quantity +1) checks the config of the unique script
@@ -1034,7 +1038,9 @@ Action: Add a test: mint +1 with the token paid to player1's address and a token
 a valid Config; expect the minting policy to fail. Main-code note only: require
 scriptOutput.value.tokens(policyId) to contain the minted token (quantity 1).
 
-### F-49 LotteryValidator is open to double satisfaction in Lose and Timeout – open
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(examples): require the betting mint to place the bet token in the bet output".
+
+### F-49 LotteryValidator is open to double satisfaction in Lose and Timeout – fixed
 Cluster `examples.5`, report finding C18-1, verdict CONFIRMED.
 
 LotteryValidator is open to double satisfaction in Lose and Timeout. Each script run checks only
@@ -1070,7 +1076,9 @@ single payout to the revealer; it must fail. Main side fix options: require that
 sits at the own script address (as DaBondPoolValidator.scala:100 does with findUniqueOrFail), or
 require the payout amount to cover the sum of all lottery inputs.
 
-### F-50 OptimizedPaymentSplitterValidator.reward counts OUTPUTS, not distinct payees – open
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(examples): spend one lottery input and keep the whole pot in a reveal".
+
+### F-50 OptimizedPaymentSplitterValidator.reward counts OUTPUTS, not distinct payees – fixed
 Cluster `examples.6`, report finding C31-1, verdict CONFIRMED.
 
 OptimizedPaymentSplitterValidator.reward counts OUTPUTS, not distinct payees: actualNPayed is +1 per
@@ -1102,7 +1110,9 @@ gets 50), honest redeemer; assert both validators reject. Main-code note: count 
 (aggregate per credential as the naive one does, or require each non-change payee credential to
 appear once).
 
-### F-51 OracleValidator.spend checks the non-zero rate and the denominator on the INPUT state (88-89), for every redee – open
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(examples): count each payee once in the optimized payment splitter".
+
+### F-51 OracleValidator.spend checks the non-zero rate and the denominator on the INPUT state (88-89), for every redee – fixed
 Cluster `examples.6`, report finding C31-20, verdict CONFIRMED.
 
 OracleValidator.spend checks the non-zero rate and the denominator on the INPUT state (88-89), for
@@ -1131,7 +1141,9 @@ Action: Add a test: Update to Rational(0,1) is accepted today, then Update and B
 Main-code note: move checkDenominator/isZero to newState in the Update branch (and drop it from
 Burn).
 
-### F-52 VaultValidator.initiateWithdrawal checks owner, recoveryKey, status=Pending and finalizationDeadline of the ne – open
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(examples): keep the oracle beacon in a valid oracle UTxO from mint to burn".
+
+### F-52 VaultValidator.initiateWithdrawal checks owner, recoveryKey, status=Pending and finalizationDeadline of the ne – fixed
 Cluster `examples.8`, report finding C34-1, verdict CONFIRMED.
 
 VaultValidator.initiateWithdrawal checks owner, recoveryKey, status=Pending and finalizationDeadline
@@ -1163,7 +1175,9 @@ Action: Main code: in initiateWithdrawal require newDatum.waitTime === datum.wai
 === datum.amount (and out lovelace === datum.amount). Test: add two negative cases to the Vault
 fill-gap suite (C34-4).
 
-### F-53 deposit has no signature check and no one-vault-input guard – open
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(examples): spend one vault input and keep the wait time in a withdrawal request". The request keeps the wait time and may only add lovelace, which the datum amount must record (the first version required the exact lovelace, which blocked a top-up for the larger Pending datum).
+
+### F-53 deposit has no signature check and no one-vault-input guard – fixed
 Cluster `examples.8`, report finding C34-2, verdict CONFIRMED.
 
 deposit has no signature check and no one-vault-input guard. Each vault input checks only its own
@@ -1194,6 +1208,8 @@ Action: Main code: add a single-own-input guard (txInfo.inputs.findUniqueOrFail 
 VestingValidator 79-82 does) to deposit, and to finalize/cancel for the known deferred variant.
 Test: two-vault deposit case in C34-4.
 
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(examples): spend one vault input and keep the wait time in a withdrawal request".
+
 ### F-54 VestingTransactions.withdraw pays the continuing output Value.lovelace(contractAmount - amount), which drops n – open
 Cluster `examples.8`, report finding C34-3, verdict CONFIRMED.
 
@@ -1215,7 +1231,7 @@ The fix vestingUtxo.output.value - Value.lovelace(amount) matches the validator 
 Action: Main code: pay vestingUtxo.output.value - Value.lovelace(amount) back to the script. Test: a partial
 emulator withdrawal of a UTxO locked with a token in VestingTransactionTest.
 
-### F-55  – open
+### F-55 JS `Utxo` constructor truncates a non-integer `outputIndex` – open
 Cluster `js-facade`, report finding C28-8, verdict NARROWED.
 
 By reading (not executed): `new Utxo(txHash, outputIndex, address, value)` converts outputIndex with
@@ -1243,7 +1259,7 @@ constructor if a TypeError is wanted there too. Main-code fix: use `intOf(output
 Action: Add a JsUtxoTest case: for outputIndex 1.5, NaN, -1 and 2^31, the constructor throws (a TypeError
 naming outputIndex). Main-code note only: use intOf(outputIndex0, "outputIndex") in the constructor.
 
-### F-56  – open
+### F-56 Stdlib `Ord[IntervalBound]` orders inclusive above exclusive at the same time, which is wrong for lower bounds – fixed
 Cluster `ledger.api`, report finding C22-1, verdict CONFIRMED.
 
 By reading (the file is @Compile, so excluded from coverage, F-9): Ord[IntervalBound] breaks a time
@@ -1280,6 +1296,8 @@ isNever(Interval(finiteExclusive(5), finiteInclusive(5))). They fail until the m
 Main-code note only: give lower bounds the opposite tie-break (inclusive lower < exclusive lower),
 e.g. separate minLower/maxLower helpers used by hull/intersection, and in isNever treat Equal-time
 bounds as never unless both are inclusive.
+
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(ledger-api): order lower bounds correctly in Interval hull, intersection and isNever".
 
 ### F-57 Timelock.blockfrostReadWriter cannot read its own output for TimeStart/TimeExpire – open
 Cluster `ledger.domain`, report finding C05-1, verdict CONFIRMED.
@@ -1477,7 +1495,7 @@ under the policy; assert either SubscriptionSupport.of returns Unindexed/Unsuppo
 subscriber receives the Included event. Main-code note only: make indexedTxQuery and coversTxQuery
 agree on MintsPolicy.
 
-### F-63  – open
+### F-63 Payment splitters (example and pattern) count outputs, not distinct payees: one payee can take another's share – fixed
 Cluster `patterns`, report finding C32-1, verdict CONFIRMED.
 
 By reading (not executed): the reward endpoint adds 1 to actualNPayed per OUTPUT, and checks only
@@ -1510,7 +1528,9 @@ B->10, nPayed 3; expect failure. Main-code note only: count distinct payee crede
 into an AssocMap per payee as PaymentSplitterValidator does) in both
 StakeValidatorPaymentSplitterExample and OptimizedPaymentSplitterValidator.
 
-### F-64 Commit 3c5cba3c8 'fix(examples) – open
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(design-patterns): count each payee once and reject native tokens in the stake splitter".
+
+### F-64 Commit 3c5cba3c8 'fix(examples) – fixed
 Cluster `patterns`, report finding C32-2, verdict CONFIRMED.
 
 Commit 3c5cba3c8 'fix(examples): paymentsplitter reject native-token contract inputs' added
@@ -1536,7 +1556,9 @@ Action: Add a failure test: one contract input with 30 lovelace plus a native to
 payees split equally' case; expect failure 'Contract input must contain only ADA'. Main-code note
 only: port the require from OptimizedPaymentSplitterValidator.scala:153-158.
 
-### F-65 Math.log(self, base) guards only base <= 0 – open
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(design-patterns): count each payee once and reject native tokens in the stake splitter".
+
+### F-65 Math.log(self, base) guards only base <= 0 – fixed
 Cluster `prelude`, report finding C04-1, verdict CONFIRMED.
 
 Math.log(self, base) guards only base <= 0. For base = 1 and self >= 1, go(ret, n) never reaches n <
@@ -1560,7 +1582,9 @@ test. Do NOT add it before the fix with assertEval*/assertEvalFails: every EvalT
 runs the JVM code first and would hang CI. If a pre-fix test is wanted, compile the term and
 evaluate only the UPLC with a small explicit budget, expecting budget exhaustion.
 
-### F-66  – open
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(prelude): fail Math.log for base 1 instead of looping forever". Base 1 fails with a message; Aiken's stdlib `log` (v4.0.0) has the same loop and fails on budget, and Plinth has no integer log.
+
+### F-66 `List.show` prints a trailing `, ` – open
 Cluster `prelude.list`, report finding C23-1, verdict CONFIRMED.
 
 By reading (not executed): showList appends ", " after every element, including the last, so List(1,
@@ -1584,7 +1608,7 @@ assertEvalEq(List.singleton(BigInt(1)).show, "[1]"), assertEvalEq(Cons(BigInt(1)
 Nil)).show, "[1, 2]"). Main-code note only: emit the separator before every element except the
 first, as Show[Data] does.
 
-### F-67  – open
+### F-67 Blockfrost `FromTransaction`/`FromInputs` returns spent outputs – open
 Cluster `testing.integration`, report finding C38-1, verdict CONFIRMED.
 
 By reading (not executed): BlockfrostProvider answers UtxoSource.FromTransaction and FromInputs from
@@ -1623,7 +1647,7 @@ stubbed /txs/{h}/utxos returns two outputs, one with consumed_by_tx set; assert 
 returns only the unspent one. Main-code note only: if it fails, drop outputs whose consumed_by_tx is
 set (or intersect with the address UTxOs).
 
-### F-68  – open
+### F-68 Blockfrost `FromAsset` silently returns partial results when one holder request fails – open
 Cluster `testing.integration`, report finding C38-2, verdict CONFIRMED.
 
 By reading (not executed): UtxoSource.FromAsset fetches /addresses/{holder}/utxos/{asset} once per
@@ -1651,7 +1675,7 @@ first holder's utxos request returns HTTP 429 and the second returns one UTxO; a
 findUtxos(UtxoQuery(FromAsset(p, n))) is Left(NetworkError). Main-code note only: make it fail when
 any holder fails, as combineOr does.
 
-### F-69  – open
+### F-69 Emulator and testkit: wrong submit-error rule name, `checkTransaction` always `Confirmed`, `getDatum`… – open
 Cluster `testing`, report finding C12-1, verdict CONFIRMED.
 
 By reading (not executed): Scenario.provider.checkTransaction maps
@@ -1750,7 +1774,7 @@ Action: Decide the V4 envelope name (or make programToPlutusFileContent reject P
 UtilsTest case: programToPlutusFileContent(p, Language.PlutusV4) yields the decided type, and
 readPlutusFileContent accepts it.
 
-### F-73  – open
+### F-73 `TxBuilder` cannot spend a datum-less PlutusV3 script UTxO – open
 Cluster `txbuilder.core`, report finding C20-1, verdict CONFIRMED.
 
 By reading (not executed): TxBuilder cannot spend a script UTxO that has no datum, even when the
@@ -1783,7 +1807,7 @@ succeeds and emulator.submit(signed tx) isRight. Keep a PlutusV2 variant that ex
 DatumIsMissing. Main-code note only: in useDatum, accept None when the resolved script is PlutusV3
 (the language is known from the attached script or the reference UTxO).
 
-### F-74  – open
+### F-74 `editTransactionSafe` drops the whole witness set, not only the redeemers – open
 Cluster `txbuilder`, report finding C09-1, verdict CONFIRMED.
 
 By reading (not executed): toEditableTransactionSafe sets `updatedTx =
@@ -1811,7 +1835,7 @@ in the witness set; assert editTransactionSafe(identity)(tx) == Right(tx) and th
 editTransaction(identity)(tx) keeps the script and the witness. Main-code note only: build updatedTx
 with `tx.withWitness(_.copy(redeemers = None))`.
 
-### F-75  – open
+### F-75 JVM `Builtins.indexArray` truncates the index to 32 bits; the CEK does not – open
 Cluster `uplc.builtin`, report finding C36-1, verdict CONFIRMED.
 
 By reading, not executed: the JVM BuiltinArray.apply indexes with n.intValue, which keeps only the
@@ -1841,7 +1865,7 @@ Action: Add a JVM-side test: Builtins.indexArray(BuiltinArray(BigInt(1), BigInt(
 check `n < 0 || n >= array.length` before `n.toInt` and throw (BuiltinException or
 IndexOutOfBoundsException, as the doc says).
 
-### F-76  – open
+### F-76 JSON codecs that cannot read their own output (Timelock Blockfrost, `DataReadWriter`, blueprint `Purpose`) – open
 Cluster `uplc.builtin`, report finding C36-2, verdict CONFIRMED.
 
 By reading the upickle 4.4.3 and ujson sources, not executed: DataReadWriter (still a public given
@@ -1872,7 +1896,7 @@ upickle.default.read[Data](upickle.default.write(d)) == d. Main-code note: make 
 delegate to dataJsonCodec (bimap via Data.toJson / Data.fromJson on the rendered ujson value), or
 deprecate it.
 
-### F-77  – open
+### F-77 `satMul(-1, Long.MinValue)` does not saturate – open
 Cluster `uplc.eval.budget`, report finding C21-1, verdict NARROWED.
 
 By reading (not executed): satMul(-1, Long.MinValue) returns Long.MinValue instead of saturating to
@@ -1975,7 +1999,7 @@ Action: Test side: add rows "é" -> "_", "xé" -> "x_", "x٣" -> "x_" to the san
 in C07-12; both fail today. Main-code note only: restrict the three predicates to ASCII ('a'-'z',
 'A'-'Z', '0'-'9').
 
-### F-80  – open
+### F-80 UtxoCells: no check that the continuing output keeps the beacon token – fixed
 Cluster `utxocells`, report finding C33-1, verdict CONFIRMED.
 
 By reading (not executed): no on-chain check makes the continuing output keep the beacon token, or
@@ -2017,7 +2041,9 @@ with the correct next datum but no beacon, and the beacon in a pubkey output; as
 (value.hasNft(policyId, beaconName)) in verifyContinuingOutput, and on non-terminal spends require
 that tx.mint has no entry for the own policy.
 
-### F-81  – open
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(utxo-cell): keep the beacon in the continuing output of a cell spend". The review added a single-cell-input check for terminal spends (two terminal spends with one burn let a second beacon leave).
+
+### F-81 UtxoFlow macros: free variables of chunk 0 become datum fields, so the transaction builder chooses them… – fixed
 Cluster `utxocells`, report finding C33-2, verdict CONFIRMED.
 
 By reading (not executed): every free variable that the body of chunk 0 references becomes a datum
@@ -2051,6 +2077,8 @@ FlowParams(seller = Alice, ..) to the program, init with datum Constr(0, [FlowPa
 ..).toData]), advance chunk 0 signed only by Bob in the Emulator; if it validates, the parameter is
 dead. Main-code note only: exclude symbols bound outside the define body from chunk-0 datum fields
 (reference them directly), or document and check them at mint.
+
+Resolution (2026-10-23): reproduced by a failing test first, then fixed in "fix(utxo-cell): read flow parameters from the closure, not from the datum". The review added: the flow mint requires the empty initial datum `Constr(0, [])`, and a flow that does not start with an await, or whose first chunk has datum fields, is a compile error.
 
 ### F-82 `Data.Map` equality ignores entry order and duplicates, so `equalsData` differs from Plutus – fixed
 
@@ -2099,3 +2127,66 @@ deprecated and the public API is unchanged, so 1.4.1 stays MiMa-compatible. The 
 scaladoc example now uses `@UplcRepr(UplcConstr)` on the list, and `WithNativeList` uses
 `SumBuiltinList(Constant)`. Test: `SumBuiltinListReprTest`. Left open: a `BuiltinList[T]` whose
 `T` has no `Data` form still lowers to a `(list value)`; `VList` is deprecated, see F-78.
+
+### F-84 Lottery first reveal can drain the pot – fixed
+
+Found by the security review of the S2 fixes, 2026-10-23; present before them. The reveal branches
+(Empty to RevealPlayerOne/RevealPlayerTwo) checked only the datum of the continuing output, not its
+value, so the revealing player could send min-ADA to the continuing output and keep the rest of
+the pot; one reveal could also merge two pots. Resolution: both reveal branches require a single
+lottery input and a continuing output with the input's tokens and at least its lovelace
+(`hasSameTokensAndAtLeastAda`; the first version required the exact value, which blocked a reveal
+that must add ADA for the larger datum) ("fix(examples): spend one lottery
+input and keep the whole pot in a reveal").
+
+### F-85 Vault example: native tokens in a vault UTxO can be stripped – open
+
+Found by the F-53 fix agent's security review, by reading. Deposit requires an ADA-only output but
+does not require an ADA-only input, and needs no signature, so anyone can lock a vault UTxO with
+tokens and any depositor can then take the tokens. Cancel compares only lovelace on the output, so
+tokens can be added (min-ADA griefing). Fix: require ADA-only inputs and outputs, or compare whole
+values.
+
+### F-86 Oracle example: a negative rate passes the Update check – open
+
+Found by the F-51 fix agent, by reading. `Update` now rejects a zero numerator or denominator, but
+a negative one passes, and `Ord[Rational]` cross-multiplication flips for a negative denominator:
+rate 8/-5 compares greater than a bet of 3/2, so `PricebetValidator.Win` lets the player win. The
+mint does not validate the initial oracle datum either. Fix: require numerator > 0 and denominator
+> 0 in Update and in mint.
+
+### F-87 Groth16 example: public inputs are not reduced modulo the scalar field order – open
+
+Found by the F-47 fix agent, by reading. Public scalars are not range-checked against the
+BLS12-381 scalar field order r, so x and x + r derive the same point and both verify (input
+malleability). snarkjs and other verifiers reject inputs >= r. Fix: require 0 <= x < r for each
+public input. Not checked against ak-381.
+
+### F-88 Oracle beacon lifecycle not enforced – fixed
+
+Found by the owner while reviewing the S2 fixes, 2026-10-23; the skills missed it (see the skills
+commit "check the token lifecycle and honest transactions in reviews"). The oracle mint did not
+place the beacon, and `Update` did not keep it in the continuation, so the beacon could leave the
+oracle and come back with any datum, while Pricebet trusts any beacon holder at the oracle script.
+Fixed in "fix(examples): keep the oracle beacon in a valid oracle UTxO from mint to burn", which
+also drops the spend `datum.isDefined` check and reduces the policy Burn branch to
+`onlyBurnsUnder`, both implied by the invariant. Also closes the mint half of F-86 (a zero rate);
+a negative rate stays open there.
+
+### F-89 Example defects found by the blind skill-verification reviews – open
+
+Two security reviews of OracleValidator, PricebetValidator, LotteryValidator and VaultValidator
+(old and new skill, 2026-10-23), by reading; not yet reproduced:
+
+- Pricebet `Join` has no single-own-input guard: one continuing output satisfies two equal bets,
+  and the joiner stakes nothing (DS-1). `Join` also checks lovelace only (tokens of the bet leave).
+- Pricebet `Win` accepts an oracle reading of any age, and one older than the join, so a player
+  can join when the result is known; `!isEntirelyAfter(deadline)` lets `Win` run after the deadline.
+- Pricebet hard-codes the beacon name `ORACLE`, while the oracle mints `config.beaconName`.
+- Lottery: the first reveal has no deadline (a late revealer times out at once); player keys are
+  not committed, so a mempool observer can copy a preimage and take a reveal or the winning
+  payout; payouts match the payment credential only, and lovelace only.
+- Cross-script double satisfaction: one output to a player can satisfy a lottery `Timeout`/`Lose`
+  and a vault `Finalize` at once (DS-2); a tagged payout (`hasPaidTagged`) closes it.
+- Vault: `Cancel` does not check `requireEntireVaultIsSpent`; `Finalize` matches the owner by
+  payment credential only; a lost owner key leaves no exit (design). Token stripping is F-85.

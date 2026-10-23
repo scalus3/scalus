@@ -21,19 +21,25 @@ A script passes in Scalus (Emulator, budget estimates, tests) and fails on chain
 
 | ID | Defect |
 |---|---|
-| F-49 | Lottery: double satisfaction in Lose and Timeout. |
-| F-50, F-63 | Payment splitters (example and pattern) count outputs, not distinct payees: one payee can take another's share. |
-| F-64 | Pattern payment splitter misses the native-token guard that the example splitters got in 3c5cba3c8. |
-| F-53 | Vault `deposit`: no signature check, no one-vault-input guard. |
-| F-52 | Vault `initiateWithdrawal` does not check `waitTime` and `amount` of the new datum. |
-| F-47 | Groth16 verifier ignores extra public inputs, so a valid proof passes with wrong inputs. |
-| F-48 | Betting: the mint branch does not check that the script output holds the minted token. |
-| F-51 | Oracle `Update` accepts rate 0 or denominator 0; the oracle UTxO is then stuck. |
-| F-80 | UtxoCells: no check that the continuing output keeps the beacon token. |
-| F-81 | UtxoFlow macros: free variables of chunk 0 become datum fields, so the transaction builder chooses them (e.g. `minBid`). |
-| F-56 | Stdlib `Ord[IntervalBound]` orders inclusive above exclusive at the same time, which is wrong for lower bounds. |
-| F-46 | Three example validators: `findSignatureOrFail` ignores its argument and recurses on the same list (valid transactions fail). |
-| F-65 | Stdlib `Math.log(x, 1)` never terminates (JVM loop; on chain, budget exhausted). |
+| F-49 (fixed) | Lottery: double satisfaction in Lose and Timeout. |
+| F-50, F-63 (fixed) | Payment splitters (example and pattern) count outputs, not distinct payees: one payee can take another's share. |
+| F-64 (fixed) | Pattern payment splitter misses the native-token guard that the example splitters got in 3c5cba3c8. |
+| F-53 (fixed) | Vault `deposit`: no signature check, no one-vault-input guard. |
+| F-52 (fixed) | Vault `initiateWithdrawal` does not check `waitTime` and `amount` of the new datum. |
+| F-47 (fixed) | Groth16 verifier ignores extra public inputs, so a valid proof passes with wrong inputs. |
+| F-48 (fixed) | Betting: the mint branch does not check that the script output holds the minted token. |
+| F-51 (fixed) | Oracle `Update` accepts rate 0 or denominator 0; the oracle UTxO is then stuck. |
+| F-80 (fixed) | UtxoCells: no check that the continuing output keeps the beacon token. |
+| F-81 (fixed) | UtxoFlow macros: free variables of chunk 0 become datum fields, so the transaction builder chooses them (e.g. `minBid`). |
+| F-56 (fixed) | Stdlib `Ord[IntervalBound]` orders inclusive above exclusive at the same time, which is wrong for lower bounds. |
+| F-46 (fixed) | Three example validators: `findSignatureOrFail` ignores its argument and recurses on the same list (valid transactions fail). |
+| F-65 (fixed) | Stdlib `Math.log(x, 1)` never terminates (JVM loop; on chain, budget exhausted). |
+| F-84 (fixed) | Lottery: a first reveal could drain the pot (found by the review of the S2 fixes). |
+| F-85 | Vault example: tokens in a vault UTxO can be stripped by a deposit, or added on cancel. |
+| F-86 | Oracle example: a negative rate passes `Update`, and the mint does not check the initial rate. |
+| F-87 | Groth16 example: public inputs are not range-checked against the scalar field order. |
+| F-88 (fixed) | Oracle example: the beacon could leave the oracle (mint placement, Update preservation). |
+| F-89 | Pricebet, lottery and vault examples: double satisfaction, oracle freshness, front-running and payout checks (list in findings.md). |
 
 ## S3 – off-chain code that builds wrong transactions or keys
 
