@@ -51,6 +51,12 @@ trait FlowCellValidator extends CellValidator {
     ): Unit = {
         val qty = sc.txInfo.mint.quantityOf(policyId, beaconName)
         if qty === BigInt(1) then
+            // The flow starts at chunk 0, which captures nothing (UtxoFlow.define checks this).
+            // Any other datum would let the initializer skip chunk 0 or pick captured values.
+            require(
+              redeemer === Data.Constr(0, List.Nil),
+              "UtxoFlow: initial datum must be the entry state"
+            )
             UtxoCellLib.verifyMintResult[Data](redeemer, beaconName, policyId, sc.txInfo)
         else if qty === BigInt(-1) then
             UtxoCellLib.verifyBurnBeacon(beaconName, policyId, sc.txInfo)
@@ -111,6 +117,12 @@ trait DataParameterizedFlowCellValidator extends DataParameterizedCellValidator 
     ): Unit = {
         val qty = sc.txInfo.mint.quantityOf(policyId, beaconName)
         if qty === BigInt(1) then
+            // The flow starts at chunk 0, which captures nothing (UtxoFlow.define checks this).
+            // Any other datum would let the initializer skip chunk 0 or pick captured values.
+            require(
+              redeemer === Data.Constr(0, List.Nil),
+              "UtxoFlow: initial datum must be the entry state"
+            )
             UtxoCellLib.verifyMintResult[Data](redeemer, beaconName, policyId, sc.txInfo)
         else if qty === BigInt(-1) then
             UtxoCellLib.verifyBurnBeacon(beaconName, policyId, sc.txInfo)

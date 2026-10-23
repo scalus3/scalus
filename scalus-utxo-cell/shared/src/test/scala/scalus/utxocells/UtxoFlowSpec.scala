@@ -13,6 +13,8 @@ import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.onchain.plutus.prelude.Option as POption
 import cps.*
 
+import scala.compiletime.testing.{typeCheckErrors, Error as TypeCheckError}
+
 // -- Test types --
 
 case class Bid(bidder: PubKeyHash, amount: BigInt) derives FromData, ToData
@@ -513,13 +515,13 @@ class UtxoFlowSpec extends AnyFunSuite {
     }
 
     // ================================================================
-    // Parameterized flow tests — outer scope params captured as datum fields
+    // Parameterized flow tests — outer scope params are referenced directly, not datum fields
     // ================================================================
 
     test("parameterized flow — outer param captured in recursive function") {
         // Pattern from the design doc: a function that takes parameters
-        // and returns a flow dispatch. The parameters become datum fields
-        // in chunks that reference them.
+        // and returns a flow dispatch. The parameters stay in the closure;
+        // they are never stored in the datum.
         def auctionFlow(seller: PubKeyHash) = UtxoFlow.define { ctx =>
             def bidLoop(currentBid: Bid): Unit = {
                 val confirm = await(UtxoFlow.suspend[Confirm])
@@ -548,8 +550,9 @@ class UtxoFlowSpec extends AnyFunSuite {
                 d match {
                     case Data.Constr(tag, fields) =>
                         assert(tag == 1, s"Expected tag=1 (loop entry), got $tag")
-                        // Datum should contain currentBid AND seller
+                        // No fields: currentBid is unused, seller comes from the closure
                         info(s"Loop entry datum fields: $fields")
+                        assert(fields.size == BigInt(0), s"Expected no fields, got $fields")
                         d
                     case other => fail(s"Expected Constr, got $other"); ???
                 }
@@ -567,7 +570,7 @@ class UtxoFlowSpec extends AnyFunSuite {
         }
 
         // Chunk 2: await Bid → calls bidLoop(newBid) → back to chunk 1
-        // This tests transitive free var: seller must be carried through chunk 2
+        // seller is used in chunk 1 again after chunk 2, still from the closure
         val bid2 = Bid(seller, BigInt(1000))
         val result2 = flowDispatch(awaitBidDatum, bid2.toData, noCtx)
         val loopDatum2 = result2 match {
@@ -576,8 +579,8 @@ class UtxoFlowSpec extends AnyFunSuite {
                 d match {
                     case Data.Constr(tag, fields) =>
                         assert(tag == 1, s"Expected tag=1 (loop back), got $tag")
-                        // seller should still be in datum fields
                         info(s"Loop re-entry datum fields: $fields")
+                        assert(fields.size == BigInt(0), s"Expected no fields, got $fields")
                         d
                     case other => fail(s"Expected Constr, got $other"); ???
                 }
@@ -593,8 +596,8 @@ class UtxoFlowSpec extends AnyFunSuite {
     }
 
     test("parameterized flow — multiple outer params + function param in datum") {
-        // Full auction pattern: seller + minBid from outer scope,
-        // currentBid as function param, all captured as datum fields.
+        // Full auction pattern: seller + minBid from outer scope (closure),
+        // currentBid as function param (datum field).
         def auctionFlow(seller: PubKeyHash, minBid: BigInt) = UtxoFlow.define { ctx =>
             def bidLoop(currentBid: Bid): Unit = {
                 val confirm = await(UtxoFlow.suspend[Confirm])
@@ -622,9 +625,9 @@ class UtxoFlowSpec extends AnyFunSuite {
         val flowDispatch = auctionFlow(seller, minBid)
 
         // Chunk 0: await Bid; require(amount >= minBid) → bidLoop
-        // Initial datum must include outer-scope params that are used in chunk 0.
-        // minBid is a free var in chunk 0's body → it's a datum field.
-        val datum0 = Data.Constr(0, PList.Cons(minBid.toData, PList.Nil))
+        // Outer-scope params are not datum fields: the initial datum must not be able
+        // to choose minBid, so chunk 0 starts with no fields.
+        val datum0 = Data.Constr(0, PList.Nil)
 
         // Bid below minBid should fail
         val lowBid = Bid(seller, BigInt(50))
@@ -634,6 +637,13 @@ class UtxoFlowSpec extends AnyFunSuite {
         assert(ex.getMessage.contains("bid too low"))
         info(s"Low bid rejected: ${ex.getMessage}")
 
+        // A minBid smuggled into the initial datum is ignored
+        val forgedDatum0 = Data.Constr(0, PList.Cons(BigInt(0).toData, PList.Nil))
+        val ex1 = intercept[IllegalArgumentException] {
+            flowDispatch(forgedDatum0, lowBid.toData, noCtx)
+        }
+        assert(ex1.getMessage.contains("bid too low"))
+
         // Valid bid → enters loop
         val bid1 = Bid(seller, BigInt(500))
         val result0 = flowDispatch(datum0, bid1.toData, noCtx)
@@ -642,8 +652,9 @@ class UtxoFlowSpec extends AnyFunSuite {
                 d match {
                     case Data.Constr(tag, fields) =>
                         assert(tag == 1, s"Expected tag=1, got $tag")
-                        // Should have currentBid AND seller in datum
+                        // Datum contains currentBid only
                         info(s"Loop entry: tag=$tag, fields count=${fields.size}")
+                        assert(fields.size == BigInt(1), s"Expected only currentBid, got $fields")
                         d
                     case other => fail(s"Expected Constr, got $other"); ???
                 }
@@ -753,6 +764,39 @@ class UtxoFlowSpec extends AnyFunSuite {
                 loop(first)
             }
         """)
+    }
+
+    // The mint handler accepts only the entry datum Constr(0, []), so the initializer cannot
+    // choose a later chunk or a value that chunk 0 would read from the datum.
+    // `errors` needs an explicit type: the macro otherwise meets it as a cyclic reference.
+
+    test("compile error — a value bound before the first await is used after it") {
+        val errors: List[TypeCheckError] = typeCheckErrors("""
+            UtxoFlow.define { ctx =>
+                val minBid = BigInt(100)
+                val bid = await(UtxoFlow.suspend[Bid])
+                require(bid.amount >= minBid)
+            }
+        """)
+        assert(
+          errors.exists(_.message.contains("values bound before the first await")),
+          errors.map(_.message).mkString("\n")
+        )
+    }
+
+    test("compile error — the flow starts with a branch") {
+        val errors: List[TypeCheckError] = typeCheckErrors("""
+            UtxoFlow.define { ctx =>
+                if ctx.ownInputValue.isZero then
+                    val bid = await(UtxoFlow.suspend[Bid])
+                else
+                    val confirm = await(UtxoFlow.suspend[Confirm])
+            }
+        """)
+        assert(
+          errors.exists(_.message.contains("must start with an await")),
+          errors.map(_.message).mkString("\n")
+        )
     }
 }
 

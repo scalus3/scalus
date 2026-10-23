@@ -743,6 +743,12 @@ object UtxoFlowMacros {
         val excludedSymbols = Set(cpsCtxParam.symbol, cellCtxParam.symbol)
         val functionEntryIndices: Set[Int] = functionEntryMap.values.toSet
 
+        // Symbols bound outside the `define` body (script parameters, values decoded from them,
+        // arguments of an enclosing def). They are in scope where the dispatch code is spliced,
+        // so chunks reference them directly. Storing them as datum fields would let whoever
+        // writes the initial datum at mint time pick their values.
+        val outerSymbols: Set[Symbol] = freeVars(userBody, excludedSymbols)
+
         val chunkInfos: List[ChunkInfo] = {
             var boundSoFar = excludedSymbols
 
@@ -761,7 +767,8 @@ object UtxoFlowMacros {
                 // Filter out Given/Implicit symbols (compiler-generated evidence
                 // like derived$FromData) which are monadic infrastructure, not
                 // user variables that need datum capture.
-                // Also filter out local function symbols (they are code, not values).
+                // Also filter out local function symbols (they are code, not values),
+                // and outer symbols (referenced directly, see outerSymbols).
                 val rawFv = freeVars(chunk.body, chunkBound)
                 // report.info(
                 //   s"  Chunk ${chunk.index} raw freeVars: ${rawFv.map(s => s"${s.name}").mkString(", ")}"
@@ -769,6 +776,7 @@ object UtxoFlowMacros {
                 val fv = rawFv.filter { sym =>
                     !sym.flags.is(Flags.Given) && !sym.flags.is(Flags.Implicit)
                     && !localFuncSymbols.contains(sym)
+                    && !outerSymbols.contains(sym)
                 }
 
                 val datumFields = fv.toList
@@ -791,6 +799,21 @@ object UtxoFlowMacros {
                 info
             }
         }
+
+        // The mint handler accepts only the entry datum Constr(0, []) (FlowCellValidator), so
+        // the initializer cannot pick a later chunk or a captured value. That needs a flow that
+        // starts with an await whose chunk captures nothing.
+        if rootCont != NextCont(0) then
+            report.errorAndAbort(
+              "UtxoFlow: the flow must start with an await, not a branch or a function call"
+            )
+        chunkInfos.head.datumFields match
+            case Nil =>
+            case fields =>
+                report.errorAndAbort(
+                  s"UtxoFlow: values bound before the first await cannot be used after it " +
+                      s"(${fields.map(_.name).mkString(", ")}): the initial datum would hold them"
+                )
 
         // Report chunk info
         def contLabel(c: Continuation): String = c match

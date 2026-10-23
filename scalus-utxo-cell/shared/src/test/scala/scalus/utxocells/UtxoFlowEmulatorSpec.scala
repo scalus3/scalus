@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.*
-import scalus.cardano.node.Emulator
+import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.cardano.onchain.plutus.prelude.List as PList
@@ -92,5 +92,75 @@ class UtxoFlowEmulatorSpec extends AnyFunSuite {
         // 4. Verify flow UTxO is gone (beacon burned)
         val cellUtxo3 = flowDef.findUtxo(emulator.utxos)
         assert(cellUtxo3.isEmpty, "Flow UTxO should be consumed after terminal transition")
+    }
+
+    // ParameterizedFlowValidator checks requireSignedBy(p.seller) in chunk 0, where p is decoded
+    // from the script parameter. The parameter must come from the script, not from the datum.
+    private val sellerParams = FlowParams(PubKeyHash(Alice.addrKeyHash), BigInt(100))
+    private val paramFlowDef = new UtxoFlowDef(
+      compiled = ParameterizedFlowCompilation.compiled(sellerParams.toData),
+      tokenName = ParameterizedFlowValidator.beaconName,
+      flowDispatch = ParameterizedFlowValidator.flowDispatch(sellerParams.toData)
+    )
+
+    private def paramFlowEmulator(): Emulator = Emulator(
+      initialUtxos = Map(
+        Input(genesisHash, 0) -> Output(Alice.address, Value.ada(1000)),
+        Input(genesisHash, 1) -> Output(Bob.address, Value.ada(1000))
+      )
+    )
+
+    /** Bob creates the cell with `initialDatum`. The builder does not run the script, so a bad
+      * datum reaches the emulator, which runs the mint policy.
+      */
+    private def mintParamFlow(
+        emulator: Emulator,
+        initialDatum: Data
+    ): Either[SubmitError, TransactionHash] = {
+        val mintTx = TxBuilder(testEnv, PlutusScriptEvaluator.constMaxBudget(testEnv))
+            .initUtxoFlow(paramFlowDef, initialDatum, Value.ada(10))
+            .complete(emulator.utxos, Bob.address)
+            .sign(Bob.signer)
+            .transaction
+        emulator.submitSync(mintTx)
+    }
+
+    private def assertMintRejected(initialDatum: Data): Unit = {
+        mintParamFlow(paramFlowEmulator(), initialDatum) match
+            case Left(SubmitError.ScriptFailure(message, logs, _, _)) =>
+                assert(
+                  (message +: logs).exists(
+                    _.contains("UtxoFlow: initial datum must be the entry state")
+                  ),
+                  s"Unexpected script failure: $message"
+                )
+            case other => fail(s"Mint with a forged initial datum must fail, got $other")
+    }
+
+    private val bid = Bid(bidder = PubKeyHash(Bob.addrKeyHash), amount = BigInt(1_000_000))
+
+    test("parameterized flow: the seller from the script parameter signs chunk 0") {
+        val emulator = paramFlowEmulator()
+        val mintResult = mintParamFlow(emulator, Data.Constr(0, PList.Nil))
+        assert(mintResult.isRight, s"Init transaction should succeed: $mintResult")
+        val advanceTx = TxBuilder(testEnv)
+            .advanceUtxoFlow(paramFlowDef, bid.toData, emulator.utxos)
+            .complete(emulator.utxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+        val result = emulator.submitSync(advanceTx)
+        assert(result.isRight, s"Advance signed by the parameter seller should succeed: $result")
+    }
+
+    test("Fail: parameterized flow: an initial datum cannot carry chunk 0 fields") {
+        // Bob tries to put his own FlowParams into the first datum. The script parameter says
+        // Alice is the seller, and chunk 0 reads it from the parameter, not from the datum.
+        val bobParams = FlowParams(PubKeyHash(Bob.addrKeyHash), BigInt(100))
+        assertMintRejected(Data.Constr(0, PList.Cons(bobParams.toData, PList.Nil)))
+    }
+
+    test("Fail: parameterized flow: an initial datum cannot start at a later chunk") {
+        // Constr(1, []) would resume at chunk 1 and skip requireSignedBy(p.seller) in chunk 0
+        assertMintRejected(Data.Constr(1, PList.Nil))
     }
 }
