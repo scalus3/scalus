@@ -26,6 +26,13 @@ class PatternActionEmbeddingTest extends AnyFunSuite {
 
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
+    /** Counts the literal 31337 in rendered SIR. Bound names (`sx-313370`) and type variables
+      * (`A#313370`) carry compiler symbol ids, which change from build to build, so a plain
+      * substring match can also count them.
+      */
+    private def literalOccurrences(rendered: String): Int =
+        "(?<![\\w#-])31337(?!\\d)".r.findAllIn(rendered).size
+
     test("big shared or-pattern action at case index 0 is embedded once, not duplicated") {
         import scalus.cardano.onchain.plutus.prelude.*
         val sir = compile { (x: These[BigInt, BigInt]) =>
@@ -35,7 +42,7 @@ class PatternActionEmbeddingTest extends AnyFunSuite {
                 case These.These(a, b) => a + b
         }
         val rendered = sir.pretty.render(120)
-        val occurrences = "31337".r.findAllIn(rendered).size
+        val occurrences = literalOccurrences(rendered)
         assert(
           occurrences == 1,
           s"expected the shared action to appear once (by reference), found it $occurrences times"
@@ -76,7 +83,7 @@ class PatternActionEmbeddingTest extends AnyFunSuite {
                 case _                  => BigInt(0)
         }
         val rendered = sir.pretty.render(120)
-        val occurrences = "31337".r.findAllIn(rendered).size
+        val occurrences = literalOccurrences(rendered)
         assert(
           occurrences == 1,
           s"expected the shared action to appear once (by reference), found it $occurrences times"
@@ -105,7 +112,7 @@ class PatternActionEmbeddingTest extends AnyFunSuite {
         }
         val rendered = sir.pretty.render(120)
         assert(rendered.contains("caseAction"), "expected a ByReference action let")
-        val occurrences = "31337".r.findAllIn(rendered).size
+        val occurrences = literalOccurrences(rendered)
         assert(
           occurrences == 1,
           s"expected the shared action to appear once (by reference), found it $occurrences times"
