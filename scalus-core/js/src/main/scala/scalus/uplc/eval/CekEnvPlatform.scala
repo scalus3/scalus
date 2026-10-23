@@ -3,6 +3,8 @@ package scalus.uplc.eval
 import scala.collection.immutable
 import scala.scalajs.js
 
+// Unused since the machine builds its environments as `CekEnv`. Kept because removing it would
+// break binary compatibility (the object compiles to a public class).
 private[eval] object CekEnvPlatform {
 
     /** An empty environment backed by a JavaScript array. */

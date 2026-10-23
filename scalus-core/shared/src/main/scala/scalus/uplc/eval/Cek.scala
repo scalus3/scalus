@@ -894,7 +894,7 @@ class CekMachine(
     )
 
     private var ctx: Context = NoFrame
-    private var env: CekValEnv = CekEnvPlatform.empty
+    private var env: CekValEnv = CekEnv.empty
     private var value: CekValue | Null = null
     private var term: Term | Null = null
 
@@ -1204,8 +1204,8 @@ class CekMachine(
                 case 2 => this.term
         }
 
-        spendBudget(ExBudgetCategory.Startup, params.machineCosts.startupCost, CekEnvPlatform.empty)
-        loop(Compute(NoFrame, CekEnvPlatform.empty, term))
+        spendBudget(ExBudgetCategory.Startup, params.machineCosts.startupCost, CekEnv.empty)
+        loop(Compute(NoFrame, CekEnv.empty, term))
     }
 
     private inline def Compute(ctx: Context, env: CekValEnv, term: Term): Int = {
@@ -1498,10 +1498,23 @@ class CekMachine(
             throw MachineError(
               s"Got a de Bruijn index 0: $name, it should be > 0. Run `DeBruijn.deBruijnTerm(term)` first."
             )
-        if name.index <= 0 || env.size < name.index then
-            throw new OpenTermEvaluatedMachineError(name, env, term.sourcePos)
-        else env(env.size - name.index)._2
+        env match
+            case e: CekEnv =>
+                val v = e.lookup(name.index)
+                if v == null then throw new OpenTermEvaluatedMachineError(name, env, term.sourcePos)
+                else v
+            case _ =>
+                if name.index <= 0 || env.size < name.index then
+                    throw new OpenTermEvaluatedMachineError(name, env, term.sourcePos)
+                else env(env.size - name.index)._2
     }
+
+    /** Binds `name` to `arg` in `env`. The machine builds every environment as a `CekEnv`; the
+      * other case is a `VLamAbs` made outside it, such as by the JIT.
+      */
+    private def extendEnv(env: CekValEnv, name: String, arg: CekValue): CekValEnv = env match
+        case e: CekEnv => e.extend(name, arg)
+        case _         => env :+ (name, arg)
 
     private def applyEvaluate(
         ctx: Context,
@@ -1571,7 +1584,7 @@ class CekMachine(
                 // for the profiler. Stateless (no runtime stack), so tail calls stay constant-space.
                 val ps = profilingSpenderOrNull
                 if ps != null then ps.onCall(callPos)
-                Compute(ctx, env :+ (name, arg), term)
+                Compute(ctx, extendEnv(env, name, arg), term)
             case b @ VBuiltin(bn, term, runtime, args, applied) =>
                 val kinds = runtime.argKinds
                 if applied < kinds.length && kinds(applied) then
