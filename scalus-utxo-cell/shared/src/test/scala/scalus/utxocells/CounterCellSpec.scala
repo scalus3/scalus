@@ -281,6 +281,135 @@ class CounterCellSpec extends AnyFunSuite {
         assert(result.isSuccess, s"UPLC terminal spend failed: $result")
     }
 
+    // -- Beacon must stay in the continuing output (F-80) --
+
+    private val beacon = Value(scriptHash, CounterCell.beaconName, BigInt(1))
+    private val scriptAddress = Address(Credential.ScriptCredential(scriptHash), Option.None)
+    private val cellLovelace = Value.lovelace(BigInt(10_000_000))
+
+    private def cellInput(ref: TxOutRef): TxInInfo = TxInInfo(
+      outRef = ref,
+      resolved = TxOut(
+        address = scriptAddress,
+        value = cellLovelace + beacon,
+        datum = OutputDatum.OutputDatum(CounterState(BigInt(5)).toData)
+      )
+    )
+
+    private def incrementContext(
+        inputs: List[TxInInfo],
+        outputs: List[TxOut],
+        mint: Value = Value.zero
+    ): ScriptContext = ScriptContext(
+      txInfo =
+          TxInfo(inputs = inputs, outputs = outputs, fee = 200_000, mint = mint, id = dummyTxId),
+      redeemer = CounterAction.Increment.toData,
+      scriptInfo = ScriptInfo.SpendingScript(ownOutRef, Option.Some(CounterState(BigInt(5)).toData))
+    )
+
+    private val nextCellOutput = TxOut(
+      address = scriptAddress,
+      value = cellLovelace + beacon,
+      datum = OutputDatum.OutputDatum(CounterState(BigInt(6)).toData)
+    )
+
+    // A def: recipientAddress is initialized further down the class
+    private def stolenBeacon: TxOut =
+        TxOut(address = recipientAddress, value = Value.lovelace(2_000_000) + beacon)
+
+    private val bothCounterCells = Seq(
+      "CounterCell" -> (() => CounterCellCompilation.compiled.withErrorTraces),
+      "CounterCellV2" -> (() => CounterCellV2Compilation.compiled.withErrorTraces)
+    )
+
+    private def resetContext(
+        inputs: List[TxInInfo],
+        outputs: List[TxOut],
+        scriptInfo: ScriptInfo
+    ): ScriptContext = ScriptContext(
+      txInfo =
+          TxInfo(inputs = inputs, outputs = outputs, fee = 200_000, mint = -beacon, id = dummyTxId),
+      redeemer = CounterAction.Reset.toData,
+      scriptInfo = scriptInfo
+    )
+
+    // Two cells reset together but only one beacon burned: the other beacon would go back to
+    // the script with a forged datum
+    private val twoCellInputs = List(cellInput(ownOutRef), cellInput(TxOutRef(ownOutRef.id, 1)))
+    private val forgedCell = TxOut(
+      address = scriptAddress,
+      value = cellLovelace + beacon,
+      datum = OutputDatum.OutputDatum(CounterState(BigInt(1000)).toData)
+    )
+
+    for (name, compiled) <- bothCounterCells do {
+        def eval(ctx: ScriptContext) = (compiled().program $ ctx.toData).evaluateDebug
+
+        def assertFailsWith(ctx: ScriptContext, expected: String) = {
+            val result = eval(ctx)
+            assert(result.isFailure, s"Expected failure with '$expected'")
+            assert(
+              result.logs.exists(_.contains(expected)),
+              s"Expected '$expected' in logs: ${result.logs}"
+            )
+        }
+
+        test(s"$name: spend that keeps the beacon in the continuing output succeeds") {
+            val result =
+                eval(incrementContext(List(cellInput(ownOutRef)), List(nextCellOutput)))
+            assert(result.isSuccess, s"Valid spend failed: $result")
+        }
+
+        test(s"$name: Fail: continuing output without the beacon") {
+            val stripped = nextCellOutput.copy(value = cellLovelace)
+            assertFailsWith(
+              incrementContext(List(cellInput(ownOutRef)), List(stripped, stolenBeacon)),
+              "UtxoCell: continuing output must keep the beacon"
+            )
+        }
+
+        test(s"$name: Fail: non-terminal spend that burns the beacon") {
+            assertFailsWith(
+              incrementContext(List(cellInput(ownOutRef)), List(nextCellOutput), mint = -beacon),
+              "UtxoCell: nothing may be minted or burned on a non-terminal spend"
+            )
+        }
+
+        test(s"$name: Fail: two cells merged into one continuing output") {
+            assertFailsWith(
+              incrementContext(twoCellInputs, List(nextCellOutput, stolenBeacon)),
+              "UtxoCell: expected one cell input"
+            )
+        }
+
+        test(s"$name: terminal spend of one cell with one burn succeeds") {
+            val spending = ScriptInfo.SpendingScript(
+              ownOutRef,
+              Option.Some(CounterState(BigInt(5)).toData)
+            )
+            val result = eval(resetContext(List(cellInput(ownOutRef)), List.Nil, spending))
+            assert(result.isSuccess, s"Valid terminal spend failed: $result")
+        }
+
+        test(s"$name: Fail: two terminal spends share one burn") {
+            val spending = ScriptInfo.SpendingScript(
+              ownOutRef,
+              Option.Some(CounterState(BigInt(5)).toData)
+            )
+            assertFailsWith(
+              resetContext(twoCellInputs, List(forgedCell), spending),
+              "UtxoCell: expected one cell input"
+            )
+        }
+
+        test(s"$name: Fail: one burn while two cells are spent (mint policy)") {
+            assertFailsWith(
+              resetContext(twoCellInputs, List(forgedCell), ScriptInfo.MintingScript(scriptHash)),
+              "UtxoCell: expected one cell input"
+            )
+        }
+    }
+
     private def makeSpendingContext(
         datum: Data,
         redeemer: Data,

@@ -32,10 +32,10 @@ object UtxoCellLib {
 
     /** Verify that a spend transition result is consistent with the on-chain transaction.
       *
-      * If nextState is Some, verifies that exactly one continuing output exists at the same script
-      * address with a matching inline datum, and that the staking credential is preserved (V016
-      * protection). If nextState is None, the cell is terminating and no continuing output is
-      * required. Also verifies all additional outputs in result.outputs (V005-safe).
+      * If nextState is Some, runs [[verifyContinuingOutput]]: one cell input, no mint under the
+      * cell policy, and one continuing output at the same address with the matching inline datum
+      * and the input's beacon. If nextState is None, the cell is terminating and no continuing
+      * output is required. Also verifies all additional outputs in result.outputs (V005-safe).
       */
     def verifySpendResult[S: ToData](
         result: UtxoCellTransition[S],
@@ -48,9 +48,11 @@ object UtxoCellLib {
 
     /** Verify a spend transition when using CellContext (outputs checked by ctx.addOutput).
       *
-      * If nextState is Some, verifies that exactly one continuing output exists at the same script
-      * address with a matching inline datum, and that the staking credential is preserved (V016
-      * protection). If nextState is None, the cell is terminating.
+      * If nextState is Some, verifies that the transaction spends exactly one input of this script,
+      * mints and burns nothing under the script policy, and has exactly one continuing output at
+      * the same script address (staking credential included, V016 protection) with a matching
+      * inline datum and the same script-policy tokens (the beacon) as the input. If nextState is
+      * None, the cell is terminating.
       */
     def verifyContinuingOutput[S: ToData](
         nextState: Option[S],
@@ -60,16 +62,36 @@ object UtxoCellLib {
         nextState match
             case Option.Some(state) =>
                 val ownAddress = tx.findInputOrFail(ownRef).resolved.address
+                val ownCredential = ownAddress.credential
+                // Exactly one cell input of this script. Otherwise two cells could share one
+                // continuing output and the second beacon could leave the script.
+                val ownInput = tx.inputs.findUniqueOrFail(
+                  _.resolved.address.credential === ownCredential,
+                  "UtxoCell: expected one cell input"
+                )
+                val policyId = ownCredential.scriptHashOrFail("UtxoCell: input is not a script")
+                // A continuing cell keeps its beacon: nothing is minted or burned under the
+                // cell policy, and the continuing output holds the same policy tokens as the
+                // input. Values are ledger-canonical, so equalsData is token-map equality.
+                require(
+                  tx.mint.tokens(policyId).isEmpty,
+                  "UtxoCell: nothing may be minted or burned on a non-terminal spend"
+                )
                 // Exactly one output at the script credential, and it must keep the whole
                 // address (staking credential included, V016). Uniqueness is by credential so
                 // the beacon cannot be moved to a second output at a different staking part.
                 val continuingOutput = tx.outputs.findUniqueOrFail(
-                  _.address.credential === ownAddress.credential,
+                  _.address.credential === ownCredential,
                   "UtxoCell: expected one continuing output"
                 )
                 require(
                   continuingOutput.address === ownAddress,
                   "UtxoCell: continuing output must keep the staking credential"
+                )
+                require(
+                  continuingOutput.value.tokens(policyId).toData ===
+                      ownInput.resolved.value.tokens(policyId).toData,
+                  "UtxoCell: continuing output must keep the beacon"
                 )
                 require(
                   continuingOutput.hasInlineDatum(state),
@@ -163,7 +185,9 @@ object UtxoCellLib {
 
     /** Verify that a beacon token is burned exactly once (for terminal transitions).
       *
-      * Also verifies that no other tokens are minted or burned under this policy (V011 protection).
+      * Also verifies that no other tokens are minted or burned under this policy (V011 protection),
+      * and that the transaction spends exactly one cell of this script. Otherwise two terminating
+      * cells could share one burn and the second beacon could leave the script.
       */
     def verifyBurnBeacon(
         tokenName: ByteString,
@@ -173,6 +197,11 @@ object UtxoCellLib {
         require(
           tx.mint.hasOnly(policyId, tokenName, -1),
           "UtxoCell: exactly one beacon token and nothing else may be burned under this policy"
+        )
+        val scriptCredential = Credential.ScriptCredential(policyId)
+        tx.inputs.findUniqueOrFail(
+          _.resolved.address.credential === scriptCredential,
+          "UtxoCell: expected one cell input"
         )
     }
 
