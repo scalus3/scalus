@@ -832,6 +832,26 @@ final class CountingBudgetSpender extends BudgetSpender {
     def getSpentBudget: ExUnits = ExUnits(memory.toLong, cpu.toLong)
 }
 
+/** The budget categories that the CEK machine and the JIT spend, allocated once. A spend used to
+  * build a new `Step(kind)` or `BuiltinApp(fun)` each time. `TallyingBudgetSpender` keys on
+  * category equality, so it sees the same categories as before. `private[uplc]` so that
+  * `scalus.uplc.jit.JitBudget` can use it too.
+  */
+private[uplc] object CekBudgetCategories {
+    val Const: ExBudgetCategory = ExBudgetCategory.Step(StepKind.Const)
+    val Var: ExBudgetCategory = ExBudgetCategory.Step(StepKind.Var)
+    val LamAbs: ExBudgetCategory = ExBudgetCategory.Step(StepKind.LamAbs)
+    val Apply: ExBudgetCategory = ExBudgetCategory.Step(StepKind.Apply)
+    val Delay: ExBudgetCategory = ExBudgetCategory.Step(StepKind.Delay)
+    val Force: ExBudgetCategory = ExBudgetCategory.Step(StepKind.Force)
+    val Builtin: ExBudgetCategory = ExBudgetCategory.Step(StepKind.Builtin)
+    val Constr: ExBudgetCategory = ExBudgetCategory.Step(StepKind.Constr)
+    val Case: ExBudgetCategory = ExBudgetCategory.Step(StepKind.Case)
+
+    /** `BuiltinApp(fun)` of every builtin, indexed by `DefaultFun.ordinal`. */
+    val builtins: Array[ExBudgetCategory] = DefaultFun.values.map(ExBudgetCategory.BuiltinApp(_))
+}
+
 /** CEK machine implementation based on Cardano Plutus CEK machine.
   *
   * The CEK machine is a stack-based abstract machine that is used to evaluate UPLC terms.
@@ -1230,27 +1250,27 @@ class CekMachine(
         val costs = params.machineCosts
         term match
             case Var(name, _) =>
-                spendBudget(ExBudgetCategory.Step(StepKind.Var), costs.varCost, env)
+                spendBudget(CekBudgetCategories.Var, costs.varCost, env)
                 Return(ctx, env, lookupVarName(env, name, term))
             case LamAbs(name, term, _) =>
-                spendBudget(ExBudgetCategory.Step(StepKind.LamAbs), costs.lamCost, env)
+                spendBudget(CekBudgetCategories.LamAbs, costs.lamCost, env)
                 Return(ctx, env, VLamAbs(name, term, env))
             case Apply(fun, arg, _) =>
-                spendBudget(ExBudgetCategory.Step(StepKind.Apply), costs.applyCost, env)
+                spendBudget(CekBudgetCategories.Apply, costs.applyCost, env)
                 // only the profiler reads `callPos`; see `trackPositions`
                 val callPos = if trackPositions then term.sourcePos else ScalusSourcePos.empty
                 Compute(FrameAwaitFunTerm(env, arg, ctx, callPos), env, fun)
             case Force(term, _) =>
-                spendBudget(ExBudgetCategory.Step(StepKind.Force), costs.forceCost, env)
+                spendBudget(CekBudgetCategories.Force, costs.forceCost, env)
                 Compute(FrameForce(ctx), env, term)
             case Delay(term, _) =>
-                spendBudget(ExBudgetCategory.Step(StepKind.Delay), costs.delayCost, env)
+                spendBudget(CekBudgetCategories.Delay, costs.delayCost, env)
                 Return(ctx, env, VDelay(term, env))
             case Const(const, _) =>
-                spendBudget(ExBudgetCategory.Step(StepKind.Const), costs.constCost, env)
+                spendBudget(CekBudgetCategories.Const, costs.constCost, env)
                 Return(ctx, env, VCon(const))
             case Builtin(bn, _) =>
-                spendBudget(ExBudgetCategory.Step(StepKind.Builtin), costs.builtinCost, env)
+                spendBudget(CekBudgetCategories.Builtin, costs.builtinCost, env)
                 // The @term@ is a 'Builtin', so it's fully discharged.
                 try
                     val meaning = getBuiltinRuntime(bn)
@@ -1258,13 +1278,13 @@ class CekMachine(
                 catch case _: Exception => throw new UnknownBuiltin(bn, env, term.sourcePos)
             case Error(_) => throw new EvaluationFailure(env, term.sourcePos, getSourceTrace)
             case Constr(tag, args, _) =>
-                spendBudget(ExBudgetCategory.Step(StepKind.Constr), costs.constrCost, env)
+                spendBudget(CekBudgetCategories.Constr, costs.constrCost, env)
                 args match
                     case arg :: rest =>
                         Compute(FrameConstr(env, tag, rest, ArraySeq.empty, ctx), env, arg)
                     case Nil => Return(ctx, env, VConstr(tag, Nil))
             case Case(scrut, cases, _) =>
-                spendBudget(ExBudgetCategory.Step(StepKind.Case), costs.caseCost, env)
+                spendBudget(CekBudgetCategories.Case, costs.caseCost, env)
                 Compute(FrameCases(env, cases, ctx), env, scrut)
     }
 
@@ -1680,7 +1700,7 @@ class CekMachine(
         else
             val args = b.args.reverse // `b.args` holds the term arguments newest first
             spendBudget(
-              ExBudgetCategory.BuiltinApp(b.bn),
+              CekBudgetCategories.builtins(b.bn.ordinal),
               runtime.costFunction.calculateCost(args*),
               env
             )
