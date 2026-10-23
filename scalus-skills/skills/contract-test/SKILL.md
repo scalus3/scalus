@@ -98,6 +98,14 @@ where the UNSAFE input fails. The transaction is valid apart from the one change
    mints nothing fails.
 6. `hasNft` / `hasPaidTagged`: quantity 2 of the beacon fails; one tagged output claimed by two
    script instances fails.
+7. State token lifecycle: minting the token to a wallet fails; minting it to the script without a
+   datum, or with a datum the state rules reject, fails; a transition that moves the token out of
+   the continuing output fails; the `Burn` redeemer with a positive quantity fails.
+
+**Liveness convention:** every check on a continuing output also gets one passing test of the
+honest transaction at its edge. For a value check: the continuing output adds lovelace (a min-ADA
+top-up for a larger datum) and passes. A suite with only `Fail:` tests cannot tell a correct check
+from one that rejects every transaction.
 
 Shape of one case (unit path, `VestingValidatorTest` "Fail: continuing output redirects the staking credential"):
 

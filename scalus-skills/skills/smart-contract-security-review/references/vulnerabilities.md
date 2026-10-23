@@ -20,40 +20,42 @@ index/ordering, PU script purpose, EV evaluation, AR arithmetic, RS resources, D
 7. [V027: ADA-Only Value Comparison (VP-2)](#v027-ada-only-value-comparison-vp-2)
 8. [V028: One-Shot Seed Not Bound (MI-2)](#v028-one-shot-seed-not-bound-mi-2)
 9. [V029: Missed Input (IX-2)](#v029-missed-input-ix-2)
+10. [V038: State Token Not Placed at Mint (MI-4)](#v038-state-token-not-placed-at-mint-mi-4)
 
 ### High
-10. [V006: Index Validation Missing (IX-1)](#v006-index-validation-missing-ix-1)
-11. [V007: Self-Dealing / Shill Bidding (DE-3)](#v007-self-dealing--shill-bidding-de-3)
-12. [V008: Double Spend via Index Reuse (IX-1)](#v008-double-spend-via-index-reuse-ix-1)
-13. [V009: Inexact Refund Amount (VP-4)](#v009-inexact-refund-amount-vp-4)
-14. [V010: Other Redeemer Attack (PU-1)](#v010-other-redeemer-attack-pu-1)
-15. [V011: Other Token Name Attack (MI-1)](#v011-other-token-name-attack-mi-1)
-16. [V012: Missing UTxO Authentication (AU-1 / AU-5)](#v012-missing-utxo-authentication-au-1--au-5)
-17. [V025: Oracle Data Validation (DE-2)](#v025-oracle-data-validation-de-2)
-18. [V030: Evaluation-Order Trap (EV-1)](#v030-evaluation-order-trap-ev-1)
-19. [V031: Signature Domain Separation (AU-7)](#v031-signature-domain-separation-au-7)
-20. [V032: Certificate Purposes Unguarded (PU-3)](#v032-certificate-purposes-unguarded-pu-3)
+11. [V006: Index Validation Missing (IX-1)](#v006-index-validation-missing-ix-1)
+12. [V007: Self-Dealing / Shill Bidding (DE-3)](#v007-self-dealing--shill-bidding-de-3)
+13. [V008: Double Spend via Index Reuse (IX-1)](#v008-double-spend-via-index-reuse-ix-1)
+14. [V009: Inexact Refund Amount (VP-4)](#v009-inexact-refund-amount-vp-4)
+15. [V010: Other Redeemer Attack (PU-1)](#v010-other-redeemer-attack-pu-1)
+16. [V011: Other Token Name Attack (MI-1)](#v011-other-token-name-attack-mi-1)
+17. [V012: Missing UTxO Authentication (AU-1 / AU-5)](#v012-missing-utxo-authentication-au-1--au-5)
+18. [V025: Oracle Data Validation (DE-2)](#v025-oracle-data-validation-de-2)
+19. [V030: Evaluation-Order Trap (EV-1)](#v030-evaluation-order-trap-ev-1)
+20. [V031: Signature Domain Separation (AU-7)](#v031-signature-domain-separation-au-7)
+21. [V032: Certificate Purposes Unguarded (PU-3)](#v032-certificate-purposes-unguarded-pu-3)
+22. [V039: Over-Strict Continuing Value (VP-7)](#v039-over-strict-continuing-value-vp-7)
 
 ### Medium
-21. [V013: Time Handling (TI-1 / TI-2)](#v013-time-handling-ti-1--ti-2)
-22. [V014: Missing Signature Validation (AU-2)](#v014-missing-signature-validation-au-2)
-23. [V015: Datum Mutation Not Validated (DT-1)](#v015-datum-mutation-not-validated-dt-1)
-24. [V016: Insufficient Staking Control (AU-4)](#v016-insufficient-staking-control-au-4)
-25. [V017: Arbitrary Datum (DT-3)](#v017-arbitrary-datum-dt-3)
-26. [V024: Parameterization Verification (AU-6)](#v024-parameterization-verification-au-6)
-27. [V033: Voting / Proposing Purposes Unguarded (PU-4)](#v033-voting--proposing-purposes-unguarded-pu-4)
-28. [V034: Value-Map Normalisation (VP-5)](#v034-value-map-normalisation-vp-5)
-29. [V035: Min-ADA Griefing on Forced Outputs (VP-6)](#v035-min-ada-griefing-on-forced-outputs-vp-6)
-30. [V036: Hash Grinding (DE-4)](#v036-hash-grinding-de-4)
+23. [V013: Time Handling (TI-1 / TI-2)](#v013-time-handling-ti-1--ti-2)
+24. [V014: Missing Signature Validation (AU-2)](#v014-missing-signature-validation-au-2)
+25. [V015: Datum Mutation Not Validated (DT-1)](#v015-datum-mutation-not-validated-dt-1)
+26. [V016: Insufficient Staking Control (AU-4)](#v016-insufficient-staking-control-au-4)
+27. [V017: Arbitrary Datum (DT-3)](#v017-arbitrary-datum-dt-3)
+28. [V024: Parameterization Verification (AU-6)](#v024-parameterization-verification-au-6)
+29. [V033: Voting / Proposing Purposes Unguarded (PU-4)](#v033-voting--proposing-purposes-unguarded-pu-4)
+30. [V034: Value-Map Normalisation (VP-5)](#v034-value-map-normalisation-vp-5)
+31. [V035: Min-ADA Griefing on Forced Outputs (VP-6)](#v035-min-ada-griefing-on-forced-outputs-vp-6)
+32. [V036: Hash Grinding (DE-4)](#v036-hash-grinding-de-4)
 
 ### Low / Design Issues
-31. [V018: Unbounded Value (RS-1)](#v018-unbounded-value-rs-1)
-32. [V019: Unbounded Datum (RS-2)](#v019-unbounded-datum-rs-2)
-33. [V020: Unbounded Inputs (RS-3)](#v020-unbounded-inputs-rs-3)
-34. [V021: UTxO Contention / EUTXO Concurrency DoS (RS-5)](#v021-utxo-contention--eutxo-concurrency-dos-rs-5)
-35. [V022: Cheap Spam / Dust Attack (RS-6)](#v022-cheap-spam--dust-attack-rs-6)
-36. [V023: Locked Value (DE-1)](#v023-locked-value-de-1)
-37. [V037: Reference-Script Size (RS-7)](#v037-reference-script-size-rs-7)
+33. [V018: Unbounded Value (RS-1)](#v018-unbounded-value-rs-1)
+34. [V019: Unbounded Datum (RS-2)](#v019-unbounded-datum-rs-2)
+35. [V020: Unbounded Inputs (RS-3)](#v020-unbounded-inputs-rs-3)
+36. [V021: UTxO Contention / EUTXO Concurrency DoS (RS-5)](#v021-utxo-contention--eutxo-concurrency-dos-rs-5)
+37. [V022: Cheap Spam / Dust Attack (RS-6)](#v022-cheap-spam--dust-attack-rs-6)
+38. [V023: Locked Value (DE-1)](#v023-locked-value-de-1)
+39. [V037: Reference-Script Size (RS-7)](#v037-reference-script-size-rs-7)
 
 ---
 
@@ -323,6 +325,7 @@ Search for:
 - `tokens(policy).forall(_._2 < 0)` without a `nonEmpty` guard (vacuous truth)
 - Flexible burn validation allowing partial burns
 - Token minting without upper bound
+- A policy branch for a `Burn` redeemer that accepts any quantities (`case Burn => ()` or `true`): a transaction can mint under the Burn redeemer. The minimum is `tx.onlyBurnsUnder(policyId)`; the exact quantity can then live in the spend branch that consumes the token (token lifecycle table)
 
 ### False Positive Indicators
 - `>=` is intentional for "mint at least N" scenarios (check if this is the design)
@@ -1563,7 +1566,7 @@ Search for:
 ## V026: Value Not Preserved on Continuing Output (VP-1)
 
 **Severity**: Critical
-**Fixed by**: `out.value.hasSameTokensAndAtLeastAda(expected)` (tokens exact, ADA open above) or `out.value === expected` (exact); tie every datum balance to `out.value.quantityOf(asset)`
+**Fixed by**: `out.value.hasSameTokensAndAtLeastAda(expected)` (tokens exact, ADA open above); tie every datum balance to `out.value.quantityOf(asset)`. An exact `out.value === expected` on a continuing output rejects a min-ADA top-up (V039); keep `===` for payouts (V009)
 **In the Scalus examples**: AMM (datum reserves never tied to the pool output value; pool fully drainable), Lottery, Vesting, PaymentSplitter
 
 ### Description
@@ -1613,6 +1616,7 @@ obligations (V005).
 ### Detection Patterns
 Search for:
 - A continuing output whose `.value` is never read
+- The opposite mistake, an exact `===` on a continuing output whose datum changes: V039
 - A datum field named like a balance (`reserves`, `amount`, `balance`) with no `quantityOf` binding it to the output
 - `getLovelace >=` on a continuing output (V027 and V009 at once)
 
@@ -2028,6 +2032,117 @@ require(
 Search for:
 - A whole-value preservation rule on a UTxO that anyone can pay into
 - Datum lists that grow with user input on a UTxO with fixed ADA (V019)
+
+---
+
+## V038: State Token Not Placed at Mint (MI-4)
+
+**Severity**: Critical
+**Fixed by**: in the mint branch, require an output at the own script that holds the minted token
+and a valid inline datum; the token lifecycle table in `SKILL.md`
+
+### Description
+A contract that authenticates its UTxO by a state, beacon or auth token relies on an invariant:
+every UTxO that carries the token sits at the script with a valid datum. The spend branches can
+only preserve the invariant (V002); the mint branch must establish it. A mint branch that checks
+the seed (V028) and `hasOnly` but no output lets the token go to a wallet, or to the script with
+no datum or a datum that breaks the state's rules. A consumer that checks "at the script and holds
+the token" (V012) then trusts whatever UTxO the minter builds later.
+
+### Attack Scenario
+```
+Mint tx:  spends the seed, mints 1 ORACLE under the oracle policy -> minter's wallet
+Later:    minter (or whoever holds the key later) sends ORACLE + datum {rate = 0, ...} to the
+          oracle address with no script run at all: paying to a script runs no validator
+Consumer: reads the reference input "at the oracle script, holds ORACLE" and trusts rate = 0
+```
+
+### Vulnerable Pattern
+```scala
+case Mint =>
+    tx.findInputOrFail(config.seedUtxo, "Must spend seed utxo")
+    require(tx.mint.hasOnly(policyId, config.beaconName, 1), "Must mint exactly 1 beacon")
+    // nothing says where the beacon goes or with which datum
+```
+
+### Secure Pattern
+```scala
+case Mint =>
+    tx.findInputOrFail(config.seedUtxo, "Must spend seed utxo")
+    require(tx.mint.hasOnly(policyId, config.beaconName, 1), "Must mint exactly 1 beacon")
+    // Base case of the invariant: the beacon starts in a valid oracle UTxO.
+    val oracleOut = tx.outputs.findUniqueOrFail(
+      _.value.hasNft(policyId, config.beaconName),
+      "Beacon must go to one output"
+    )
+    require(
+      oracleOut.address.credential === Credential.ScriptCredential(policyId),
+      "Beacon must go to the oracle script"
+    )
+    val state = oracleOut.datum.inlineOrFail[OracleState]("Oracle output must have an inline datum")
+    requireValidState(state) // the same rules an update checks
+```
+
+### Detection Patterns
+Search for:
+- A mint branch that reads no output, while a spend branch or a consumer checks `hasNft` / `quantityOf` of the same token
+- One-shot policies (V028) whose minted token is the identity of a script UTxO
+
+### False Positive Indicators
+- The token is a receipt for a wallet (an LP token, a voucher), not the identity of a script UTxO
+- The datum rules are enforced again by every reader of the UTxO (rare; still report the gap)
+
+---
+
+## V039: Over-Strict Continuing Value (VP-7)
+
+**Severity**: High (a liveness defect: honest transactions fail, funds can get stuck)
+**Fixed by**: `out.value.hasSameTokensAndAtLeastAda(expected)` on the continuing output; when a datum field records the lovelace, require `newDatum.amount === out.value.getLovelace`
+
+### Description
+The min-ADA an output needs grows with its size, and the datum is part of it. A transition that
+writes a larger datum (a revealed secret, a deadline, a status with fields) can need more lovelace
+than the input holds, and the builder adds it. A validator that requires the continuing value to
+equal the input value (`===`, or an exact lovelace equality) rejects that honest transaction. The
+UTxO is stuck whenever its lovelace is below the new min-ADA. The attack-trace method misses this:
+no attacker gains anything.
+
+### Scenario
+```
+Input:  lottery @ script, 2 ADA (min-ADA of the Empty datum), datum = Empty
+Honest reveal: datum = PlayerOneRevealed(len, pkh) needs 2.1 ADA; builder adds 0.1 ADA
+Check:  continuationOutput.value === ownInput.resolved.value   -> 2.1 ADA != 2 ADA -> fails
+Result: no reveal transaction can be built; the game cannot proceed
+```
+
+### Vulnerable Pattern
+```scala
+require(continuationOutput.value === ownInput.resolved.value, "pot must stay")
+// or, with a datum amount that the request may not change:
+require(out.value.getLovelace === datum.amount, "value conserved")
+require(newDatum.amount === datum.amount, "amount unchanged")
+```
+
+### Secure Pattern
+```scala
+require(
+  continuationOutput.value.hasSameTokensAndAtLeastAda(ownInput.resolved.value),
+  "pot must stay"
+)
+// A datum that records the lovelace records the top-up too:
+require(out.value.hasSameTokensAndAtLeastAda(ownInput.resolved.value), "value conserved")
+require(newDatum.amount === out.value.getLovelace, "amount records the vault lovelace")
+```
+
+### Detection Patterns
+Search for:
+- `=== ownInput.resolved.value` or `=== ownInput.value` on a continuing output
+- `getLovelace === datum.<field>` together with `newDatum.<field> === datum.<field>`
+- Then trace the honest transaction with a larger datum (SKILL.md, "Liveness")
+
+### False Positive Indicators
+- The datum cannot change size in this transition (same type, same constructor, only fixed-size fields changed)
+- The UTxO is guaranteed far above min-ADA by a deposit rule (state the rule)
 
 ---
 

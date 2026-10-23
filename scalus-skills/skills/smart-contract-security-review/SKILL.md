@@ -1,6 +1,6 @@
 ---
 name: smart-contract-security-review
-description: Security review for Scalus/Cardano smart contracts. Analyzes @Compile annotated validators for vulnerabilities like redirect attacks, inexact value validation, missing token verification, ADA-only comparisons, rounding direction, and self-dealing. Use when reviewing on-chain code, before deploying validators, or when /smart-contract-security-review is invoked. Requires explicit path argument.
+description: Security review for Scalus/Cardano smart contracts. Analyzes @Compile annotated validators for vulnerabilities like redirect attacks, inexact value validation, missing token verification, broken token lifecycle invariants, honest transactions the validator rejects, ADA-only comparisons, rounding direction, and self-dealing. Use when reviewing on-chain code, before deploying validators, or when /smart-contract-security-review is invoked. Requires explicit path argument.
 ---
 
 # Smart Contract Security Review
@@ -25,10 +25,45 @@ grep -rn "extends DataParameterizedValidator" --include="*.scala" <path>
 
 1. **Discovery**: Find all `@Compile` annotated code in specified path
 2. **Classification**: Identify validator type (spend/mint/reward/certify/vote/propose)
-3. **Analysis**: Check each validator against vulnerability checklist
-4. **False Positive Verification**: For each potential issue, verify it's not a false positive
-5. **Reporting**: Generate structured report with severity levels (only verified issues)
-6. **Remediation**: Use TodoWrite to track issues, fix one-by-one with user confirmation
+3. **Token lifecycle**: For every state, beacon or auth token, fill the lifecycle table below
+4. **Analysis**: Check each validator against vulnerability checklist
+5. **Liveness**: For every value or datum check on a continuing output, trace an honest transaction (below)
+6. **False Positive Verification**: For each potential issue, verify it's not a false positive
+7. **Reporting**: Generate structured report with severity levels (only verified issues)
+8. **Remediation**: Use TodoWrite to track issues, fix one-by-one with user confirmation
+
+**Scope:** review the whole validator, every purpose and every branch, and the validators that
+read its UTxOs, even when you were asked about one change or one diff. A fix is safe only if the
+contract around it is: most findings in a fixed branch come from the branches next to it.
+
+## Token Lifecycle (Invariant) Analysis
+
+A contract that identifies its UTxO by a token is secure only if an invariant holds for every
+UTxO that carries the token: it sits at the script address, with a valid inline datum, and there
+is one of it. Prove it by induction, one row per transaction kind:
+
+| Step | Must hold | Check |
+|---|---|---|
+| Base: mint | The minted token goes to an output at the own script, with an inline datum of the state type that passes the state's own rules (non-zero rate, deadline in the future, ...) | `out.address.credential === ScriptCredential(policyId)` (one script mints and spends) or the whole address; `out.value.hasNft(policyId, name)`; `out.datum.inlineOrFail[State](msg)` plus the state checks. Missing: V038 |
+| Step: each spend branch that continues | The continuing output keeps the token and a valid datum | `hasNft` on the continuing output (V002), datum checks (V015, V017) |
+| End: burn | Burning the token happens only through a spend branch that allows it | the policy's burn branch allows only negative quantities (`onlyBurnsUnder(policyId)`, V003); the spend branch checks the exact burn |
+
+Report a missing base case or step. Then list the checks the invariant makes redundant (for
+example a `datum.isDefined` guard on the token-holding UTxO) for `optimize-contract`; do not
+report them as vulnerabilities.
+
+## Liveness: The Honest Transaction
+
+An attack trace asks whether a bad transaction passes. Also ask whether every good transaction
+passes. For each `require` on a continuing output, build the honest transaction of that branch and
+trace it, with these variations:
+
+- The new datum is larger than the old one (a field filled in, a list grown), so the output needs
+  more min-ADA, and the builder adds lovelace. A whole-value `===` or an exact lovelace equality
+  rejects it: the UTxO can get stuck (V039).
+- The builder adds change, collateral or a fee payer input that the validator did not expect.
+
+A check that rejects an honest transaction is a finding even though no attacker gains value.
 
 ## Vulnerability Checklist
 
@@ -45,13 +80,14 @@ closes the class; "design" means no operation can, review the design.
 |----|----------|------|------|-----------|----------|
 | V001 | VP-3 | Redirect Attack | Funds stolen via output redirection | `outputs.at(idx)` without a whole-address check | `findContinuingOutputOrFail(ownInput, msg)` |
 | V002 | AU-1 | Token/NFT Not Verified | State token excluded | No `hasNft` / `hasOnly` on the continuing output | `out.value.hasNft(policy, name)` |
-| V003 | MI-1 / MI-3 | Inexact Burn/Mint | Extra tokens minted, partial burn | `>=` instead of `===`; `quantityOf` alone; `forall(_._2 < 0)` on a possibly empty map | `tx.mint.hasOnly(policy, name, signedQty)`; `tx.onlyBurnsUnder(policy)` |
+| V003 | MI-1 / MI-3 | Inexact Burn/Mint | Extra tokens minted, partial burn | `>=` instead of `===`; `quantityOf` alone; `forall(_._2 < 0)` on a possibly empty map; a `Burn` redeemer branch that accepts any quantities (`true`): the Burn redeemer then mints | `tx.mint.hasOnly(policy, name, signedQty)`; `tx.onlyBurnsUnder(policy)` |
 | V004 | AR-1 | Rounding Direction (on-chain `Integer` is unbounded; there is no overflow) | Remainder harvested per split action; negative amounts | `/` on fees or shares without a stated direction; redeemer amounts without `> 0` | `a divCeil b` / `a divFloor b` (round against the party that benefits: contract payouts down, amounts owed to the contract up) |
 | V005 | DS-1 / DS-2 | Double Satisfaction | Pay once, satisfy many | `outputs.exists` without unique linking; `>=` payouts | `inputs.findUniqueOrFail(_.resolved.address.credential === ownCred, msg)` or `hasPaidTagged(addr, value, tag)` |
-| V026 | VP-1 | Value Not Preserved on Continuing Output | Continuing UTxO drained while the datum looks right | Datum transition checked, `.value` never read; datum balance not tied to `quantityOf` | `out.value.hasSameTokensAndAtLeastAda(expected)` or `out.value === expected`; bind datum balances with `quantityOf` |
+| V026 | VP-1 | Value Not Preserved on Continuing Output | Continuing UTxO drained while the datum looks right | Datum transition checked, `.value` never read; datum balance not tied to `quantityOf` | `out.value.hasSameTokensAndAtLeastAda(expected)`; bind datum balances with `quantityOf`. Not `===` on a continuing output (V039) |
 | V027 | VP-2 | ADA-Only Value Comparison | Native tokens stripped while lovelace matches | `getLovelace` as the only value check on a script UTxO (reading the amount with it is fine); `getAdaFromOutputs` / `getAdaFromInputs` | whole `Value`: `valuePaidTo(addr)`, `valueSpentFrom(addr)`, `===`; or `withoutLovelace.isZero` at the boundary |
 | V028 | MI-2 | One-Shot Seed Not Bound | "Unique" NFT mintable forever | `TxOutRef` parameter never compared with an input's `outRef` | `findInputOrFail(seed, msg)` or `inputs.at(i).outRef === seed`; `seed.deriveTokenName`; `mint.hasOnly` |
 | V029 | IX-2 | Missed Input | A script input no index names is spent unchecked | Loop over redeemer indices, no walk over `tx.inputs` | walk `tx.inputs`; `UtxoIndexer.multiOneToOneNoRedeemer` |
+| V038 | MI-4 | State Token Not Placed at Mint | The "authentic" token lives in a wallet or in a UTxO with no or an invalid datum; consumers trust it | A mint branch that checks the seed and `hasOnly` but no output: nothing says where the token goes or with which datum | require an output at the own script with `hasNft(policyId, name)` and a valid inline datum (token lifecycle table) |
 
 ### High Severity
 
@@ -68,6 +104,7 @@ closes the class; "design" means no operation can, review the design.
 | V030 | EV-1 | Evaluation-Order Trap | Security check never evaluated | Check on the right of `\|\|` or in an untaken branch; pattern callback ending in a `Boolean` | one obligation per `require`; callbacks return `Unit` |
 | V031 | AU-7 | Signature Domain Separation | Off-chain signature replayed across instances | `verifyEd25519Signature` over a payload without script hash and nonce | design: payload commits to domain tag, own script hash, spent `TxOutRef` |
 | V032 | PU-3 | Certificate Purposes Unguarded | Deregistration griefing, deposit theft | `certify` body `()` or permissive `case _ => ()` | plugin default `fail`; explicit `TxCert` match with failing default |
+| V039 | VP-7 | Over-Strict Continuing Value | Honest transition rejected; UTxO stuck when the new datum needs more min-ADA | `out.value === ownInput.resolved.value` or `out.value.getLovelace === amount` on a continuing output whose datum changes | `out.value.hasSameTokensAndAtLeastAda(expected)`; if a datum field records the lovelace, require it to equal the new `getLovelace` |
 
 ### Medium Severity
 
@@ -105,6 +142,10 @@ Checklist rules:
 3. V027 before V005: when a value check reads `.getLovelace`, ask whether tokens can be in the
    UTxO before asking whether one output can serve two inputs.
 4. V013: any `getValidityStartTime` is a finding; a `validFromOrFail` / `validToOrFail` is not.
+5. V026 and V039 are two sides of one check: the continuing value may not shrink and may not lose
+   or gain tokens (V026), and it may gain lovelace (V039). `hasSameTokensAndAtLeastAda` is both.
+6. V038 and V002: a token check on the continuing output proves nothing if the mint never put the
+   token in a valid UTxO. Check the lifecycle table first.
 
 ## False Positive Verification
 
@@ -203,6 +244,9 @@ Before reporting, answer these questions:
 | What value does the attacker gain? | Concrete amount/asset |
 
 ### Do NOT Report If
+
+These rules apply to attack findings. A liveness finding (V039, V023) needs a traced honest
+transaction that the validator rejects instead.
 
 - You only found a pattern match without tracing execution
 - You haven't constructed a specific attack transaction

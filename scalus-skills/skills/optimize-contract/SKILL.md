@@ -96,6 +96,7 @@ For detailed patterns with Scalus code examples, see `references/patterns.md`.
 | O033 | `xs.filter(p).length` | 2 traversals plus k `mkCons`; `filter` is a non-tail `foldRight`; no pass fuses them | `xs.count(p)`: one tail-recursive `foldLeft`, no allocation |
 | O034 | `filter(p).length === BigInt(1)` then `.head`, or `count(p) === BigInt(1)` | 2 passes (or 1 pass plus a second scan for the element); the guard and the lookup are separate | `xs.findUniqueOrFail(p, msg)`: one pass, returns the element, fails on 0 or 2+. Against `count(p) === BigInt(1)` on inputs: fee 3 175 vs 3 307 (3 inputs), 6 289 vs 6 804 (10 inputs) |
 | O035 | `value.lovelaceAmount` or a hand-written walk to the ADA entry | Walks the `Data` map: about 30 more machine steps per call than the builtin; `lovelaceAmount` is deprecated | `value.getLovelace`: one `lookupCoin` at PV11 |
+| O036 | A check the token invariant already proves | Runs on every spend: a `datum.isDefined` guard on a UTxO that holds the state token; an exact burn quantity checked in both the policy and the spend branch | Drop it once the security review's token lifecycle table holds (mint places the token in a valid UTxO, every transition keeps it). A policy `Burn` branch shrinks to `tx.onlyBurnsUnder(policyId)`, never to `true`. See "Let the Token Invariant Do the Work" |
 
 ### Low Impact — Micro-Optimizations
 
@@ -245,6 +246,31 @@ val ada = out.value.lovelaceAmount
 // One builtin at PV11
 val ada = out.value.getLovelace
 ```
+
+### 10. Let the Token Invariant Do the Work
+When the security review proves the token lifecycle (`smart-contract-security-review`, "Token
+Lifecycle"): the mint puts the token in an output at the script with a valid inline datum, and
+every spend branch keeps it there, then each UTxO that holds the token has that datum. A check
+that re-proves it is redundant on that UTxO:
+
+```scala
+// spend: the datum is never read, and every token-holding UTxO has one by induction
+require(datum.isDefined, "Must have inline datum")   // drop
+
+// mint, Burn redeemer: the only token is in the oracle UTxO, a continuing spend branch keeps it
+// there, so burning it runs the spend Burn branch, which checks the signature and the quantity
+case Burn => require(tx.mint.hasOnly(policyId, name, -1), "burn one")   // before
+case Burn => require(tx.onlyBurnsUnder(policyId), "burn only")     // after
+```
+
+Two limits. Prove the invariant first; without it the check is the only protection. And keep the
+part no invariant covers: `case Burn => ()` lets the Burn redeemer mint new tokens, so a burn
+branch always keeps `onlyBurnsUnder(policyId)`.
+
+The reverse also holds: a rewrite must not make a continuing output stricter. Replacing field
+checks with `out.hasInlineDatum(expected)` pins every field; if one field records the lovelace
+(`amount`) or a time the builder picks, pin it to the new value (`out.value.getLovelace`), not the
+old one, or the honest transaction that adds min-ADA fails (security review V039).
 
 ## Compiler Options That Affect Budget
 

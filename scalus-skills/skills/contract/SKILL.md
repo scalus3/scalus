@@ -79,7 +79,13 @@ newer; on 1.1.1 or older, write the expansion the cheatsheet lists in its "Repla
   (deprecated: a `Data` map walk, about 30 more machine steps per call). Reading the amount is
   fine; comparing only the ADA of a script UTxO is not (V027 in the security review).
 - Token presence: `value.hasNft(policyId, tokenName)` (quantity exactly 1). Continuing value:
-  `out.value.hasSameTokensAndAtLeastAda(ownInput.resolved.value)`, not `===` and not `>=`.
+  `out.value.hasSameTokensAndAtLeastAda(ownInput.resolved.value)`, not `===` and not `>=`: a new
+  datum can need more min-ADA, and `===` then rejects the honest transaction that adds it. A
+  datum field that records the lovelace equals the new `getLovelace`, not the old amount.
+- State or beacon token: the mint branch puts the token in an output at the own script with a
+  valid inline datum (`out.value.hasNft(policyId, name)`, `out.datum.inlineOrFail[State](msg)` and
+  the state's own rules); every continuing spend keeps it (`hasNft` on the continuing output); a
+  `Burn` redeemer branch allows only burning (`onlyBurnsUnder`), never `true`.
 - Burn: `tx.onlyBurnsUnder(policyId)` (non-empty and every quantity negative).
   `tokens(policy).forall(_._2 < 0)` is vacuously true on an empty map.
 - Credentials: `address.credential.scriptHashOrFail(msg)` / `pubKeyHashOrFail(msg)`, never a
