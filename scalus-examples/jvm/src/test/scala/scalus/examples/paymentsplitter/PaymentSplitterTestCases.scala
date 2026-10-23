@@ -44,6 +44,9 @@ trait PaymentSplitterTestCases { self: ScalusTest =>
       *   true if the test should succeed, false otherwise
       * @param expectedError
       *   Expected error regex pattern if expectedSuccess is false
+      * @param claimedNPayed
+      *   The `nPayed` the optimized validator's redeemer claims; by default, the number of distinct
+      *   payees in the outputs
       */
     case class PaymentSplitterTestCase(
         name: String,
@@ -53,8 +56,12 @@ trait PaymentSplitterTestCases { self: ScalusTest =>
         outputs: SList[Output],
         fee: BigInt,
         expectedSuccess: Boolean,
-        expectedError: Option[String] = None
+        expectedError: Option[String] = None,
+        claimedNPayed: Option[BigInt] = None
     ) {
+        def nPayed: BigInt =
+            claimedNPayed.getOrElse(BigInt(outputs.asScala.map(_.payee).distinct.size))
+
         def splitPerPayee: BigInt = {
             val total = contractInputs.sum
             val n = payees.asScala.size
@@ -199,6 +206,30 @@ trait PaymentSplitterTestCases { self: ScalusTest =>
         fee = BigInt(10),
         expectedSuccess = false,
         expectedError = Some("value to be payed|split")
+      ),
+      // The submitter pays itself twice and claims two payees were paid: B gets nothing.
+      PaymentSplitterTestCase(
+        name = "failure when the change payee is paid twice instead of the other payee",
+        payees = SList(A, B),
+        contractInputs = scala.List(BigInt(100)),
+        feePayerInput = (A, BigInt(10)),
+        outputs = SList(A gets 58, A gets 50),
+        fee = BigInt(2),
+        expectedSuccess = false,
+        expectedError = Some("Not all payees were paid"),
+        claimedNPayed = Some(BigInt(2))
+      ),
+      // B gets the split twice and C nothing, with three payees claimed.
+      PaymentSplitterTestCase(
+        name = "failure when a payee is paid twice instead of another payee",
+        payees = SList(A, B, C),
+        contractInputs = scala.List(BigInt(30)),
+        feePayerInput = (A, BigInt(10)),
+        outputs = SList(A gets 18, B gets 10, B gets 10),
+        fee = BigInt(2),
+        expectedSuccess = false,
+        expectedError = Some("Not all payees were paid|not paid yet"),
+        claimedNPayed = Some(BigInt(3))
       )
     )
 }

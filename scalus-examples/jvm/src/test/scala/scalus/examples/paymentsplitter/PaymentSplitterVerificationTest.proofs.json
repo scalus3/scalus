@@ -205,10 +205,10 @@
       "result": "proved",
       "statement": "87c14ff6f518e51c",
       "programs": [
-        "2bd60dcd44e091e2"
+        "92a958a03f4341fe"
       ],
       "notes": {
-        "budget": "1403",
+        "budget": "1393",
         "kind": "Blaster"
       },
       "tests": [
@@ -221,10 +221,10 @@
       "statement": "6284a8ecd8bd9c99",
       "programs": [
         "84e9d729a0a6a17f",
-        "16d9e4c1091d85e3"
+        "ffcbb526e1c16d70"
       ],
       "notes": {
-        "budget": "1607",
+        "budget": "1597",
         "kind": "Blaster"
       },
       "tests": [
@@ -237,10 +237,10 @@
       "statement": "b16aee2523c23f6d",
       "programs": [
         "da20ee8598dcb7ba",
-        "226933caee8c4bf5"
+        "1f25af7309881085"
       ],
       "notes": {
-        "budget": "1268",
+        "budget": "1258",
         "kind": "Blaster"
       },
       "tests": [
@@ -252,10 +252,10 @@
       "result": "proved",
       "statement": "c58afee1ebd83f6c",
       "programs": [
-        "8fdd577ed0a9fb77"
+        "187274292b61db6d"
       ],
       "notes": {
-        "budget": "1593",
+        "budget": "1583",
         "kind": "Blaster"
       },
       "tests": [
@@ -268,10 +268,10 @@
       "statement": "cf9aed4c76c9a1cc",
       "programs": [
         "8609c6e7efb2d96f",
-        "a150b8cbf05d3561"
+        "f758b32b0e953671"
       ],
       "notes": {
-        "budget": "279",
+        "budget": "269",
         "kind": "Blaster"
       },
       "tests": [
@@ -283,10 +283,10 @@
       "result": "proved",
       "statement": "b65528972ae0bb3b",
       "programs": [
-        "7a0ea78d264fbfd6"
+        "c9a4c29c0a75baa2"
       ],
       "notes": {
-        "budget": "269",
+        "budget": "259",
         "kind": "Blaster"
       },
       "tests": [
@@ -300,10 +300,10 @@
       "programs": [
         "7afda6d9d38b825d",
         "b4da1362688fbe40",
-        "10b70ec6bf750984"
+        "e4853fb0da75878b"
       ],
       "notes": {
-        "budget": "5138",
+        "budget": "4844",
         "kind": "Blaster"
       },
       "tests": [
@@ -317,10 +317,10 @@
       "programs": [
         "bf6c1778862da16c",
         "d83bc3d89570738b",
-        "0caece4df267397c"
+        "38dc49ed12295991"
       ],
       "notes": {
-        "budget": "5168",
+        "budget": "4891",
         "kind": "Blaster"
       },
       "tests": [
