@@ -279,6 +279,9 @@ object Math:
             else BigInt(1)
         s.length * BigInt(8) - n
 
+    /** The failure message of [[log]] for base 1. */
+    inline val LogBaseOne = "Math.log: base 1 has no logarithm"
+
     /** Computes a logarithm in a given base using integer divisions.
       *
       * @param self
@@ -292,13 +295,16 @@ object Math:
       *   log(42, base = 2) == 5
       *   log(42, base = 3) == 3
       *   log(5, base = 0) == 0
+      *   log(5, base = 1) // fails: no logarithm in base 1
       *   log(4, base = 4) == 1
       *   log(4, base = 42) == 0
       *   }}}
       * @return
-      *   Greatest integer `k` such that `base^k <= self`.
+      *   Greatest integer `k` such that `base^k <= self`, or `0` if `base <= 0`. Fails for
+      *   `base = 1`, where no greatest `k` exists (Aiken's stdlib runs out of budget there).
       */
     def log(self: BigInt, base: BigInt): BigInt = if base <= 0 then 0
+    else if base === BigInt(1) then fail(LogBaseOne)
     else
         @tailrec
         def go(ret: BigInt, n: BigInt): BigInt =

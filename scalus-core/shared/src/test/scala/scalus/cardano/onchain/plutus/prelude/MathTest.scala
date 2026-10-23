@@ -2,12 +2,20 @@ package scalus.cardano.onchain.plutus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{Coin, ExUnits}
-import scalus.cardano.onchain.RequirementError
+import scalus.cardano.onchain.{OnchainError, RequirementError}
 import scalus.cardano.onchain.plutus.prelude.Math.*
 import scalus.cardano.onchain.plutus.prelude.{divCeil, divFloor, Math}
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.testing.kit.EvalTestKit
+import scalus.uplc.{DeBruijn, PlutusV3}
+import scalus.uplc.Constant.given
+import scalus.uplc.Term.asTerm
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.eval.{Log, PlutusVM, RestrictingBudgetSpender}
+
+import scala.util.Try
 
 class MathTest extends AnyFunSuite with EvalTestKit:
 
@@ -346,44 +354,61 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           log(BigInt(10), base = BigInt(2)),
           BigInt(3),
           Seq(
-            compilerOptions -> ExUnits(memory = 10714, steps = 2_621744)
+            compilerOptions -> ExUnits(memory = 11615, steps = 2_818_077)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(42), base = BigInt(2)),
           BigInt(5),
           Seq(
-            compilerOptions -> ExUnits(memory = 15322, steps = 3_915422)
+            compilerOptions -> ExUnits(memory = 16223, steps = 4_111_755)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(42), base = BigInt(3)),
           BigInt(3),
           Seq(
-            compilerOptions -> ExUnits(memory = 10714, steps = 2_621744)
+            compilerOptions -> ExUnits(memory = 11615, steps = 2_818_077)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(5), base = BigInt(0)),
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 1701, steps = 299937)
+            compilerOptions -> ExUnits(memory = 2001, steps = 347_937)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(4), base = BigInt(4)),
           BigInt(1),
           Seq(
-            compilerOptions -> ExUnits(memory = 6106, steps = 1_328066)
+            compilerOptions -> ExUnits(memory = 7007, steps = 1_524_399)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(4), base = BigInt(42)),
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 3802, steps = 681227)
+            compilerOptions -> ExUnits(memory = 4703, steps = 877_560)
           )
         )
+
+    test("log with base 1 fails"):
+        // On chain first, under a small budget: the old code ran until the budget was exhausted,
+        // which also fails, but without the message.
+        val compiled = PlutusV3.compile((n: Data) => log(n.to[BigInt], base = BigInt(1)))
+        val applied = compiled.program.term $ BigInt(5).toData.asTerm
+        val logger = Log()
+        val result = Try(
+          summon[PlutusVM].evaluateDeBruijnedTerm(
+            DeBruijn.deBruijnTerm(applied),
+            RestrictingBudgetSpender(ExUnits(memory = 1_000_000, steps = 1_000_000_000)),
+            logger
+          )
+        )
+        assert(result.isFailure)
+        assert(logger.getLogs.exists(_.contains(Math.LogBaseOne)), logger.getLogs.toList)
+        assertEvalFailsWithMessage[OnchainError](Math.LogBaseOne)(log(BigInt(1), BigInt(1)))
 
     test("divFloor and divCeil"):
         checkEval: (a: BigInt, b: BigInt) =>
