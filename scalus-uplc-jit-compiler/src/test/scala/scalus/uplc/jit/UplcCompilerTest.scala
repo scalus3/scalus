@@ -18,6 +18,7 @@ import scala.util.Try
 class UplcCompilerTest extends AnyFunSuite {
 
     private given vm: PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+    private val dijkstraVM: PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.dijkstraPV)
     private val budget = ExUnits(memory = 10_000_000_000L, steps = 10_000_000_000_000L)
 
     /** `sumToN(n)` by plain recursion, which traces "start" first: one level of UPLC calls per
@@ -162,6 +163,58 @@ class UplcCompilerTest extends AnyFunSuite {
           MaxDepth
         )
         assertThrows[InvalidReturnValue](compiled.evaluateScript(NoBudgetSpender, NoLogger))
+    }
+
+    /** `evaluator.run`, tracked as `track` does; its result is unit, as `run` returns nothing. */
+    private def runOnly(evaluator: UplcEvaluator)(using PlutusVM): Run =
+        track(budget) { (s, l) =>
+            evaluator.run(s, l)
+            Term.Const(Constant.Unit)
+        }
+
+    /** The last spender and log of `run` hold what the CEK machine spent and logged. */
+    private def assertSameCost(run: Run, expected: Run): Unit = {
+        assert(run.result.isSuccess, run)
+        assert(run.spender.getSpentBudget == expected.spender.getSpentBudget)
+        assert(run.spender.costs == expected.spender.costs)
+        assert(run.log.getLogs.toSeq == expected.log.getLogs.toSeq)
+    }
+
+    test("run: a function result returns, with the budget of the CEK machine [EV-15, EV-16]") {
+        val term = Term.parseUplc("[(lam x (lam y x)) (con integer 1)]").toOption.get
+        val expected = cek(term)
+        assert(expected.result.isSuccess) // not vacuous: the CEK machine evaluates it
+        for evaluator <- List(
+              UplcCompiler.compile(term, MaxDepth),
+              UplcCompiler.compile(term, MaxDepth).withFallback()
+            )
+        do assertSameCost(runOnly(evaluator), expected)
+    }
+
+    test("run with withFallback past the call-depth limit: the CEK budget and logs [EV-17]") {
+        val term = sumTo $ BigInt(MaxDepth + 100).asTerm
+        val run = runOnly(UplcCompiler.compile(term, MaxDepth).withFallback())
+        assertSameCost(run, cek(term))
+        assert(run.spenders.size == 2 && run.logs.size == 2)
+    }
+
+    test("run: a failing script throws what evaluate throws") {
+        val term = compile { (n: BigInt) =>
+            Builtins.trace("before")(if n > 0 then throw new Exception("boom") else n)
+        }.toUplc(true) $ BigInt(1).asTerm
+        val run = runOnly(UplcCompiler.compile(term, MaxDepth).withFallback())
+        val expected = cek(term)
+        assert(run.result.isFailure)
+        assert(JitCekDiff.sameFailure(expected.result.failed.get, run.result.failed.get))
+        assert(run.spender.getSpentBudget == expected.spender.getSpentBudget)
+    }
+
+    test("run rejects a vm of another protocol version, before it spends [EV-14]") {
+        val compiled = UplcCompiler.compile(Term.parseUplc("(lam x x)").toOption.get, MaxDepth)
+        for evaluator <- List(compiled, compiled.withFallback()) do
+            val run = runOnly(evaluator)(using dijkstraVM)
+            assert(run.result.failed.toOption.exists(_.isInstanceOf[IllegalArgumentException]))
+            assert(run.spenders.isEmpty && run.logs.isEmpty)
     }
 
     test("one Compiled evaluated from 8 threads at once gives the CEK result every time [CT-2]") {

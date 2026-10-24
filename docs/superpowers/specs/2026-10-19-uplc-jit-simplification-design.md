@@ -192,6 +192,7 @@ linking breaks its call site permanently. The counter throws while the stack sti
 trait UplcEvaluator {
     def evaluate(budgetSpender: => BudgetSpender, logger: => Logger)(using vm: PlutusVM): Term
     final def evaluateScript(budgetSpender: => BudgetSpender, logger: => Logger)(using vm: PlutusVM): Unit
+    def run(budgetSpender: => BudgetSpender, logger: => Logger)(using vm: PlutusVM): Unit
 }
 object UplcCompiler {
     def compile(
@@ -239,6 +240,20 @@ of PV12.
   `FunctionResultError`. It MUST NOT be evaluated again with the CEK machine. `[EV-8]`
 - `evaluateScript` MUST throw `InvalidReturnValue` for a result that `PlutusVM.isResultValid`
   rejects, and for a result with no term. `[EV-9]`
+- `run` MUST make the checks of `[EV-1]`, `[EV-2]` and `[EV-13]`, as `evaluate` does. `[EV-14]`
+- `run` MUST spend the budget and write the logs that `evaluate` spends and writes. `[EV-15]`
+- `run` MUST return normally for a result with no term. It MUST NOT convert the result to a
+  term. `[EV-16]`
+- The evaluator of `withFallback` MUST apply `[EV-4]` and `[EV-5]` to `run` too. `[EV-17]`
+
+*Example, illustrative.* A benchmark times
+`UplcCompiler.compile(term).withFallback().run(CountingBudgetSpender(), NoLogger)`. For
+`(lam x x)`, `evaluate` throws `FunctionResultError`, and `run` returns. Both spend the same budget.
+
+**Why `run`:** a caller that needs only the budget and the logs, such as a benchmark or a cost
+estimate, must not fail on a script that returns a function. 78 of the 89 `plutus_use_cases`
+scripts do. The CEK machine evaluates them without error, so before `run` such a caller called
+`Compiled.code` directly and skipped the checks of `[EV-1]` and `[EV-2]`.
 
 **Why:** an evaluator only evaluates; the fallback is a decorator, so a caller that wants the JIT
 alone gets it, and the fallback rule lives in one place. A spent budget and written logs cannot be

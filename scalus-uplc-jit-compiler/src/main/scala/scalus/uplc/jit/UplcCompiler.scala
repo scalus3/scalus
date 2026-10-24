@@ -16,6 +16,15 @@ trait UplcEvaluator {
     /** Evaluates the term and returns its result term, as `vm.evaluateDeBruijnedTerm` does. */
     def evaluate(budgetSpender: => BudgetSpender, logger: => Logger)(using vm: PlutusVM): Term
 
+    /** Evaluates the term for its budget and logs only, and discards the result ([EV-14] to
+      * [EV-17]).
+      *
+      * It spends and logs what [[evaluate]] spends and logs, and throws what it throws, with one
+      * exception: a result with no term, such as a function, returns normally here, as it does on
+      * the CEK machine. Use it to measure or estimate the cost of a script.
+      */
+    def run(budgetSpender: => BudgetSpender, logger: => Logger)(using vm: PlutusVM): Unit
+
     /** [[evaluate]], then the check of `PlutusVM.evaluateScript`: a PlutusV3 or V4 script must
       * return unit, or it fails with `InvalidReturnValue` (spec [EV-9]).
       *
@@ -118,6 +127,13 @@ object UplcCompiler {
             toTerm(value).getOrElse(throw new FunctionResultError(JitRuntime.describe(value)))
         }
 
+        def run(budgetSpender: => BudgetSpender, logger: => Logger)(using
+            vm: PlutusVM
+        ): Unit = {
+            checkScope(vm, protocolVersion)
+            code(logger, budgetSpender, vm.machineParams): Unit
+        }
+
         /** This evaluator, with a fallback: a script that reaches the call-depth limit is evaluated
           * again, from the start, with the CEK machine of the `vm` of the evaluation, and with
           * `budgetSpender` and `logger` evaluated a second time ([EV-4], [EV-5]). A spent budget
@@ -146,6 +162,13 @@ object UplcCompiler {
             catch
                 case _: StackThresholdException =>
                     vm.evaluateDeBruijnedTerm(deBruijned, budgetSpender, logger)
+
+        def run(budgetSpender: => BudgetSpender, logger: => Logger)(using vm: PlutusVM): Unit =
+            // as evaluate above: compiled.run checks `vm` first ([EV-14])
+            try compiled.run(budgetSpender, logger)
+            catch
+                case _: StackThresholdException =>
+                    vm.runDeBruijnedTerm(deBruijned, budgetSpender, logger)
     }
 
     /** Rejects a machine other than the one the code was compiled for ([EV-1], [EV-2]): PlutusV3 or

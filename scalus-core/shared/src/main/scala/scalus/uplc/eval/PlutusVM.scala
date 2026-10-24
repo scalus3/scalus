@@ -113,8 +113,28 @@ class PlutusVM(
         budgetSpender: BudgetSpender = NoBudgetSpender,
         logger: Logger = NoLogger,
         tracing: Boolean = false
-    ): Term = {
-        val cek = new CekMachine(
+    ): Term =
+        DeBruijn.fromDeBruijnTerm(
+          cekMachine(budgetSpender, logger, tracing).evaluateTerm(debruijnedTerm)
+        )
+
+    /** [[evaluateDeBruijnedTerm]] for its budget and logs only: the result stays a De Bruijn term
+      * and is dropped, so nothing converts it. For the JIT's `UplcEvaluator.run` (its spec
+      * [EV-16]).
+      */
+    private[scalus] def runDeBruijnedTerm(
+        debruijnedTerm: Term,
+        budgetSpender: BudgetSpender,
+        logger: Logger
+    ): Unit =
+        cekMachine(budgetSpender, logger, tracing = false).evaluateTerm(debruijnedTerm): Unit
+
+    private def cekMachine(
+        budgetSpender: BudgetSpender,
+        logger: Logger,
+        tracing: Boolean
+    ): CekMachine =
+        new CekMachine(
           machineParams,
           budgetSpender,
           logger,
@@ -123,8 +143,6 @@ class PlutusVM(
           tracing = tracing,
           caseOnDataEnabled = caseOnDataEnabled
         )
-        DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
-    }
 
     /** Evaluates a debruijned term with profiling enabled. Does not follow CIP-117.
       *
