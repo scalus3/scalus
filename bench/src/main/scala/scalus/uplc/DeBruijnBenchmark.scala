@@ -9,8 +9,6 @@ import org.openjdk.jmh.annotations.Scope
 import org.openjdk.jmh.annotations.Setup
 import org.openjdk.jmh.annotations.State
 
-import java.nio.file.Files
-import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
 import scala.annotation.nowarn
 
@@ -31,7 +29,7 @@ class DeBruijnBenchmark:
 
     @Setup
     def readProgram() = {
-        val bytes = Files.readAllBytes(Paths.get(s"src/main/resources/data/$file"))
+        val bytes = BenchData.read(file)
         deBruijned = DeBruijnedProgram.fromFlatEncoded(bytes).term
         named = DeBruijn.fromDeBruijnTerm(deBruijned)
     }

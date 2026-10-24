@@ -1,59 +1,52 @@
 package scalus.uplc.eval
 
-import org.openjdk.jmh.annotations.Benchmark
-import org.openjdk.jmh.annotations.BenchmarkMode
-import org.openjdk.jmh.annotations.Mode
-import org.openjdk.jmh.annotations.OutputTimeUnit
-import org.openjdk.jmh.annotations.Param
-import org.openjdk.jmh.annotations.Scope
-import org.openjdk.jmh.annotations.Setup
-import org.openjdk.jmh.annotations.State
-import scalus.*
+import org.openjdk.jmh.annotations.*
 import scalus.cardano.ledger.ExUnits
-import scalus.cardano.ledger.MajorProtocolVersion
-import scalus.uplc.DeBruijnedProgram
+import scalus.uplc.{BenchData, DeBruijnedProgram, Term}
 
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
 import scala.annotation.nowarn
 
-/** Benchmark for CekMachine running on JVM.
+/** The CEK machine on the scripts of plutus-vm-benchmark, with its parameters: a PlutusV3 machine
+  * with the mainnet cost model and protocol version, costing on: a restricting spender with a
+  * budget too large to run out (`ExUnits.enormous`), as the other VMs of plutus-vm-benchmark use.
   *
-  * This follows the structure of Plutus `validation` benchmarks. Those can be found at:
-  * https://github.com/input-output-hk/plutus/blob/086d16a771a894a10e5a99e17d4082ea32af8a89/plutus-benchmark/validation/bench/BenchCek.hs
+  *   - `bench`: flat decode + evaluation, the ranking loop of plutus-vm-benchmark.
+  *   - `benchEval`: evaluation of the program decoded in setup, its eval-only loop.
+  *   - `decode`: flat decode alone, so a gap to another VM can be assigned to decode or to eval.
   *
-  * The idea is to benchmark the evaluation of some UPLC programs (smart contracts) using the
-  * CekMachine implementation on the JVM. Don't account for deserialization time, only evaluation
-  * time.
+  * The method names are those of plutus-vm-benchmark's harness (`pvb.scalus.CekJVMBenchmark`), so
+  * the results of both line up. Scripts: [[BenchData]].
   */
-@State(Scope.Benchmark)
-class CekJVMBenchmark:
-    @Param(
-      Array(
-        "auction_1-1.flat",
-        "auction_1-2.flat",
-        "auction_1-3.flat",
-        "auction_1-4.flat"
-      )
-    )
+@State(Scope.Thread)
+@BenchmarkMode(Array(Mode.AverageTime))
+@OutputTimeUnit(TimeUnit.MICROSECONDS)
+class CekJVMBenchmark {
+    @Param(Array("auction_1-1.flat", "auction_1-2.flat", "auction_1-3.flat", "auction_1-4.flat"))
     @nowarn("msg=unset private variable")
     private var file: String = ""
-    private var path: Path = null
-    private var program: DeBruijnedProgram = null
-    private val vm = PlutusVM.makePlutusV1VM(MajorProtocolVersion.vanRossemPV)
+    private var flat: Array[Byte] = null
+    private var term: Term = null
+    private val vm = PlutusVM.makePlutusV3VM()
 
     @Setup
-    def readProgram() = {
-        path = Paths.get(s"src/main/resources/data/$file")
-        val bytes = Files.readAllBytes(path)
-        program = DeBruijnedProgram.fromFlatEncoded(bytes)
+    def setup(): Unit = {
+        flat = BenchData.read(file)
+        term = DeBruijnedProgram.fromFlatEncoded(flat).term
     }
 
     @Benchmark
-    @BenchmarkMode(Array(Mode.AverageTime))
-    @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    def bench() = {
-        vm.evaluateScript(program, RestrictingBudgetSpender(ExUnits.enormous), NoLogger)
-    }
+    def bench(): Term =
+        vm.evaluateDeBruijnedTerm(
+          DeBruijnedProgram.fromFlatEncoded(flat).term,
+          RestrictingBudgetSpender(ExUnits.enormous),
+          NoLogger
+        )
+
+    @Benchmark
+    def benchEval(): Term =
+        vm.evaluateDeBruijnedTerm(term, RestrictingBudgetSpender(ExUnits.enormous), NoLogger)
+
+    @Benchmark
+    def decode(): Term = DeBruijnedProgram.fromFlatEncoded(flat).term
+}
