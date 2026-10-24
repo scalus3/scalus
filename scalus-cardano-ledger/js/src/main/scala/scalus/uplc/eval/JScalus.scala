@@ -84,8 +84,8 @@ object JScalus {
       * @deprecated
       *   (since 1.2.0) Not replaced: `evaluator.evaluateScript` does not profile. Attributing cost
       *   to source lines needs the compiler output that produced the script, so profile from the
-      *   JVM, where `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full report.
-      *   This function keeps working meanwhile.
+      *   JVM, where the Scala `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the
+      *   full report. The JS `PlutusVM` does not profile. This function keeps working meanwhile.
       */
     @JSExport
     @JSExportTopLevel("evaluateScriptProfile")

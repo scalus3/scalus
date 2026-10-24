@@ -25,8 +25,11 @@ object JEvaluator {
       * protocol never had still runs. Whether a chain would accept the script is
       * `Script.isWellFormed`'s question.
       *
+      * It builds the machine from `options` on every call. To evaluate many scripts with the same
+      * options, build a `PlutusVM` once and call its `evaluateScript`.
+      *
       * @param script
-      *   the script, as hex or bytes of raw flat, single CBOR or double CBOR
+      *   the script, as hex or bytes of raw flat, single CBOR or double CBOR, or a `Program`
       * @param args
       *   the arguments, each a CBOR-encoded `Data`, applied left to right
       * @param options
@@ -36,27 +39,11 @@ object JEvaluator {
       */
     @JSExport
     def evaluateScript(
-        @TsType("string | Uint8Array") script: js.Any,
+        @TsType("string | Uint8Array | Program") script: js.Any,
         @TsType("readonly (string | Uint8Array)[]") args: js.Any,
         options: JEvaluationOptions
-    ): JEvaluationResult = {
-        val vm = JEvaluationOptions.machine(options)
-        val spender = JEvaluationOptions
-            .maxBudget(options)
-            .fold[BudgetSpender](CountingBudgetSpender())(RestrictingBudgetSpender(_))
-        val program = JUplc.applyAll(JUplc.decodeScript(script), JUplc.decodeArgs(args))
-        val logger = Log()
-        // Every exception is a failed result: the machine's own errors are script failures,
-        // anything else a defect in Scalus, which `error.code` reports as INTERNAL_ERROR.
-        JEvaluationResult.of(
-          try
-              val term = vm.evaluateScript(program, spender, logger)
-              Result.Success(term, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
-          catch
-              case e: Exception =>
-                  Result.Failure(e, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
-        )
-    }
+    ): JEvaluationResult =
+        new JPlutusVM(options).evaluateScript(script, args)
 
     /** Evaluates every Plutus script of a transaction and reports what each redeemer cost.
       *

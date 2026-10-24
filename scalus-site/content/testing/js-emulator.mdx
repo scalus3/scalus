@@ -427,6 +427,28 @@ const redeemers = evalPlutusScripts(
 );
 ```
 
+### Evaluating one script
+
+`evaluator.evaluateScript(script, args, options)` applies CBOR-encoded `Data` arguments to a
+script, runs it and returns an `EvaluationResult`. It builds the machine from `options` on every
+call. To evaluate many scripts, build a `PlutusVM` once. To evaluate one script many times, also
+decode it once with `uplc.decodeProgram`:
+
+```typescript
+import { EvaluationOptions, PlutusVM, uplc } from "scalus";
+
+const vm = new PlutusVM(EvaluationOptions.mainnet("PlutusV3")); // the machine, built once
+const program = uplc.decodeProgram(scriptHex);                  // the script, decoded once
+
+for (const [datum, redeemer, context] of cases) {
+  const result = vm.evaluateScript(program, [datum, redeemer, context]);
+  console.log(result.isSuccess, result.budget.steps, result.budget.memory);
+}
+```
+
+`vm.evaluateScript` also takes the script as hex or bytes, as `evaluator.evaluateScript` does. A
+`maxBudget` in the options applies to every call of that `PlutusVM`.
+
 ### Profiling a script
 
 `evaluateScript(doubleCborHex)` runs a single fully-applied script (for example the output of `applyDataArgToScript`) and returns an `EvaluationResult` with `isSuccess`, `budget`, and `logs`. `evaluateScriptProfile(doubleCborHex)` does the same but also collects [CEK machine profiling data](/docs/smart-contract-optimisations/profiling), exposed on the result as `profileJson` – per-source-location and per-builtin cost plus the transition edges. It is `undefined` for the plain `evaluateScript` (which has zero profiling overhead).

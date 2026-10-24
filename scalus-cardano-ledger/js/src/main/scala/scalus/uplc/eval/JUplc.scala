@@ -37,6 +37,20 @@ object JUplc {
     def decodeToFlat(@TsType("string | Uint8Array") script: js.Any): Uint8Array =
         flatOf(script, "script").toUint8Array
 
+    /** Decodes a script once, to evaluate it many times: pass the `Program` to
+      * `PlutusVM.evaluateScript` or `evaluator.evaluateScript` in place of the bytes.
+      *
+      * @param script
+      *   the script, as hex or bytes of raw flat, single CBOR or double CBOR
+      * @return
+      *   the decoded program
+      * @throws TypeError
+      *   if the script cannot be read
+      */
+    @JSExport
+    def decodeProgram(@TsType("string | Uint8Array") script: js.Any): JProgram =
+        new JProgram(script)
+
     /** Applies `Data` arguments to a flat program, left to right.
       *
       * @param flat

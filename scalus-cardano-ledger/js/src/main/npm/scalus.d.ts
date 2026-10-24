@@ -641,6 +641,33 @@ export class PlutusScriptEvaluationError extends Error {
   readonly name: string;
 }
 
+/**
+ * A Plutus machine, built once from its options, to evaluate many scripts.
+ *
+ * `evaluator.evaluateScript` builds the machine from the cost model on every call. A `PlutusVM`
+ * builds it once, so repeated evaluations skip that work.
+ *
+ * ```ts
+ * const vm = new PlutusVM(EvaluationOptions.mainnet("PlutusV3"))
+ * for (const script of scripts) vm.evaluateScript(script, [])
+ * ```
+ *
+ * @param options the language, protocol version and cost model, and optionally a `maxBudget` that applies to every evaluation
+ * @throws TypeError if the options cannot be read
+ */
+export class PlutusVM {
+  constructor(options: EvaluationOptions);
+  /**
+   * Applies the arguments to the script, runs it, and reports what it cost, as
+   * `evaluator.evaluateScript` does with this machine's options.
+   *
+   * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR, or a `Program`
+   * @param args the arguments, each a CBOR-encoded `Data`, applied left to right
+   * @throws TypeError if the script or an argument cannot be read
+   */
+  evaluateScript(script: string | Uint8Array | Program, args: readonly (string | Uint8Array)[]): EvaluationResult;
+}
+
 /** Pool registration entry for `EmulatorOptions`. Give exactly one of `params` and `poolId`. */
 export interface PoolRegistration {
   /**
@@ -656,6 +683,27 @@ export interface PoolRegistration {
    * relays.
    */
   readonly poolId?: string;
+}
+
+/**
+ * A UPLC program, decoded once, to evaluate many times without decoding it again.
+ *
+ * Pass it to `PlutusVM.evaluateScript` or `evaluator.evaluateScript` in place of the script bytes.
+ * `uplc.decodeProgram(script)` makes one too.
+ *
+ * ```ts
+ * const program = uplc.decodeProgram(scriptHex)
+ * const vm = new PlutusVM(EvaluationOptions.mainnet("PlutusV3"))
+ * vm.evaluateScript(program, [datum, redeemer, context])
+ * ```
+ *
+ * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR
+ * @throws TypeError if the script cannot be read
+ */
+export class Program {
+  constructor(script: string | Uint8Array);
+  /** The program as flat bytes, as `uplc.decodeToFlat` returns them. */
+  toFlat(): Uint8Array;
 }
 
 /**
@@ -817,7 +865,7 @@ export const Scalus: {
    *
    * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
    * @returns The outcome, with `profileJson` populated.
-   * @deprecated (since 1.2.0) Not replaced: `evaluator.evaluateScript` does not profile. Attributing cost to source lines needs the compiler output that produced the script, so profile from the JVM, where `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full report. This function keeps working meanwhile.
+   * @deprecated (since 1.2.0) Not replaced: `evaluator.evaluateScript` does not profile. Attributing cost to source lines needs the compiler output that produced the script, so profile from the JVM, where the Scala `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full report. The JS `PlutusVM` does not profile. This function keeps working meanwhile.
    */
   evaluateScriptProfile(doubleCborHex: string): EvaluationResult;
   /**
@@ -1345,7 +1393,7 @@ export function evaluateScript(doubleCborHex: string): EvaluationResult;
  *
  * @param doubleCborHex The double-CBOR-encoded hex representation of the Plutus script.
  * @returns The outcome, with `profileJson` populated.
- * @deprecated (since 1.2.0) Not replaced: `evaluator.evaluateScript` does not profile. Attributing cost to source lines needs the compiler output that produced the script, so profile from the JVM, where `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full report. This function keeps working meanwhile.
+ * @deprecated (since 1.2.0) Not replaced: `evaluator.evaluateScript` does not profile. Attributing cost to source lines needs the compiler output that produced the script, so profile from the JVM, where the Scala `PlutusVM.evaluateScriptProfile` and `ProfileFormatter` render the full report. The JS `PlutusVM` does not profile. This function keeps working meanwhile.
  */
 export function evaluateScriptProfile(doubleCborHex: string): EvaluationResult;
 
@@ -1362,12 +1410,15 @@ export const evaluator: {
    * protocol never had still runs. Whether a chain would accept the script is
    * `Script.isWellFormed`'s question.
    *
-   * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR
+   * It builds the machine from `options` on every call. To evaluate many scripts with the same
+   * options, build a `PlutusVM` once and call its `evaluateScript`.
+   *
+   * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR, or a `Program`
    * @param args the arguments, each a CBOR-encoded `Data`, applied left to right
    * @param options the language, protocol version and cost model, and optionally a `maxBudget`
    * @throws TypeError if the script, an argument or the options cannot be read
    */
-  evaluateScript(script: string | Uint8Array, args: readonly (string | Uint8Array)[], options: EvaluationOptions): EvaluationResult;
+  evaluateScript(script: string | Uint8Array | Program, args: readonly (string | Uint8Array)[], options: EvaluationOptions): EvaluationResult;
   /**
    * Evaluates every Plutus script of a transaction and reports what each redeemer cost.
    *
@@ -1436,6 +1487,15 @@ export const uplc: {
    * @returns the flat program bytes
    */
   decodeToFlat(script: string | Uint8Array): Uint8Array;
+  /**
+   * Decodes a script once, to evaluate it many times: pass the `Program` to
+   * `PlutusVM.evaluateScript` or `evaluator.evaluateScript` in place of the bytes.
+   *
+   * @param script the script, as hex or bytes of raw flat, single CBOR or double CBOR
+   * @returns the decoded program
+   * @throws TypeError if the script cannot be read
+   */
+  decodeProgram(script: string | Uint8Array): Program;
   /**
    * Applies `Data` arguments to a flat program, left to right.
    *
