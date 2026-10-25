@@ -1,9 +1,20 @@
 # Changelog
 
-## Unreleased
+## 1.4.1 (2026-10-25)
 
 ### Added
 
+- The experimental UPLC JIT compiler is published as `org.scalus::scalus-uplc-jit-compiler`. It has
+  no binary compatibility check yet. Its staging compiler is `scala3-compiler` 3.3.8, so a project
+  that uses it builds on Scala 3.3.x. `UplcEvaluator.run` returns the budget and the logs for a
+  script whose result is a function, where `evaluate` throws `FunctionResultError`.
+  `UplcCompiler.compile` and `JIT.jitUplc` take the protocol version (PV11 by default). At PV12
+  (Dijkstra) the generated code supports `case` on `Data`, and `evaluate` rejects a `PlutusVM` of
+  another protocol version.
+- JavaScript: `new PlutusVM(options)` builds the machine once, and `uplc.decodeProgram` (or
+  `new Program`) decodes a script once. `vm.evaluateScript` and `evaluator.evaluateScript` take a
+  `Program` in place of the bytes, and `Program.toFlat()` returns the flat bytes. Before, each
+  evaluation converted the cost model again, about 114 us per call.
 - `UplcBlaster` quantifies over `String`, and `equal` compares `ByteString` and `String` values.
   Blaster's SMT strings have other characters than Lean's
   ([input-output-hk/Lean-blaster#389](https://github.com/input-output-hk/Lean-blaster/issues/389)),
@@ -19,6 +30,10 @@
 
 ### Changed
 
+- The CEK machine takes 31% less time on the Plutus use-case scripts (geometric mean) and allocates
+  62% less (1506 KB to 573 KB per evaluation). Budgets and errors do not change.
+- The inliner caches the free variables of each term in a pass, so deep terms no longer take
+  quadratic time. The example corpus compiles to the same bytes, about 15% faster.
 - `scalus-verification` pins Lean-blaster to `main` at `6c27ff9`.
 - `LeanProofs.check(statement)` and `check(statement, budget: Budget)` are one method,
   `check(statement, budget: Budget = Budget.Auto)`. Calls compile as before; code compiled against
@@ -28,13 +43,6 @@
   None)`, and `Tactic.restore` returns `Either[String, ExecutionResult]` instead of an `Option`. A
   tactic implemented against 1.4.0 must override the new signatures. `UplcBlaster.Artifact` has a
   new field `read`, so positional constructions and patterns of it need one more argument.**
-
-### Removed
-
-- **Scala 3.8.4 is no longer supported: no `scalus-plugin_3.8.4` is published for this release,
-  and CI no longer tests it. A project on Scala 3.8.x moves to 3.9.0 (the LTS that supersedes
-  it) or 3.3.8.** The `_3` libraries are unchanged. The sbt 2 build of `scalus-sbt-plugin` still
-  uses Scala 3.8.4, because sbt 2.0.x requires it.
 
 ### Deprecated
 
