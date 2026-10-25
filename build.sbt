@@ -613,7 +613,11 @@ lazy val scalusUplcJitCompiler = project
       // Full stack traces for test failures (helps debug deep lowering errors)
       Test / testOptions += Tests.Argument("-oF"),
       inConfig(Test)(PluginDependency),
-      publish / skip := true
+      // Published (experimental, no MiMa) so that external benchmarks can run the JIT. The
+      // staging compiler is scala3-compiler at this build's version, 3.3.8, so a consumer must
+      // build on Scala 3.3.x: a 3.3 compiler rejects the TASTy of a newer scala3-library.
+      publishOnlyLts,
+      jvmReleaseTarget
     )
 
 // TypeScript definitions generator: reads TASTy of the Scala.js modules and
