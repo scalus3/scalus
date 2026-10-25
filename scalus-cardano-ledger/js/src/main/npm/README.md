@@ -353,6 +353,24 @@ bytesToHex(double);                                 // hexToBytes goes the other
 CBOR round trips preserve the *value*, not the original bytes. Semantically equal Data can have
 more than one encoding, so do not use this path to reproduce a datum hash.
 
+### Evaluating one script many times
+
+`evaluator.evaluateScript` builds a machine from the options and decodes the script on every call.
+To evaluate many times, build the machine once with `new PlutusVM(options)` and decode the script
+once with `uplc.decodeProgram` (or `new Program(script)`):
+
+```typescript
+import { uplc, PlutusVM, EvaluationOptions } from "scalus";
+
+const vm = new PlutusVM(EvaluationOptions.mainnet("PlutusV3"));
+const program = uplc.decodeProgram(script);
+for (const redeemer of redeemers) {
+  vm.evaluateScript(program, [datum, redeemer, context]);
+}
+```
+
+`evaluator.evaluateScript` also takes a `Program`, and `program.toFlat()` gives the flat bytes back.
+
 ### Feeding it from Lucid, Mesh or the Evolution SDK
 
 Serialize with the SDK you already use, then hand over the bytes. No Scalus-specific Data type,
