@@ -3,7 +3,7 @@ package scalus
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.compile
 import scalus.compiler.sir.SIR
-import scalus.examples.MintingPolicy
+import scalus.examples.oneshotmint.MintingPolicy
 import scalus.cardano.onchain.plutus.prelude.SortedMap
 import scalus.uplc.Term
 import scalus.uplc.TermDSL.given

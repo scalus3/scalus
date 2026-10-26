@@ -1,4 +1,4 @@
-package scalus.examples
+package scalus.examples.oneshotmint
 
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString.*
@@ -83,8 +83,32 @@ object MintingPolicy {
         txId: ByteString,
         txOutIdx: BigInt,
         tokensToMint: SortedMap[ByteString, BigInt]
-    ) = (redeemer: Unit, ctxData: Data) => {
-        deserializer(ctxData) match
+    ) = (redeemer: Unit, ctxData: Data) => mint(deserializer(ctxData), txId, txOutIdx, tokensToMint)
+
+    /** The policy, on the minting context a deserializer reads. It is a one-shot policy: the
+      * transaction that spends the output `txId#txOutIdx`, the seed, mints `tokensToMint`, and any
+      * other transaction can only burn the policy's tokens. The ledger lets an output be spent
+      * once, so the tokens are minted once.
+      */
+    inline def mint(
+        context: MintingContext,
+        txId: ByteString,
+        txOutIdx: BigInt,
+        tokensToMint: SortedMap[ByteString, BigInt]
+    ): Unit = {
+        // What holds of every transaction the policy accepts. These clauses are its
+        // specification, not checks: they are no part of the script, and
+        // `MintingPolicyVerificationTest` proves them about the compiled policy.
+
+        // 1. Only the seed mints. A transaction that does not spend the seed output burns each of
+        //    the policy's tokens that it names.
+        Spec.ensures(spendsSeed(context, txId, txOutIdx) || burnsOnly(context))
+
+        // 2. The transaction that spends the seed output mints exactly `tokensToMint`: each of its
+        //    tokens in its quantity, and no other token of the policy.
+        Spec.ensures(!spendsSeed(context, txId, txOutIdx) || mintsExactly(context, tokensToMint))
+
+        context match
             case MintingContext(txOutRefs, minted, ownSymbol) =>
                 val mintedTokens = minted.toSortedMap.get(ownSymbol) match
                     case Some(mintedTokens) => mintedTokens
@@ -95,8 +119,6 @@ object MintingPolicy {
                     txOutRefTxId.hash == txId && txOutRefIdx == txOutIdx
                 }
 
-                inline def check(b: Boolean, inline msg: String): Unit =
-                    if b then () else throw new Exception(msg)
                 checkSpendsTxOut match
                     // If the transaction spends the TxOut, then it's a minting transaction
                     case Some(input) => check(Value.equalsAssets(mintedTokens, tokensToMint), "M")
@@ -109,6 +131,41 @@ object MintingPolicy {
                             }
                         check(burned, "B")
     }
+
+    inline def check(b: Boolean, inline msg: String): Unit =
+        if b then () else throw new Exception(msg)
+
+    // What the `Spec` clauses of `mint` speak of. Only the clauses use these functions, and they
+    // are removed from the script with them.
+
+    /** Whether the transaction spends the seed output `txId#txOutIdx`. */
+    def spendsSeed(context: MintingContext, txId: ByteString, txOutIdx: BigInt): Boolean =
+        context.inputs.exists(ref => ref.id.hash == txId && ref.idx == txOutIdx)
+
+    /** The quantities of the policy's own tokens in the transaction's mint. */
+    def ownTokens(context: MintingContext): SortedMap[ByteString, BigInt] =
+        context.minted.toSortedMap.get(context.ownSymbol).getOrFail(NoOwnTokens)
+
+    /** Whether the transaction burns each of the policy's tokens that it names: every quantity is
+      * negative.
+      */
+    def burnsOnly(context: MintingContext): Boolean =
+        ownTokens(context).toList.forall { case (_, quantity) => quantity < BigInt(0) }
+
+    /** Whether the transaction mints `tokens` and nothing else of the policy: each token has the
+      * same quantity in the mint as in `tokens`, where a token that is not named has none.
+      */
+    def mintsExactly(context: MintingContext, tokens: SortedMap[ByteString, BigInt]): Boolean = {
+        val minted = ownTokens(context)
+        tokens.toList.forall { case (name, quantity) => quantityOf(minted, name) == quantity } &&
+        minted.toList.forall { case (name, quantity) => quantity == quantityOf(tokens, name) }
+    }
+
+    /** The quantity of the token `name` in `tokens`, zero where it is not named. */
+    def quantityOf(tokens: SortedMap[ByteString, BigInt], name: ByteString): BigInt =
+        tokens.get(name).getOrElse(BigInt(0))
+
+    inline val NoOwnTokens = "The mint names no token of the policy"
 
     @Ignore
     given Options = Options(

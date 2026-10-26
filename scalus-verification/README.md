@@ -60,6 +60,11 @@ validator actually runs on chain.
   has: who submits a payout and who is paid, that every payee is paid exactly the split, that only
   ADA is split, that an honest payout is accepted, and for the optimized one, that a spend needs
   its stake validator, which checks the same split, and that its stake is never delegated.
+- `scalus-examples/jvm/src/test/scala/scalus/examples/oneshotmint/MintingPolicyVerificationTest.scala`
+  - properties of the one-shot minting policy, on transactions of the shape the ledger gives a
+  script of version 1: the two guarantees that `MintingPolicy.mint` states with `Spec.ensures`,
+  that the transaction that spends the seed mints the tokens and any other burns them, and that
+  the optimized deserializer reads the ledger's context, whatever else the transaction has.
 
 ## Statements
 
@@ -318,6 +323,7 @@ sbt scalusVerification/test                                                     
 sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 2 min
 sbt "scalusExamplesJVM/testOnly scalus.examples.htlc.HtlcVerificationTest"         # about 3 min
 sbt "scalusExamplesJVM/testOnly scalus.examples.paymentsplitter.PaymentSplitterVerificationTest"
+sbt "scalusExamplesJVM/testOnly scalus.examples.oneshotmint.MintingPolicyVerificationTest"   # about 6 min
 sbt "scalusVerification/testOnly *UplcBlasterLimitsTest"   # the statements Lean does not finish
 ```
 
@@ -405,8 +411,8 @@ Neither names a workspace. A project has one, and its build has it (below).
 
 ### Kept results
 
-`PreludeProofsTest`, `VestingVerificationTest`, `HtlcVerificationTest` and
-`PaymentSplitterVerificationTest` keep the results of
+`PreludeProofsTest`, `VestingVerificationTest`, `HtlcVerificationTest`,
+`PaymentSplitterVerificationTest` and `MintingPolicyVerificationTest` keep the results of
 their statements, each in a file beside its source, `<Suite>.proofs.json`, which is committed. An entry has the hashes of
 what the result rests on: the statement as Lean is given it, the program of each test, and
 Lean's side. See the [overview](../docs/design/verification-overview.md#56-kept-results).

@@ -45,7 +45,7 @@ Paths are repo-relative from the worktree root
 | 22 | `SE/linkedlist/LinkedListValidator.scala` | spend + mint | delegates to `scalus.patterns.LinkedList` |
 | 23 | `SE/MembershipToken.scala` | spend + mint | `ParameterizedValidator[ByteString]` |
 | 24 | `SE/cape/twopartyescrow/TwoPartyEscrowValidator.scala` | spend | **re-implements prelude helpers by hand** |
-| 25 | `scalus-examples/shared/src/main/scala/scalus/examples/MintingPolicy.scala` | mint | raw-`Data` hand-written deserialiser |
+| 25 | `scalus-examples/shared/src/main/scala/scalus/examples/oneshotmint/MintingPolicy.scala` | mint | raw-`Data` hand-written deserialiser |
 | 26 | `SE/PreimageValidator.scala` | spend (3 variants) | |
 | 27 | `SE/PubKeyValidator.scala` | spend (3 variants) | raw builtin list walking |
 | 28 | `SE/HelloCardano.scala` | spend | |
