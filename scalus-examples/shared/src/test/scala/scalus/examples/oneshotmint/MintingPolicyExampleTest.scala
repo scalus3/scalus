@@ -1,5 +1,6 @@
 package scalus
 package examples
+package oneshotmint
 
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data

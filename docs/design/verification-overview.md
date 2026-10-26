@@ -46,13 +46,16 @@ side stays in the backends: Lean 4, Blaster and Z3 today.
   sbt plugin has `leanWorkspace`, `leanInit` and `leanBuild`.
 
 The statements are about real code. `PreludeProofsTest` restates the theorems first written by
-hand in Lean (§8.1). In the examples, `VestingVerificationTest`, `HtlcVerificationTest` and
-`PaymentSplitterVerificationTest` prove properties of validators over script contexts written as
-`Data`. ci-jvm passes on the kept results, and the Lean-Proofs workflow recalculates them nightly
-and on a push that changes what the proofs are made of.
+hand in Lean (§8.1). In the examples, `VestingVerificationTest`, `HtlcVerificationTest`,
+`PaymentSplitterVerificationTest` and `MintingPolicyVerificationTest` prove properties of
+validators over script contexts written as `Data`. ci-jvm passes on the kept results, and the
+Lean-Proofs workflow recalculates them nightly and on a push that changes what the proofs are made
+of.
 
 `Spec` replaces the `spec.requires` / `spec.ensures` clauses of the first prototype, and
-`VestingValidator` states its guarantees with it (§8.2).
+`VestingValidator` states its guarantees with it (§8.2), as does the one-shot `MintingPolicy`
+(`scalus.examples.oneshotmint`), in `mint`, the inline function of the policy on the minting
+context that a deserializer reads.
 
 Statements are declared by name, `statement` or `refute` for a negative control, and run as
 `VerificationRequest`s by `LeanProofs`, which holds each to its `ExpectedOutcome` (§4.5, §5.2).
@@ -870,9 +873,10 @@ backend again for a statement that has not changed. It is the same for every tac
 verifier keeps and looks up, and a tactic says what its results rest on.
 
 Built: `KeptResults` and `Verifier.keeping(results)`, the tactic's side for `blaster-uplc`, and
-the suites of proofs about code, `PreludeProofsTest`, `VestingVerificationTest` and
-`HtlcVerificationTest`, each with its file. A suite about the tactic itself keeps nothing: what it tests is not in a statement's
-fingerprint, and Lean is to be asked every time.
+the suites of proofs about code, `PreludeProofsTest`, `VestingVerificationTest`,
+`HtlcVerificationTest`, `PaymentSplitterVerificationTest` and `MintingPolicyVerificationTest`,
+each with its file. A suite about the tactic itself keeps nothing: what it tests is not in a
+statement's fingerprint, and Lean is to be asked every time.
 
 **What is kept, by the result.**
 

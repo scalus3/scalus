@@ -1143,7 +1143,7 @@ Path prefixes used below (all relative to the repo root):
 | C.16 | `Value.tokens` | 2 (core method + verbatim re-expression) | `PAT patterns/TransactionLevelMinterValidator.scala:34` |
 | C.17 | Whole-file forks | 4 pairs/families | lottery, auction, paymentsplitter, setbench |
 | C.18 | Value/`Data` equality | 2 (`===` vs `.toData ==`) | `EX cape/twopartyescrow/TwoPartyEscrowValidator.scala:96` |
-| C.19 | Failure idiom | 3 (`require`/`fail` vs raw `throw` vs local `check`) | `EXS MintingPolicy.scala:98` |
+| C.19 | Failure idiom | 3 (`require`/`fail` vs raw `throw` vs local `check`) | `EXS oneshotmint/MintingPolicy.scala:135` |
 
 ### C.1 The same ledger concept, three type definitions
 
@@ -1560,7 +1560,7 @@ def hasOnly(cs: PolicyId, tn: TokenName, amount: BigInt): Boolean = { ... }
 | `mint.quantityOf(p, n) === k` | `EX MembershipToken.scala:133`; `EX factory/Factory.scala:181`; `EX betting/BettingValidator.scala:193`; `EX pricebet/OracleValidator.scala:128`; `PAT patterns/LinkedList.scala:90`, `:111`, `:162`, `:234`, `:291`, `:347`, `:405` |
 | `mint.flatten.filter(policy).length === 1` | `EX MembershipToken.scala:106-112`; `PAT examples/ParameterValidationExample.scala:125-132` |
 | `mint.tokens(p).forall(_._2 < 0)` (all-burn) | `EX crowdfunding/Crowdfunding.scala:232-236`, `:758-762`; `EX decentralizedidentity/…:232-235`; `EX auction/Auction.scala:453-457`; `EX auction/UnfixedAuction.scala:306-309` |
-| build expected `Value` then compare token maps | `EX editablenft/EditableNftValidator.scala:98-103`, `:110-119`; `EXS MintingPolicy.scala:102` (`Value.equalsAssets`) |
+| build expected `Value` then compare token maps | `EX editablenft/EditableNftValidator.scala:98-103`, `:110-119`; `EXS oneshotmint/MintingPolicy.scala:124` (`Value.equalsAssets`) |
 
 ```scala
 // PAT examples/ParameterValidationExample.scala:125-132
@@ -1698,7 +1698,7 @@ val tokens = txInfo.mint.toSortedMap.get(minterScriptHash).getOrElse(SortedMap.e
 Sites that reach into `.toSortedMap.get(policy)` instead of calling `tokens`:
 `PAT patterns/LinkedList.scala:423`, `:452`, `:520`; `PAT patterns/TransactionLevelMinterValidator.scala:34`, `:44`;
 `EX factory/Factory.scala:142`, `:175`; `EX linkedlist/LinkedListValidator.scala:178`;
-`EXS MintingPolicy.scala:89`.
+`EXS oneshotmint/MintingPolicy.scala:113`.
 
 ### C.17 Whole-file forks (same contract, two implementations)
 
@@ -1781,7 +1781,7 @@ inline def require(inline requirement: Boolean, inline message: String): Unit =
     if requirement then () else throw new RequirementError(message)
 ```
 ```scala
-// EXS MintingPolicy.scala:98-99   (locally re-implemented)
+// EXS oneshotmint/MintingPolicy.scala:135-136   (locally re-implemented)
 inline def check(b: Boolean, inline msg: String): Unit =
     if b then () else throw new Exception(msg)
 ```
@@ -1790,7 +1790,7 @@ inline def check(b: Boolean, inline msg: String): Unit =
 if signatories.isEmpty then throw new RuntimeException("Signature not found")
 ```
 Raw-`throw` sites: `EX PubKeyValidator.scala:18`, `:33`, `:48`; `EX PreimageValidator.scala:70`;
-`EXS MintingPolicy.scala:50-53`, `:91-92`, `:99`, `:146-149`;
+`EXS oneshotmint/MintingPolicy.scala:50-53`, `:115-116`, `:136`, `:203-206`;
 `EX amm/AmmValidator.scala` uses `fail` throughout. `require`/`fail`/`getOrFail` dominate everywhere
 else, so this is legacy rather than a live split.
 

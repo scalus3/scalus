@@ -4,8 +4,8 @@ How `blaster-uplc` from [the verification overview](../verification-overview.md)
 Code: `scalus-verification/src/main/scala/scalus/verify/uplcblaster/UplcBlaster.scala` and
 `scalus-verification/src/main/lean/ScalusProofs/Run.lean`. Tests: `UplcBlasterTest`,
 `PreludeProofsTest` and `UplcBlasterLimitsTest`, and `VestingVerificationTest`,
-`HtlcVerificationTest` and `PaymentSplitterVerificationTest` in `scalus-examples`. For how to use
-it, see `scalus-verification/README.md`.
+`HtlcVerificationTest`, `PaymentSplitterVerificationTest` and `MintingPolicyVerificationTest` in
+`scalus-examples`. For how to use it, see `scalus-verification/README.md`.
 
 ## Pipeline
 
@@ -419,10 +419,10 @@ The workspace is `scalus-verification/src/main/lean`: Lean 4.24.0 (`lean-toolcha
 - **The toolchain** is `elan` and `z3`, from the default and `ci` nix shells.
 
 CI: `.github/workflows/lean-proofs.yml` runs on a push that changes the verification module,
-the vesting or the HTLC example or the workflow itself, daily, and on demand. The daily run is
-for changes elsewhere, such as in the compiler, which change the programs the proofs are about.
-It builds the workspace of the library and that of the vesting example, then runs
-`sbt scalusVerification/test`, `VestingVerificationTest` and `HtlcVerificationTest` with
+the vesting, HTLC, payment splitter or minting policy example or the workflow itself, daily, and
+on demand. The daily run is for changes elsewhere, such as in the compiler, which change the
+programs the proofs are about. It builds the workspace of the library and that of the vesting
+example, then runs `sbt scalusVerification/test` and the four example suites with
 `SCALUS_REQUIRE_LEAN=1`, so a test that cannot run Lean fails instead of being canceled. In
 `ci-jvm`, without Lean, a suite that keeps its results passes on them, and a test that asks Lean
 is canceled.
@@ -658,6 +658,102 @@ What the suite shows about the tactic:
 What it does not show: that a bound of the validity range is inclusive or not, which the
 validator does not read and the ledger decides; a transaction of more than two signatures; and
 the published script, which `HtlcContract` compiles with other options.
+
+## What `MintingPolicyVerificationTest` covers
+
+`scalus-examples/jvm/src/test/scala/scalus/examples/oneshotmint/MintingPolicyVerificationTest.scala`
+states properties of the one-shot minting policy example, `scalus.examples.oneshotmint`, in the
+library's Lean workspace. The transaction that spends the policy's seed output mints
+`tokensToMint`, and any other transaction can only burn the policy's tokens.
+
+The specification is written in `MintingPolicy` itself. `mint` is the policy on the
+`MintingContext` that a deserializer reads, an inline function that `mintingPolicyScript` calls.
+It states two guarantees at its head with `Spec.ensures`:
+
+1. a transaction that does not spend the seed burns each of the policy's tokens that it names,
+   and so mints none;
+2. the transaction that spends the seed mints exactly `tokensToMint`: each token has the same
+   quantity in the mint as there, where a token that is not named has none. The clause is
+   written with its own functions, `mintsExactly` and `quantityOf`, and not with the
+   `Value.equalsAssets` the code checks, so that the proof compares two descriptions.
+
+Their functions (`spendsSeed`, `ownTokens`, `burnsOnly`, `mintsExactly`, `quantityOf`) are only
+called by the clauses, so they are erased with them. When the clauses were added, the scripts'
+bytes were compared before and after, and were the same: the version 1 scripts with either
+deserializer, the version 2 script and the Scott-encoded one, with and without error traces and
+the optimizer. That was a check made once, not a test. What a test pins is the three sizes
+`MintingPolicyExampleTest` asserts, with the optimizer, and that erasure removes the clauses and
+their functions from the program's SIR.
+
+**The shape is the ledger's.** For a script of version 1 or 2 the ledger's mint starts with an
+entry of zero ADA (`LedgerToPlutusTranslation.getMintValueV1V2`). A `Mint` variable is the
+policy's parameters (the seed and one token) and what the policy reads of a transaction: one
+input, or two where a Boolean field says so; the policy the script runs as; and a mint of the
+entry of ADA, a policy of one token, and, where another Boolean field says so, a policy of two.
+The solver chooses the Booleans, so one statement covers the four shapes, among them the
+example's minting as the ledger gives it to the policy: the seed alone, and after the entry of
+ADA the policy's token alone. The example's own test builds its contexts without that entry, and
+its burns without an input, so they are not of these shapes. An `Unread` variable is
+what the optimized deserializer does not read: the outputs the inputs spend, and the eight
+fields of the transaction other than the inputs and the mint, each any `Data`. The context is
+written field by field. A test without Lean checks it against the ledger's types and the
+ledger's translation of the mint, for each of the four shapes.
+
+| About | Statement | Quantified over | Budget | Time |
+|---|---|---|---|---|
+| `mint` | the two guarantees it states, for a mint whose token names are different | a `Mint`, the context built from it | 5740 | 82 s, together |
+| | the transaction that spends the seed mints the tokens, wherever the seed is among the inputs | | 2098 | 50 s |
+| | a transaction that does not spend the seed burns the tokens | | 2020 | 46 s |
+| the optimized deserializer | it reads the input references, the mint and the policy of the ledger's context | a `Mint`; an `Unread` | 2085 | 12 s |
+| | it reads nothing but a minting | and the purpose: any `Data` | 1890 | |
+| the script | where it accepts a transaction without the seed, the transaction burns the policy's tokens | a `Mint`; an `Unread` | 5542 | 2.5 min |
+| | where it accepts the transaction that spends the seed, of a mint whose token names are different, that transaction mints exactly the tokens | | 5006 | |
+| | it accepts the transaction that spends the seed and mints the tokens | | 2756 | |
+
+The script's statements are the guarantees of `mint`, stated of the transaction and not of what
+the deserializer reads. Wherever the script's policy is in the mint, they hold.
+
+The tactic found the budgets (`Budget.Auto`): from 1890 to 5740. The times are of the tests, each
+with its negative control, recalculated at the kept budgets. The suite keeps ten statements. Two
+of them are negative controls, and both are refuted with a counterexample. In the first, a
+transaction spends the seed and mints the token in another quantity, and the policy rejects it.
+In the second, the policy accepts a transaction that does not spend the seed: a burn. With Lean
+the suite takes about 6 min at the kept budgets; the run that searched the budgets took 13 min.
+
+What the suite shows:
+
+- **The policy relies on the mint being a map.** Clause 2 was first stated for every mint, and
+  was refuted. The policy's own tokens were `[("", -1), ("", 0)]`, and `tokensToMint` was
+  `[("", -1)]`. `equalsAssets` compares two lists of tokens one entry at a time and allows
+  trailing zeros, so the policy accepts. But the name `""` has two quantities there, which no
+  mint of the ledger has: its mint is a map, with every name once under a policy, and no
+  quantity is zero but that of the entry of ADA. So the guarantees are stated with a
+  precondition, the contract `mints_of_distinct_token_names`: the two tokens of the second policy
+  have different names. That is all of the ledger's rule the proof needs, and less than the rule,
+  which also orders the policies and the names and has no zero quantity.
+  `Verifier.guarantees` of that contract proves them where it holds. A clause written with
+  `equalsAssets`, as the code is, would have been proved for every mint and said nothing of
+  this.
+- **Clauses are read only where inlining puts them.** `Verifier.guarantees` reads the clauses in
+  the code of the function it is given, outside function values. The policy is the lambda that
+  `mintingPolicyScript` returns. Clauses in that lambda would be inside a function value. A
+  function that calls `mintingPolicyScript` would not contain them at all: it is a module
+  definition, which is not inlined. So the clauses are in `mint`, which is inline, and the
+  statement is about a function that calls `mint` on a minting context of the shape. The script
+  as a whole is covered by explicit statements.
+- **Symbolic Booleans in a shape cost time, not steps.** Choosing the length of two lists with
+  two Booleans multiplies the paths by four. In the first version of the shape, which had
+  neither the entry of ADA nor the Booleans, the transaction that spends the seed was proved to
+  mint the tokens in 16 s at 1996 steps; now it takes 50 s, at 2098 steps.
+- **Scala has no `inline def` inside an `inline def`.** The policy's local `check` became a
+  function of the object when the body moved into `mint`. Inlining expands it as before, and the
+  bytes are the same.
+
+What it does not show: a transaction of any other shape (longer lists of inputs, policies or
+tokens, a transaction without an input, or a mint without the entry of ADA, which the ledger
+does not give a script of version 1 or 2); that the tokens are minted once, which follows from
+the ledger spending an output once; the deserializer that reads the whole context, and the one of
+version 2; and the published scripts, which `MintingPolicy` compiles with other options.
 
 ## Statements that do not finish
 

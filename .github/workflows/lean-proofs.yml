@@ -11,6 +11,7 @@ on:
       - 'scalus-examples/**/vesting/**'
       - 'scalus-examples/**/scalus/examples/htlc/**'
       - 'scalus-examples/**/scalus/examples/paymentsplitter/**'
+      - 'scalus-examples/**/scalus/examples/oneshotmint/**'
       - '.github/workflows/lean-proofs.yml'
   schedule:
     # 03:17 UTC daily. Off the hour to avoid the GitHub Actions rush.
@@ -19,7 +20,7 @@ jobs:
   proofs:
     name: blaster
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
@@ -52,7 +53,7 @@ jobs:
         env:
           SCALUS_REQUIRE_LEAN: "1"
         run: |
-          nix develop .#ci --accept-flake-config --command bash -c "sbt --batch scalusVerification/test 'scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest scalus.examples.htlc.HtlcVerificationTest scalus.examples.paymentsplitter.PaymentSplitterVerificationTest -- -l scalus.verify.uplcblaster.Unfinished'"
+          nix develop .#ci --accept-flake-config --command bash -c "sbt --batch scalusVerification/test 'scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest scalus.examples.htlc.HtlcVerificationTest scalus.examples.paymentsplitter.PaymentSplitterVerificationTest scalus.examples.oneshotmint.MintingPolicyVerificationTest -- -l scalus.verify.uplcblaster.Unfinished'"
       - name: The kept results are current
         # The run above asked Lean for every statement. One whose entry was missing or stale was
         # proved again and written into its file, so a file that changed is not the one of this
