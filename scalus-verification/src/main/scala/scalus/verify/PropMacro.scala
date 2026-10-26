@@ -1,5 +1,7 @@
 package scalus.verify
 
+import scalus.uplc.builtin.{Data, FromData}
+
 import scala.quoted.*
 
 /** Builds the runtime [[Prop]] object from statement syntax.
@@ -30,6 +32,13 @@ private[verify] object PropMacro {
         Quotes
     ): Expr[Prop] =
         binders(body, List(Type.of[A], Type.of[B], Type.of[C]), "forAll")((idents, inner) =>
+            universal(idents, inner)
+        )
+
+    def forAllData[A: Type](body: Expr[A => Prop | Boolean], decode: Expr[FromData[A]])(using
+        Quotes
+    ): Expr[Prop] =
+        binders(body, List(Type.of[A]), "forAllData", Some(decode))((idents, inner) =>
             universal(idents, inner)
         )
 
@@ -86,6 +95,10 @@ private[verify] object PropMacro {
 
     def test(b: Expr[Boolean])(using Quotes): Expr[Prop] = '{ Prop.Bool(${ leaf(b) }) }
 
+    /** [[DataEncoding.of]] of `A`, from its SIR type as a statement variable has it. */
+    def dataEncoding[A: Type](using Quotes): Expr[DataEncoding] =
+        '{ DataEncoding.of(Props.variableType(scalus.compiler.compile((value: A) => value))) }
+
     def denotes[A: Type](e: Expr[A])(using Quotes): Expr[Prop] = '{ Prop.Denotes(${ leaf(e) }) }
 
     def equal[A: Type](a: Expr[A], b: Expr[A])(using Quotes): Expr[Prop] =
@@ -94,7 +107,12 @@ private[verify] object PropMacro {
     /** Passes the binders' identifiers and the statement of the lambda literal `body`
       * ([[statementOf]]) to `build`.
       */
-    private def binders(body: Expr[Any], types: List[Type[?]], kind: String)(
+    private def binders(
+        body: Expr[Any],
+        types: List[Type[?]],
+        kind: String,
+        decode: Option[Expr[Any]] = None
+    )(
         build: (List[Expr[PropExpr.Ident[?]]], Expr[Prop]) => Expr[Prop]
     )(using Quotes): Expr[Prop] = {
         import quotes.reflect.*
@@ -105,8 +123,57 @@ private[verify] object PropMacro {
           s"$kind requires a lambda literal of ${types.size} parameters"
         )
         val statement = statementOf(rhs, params.map(_.symbol).toSet, kind)
-        val idents = params.zip(types).map((param, tpe) => ident(param.symbol, param.pos, tpe))
+        val idents = params.zip(types).map { (param, tpe) =>
+            val decoder =
+                if kind == "forAllData" then
+                    refuseDataRepresented(List(param), "the variable of forAllData, one already,")
+                    decode
+                else if quantifying.contains(kind) then
+                    encodedDecoder(param, TypeRepr.of(using tpe))
+                else
+                    refuseDataRepresented(List(param), "a call's result, the function's,")
+                    None
+            ident(param.symbol, param.pos, tpe, decoder)
+        }
         build(idents, statement)
+    }
+
+    /** The binders whose variables a statement quantifies over, which range over the `Data`
+      * encodings of their values where their parameters are written `A @UplcRepr(Data)`. Another
+      * binder, as a call's result, is given its value.
+      */
+    private val quantifying = Set("forAll", "exists", "existsLet")
+
+    /** The decoder of the variable that `param` of a quantifier over `binderType` stands for, where
+      * the parameter is written `A @UplcRepr(UplcRepresentation.Data)`: the `FromData[A]` given
+      * here. A parameter's own type, as written, keeps its annotations: the binder's type argument
+      * has lost them by the time the macro runs. `A` is the binder's type: a function's parameter
+      * may be of a wider type, which the variable would range over instead.
+      */
+    private def encodedDecoder(using
+        Quotes
+    )(param: quotes.reflect.ValDef, binderType: quotes.reflect.TypeRepr): Option[Expr[Any]] = {
+        import quotes.reflect.*
+        dataRepresented(param.tpt.tpe).map { underlying =>
+            if !(underlying =:= binderType) then
+                report.errorAndAbort(
+                  s"the parameter is of ${underlying.show}, and the quantifier of " +
+                      s"${binderType.show}: a variable over Data encodings ranges over the " +
+                      "quantifier's type, so write the parameter's type as it",
+                  param.pos
+                )
+            underlying.asType match
+                case '[u] =>
+                    Expr
+                        .summon[FromData[u]]
+                        .getOrElse(
+                          report.errorAndAbort(
+                            s"a variable of ${Type.show[u]} @UplcRepr(Data) is read from its " +
+                                s"Data, which needs a FromData[${Type.show[u]}]",
+                            param.pos
+                          )
+                        )
+        }
     }
 
     /** The statement a lambda's body states about its parameters `symbols`.
@@ -136,26 +203,89 @@ private[verify] object PropMacro {
             )
     }
 
-    /** The identifier of the statement variable a lambda's parameter stands for. */
+    /** The identifier of the statement variable a lambda's parameter stands for: over the `Data`
+      * encodings of its values ([[Props.forAllData]]) where it has a `decode`, the `FromData` that
+      * reads them.
+      */
     private def ident(using
         Quotes
     )(
         symbol: quotes.reflect.Symbol,
         pos: quotes.reflect.Position,
-        tpe: Type[?]
+        tpe: Type[?],
+        decode: Option[Expr[Any]]
     ): Expr[PropExpr.Ident[?]] = {
         val name = variableName(symbol)
         val id = positionId(pos)
         tpe match
             case '[t] =>
-                '{
+                val variable = '{
                     new PropExpr.Ident[t](
                       ${ Expr(name) },
                       ${ Expr(id) },
                       Props.variableType(scalus.compiler.compile((value: t) => value))
                     )
                 }
+                decode match
+                    case None => variable
+                    case Some(reader) =>
+                        val reads = reader.asExprOf[FromData[t]]
+                        '{
+                            DataEncoding.encodedVariable(
+                              $variable,
+                              scalus.compiler.compile((data: Data) => data.to[t](using $reads))
+                            )
+                        }
     }
+
+    /** The type of a statement variable written `A @UplcRepr(UplcRepresentation.Data)`, which
+      * ranges over the `Data` encodings of the values of `A`, as [[Props.forAllData]]: `A`. None
+      * for another type: another representation is the compiler's, as it was.
+      */
+    private def dataRepresented(using
+        Quotes
+    )(tpe: quotes.reflect.TypeRepr): Option[quotes.reflect.TypeRepr] = {
+        import quotes.reflect.*
+        def isData(argument: Term) =
+            argument.symbol.name == "Data" &&
+                argument.symbol.owner == TypeRepr
+                    .of[scalus.compiler.UplcRepresentation]
+                    .typeSymbol
+                    .companionModule
+                    .moduleClass
+        // An alias is followed by hand: `dealias` drops the annotation too.
+        def written(tpe: TypeRepr): TypeRepr = tpe match
+            case alias: TypeRef if alias.typeSymbol.isAliasType =>
+                written(alias.translucentSuperType)
+            case other => other
+        written(tpe) match
+            case AnnotatedType(underlying, annotation @ Apply(_, List(argument)))
+                if annotation.tpe <:< TypeRepr.of[scalus.compiler.UplcRepr] && isData(argument) =>
+                Some(underlying)
+            case _ => None
+    }
+
+    /** The type of a statement variable as code has it: without the representation that makes it a
+      * variable over `Data` encodings ([[dataRepresented]]), which the statement reads and the code
+      * does not.
+      */
+    private def codeType(using Quotes)(tpe: quotes.reflect.TypeRepr): quotes.reflect.TypeRepr =
+        dataRepresented(tpe).getOrElse(tpe)
+
+    /** Refuses `@UplcRepr(UplcRepresentation.Data)` on the parameters `params`, which stand for
+      * `what`: a value given to the statement, not one it quantifies over.
+      */
+    private def refuseDataRepresented(using
+        Quotes
+    )(params: List[quotes.reflect.ValDef], what: String): Unit =
+        params.foreach(param =>
+            if dataRepresented(param.tpt.tpe).isDefined then
+                quotes.reflect.report.errorAndAbort(
+                  s"$what takes no @UplcRepr(UplcRepresentation.Data): only a variable that a " +
+                      "statement quantifies over ranges over Data encodings",
+                  param.pos
+                )
+        )
 
     /** The parameters and body of the lambda literal `term`, of `arity` parameters when given. */
     private def lambdaOf(using
@@ -202,7 +332,10 @@ private[verify] object PropMacro {
         if post.tpe.widen <:< TypeRepr.of[Prop] then
             checkClosed(post, ensureParams.map(_.symbol).toSet)
         val precondition = statementOf(pre, params.map(_.symbol).toSet, "expects")
-        val idents = params.map(param => ident(param.symbol, param.pos, param.tpt.tpe.asType))
+        // A contract's variables are its function's arguments, which callers instantiate.
+        refuseDataRepresented(params, "a contract's variable, its function's argument,")
+        refuseDataRepresented(ensureParams, "a contract's variable, its function's argument,")
+        val idents = params.map(param => ident(param.symbol, param.pos, param.tpt.tpe.asType, None))
         val call = PropMacro.call[Arg, R](
           '{ $fn.ref },
           argumentOf[Arg](params),
@@ -238,7 +371,9 @@ private[verify] object PropMacro {
             case List(one) => one.asExprOf[Arg]
             case refs =>
                 val tuple = Ref(defn.TupleClass(refs.size).companionModule)
-                Select.overloaded(tuple, "apply", params.map(_.tpt.tpe), refs).asExprOf[Arg]
+                Select
+                    .overloaded(tuple, "apply", params.map(param => codeType(param.tpt.tpe)), refs)
+                    .asExprOf[Arg]
     }
 
     /** `∀ args. when(args) ==> succeeds(fn, args)`, or `==> fails(fn, args)`: the function returns,
@@ -253,7 +388,10 @@ private[verify] object PropMacro {
     )(using Quotes): Expr[Prop] = {
         val (params, outcome) = outcomeWhen[Arg, R](fn, when, fails)
         universal(
-          params.map(param => ident(param.symbol, param.pos, param.tpt.tpe.asType)),
+          params.map { param =>
+              val binderType = codeType(param.tpt.tpe)
+              ident(param.symbol, param.pos, binderType.asType, encodedDecoder(param, binderType))
+          },
           outcome
         )
     }
@@ -270,6 +408,7 @@ private[verify] object PropMacro {
             val declared = $contract
             ${
                 val (params, outcome) = outcomeWhen[Arg, R]('{ declared.function }, when, fails)
+                refuseDataRepresented(params, "a contract's variable, its function's argument,")
                 val names = Expr(params.map(param => variableName(param.symbol)))
                 '{ declared.withClause($names, $outcome) }
             }
@@ -339,7 +478,7 @@ private[verify] object PropMacro {
         else
             val names = variables.map(variableName)
             val methodType = MethodType(variables.map(_.name))(
-              _ => variables.map(symbol => symbol.termRef.widen),
+              _ => variables.map(symbol => codeType(symbol.termRef.widen)),
               _ => TypeRepr.of[A]
             )
             val lambda = Lambda(

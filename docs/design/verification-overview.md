@@ -1142,9 +1142,10 @@ No calibration between Scalus's metering and Lean's steps is needed.
 
 **Limits.**
 
-- Quantified variables are `BigInt`, `Boolean`, `ByteString`, `String`, `Data` or case classes
-  of them for now; values inside tests, such as call arguments and results, can have any type. An enum or a
-  list cannot be quantified over yet; quantify over `Data` with `FromData`.
+- Quantified variables are `BigInt`, `Boolean`, `ByteString`, `String`, `Data`, lists and maps
+  (as their representation passes them, restricted to their type's values by a predicate derived
+  from the type), or case classes and enums of them; values inside tests, such as call arguments
+  and results, can have any type.
 - Programs must be compiled without the CIP-153 `Value` and CIP-138 array builtins, which the
   Lean model lacks. A ledger `Value` represented as `Data` is unaffected.
 - Programs that read single bytes or reach the CIP-121/122 bitwise builtins cannot be proved over

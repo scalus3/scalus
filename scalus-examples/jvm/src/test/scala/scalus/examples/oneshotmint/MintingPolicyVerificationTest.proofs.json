@@ -11,7 +11,7 @@
     "mints_of_distinct_token_names/ensures": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "807f6db6c9f3c5b6",
+      "statement": "5ad18d9f36d3a6ae",
       "programs": [
         "05042940663a17f3",
         "4ad4c32829df2318",
@@ -29,7 +29,7 @@
     "one_shot_mint.mint.accepted_only_with_the_seed": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "07e4887868bf0dd7",
+      "statement": "f3875e1f4b3990ac",
       "programs": [
         "3e98557b2aa2392a",
         "81e6ca808ef80e7e"
@@ -66,7 +66,7 @@
     "one_shot_mint.mint.burns_without_the_seed": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "07e4887868bf0dd7",
+      "statement": "f3875e1f4b3990ac",
       "programs": [
         "88b755836de3b3a7",
         "3e98557b2aa2392a"
@@ -82,7 +82,7 @@
     "one_shot_mint.mint.seed_mints_any_quantity": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "07e4887868bf0dd7",
+      "statement": "f3875e1f4b3990ac",
       "programs": [
         "6db72a36467ecb31",
         "3e98557b2aa2392a"
@@ -119,7 +119,7 @@
     "one_shot_mint.mint.seed_mints_the_tokens": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "07e4887868bf0dd7",
+      "statement": "f3875e1f4b3990ac",
       "programs": [
         "560468ff1f765a23",
         "3e98557b2aa2392a"
@@ -130,86 +130,6 @@
       },
       "tests": [
         "the transaction that spends the seed mints the tokens"
-      ]
-    },
-    "one_shot_mint.optimized_deserializer.reads_only_a_minting": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "e7535997f1762474",
-      "programs": [
-        "7138105bcd1da523",
-        "ffad18f4642688da"
-      ],
-      "notes": {
-        "budget": "1890",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the optimized deserializer reads the ledger's context, and only of a minting"
-      ]
-    },
-    "one_shot_mint.optimized_deserializer.reads_the_ledger_context": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "f0930643d31d2121",
-      "programs": [
-        "4abb914374781d67"
-      ],
-      "notes": {
-        "budget": "2085",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the optimized deserializer reads the ledger's context, and only of a minting"
-      ]
-    },
-    "one_shot_mint.script.only_the_seed_mints": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "0645e8bcbf8d5f05",
-      "programs": [
-        "9608df270d5ff2de",
-        "30b16016486ec7c4"
-      ],
-      "notes": {
-        "budget": "5542",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the script mints only with the seed, and with it exactly the tokens"
-      ]
-    },
-    "one_shot_mint.script.seed_mints_exactly_the_tokens": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "bc6902d8dfe0a4b4",
-      "programs": [
-        "2fd34267669fe5b0",
-        "9608df270d5ff2de",
-        "a079a1eed99aeded"
-      ],
-      "notes": {
-        "budget": "5006",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the script mints only with the seed, and with it exactly the tokens"
-      ]
-    },
-    "one_shot_mint.script.seed_mints_the_tokens": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "0645e8bcbf8d5f05",
-      "programs": [
-        "9dff0e6f7fbcfbee",
-        "9608df270d5ff2de"
-      ],
-      "notes": {
-        "budget": "2756",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the script mints only with the seed, and with it exactly the tokens"
       ]
     }
   }

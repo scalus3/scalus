@@ -81,6 +81,14 @@ private[uplcblaster] object SmtValues {
     def data(text: String, renaming: Renaming): Either[Unreadable, Data] =
         read(text, toData(renaming))
 
+    /** A Lean `List Data`: a builtin list of `Data`. */
+    def dataList(text: String, renaming: Renaming): Either[Unreadable, List[Data]] =
+        read(text, toList(_, toData(renaming)))
+
+    /** A Lean `List (Data × Data)`: a builtin list of pairs, or the entries of a `Data.Map`. */
+    def dataPairs(text: String, renaming: Renaming): Either[Unreadable, List[(Data, Data)]] =
+        read(text, toList(_, toPair(renaming)))
+
     def bytes(text: String): Either[Unreadable, ByteString] = bytes(text, Renaming.none)
 
     def bytes(text: String, renaming: Renaming): Either[Unreadable, ByteString] =

@@ -4,14 +4,18 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import scalus.*
 import scalus.cardano.ledger.ExUnits
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.compiler.Options
-import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, DataDecl, SIR, SIRBuiltins, SIRType}
+import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, ConstrDecl, DataDecl, SIR, SIRBuiltins, SIRType}
 import scalus.compiler.sir.linking.Wrappers
-import scalus.uplc.{Constant, DeBruijn, DefaultFun, Program, Term}
+import scalus.compiler.sir.lowering.{LoweringContext, ProductCaseClassRepresentation, SumCaseClassRepresentation}
+import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
+import scalus.uplc.{Constant, DeBruijn, DefaultFun, DefaultUni, Program, Term}
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.utils.{Hex, Utils}
 import scalus.verify.*
+import scalus.verify.SirTypes.*
 import scalus.verify.lean.{Directories, LeanServer, LeanServerProvider, LeanWorkspace}
 
 import java.nio.file.{Files, Path}
@@ -42,17 +46,17 @@ enum Budget {
 /** Proves [[scalus.verify.Prop]] statements about their compiled UPLC with Lean Blaster.
   *
   * The supported fragment has universal and existential quantifiers over `BigInt`, `Boolean`,
-  * `ByteString`, `String`, `Data` and case classes of them, with tests, calls, `denotes`, `equal`
-  * and the connectives. An `existsLet` is eliminated by applying its body to the supplied witness.
-  * Every test is compiled to its own closed UPLC predicate over the quantified values in its scope
-  * (see [[UplcBlaster.lower]]). The Lean CEK model runs each predicate for at most `budget` steps,
-  * keeping a failing program apart from an exhausted budget, and Blaster decides the resulting
-  * proposition. Each test is read according to its polarity (design doc §6.2), so a proof at any
-  * budget holds without the budget, and a statement that a program fails can be proved. A closed
-  * statement, without quantified variables, has nothing to search for: Lean decides it by running
-  * its predicates, with `native_decide` ([[ProofKind.LeanNative]]). A counterexample is replayed on
-  * the Scalus CEK before it is reported as a refutation. Other statement shapes are rejected during
-  * preparation.
+  * `ByteString`, `String`, `Data`, lists and maps, and case classes and enums of them, with tests,
+  * calls, `denotes`, `equal` and the connectives. An `existsLet` is eliminated by applying its body
+  * to the supplied witness. Every test is compiled to its own closed UPLC predicate over the
+  * quantified values in its scope (see [[UplcBlaster.lower]]). The Lean CEK model runs each
+  * predicate for at most `budget` steps, keeping a failing program apart from an exhausted budget,
+  * and Blaster decides the resulting proposition. Each test is read according to its polarity
+  * (design doc §6.2), so a proof at any budget holds without the budget, and a statement that a
+  * program fails can be proved. A closed statement, without quantified variables, has nothing to
+  * search for: Lean decides it by running its predicates, with `native_decide`
+  * ([[ProofKind.LeanNative]]). A counterexample is replayed on the Scalus CEK before it is reported
+  * as a refutation. Other statement shapes are rejected during preparation.
   *
   * The checks run in a Lean server, one after another: the server loads the workspace once, and a
   * check is an edit of its document (docs/design/verification-details/lean-server.md). The tactic
@@ -285,7 +289,11 @@ object UplcBlaster {
         binders: List[PropExpr.Ident[?]],
         body: LeafFormula,
         leaves: Vector[Program],
-        private[uplcblaster] val leafBinders: Vector[List[Int]]
+        private[uplcblaster] val leafBinders: Vector[List[Int]],
+        /** For each binder, the Lean predicate its values satisfy, where Lean's variable has more
+          * values than its type: a function to `Bool`, applied to the variable in the quantifier.
+          */
+        private[uplcblaster] val predicates: Vector[Option[String]] = Vector.empty
     ) {
 
         /** The SHA-256 of each leaf's program CBOR, in the order of [[leaves]]. */
@@ -301,18 +309,7 @@ object UplcBlaster {
           * its body is false of one assignment. With one, an assignment shows nothing: the witness
           * may be another value.
           */
-        def hasExistential: Boolean = {
-            def loop(formula: LeafFormula, positive: Boolean): Boolean = formula match
-                case LeafFormula.Exists(_, body)  => positive || loop(body, positive)
-                case LeafFormula.Forall(_, body)  => !positive || loop(body, positive)
-                case LeafFormula.And(left, right) => loop(left, positive) || loop(right, positive)
-                case LeafFormula.Or(left, right)  => loop(left, positive) || loop(right, positive)
-                case LeafFormula.Not(inner)       => loop(inner, !positive)
-                case LeafFormula.Implies(premise, conclusion) =>
-                    loop(premise, !positive) || loop(conclusion, positive)
-                case _: LeafFormula.Test | _: LeafFormula.Denotes => false
-            loop(body, positive = true)
-        }
+        def hasExistential: Boolean = quantifiers(body).exists((_, universal) => !universal)
     }
 
     /** The Scalus CEK budget for replaying a counterexample: a hundred times the mainnet
@@ -379,15 +376,18 @@ object UplcBlaster {
     /** Lowers a statement in the supported fragment, or explains why it is outside it.
       *
       * The fragment has universal and existential quantifiers over `BigInt`, `Boolean`,
-      * `ByteString`, `String`, `Data` and case classes of them. A variable of a case class becomes
-      * one variable per field in [[Lowered.binders]], and each test builds it from them.
-      * `existsLet` applies its body to the supplied witness and introduces no Lean quantifier.
-      * Leaves are Boolean tests, calls whose continuation is a test or another total call,
-      * `denotes`, and `equal` over `BigInt`, `Boolean`, `ByteString`, `String` and `Data`. A call's
-      * arguments and result, and the operand of `denotes`, can have any type. Its connectives are
-      * `&&`, `||`, `!`, `==>` and `<=>`. `<=>` becomes two implications, because its operands occur
-      * in both polarities. A partial call, `whenReturns(f, a)(r => p)`, becomes
-      * `denotes(f(a)) ==> call(f, a)(r => p)`: its two leaves run the function's program each.
+      * `ByteString`, `String`, `Data`, lists and maps, and case classes and enums of them. A
+      * variable of a case class becomes one variable per field in [[Lowered.binders]], and one of
+      * an enum a constructor's number and the fields of every constructor; each test builds it from
+      * them. A list or a map is one variable, in the form it is passed, and only where it stands
+      * for every value ([[Variable.isLarger]]). `existsLet` applies its body to the supplied
+      * witness and introduces no Lean quantifier. Leaves are Boolean tests, calls whose
+      * continuation is a test or another total call, `denotes`, and `equal` over `BigInt`,
+      * `Boolean`, `ByteString`, `String` and `Data`. A call's arguments and result, and the operand
+      * of `denotes`, can have any type. Its connectives are `&&`, `||`, `!`, `==>` and `<=>`. `<=>`
+      * becomes two implications, because its operands occur in both polarities. A partial call,
+      * `whenReturns(f, a)(r => p)`, becomes `denotes(f(a)) ==> call(f, a)(r => p)`: its two leaves
+      * run the function's program each.
       *
       * A call of a function in `functions` is linked to that function's compiled program, so the
       * function's bytes appear unchanged in the predicate. A function of several parameters is
@@ -397,6 +397,10 @@ object UplcBlaster {
     def lower(prop: Prop, functions: FunctionTable): Either[String, Lowered] =
         checkSignatures(prop, functions).flatMap { _ =>
             val binders = ArrayBuffer.empty[PropExpr.Ident[?]]
+            // The predicate of each binder, in the order of `binders`.
+            val predicates = ArrayBuffer.empty[Option[String]]
+            // The binders whose predicate is not exact, which may stand only for every value.
+            val inexact = scala.collection.mutable.Set.empty[Int]
             val leaves = ArrayBuffer.empty[Program]
             val leafBinders = ArrayBuffer.empty[List[Int]]
             // Leaves that are one program over the same variables share it, as the calls of two
@@ -417,13 +421,62 @@ object UplcBlaster {
 
             /** The primitive Lean binders for one statement binder, and a binding that rebuilds a
               * case class from its fields in every leaf in its scope.
+              *
+              * A list's or a map's items are any `Data` to Lean: the quantifier restricts them to
+              * the type's with a predicate derived from the type. Where the predicate is not exact,
+              * the variable keeps more values than its type, and is checked to stand for every
+              * value once the statement is lowered.
               */
-            def quantified(
+            def quantified(ident: PropExpr.Ident[?]): Either[String, (List[Int], List[Binding])] =
+                DataEncoding.encoded(ident.tp) match
+                    case Some((valueType, decoder)) => quantifiedData(ident, valueType, decoder)
+                    case None                       => quantifiedValues(ident)
+
+            /** A [[Props.forAllData]] variable: one Lean `Data`, restricted to the encodings of its
+              * type's values, and the binding that decodes it in every leaf in its scope. The
+              * decoder's data declarations go around the leaf with the leaf's own ([[withBuilt]]).
+              */
+            def quantifiedData(
+                ident: PropExpr.Ident[?],
+                valueType: SIRType,
+                decoder: SIR
+            ): Either[String, (List[Int], List[Binding])] =
+                val decoded = Props.openVariables(decoder, List(ident.name))
+                DataEncoding.of(valueType) match
+                    case DataEncoding.Unknown(reason) =>
+                        Left(s"a forAllData binder of ${valueType.show} is not supported: $reason")
+                    // `d.to[A]` compiles to the compiler's own reading, whatever FromData is
+                    // given. A decoder that is not would read other Data than the premise admits.
+                    case _ if !decodesByRepresentation(decoded, ident.name) =>
+                        Left(
+                          s"a forAllData binder of ${valueType.show} is read otherwise than by " +
+                              "the compiler's Data representation of the type, which its premise " +
+                              "is derived from: a Data the premise admits could fail to decode, " +
+                              "and count as a value of the type"
+                        )
+                    case _ =>
+                        val restriction = variableRestriction(Variable.EncodedData, ident.tp)
+                        val position = binders.size
+                        binders += new PropExpr.Ident[Any](ident.name, 0L, ident.tp)
+                        predicates += restriction.premise
+                        if !restriction.exact then inexact += position
+                        Right(List(position) -> List(Binding(ident.name, valueType, decoded)))
+
+            def quantifiedValues(
                 ident: PropExpr.Ident[?]
             ): Either[String, (List[Int], List[Binding])] =
                 expand(ident.name, ident.tp).map { (variables, built) =>
+                    val restrictions = variables.map(v =>
+                        variableOf(v.tp)
+                            .filter(_.isLarger)
+                            .map(kind => variableRestriction(kind, v.tp))
+                    )
                     val from = binders.size
                     binders ++= variables
+                    predicates ++= restrictions.map(_.flatMap(_.premise))
+                    inexact ++= variables.indices
+                        .filter(i => restrictions(i).exists(!_.exact))
+                        .map(from + _)
                     val positions = (from until binders.size).toList
                     positions -> built.map(Binding(ident.name, ident.tp, _)).toList
                 }
@@ -444,7 +497,7 @@ object UplcBlaster {
             ): Either[String, LeafFormula] = current match {
                 case Prop.Call(fn, arg, result, false, body) =>
                     for
-                        returns <- returnsSir(fn, arg, result.tp, functions)
+                        returns <- returnsSir(fn, arg, DataEncoding.valueType(result.tp), functions)
                         formula <- loop(
                           Prop.Implies(
                             Prop.Denotes(PropExpr.SIRExpr(returns)),
@@ -502,7 +555,31 @@ object UplcBlaster {
                     loop(instantiate(body, ident, witness), scope, built)
             }
 
-            loop(prop, Nil, Nil).flatMap { formula =>
+            // A variable with more values than its type is sound only where it stands for every
+            // value: a statement that holds of all of them holds of the type's, but a value that
+            // shows a statement of some value can be none of the type's.
+            def standsForEvery(formula: LeafFormula): Either[String, LeafFormula] = {
+                val claimed = quantifiers(formula)
+                    .collect { case (introduced, false) =>
+                        introduced.filter(inexact.contains)
+                    }
+                    .flatten
+                    .distinct
+                if claimed.isEmpty then Right(formula)
+                else
+                    Left(
+                      s"${claimed.map(binders(_).name).mkString(", ")}: a list, a map or a " +
+                          "forAllData variable whose type cannot be told from Data exactly, as a " +
+                          "type that contains itself, has more values as a variable than its type " +
+                          "has. A statement that holds of all of them holds of the type's, but a " +
+                          "value that shows a statement of some value can be none of the type's. " +
+                          "So such a variable is one only where it stands for every value: in a " +
+                          "forAll in a positive position, or an exists in a negative one, and not " +
+                          "under <=>"
+                    )
+            }
+
+            loop(prop, Nil, Nil).flatMap(standsForEvery).flatMap { formula =>
                 val utf8 =
                     leaves.flatMap(_.term.collectBuiltins).filter(utf8Builtins).distinct.sorted
                 if binders.nonEmpty && utf8.nonEmpty then
@@ -513,7 +590,16 @@ object UplcBlaster {
                           "Plutus's (input-output-hk/Lean-blaster#389), so a proof would not hold. " +
                           "A closed statement, which Lean evaluates, may apply them"
                     )
-                else Right(Lowered(binders.toList, formula, leaves.toVector, leafBinders.toVector))
+                else
+                    Right(
+                      Lowered(
+                        binders.toList,
+                        formula,
+                        leaves.toVector,
+                        leafBinders.toVector,
+                        predicates.toVector
+                      )
+                    )
             }
         }
 
@@ -547,68 +633,349 @@ object UplcBlaster {
       * `Data.I` would be any `Data`, so a statement would be refuted by a value that is no `I`, and
       * an `exists` proved by one.
       */
-    private def leanVariable(tp: SIRType): Boolean = tp match
-        case SIRType.Integer | SIRType.Boolean | SIRType.ByteString | SIRType.String => true
-        case other => isWholeData(other)
+    private def leanVariable(tp: SIRType): Boolean = variableOf(tp).isDefined
 
-    /** `Data` itself, and not one of its constructors. */
-    private def isWholeData(tp: SIRType): Boolean = tp match
-        case SIRType.SumCaseClass(decl, _) => decl.name == SIRType.Data.name
-        case _                             => false
+    /** The kind of Lean variable that stands for a variable of type `tp` as it is, if one does.
+      *
+      * Besides the constants, a list or a map is one: the compiler passes it as a builtin list or
+      * as one `Data.Map`, not through its constructors, so Lean has a variable of that form, and
+      * the value reaches the programs as it would at run time. Which form is the lowering's default
+      * representation of the type: a builtin list of `Data` for a `List` of a type that is `Data`,
+      * a builtin list of pairs of `Data` for a list of pairs, and a `Data.Map` for `SortedMap`,
+      * `AssocMap` and `Value`. Its elements are any `Data`, as the representation's are, and its
+      * length is any length.
+      */
+    private def variableOf(tp: SIRType): Option[Variable] = unwrap(tp) match
+        case _ if DataEncoding.encoded(tp).isDefined => Some(Variable.EncodedData)
+        case SIRType.Integer                         => Some(Variable.Integer)
+        case SIRType.Boolean                         => Some(Variable.Boolean)
+        case SIRType.ByteString                      => Some(Variable.ByteString)
+        case SIRType.String                          => Some(Variable.String)
+        case whole if isWholeData(whole)             => Some(Variable.WholeData)
+        // One constructor of a type, as `Data.I` or `List.Cons`: Lean's variable for it would be
+        // one of the whole type, which has other values.
+        case SIRType.CaseClass(_, _, Some(_)) => None
+        case other if collectionTypes.contains(declarationName(other)) =>
+            collections.getOrElseUpdate(typeKey(other), collection(other))
+        case _ => None
+
+    /** The types that are passed as a list or as a map: the only ones whose representation decides
+      * the variable, and so the only ones whose representation is looked up.
+      */
+    private val collectionTypes = Set(
+      "scalus.cardano.onchain.plutus.prelude.List",
+      SIRType.PairList.DataDeclName,
+      "scalus.cardano.onchain.plutus.prelude.SortedMap",
+      "scalus.cardano.onchain.plutus.prelude.AssocMap",
+      "scalus.cardano.onchain.plutus.v1.Value"
+    )
+
+    /** [[collection]] of each type it was asked about, by its [[SirTypes.typeKey]]. */
+    private val collections = scala.collection.concurrent.TrieMap.empty[String, Option[Variable]]
+
+    /** The context in which the tactic's programs are lowered, which chooses the representations of
+      * their parameters.
+      */
+    private[verify] def representations: LoweringContext =
+        UplcSignature.loweringContext(options, options.targetLanguage)
+
+    /** [[variableOf]] for a type that is passed as a list or as a map. */
+    private def collection(tp: SIRType): Option[Variable] = {
+        given LoweringContext = representations
+        SirTypeUplcGenerator.defaultRepresentation(tp) match
+            case SumCaseClassRepresentation.SumBuiltinList(element) if element.isPackedData =>
+                Some(Variable.DataList)
+            case SumCaseClassRepresentation.SumPairBuiltinList(key, value)
+                if key.isPackedData && value.isPackedData =>
+                Some(Variable.PairList)
+            case ProductCaseClassRepresentation.PackedDataMap => Some(Variable.DataMap)
+            case ProductCaseClassRepresentation.OneElementWrapper(
+                  ProductCaseClassRepresentation.PackedDataMap
+                ) =>
+                Some(Variable.DataMap)
+            case _ => None
+    }
+
+    /** The binders of each quantifier of `formula`, and whether the quantifier stands for every
+      * value: a `forAll` in a positive position, or an `exists` in a negative one. A side of `<=>`
+      * occurs in both positions, so each of its quantifiers is listed twice.
+      */
+    private def quantifiers(formula: LeafFormula): List[(List[Int], Boolean)] = {
+        def loop(formula: LeafFormula, polarity: Polarity): List[(List[Int], Boolean)] =
+            formula match
+                case LeafFormula.Forall(binders, body) =>
+                    (binders -> (polarity == Polarity.Positive)) :: loop(body, polarity)
+                case LeafFormula.Exists(binders, body) =>
+                    (binders -> (polarity == Polarity.Negative)) :: loop(body, polarity)
+                case LeafFormula.And(left, right) => loop(left, polarity) ++ loop(right, polarity)
+                case LeafFormula.Or(left, right)  => loop(left, polarity) ++ loop(right, polarity)
+                case LeafFormula.Not(inner)       => loop(inner, polarity.turned)
+                case LeafFormula.Implies(premise, conclusion) =>
+                    loop(premise, polarity.turned) ++ loop(conclusion, polarity)
+                case _: LeafFormula.Test | _: LeafFormula.Denotes => Nil
+        loop(formula, Polarity.Positive)
+    }
+
+    /** Where a part of a statement is: in a positive position, which the statement claims, or in a
+      * negative one, under a negation or in a premise.
+      */
+    private enum Polarity {
+        case Positive, Negative
+
+        /** The position under a negation or in a premise of a part in this one. */
+        def turned: Polarity = this match
+            case Positive => Negative
+            case Negative => Positive
+    }
+
+    /** A kind of Lean variable: its Lean type, and the term that passes its value to a program, in
+      * the form the compiled code takes.
+      */
+    private enum Variable(val leanType: String) {
+
+        /** Whether the variable has values its type does not have: the items of a list or a map are
+          * any `Data`. A statement about all its values holds of the type's, and one that claims
+          * some value can be shown by a value the type does not have.
+          */
+        def isLarger: Boolean = this match
+            case DataList | PairList | DataMap | EncodedData => true
+            case _                                           => false
+        case Integer extends Variable("Integer")
+        case Boolean extends Variable("Bool")
+        case ByteString extends Variable("ByteString")
+        case String extends Variable("String")
+        case WholeData extends Variable("Data")
+
+        /** A builtin list of `Data`. */
+        case DataList extends Variable("List Data")
+
+        /** A builtin list of pairs of `Data`. */
+        case PairList extends Variable("List (Data × Data)")
+
+        /** The entries of one `Data.Map`. */
+        case DataMap extends Variable("List (Data × Data)")
+
+        /** The `Data` encoding of a value of its type ([[Props.forAllData]]). */
+        case EncodedData extends Variable("Data")
+
+        /** The term that passes the value of the Lean variable `name`. The text is part of every
+          * kept result's fingerprint ([[UplcBlaster.fingerprint]]): writing the same term another
+          * way makes every kept result stale.
+          */
+        def argument(name: String): String = this match
+            case Integer                 => s"Term.Const (Const.Integer $name)"
+            case Boolean                 => s"Term.Const (Const.Bool $name)"
+            case ByteString              => s"Term.Const (Const.ByteString $name)"
+            case String                  => s"Term.Const (Const.String $name)"
+            case WholeData | EncodedData => s"Term.Const (Const.Data $name)"
+            case DataList                => s"Term.Const (Const.ConstDataList $name)"
+            case PairList                => s"Term.Const (Const.ConstPairDataList $name)"
+            case DataMap                 => s"Term.Const (Const.Data (Data.Map $name))"
+    }
 
     /** The variables Lean quantifies over for a statement's variable `name` of type `tp`, and the
       * variable's value built from them, when it is not one of them itself.
       *
       * A variable of a case class ranges over the values of its constructor (prop-semantics.md §1),
       * so it stands for one variable per field, named `name.field`, and its value is the
-      * constructor applied to them. A field that is a case class is expanded in turn: a `Config`
-      * with a `PubKeyHash` ends in the hash's `ByteString`.
+      * constructor applied to them. A field that is a case class or an enum is expanded in turn: a
+      * `Config` with a `PubKeyHash` ends in the hash's `ByteString`.
+      *
+      * A variable of an enum, or of another type of several constructors, ranges over the values of
+      * all of them. It stands for an integer `name.case`, which chooses the constructor, and for
+      * the fields of every constructor, named `name.Constructor.field`. Its value is the
+      * constructor the integer chooses, applied to that constructor's fields: the first for 0, the
+      * second for 1, and so on, and the last for every other integer, so that each integer is some
+      * value. A type that contains itself, such as `List`, has values of every size, which no set
+      * of variables stands for, and is not supported. `enclosing` names the types being expanded.
       */
     private def expand(
         name: String,
-        tp: SIRType
+        tp: SIRType,
+        enclosing: Set[String] = Set.empty,
+        count: Expansion = new Expansion
+    ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] = {
+        count.parts += 1
+        if count.parts > maxParts then
+            Left(
+              s"a ${tp.show} binder is not supported: it has more than $maxParts parts, as a " +
+                  "type that contains itself under other arguments each time"
+            )
+        else expandPart(name, tp, enclosing, count)
+    }
+
+    /** [[expand]] of one part, counted. */
+    private def expandPart(
+        name: String,
+        tp: SIRType,
+        enclosing: Set[String],
+        count: Expansion
     ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] = unwrap(tp) match
         case plain if leanVariable(plain) =>
             Right(List(new PropExpr.Ident[Any](name, 0L, plain)) -> None)
         case product @ SIRType.CaseClass(constructor, typeArguments, None) =>
-            val arguments = constructor.typeParams.zip(typeArguments).toMap
-            val fields = constructor.params.map { field =>
+            // The declaration of a class that is its own only constructor, as the compiler makes
+            // it.
+            val declaration = DataDecl(
+              constructor.name,
+              List(constructor),
+              constructor.typeParams,
+              constructor.annotations
+            )
+            nested(product, enclosing).flatMap(inner =>
+                constructed(name, declaration, constructor, typeArguments, product, inner, count)
+            )
+        case sum @ SIRType.SumCaseClass(declaration, _) if declaration.constructors.isEmpty =>
+            Left(s"a ${sum.show} binder is not supported: the type has no constructors")
+        case sum @ SIRType.SumCaseClass(declaration, typeArguments) =>
+            nested(sum, enclosing).flatMap(inner =>
+                expandSum(name, sum, declaration, typeArguments, inner, count)
+            )
+        case one @ SIRType.CaseClass(_, _, Some(parent)) =>
+            Left(
+              s"a ${one.show} binder is not supported: it is one constructor of ${parent.show}, " +
+                  s"and Lean's variable for it would have the other values of ${parent.show}. " +
+                  s"Quantify over ${parent.show}"
+            )
+        case other =>
+            Left(
+              s"a ${other.show} binder is not supported, only BigInt, Boolean, ByteString, " +
+                  "String, Data, lists and maps, and case classes and enums of them"
+            )
+
+    /** Whether `decoded`, the decoder of a [[Props.forAllData]] variable `name` applied to it, is
+      * the compiler's own: `UniversalDataConversion.fromData`, which reads the `Data` as the type's
+      * `Data` representation, the one its premise is derived from. Definitions the compiler put
+      * around it do not change what it reads.
+      */
+    private def decodesByRepresentation(decoded: SIR, name: String): Boolean = {
+        val fromData = "scalus.uplc.builtin.internal.UniversalDataConversion$.fromData"
+        Wrappers.of(decoded)._2 match
+            case SIR.Apply(SIR.ExternalVar(_, function, _, _), SIR.Var(argument, _, _), _, _) =>
+                function == fromData && argument == name
+            case SIR.Apply(SIR.Var(function, _, _), SIR.Var(argument, _, _), _, _) =>
+                function == fromData && argument == name
+            case _ => false
+    }
+
+    /** The parts of one statement variable expanded so far ([[expand]]): its fields, and theirs,
+      * whether they are Lean variables or are expanded in turn.
+      */
+    private final class Expansion(var parts: Int = 0)
+
+    /** How many parts one statement variable may have: many more than a type of the ledger has, and
+      * an end to a type that contains itself under other arguments each time, which [[nested]] does
+      * not tell, and whose fields double at each level.
+      */
+    private val maxParts = 10_000
+
+    /** The types being expanded, with `tp`, which is expanded inside them, or why it cannot be. A
+      * type is told by its arguments as well: an `Option[Address]` holds an `Option` of another
+      * type, and does not contain itself.
+      */
+    private def nested(tp: SIRType, enclosing: Set[String]): Either[String, Set[String]] = {
+        val shown = tp.show
+        if enclosing.contains(shown) then
+            Left(
+              s"a $shown binder is not supported: the type contains itself, so its values have " +
+                  "no bound in size, and no set of variables stands for them"
+            )
+        else if enclosing.size >= maxNesting then
+            Left(s"a $shown binder is not supported: its types nest more than $maxNesting deep")
+        else Right(enclosing + shown)
+    }
+
+    /** The variables of a constructor's fields, named `name.field`, and the constructor applied to
+      * them. `tp` is the type of the value, and `typeArguments` are the constructor's own.
+      */
+    private def constructed(
+        name: String,
+        declaration: DataDecl,
+        constructor: ConstrDecl,
+        typeArguments: List[SIRType],
+        tp: SIRType,
+        enclosing: Set[String],
+        count: Expansion
+    ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] = {
+        val fields = constructor.params.zip(fieldTypes(constructor, typeArguments)).map {
+            (field, fieldType) =>
                 val fieldName = s"$name.${field.name}"
-                val fieldType = SIRType.substitute(field.tp, arguments, Map.empty)
-                expand(fieldName, fieldType).map { (binders, built) =>
+                expand(fieldName, fieldType, enclosing, count).map { (binders, built) =>
                     val value: AnnotatedSIR =
                         built.getOrElse(SIR.Var(fieldName, binders.head.tp, AnnotationsDecl.empty))
                     binders -> value
                 }
-            }
-            fields.collectFirst { case Left(reason) => reason } match
-                case Some(reason) => Left(reason)
+        }
+        fields.collectFirst { case Left(reason) => reason } match
+            case Some(reason) => Left(reason)
+            case None =>
+                val (binders, values) = fields.collect { case Right(field) => field }.unzip
+                Right(
+                  binders.flatten -> Some(
+                    SIR.Constr(constructor.name, declaration, values, tp, AnnotationsDecl.empty)
+                  )
+                )
+    }
+
+    /** [[expand]] of a variable of a type of several constructors. */
+    private def expandSum(
+        name: String,
+        sum: SIRType,
+        declaration: DataDecl,
+        typeArguments: List[SIRType],
+        enclosing: Set[String],
+        count: Expansion
+    ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] = {
+        val annotations = AnnotationsDecl.empty
+        val variants = declaration.constructors.map { constructor =>
+            ownArguments(constructor, typeArguments) match
                 case None =>
-                    val (binders, values) = fields.collect { case Right(field) => field }.unzip
-                    // The declaration of a class that is its own only constructor, as the
-                    // compiler makes it.
-                    val declaration = DataDecl(
-                      constructor.name,
-                      List(constructor),
-                      constructor.typeParams,
-                      constructor.annotations
+                    Left(
+                      s"a ${sum.show} binder is not supported: the type arguments of " +
+                          s"${constructor.name} are not those of the type"
                     )
-                    Right(
-                      binders.flatten -> Some(
-                        SIR.Constr(
-                          constructor.name,
-                          declaration,
-                          values,
-                          product,
-                          AnnotationsDecl.empty
+                case Some(own) =>
+                    val tp = SIRType.typeApply(declaration.constrType(constructor.name), own)
+                    val label = constructor.name.split('.').last.stripPrefix("$")
+                    constructed(
+                      s"$name.$label",
+                      declaration,
+                      constructor,
+                      own,
+                      tp,
+                      enclosing,
+                      count
+                    )
+        }
+        variants.collectFirst { case Left(reason) => reason } match
+            case Some(reason) => Left(reason)
+            case None =>
+                val (binders, values) = variants.collect { case Right(variant) => variant }.unzip
+                val built = values.flatten
+                if built.size == 1 then Right(binders.flatten -> built.headOption)
+                else
+                    val tag = new PropExpr.Ident[Any](s"$name.case", 0L, SIRType.Integer)
+                    val tagVariable = SIR.Var(tag.name, SIRType.Integer, annotations)
+                    def chosen(index: Int): AnnotatedSIR = {
+                        val partial = SIR.Apply(
+                          SIRBuiltins.equalsInteger,
+                          tagVariable,
+                          SIRType.Fun(SIRType.Integer, SIRType.Boolean),
+                          annotations
                         )
-                      )
-                    )
-        case other =>
-            Left(
-              s"a ${other.show} binder is not supported, only BigInt, Boolean, ByteString, " +
-                  "String, Data and case classes of them"
-            )
+                        val number = SIR.Const(
+                          Constant.Integer(BigInt(index)),
+                          SIRType.Integer,
+                          annotations
+                        )
+                        SIR.Apply(partial, number, SIRType.Boolean, annotations)
+                    }
+                    val value = built.init.zipWithIndex.foldRight(built.last) {
+                        case ((constructor, index), otherwise) =>
+                            SIR.IfThenElse(chosen(index), constructor, otherwise, sum, annotations)
+                    }
+                    Right((tag :: binders.flatten) -> Some(value))
+    }
 
     /** `sir` with the variables in `built` that it uses bound to their values, inside its data
       * declarations.
@@ -619,10 +986,18 @@ object UplcBlaster {
         if used.isEmpty then sir
         else
             val (data, expression) = declarations(sir)
-            val constructed = used.flatMap(binding => constructorDeclarations(binding.value))
+            // A value's own data declarations, as a decoder's, go around the leaf, with those of
+            // the constructors it applies.
+            val values = used.map(binding => binding -> declarations(binding.value))
+            val constructed = values.flatMap { case (_, (own, value)) =>
+                own ++ constructorDeclarations(value)
+            }
+            val bindings = values.map { case (binding, (_, value)) =>
+                Binding(binding.name, binding.tp, value)
+            }
             withDeclarations(
               constructed ++ data,
-              SIR.Let(used, expression, SIR.LetFlags.None, AnnotationsDecl.empty)
+              SIR.Let(bindings, expression, SIR.LetFlags.None, AnnotationsDecl.empty)
             )
     }
 
@@ -655,7 +1030,13 @@ object UplcBlaster {
                 val (definitions, witnessValue) = Wrappers.definitions(linkedWitness)
                 val (bodyDeclarations, body) = declarations(sir)
                 val bound = SIR.Let(
-                  List(Binding(ident.name, ident.tp, witnessValue)),
+                  List(
+                    Binding(
+                      ident.name,
+                      DataEncoding.valueType(ident.tp),
+                      witnessValue
+                    )
+                  ),
                   body,
                   SIR.LetFlags.None,
                   AnnotationsDecl.empty
@@ -687,6 +1068,8 @@ object UplcBlaster {
     private def constructorDeclarations(sir: SIR): List[DataDecl] = sir match
         case SIR.Constr(_, data, arguments, _, _) =>
             data :: arguments.flatMap(constructorDeclarations)
+        case SIR.IfThenElse(_, ifTrue, ifFalse, _, _) =>
+            constructorDeclarations(ifTrue) ++ constructorDeclarations(ifFalse)
         case _ => Nil
 
     /** A test, or a total call continuing with one, as one Boolean SIR expression over the
@@ -723,9 +1106,10 @@ object UplcBlaster {
         val annotations = AnnotationsDecl.empty
         val (argumentDeclarations, values) = arguments.map(declarations).unzip
         val (continuationDeclarations, test) = declarations(continuation)
-        application(fn, values, result.tp, functions).map { called =>
+        val resultType = DataEncoding.valueType(result.tp)
+        application(fn, values, resultType, functions).map { called =>
             val continued = SIR.Apply(
-              SIR.LamAbs(SIR.Var(result.name, result.tp, annotations), test, Nil, annotations),
+              SIR.LamAbs(SIR.Var(result.name, resultType, annotations), test, Nil, annotations),
               called,
               SIRType.Boolean,
               annotations
@@ -807,12 +1191,6 @@ object UplcBlaster {
             case _ if functionDepth(tp) < arity =>
                 Left(s"${fn.displayName} has the type ${tp.show}, not one of $arity parameters")
             case _ => Right(curriedTypesOf(tp, arity))
-
-    /** A type without the wrappers that leave it what it is: annotations and type proxies. */
-    private def unwrap(tp: SIRType): SIRType = tp match
-        case SIRType.Annotated(inner, _)           => unwrap(inner)
-        case SIRType.TypeProxy(ref) if ref != null => unwrap(ref)
-        case other                                 => other
 
     /** How many parameters a curried function type takes. */
     private def functionDepth(tp: SIRType): Int = unwrap(tp) match
@@ -908,7 +1286,10 @@ object UplcBlaster {
           unbound.isEmpty,
           s"UPLC proposition body has free variables: ${unbound.toList.sorted.mkString(", ")}"
         )
-        val parameters = linked ++ binders.map(ident => ident.name -> ident.tp)
+        // A variable over the `Data` encodings of its values takes the `Data`.
+        val parameters = linked ++ binders.map(ident =>
+            ident.name -> DataEncoding.encoded(ident.tp).fold(ident.tp)(_ => SIRType.Data())
+        )
         val function = parameters.foldRight(unlinkedBody) { case ((name, tp), result) =>
             SIR.LamAbs(
               SIR.Var(name, tp, AnnotationsDecl.empty),
@@ -978,7 +1359,7 @@ object UplcBlaster {
     private def expressionSir(expr: PropExpr[?]): SIR = expr match
         case PropExpr.SIRExpr(sir) => sir
         case PropExpr.Ident(name, _, tp) =>
-            SIR.Var(name, tp, AnnotationsDecl.empty)
+            SIR.Var(name, DataEncoding.valueType(tp), AnnotationsDecl.empty)
 
     /** Removes the module definitions of functions in `functions` from around an expression.
       * `Compiler.compile` put them there; their remaining `ExternalVar` occurrences become explicit
@@ -1588,34 +1969,53 @@ object UplcBlaster {
       * constructor with a tag of more than 64 bits is written by Scalus in a form that Lean's
       * library does not read.
       */
-    private[uplcblaster] def leanValue(value: Constant): String = {
-        def integer(value: BigInt): String = if value < 0 then s"($value)" else value.toString
-        // One character for a byte, as Lean's library holds a byte string. Lean reads `\xHH`
-        // as the character of that code; what it prints, `\u{HH}`, it does not read.
-        def bytes(value: ByteString): String =
-            value.bytes
-                .map(byte => f"\\x${byte & 0xff}%02x")
-                .mkString("(ByteString.mk \"", "", "\")")
-        def data(value: Data): String = value match
-            case Data.Constr(tag, fields) =>
-                s"(Data.Constr ${integer(tag)} [${fields.toScalaList.map(data).mkString(", ")}])"
-            case Data.Map(entries) =>
-                val pairs = entries.toScalaList.map((key, item) => s"(${data(key)}, ${data(item)})")
-                s"(Data.Map [${pairs.mkString(", ")}])"
-            case Data.List(items) => s"(Data.List [${items.toScalaList.map(data).mkString(", ")}])"
-            case Data.I(number)   => s"(Data.I ${integer(number)})"
-            case Data.B(string)   => s"(Data.B ${bytes(string)})"
-        value match
-            case Constant.Integer(number)    => s"Const.Integer ${integer(number)}"
-            case Constant.Bool(truth)        => s"Const.Bool $truth"
-            case Constant.ByteString(string) => s"Const.ByteString ${bytes(string)}"
-            case Constant.String(string)     => s"Const.String \"${leanString(string)}\""
-            case Constant.Data(tree)         => s"Const.Data ${data(tree)}"
-            case other =>
-                throw new IllegalArgumentException(
-                  s"no variable of a statement has the value $other"
-                )
-    }
+    private[uplcblaster] def leanValue(value: Constant): String = value match
+        case Constant.Integer(number)    => s"Const.Integer ${leanInteger(number)}"
+        case Constant.Bool(truth)        => s"Const.Bool $truth"
+        case Constant.ByteString(string) => s"Const.ByteString ${leanBytes(string)}"
+        case Constant.String(string)     => s"Const.String \"${leanString(string)}\""
+        case Constant.Data(tree)         => s"Const.Data ${leanData(tree)}"
+        case Constant.List(DefaultUni.Data, items) =>
+            val values = items.map {
+                case Constant.Data(tree) => leanData(tree)
+                case other =>
+                    throw new IllegalArgumentException(s"a list of Data has the item $other")
+            }
+            s"Const.ConstDataList [${values.mkString(", ")}]"
+        case Constant.List(element, items) if element == DataPair =>
+            val pairs = items.map {
+                case Constant.Pair(Constant.Data(key), Constant.Data(value)) =>
+                    s"(${leanData(key)}, ${leanData(value)})"
+                case other =>
+                    throw new IllegalArgumentException(s"a list of pairs has the item $other")
+            }
+            s"Const.ConstPairDataList [${pairs.mkString(", ")}]"
+        case other =>
+            throw new IllegalArgumentException(
+              s"no variable of a statement has the value $other"
+            )
+
+    /** A `Data` as a Lean term of PlutusCore's `Data`. */
+    private[uplcblaster] def leanData(value: Data): String = value match
+        case Data.Constr(tag, fields) =>
+            s"(Data.Constr ${leanInteger(tag)} [${fields.toScalaList.map(leanData).mkString(", ")}])"
+        case Data.Map(entries) =>
+            val pairs =
+                entries.toScalaList.map((key, item) => s"(${leanData(key)}, ${leanData(item)})")
+            s"(Data.Map [${pairs.mkString(", ")}])"
+        case Data.List(items) =>
+            s"(Data.List [${items.toScalaList.map(leanData).mkString(", ")}])"
+        case Data.I(number) => s"(Data.I ${leanInteger(number)})"
+        case Data.B(string) => s"(Data.B ${leanBytes(string)})"
+
+    private def leanInteger(value: BigInt): String =
+        if value < 0 then s"($value)" else value.toString
+
+    /** One character for a byte, as Lean's library holds a byte string. Lean reads `\xHH` as the
+      * character of that code; what it prints, `\u{HH}`, it does not read.
+      */
+    private def leanBytes(value: ByteString): String =
+        value.bytes.map(byte => f"\\x${byte & 0xff}%02x").mkString("(ByteString.mk \"", "", "\")")
 
     /** The truth of a formula as Lean reads it under a budget (`renderFormula`), on the runs of its
       * leaves on one assignment. A program that has not ended within the budget counts against what
@@ -1858,6 +2258,86 @@ object UplcBlaster {
                 )
     }
 
+    /** What the quantifier asks of the values of a list or a map variable: the Lean premise on the
+      * variable, none where it says nothing, and whether it holds of exactly the type's values.
+      */
+    private final case class Restriction(premise: Option[String], exact: Boolean)
+
+    /** The encoding of a variable of type `tp` that has more values than its type
+      * ([[Variable.isLarger]]): a builtin list of items, a builtin list of pairs or a `Data.Map`,
+      * which is the type's `Data` encoding, or the `Data` of a value of a [[Props.forAllData]]
+      * variable.
+      */
+    private def variableEncoding(tp: SIRType): DataEncoding =
+        DataEncoding.of(DataEncoding.valueType(tp))
+
+    /** The restriction of a variable of `kind` and type `tp` to its type's values: of the items of
+      * a list or a map, or of the `Data` of a [[Props.forAllData]] variable.
+      */
+    private def variableRestriction(kind: Variable, tp: SIRType): Restriction = {
+        val fresh = Iterator.from(0)
+        variableEncoding(tp) match
+            case encoding if kind == Variable.EncodedData =>
+                Restriction(
+                  Option.unless(encoding.isAnything)(encoding.leanPredicate(fresh)),
+                  encoding.exact
+                )
+            case DataEncoding.Items(items) if items.isAnything => Restriction(None, exact = true)
+            case DataEncoding.Entries(keys, values, DataEncoding.KeyOrder.Any)
+                if keys.isAnything && values.isAnything =>
+                Restriction(None, exact = true)
+            case encoding @ DataEncoding.Items(items) =>
+                Restriction(Some(s"(scalusAll ${items.leanPredicate(fresh)})"), encoding.exact)
+            case encoding @ DataEncoding.Entries(keys, values, order) =>
+                Restriction(
+                  Some(DataEncoding.leanEntries(keys, values, order, fresh)),
+                  encoding.exact
+                )
+            case other => Restriction(None, other.exact)
+    }
+
+    /** Why `value`, Lean's value for a variable of type `tp`, is no value of the type, or `None`
+      * where it is one. Only a list, a map or a [[Props.forAllData]] variable has values its type
+      * does not have ([[Variable.isLarger]]): its items, or itself, are any `Data`, unless the
+      * quantifier's predicate is exact. A value that cannot be checked here counts as none of the
+      * type's, so that a refutation never rests on it.
+      */
+    private[uplcblaster] def outsideType(value: Constant, tp: SIRType): Option[String] =
+        variableOf(tp).filter(_.isLarger).flatMap { kind =>
+            (variableEncoding(tp), value) match
+                case (DataEncoding.Items(items), Constant.List(_, values)) =>
+                    values.iterator.zipWithIndex
+                        .flatMap {
+                            case (Constant.Data(item), index) =>
+                                items.outside(item).map(reason => s"item $index: $reason")
+                            case (other, index) => Some(s"item $index is $other, no Data")
+                        }
+                        .nextOption()
+                case (DataEncoding.Entries(keys, values, order), Constant.List(_, items)) =>
+                    val pairs = items.collect {
+                        case Constant.Pair(Constant.Data(key), Constant.Data(value)) => key -> value
+                    }
+                    if pairs.size != items.size then Some(s"$value is no list of pairs of Data")
+                    else DataEncoding.entriesOutside(keys, values, order, pairs)
+                case (encoding, Constant.Data(data)) => encoding.outside(data)
+                case (encoding, other)               => Some(s"$other is no value of a ${tp.show}")
+        }
+
+    /** The value of a variable of a builtin list of `Data`. */
+    private def dataList(items: List[Data]): Constant =
+        Constant.List(DefaultUni.Data, items.map(Constant.Data(_)))
+
+    /** The type of a pair of `Data`, the items of a builtin list of pairs. */
+    private val DataPair: DefaultUni = DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data)
+
+    /** The value of a variable of a builtin list of pairs of `Data`. */
+    private def pairList(pairs: List[(Data, Data)]): Constant = {
+        Constant.List(
+          DataPair,
+          pairs.map((key, value) => Constant.Pair(Constant.Data(key), Constant.Data(value)))
+        )
+    }
+
     private val counterexampleLine = """-\s+x(\d+):\s+(.+?)\s*$""".r.unanchored
 
     /** The values of Blaster's counterexample to `goal`, in binder order, with the renaming of the
@@ -1898,28 +2378,47 @@ object UplcBlaster {
             .foldRight[Either[SmtValues.Unreadable, List[Constant]]](Right(Nil)) {
                 case ((binder, index), rest) =>
                     val text = reported.get(index)
-                    val value: Either[SmtValues.Unreadable, Constant] = binder.tp match
-                        case SIRType.Integer =>
+                    val value: Either[SmtValues.Unreadable, Constant] = variableOf(binder.tp) match
+                        case Some(Variable.Integer) =>
                             text.fold(Right(BigInt(0)))(SmtValues.integer).map(Constant.Integer(_))
-                        case SIRType.Boolean =>
+                        case Some(Variable.Boolean) =>
                             text.fold(Right(false))(SmtValues.boolean).map(Constant.Bool(_))
-                        case SIRType.ByteString =>
+                        case Some(Variable.ByteString) =>
                             text.fold(Right(ByteString.empty))(SmtValues.bytes(_, renamed))
                                 .map(Constant.ByteString(_))
-                        case SIRType.String =>
+                        case Some(Variable.String) =>
                             text.fold(Right(""))(SmtValues.string(_, renamed))
                                 .map(Constant.String(_))
-                        case tp if isWholeData(tp) =>
+                        case Some(Variable.WholeData) =>
                             text.fold(Right(Data.I(0)))(SmtValues.data(_, renamed))
                                 .map(Constant.Data(_))
-                        case other =>
+                        // A value Lean leaves out is any value, and one of the type is taken.
+                        case Some(Variable.EncodedData) =>
+                            val example = variableEncoding(binder.tp).example
+                            text.fold(Right(example.getOrElse(Data.I(0))))(
+                              SmtValues.data(_, renamed)
+                            ).map(Constant.Data(_))
+                        case Some(Variable.DataList) =>
+                            text.fold(Right(Nil))(SmtValues.dataList(_, renamed)).map(dataList)
+                        case Some(Variable.PairList) =>
+                            text.fold(Right(Nil))(SmtValues.dataPairs(_, renamed)).map(pairList)
+                        case Some(Variable.DataMap) =>
+                            text.fold(Right(Nil))(SmtValues.dataPairs(_, renamed))
+                                .map(pairs => Constant.Data(Data.Map(PList.from(pairs))))
+                        case None =>
                             Left(
                               SmtValues.Unreadable.Malformed(
-                                s"a ${other.show} binder has no counterexample value"
+                                s"a ${binder.tp.show} binder has no counterexample value"
                               )
                             )
+                    // A list's or a map's items are any `Data` to Lean, and need not be the type's.
+                    val typed = value.flatMap(v =>
+                        outsideType(v, binder.tp)
+                            .map(reason => SmtValues.Unreadable.OutsideType(reason))
+                            .toLeft(v)
+                    )
                     // The variable the value is of, in the reason.
-                    val named = value.left.map {
+                    val named = typed.left.map {
                         case SmtValues.Unreadable.Malformed(reason) =>
                             SmtValues.Unreadable.Malformed(s"${binder.name}: $reason")
                         case SmtValues.Unreadable.OutsideType(reason) =>
@@ -2094,13 +2593,12 @@ object UplcBlaster {
             .mkString
     }
 
-    private def leanType(tp: SIRType): String = tp match
-        case SIRType.Integer       => "Integer"
-        case SIRType.Boolean       => "Bool"
-        case SIRType.ByteString    => "ByteString"
-        case SIRType.String        => "String"
-        case tp if isWholeData(tp) => "Data"
-        case other => throw new IllegalStateException(s"unexpected ${other.show} binder")
+    private def leanType(tp: SIRType): String =
+        variable(tp).leanType
+
+    /** The kind of Lean variable of a binder that [[expand]] left, which has one. */
+    private def variable(tp: SIRType): Variable =
+        variableOf(tp).getOrElse(throw new IllegalStateException(s"unexpected ${tp.show} binder"))
 
     /** Renders a formula with each leaf read by its polarity (design doc §6.2).
       *
@@ -2119,13 +2617,21 @@ object UplcBlaster {
         formula: LeafFormula,
         state: Int => String,
         binder: Int => String,
+        guardOf: Int => Option[String],
         positive: Boolean
     ): String = {
         def render(inner: LeafFormula, positive: Boolean) =
-            renderFormula(inner, state, binder, positive)
+            renderFormula(inner, state, binder, guardOf, positive)
+        // A variable whose Lean type has more values than its own is restricted to its type's by a
+        // premise: `∀ x, p x = true → body`, and so an `exists`, `¬∀¬`, to `∃ x, p x ∧ body`.
         def quantified(symbol: String, binders: List[Int], body: LeafFormula): String =
             if binders.isEmpty then render(body, positive)
-            else s"($symbol ${binders.map(binder).mkString(" ")}, ${render(body, positive)})"
+            else
+                val inner = render(body, positive)
+                val guards = binders.flatMap(guardOf)
+                val guarded =
+                    if guards.isEmpty then inner else s"(${guards.mkString(" ∧ ")} → $inner)"
+                s"($symbol ${binders.map(binder).mkString(" ")}, $guarded)"
         formula match
             case LeafFormula.Test(leaf) =>
                 if positive then s"(fromFrameToBool ${state(leaf)} = some true)"
@@ -2169,7 +2675,7 @@ object UplcBlaster {
         val check =
             if goal.binders.isEmpty then
                 val state = (leaf: Int) => s"(runProgramFor leaf$leaf.script [] $budget)"
-                s"example : ${renderFormula(goal.body, state, _ => "", positive = true)} := by native_decide"
+                s"example : ${renderFormula(goal.body, state, _ => "", _ => None, positive = true)} := by native_decide"
             else
                 val names = goal.binders.indices.map(index => s"x$index").toList
                 val declarations = goal.binders.zip(names).map { (binder, name) =>
@@ -2179,7 +2685,7 @@ object UplcBlaster {
                     val parameters = scope.map(declarations)
                     val terms = scope.map { index =>
                         val binder = goal.binders(index)
-                        s"Term.Const $$ Const.${leanType(binder.tp)} ${names(index)}"
+                        variable(binder.tp).argument(names(index))
                     }
                     ((s"def arguments$leaf" +: parameters) :+
                         s": List Term := [${terms.mkString(", ")}]").mkString(" ")
@@ -2192,14 +2698,19 @@ object UplcBlaster {
                     s"(prepared$leaf$arguments)"
                 }
                 val declaration = (index: Int) => declarations(index)
-                val formula = renderFormula(goal.body, state, declaration, positive = true)
+                val premise = (index: Int) =>
+                    goal.predicates.lift(index).flatten.map(p => s"($p ${names(index)} = true)")
+                val formula =
+                    renderFormula(goal.body, state, declaration, premise, positive = true)
                 s"""${arguments.mkString("\n")}
                    |
                    |${prepared.mkString("\n")}
                    |
                    |#blaster (gen-cex: 1) [$formula]""".stripMargin
-
-        check
+        // The definitions a check uses where a variable is restricted to its type's values. A
+        // check without such a variable has none of them in its text.
+        if goal.predicates.exists(_.isDefined) then s"${DataEncoding.leanDefinitions}\n\n$check"
+        else check
     }
 
     /** What the result of a check of `goal` rests on (docs/design/verification-overview.md §5.6):
@@ -2325,6 +2836,19 @@ object UplcBlaster {
         case Constant.ByteString(string) => s"\"${string.toHex}\""
         case Constant.String(string)     => writeToString(string)
         case Constant.Data(tree)         => Data.toJson(tree)
+        // A list is written as the `Data` list or map of its items, as Plutus writes those.
+        case Constant.List(DefaultUni.Data, items) =>
+            Data.toJson(Data.List(PList.from(items.map {
+                case Constant.Data(tree) => tree
+                case other =>
+                    throw new IllegalArgumentException(s"a list of Data has the item $other")
+            })))
+        case Constant.List(element, items) if element == DataPair =>
+            Data.toJson(Data.Map(PList.from(items.map {
+                case Constant.Pair(Constant.Data(key), Constant.Data(value)) => key -> value
+                case other =>
+                    throw new IllegalArgumentException(s"a list of pairs has the item $other")
+            })))
         case other =>
             throw new IllegalArgumentException(s"no variable of a statement has the value $other")
 
@@ -2366,10 +2890,30 @@ object UplcBlaster {
             // `Data` is a JSON object; its codec reads `null` as a null value.
             case _ if !value.startsWith("{") => Left("no Data value, which is a JSON object")
             case _ =>
-                try Right(Constant.Data(Data.fromJson(value)))
-                catch
-                    case error: JsonReaderException      => Left(s"no Data value: ${told(error)}")
-                    case error: IllegalArgumentException => Left(s"no Data value: ${told(error)}")
+                val read =
+                    try Right(Data.fromJson(value))
+                    catch
+                        case error: JsonReaderException => Left(s"no Data value: ${told(error)}")
+                        case error: IllegalArgumentException =>
+                            Left(s"no Data value: ${told(error)}")
+                val restored = read.flatMap(tree =>
+                    (variableOf(tp), tree) match
+                        case (Some(Variable.DataList), Data.List(items)) =>
+                            Right(dataList(items.toScalaList))
+                        case (Some(Variable.DataList), _) => Left("no Data list")
+                        case (Some(Variable.PairList), Data.Map(entries)) =>
+                            Right(pairList(entries.toScalaList))
+                        case (Some(Variable.PairList), _)          => Left("no Data map")
+                        case (Some(Variable.DataMap), Data.Map(_)) => Right(Constant.Data(tree))
+                        case (Some(Variable.DataMap), _)           => Left("no Data map")
+                        case _                                     => Right(Constant.Data(tree))
+                )
+                // A list's or a map's value is checked against its type, as a counterexample is.
+                restored.flatMap(value =>
+                    outsideType(value, tp)
+                        .map(reason => s"no value of its type: $reason")
+                        .toLeft(value)
+                )
     }
 
     private val integerJson = """-?\d+""".r
