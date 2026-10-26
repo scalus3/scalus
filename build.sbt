@@ -552,7 +552,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     )
     .nativeSettings(
       // Scala Native 0.5.12 supports both 3.8.4 and 3.9.0 (`nscplugin_3.9.0` and
-      // `scala3lib_native0.5_3:3.9.0+0.5.12` are published), so Native tracks the same versions as
+      // `scala3lib_native0.5_3:3.10.0+0.5.12` are published), so Native tracks the same versions as
       // JVM/JS. Run the next-version native tests with `++3.8.4 scalusNative/test` (or `++3.9.0`).
       crossScalaVersions := supportedScalaVersions,
       // Each native test group runs as its own statically-linked binary with its own
