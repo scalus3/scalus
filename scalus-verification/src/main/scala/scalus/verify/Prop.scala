@@ -2,6 +2,7 @@ package scalus.verify
 
 import scalus.compiler.sir.{SIR, SIRType}
 import scalus.compiler.sir.linking.Wrappers
+import scalus.uplc.builtin.FromData
 import scala.language.implicitConversions
 
 enum PropExpr[A] {
@@ -203,6 +204,38 @@ object Props {
     inline def forAll[A: Quantifiable, B: Quantifiable, C: Quantifiable](
         inline body: (A, B, C) => Prop | Boolean
     ): Prop = ${ PropMacro.forAll3[A, B, C]('body) }
+
+    /** Every value of `A`, as Lean has its `Data` encoding: [[forAll]], with the variable one
+      * `Data` to Lean, restricted to the encodings of the values of `A` ([[DataEncoding.of]]), and
+      * `d.to[A]` to the programs, which read the `Data` themselves. A type that contains itself,
+      * which [[forAll]] cannot quantify over, can be quantified over so. Where the restriction is
+      * not exact, the variable has more values than `A`, and is a variable only where it stands for
+      * every value, as a list's is.
+      *
+      * Its values are the encodings that `toData` gives, as the node gives a script its context:
+      * `forAllData[ScriptContext]` stands for every context. They are not all the `Data` that
+      * `d.to[A]` reads without failing, which checks no more than it reads: for `Data` that a
+      * transaction supplies, as a datum a script decodes, quantify over `Data`.
+      *
+      * A parameter of a quantifier is one such variable where its type is written annotated
+      * `@UplcRepr(UplcRepresentation.Data)`, in the lambda: `forAll((x: A @UplcRepr(Data)) => …)`
+      * is `forAllData[A](x => …)`, and so is such a parameter of `exists`, `existsLet`,
+      * `returnsWhen`, `failsWhen`, and of a quantifier of several variables. Its type is the
+      * quantifier's. On a type argument, `forAll[A @UplcRepr(Data)]`, the annotation is not seen:
+      * the compiler drops it before the statement is built. A call's result and a contract's
+      * variables take no such annotation. The programs read the variable with `d.to[A]`, which the
+      * compiler compiles to its own reading of the type's representation, the one the premise is
+      * derived from, whatever `decode` is.
+      *
+      * {{{
+      * forAllData[ScriptContext](ctx => succeeds(validator, ctx) ==> ctx.txInfo.signatories.nonEmpty)
+      * forAll((ctx: ScriptContext @UplcRepr(UplcRepresentation.Data), n: BigInt) => …)
+      * }}}
+      */
+    inline def forAllData[A](inline body: A => Prop | Boolean)(using
+        inline decode: FromData[A]
+    ): Prop =
+        ${ PropMacro.forAllData[A]('body, 'decode) }
 
     /** Constructs an explicit existential quantifier from an identifier and a proposition. */
     def existsSIR[A](

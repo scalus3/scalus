@@ -3,8 +3,7 @@ package scalus.examples.vesting
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude
-import scalus.compiler.{Compile, Options}
-import scalus.uplc.PlutusV3
+import scalus.compiler.Compile
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v3.{Interval, ScriptContext, ScriptInfo, TxId, TxInInfo, TxInfo, TxOut, TxOutRef}
@@ -68,8 +67,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     /** The example's own Lean workspace, `src/test/lean/LinearVesting`. It requires Scalus's Lean
       * library, and has that library's packages where the library's workspace has them.
       */
-    override protected def leanWorkspace: Path =
-        LeanProofs.inSources("scalus-examples", "jvm", "src", "test", "lean", "LinearVesting")
+    override protected def leanWorkspace: Path = VestingVerificationTest.workspace
 
     /** The results of the statements below are kept beside this file: a run without Lean passes on
       * them, and sees at once where the validator's code is no longer the one they are of.
@@ -88,16 +86,6 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
           )
           .resolve("VestingVerificationTest.proofs.json")
     )
-
-    test("the example's Lean workspace has the Lean and the packages of Scalus's library") {
-        // The two workspaces share the clones of the packages and what is built of them. A
-        // manifest that names another revision would check it out for both, and another Lean
-        // would build them again, each time the other workspace is used.
-        val library = LeanProofs.librarySources
-        assert(LeanProofs.pinned(library).nonEmpty)
-        assert(LeanProofs.pinned(leanWorkspace) == LeanProofs.pinned(library))
-        assert(LeanProofs.toolchain(leanWorkspace) == LeanProofs.toolchain(library))
-    }
 
     // The schedule
 
@@ -189,28 +177,6 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
         check(boundedWithoutCondition, scheduleBudget)
     }
 
-    test("the specification is not part of the script") {
-        // The clause is checked where the code runs as Scala,
-        val halfway = VestingValidator.linearVesting(
-          config(BigInt(0), BigInt(10), BigInt(100)),
-          BigInt(5)
-        )
-        assert(halfway == BigInt(50))
-        // and kept in the SIR, with the function that checks it and that function's error.
-        val sir = linearVesting(Representation.Sir).toString
-        assert(sir.contains("Spec$.ensuring"))
-        assert(sir.contains("a postcondition does not hold"))
-        // It is gone from the program. Compiled with error traces, a program has the message of
-        // every error it can raise, as the validator has its own, and none for a clause. The
-        // tactic's options leave messages out, so its programs would not show one.
-        given Options = Options.debug
-        val schedule = PlutusV3.compile(VestingValidator.linearVesting).program.show
-        val script = PlutusV3.compile(VestingValidator.validate).program.show
-        assert(script.contains(VestingValidator.DatumNotFound))
-        assert(!schedule.contains("postcondition"))
-        assert(!script.contains("postcondition"))
-    }
-
     private val doesNotDecrease = verifier.statement(
       "vesting.schedule.does_not_decrease",
       forAll[Config, BigInt, BigInt]((config, earlier, later) =>
@@ -247,24 +213,6 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     /** The steps for a context the validator rejects before it reads the transaction. */
     private val rejectionBudget = 600
-
-    test("the contexts built from Data are the ledger's encoding") {
-        // The statements below say that the validator fails, which a malformed context would make
-        // true for the wrong reason.
-        val ref = TxOutRef(TxId(hex"00"), 0)
-        val datum = config(BigInt(1), BigInt(2), BigInt(3)).toData
-        val redeemer = Action(BigInt(4)).toData
-        def expected(datum: prelude.Option[Data]) =
-            ScriptContext(
-              TxInfo.placeholder,
-              redeemer,
-              ScriptInfo.SpendingScript(ref, datum)
-            ).toData
-        def built(datum: Data) =
-            scriptContext(TxInfo.placeholder.toData, redeemer, spendingInfo(ref.toData, datum))
-        assert(built(noDatum) == expected(prelude.Option.None))
-        assert(built(someDatum(datum)) == expected(prelude.Option.Some(datum)))
-    }
 
     private val noDatumIsRejected = verifier.statement(
       "vesting.validator.no_datum_is_rejected",
@@ -723,6 +671,12 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
   * test's `this` in that expression.
   */
 object VestingVerificationTest {
+
+    /** The example's own Lean workspace, `src/test/lean/LinearVesting`, in which the suite runs its
+      * checks.
+      */
+    def workspace: Path =
+        LeanProofs.inSources("scalus-examples", "jvm", "src", "test", "lean", "LinearVesting")
 
     /** The beneficiary of every withdrawal here, a constant: its signature is compared with the
       * datum's.

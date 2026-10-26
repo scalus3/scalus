@@ -110,15 +110,21 @@ object UplcSignature {
         if options.targetLoweringBackend != TargetLoweringBackend.SirToUplcV3Lowering then
             Backend(options.targetLoweringBackend)
         else
-            // The target settings of SirToUplcV3Lowering.newLoweringContext, without the support
-            // bindings it lowers, which default representations do not read.
-            val protocolVersion =
-                if language == Language.PlutusV4 then Language.PlutusV4.introducedInVersion
-                else options.targetProtocolVersion
-            given LoweringContext =
-                LoweringContext(targetLanguage = language, targetProtocolVersion = protocolVersion)
+            given LoweringContext = loweringContext(options, language)
             val (parameters, result) = split(SirTypeUplcGenerator.defaultRepresentation(tp), arity)
             Represented(parameters, result)
+
+    /** The context in which the V3 lowering chooses the default representations of a program
+      * lowered with `options` for `language`: the target settings of
+      * `SirToUplcV3Lowering.newLoweringContext`, without the support bindings it lowers, which
+      * default representations do not read.
+      */
+    private[verify] def loweringContext(options: Options, language: Language): LoweringContext = {
+        val protocolVersion =
+            if language == Language.PlutusV4 then Language.PlutusV4.introducedInVersion
+            else options.targetProtocolVersion
+        LoweringContext(targetLanguage = language, targetProtocolVersion = protocolVersion)
+    }
 
     private def split(
         representation: LoweredValueRepresentation,

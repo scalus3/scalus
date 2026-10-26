@@ -27,6 +27,13 @@ object Quantifiable {
         marker[A]
     }
 
+    /** An enum, or another type of several constructors. Its values are those of all its
+      * constructors (prop-semantics.md §1). The fields of the constructors are not checked here: a
+      * type that contains itself, as `List`, would have no end of fields to check. The tactic
+      * checks them, and says which one it does not support.
+      */
+    inline given sum[A](using mirror: Mirror.SumOf[A]): Quantifiable[A] = marker[A]
+
     /** An instance for a type the caller has checked. */
     def marker[A]: Quantifiable[A] = new Quantifiable[A] {}
 }

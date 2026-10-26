@@ -12,7 +12,7 @@
     "spends/ensures": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "057edec0bd7340d8",
+      "statement": "e117e805675b2205",
       "programs": [
         "48aa3a1595befeb7",
         "53c869ef90e5b602",
@@ -30,7 +30,7 @@
     "vesting.schedule.bounded_without_condition": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "48db2e9a3a68bcde",
+      "statement": "5dde9d47dfb3d05e",
       "programs": [
         "5c653021f0f6dce1",
         "c761d7b2b6f3888c",
@@ -54,7 +54,7 @@
     "vesting.schedule.does_not_decrease": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "1ac3cc3bac313300",
+      "statement": "a39fcccb90f69d86",
       "programs": [
         "1a72b1e091801333",
         "81ebb2fdf61f999e"
@@ -70,7 +70,7 @@
     "vesting.schedule.does_not_decrease_for_any_amount": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "1ac3cc3bac313300",
+      "statement": "a39fcccb90f69d86",
       "programs": [
         "4233d166e3119bbd",
         "81ebb2fdf61f999e"
@@ -83,9 +83,9 @@
         "config.beneficiary.hash": "",
         "config.duration": 0,
         "config.initialAmount": -1,
-        "config.startTimestamp": -2,
-        "earlier": -4,
-        "later": -1
+        "config.startTimestamp": -4,
+        "earlier": -5,
+        "later": -3
       },
       "tests": [
         "the vested amount does not decrease with time"
@@ -94,7 +94,7 @@
     "vesting.schedule.everything_from_the_end": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "318cc4c423632e0e",
+      "statement": "20c12c5e47bdb155",
       "programs": [
         "cd650d3a1fc3f07a",
         "113d3a4e2d70942f"
@@ -110,7 +110,7 @@
     "vesting.schedule.returns": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "e121d366325ced83",
+      "statement": "3139cd9327fcf613",
       "programs": [
         "1a02b353d6639bbb"
       ],
@@ -125,7 +125,7 @@
     "vesting.schedule.stated_contract_holds": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "2e67634cb9bbebf9",
+      "statement": "5b13aa21c179e4fd",
       "programs": [
         "5c653021f0f6dce1",
         "1a02b353d6639bbb",
@@ -143,7 +143,7 @@
     "vesting.schedule.vested_below_the_amount": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "48db2e9a3a68bcde",
+      "statement": "5dde9d47dfb3d05e",
       "programs": [
         "4a0d6db9e431a08e",
         "c761d7b2b6f3888c",
@@ -167,7 +167,7 @@
     "vesting.schedule.zero_before_start": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "318cc4c423632e0e",
+      "statement": "20c12c5e47bdb155",
       "programs": [
         "6ff97ca2f7903ef7",
         "a520a7adccc409e9"
@@ -183,7 +183,7 @@
     "vesting.validator.no_datum_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "1c207e4e5e5ea831",
+      "statement": "ff3d2b5a8500c4d4",
       "programs": [
         "a2a8e059fdd76a7a"
       ],
@@ -198,7 +198,7 @@
     "vesting.validator.non_positive_amount_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "cb8aa581c9abc2ac",
+      "statement": "ef95bae844a3ac53",
       "programs": [
         "2d836507fba7b7c3",
         "c31d8c26d1e64064"
@@ -214,7 +214,7 @@
     "vesting.validator.only_spending": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "0127eb16b379b16e",
+      "statement": "fc1ffe0c48fb7155",
       "programs": [
         "d2a643a94d9ac501",
         "7dc0c63ece5f2d1a"
@@ -230,7 +230,7 @@
     "vesting.withdrawal.everything_after_the_end": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "27fb46cb7b334b13",
+      "statement": "74f30df03d9004c1",
       "programs": [
         "d033e2da9a098c33",
         "d22c85ae6b26ad0a"
@@ -246,7 +246,7 @@
     "vesting.withdrawal.everything_at_any_time": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "27fb46cb7b334b13",
+      "statement": "74f30df03d9004c1",
       "programs": [
         "49aeb66f9d34555b",
         "d22c85ae6b26ad0a"
@@ -270,7 +270,7 @@
     "vesting.withdrawal.locked_at_least_unvested": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "d7d35bcf2ded662a",
+      "statement": "9699d4264007ac78",
       "programs": [
         "dd259a1f1235ed04",
         "ad69a1d00edaa251"
@@ -286,7 +286,7 @@
     "vesting.withdrawal.locked_for_any_outputs": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "72003b9c14b54091",
+      "statement": "7480ec2b27230d53",
       "programs": [
         "dd259a1f1235ed04",
         "5c409699b2b32a23"
@@ -302,7 +302,7 @@
     "vesting.withdrawal.locked_more_than_unvested": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "d7d35bcf2ded662a",
+      "statement": "9699d4264007ac78",
       "programs": [
         "df2ea761551afc0a",
         "ad69a1d00edaa251"
@@ -358,7 +358,7 @@
     "vesting.withdrawal.signed_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "afb97d43bd33715b",
+      "statement": "3b3bb5cf2dbdb6d5",
       "programs": [
         "ad69a1d00edaa251"
       ],
@@ -383,7 +383,7 @@
     "vesting.withdrawal.unsigned_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "e281ad1f61b49d8a",
+      "statement": "a89779ecaaae9bd5",
       "programs": [
         "e05f299f12b359b2"
       ],
@@ -398,7 +398,7 @@
     "withdraw/vested_in_range#1": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "018e2bd9f23851b6",
+      "statement": "12a9239174d60957",
       "programs": [
         "3bfdb0325e0d17c1",
         "b88822cf7b1edf13"
@@ -425,7 +425,7 @@
     "withdraw_of_an_amount/vested_in_range#1": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "ba7daab2463b05a7",
+      "statement": "f32df426e783ddd7",
       "programs": [
         "1eabacc8665bc7c8",
         "3bfdb0325e0d17c1",

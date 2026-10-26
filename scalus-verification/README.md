@@ -19,9 +19,10 @@ validator actually runs on chain.
 
 - `src/test/examples/` - a [compact BigInt example](src/test/examples/README.md) for reports:
   one compiled function, a proof, a counterexample, no solutions, and an inconclusive check.
-- `src/main/scala/scalus/verify/` - `Prop` and the `Props` syntax (`forAll`, `exists`,
-  `existsLet`, `call`, `denotes`, `equal`), `Quantifiable`, the function table (`FunctionRef`,
-  `FunctionDef`) and `Verifier`. `Prop` captures statements without evaluating them; `Verifier`
+- `src/main/scala/scalus/verify/` - `Prop` and the `Props` syntax (`forAll`, `forAllData`,
+  `exists`, `existsLet`, `call`, `denotes`, `equal`), `Quantifiable`, `DataEncoding` (which `Data`
+  are the values of a type, as a Lean predicate and a JVM check), the function table
+  (`FunctionRef`, `FunctionDef`) and `Verifier`. `Prop` captures statements without evaluating them; `Verifier`
   registers functions and statements, then passes goals to tactics. A successful proof retains a
   backend-specific `ProofArtifact`.
 - `src/main/scala/scalus/verify/lean/` - common `Prop` to Lean proposition generation. The first
@@ -61,10 +62,9 @@ validator actually runs on chain.
   ADA is split, that an honest payout is accepted, and for the optimized one, that a spend needs
   its stake validator, which checks the same split, and that its stake is never delegated.
 - `scalus-examples/jvm/src/test/scala/scalus/examples/oneshotmint/MintingPolicyVerificationTest.scala`
-  - properties of the one-shot minting policy, on transactions of the shape the ledger gives a
+  - properties of the one-shot minting policy, on minting contexts of the shape the ledger gives a
   script of version 1: the two guarantees that `MintingPolicy.mint` states with `Spec.ensures`,
-  that the transaction that spends the seed mints the tokens and any other burns them, and that
-  the optimized deserializer reads the ledger's context, whatever else the transaction has.
+  and that the transaction that spends the seed mints the tokens and any other burns them.
 
 ## Statements
 
@@ -96,11 +96,14 @@ the steps of Lean's machine a check lets each test's program run, or `Budget.Aut
 the tactic finds them ("The budget rule").
 
 `UplcBlaster` proves statements with universal and existential quantifiers over `BigInt`,
-`Boolean`, `ByteString`, `String`, `Data` and case classes of them: Boolean tests, calls, `denotes` and
-`equal`, combined with `&&`, `||`, `!`, `==>` and `<=>`. `existsLet` supplies and eliminates an
-explicit witness, avoiding an SMT quantifier; ordinary `exists` is emitted to Blaster as the
-classically equivalent `¬∀¬`. A variable of a case class, as in
-`forAll[Config, BigInt]((config, time) => …)`, is one variable per field for Lean. Each test becomes
+`Boolean`, `ByteString`, `String`, `Data`, lists and maps, and case classes and enums of them:
+Boolean tests, calls, `denotes` and `equal`, combined with `&&`, `||`, `!`, `==>` and `<=>`.
+`existsLet` supplies and eliminates an explicit witness, avoiding an SMT quantifier; ordinary
+`exists` is emitted to Blaster as the classically equivalent `¬∀¬`. A variable of a case class, as in
+`forAll[Config, BigInt]((config, time) => …)`, is one variable per field for Lean;
+`forAllData[A](x => …)` makes it one `Data`, restricted to the encodings of `A`'s values, which
+the tests decode with `d.to[A]`, and so does a parameter written
+`(x: A @UplcRepr(UplcRepresentation.Data)) => …` of a quantifier. Each test becomes
 its own closed UPLC predicate over the quantified values in its scope. The tactic writes them
 to files, gives its Lean server a check that imports them, and reads Blaster's verdict from
 what Lean reports. The server loads the workspace once, so a small check takes a fraction of a
@@ -214,7 +217,8 @@ verifier.verify(inRange, UplcBlaster(Budget.LeanSteps(120), lean)) // Proven
 so a call that fails satisfies it. `totalContract` also claims that the function returns where
 `expects` holds. `verifier.contract` registers the statement as the function's contract, and
 `verifier.contracts(clamp.ref)` lists them. The function's parameters must be quantifiable:
-`BigInt`, `Boolean`, `ByteString`, `String`, `Data` or case classes of them.
+`BigInt`, `Boolean`, `ByteString`, `String`, `Data`, a list or a map, or case classes and enums
+of them.
 
 A contract can also state when its function returns and when it fails:
 
@@ -323,7 +327,7 @@ sbt scalusVerification/test                                                     
 sbt "scalusExamplesJVM/testOnly scalus.examples.vesting.VestingVerificationTest"   # about 2 min
 sbt "scalusExamplesJVM/testOnly scalus.examples.htlc.HtlcVerificationTest"         # about 3 min
 sbt "scalusExamplesJVM/testOnly scalus.examples.paymentsplitter.PaymentSplitterVerificationTest"
-sbt "scalusExamplesJVM/testOnly scalus.examples.oneshotmint.MintingPolicyVerificationTest"   # about 6 min
+sbt "scalusExamplesJVM/testOnly scalus.examples.oneshotmint.MintingPolicyVerificationTest"   # about 3 min
 sbt "scalusVerification/testOnly *UplcBlasterLimitsTest"   # the statements Lean does not finish
 ```
 

@@ -11,7 +11,7 @@
     "prelude.abs.argument_or_negation": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "21fae736685d64c3",
+      "statement": "4642ebaae8d4bfb5",
       "programs": [
         "d1016bca67f6f7a1"
       ],
@@ -26,7 +26,7 @@
     "prelude.abs.non_negative": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "21fae736685d64c3",
+      "statement": "4642ebaae8d4bfb5",
       "programs": [
         "0e99796ac11af631"
       ],
@@ -41,7 +41,7 @@
     "prelude.abs.positive": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "21fae736685d64c3",
+      "statement": "4642ebaae8d4bfb5",
       "programs": [
         "f51b0ac1ebac47aa"
       ],
@@ -76,7 +76,7 @@
     "prelude.clamp.in_any_range": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "104be38635b7155a",
+      "statement": "463ce5e865eba24e",
       "programs": [
         "c2511f3971e3b24e"
       ],
@@ -96,7 +96,7 @@
     "prelude.clamp.in_range": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "112a877d1a7b5ccf",
+      "statement": "d9bc8b4831d8e772",
       "programs": [
         "76ed15abf3e4599d",
         "c2511f3971e3b24e"
@@ -112,7 +112,7 @@
     "prelude.clamp.keeps_a_value_in_range": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "112a877d1a7b5ccf",
+      "statement": "d9bc8b4831d8e772",
       "programs": [
         "6f9693ceff7ec2d2",
         "35db08a69d4974a6"
@@ -145,7 +145,7 @@
     "prelude.exp2.negative_exponent": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "4c05b745268b0fce",
+      "statement": "2343d32ac812b0ed",
       "programs": [
         "6e3f203106018b53",
         "b7cc881c8274754e"
@@ -161,7 +161,7 @@
     "prelude.exp2.negative_exponent_one": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "4c05b745268b0fce",
+      "statement": "2343d32ac812b0ed",
       "programs": [
         "6e3f203106018b53",
         "8f81cddfbd8374bc"
@@ -230,7 +230,7 @@
     "prelude.list_fold.product": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "d46783623238bc41",
+      "statement": "1dd95bcd3407a571",
       "programs": [
         "b0c9bf770bc8e08c"
       ],
@@ -249,7 +249,7 @@
     "prelude.list_fold.sum": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "d46783623238bc41",
+      "statement": "1dd95bcd3407a571",
       "programs": [
         "708e3bf12cabc19e"
       ],
@@ -280,7 +280,7 @@
     "prelude.max.at_most_the_first": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "d46783623238bc41",
+      "statement": "1dd95bcd3407a571",
       "programs": [
         "0f81c0cedbbbb2d1"
       ],
@@ -315,7 +315,7 @@
     "prelude.max.upper_bound": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "d46783623238bc41",
+      "statement": "1dd95bcd3407a571",
       "programs": [
         "82cd76adf7d17cba"
       ],
@@ -330,7 +330,7 @@
     "prelude.min.an_argument": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "d46783623238bc41",
+      "statement": "1dd95bcd3407a571",
       "programs": [
         "377f284a3aa632e5"
       ],
@@ -345,7 +345,7 @@
     "prelude.min.lower_bound": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "d46783623238bc41",
+      "statement": "1dd95bcd3407a571",
       "programs": [
         "8c5e658ba54594b4"
       ],
@@ -376,7 +376,7 @@
     "prelude.min.upper_bound": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "d46783623238bc41",
+      "statement": "1dd95bcd3407a571",
       "programs": [
         "2780e05c52c8494f"
       ],
@@ -395,7 +395,7 @@
     "prelude.min_max.sum": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "d46783623238bc41",
+      "statement": "1dd95bcd3407a571",
       "programs": [
         "62b967469d71d071"
       ],
@@ -426,7 +426,7 @@
     "prelude.option_match.defaults_otherwise": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "4c05b745268b0fce",
+      "statement": "2343d32ac812b0ed",
       "programs": [
         "05df314b7a5928de",
         "2e942727c998138c"
@@ -442,7 +442,7 @@
     "prelude.option_match.doubles_a_positive_value": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "4c05b745268b0fce",
+      "statement": "2343d32ac812b0ed",
       "programs": [
         "171628cceef1b617",
         "6d2b2403ffa2413e"
@@ -458,7 +458,7 @@
     "prelude.option_match.doubles_every_value": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "21fae736685d64c3",
+      "statement": "4642ebaae8d4bfb5",
       "programs": [
         "6d2b2403ffa2413e"
       ],

@@ -11,7 +11,7 @@
     "htlc.bounds.refund_ignores_whether_its_lower_bound_is_inclusive": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "8384e2b0298ccd16",
+      "statement": "e11d1e5f49c7f5e0",
       "programs": [
         "c0468f563188290d",
         "14b259edd1b43710"
@@ -27,7 +27,7 @@
     "htlc.bounds.reveal_ignores_whether_its_upper_bound_is_inclusive": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "52ecdd564c4e3baf",
+      "statement": "1b4e1b8b16bd66b6",
       "programs": [
         "42088b3fec06d630",
         "15bb5c65d55c08a9"
@@ -43,7 +43,7 @@
     "htlc.context.only_spending_is_validated": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "0127eb16b379b16e",
+      "statement": "fc1ffe0c48fb7155",
       "programs": [
         "d2a643a94d9ac501",
         "7d65c34a6bf59fe6"
@@ -59,7 +59,7 @@
     "htlc.context.output_without_a_datum_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "1c207e4e5e5ea831",
+      "statement": "ff3d2b5a8500c4d4",
       "programs": [
         "e59e13ac253da501"
       ],
@@ -74,7 +74,7 @@
     "htlc.context.redeemer_of_neither_action_is_rejected": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "5d26b1219dea1da5",
+      "statement": "1fd0964eeb4b0312",
       "programs": [
         "5fa25ee310d96502",
         "277d82654b67870a"
@@ -90,7 +90,7 @@
     "htlc.refund.committer_refunds_after_another_signature": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "d28c176c09b45a05",
+      "statement": "d99ace1fc19e8f25",
       "programs": [
         "2377001613b53351",
         "7b9293465af7556d"
@@ -106,7 +106,7 @@
     "htlc.refund.committer_refunds_at_any_time": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "e094cde77d267c04",
+      "statement": "bdb79615e4a06401",
       "programs": [
         "beb00424dd60a305"
       ],
@@ -144,7 +144,7 @@
     "htlc.refund.committer_refunds_from_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "e5d6aec0aa32186c",
+      "statement": "192bd6c0ae03570b",
       "programs": [
         "d8ffed0e6555b361",
         "beb00424dd60a305"
@@ -160,7 +160,7 @@
     "htlc.refund.rejected_at_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "9a5c1375ec7827ca",
+      "statement": "2a6fea27b445256c",
       "programs": [
         "74bb2ac9ec7fcb16",
         "c0468f563188290d"
@@ -200,7 +200,7 @@
     "htlc.refund.rejected_before_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "9a5c1375ec7827ca",
+      "statement": "2a6fea27b445256c",
       "programs": [
         "46e23b6836940095",
         "c0468f563188290d"
@@ -216,7 +216,7 @@
     "htlc.refund.rejected_from_neg_inf": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "f9ae8de5e10bd5da",
+      "statement": "7c2c86d4cbde84e4",
       "programs": [
         "0989b2e1b21da959"
       ],
@@ -231,7 +231,7 @@
     "htlc.refund.rejected_from_pos_inf": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "f9ae8de5e10bd5da",
+      "statement": "7c2c86d4cbde84e4",
       "programs": [
         "f88b4b4f91b9c727"
       ],
@@ -246,7 +246,7 @@
     "htlc.refund.rejected_when_another_key_signs": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "a3c657590c0aaea8",
+      "statement": "a85ef03b92eb5761",
       "programs": [
         "242f02a513cb9f56",
         "c0468f563188290d"
@@ -262,7 +262,7 @@
     "htlc.refund.rejected_when_two_other_keys_sign": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "2561277435f4f7e7",
+      "statement": "7238f07c517cc106",
       "programs": [
         "d1591ba1df616118",
         "1878050e1e4d4bfd"
@@ -278,7 +278,7 @@
     "htlc.refund.rejected_when_unsigned": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "2b1b9117ff894e51",
+      "statement": "4fdcb4e10541d594",
       "programs": [
         "74e244f75d422f83"
       ],
@@ -293,7 +293,7 @@
     "htlc.refund.rejected_whoever_signs": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "1b2ba75c6a3bcdd6",
+      "statement": "7f0850f3a1ab14d7",
       "programs": [
         "c0468f563188290d"
       ],
@@ -332,7 +332,7 @@
     "htlc.reveal.receiver_reveals_after_another_signature": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "222551a9fdc5a9c3",
+      "statement": "5be09d41448e5f58",
       "programs": [
         "92c60e7c79f743e3",
         "d7451a726d907cae"
@@ -348,7 +348,7 @@
     "htlc.reveal.receiver_reveals_at_any_time": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "b1e59df26e013d42",
+      "statement": "5aebfeb4822a2c7c",
       "programs": [
         "ef85a5a16e6ddd6f"
       ],
@@ -386,7 +386,7 @@
     "htlc.reveal.receiver_reveals_up_to_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "cb33680e8915b8fc",
+      "statement": "2364e6f153c51d8f",
       "programs": [
         "71585b7489159cb8",
         "ef85a5a16e6ddd6f"
@@ -402,7 +402,7 @@
     "htlc.reveal.rejected_after_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "41a01d0b6dd13683",
+      "statement": "6ef3eebd97fef100",
       "programs": [
         "bae1556497820609",
         "15bb5c65d55c08a9"
@@ -418,7 +418,7 @@
     "htlc.reveal.rejected_at_the_timeout": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "8430abaea8b4d6d7",
+      "statement": "b56d29226c7d4a2b",
       "programs": [
         "57b4789f6dee542e",
         "ef85a5a16e6ddd6f"
@@ -457,7 +457,7 @@
     "htlc.reveal.rejected_up_to_neg_inf": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "2845743feb259ef9",
+      "statement": "c1e2a59b6b96dc11",
       "programs": [
         "5575c6259a9773a7"
       ],
@@ -472,7 +472,7 @@
     "htlc.reveal.rejected_up_to_pos_inf": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "2845743feb259ef9",
+      "statement": "c1e2a59b6b96dc11",
       "programs": [
         "9174a561b62caf08"
       ],
@@ -487,7 +487,7 @@
     "htlc.reveal.rejected_when_another_key_signs": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "54a605a8e4075aa0",
+      "statement": "cce17cb2e3eb3186",
       "programs": [
         "1772bf8f46b03014",
         "15bb5c65d55c08a9"
@@ -503,7 +503,7 @@
     "htlc.reveal.rejected_when_two_other_keys_sign": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "84be0841e97d248a",
+      "statement": "05c1b6ba4a4800b2",
       "programs": [
         "e6ad1f9daa9a845e",
         "3ae5755db262a0e1"
@@ -519,7 +519,7 @@
     "htlc.reveal.rejected_when_unsigned": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "afe6be86325219cd",
+      "statement": "0acdf00a56663ef1",
       "programs": [
         "b77f68699e5cd647"
       ],
@@ -534,7 +534,7 @@
     "htlc.reveal.rejected_whoever_signs": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "97022b4088df3645",
+      "statement": "de9306fa827374ee",
       "programs": [
         "9436b684a497d2dc"
       ],
@@ -573,7 +573,7 @@
     "htlc.reveal.rejected_without_a_preimage": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "54a605a8e4075aa0",
+      "statement": "cce17cb2e3eb3186",
       "programs": [
         "45e21617840663b2",
         "15bb5c65d55c08a9"
@@ -589,7 +589,7 @@
     "htlc.reveal_and_refund.reveal_ends_before_refund_begins": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "ee1b8798e83a6ded",
+      "statement": "e0354342738579c1",
       "programs": [
         "1ffd5f23ba1b4ec5",
         "4ff6a90d68d0027b",
@@ -606,7 +606,7 @@
     "htlc.reveal_and_refund.reveal_ends_strictly_before_refund_begins": {
       "tactic": "uplc-blaster",
       "result": "refuted",
-      "statement": "e6db624ed84d9ec6",
+      "statement": "2903a5a49875d6ac",
       "programs": [
         "4a8478a9b6e44bf8",
         "5e72139d280340d5",

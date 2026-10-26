@@ -31,8 +31,8 @@ Prop ──lower──► Lowered(binders, body: LeafFormula, leaves: Vector[Pro
 Preparation accepts statements built with:
 
 - universal and existential quantifiers over `BigInt`, `Boolean`, `ByteString`, `String`,
-  `Data`, and case classes whose fields are of these types or such case classes, at any
-  proposition position;
+  `Data`, lists and maps, and case classes and enums whose fields are of these types or such
+  case classes and enums, at any proposition position;
 - `existsLet(w)(x => p)`, which is lowered as the strict binding `let x = w in p` and introduces
   no SMT quantifier;
 - `&&`, `||`, `!`, `==>` and `<=>` over these leaves:
@@ -53,10 +53,91 @@ ranges over the values of its constructor
 variable per field, named `variable.field` in `Lowered.binders` and in a counterexample, and a
 field that is a case class is expanded in turn. Each test that uses the variable starts with
 `let variable = Constructor(fields…)`, which the compiler lowers to the class's own
-representation, as it does for a constructor written in the test. An enum is not expanded: it has
-several constructors. `Quantifiable` has an instance for every case class whose fields have one. The exception is a function registered
-without SIR, which has no declared type: a call to it can pass only `BigInt`, `Boolean`,
-`ByteString`, `String` and `Data` values (see "The calling convention").
+representation, as it does for a constructor written in the test. `Quantifiable` has an instance
+for every case class whose fields have one. The exception is a function registered without SIR,
+which has no declared type: a call to it can pass only `BigInt`, `Boolean`, `ByteString`,
+`String` and `Data` values (see "The calling convention").
+
+**A variable of an enum**, or of another type of several constructors such as `Option`, ranges
+over the values of all of them. It stands for an integer `variable.case`, which chooses the
+constructor, and for the fields of every constructor, named `variable.Constructor.field`, each
+expanded as above. Each test that uses it starts with
+`let variable = if case == 0 then C0(…) else if case == 1 then C1(…) … else Cn(…)`: the
+constructors in the order of their declaration, with the last one for every integer not taken
+before, so that each integer is a value and the integer needs no premise. A counterexample
+names the constructor by that integer. A constructor passes its type parameters on to the
+enum's, so `Option[BigInt]` is the integer and the `BigInt` of `Some`. A type that contains
+itself and is passed through its constructors has values of every size, which no set of
+variables stands for: it is refused, with that reason, and `forAllData` quantifies over it.
+`Quantifiable` has an instance for every type of several constructors; the tactic checks their
+fields.
+
+**A variable of a list or a map** is one Lean variable in the form the compiler passes it, not
+built from constructors. The form is the lowering's default representation of the type
+(`SirTypeUplcGenerator.defaultRepresentation`): a `List` of a type that is `Data` is a builtin
+list of `Data`, which Lean has as `List Data` and passes as `Const.ConstDataList`; a list of
+pairs is a builtin list of pairs, `List (Data × Data)` passed as `Const.ConstPairDataList`; and
+`SortedMap`, `AssocMap` and `Value`, which is its map, are one `Data.Map`, `List (Data × Data)`
+passed as `Const.Data (Data.Map …)`.
+
+To Lean the items of such a variable are any `Data`, which are more values than its type has. So the
+quantifier restricts it with a predicate derived recursively from the type, along the type's `Data`
+representation: `∀ xs, p xs = true → …`, and an `exists`, written `¬∀¬`, becomes `∃ xs, p xs ∧ …`.
+An integer is `I`, a byte string `B`, a string `B` of its UTF-8 (which the predicate does not
+check), a Boolean `Constr 0|1 []`, a case class or an enum's constructor `Constr` with its tag and
+its fields' encodings, a list `List` of its items', a map `Map` of its keys' and values', with the
+keys of a `SortedMap` of byte strings or integers in ascending order, and a type whose one field it
+wraps, as `PubKeyHash` or `Value`, that field's. The few definitions the predicates use
+(`scalusAll`, `scalusAllPairs`, `scalusAscendingBytes`, …) are written into a check that needs them,
+and not into the library, whose hash every kept result rests on.
+
+The description is public, as `scalus.verify.DataEncoding`: `DataEncoding.of[A]` derives it,
+`leanPredicate` and `leanDefinition(name)` give the Lean predicate, a `Data → Bool`, for a Lean
+file of one's own (after `DataEncoding.leanDefinitions`, with PlutusCore's `Data` opened as
+`Data`), and `outside(data)` checks a `Data` on the JVM. `exact` says whether the predicate holds
+of exactly the type's values.
+
+Where the predicate is exact, the variable's values are its type's, and it can be quantified
+anywhere; Lean's counterexamples are of the type. Where it is not, as for a type that contains
+itself, a string, a function, or keys whose order is not checked, the variable has more values than
+its type: it is refused where it would claim a value (an `exists` in a positive position, a `forAll`
+in a negative one, either under `<=>`), and a counterexample with a value outside the type is
+checked on the JVM and reported as inconclusive. Z3 rarely finds a witness through a recursive
+predicate: an `exists` over a list comes back undetermined, and `existsLet` with a witness proves
+it. Its length is any length, so a program that walks the list meets [the loops Lean does not
+finish](#statements-that-do-not-finish).
+
+**A variable over the `Data` encodings of a type**, `forAllData[A](x => …)`, is one Lean `Data`
+variable, not built from constructors. It ranges over the values of `A` as `forAll[A]` does, each
+given as its encoding: each test that uses it starts with `let x = d.to[A]`, the decoder the macro
+compiles, so the programs read the `Data` themselves. The quantifier restricts `d` with the
+predicate of `A`'s encoding, `DataEncoding.of[A]`, derived as for the items of a list, and the same
+rule applies: where it is exact, as for a case class of integers, `x` can be anywhere; where it is
+not, as for a type that contains itself, whose fields are any `Data` to Lean below the first level,
+it is a variable only where it stands for every value, and a counterexample outside the type is
+inconclusive. `forAll[A]` and `forAllData[A]` state the same of an `A` whose predicate is exact;
+they differ in what Lean searches: many typed variables, or one `Data` behind a premise.
+`forAllData` takes a `FromData[A]`, which `d.to[A]` needs. Its values are the encodings of `A`'s
+values, the `Data` that `toData` gives: a map's keys in order, a constructor's tag and number of
+fields as declared. That is the `Data` the node gives a script as its context, which it builds
+itself, so `forAllData[ScriptContext]` stands for every context a script can get. It is not every
+`Data` that `d.to[A]` reads without failing: the decoder reads what it needs and checks no more, so
+`Data` with unordered keys, or with more fields than the constructor has, is read as a value too. A
+parameter that a transaction supplies, as a datum or a redeemer the script decodes itself, can be
+such `Data`: a statement about it quantifies over `Data`, `forAll[Data](d => …)`, and decodes it in
+the test.
+
+A parameter of a quantifier is such a variable where its type is written annotated in the lambda,
+`forAll((ctx: ScriptContext @UplcRepr(UplcRepresentation.Data), n: BigInt) => …)`, or through an
+alias that is: in `forAll`, `exists`, `existsLet`, `returnsWhen` and `failsWhen`, of one variable or
+several. The annotation is read from the parameter: on a type argument, `forAll[A @UplcRepr(Data)]`,
+the compiler has dropped it by the time the statement is built. The parameter's type is the
+quantifier's, which it ranges over, and not a wider one. A call's result and a contract's variables
+are given, not quantified over, and take no such annotation: it is a compile error there, and on the
+variable of `forAllData`, which is one already. Another representation is the compiler's, as it was.
+The decoder is `d.to[A]`, which the compiler compiles to its own reading of the type's `Data`
+representation, the one the premise is derived from, whatever `FromData` is given; the tactic checks
+that it is.
 
 `<=>` becomes two implications, because each of its operands occurs in both polarities. Each leaf
 program takes only the binders in scope at that leaf. Anything else produces a
@@ -218,7 +299,7 @@ open …
 #import_uplc leaf0 PlutusV3 single_cbor_hex "/tmp/scalus-uplc-blaster-…/Leaf0.flat"
 
 def arguments (x0 : Integer) (x1 : Bool) : List Term :=
-  [Term.Const $ Const.Integer x0, Term.Const $ Const.Bool x1]
+  [Term.Const (Const.Integer x0), Term.Const (Const.Bool x1)]
 
 #prep_uplc_run prepared0 leaf0 arguments 100
 
@@ -429,12 +510,24 @@ is canceled.
 
 ## Limits
 
-- **Types.** A quantified variable is a `BigInt`, a `Boolean`, a `ByteString`, a `String`, a
-  `Data`, or a case class of them. An enum, a `List` or an `Option` cannot be quantified over
-  yet; quantify over `Data` with `denotes(d.to[A]) ==> …`. Nor can one constructor of `Data`,
-  such as `Data.I`: Lean's variable for it would be any `Data`. Quantify over its field. The
-  operands of `equal` must be `BigInt`, `Boolean`, `ByteString`, `String` or `Data`. Call
-  arguments and results can have any type.
+- **Types.** A quantified variable is a `BigInt`, a `Boolean`, a `ByteString`, a `String`, a `Data`,
+  a list or a map, or a case class or an enum of them. A list or a map is restricted to its type's
+  values by a predicate derived from the type; where that cannot be exact it is a variable only in a
+  universal position. A type that contains itself and is passed through its constructors cannot be
+  quantified over with `forAll`; `forAllData` quantifies over it, as a variable only where it stands
+  for every value. `forAll[Data](d => denotes(d.to[A]) ==> …)` does not stand for it: `d.to[A]`
+  checks nothing itself, and the premise holds of every `d` that the program's conversion to `A`'s
+  representation reads without failing, which is part of what makes `d` a value of `A`, and a part
+  that depends on the representation. Nor can one constructor of `Data`, such as `Data.I`, be
+  quantified over: Lean's variable for it would be any `Data`. Quantify over its field. The operands
+  of `equal` must be `BigInt`, `Boolean`, `ByteString`, `String` or `Data`. Call arguments and
+  results can have any type.
+- **The type's values, not the ledger's.** A variable's values are those of its type, and an exact
+  predicate is exact for the type: a `Value` with an amount of zero or a policy without tokens is a
+  value of `Value`, which the ledger never puts in a context. An `exists` can be shown by such a
+  value, and a statement about contexts the ledger builds needs the ledger's rules as premises.
+  `forAllData[A]` ranges over the encodings `toData` gives, which are not all the `Data` that
+  `d.to[A]` reads: for `Data` a transaction supplies, quantify over `Data`.
 - **Byte strings.** Lean's model stores a byte string as a `String`, so a `ByteString` variable
   ranges over more than byte strings. A proof holds of them all the same. A counterexample can
   have characters above 255: each is read as one of the highest bytes that neither the
@@ -506,8 +599,8 @@ What is not stated, and why:
   an input range in the statement. The budgets it then needs are where proof cost explodes.
 - **`sqrt` and `isSqrt`.** `sqrt` needs about 405 steps, which is also where proof cost explodes.
 - **`log2` and `pow`.** They reach the bitwise builtins.
-- **`Data` round-trips** of case classes. `Data` binders make them expressible now, as
-  `forAll[Data](d => denotes(d.to[A]) ==> …)`; none is stated yet.
+- **`Data` round-trips** of case classes. `forAllData[A]` can state them, with `equal` over
+  their `Data`; none is stated yet.
 - **Codegen equivalence** (optimizer on and off, PV10 and PV11, the lowering backends). It can now
   be stated:
 
@@ -693,32 +786,22 @@ entry of ADA, a policy of one token, and, where another Boolean field says so, a
 The solver chooses the Booleans, so one statement covers the four shapes, among them the
 example's minting as the ledger gives it to the policy: the seed alone, and after the entry of
 ADA the policy's token alone. The example's own test builds its contexts without that entry, and
-its burns without an input, so they are not of these shapes. An `Unread` variable is
-what the optimized deserializer does not read: the outputs the inputs spend, and the eight
-fields of the transaction other than the inputs and the mint, each any `Data`. The context is
-written field by field. A test without Lean checks it against the ledger's types and the
-ledger's translation of the mint, for each of the four shapes.
+its burns without an input, so they are not of these shapes. The statements are about the
+`MintingContext` built from a `Mint`, not about a script context: the deserializers and the
+script on the ledger's context are not covered.
 
 | About | Statement | Quantified over | Budget | Time |
 |---|---|---|---|---|
 | `mint` | the two guarantees it states, for a mint whose token names are different | a `Mint`, the context built from it | 5740 | 82 s, together |
 | | the transaction that spends the seed mints the tokens, wherever the seed is among the inputs | | 2098 | 50 s |
 | | a transaction that does not spend the seed burns the tokens | | 2020 | 46 s |
-| the optimized deserializer | it reads the input references, the mint and the policy of the ledger's context | a `Mint`; an `Unread` | 2085 | 12 s |
-| | it reads nothing but a minting | and the purpose: any `Data` | 1890 | |
-| the script | where it accepts a transaction without the seed, the transaction burns the policy's tokens | a `Mint`; an `Unread` | 5542 | 2.5 min |
-| | where it accepts the transaction that spends the seed, of a mint whose token names are different, that transaction mints exactly the tokens | | 5006 | |
-| | it accepts the transaction that spends the seed and mints the tokens | | 2756 | |
 
-The script's statements are the guarantees of `mint`, stated of the transaction and not of what
-the deserializer reads. Wherever the script's policy is in the mint, they hold.
-
-The tactic found the budgets (`Budget.Auto`): from 1890 to 5740. The times are of the tests, each
-with its negative control, recalculated at the kept budgets. The suite keeps ten statements. Two
+The tactic found the budgets (`Budget.Auto`): from 2020 to 5740. The times are of the tests, each
+with its negative control, recalculated at the kept budgets. The suite keeps five statements. Two
 of them are negative controls, and both are refuted with a counterexample. In the first, a
 transaction spends the seed and mints the token in another quantity, and the policy rejects it.
 In the second, the policy accepts a transaction that does not spend the seed: a burn. With Lean
-the suite takes about 6 min at the kept budgets; the run that searched the budgets took 13 min.
+the suite takes about 3 min at the kept budgets.
 
 What the suite shows:
 
@@ -752,8 +835,8 @@ What the suite shows:
 What it does not show: a transaction of any other shape (longer lists of inputs, policies or
 tokens, a transaction without an input, or a mint without the entry of ADA, which the ledger
 does not give a script of version 1 or 2); that the tokens are minted once, which follows from
-the ledger spending an output once; the deserializer that reads the whole context, and the one of
-version 2; and the published scripts, which `MintingPolicy` compiles with other options.
+the ledger spending an output once; the deserializers, and so the script on the ledger's script
+context; and the published scripts, which `MintingPolicy` compiles with other options.
 
 ## Statements that do not finish
 

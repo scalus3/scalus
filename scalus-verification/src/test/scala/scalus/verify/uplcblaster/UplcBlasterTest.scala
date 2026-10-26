@@ -2,11 +2,13 @@ package scalus.verify.uplcblaster
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
+import scalus.cardano.onchain.plutus.prelude
 import scalus.cardano.onchain.plutus.prelude.{require, Math}
-import scalus.compiler.Compile
+import scalus.cardano.onchain.plutus.v1.Value
+import scalus.compiler.{Compile, UplcRepr, UplcRepresentation}
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRBuiltins, SIRType, TargetLoweringBackend}
 import scalus.compiler.sir.lowering.{PrimitiveRepresentation, ProductCaseClassRepresentation, SumCaseClassRepresentation}
-import scalus.uplc.{Constant, PlutusV3, Term}
+import scalus.uplc.{Constant, DefaultUni, PlutusV3, Term}
 import scalus.uplc.Term.asTerm
 import scalus.uplc.builtin.{Builtins, ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.Data.toData
@@ -42,6 +44,27 @@ enum BlasterShape derives FromData, ToData:
 @Compile
 object BlasterShape
 
+case class BlasterPairs(entries: prelude.List[(ByteString, BigInt)]) derives FromData, ToData
+
+@Compile
+object BlasterPairs
+
+/** A FromData of its own, which would read other Data than the compiler's representation. */
+@Compile
+object BlasterPairReader {
+    val firstOnly: FromData[BlasterPair] = (d: Data) => BlasterPair(Builtins.unIData(d), BigInt(0))
+}
+
+/** A variable over the Data encodings of BlasterPair, as an alias. */
+type BlasterPairData = BlasterPair @UplcRepr(UplcRepresentation.Data)
+
+enum BlasterTree derives FromData, ToData:
+    case Leaf
+    case Node(left: BlasterTree, right: BlasterTree)
+
+@Compile
+object BlasterTree
+
 class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
 
@@ -52,6 +75,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     private val makePair =
         FunctionDef.named("makePair", (a: BigInt, b: BigInt) => BlasterPair(a, b))
     private val sum = FunctionDef.named("sum", (p: BlasterPair) => p.a + p.b)
+    private val shift = FunctionDef.named("shift", (p: BlasterPair, n: BigInt) => p.a + n)
     private val area = FunctionDef.named(
       "area",
       (s: BlasterShape) =>
@@ -855,6 +879,321 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         assert(integer(counterexample(names.last)) != 0, counterexample)
     }
 
+    test("a variable of an enum is a choice of constructor, and the fields of each") {
+        val areaOfShape = forAll[BlasterShape](s =>
+            callRef(area.ref, s)(a =>
+                s match
+                    case BlasterShape.Circle(r)  => a == r
+                    case BlasterShape.Rect(w, h) => a == w * h
+            )
+        )
+        // Lean quantifies over the number of the constructor, then over the fields of each
+        // constructor, named after it.
+        val variables = lowered(areaOfShape, FunctionTable(area)).binders
+        assert(variables.map(_.tp) == List.fill(4)(SIRType.Integer), variables)
+        assert(
+          variables
+              .map(_.name.dropWhile(_ != '.')) == List(".case", ".Circle.r", ".Rect.w", ".Rect.h"),
+          variables
+        )
+        proven(areaOfShape, 400, area)
+        // Both constructors are among the values: each of these is refuted by the other one. The
+        // number 0 is the first constructor, and every other number the last.
+        val notCircle = refuted(
+          forAll[BlasterShape](s =>
+              s match
+                  case BlasterShape.Circle(_) => true
+                  case _                      => false
+          ),
+          400
+        )
+        val choice = notCircle.collectFirst {
+            case (name, value) if name.endsWith(".case") => value
+        }
+        assert(choice.exists(integer(_) != 0), notCircle)
+        val notRect = refuted(
+          forAll[BlasterShape](s =>
+              s match
+                  case BlasterShape.Rect(_, _) => true
+                  case _                       => false
+          ),
+          400
+        )
+        val first = notRect.collectFirst { case (name, value) if name.endsWith(".case") => value }
+        assert(first.exists(integer(_) == 0), notRect)
+    }
+
+    test("an enum with a type argument, as Option, has the fields of its argument") {
+        val definedOrEmpty =
+            forAll[prelude.Option[BigInt]](o => o.isDefined == !o.isEmpty)
+        val variables = lowered(definedOrEmpty, FunctionTable.empty).binders
+        assert(variables.map(_.tp) == List(SIRType.Integer, SIRType.Integer), variables)
+        proven(definedOrEmpty, 160)
+        // negative control: None is a value too
+        refuted(forAll[prelude.Option[BigInt]](o => o.isDefined), 160)
+    }
+
+    test("a list is one variable, a builtin list of Data, as it is passed") {
+        val emptyOrNot = forAll[prelude.List[BigInt]](xs => xs.isEmpty || !xs.isEmpty)
+        val variables = lowered(emptyOrNot, FunctionTable.empty).binders
+        assert(variables.size == 1, variables)
+        proven(emptyOrNot, 100)
+        // negative control: a list whose first item is 5 is among the values
+        val notFive = refuted(
+          forAll[prelude.List[BigInt]](xs => xs.isEmpty || xs.head != BigInt(5)),
+          200
+        )
+        assert(
+          notFive.values.exists {
+              case Constant.List(_, Constant.Data(Data.I(five)) :: _) => five == 5
+              case _                                                  => false
+          },
+          notFive
+        )
+        // Its items are any Data to Lean, as they are where the list is passed. The quantifier
+        // restricts them to integers with a predicate derived from the type, so the head of a list
+        // that is not empty is an integer.
+        proven(forAll[prelude.List[BigInt]](xs => xs.isEmpty || xs.head == xs.head), 200)
+    }
+
+    test("a list is restricted to its type's values, so that an exists over it is sound") {
+        // The predicate on its items is exact for a List[BigInt], so an exists over it is a
+        // statement Lean is given: a witness is a list of integers. Z3 does not find one through
+        // the recursive predicate (it answers unknown), so a witness is given here.
+        assert(
+          UplcBlaster
+              .lower(exists[prelude.List[BigInt]](xs => !xs.isEmpty), FunctionTable.empty)
+              .isRight
+        )
+        proven(
+          existsLet(prelude.List.Cons(BigInt(5), prelude.List.Nil))(xs =>
+              !xs.isEmpty && xs.head == BigInt(5)
+          ),
+          200
+        )
+        // For a type that contains itself the predicate is not exact, and the variable keeps more
+        // values than its type: a statement that claims some value is refused.
+        def refused(prop: Prop) = UplcBlaster.lower(prop, FunctionTable.empty) match
+            case Left(reason) =>
+                assert(reason.contains("has more values as a variable than its type"), reason)
+            case Right(_) => fail("expected the statement to be refused")
+        refused(exists[prelude.List[BlasterTree]](trees => trees.isEmpty))
+        refused(!forAll[prelude.List[BlasterTree]](trees => trees.isEmpty))
+        refused(forAll[prelude.List[BlasterTree]](trees => trees.isEmpty) ==> Prop(true))
+        refused(forAll[prelude.List[BlasterTree]](trees => trees.isEmpty) <=> Prop(true))
+        // Where it stands for every value it is a variable.
+        assert(
+          UplcBlaster
+              .lower(
+                forAll[prelude.List[BlasterTree]](trees => trees.isEmpty || !trees.isEmpty),
+                FunctionTable.empty
+              )
+              .isRight
+        )
+    }
+
+    test("the predicate on a list's items follows their Data representation, nested") {
+        // The Lean predicate and the check of a counterexample are derived from one description
+        // of a type's encoding, so a value Scala encodes passes both. Checked here on the JVM: a
+        // nested recursive predicate is one Z3 answers unknown about.
+        def typeOf(prop: Prop) = lowered(prop, FunctionTable.empty).binders.head.tp
+        def list(items: Data*) = Constant.List(DefaultUni.Data, items.map(Constant.Data(_)).toList)
+        val lists = typeOf(forAll[prelude.List[prelude.List[BigInt]]](_ => true))
+        val inner = prelude.List.Cons(BigInt(1), prelude.List.Cons(BigInt(2), prelude.List.Nil))
+        assert(
+          UplcBlaster
+              .outsideType(list(inner.toData, prelude.List.empty[BigInt].toData), lists)
+              .isEmpty
+        )
+        assert(UplcBlaster.outsideType(list(Data.I(1)), lists).nonEmpty)
+        // A case class with a list of pairs, whose encoding is the lowering's.
+        val pairs = typeOf(forAll[prelude.List[BlasterPairs]](_ => true))
+        val entries =
+            BlasterPairs(prelude.List.Cons((ByteString.fromHex("aa"), BigInt(1)), prelude.List.Nil))
+        assert(
+          UplcBlaster
+              .outsideType(list(entries.toData, BlasterPairs(prelude.List.Nil).toData), pairs)
+              .isEmpty
+        )
+        assert(UplcBlaster.outsideType(list(Data.Constr(0, prelude.List.Nil)), pairs).nonEmpty)
+        // A map's keys ascend, and a Value is the map of its policies.
+        val map = typeOf(forAll[prelude.SortedMap[ByteString, BigInt]](_ => true))
+        val sorted = prelude.SortedMap.fromList(
+          prelude.List.Cons(
+            (ByteString.fromHex("bb"), BigInt(2)),
+            prelude.List.Cons((ByteString.fromHex("aa"), BigInt(1)), prelude.List.Nil)
+          )
+        )
+        assert(UplcBlaster.outsideType(Constant.Data(sorted.toData), map).isEmpty)
+        val unsorted = Data.Map(
+          prelude.List.Cons(
+            Data.B(ByteString.fromHex("bb")) -> Data.I(2),
+            prelude.List.Cons(Data.B(ByteString.fromHex("aa")) -> Data.I(1), prelude.List.Nil)
+          )
+        )
+        assert(UplcBlaster.outsideType(Constant.Data(unsorted), map).nonEmpty)
+        val value = typeOf(forAll[Value](_ => true))
+        val tokens = Value(ByteString.fromHex("cc"), ByteString.fromHex("01"), BigInt(5))
+        assert(UplcBlaster.outsideType(Constant.Data(tokens.toData), value).isEmpty)
+        // A list of Data needs no premise: every item is a value.
+        val anyData = lowered(
+          forAll[prelude.List[Data]](xs => xs.isEmpty || !xs.isEmpty),
+          FunctionTable.empty
+        )
+        assert(anyData.predicates == Vector(None), anyData.predicates)
+        // A function has no Data encoding: lowering a map of functions does not throw.
+        UplcBlaster.lower(
+          forAll[prelude.SortedMap[BigInt, BigInt => BigInt]](_ => true),
+          FunctionTable.empty
+        )
+    }
+
+    test("forAllData quantifies over the Data encodings of a type's values") {
+        // One Lean variable, a Data, restricted to the encodings of a BlasterPair: the programs
+        // read it as `d.to[BlasterPair]`.
+        val commutes = forAllData[BlasterPair](p => p.a + p.b == p.b + p.a)
+        val lowering = lowered(commutes, FunctionTable.empty)
+        assert(lowering.binders.size == 1, lowering.binders)
+        assert(lowering.predicates.head.exists(_.contains("Data.Constr")), lowering.predicates)
+        proven(commutes, 300)
+        // negative control: a counterexample is the encoding of a BlasterPair
+        val values = refuted(forAllData[BlasterPair](p => p.a == p.b), 300)
+        values.values.toList match
+            case List(Constant.Data(data)) =>
+                assert(DataEncoding.of[BlasterPair].outside(data).isEmpty, data)
+            case other => fail(s"expected one Data value, got $other")
+        // A variable the statement does not read: whatever value Lean gives, or leaves out, the
+        // counterexample is one of the type.
+        refuted(forAllData[BlasterPair](_ => false), 100).values.toList match
+            case List(Constant.Data(data)) =>
+                assert(DataEncoding.of[BlasterPair].outside(data).isEmpty, data)
+            case other => fail(s"expected one Data value, got $other")
+        // A type that contains itself, which forAll does not quantify over. Its fields are any
+        // Data to Lean: the variable has more values than its type, and is one only where it
+        // stands for every value.
+        proven(
+          forAllData[BlasterTree](tree =>
+              tree match
+                  case BlasterTree.Leaf       => true
+                  case BlasterTree.Node(_, _) => true
+          ),
+          300
+        )
+        UplcBlaster.lower(!forAllData[BlasterTree](_ => true), FunctionTable.empty) match
+            case Left(reason) => assert(reason.contains("forAllData variable"), reason)
+            case Right(_)     => fail("expected the statement to be refused")
+        // The decoder is `d.to[A]`, which the compiler compiles to its own reading of the type's
+        // representation, the one the premise is derived from, whatever FromData is given.
+        val decoder = lowered(
+          forAllData[BlasterPair](p => p.a == p.a)(using BlasterPairReader.firstOnly),
+          FunctionTable.empty
+        ).binders.head.tp
+        assert(
+          DataEncoding
+              .encoded(decoder)
+              .exists(_._2.pretty.render(100).contains("UniversalDataConversion$.fromData")),
+          decoder.show
+        )
+    }
+
+    test("a parameter of a type annotated @UplcRepr(Data) is a variable of forAllData") {
+        // In a forAll of several variables, the annotated one is the Data, and the other as before.
+        val annotated = forAll((p: BlasterPair @UplcRepr(UplcRepresentation.Data), n: BigInt) =>
+            p.a + n == n + p.a
+        )
+        val lowering = lowered(annotated, FunctionTable.empty)
+        val plain = lowered(forAllData[BlasterPair](p => p.a == p.a), FunctionTable.empty)
+        assert(lowering.binders.size == 2, lowering.binders)
+        assert(lowering.predicates == plain.predicates :+ None, lowering.predicates)
+        proven(annotated, 300)
+        // In an exists: the predicate of a BlasterPair is exact, so a value Lean finds is one. Z3
+        // does not find one through the predicate (it answers unknown); existsLet gives it.
+        assert(
+          UplcBlaster
+              .lower(
+                exists((p: BlasterPair @UplcRepr(UplcRepresentation.Data)) => p.a == BigInt(1)),
+                FunctionTable.empty
+              )
+              .isRight
+        )
+        proven(
+          existsLet(BlasterPair(1, 2))((p: BlasterPair @UplcRepr(UplcRepresentation.Data)) =>
+              p.a == BigInt(1)
+          ),
+          300
+        )
+        // A type that contains itself is a variable only where it stands for every value.
+        UplcBlaster.lower(
+          exists((_: BlasterTree @UplcRepr(UplcRepresentation.Data)) => true),
+          FunctionTable.empty
+        ) match
+            case Left(reason) => assert(reason.contains("forAllData variable"), reason)
+            case Right(_)     => fail("expected the statement to be refused")
+        // Through an alias, as written.
+        val aliased = lowered(forAll((p: BlasterPairData) => p.a == p.a), FunctionTable.empty)
+        assert(aliased.predicates == plain.predicates, aliased.predicates)
+        // In returnsWhen of several parameters, whose call passes them as a tuple.
+        proven(
+          returnsWhen(shift)((p: BlasterPair @UplcRepr(UplcRepresentation.Data), n: BigInt) =>
+              true
+          ),
+          300,
+          shift
+        )
+        // The variable ranges over the quantifier's type: a parameter of a wider type is refused,
+        // and so is the annotation on forAllData's own variable, which is one already.
+        assertDoesNotCompile(
+          "forAll[prelude.Option.Some[BigInt]]((x: prelude.Option[BigInt] " +
+              "@UplcRepr(UplcRepresentation.Data)) => true)"
+        )
+        assertDoesNotCompile(
+          "forAllData[BlasterPair]((p: BlasterPair @UplcRepr(UplcRepresentation.Data)) => true)"
+        )
+        // A call's result and a contract's variable are given, not quantified over.
+        assertDoesNotCompile(
+          "call(sum, BlasterPair(1, 2))((r: BigInt @UplcRepr(UplcRepresentation.Data)) => r > 0)"
+        )
+        assertDoesNotCompile(
+          "contract(sum)(expects = (p: BlasterPair @UplcRepr(UplcRepresentation.Data)) => " +
+              "true, ensures = p => r => true)"
+        )
+        // Another representation is the compiler's, as it was.
+        assertCompiles(
+          "forAll((p: BlasterPair @UplcRepr(UplcRepresentation.UplcConstr)) => p.a == p.a)"
+        )
+    }
+
+    test("a map and a Value are one variable, the entries of a Data.Map") {
+        val emptyOrNot = forAll[prelude.SortedMap[ByteString, BigInt]](m => m.isEmpty || !m.isEmpty)
+        assert(lowered(emptyOrNot, FunctionTable.empty).binders.size == 1)
+        proven(emptyOrNot, 100)
+        // negative control: a map whose first entry is 0xaa -> 7 is among the values
+        val notThat = refuted(
+          forAll[prelude.SortedMap[ByteString, BigInt]](m =>
+              m.isEmpty || m.toList.head._1 != ByteString.fromHex("aa") ||
+                  m.toList.head._2 != BigInt(7)
+          ),
+          600
+        )
+        assert(
+          notThat.values.exists {
+              case Constant.Data(Data.Map(entries)) => !entries.isEmpty
+              case _                                => false
+          },
+          notThat
+        )
+        // A Value is passed as its one field, the map of its policies.
+        val value = forAll[Value](v => v.toSortedMap.isEmpty || !v.toSortedMap.isEmpty)
+        assert(lowered(value, FunctionTable.empty).binders.size == 1)
+        proven(value, 100)
+    }
+
+    test("a type is told by its arguments: an Option of an Option does not contain itself") {
+        val nested =
+            lowered(forAll[prelude.Option[prelude.Option[BigInt]]](_ => true), FunctionTable.empty)
+        assert(nested.binders.map(_.tp) == List.fill(3)(SIRType.Integer), nested.binders)
+    }
+
     test("a case class in a case class is expanded down to its fields") {
         val keyLength = forAll[BlasterOwned](o =>
             Builtins.lengthOfByteString(o.owner.key) >= BigInt(0) && o.amount == o.amount
@@ -1583,12 +1922,17 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("statements outside the fragment are unsupported") {
-        // The tactic reports these without running Lean. An enum has several constructors, so
-        // it is not built from one set of fields.
-        given Quantifiable[BlasterShape] = new Quantifiable[BlasterShape] {}
-        val shape = forAll[BlasterShape](_ => true)
-        val shapes = UplcBlaster.lower(shape, FunctionTable.empty)
-        assert(shapes.left.exists(_.contains("BlasterShape binder")), shapes)
+        // The tactic reports these without running Lean. A type that contains itself, and is
+        // passed through its constructors, has values of every size, which no set of variables
+        // stands for.
+        // One constructor of a type, as List.Cons, would be a variable of the whole type.
+        val cons =
+            UplcBlaster.lower(forAll[prelude.List.Cons[BigInt]](_ => true), FunctionTable.empty)
+        assert(cons.left.exists(_.contains("one constructor")), cons)
+
+        val tree = forAll[BlasterTree](_ => true)
+        val trees = UplcBlaster.lower(tree, FunctionTable.empty)
+        assert(trees.left.exists(_.contains("contains itself")), trees)
 
         // One constructor of `Data` is no type of Lean's: its variable would be any `Data`, and
         // the statement would be about values the Scala type does not have.
@@ -1607,12 +1951,12 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
 
         // The verifier gives the reason as an unsupported result, and Lean is not asked.
         val verifier = Verifier.empty
-        verifier.verify(verifier.statement(shape), UplcBlaster(Budget.LeanSteps(10), lean)) match
+        verifier.verify(verifier.statement(tree), UplcBlaster(Budget.LeanSteps(10), lean)) match
             case VerificationResult.Unsupported(report) =>
                 val reasons = report.issues.collect {
                     case CompatibilityIssue.UnsupportedFeature(_, reason) => reason
                 }
-                assert(reasons.exists(_.contains("BlasterShape binder")), report)
+                assert(reasons.exists(_.contains("contains itself")), report)
             case other => fail(s"expected an unsupported result, got $other")
     }
 }
