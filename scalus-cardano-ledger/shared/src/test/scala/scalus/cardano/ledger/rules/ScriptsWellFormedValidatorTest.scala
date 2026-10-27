@@ -3,7 +3,9 @@ package scalus.cardano.ledger.rules
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
+import scalus.serialization.cbor.Cbor
 import scalus.uplc.builtin.ByteString
+import scalus.uplc.{Constant, Program, ProgramFlatCodec, Term}
 
 /** `Babbage.validateScriptsWellFormed` in cardano-ledger, on a transaction from preprod. */
 class ScriptsWellFormedValidatorTest extends AnyFunSuite {
@@ -104,5 +106,28 @@ class ScriptsWellFormedValidatorTest extends AnyFunSuite {
           )
         )
         assert(ScriptsWellFormedValidator.validate(context(10), State(), preprodTx).isRight)
+    }
+
+    test("Babbage introduced the check: before protocol version 7 a malformed script passes") {
+        // `\redeemer ctx -> ()` with one byte after its filler, which no language allows
+        val flat = ProgramFlatCodec.unsafeEncodeFlat(
+          Program.plutusV1(Term.LamAbs("redeemer", Term.LamAbs("ctx", Term.Const(Constant.Unit))))
+        )
+        val script = Script.PlutusV1(ByteString.fromArray(Cbor.encode(flat :+ 0.toByte)))
+        val tx = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
+          ),
+          TransactionWitnessSet(
+            scripts = Seq(script),
+            redeemers = None,
+            vkeyWitnesses = Set.empty,
+            plutusData = Seq.empty
+          )
+        )
+        assert(ScriptsWellFormedValidator.validate(context(6), State(), tx).isRight)
+        assert(ScriptsWellFormedValidator.validate(context(7), State(), tx).isLeft)
     }
 }

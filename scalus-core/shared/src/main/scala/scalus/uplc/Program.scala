@@ -186,6 +186,9 @@ object Program:
 
     /** Deserializes a program from a flat-encoded byte array.
       *
+      * The bytes must hold the program and its filler and nothing else, see
+      * [[ProgramFlatCodec.decodeFlat]].
+      *
       * @param flatEncoded
       * @return
       */
@@ -375,6 +378,10 @@ object DeBruijnedProgram {
 
     /** Deserializes a program from a flat-encoded byte array.
       *
+      * The bytes must hold the program and its filler and nothing else, see
+      * [[ProgramFlatCodec.decodeFlat]]. Use [[fromFlatEncodedWithRemainingBytes]] when other bytes
+      * follow the program.
+      *
       * @param flatEncoded
       *   the flat-encoded byte array
       * @return
@@ -397,7 +404,8 @@ object DeBruijnedProgram {
 
     /** Deserializes a program from a CBOR-encoded byte array.
       *
-      * `cbor` must be exactly one CBOR byte string. A script taken from a transaction can have
+      * `cbor` must be exactly one CBOR byte string, and the byte string must hold exactly one
+      * flat-encoded program, see [[fromFlatEncoded]]. A script taken from a transaction can have
       * bytes after its byte string; read it with [[fromCborPrefix]].
       *
       * @param cbor
@@ -423,8 +431,7 @@ object DeBruijnedProgram {
       * This is how the ledger reads a Plutus script. It ignores the bytes after the byte string in
       * Plutus V1 and V2 scripts and rejects them in later languages;
       * [[scalus.cardano.ledger.PlutusScript.isWellFormed]] applies that rule. As in [[fromCbor]],
-      * the program's padding and any bytes after the program inside the byte string are not
-      * checked.
+      * the byte string must hold exactly one flat-encoded program.
       *
       * @param cbor
       *   bytes that start with a definite-length CBOR byte string holding a flat-encoded program

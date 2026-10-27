@@ -842,8 +842,34 @@ object PlutusScriptEvaluator {
             limit: ExUnits,
             args: Data*
         ): Result = {
-            // Parse UPLC program from CBOR
-            val program = plutusScript.deBruijnedProgram
+            // Before Babbage the ledger did not check that scripts are well formed in phase 1, and a
+            // script it could not deserialise failed in phase 2. Babbage added the phase 1 check,
+            // `ScriptsWellFormedValidator`.
+            if protocolMajorVersion < MajorProtocolVersion.vasilPV &&
+                !plutusScript.isWellFormed(protocolMajorVersion)
+            then
+                throw new PlutusScriptEvaluationException(
+                  s"The ${plutusScript.language} script ${plutusScript.scriptHash.toHex} cannot " +
+                      s"be deserialised at protocol version ${protocolMajorVersion.version}",
+                  null,
+                  Array.empty,
+                  plutusScript.scriptHash,
+                  spentBudget = ExUnits.zero
+                )
+
+            // Parse UPLC program from CBOR. From Babbage on, the ledger rejects a script it cannot
+            // deserialise in phase 1, so this is not a PlutusScriptEvaluationException: callers
+            // read that as a phase 2 failure, which marks the transaction invalid and takes its
+            // collateral.
+            val program =
+                try plutusScript.deBruijnedProgram
+                catch
+                    case NonFatal(e) =>
+                        throw new IllegalArgumentException(
+                          s"Cannot decode the ${plutusScript.language} script " +
+                              s"${plutusScript.scriptHash.toHex}: ${e.getMessage}",
+                          e
+                        )
 
             // The ledger rejects an open script before running it. The arguments are constants, so
             // checking the script is the same as checking the applied term, as Plutus does.

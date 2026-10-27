@@ -188,9 +188,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
         if bytes.isEmpty then None
         else
             Try {
-                val ProgramFlatCodec.DecodeResult(program, remainder) =
-                    ProgramFlatCodec.decodeFlatWithRemainingBytes(bytes)
-                require(remainder.isEmpty, s"${remainder.length} bytes after the program")
+                val program = ProgramFlatCodec.decodeFlat(bytes)
                 require(isClosed(program.term), "a variable is out of scope")
                 program
             }.toOption

@@ -29,7 +29,8 @@ sealed trait PlutusScript extends Script {
     /** Get the program, preferring the cached in-memory version over CBOR deserialization.
       *
       * Bytes after the script's CBOR byte string are ignored in a Plutus V1 or V2 script, as the
-      * ledger does, and fail the decoding in later languages.
+      * ledger does, and fail the decoding in later languages. Bytes after the program inside the
+      * byte string fail the decoding in every language.
       */
     def program: Program = {
         val p = _cachedProgram
@@ -96,11 +97,9 @@ object PlutusScript {
             try flatEncodedProgram(script.bytes, language)
             catch case NonFatal(_) => return false
 
-        val ProgramFlatCodec.DecodeResult(DeBruijnedProgram(_, term), afterProgram) =
-            try ProgramFlatCodec.decodeFlatWithRemainingBytes(flatEncoded)
+        val term =
+            try ProgramFlatCodec.decodeFlat(flatEncoded).term
             catch case NonFatal(_) => return false
-
-        if afterProgram.nonEmpty then return false
 
         val collectedBuiltins = term.collectBuiltins
         val foundBuiltinsIntroducedIn =
