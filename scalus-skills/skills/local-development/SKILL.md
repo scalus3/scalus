@@ -1,6 +1,6 @@
 ---
 name: local-development
-description: Use when developing or testing Scalus smart contracts with the local Emulator and TxBuilder. Covers how to create an Emulator provider, submit transactions, and test negative validator cases.
+description: Use when developing or testing Scalus smart contracts with the local Emulator and TxBuilder. Covers how to create an Emulator provider, submit transactions, test negative validator cases, and test confirmation delay and rollbacks.
 ---
 
 ## Overview
@@ -136,6 +136,47 @@ TxBuilder(env, evaluator)
     .transaction
 // Then submit to the Emulator and assert Left(SubmitError.ScriptFailure(...))
 ```
+
+## Testing delay and rollbacks with the Manual preset (Scalus newer than 1.4.1)
+
+By default the Emulator forges a block on every `submit`, so a test never sees a transaction
+`Pending`. Use `ChainConfig.manual` to test code that depends on confirmation delay, or on
+surviving a fork (a rollback that returns a transaction to the mempool, or drops it):
+
+```scala
+import scalus.cardano.node.Emulator
+import scalus.cardano.node.emulator.ChainConfig
+
+val provider = Emulator.withAddresses(addresses, value, ChainConfig.manual)
+provider.submit(tx).await()                 // Right(txHash); not yet visible
+provider.txStatus(tx.id)                    // TxStatus.Pending
+provider.produceBlock()                     // forges a block from the mempool
+provider.txStatus(tx.id)                    // TxStatus.Confirmed(1, point)
+```
+
+Use it when the thing under test is the *absence* of a confirmed transaction (a provider that
+polls, a UI that shows "pending", a retry path) or a rollback (`provider.rollback(n)`, or a rival
+block via `provider.produceBlock(on, txs)`). For everything else, `ChainConfig.instant` (the
+default) is simpler and is what every other example on this page uses.
+
+Pitfalls:
+- Calling `produceBlock()` after every `submit` gives one block per tx, like `ChainConfig.instant`,
+  but at a new slot each time: Manual forges at `max(current slot, tip slot + 1)` and moves the
+  current slot there; Instant never moves the slot. Submit everything that should land in one
+  block first, then call `produceBlock()` once.
+- In Manual, `setSlot` below the tip slot throws `IllegalArgumentException`. Set the slot before
+  you forge, not after.
+- `txStatus(hash)` is the one safe assertion for "still pending" / "confirmed" / "dropped" /
+  "rolled back"; `findUtxos` alone cannot tell "pending" apart from "never submitted".
+- Off-the-shelf code that calls `pollForConfirmation` or `submitAndPoll` still works under
+  `Manual`: with the default `AwaitTxPolicy.ProduceBlock` it forges blocks until the transaction
+  leaves the mempool, up to `maxAttempts` times.
+- Under `ChainConfig.instant`, `rollback(1)` at an unchanged slot returns the txs to the mempool
+  and forges them at once into the same block, with the same hash, so nothing changes. Test a
+  rollback under `Manual`, with `withOrphanTxs(OrphanTxPolicy.Drop)`, or after `tick(1)`.
+- The default `securityParam` (`k = 2160`) is already far deeper than any test builds; `rollback(n)`
+  and a branch `produceBlock(on, txs)` need no larger value. Lower it
+  (`ChainConfig.manual.withSecurityParam(2)`) only to test the `TooDeep` boundary on purpose.
 
 ## Ledger rules the Emulator checks (Scalus 1.4.0 or newer)
 
