@@ -9,7 +9,9 @@
   `deBruijnedProgram` require the program's filler to end the bytes, as `unflat` in Plutus does.
   Bytes after the filler, a missing filler and a filler that ends inside a byte throw
   `FlatDecodingError`. Before, they were ignored, so an accessor returned a program for a script
-  that `isWellFormed` refuses. Read a program that other bytes follow with
+  that `isWellFormed` refuses. In JavaScript, `uplc.decodeProgram`, `uplc.applyArgs`,
+  `uplc.applyParamsToScript` and `evaluateScript` throw a `TypeError` for such a script. Read a
+  program that other bytes follow with
   `decodeFlatWithRemainingBytes`, which now reports a filler that ends inside a byte as
   `FlatDecodingError` instead of `IllegalArgumentException`.**
 

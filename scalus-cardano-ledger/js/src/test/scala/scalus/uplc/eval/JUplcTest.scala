@@ -19,6 +19,11 @@ class JUplcTest extends AnyFunSuite {
 
     private val program = λ("x")(vr"x").plutusV1.deBruijnedProgram
 
+    /** `program` with its filler, the whole last byte `00000001`, run on into one more byte:
+      * `00000000 00000001`. It decodes to `program`, but encoding `program` gives other bytes.
+      */
+    private val longerFiller = program.flatEncoded.init ++ Array[Byte](0, 1)
+
     private def typeError(body: => Any): js.TypeError =
         intercept[js.JavaScriptException](body).exception match
             case e: js.TypeError => e
@@ -118,19 +123,21 @@ class JUplcTest extends AnyFunSuite {
         }
     }
 
+    test("reads the program as unflat does: its filler must end the bytes, on a byte boundary") {
+        assert(JUplc.decodeScript(JsCbor.encode(longerFiller)).alphaEq(program))
+
+        val trailing = Cbor.encode(program.flatEncoded ++ Array[Byte](0)).toByteArray
+        val failure = typeError(JUplc.decodeScript(trailing.toUint8Array))
+        assert(failure.message.contains("follow the filler"), failure.message)
+
+        // `00000010`: the filler `0000001` ends one bit before the end of the byte
+        val badPadding = program.flatEncoded.updated(program.flatEncoded.length - 1, 2.toByte)
+        typeError(JUplc.decodeScript(JsCbor.encode(badPadding)))
+    }
+
     test("reads the program without vetting what it reads") {
         // Whether a chain would admit the script is `PlutusScript.isWellFormed`'s question, asked
-        // of a whole transaction elsewhere. These four all decode.
-        val trailing = Cbor.encode(program.flatEncoded ++ Array[Byte](0)).toByteArray
-        assert(JUplc.decodeScript(trailing.toUint8Array).alphaEq(program))
-
-        val badPadding = program.flatEncoded.clone()
-        badPadding(badPadding.length - 1) = 2
-        assert(
-          JUplc
-              .decodeScript(JsCbor.encode(badPadding))
-              .alphaEq(program)
-        )
+        // of a whole transaction elsewhere. These two decode.
 
         // A version outside the two the ledger allows is not this layer's to refuse.
         val encoder = EncoderState(20)
@@ -154,10 +161,9 @@ class JUplcTest extends AnyFunSuite {
 
     test("the primitives change the envelope and never the script's own bytes") {
         // A script hashes over exactly these bytes, so a conversion that re-encoded from the
-        // decoded program could hand back a script with a different hash. Non-canonical padding
-        // is the cheapest input where re-encoding and passing through differ.
-        val quirky = program.flatEncoded.clone()
-        quirky(quirky.length - 1) = 2
+        // decoded program could hand back a script with a different hash. A longer filler is the
+        // cheapest input where re-encoding and passing through differ.
+        val quirky = longerFiller
         assert(!quirky.sameElements(program.flatEncoded))
         val single = Cbor.encode(quirky).toByteArray
         val double = Cbor.encode(single).toByteArray
