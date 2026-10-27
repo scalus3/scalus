@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+### Added
+
+- The Emulator behaves like a small Cardano node: a block tree, a mempool, block forging and
+  chain selection. `ChainConfig.manual`, a new preset, holds a submitted transaction in the
+  mempool until an explicit `produceBlock()`; `ChainConfig.instant`, the default, keeps today's
+  "every submit is a block" behaviour. `txStatus(hash)` reports `Pending`,
+  `Confirmed(depth, point)`, `Dropped(reason)`, `RolledBack` or `NotFound`, and
+  `findUtxos(query, view)` reads the tip, the mempool, or a `ChainView.Stable(depth)` block.
+- Forks and rollback: `produceBlock(on, txs)` forges a block anywhere in the block tree, for
+  example a rival that double-spends a pending transaction's input. Chain selection switches to
+  the longest resulting chain, and `rollback(n)` removes the last `n` blocks. Either way, the
+  orphaned transactions follow `ChainConfig.orphanTxs`: back to the mempool (`ReturnToMempool`,
+  the default) or `RolledBack` (`Drop`). The testkit `ImmutableEmulator` gains the same
+  `produceBlock` and `rollback`, which return the next `ImmutableEmulator` alongside the result,
+  and `txStatus`.
+- `StreamingEmulator` now delivers the Emulator's real blocks, so it also serves block
+  subscriptions: a forged block is a `RollForward` carrying it, and a fork switch or a `rollback`
+  is a `RollBackward` to the common ancestor.
+  `EmulatorBase.diff(from, to)` computes the same `ChainEvent`s between any two chain tips
+  directly, without a subscription. `diff` and the Java `getDiff` are experimental: the event
+  types live in `scalus.cardano.node.stream.internal` and may change in a minor release.
+- New `BlockHeader.hash` (blake2b-256 of the header CBOR, how Cardano names a block) and
+  `Block.bodyHash(bodies, witnessSets, auxiliaryData, invalidTxs)`, which computes the block body
+  hash of the Alonzo and later eras from the four body segments.
+- JVM and JS `Emulator` gain a constructor that takes `chainConfig: ChainConfig` in place of the
+  applied-tx log, with no default arguments (the Emulator is a Java/JS-usable type);
+  `withAddresses`, `withState` and the other factories gain an overload that takes one, as do the
+  testkit `ImmutableEmulator.withAddresses`, `fromPreconfiguration` and `fromJson`.
+- Java: `EmulatorJavaApi` gains `tryProduceBlock`, `tryRollback`, `getMempoolTxs`, `getDiff` and
+  `findUtxosForAddress(address, view)`, returning the new `EmulatorResult`; `ChainView.tip()`,
+  `mempool()` and `stable(depth)` build a view, and `TxStatus.pending()`, `rolledBack()`,
+  `notFound()`, `DropReason.expired()` and `inputsSpent()` name the cases, since a Scala 3 enum
+  case is only a static field of its module class. `ForgeError` and `RollbackError` have a
+  `message` in prose. JavaScript: `Emulator.create` takes `blockProduction`, `awaitTx`,
+  `orphanTxs` and `securityParam`, and gains `produceBlock`, `produceBlockOn`, `rollback`,
+  `getMempool`, `getTip`, `getTxStatus` and `awaitTx`; `getTransactionStatus` now also returns
+  `"Pending"`, `"Dropped"` and `"RolledBack"`.
+
 ### Changed
 
 - **`scalus-plugin` is no longer published for Scala 3.3.7. A project on Scala 3.3.x must use
@@ -16,6 +54,43 @@
   program that other bytes follow with
   `decodeFlatWithRemainingBytes`, which now reports a filler that ends inside a byte as
   `FlatDecodingError` instead of `IllegalArgumentException`.**
+- **Migration hazard: `checkTransaction` reports `NotFound` for a transaction of an imported
+  applied-tx log; such a transaction has no block.** Before, they
+  reported `Confirmed`. `hasTx`, `getTransaction`, `getAppliedTx` and `appliedTxLog` still find
+  it. A transaction in a block below the `clearAppliedTxs` cursor is `Confirmed`; it used to be
+  `NotFound`.
+- `StreamingEmulator` keeps up to `k` blocks (the Emulator's `securityParam`, default 2160), so a
+  `rollback` or fork switch of the Emulator reaches subscribers as `RolledBack`. The advertised
+  `rollbackHorizon` is the constructor's `securityParam` as `Some(securityParam)`, so `noRollback`
+  subscribers wait as before. The default is now `Some(0)` instead of `None`, since the stream can
+  deliver `RolledBack`. A `noRollback` subscriber can now get `RolledBack` when a test rolls back
+  deeper than the advertised horizon.
+- `StreamingEmulator.newEmptyBlock()` still ticks the slot by one, then forges through the
+  Emulator's `produceBlock()`, so the block is part of the Emulator's own chain, visible in `tip`
+  and `diff`. Under `ChainConfig.manual` it also confirms the pending transactions.
+- **Migration hazard: the testkit `ImmutableEmulator` now wraps one shared `EmulatorState`**
+  instead of its own 9-field model. `copy` and `unapply` of the old fields are gone, so code that
+  pattern-matches it, or copies it by field name, no longer compiles. The companion `apply` with
+  the old fields and the field accessors (`state`, `utxos`, `env`, `appliedTxLog`, ...) stay.
+- `EmulatorState` holds a block tree and a mempool, so it has 12 product elements instead of 6,
+  and `_1` .. `_6` return the new fields. A pattern match on its elements, such as
+  `case EmulatorState(ledger, context, ...)`, no longer compiles; use the `ledger`, `context`,
+  `binaryDatums` and `appliedTxLog` accessors.
+- `scalus.js` grows by about 83 KB for the chain feature, since the linker now reaches block
+  forging, chain selection, rollback and poll code; the bundle-size cap CI checks is 2.4 MiB.
+
+### Deprecated
+
+- `clearAppliedTxs`: the selected chain is the applied-tx log now; start a new Emulator for an
+  empty log.
+- `StreamingEmulator.syntheticBlockHash`: the stream delivers the Emulator's real blocks, named by
+  their header hash.
+- The `initialAppliedTxLog` parameter of the JVM and JS `Emulator` constructor, the
+  `appliedTxLog` parameter of the testkit `ImmutableEmulator.apply`, and the `appliedTxLog`
+  parameter of `EmulatorState.initial`: the log has no blocks, so status APIs report `NotFound`
+  for its transactions. Use `snapshot()` or `ImmutableEmulator.fromEmulator`/`toEmulator`, which
+  keep the blocks. The deprecation is in the scaladoc only: the parameters have defaults, so the
+  compiler cannot warn.
 
 ### Fixed
 
@@ -24,6 +99,13 @@
   (Babbage), the ledger had no phase 1 check: `ScriptsWellFormedValidator` accepts the script, and
   it fails in phase 2.
 - A flat decoding error shows the bytes around the failure, not the whole input.
+- `Block.hash` returns the header hash (`BlockHeader.hash`), as Cardano names a block. It
+  returned the block body hash, so two empty blocks on different parents had the same hash.
+  **Migration hazard: code that stored or compared `Block.hash` gets a different value; the old
+  value is `block.header.headerBody.blockBodyHash`.**
+- Instant: moving the current slot backward with `setSlot` before an epoch boundary no block has
+  crossed now restores the donations that boundary moved into the treasury, as on a node. Before,
+  the move could not be undone.
 
 ## 1.4.1 (2026-10-26)
 
