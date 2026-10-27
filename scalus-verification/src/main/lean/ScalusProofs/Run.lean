@@ -96,9 +96,42 @@ def hasMismatchedDite (e : Expr) : Bool :=
       | c, .lam _ yes _ _, .lam _ no _ _ => yes != c || no != mkNot c
       | _, _, _ => false).isSome
 
+/-- `e` with the branches of each `Blaster.dite' c t f` taking `c` and `¬ c`, as `dite'` asks,
+    where a branch does not use its binder. Blaster's optimizer rewrites the type of a branch's
+    binder apart from the condition, as `¬ true = b` to `false = b` (Lean-blaster#154). A binder
+    that the branch's body does not use may be of any type, so the term means what it meant. A
+    branch that uses its binder is left as it is, and `hasMismatchedDite` still finds it. -/
+partial def repairedDite (e : Expr) : Expr :=
+  (go e).run' {}
+where
+  go (e : Expr) : StateM (Std.HashMap Expr Expr) Expr := do
+    if let some done := (← get).get? e then return done
+    let result ← match e with
+      | .app f a => pure <| restated (e.updateApp! (← go f) (← go a))
+      | .lam _ t b _ => pure <| e.updateLambdaE! (← go t) (← go b)
+      | .forallE _ t b _ => pure <| e.updateForallE! (← go t) (← go b)
+      | .letE _ t v b _ => pure <| e.updateLetE! (← go t) (← go v) (← go b)
+      | .mdata _ b => pure <| e.updateMData! (← go b)
+      | .proj _ _ b => pure <| e.updateProj! (← go b)
+      | _ => pure e
+    modify (·.insert e result)
+    return result
+  restated (e : Expr) : Expr :=
+    if e.isAppOfArity ``Blaster.dite' 4 then
+      let args := e.getAppArgs
+      let c := args[1]!
+      let takes (branch binder : Expr) : Expr :=
+        match branch with
+        | .lam n type body info =>
+          if type == binder || body.hasLooseBVar 0 then branch else .lam n binder body info
+        | _ => branch
+      mkAppN e.getAppFn #[args[0]!, c, takes args[2]! c, takes args[3]! (mkNot c)]
+    else e
+
 /-- `#prep_uplc_run name script inputs budget` defines `name` as the function of `inputs`'
     parameters that runs `script` on `inputs` for at most `budget` steps with `runFor`, optimized
-    by Blaster as `#prep_uplc` does, or as written where the kernel rejects the optimized run.
+    by Blaster as `#prep_uplc` does, with the branches of its case splits taking what `dite'` asks
+    (`repairedDite`), or as written where the kernel still rejects the optimized run.
     `inputs` is a function returning `List Term`, or a `List Term` for a program without
     parameters. -/
 syntax (name := prepUplcRun) "#prep_uplc_run" ident ident ident num : command
@@ -117,7 +150,8 @@ def prepUplcRunImp : CommandElab := fun stx => do
     let run ← Meta.lambdaTelescope (← Meta.etaExpand inputs) fun xs _ =>
       mkLambdaFVars xs
         (mkApp3 (mkConst ``runProgramFor) program (mkAppN inputs xs) (mkNatLit budget))
-    let (value, _) ← Optimize.main run |>.run default
+    let (optimized, _) ← Optimize.main run |>.run default
+    let value := repairedDite optimized
     let definition (value : Expr) : TermElabM Declaration := do
       return Declaration.defnDecl {
         name := name,

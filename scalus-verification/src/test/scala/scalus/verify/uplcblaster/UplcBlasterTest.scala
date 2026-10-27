@@ -1659,6 +1659,53 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         finally Directories.remove(directory)
     }
 
+    test("a case split that Blaster writes ill-typed is repaired, so the kernel takes it") {
+        // Blaster's optimizer rewrites a branch's binder apart from the condition: `¬ true = b` to
+        // `false = b`, and `¬ (¬ p ∧ ¬ q)` to `p ∨ q`, where `dite'` asks for `¬ c`
+        // (Lean-blaster#154). The kernel rejects such a run, which `#prep_uplc_run` would then
+        // keep as written, for `#blaster` to expand again. The two terms are Blaster's own tests',
+        // as the issue gives them. Where Blaster writes them well typed, the repair is not needed.
+        val text =
+            """import ScalusProofs.Run
+              |
+              |open Lean Elab Command Term Meta
+              |
+              |elab "#scalus_dite " name:str t:term : command => liftTermElabM do
+              |  let e ← elabTermAndSynthesize t none
+              |  let (written, _) ← Blaster.Optimize.command ({} : Blaster.Options.BlasterOptions) e
+              |  let kernel (value : Expr) : TermElabM String := do
+              |    let decl := Declaration.defnDecl {
+              |      name := Name.mkSimple ("scalus_dite_" ++ name.getString), levelParams := [],
+              |      type := mkSort levelZero, value := value, hints := .abbrev, safety := .safe }
+              |    match (← getEnv).toKernelEnv.addDecl (← getOptions) decl with
+              |    | .ok _ => pure "accepted"
+              |    | .error _ => pure "rejected"
+              |  let repaired := ScalusProofs.Run.repairedDite written
+              |  logInfo m!"{name.getString}: written {← kernel written}, repaired {← kernel repaired}, \
+              |    mismatched {ScalusProofs.Run.hasMismatchedDite repaired}"
+              |
+              |#scalus_dite "bool"
+              |  ∀ (a b : Bool) (x y z : Nat) (f : b && (a || !a) → Nat → Nat),
+              |    (if h : b && (a || !a) then (f h x + 40) - 40 else y) < z
+              |
+              |#scalus_dite "deMorgan"
+              |  ∀ (p q : Prop) (x y z : Nat) [Decidable p] [Decidable q] (f : ¬ p ∧ ¬ q → Nat → Nat),
+              |    (if h : ¬ p ∧ ¬ q then f h x else y) < z
+              |""".stripMargin
+        leanServer.check(text, Some(2.minutes)) match
+            case LeanServer.Result.Finished(messages) =>
+                assert(!messages.exists(_.severity == LeanServer.Severity.Error), messages)
+                val said = messages.map(_.text.trim)
+                for name <- List("bool", "deMorgan") do
+                    assert(
+                      said.contains(
+                        s"$name: written rejected, repaired accepted, mismatched false"
+                      ),
+                      said
+                    )
+            case other => fail(s"expected Lean's verdicts, got $other")
+    }
+
     test("an attempt of a search is given up at its own time limit") {
         // No check is answered within a millisecond, so the first attempt is given up, and the
         // search with it: a larger budget would only take longer.
