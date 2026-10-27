@@ -8,6 +8,7 @@ import org.typelevel.paiges.Doc.*
 import scalus.uplc.builtin.Data.{B, Constr, FromData, I, Map}
 import scalus.compiler.fieldAsData
 import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.serialization.cbor.Cbor as ScalusCbor
 import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.utils.Pretty.{lit, rainbowBracket}
@@ -110,70 +111,131 @@ private trait DataApi {
     }
 
     /** CBOR encoder for the [[Data]] type. The encoding and decoding logic is based on the
-      * [[https://github.com/IntersectMBO/plutus/blob/441b76d9e9745dfedb2afc29920498bdf632f162/plutus-core/plutus-core/src/PlutusCore/Data.hs#L72 Cardano node implementation]].
+      * [[https://github.com/IntersectMBO/plutus/blob/507cab8cf6192e5143f12be5b2d3005a2928dc6d/plutus-core/plutus-core/src/PlutusCore/Data.hs#L146 Cardano node implementation]].
+      *
+      * The reference has no limit on the nesting depth, so the encoder does not recurse: it keeps
+      * the arrays and maps it has opened on the heap. Borer's validation still stops at 1000
+      * nesting levels; [[scalus.serialization.cbor.Cbor.encode]] writes without it.
       */
     given dataCborEncoder: Encoder[Data] with
-        override def write(writer: borer.Writer, data: Data): borer.Writer =
 
-            def writeChunkedByteArray(value: Array[Byte]) = {
-                if value.length <= 64 then writer.writeBytes(value)
-                else writer.writeBytesIterator(value.grouped(64))
-            }
+        /** A non-empty array being written: the items still to write. */
+        private final class OpenArray(var rest: PList[Data])
 
-            def writeChunkedBigInt(x: BigInt) = {
-                // use the default BigInt serialization, it works same as in the Cardano node
-                if x.bitLength <= 64 then writer.write(x)
-                else
-                    // otherwise, chunk the bytes
-                    val bytes =
-                        val bytes = x.toByteArray
-                        if x.signum < 0 then
-                            bytes.mapInPlace(b => (~b.toInt).toByte) // basically, -1 - x
-                        // in Java first byte CAN be zero (for sign bit), in Haskell it can not
-                        if bytes.head == 0 then bytes.tail else bytes
-                    if x.signum < 0 then writer.writeTag(Tag.NegativeBigNum)
-                    else writer.writeTag(Tag.PositiveBigNum)
-                    writeChunkedByteArray(bytes)
-            }
+        /** A non-empty map being written: the entries still to write. */
+        private final class OpenMap(var rest: PList[(Data, Data)])
 
+        override def write(writer: borer.Writer, data: Data): borer.Writer = {
             data match
-                case Constr(constr, args) if 0 <= constr && constr < 7 =>
-                    writer.writeTag(Other((121 + constr).toLong))
-                    writer.writeLinearSeq(args.toScalaList)
-                case Constr(constr, args) if 7 <= constr && constr < 128 =>
-                    writer.writeTag(Other((1280 + (constr - 7)).toLong))
-                    writer.writeLinearSeq(args.toScalaList)
-                case Constr(constr, args) =>
-                    // The index is a CBOR *unsigned* 64-bit integer, so writing it as a signed
-                    // Long turned everything from 2^63 up into a negative integer - different
-                    // bytes, and a different `serialiseData` hash, than the node produces.
-                    // Borer's BigInt encoder picks the right CBOR major type across the range.
-                    writer.writeTag(Other(102))
-                    writer.writeArrayHeader(2)
-                    writer.write(constr)
-                    writer.writeLinearSeq(args.toScalaList)
-                case Map(values)       => writeMap(writer, values.toScalaList)
-                case Data.List(values) => writer.writeLinearSeq(values.toScalaList)
-                case I(value)          => writeChunkedBigInt(value)
-                case B(value)          => writeChunkedByteArray(value.bytes)
-        /*
-         * Cardano stores maps as a list of key-value pairs
-         * Note, that it allows duplicate keys!
-         * This is why we don't use the `writeMap` method from `Writer` here
-         */
-        private def writeMap[A: Encoder, B: Encoder](
-            writer: borer.Writer,
-            x: Iterable[(A, B)]
-        ): borer.Writer =
-            if x.nonEmpty then
-                val iterator = x.iterator
-                writer.writeMapHeader(x.size)
-                while iterator.hasNext do
-                    val (k, v) = iterator.next()
-                    writer.write(k)
-                    writer.write(v)
-            else writer.writeEmptyMap()
+                case I(value) => writeChunkedBigInt(writer, value)
+                case B(value) => writeChunkedByteArray(writer, value.bytes)
+                case _        => writeNested(writer, data)
             writer
+        }
+
+        private def writeChunkedByteArray(writer: borer.Writer, value: Array[Byte]): Unit = {
+            if value.length <= 64 then writer.writeBytes(value)
+            else writer.writeBytesIterator(value.grouped(64))
+        }
+
+        // The byte string of a big number: `x` for tag 2, `-1 - x` for tag 3
+        private def bigNumBytes(x: BigInt): Array[Byte] = {
+            val bytes = x.toByteArray
+            if x.signum < 0 then bytes.mapInPlace(b => (~b.toInt).toByte) // basically, -1 - x
+            // in Java first byte CAN be zero (for sign bit), in Haskell it can not
+            if bytes.head == 0 then bytes.tail else bytes
+        }
+
+        private def writeBigNumTag(writer: borer.Writer, x: BigInt): Unit =
+            writer.writeTag(if x.signum < 0 then Tag.NegativeBigNum else Tag.PositiveBigNum)
+
+        private def writeChunkedBigInt(writer: borer.Writer, x: BigInt): Unit = {
+            // use the default BigInt serialization, it works same as in the Cardano node
+            if x.bitLength <= 64 then writer.write(x)
+            else
+                // otherwise, chunk the bytes
+                writeBigNumTag(writer, x)
+                writeChunkedByteArray(writer, bigNumBytes(x))
+        }
+
+        private def writeConstrTag(writer: borer.Writer, constr: BigInt): Unit = {
+            if 0 <= constr && constr < 7 then writer.writeTag(Other((121 + constr).toLong))
+            else if 7 <= constr && constr < 128 then
+                writer.writeTag(Other((1280 + (constr - 7)).toLong))
+            else
+                writer.writeTag(Other(102))
+                writer.writeArrayHeader(2)
+                writeConstrIndex(writer, constr)
+        }
+
+        // The index of a tag-102 `Constr` is a CBOR *unsigned* 64-bit integer, so writing it
+        // as a signed Long turned everything from 2^63 up into a negative integer - different
+        // bytes, and a different `serialiseData` hash, than the node produces. Borer's BigInt
+        // encoder picks the right CBOR major type within 64 bits. Beyond them the reference
+        // writes the index with cborg's `encodeInteger`: tag 2 or 3 and ONE definite byte
+        // string, not chunked like the integer of `I`, and without the sign byte `00` that
+        // borer's encoder adds.
+        private def writeConstrIndex(writer: borer.Writer, x: BigInt): Unit = {
+            if x.bitLength <= 64 then writer.write(x)
+            else
+                writeBigNumTag(writer, x)
+                writer.writeBytes(bigNumBytes(x))
+        }
+
+        /** Writes a list, a map or a `Constr`, and all it holds. What is still to write is kept on
+          * the heap, innermost last: the open arrays and maps, and the value of each map entry
+          * whose key is being written.
+          */
+        private def writeNested(writer: borer.Writer, data: Data): Unit = {
+            val pending = ArrayBuffer.empty[OpenArray | OpenMap | Data]
+
+            // A list, and the fields of a `Constr`, are an indefinite array when non-empty
+            def writeArray(items: PList[Data]): Unit = {
+                items match
+                    case PList.Nil => writer.writeEmptyArray()
+                    case _ =>
+                        writer.writeArrayStart()
+                        pending += OpenArray(items)
+            }
+
+            def writeItem(item: Data): Unit = {
+                item match
+                    case Constr(constr, args) =>
+                        writeConstrTag(writer, constr)
+                        writeArray(args)
+                    // Cardano stores maps as a list of key-value pairs and allows duplicate keys,
+                    // so the map is written entry by entry, not with the `writeMap` of `Writer`
+                    case Map(PList.Nil) => writer.writeEmptyMap()
+                    case Map(entries) =>
+                        writer.writeMapHeader(entries.length.toLong)
+                        pending += OpenMap(entries)
+                    case Data.List(values) => writeArray(values)
+                    case I(value)          => writeChunkedBigInt(writer, value)
+                    case B(value)          => writeChunkedByteArray(writer, value.bytes)
+            }
+
+            writeItem(data)
+            while pending.nonEmpty do
+                pending.last match
+                    case array: OpenArray =>
+                        array.rest match
+                            case PList.Cons(head, tail) =>
+                                array.rest = tail
+                                writeItem(head)
+                            case PList.Nil =>
+                                pending.dropRightInPlace(1)
+                                writer.writeBreak()
+                    case map: OpenMap =>
+                        map.rest match
+                            case PList.Cons((key, value), tail) =>
+                                map.rest = tail
+                                pending += value // written after the key and all the key holds
+                                writeItem(key)
+                            case PList.Nil => pending.dropRightInPlace(1)
+                    case value: Data =>
+                        pending.dropRightInPlace(1)
+                        writeItem(value)
+        }
     end dataCborEncoder
 
     /** CBOR decoder for the [[Data]] type. The encoding and decoding logic is based on the
@@ -298,13 +360,13 @@ private trait DataApi {
             writeToString[Data](a, WriterConfig.withIndentionStep(indent))(using dataJsonCodec)
 
     extension [A <: Data](a: A)
-        /** Encode a [[Data]] value to CBOR.
+        /** Encode a [[Data]] value to CBOR. The nesting depth of the value is not limited.
           */
-        def toCbor: Array[Byte] = Cbor.encode(a)(using dataCborEncoder).toByteArray
+        def toCbor: Array[Byte] = ScalusCbor.encode[Data](a)
 
         /** Encode a [[Data]] value to CBOR [[ByteString]]
           */
-        def toCborByteString: ByteString = ByteString.fromArray(toCbor)
+        def toCborByteString: ByteString = ScalusCbor.encodeToByteString[Data](a)
 
     extension (inline data: Data)
         inline def field[A](inline expr: A => Any): Data = fieldAsData(expr)(data)
@@ -342,10 +404,10 @@ private trait DataApi {
 
     given Flat[Data] with
         def bitSize(a: Data): Int =
-            summon[Flat[Array[Byte]]].bitSize(Cbor.encode(a).toByteArray)
+            summon[Flat[Array[Byte]]].bitSize(ScalusCbor.encode(a))
 
         def encode(a: Data, encode: EncoderState): Unit =
-            flat.encode(Cbor.encode(a).toByteArray, encode)
+            flat.encode(ScalusCbor.encode(a), encode)
 
         def decode(decode: DecoderState): Data =
             val bytes = summon[Flat[Array[Byte]]].decode(decode)

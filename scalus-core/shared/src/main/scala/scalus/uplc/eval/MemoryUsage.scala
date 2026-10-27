@@ -1,6 +1,7 @@
 package scalus.uplc.eval
 
 import java.nio.charset.StandardCharsets
+import scala.collection.mutable.ArrayBuffer
 
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
@@ -60,55 +61,48 @@ object MemoryUsage {
     def memoryUsageStringByByteLength(s: String): CostingInteger =
         CostingInteger(s.getBytes(StandardCharsets.UTF_8).length.toLong / 4L)
 
-    def memoryUsageData(d: Data): CostingInteger = {
-        val nodeMem: CostingInteger = CostingInteger(4L)
-        val usage: CostingInteger = d match
-            case Data.I(i)         => memoryUsageInteger(i)
-            case Data.B(bs)        => memoryUsageByteString(bs)
-            case Data.Constr(_, l) => sumList(l.toScalaList)
-            case Data.Map(l) =>
-                var acc: CostingInteger = CostingInteger(0L)
-                val it = l.toScalaList.iterator
-                while it.hasNext do
-                    val t = it.next()
-                    acc = acc + memoryUsageData(t._1) + memoryUsageData(t._2)
-                acc
-            case Data.List(l) => sumList(l.toScalaList)
-        // The cost of each node of the 'Data' object (in addition to the cost of its content).
-        nodeMem + usage
-    }
+    // The cost of each node of the 'Data' object (in addition to the cost of its content).
+    private val dataNodeMem: CostingInteger = CostingInteger(4L)
 
-    private def sumList(l: List[Data]): CostingInteger =
-        var acc: CostingInteger = CostingInteger(0L)
-        val it = l.iterator
-        while it.hasNext do acc = acc + memoryUsageData(it.next())
-        acc
+    def memoryUsageData(d: Data): CostingInteger = {
+        d match
+            case Data.I(i)  => dataNodeMem + memoryUsageInteger(i)
+            case Data.B(bs) => dataNodeMem + memoryUsageByteString(bs)
+            case _          => sumDataNodes(d, dataNodeMem, withLeaves = true)
+    }
 
     /** Counts the number of nodes in a `Data` value (each Constr/Map/List/I/B node is 1, ignoring
       * the size of integer/bytestring leaves). Matches Plutus `DataNodeCount`, used to cost
       * `unValueData`.
       */
-    def memoryUsageDataNodeCount(d: Data): CostingInteger = {
-        val children: CostingInteger = d match
-            case Data.I(_)         => CostingInteger(0L)
-            case Data.B(_)         => CostingInteger(0L)
-            case Data.Constr(_, l) => sumNodeCount(l.toScalaList)
-            case Data.Map(l) =>
-                var acc: CostingInteger = CostingInteger(0L)
-                val it = l.toScalaList.iterator
-                while it.hasNext do
-                    val t = it.next()
-                    acc = acc + memoryUsageDataNodeCount(t._1) + memoryUsageDataNodeCount(t._2)
-                acc
-            case Data.List(l) => sumNodeCount(l.toScalaList)
-        CostingInteger(1L) + children
-    }
+    def memoryUsageDataNodeCount(d: Data): CostingInteger =
+        sumDataNodes(d, CostingInteger(1L), withLeaves = false)
 
-    private def sumNodeCount(l: List[Data]): CostingInteger =
+    /** `nodeCost` for each node of `d`, plus the memory usage of its integers and byte strings when
+      * `withLeaves` is set. The nesting depth of `Data` is not limited, so the nodes still to visit
+      * are kept on the heap, not on the stack.
+      */
+    private def sumDataNodes(
+        d: Data,
+        nodeCost: CostingInteger,
+        withLeaves: Boolean
+    ): CostingInteger = {
         var acc: CostingInteger = CostingInteger(0L)
-        val it = l.iterator
-        while it.hasNext do acc = acc + memoryUsageDataNodeCount(it.next())
+        val pending = ArrayBuffer.empty[Data].addOne(d)
+        while pending.nonEmpty do
+            acc = acc + nodeCost
+            pending.remove(pending.length - 1) match
+                case Data.I(i)         => if withLeaves then acc = acc + memoryUsageInteger(i)
+                case Data.B(bs)        => if withLeaves then acc = acc + memoryUsageByteString(bs)
+                case Data.Constr(_, l) => l.foreach(pending += _)
+                case Data.Map(l) =>
+                    l.foreach { (k, v) =>
+                        pending += k
+                        pending += v
+                    }
+                case Data.List(l) => l.foreach(pending += _)
         acc
+    }
 
     def memoryUsage(a: CekValue): CostingInteger = a match
         case VCon(const) => memoryUsage(const)

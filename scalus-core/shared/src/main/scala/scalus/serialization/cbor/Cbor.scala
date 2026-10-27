@@ -13,7 +13,8 @@ object Cbor {
     /** Encodes a value to CBOR format.
       *
       * This implementation allows [[scalus.cardano.ledger.KeepRaw]] to store original CBOR bytes
-      * when encoding.
+      * when encoding. It writes without borer's validation, so the nesting depth is not limited to
+      * borer's 1000 levels, which `Data.toCbor` and the `serialiseData` builtin rely on.
       * @note
       *   this method uses a workaround to enable storing original CBOR bytes described
       *   [here](https://github.com/sirthias/borer/issues/761#issuecomment-2939269119)
