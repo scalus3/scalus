@@ -29,6 +29,21 @@ Conclusion: test refactoring alone can cut at most part of 8.3 min. F-2 and F-3 
 
 Update 2026-10-21: still 2m20s per job on ubuntu-26.04 (F-27).
 
+Update 2026-10-30, upstream: sbt/sbt#9945 is closed by https://github.com/sbt/sbt/pull/10002
+(merged into `develop`, the 2.x line, 2026-10-30; no `1.13.x` backport yet, and sbt 1.13.1 from
+2026-10-28 predates it). The maintainer's root cause completes point 4 below: sbt-welcome adds
+single-letter aliases for `usefulTasks` (`a` to `f`; `c` = `precommit`, `d` = `ci`, `f` = `mima`).
+While the parser reads `clean`, the prefix `c` already matches alias `c`, so sbt parses the whole
+`precommit` body, which hits `c`, `d` and `f` again. Each key in those bodies goes through
+`Act.key` / `KeyIndex.keys`, which is slow in this cross-project build. That is why the minimal
+builds without sbt-welcome stayed fast (point 5). The fix parses an alias body only after the
+alias name ends.
+
+Our state: the gap is already gone with `commandSequence`. CI run 40940158579 (master 1aba6f19d,
+2026-10-29), all 5 ci-jvm jobs: the first command follows the welcome banner within 0-2 s (it was
+2m20s per job). The remaining `addCommandAlias` calls (`ci-jvm`, `benchmark*`) have one-step
+bodies, and the letter aliases now point at commands with a fixed parser.
+
 Cause, re-validated 2026-10-21 (the first explanation, "parsing `;`-joined commands is slow",
 was incomplete):
 

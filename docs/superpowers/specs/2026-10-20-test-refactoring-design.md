@@ -56,6 +56,7 @@ replaces needs a reason, or it gets the `Slow` tag.
 | `generator` | Fix or extend an `Arbitrary`/`Gen` instance. |
 | `style` | Align a test with the style guide. |
 | `simplify` | Make test code shorter or clearer, with the same assertions. |
+| `budget-pin` | Add or fix a budget pin, per `[BP-1]` to `[BP-9]`. |
 | `main-bug` | A defect in main code, found while reading tests. It goes to `findings.md`, not to the backlog. |
 
 ## Phases
@@ -336,11 +337,127 @@ get lost; the pilot found two (F-33, F-34).
 - The Fable reviewer MUST merge `extract-helper` and `adopt-helper` findings across clusters. `[P3-3]`
 - The Fable reviewer MUST write the backlog to `docs/internal/test-refactor/backlog.md`. `[P3-4]`
 - The backlog MUST be grouped by scope first, then by module. `[P3-5]`
-- The backlog MUST order scopes by estimated CI time saved, largest first. `[P3-6]`
+- *Withdrawn 2026-10-27:* `[P3-6]` (order scopes by CI time saved). P1 took the large CI wins;
+  the 761 remaining findings save 61 s in total, so that order carries no information.
 - The owner MUST approve the backlog before P4 starts. `[P3-7]`
+- The backlog MUST order the scopes as follows. `[P3-8]`
+
+  | Step | Scope | Reason for the position |
+  |---|---|---|
+  | 1 | `extract-helper` | Later steps use the new helpers. This step also implements the budget-pin API and its update tool. |
+  | 2 | `adopt-helper` | Needs step 1. |
+  | 3 | `simplify` | Largest shrink (about 15k lines). |
+  | 4 | `merge-duplicate-tests` | About 7k lines. `[AG-8]` protects the assertions. |
+  | 5 | `budget-pin` | Pins go on the tests that survived steps 3 and 4. |
+  | 6 | `generator` | Property tests need good generators. |
+  | 7 | `to-property` | Needs step 6. |
+  | 8 | `strengthen-assertion` | Only on the tests that survived. |
+  | 9 | `fill-gap` | New tests come last, in the final style. |
+
+- The Fable reviewer MUST fold each `ci-time` and `style` finding into the earliest unit, in
+  `[P3-8]` order, that touches the same file. A finding with no such unit MUST go to the unit of its module in step 3. `[P3-9]`
+- `helpers.md` MUST show, for each new or changed helper: its signature, one before/after
+  example from a real test, and the number of call sites it replaces. `[P3-10]`
+- The owner MUST approve each helper in `helpers.md` before any unit applies it. `[P3-11]`
+- The Fable reviewer MUST choose the helper API from what the code base already has, plus
+  what the findings ask for. It MUST name the existing helper that each new helper replaces or
+  extends. `[P3-12]`
+- `helpers.md` MUST define the budget-pin API that `[BP-1]` to `[BP-8]` require. `[P3-13]`
 
 *Example, illustrative, for `[P3-3]`:* five clusters each build an Emulator with a funded
 party. P3 creates one `extract-helper` unit for it, not five.
+
+### Method
+
+1. A script writes `docs/internal/test-refactor/p3/findings-by-scope/<scope>.jsonl`: every P2
+   finding except `main-bug`, with its cluster, module and verdict. The 42 reports (1.8 MB) are
+   too large for one agent.
+   - The script also writes `helper-mentions.jsonl`: findings of any scope whose `action` names a
+     helper or asks for one.
+   - The script joins findings across scopes and clusters by evidence path and by the def names
+     of `repeated-defs.csv`, into `cross-cluster.jsonl`.
+   - A second script writes `budget-inventory.csv`: every on-chain evaluation site (file, line,
+     suite, test) with its pin state: `none`, `upper-bound`, `exact`, `exact+fee`, `size`,
+     `tx-fee`, `forced-fee` or `property`.
+2. Agent H (Fable) reads the `extract-helper`, `adopt-helper` and `simplify` digests, the helper
+   inventory (`shared-helpers.csv`, `repeated-defs.csv`), `helper-mentions.jsonl`,
+   `cross-cluster.jsonl`, `budget-inventory.csv` and the existing helper sources. It writes
+   `helpers.md`, including the budget-pin API and where it lives (core test sources, or the
+   published `scalus-testkit` main, which MiMa and the interop rules govern).
+3. The owner reviews `helpers.md` `[P3-11]`.
+4. Agent S (Fable) reads the `style` digest, `helpers.md`, the `lanthorn:writing-tests` and
+   `scalus:contract-test` skills, and samples of the best and worst tests the reports name. It
+   writes `style-guide.md`.
+5. A script groups the remaining findings into draft units by scope and module, with the size
+   limit of `[P4-3]`.
+6. Agent B (Fable) turns the draft units into `backlog.md`: it merges duplicate findings, folds
+   `ci-time` and `style` per `[P3-9]`, builds the `budget-pin` units from `budget-inventory.csv`,
+   and orders per `[P3-8]`.
+7. The owner approves the backlog `[P3-7]`.
+
+**Why:** `[P3-8]`: shrinking first avoids work on tests that are deleted anyway, and new tests are
+written once, in the final style. The cost is one gap in the safety net: the coverage gate sees a
+lost statement, not a weaker assertion. `[AG-8]` closes that gap. `[P3-11]`: a helper used by
+hundreds of call sites is expensive to change after the units apply it.
+
+## Budget pins
+
+**Purpose:** catch budget drift of on-chain code, and record each improvement.
+
+Definitions for this section:
+
+| Term | Meaning |
+|---|---|
+| on-chain test | A test that evaluates UPLC compiled from Scalus code: a validator, or a prelude or stdlib function. |
+| budget pin | An exact expected value of memory, CPU steps and fee for one evaluation. |
+| execution fee | `ExUnits.fee(CardanoInfo.mainnet.protocolParams.executionUnitPrices)` (ceiling). The prices come from the checked-in snapshot `blockfrost-params-epoch-645.json`. A snapshot change updates every fee pin in one commit, with the tool. |
+
+- Each on-chain test MUST pin the budget of each fixed-input evaluation whose result it
+  asserts, also when the expected result is a failure. `[BP-1]`
+- An evaluation with ScalaCheck inputs is exempt from `[BP-1]`. A property test SHOULD keep one
+  fixed-input case with a pin. `[BP-1a]`
+- A differential test that asserts one budget equals another (for example JIT = CEK) is exempt
+  from `[BP-1]`. `[BP-1b]`
+- A budget pin MUST compare exact values. It MUST NOT be an upper bound. `[BP-2]`
+- A budget pin MUST include memory, CPU steps and the execution fee. `[BP-3]`
+- A test that builds and balances a transaction MUST pin `tx.body.value.fee` of the transaction
+  under test. A fee that the test forces is not a pin. `[BP-4]`
+- A test of a validator SHOULD also pin the script size in bytes. `[BP-5]`
+- When the pinned values differ between compiler generations, the pin MUST hold one value per
+  generation. `[BP-6]`
+- The compiler generation MUST be readable on every platform and project that runs a pinned
+  test. Today only `scalusExamplesJVM` sets `-Dscalus.test.scalaVersion`. `[BP-6a]`
+- A pin that checks several `Options` MUST hold one value per `Options`. `[BP-6b]`
+- On a mismatch, the failure message MUST show the expected and actual values and the
+  difference in percent, for each pinned quantity. It MUST show the pin key, and the percent
+  with one decimal and a sign, relative to the expected value. `[BP-7]`
+- A tool MUST be able to update every pin from a test run, without manual edits. `[BP-8]`
+- Each pin MUST have a key that is unique in its suite: the test name, plus a label when a test
+  pins more than one evaluation. The tool MUST update by key, never by value. `[BP-8a]`
+- The tool MUST run on the JVM. JS and Native runs MUST only check the pins. `[BP-8b]`
+- A pin whose key no test uses MUST fail the suite. A test that evaluates on-chain code and finds
+  no pin for its key MUST fail. `[BP-8c]`
+- A commit that changes a pin MUST state the old and new values, or the total change, in its
+  message. `[BP-9]`
+
+*Example, illustrative, for `[BP-2]` and `[BP-7]`:* a pin of `memory = 25 694`, `steps = 4 809 547`
+fails when an optimization lowers memory to `25 100`, with the message
+`memory 25 694 -> 25 100 (-2.3 %)`. The developer updates the pin, and the commit message records
+the improvement.
+
+**Why:** `[BP-2]`: an upper bound catches a regression but hides an improvement; the owner wants
+both visible. `[BP-3]`: the owner compares on fee and memory, not on CPU. `[BP-5]`: script size is
+most of the script fee. `[BP-8]`: `scripts/update-budgets.py` rewrites `ExUnits` literals by
+value, so two tests with the same literal overwrite each other's pin: `ValueTest` has
+`ExUnits(memory = 500, steps = 64100)` at 6 sites. `[BP-8c]` makes a lost pin (`[AG-9]`) visible
+without review.
+
+*Implementation status (2026-10-27):* `EvalTestKit` has `assertEvalWithBudgets` and
+`assertEvalWithBudgetAndFee`. There are 809 `ExUnits(...)` literals in 79 test files; some are
+inputs, not pins (`PlutusScriptsTransactionMutatorTest`, `ExUnitsTest`). Fee pins exist in about
+18 places. `[BP-8]` to `[BP-8c]` are not met. Fable's review (2026-10-27) recommends a generated,
+committed Scala table per suite (`<Suite>Budgets.scala`, a map from key to pin, one column per
+generation), rewritten by a JVM run with `-Dscalus.budgets.update=true`. `helpers.md` decides.
 
 ## P4..N – Implement
 
@@ -351,6 +468,8 @@ party. P3 creates one `extract-helper` unit for it, not five.
 - Each unit MUST cover one scope in one module. `[P4-1]`
 - Each unit MUST live on its own branch in its own git worktree. `[P4-2]`
 - A unit SHOULD change at most about 800 lines. A larger unit MUST split by package. `[P4-3]`
+- A `budget-pin` unit MAY split by file. Then `[P4-4]` means one commit per file. `[P4-3a]`
+- Two active units MUST NOT change the same suite or its budget table. `[P4-5a]`
 - Each unit MUST have one commit per cluster. `[P4-4]`
 - At most 2 units MAY be active at one time. `[P4-5]`
 - The coordinator MUST run `sbtn shutdown` in the worktree when its unit ends. `[P4-6]`
@@ -395,8 +514,19 @@ commit by commit.
 - Each commit that deletes a test MUST name, in its message, the test that now covers the
   behavior. `[AG-7]`
 
+- When an edit agent merges tests, the merged test MUST keep every assertion of each source
+  test, except one that a kept assertion implies. Exact equality implies any predicate on the
+  same value. `[AG-8]`
+- When an edit agent merges or deletes tests, it MUST keep every budget pin of the source
+  tests. A `to-property` unit MUST keep one fixed-input case with a pin per source pin. `[AG-9]`
+- An edit agent MUST treat the `action` of an `UNVERIFIED` finding as a hypothesis. It MUST
+  confirm the `claim` on the `evidence` lines before it edits. If the claim does not hold, it
+  MUST skip the finding and report it. `[AG-10]`
+
 **Why:** `[AG-5]`: a new property test can find a real bug. A silent "fix" of the test would
-hide it. `[AG-7]`: the owner can check each deletion against the coverage diff.
+hide it. `[AG-7]`: the owner can check each deletion against the coverage diff. `[AG-10]`: 593 of
+the 810 P2 findings were not verified. `[AG-8]`: the
+coverage gate does not see a weaker assertion. `[AG-9]`: a lost pin hides future budget drift.
 
 ## Execution order
 
