@@ -1,6 +1,6 @@
 package scalus.uplc.builtin
 
-import io.bullet.borer.Cbor
+import io.bullet.borer.{Cbor, Tag}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.uplc.builtin
@@ -130,6 +130,31 @@ class DataCborCodecTest extends AnyFunSuite with ScalaCheckPropertyChecks with A
         assertRejects("d8 66 82 c2 49 010000000000000000 80")
     }
 
+    /* `encodeData` writes an index beyond 64 bits with cborg's `encodeInteger`: tag 2 and ONE
+     * definite byte string of the minimal magnitude, not chunked like the integer of `I`. Borer's
+     * BigInt encoder added Java's sign byte `00` whenever the top bit of the magnitude was set.
+     * The expected bytes are `serialiseData` of plutus-ledger-api 1.70.0.0, reported in #398.
+     */
+    test("Constr index beyond 64 bits is one definite byte string without a sign byte") {
+        def expected(magnitude: String) = {
+            val length = magnitude.length / 2
+            val head = if length < 24 then f"${0x40 + length}%02x" else f"58$length%02x"
+            "d86682c2" + head + magnitude + "80"
+        }
+        val cases = Seq(
+          65 -> ("01" + "ff" * 8),
+          72 -> "ff" * 9,
+          512 -> "ff" * 64,
+          513 -> ("01" + "ff" * 64),
+          600 -> "ff" * 75
+        )
+        for (bits, magnitude) <- cases do
+            val d = Constr((BigInt(1) << bits) - 1, PList.Nil)
+            assert(encodeHex(d) == expected(magnitude), s"index of $bits bits")
+            assert(Utils.bytesToHex(Builtins.serialiseData(d).bytes) == expected(magnitude))
+        assert(encodeHex(Constr(twoTo64, PList.Nil)) == expected("01" + "00" * 8))
+    }
+
     test("Constr index must be a non-negative integer") {
         assertRejects("d8 66 82 20 80") // -1
         assertRejects("d8 66 82 3b 8000000000000000 80") // -2^63 - 1, a negative overlong
@@ -228,3 +253,46 @@ class DataCborCodecTest extends AnyFunSuite with ScalaCheckPropertyChecks with A
             roundtrip(d)
         }
     }
+
+    test("the bytes are those of the recursive encoder it replaced") {
+        forAll { (d: Data) =>
+            val expected = Utils.bytesToHex(Cbor.encode(d)(using RecursiveEncoder).toByteArray)
+            assert(Utils.bytesToHex(d.toCbor) == expected)
+            assert(Utils.bytesToHex(Builtins.serialiseData(d).bytes) == expected)
+        }
+    }
+
+    /** The recursive encoder that `dataCborEncoder` replaced (#398), kept as an oracle: the bytes
+      * must not change, except for a `Constr` index beyond 64 bits, which the generator does not
+      * produce.
+      */
+    private object RecursiveEncoder extends io.bullet.borer.Encoder[Data]:
+        def write(w: io.bullet.borer.Writer, data: Data): io.bullet.borer.Writer = {
+            given io.bullet.borer.Encoder[Data] = this
+            def bytes(value: Array[Byte]) = {
+                if value.length <= 64 then w.writeBytes(value)
+                else w.writeBytesIterator(value.grouped(64))
+            }
+            data match {
+                case Constr(c, args) =>
+                    if c < 7 then w.writeTag(Tag.Other((121 + c).toLong))
+                    else if c < 128 then w.writeTag(Tag.Other((1280 + (c - 7)).toLong))
+                    else w.writeTag(Tag.Other(102)).writeArrayHeader(2).write(c)
+                    w.writeLinearSeq(args.toScalaList)
+                case Map(entries) =>
+                    val pairs = entries.toScalaList
+                    if pairs.isEmpty then w.writeEmptyMap()
+                    else
+                        w.writeMapHeader(pairs.size)
+                        pairs.foreach((k, v) => w.write(k).write(v))
+                        w
+                case List(items)               => w.writeLinearSeq(items.toScalaList)
+                case I(x) if x.bitLength <= 64 => w.write(x)
+                case I(x) =>
+                    val magnitude = x.toByteArray
+                    if x.signum < 0 then magnitude.mapInPlace(b => (~b.toInt).toByte)
+                    w.writeTag(if x.signum < 0 then Tag.NegativeBigNum else Tag.PositiveBigNum)
+                    bytes(if magnitude.head == 0 then magnitude.tail else magnitude)
+                case B(value) => bytes(value.bytes)
+            }
+        }

@@ -1,7 +1,6 @@
 package scalus.cardano.txbuilder
 
-import io.bullet.borer.Cbor
-import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.TransactionBuilder.Operation
@@ -81,11 +80,16 @@ object StepError {
         datumHash: DataHash,
         step: TransactionBuilderStep
     ) extends StepError {
-        override def explain
-            : String = "You provided a `DatumWitness` with a datum that does not match the datum hash present in a transaction output.\n " +
-            s" Datum: $datum (CBOR: ${ByteString.fromArray(Cbor.encode(datum).toByteArray).toHex})\n  " +
-            s" Datum hash: ${datumHash.toHex}\n  " +
-            s"UTxO: $utxo"
+        override def explain: String = {
+            val cbor = datum.toCborByteString
+            // `Data.toString` recurses over the nesting, which is at most one level per CBOR byte,
+            // so only a datum of a few hundred bytes is shown in readable form
+            val readable = if cbor.size <= 512 then s"$datum " else ""
+            "You provided a `DatumWitness` with a datum that does not match the datum hash present in a transaction output.\n " +
+                s" Datum: $readable(CBOR: ${cbor.toHex})\n  " +
+                s" Datum hash: ${datumHash.toHex}\n  " +
+                s"UTxO: $utxo"
+        }
     }
 
     case class IncorrectScriptHash(
