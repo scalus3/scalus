@@ -611,24 +611,30 @@ final class Verifier private (results: Option[KeptResults]) {
     /** Runs an already compatible tactic and registers a successful theorem for later goals. */
     def prove(prepared: PreparedRun): ExecutionResult = {
         require(prepared.verifier eq this, "the prepared run belongs to another verifier")
+        // A proof uses only the theorems the verifier has, and says how it was found.
+        def checked(proof: Proof): Unit = {
+            proof.usedLemmas.foreach { lemma =>
+                require(
+                  proven.get(lemma.statement.name).exists(_ eq lemma),
+                  s"tactic ${prepared.tacticName} used an unavailable lemma ${lemma.statement.name}"
+                )
+            }
+            require(
+              proof.artifact != null,
+              s"tactic ${prepared.tacticName} supplied no proof artifact"
+            )
+        }
         prepared.execute() match
             case VerificationResult.Proven(proof) =>
-                proof.usedLemmas.foreach { lemma =>
-                    require(
-                      proven.get(lemma.statement.name).exists(_ eq lemma),
-                      s"tactic ${prepared.tacticName} used an unavailable lemma ${lemma.statement.name}"
-                    )
-                }
-                require(
-                  proof.artifact != null,
-                  s"tactic ${prepared.tacticName} supplied no proof artifact"
-                )
+                checked(proof)
                 val theorem = new Theorem(prepared.statement, proof)
                 proven = proven.updated(prepared.statement.name, theorem)
                 VerificationResult.Proven(proof)
             // A proof within a bound is of a weaker statement: no theorem is registered.
-            case within @ VerificationResult.ProvenWithin(_, _) => within
-            case VerificationResult.Refuted(proof)              => VerificationResult.Refuted(proof)
+            case within @ VerificationResult.ProvenWithin(proof, _) =>
+                checked(proof)
+                within
+            case VerificationResult.Refuted(proof) => VerificationResult.Refuted(proof)
             case inconclusive @ VerificationResult.Inconclusive(_) => inconclusive
             case failed @ VerificationResult.Failed(_)             => failed
     }

@@ -180,42 +180,39 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     // The deployed script, on every context the node gives it
 
-    /** The script as the ledger runs it, with a seed and tokens of its own: the optimized
-      * deserializer of the context, and the policy.
-      */
-    private val deployed = FunctionDef.named(
-      "deployed",
-      (ctxData: Data) =>
-          MintingPolicy.mintingPolicyScript(MintingPolicy.optimizedCtxDeserializer)(
-            seedTxId,
-            BigInt(0),
-            SortedMap.singleton(tokenName, BigInt(1000))
-          )((), ctxData)
-    )
-
-    verifier.addFunction(deployed)
-
-    /** Only the seed mints, of every script context, with no shape: the context is one `Data`, the
-      * encoding of a context, as the node gives a script. Checked within a budget, it would hold of
-      * every context on which the script and the test end within it. Lean does not finish it: the
-      * symbolic run follows every way a `Data` can be read, and every length of the inputs, of the
-      * mint and of the tokens, to the end of the budget.
-      */
-    private val deployedOnlyTheSeedMints = verifier.statement(
-      "one_shot_mint.deployed.only_the_seed_mints",
-      forAllData[v1.ScriptContext](ctx => succeeds(deployed, ctx.toData) ==> onlyTheSeedMints(ctx))
-    )
-
     test(
       "the deployed script, on every context the node gives it: only the seed mints",
       Unfinished
     ) {
+        // The script as the ledger runs it, with a seed and tokens of its own: the optimized
+        // deserializer of the context, and the policy. It is linked only where it is checked.
+        val deployed = FunctionDef.named(
+          "deployed",
+          (ctxData: Data) =>
+              MintingPolicy.mintingPolicyScript(MintingPolicy.optimizedCtxDeserializer)(
+                seedTxId,
+                BigInt(0),
+                SortedMap.singleton(tokenName, BigInt(1000))
+              )((), ctxData)
+        )
+        verifier.addFunction(deployed)
+        // Only the seed mints, of every script context, with no shape: the context is one `Data`,
+        // the encoding of a context, as the node gives a script. Checked within a budget, it would
+        // hold of every context on which the script and the test end within it. Lean does not
+        // finish it: the symbolic run follows every way a `Data` can be read, and every length of
+        // the inputs, of the mint and of the tokens, to the end of the budget.
+        val deployedOnlyTheSeedMints = verifier.statement(
+          "one_shot_mint.deployed.only_the_seed_mints",
+          forAllData[v1.ScriptContext](ctx =>
+              succeeds(deployed, ctx.toData) ==> onlyTheSeedMints(ctx)
+          )
+        )
         // At 2000 steps Lean was still in the symbolic run of a test after 10 minutes.
         val reason = inconclusive(
           deployedOnlyTheSeedMints,
           UplcBlaster(Budget.Within(2000), lean, 60.seconds)
         )
-        assert(reason.contains("symbolically"), reason)
+        assert(reason.contains("did not finish"), reason)
     }
 }
 

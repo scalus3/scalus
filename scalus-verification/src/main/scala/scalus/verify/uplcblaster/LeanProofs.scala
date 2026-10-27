@@ -245,13 +245,22 @@ final class LeanProofs private (
 
     /** Runs `request` in `verifier`, and holds its result to the one the request expects: every
       * expectation of these proofs is held so. A proof is to be among the verifier's theorems, and
-      * a refuted statement is not to be.
+      * a refuted statement is not to be. A proof within a budget is one where the request asks for
+      * a check within that budget, and makes no theorem.
       */
     private def checked(verifier: Verifier, request: VerificationRequest): VerificationResult = {
         val statement = request.statement
         val name = statement.name
-        val result = run(verifier, statement, request.tactic)
         def isTheorem = verifier.theorems.exists(_.statement eq statement)
+        val wasTheorem = isTheorem
+        val result = run(verifier, statement, request.tactic)
+        // The budget a check within one is asked for at.
+        val within = request.tactic match
+            case blaster: UplcBlaster =>
+                blaster.budget match
+                    case Budget.Within(steps) => Some(steps)
+                    case _                    => None
+            case _ => None
         (request.expected, result) match
             case (ExpectedOutcome.Valid, VerificationResult.Proven(proof)) =>
                 proof.artifact match
@@ -261,11 +270,19 @@ final class LeanProofs private (
             // A check within a budget is asked for, and proves the statement within it, which is
             // no theorem.
             case (ExpectedOutcome.Valid, VerificationResult.ProvenWithin(proof, _)) =>
+                if within.isEmpty then
+                    failed(s"$name: expected a proof, got ${LeanProofs.describe(result)}")
                 proof.artifact match
-                    case artifact: UplcBlaster.Artifact => checkedProof(artifact)
-                    case _                              =>
-                if isTheorem then
-                    failed(s"$name: proved within a budget, and the verifier has a theorem of it")
+                    case artifact: UplcBlaster.Artifact =>
+                        checkedProof(artifact)
+                        if !within.contains(artifact.budget) then
+                            failed(
+                              s"$name: proved within ${artifact.budget} steps, where a check " +
+                                  s"within ${within.mkString} steps was asked for"
+                            )
+                    case _ =>
+                if isTheorem && !wasTheorem then
+                    failed(s"$name: proved within a budget, and made a theorem of")
             case (ExpectedOutcome.Falsified, VerificationResult.Refuted(_)) =>
                 if isTheorem then failed(s"$name: refuted, and the verifier has a theorem of it")
             case (ExpectedOutcome.Valid, other) =>

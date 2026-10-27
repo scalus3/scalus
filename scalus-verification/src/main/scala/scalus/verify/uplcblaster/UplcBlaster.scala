@@ -187,8 +187,8 @@ final class UplcBlaster private (
                               "statement whose quantifiers all stand for every value, a forAll in " +
                               "a positive position or an exists in a negative one"
                         )
-                    case Budget.Within(_) => Right(lowered.copy(within = true))
-                    case _                => Right(lowered)
+                    case Budget.Within(steps) => Right(lowered.copy(within = Some(steps)))
+                    case _                    => Right(lowered)
             )
             .left
             .map(reason =>
@@ -323,10 +323,10 @@ object UplcBlaster {
           * values than its type: a function to `Bool`, applied to the variable in the quantifier.
           */
         private[uplcblaster] val predicates: Vector[Option[String]] = Vector.empty,
-        /** Whether it is checked within its budget ([[Budget.Within]]): a run the budget cuts is
-          * read in the statement's favour, and a proof is one within the budget.
+        /** The budget it is checked within ([[Budget.Within]]), where it is: a run the budget cuts
+          * is read in the statement's favour, and a proof is one within the budget.
           */
-        private[uplcblaster] val within: Boolean = false
+        private[uplcblaster] val within: Option[Int] = None
     ) {
 
         /** The SHA-256 of each leaf's program CBOR, in the order of [[leaves]]. */
@@ -1612,6 +1612,14 @@ object UplcBlaster {
         keep.foreach(keepCheck(goal, budget, maxHeartbeats, _))
         val checked = server.check(checkSource(goal, budget, maxHeartbeats, _), timeout)
         probed(goal, budget, checked, timeout.mkString) match
+            // Within a budget a run the budget cuts counts for the statement, and a run that ends
+            // within it ends so with more steps: the budget is not at fault.
+            case Probe.Spurious(_, reason) if goal.within.isDefined =>
+                VerificationResult.Inconclusive(
+                  s"$reason. Within a budget a run the budget cuts counts for the statement, so " +
+                      "more steps change nothing: the values read from Lean's counterexample do " +
+                      "not show what Lean found" + unknownTo(goal)
+                )
             // The budget was given, so no other is tried. Lean's machine says whether the budget
             // is at fault: a counterexample is spurious for another reason too.
             case Probe.Spurious(values, reason) =>
@@ -2181,7 +2189,7 @@ object UplcBlaster {
                 VerificationResult.Failed(s"Lean reported an error: ${concise(output)}")
             else VerificationResult.Failed(s"Lean reported no verdict: ${concise(output)}")
         def proved: ExecutionResult =
-            if goal.within then
+            if goal.within.isDefined then
                 VerificationResult.ProvenWithin(Proof(artifact), withinBound(budget))
             else VerificationResult.Proven(Proof(artifact))
         if closed then
@@ -2724,7 +2732,7 @@ object UplcBlaster {
         val check =
             if goal.binders.isEmpty then
                 val state = (leaf: Int) => s"(runProgramFor leaf$leaf.script [] $budget)"
-                s"example : ${renderFormula(goal.body, state, _ => "", _ => None, positive = true, goal.within)} := by native_decide"
+                s"example : ${renderFormula(goal.body, state, _ => "", _ => None, positive = true, goal.within.isDefined)} := by native_decide"
             else
                 val names = goal.binders.indices.map(index => s"x$index").toList
                 val declarations = goal.binders.zip(names).map { (binder, name) =>
@@ -2756,7 +2764,7 @@ object UplcBlaster {
                       declaration,
                       premise,
                       positive = true,
-                      goal.within
+                      goal.within.isDefined
                     )
                 s"""${arguments.mkString("\n")}
                    |
@@ -2774,12 +2782,14 @@ object UplcBlaster {
       * programs, each program, and Lean's side as `workspace` has it.
       *
       * The budget is not part of it: a proof at any budget holds without the budget, and a
-      * refutation is replayed without one.
+      * refutation is replayed without one. A check within a budget ([[Budget.Within]]) is the
+      * exception: its proof is of the inputs its budget reaches, and is none at another budget, so
+      * its text has its budget.
       */
     private[uplcblaster] def fingerprint(goal: Lowered, workspace: Path): Fingerprint =
         Fingerprint(
           LeanWorkspace.environment(workspace),
-          Fingerprint.hash(document(Vector.empty, checkBody(goal, 0), 0)),
+          Fingerprint.hash(document(Vector.empty, checkBody(goal, goal.within.getOrElse(0)), 0)),
           goal.leaves.toList.map(program => Fingerprint.hash(program.cborEncoded))
         )
 
@@ -2849,12 +2859,13 @@ object UplcBlaster {
         artifact: Artifact
     ): Either[String, ExecutionResult] =
         kept.result match
-            // A check within its budget proves less, and its text is another: the two are kept
-            // apart, and a proof of one is none of the other.
-            case Kept.Result.Proved if goal.within =>
+            // A check within a budget proves less, and its text, which has its budget, is
+            // another ([[fingerprint]]): a result kept for one is not looked up for the other.
+            // A proof of one is none of the other, wherever a result comes from.
+            case Kept.Result.Proved if goal.within.isDefined =>
                 Left("it was proved without a budget, and is checked within one")
             case Kept.Result.Proved => Right(VerificationResult.Proven(Proof(artifact)))
-            case Kept.Result.ProvedWithin if goal.within =>
+            case Kept.Result.ProvedWithin if goal.within.isDefined =>
                 Right(
                   VerificationResult.ProvenWithin(Proof(artifact), withinBound(artifact.budget))
                 )

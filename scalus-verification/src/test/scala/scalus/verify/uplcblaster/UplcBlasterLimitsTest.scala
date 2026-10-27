@@ -8,7 +8,9 @@ import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.builtin.Data
 import scalus.verify.*
 import scalus.verify.Props.*
+import scalus.verify.lean.{Directories, LeanServer, LeanServerProvider}
 
+import java.nio.file.Files
 import scala.concurrent.duration.*
 
 /** Statements that are natural to write and that [[UplcBlaster]] cannot settle: their programs
@@ -71,27 +73,68 @@ class UplcBlasterLimitsTest extends AnyFunSuite with LeanProofsSuite {
             case Right(_)     => fail("expected the statement to be refused")
     }
 
-    test("a proof within a budget is kept apart from a proof") {
+    test("a proof within a budget is kept for its budget, apart from a proof") {
+        // A provider that says its workspace and has no server: whatever asks Lean fails.
+        val silent = new LeanServerProvider {
+            override def server(): Either[String, LeanServer] = Left("Lean was asked")
+            override def workspace: scala.Option[java.nio.file.Path] = scala.Some(leanWorkspace)
+        }
+        val directory = Files.createTempDirectory("scalus-kept-")
+        val file = directory.resolve("Within.proofs.json")
+        // The statement, in a verifier of its own that keeps its results as `mode` says.
+        def stated(mode: KeptResults.Mode): (Verifier, Statement) = {
+            val verifier = Verifier.keeping(KeptResults.in(file, mode))
+            verifier.addFunction(length)
+            verifier -> verifier.statement("length", lengthIsNotNegative)
+        }
+        def verified(mode: KeptResults.Mode, tactic: UplcBlaster): VerificationResult = {
+            val (verifier, statement) = stated(mode)
+            verifier.verify(statement, tactic)
+        }
+        def stale(result: VerificationResult): Boolean = result match
+            case VerificationResult.Inconclusive(reason) => reason.startsWith(KeptResults.stale)
+            case _                                       => false
+        try
+            // With Lean, once.
+            val asked = verified(KeptResults.Mode.Use, UplcBlaster(Budget.Within(400), lean))
+            assert(asked.isInstanceOf[VerificationResult.ProvenWithin], asked)
+            // Without Lean: within the same budget it is the proof that was kept,
+            verified(KeptResults.Mode.Frozen, UplcBlaster(Budget.Within(400), silent)) match
+                case VerificationResult.ProvenWithin(proof, bound) =>
+                    val artifact = proof.artifact.asInstanceOf[UplcBlaster.Artifact]
+                    assert(artifact.kept && artifact.budget == 400)
+                    assert(bound == UplcBlaster.withinBound(400))
+                case other => fail(s"expected the kept proof within 400 steps, got $other")
+            // and it is none within another budget, which reaches other inputs, or without one.
+            val wider = UplcBlaster(Budget.Within(800), silent)
+            assert(stale(verified(KeptResults.Mode.Frozen, wider)))
+            assert(stale(verified(KeptResults.Mode.Frozen, UplcBlaster(Budget.Auto, silent))))
+            // The file keeps one result for a name: a run that checks one statement in two ways
+            // would keep each in place of the other.
+            val (verifier, statement) = stated(KeptResults.Mode.Use)
+            verifier.verify(statement, UplcBlaster(Budget.Within(400), silent))
+            val twice = intercept[IllegalStateException](verifier.verify(statement, wider))
+            assert(twice.getMessage.contains("as another statement"), twice.getMessage)
+        finally Directories.remove(directory)
+        // A proof of one is none of the other, wherever a kept result comes from.
         val goal = UplcBlaster.lower(lengthIsNotNegative, FunctionTable(length)) match
-            case Right(lowered) => lowered.copy(within = true)
+            case Right(lowered) => lowered.copy(within = Some(400))
             case Left(reason)   => fail(reason)
-        val artifact = UplcBlaster.Artifact(
-          goal.programHashes,
-          400,
-          "",
-          Nil,
-          "",
-          ProofKind.Blaster,
-          kept = false
-        )
+        val artifact =
+            UplcBlaster.Artifact(
+              goal.programHashes,
+              400,
+              "",
+              Nil,
+              "",
+              ProofKind.Blaster,
+              kept = false
+            )
         val proof: ExecutionResult =
             VerificationResult.ProvenWithin(Proof(artifact), UplcBlaster.withinBound(400))
         val kept = UplcBlaster.kept(goal, proof).getOrElse(fail("a proof within a budget is kept"))
         assert(kept.result == Kept.Result.ProvedWithin)
-        assert(
-          UplcBlaster.restored(goal, kept).exists(_.isInstanceOf[VerificationResult.ProvenWithin])
-        )
-        assert(UplcBlaster.restored(goal.copy(within = false), kept).isLeft)
+        assert(UplcBlaster.restored(goal.copy(within = None), kept).isLeft)
     }
 
     test("a loop that only walks a list is inconclusive in seconds, at any budget", Unfinished) {

@@ -254,7 +254,9 @@ function's own program agree when both are lowered with the same options:
 positive reading is strong: the program halts within the budget with the right result. A
 negative reading is weak: the program neither halts with the wrong result nor fails within the
 budget, so a run that exhausts the budget counts as possibly right. The overview (§6.2) shows why
-a proof at any budget then holds without the budget.
+a proof at any budget then holds without the budget. A check within a budget (`Budget.Within`)
+reads a run the budget cuts the other way, in the statement's favour, and proves less: [A check
+within a budget](#a-check-within-a-budget).
 
 Every reading is an equation between `Bool` values, for two reasons:
 
@@ -447,6 +449,11 @@ The result depends on what `holds` finds:
     `sha3_256(preimage)` for an image.
   - that the statement takes more steps there than a search counts, or holds at no budget on
     Lean's machine.
+
+  Within a budget (`Budget.Within`) nothing is counted. A run the budget cuts counts for the
+  statement there, and a run that ended within the budget ends so with more steps, so the budget
+  is never at fault: the message says that the values do not show what Lean found, and names the
+  `opaque` builtins the programs apply.
 - **Undecided, because a leaf exhausted the replay budget:** `Inconclusive`.
 
 ## Budgets
@@ -488,7 +495,10 @@ did not fail, an assumed one halted. Where every run ends within the budget the 
 statement's own; so a proof is a proof of the statement on every input on which each test's program
 ends within `n` steps. It is a `VerificationResult.ProvenWithin`, with that bound in words, and not
 a theorem: no later statement uses it as a lemma, and a kept file keeps it as `proved within`, apart
-from a proof. A counterexample is one where the runs the statement rests on ended, so it is replayed
+from a proof. Its fingerprint has its budget, unlike that of a proof: a proof within one budget is
+none within another, which reaches other inputs. A kept file has one result for a statement's name,
+so a run that checks one statement in two ways, within two budgets or within one and without,
+fails, and the two need names of their own. A counterexample is one where the runs the statement rests on ended, so it is replayed
 as any other, and refutes the statement itself.
 
 A run the budget cuts is no witness: a check within a budget is of a statement whose quantifiers all
@@ -851,6 +861,24 @@ What the suite shows:
 - **Scala has no `inline def` inside an `inline def`.** The policy's local `check` became a
   function of the object when the body moved into `mint`. Inlining expands it as before, and the
   bytes are the same.
+
+**The script on every context is stated, and not finished.** A test tagged `Unfinished` states of
+the script as the ledger runs it, `deployed` (the optimized deserializer and the policy, with a
+seed and tokens of the test's own), that only the seed mints:
+`forAllData[v1.ScriptContext](ctx => succeeds(deployed, ctx.toData) ==> onlyTheSeedMints(ctx))`.
+The context is one `Data`, with no shape. Within 2000 steps (`Budget.Within`) Lean was still in the
+symbolic run of a test after 10 minutes. Within smaller budgets it finishes, and the time grows
+steeply with the budget:
+
+| Within | The script alone | The statement |
+|---|---|---|
+| 300 | 15 s | 11 s |
+| 600 | 9 s | 32 s |
+| 900 | 69 s | no result in 3 min |
+| 1200 | no result in 3 min | no result in 3 min |
+
+The budget bounds the steps of a path, not the length of each list, so the paths are the
+combinations of the lengths of the context's lists whose runs fit in it.
 
 What it does not show: a transaction of any other shape (longer lists of inputs, policies or
 tokens, a transaction without an input, or a mint without the entry of ADA, which the ledger
