@@ -43,8 +43,9 @@ class EmulatorStateInvariantTest extends AnyFunSuite {
         // Without this, a typo in either snippet above would make it fail to compile for an
         // unrelated reason, and the assertion would pass while checking nothing.
         assertCompiles("state.appliedTxLog")
-        // The same `apply` reference compiles for a public case class of this package.
-        assertCompiles("LedgerSnapshot.apply")
+        // The same `apply` reference compiles for a case class with no privacy of its own, in
+        // scalus.cardano.node.emulator, reachable from here since it is only `private[node]`.
+        assertCompiles("scalus.cardano.node.emulator.LedgerSnapshot.apply")
     }
 
     test("initial derives both caches from the log it is given") {

@@ -162,7 +162,8 @@ block makes it visible, and a fork can roll it back. `ChainConfig.blockProductio
 preset:
 
 ```scala
-import scalus.cardano.node.{ChainConfig, Emulator}
+import scalus.cardano.node.Emulator
+import scalus.cardano.node.emulator.ChainConfig
 
 // The default: every submit forges a block at once, so every example above still holds.
 val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address), Value.ada(1000), ChainConfig.instant)
@@ -405,6 +406,7 @@ variants (`submitAsync`, `findUtxosForAddressAsync`) mirror the asynchronous
 import scalus.cardano.address.Address;
 import scalus.cardano.ledger.*;
 import scalus.cardano.node.*;
+import scalus.cardano.node.emulator.*;
 import java.util.List;
 import java.util.Map;
 

@@ -4,6 +4,7 @@ import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, STS}
 import scalus.cardano.ledger.*
+import scalus.cardano.node.emulator.ChainConfig
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec

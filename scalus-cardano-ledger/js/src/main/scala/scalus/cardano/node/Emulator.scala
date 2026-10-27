@@ -4,6 +4,7 @@ import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, STS}
 import scalus.cardano.ledger.*
+import scalus.cardano.node.emulator.ChainConfig
 
 /** An in-memory bare-bones node implementation (JS version with single-threaded state).
   *

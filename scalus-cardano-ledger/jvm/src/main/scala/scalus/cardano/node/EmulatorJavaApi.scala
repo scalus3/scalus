@@ -5,6 +5,7 @@ import scalus.uplc.DebugScript
 import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
+import scalus.cardano.node.emulator.{ChainView, ChainViewError, EmulatorResult, ForgeError, RollbackError}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.ChainEvent
 

@@ -2,6 +2,7 @@ package scalus.cardano.node.stream
 
 import scalus.cardano.ledger.*
 import scalus.cardano.node.*
+import scalus.cardano.node.emulator.{ForgeError, RollbackError}
 import scalus.cardano.node.stream.internal.{ChainEvent, Mailbox, SubscriptionHub}
 import scalus.uplc.builtin.{ByteString, Data}
 

@@ -4,6 +4,7 @@ import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator, STS, State, UtxoEnv}
 import scalus.cardano.node.*
+import scalus.cardano.node.emulator.{ForgeError, RollbackError, TxStatus}
 import scalus.cardano.node.stream.ChainPoint
 import scalus.uplc.builtin.Data
 
@@ -17,9 +18,9 @@ import scala.concurrent.{ExecutionContext, Future}
   * instance, leaving the original unchanged.
   *
   * It wraps the same [[EmulatorState]] the mutable emulator runs on, so the chain, the mempool and
-  * the presets of [[ChainConfig]] behave the same way, spec [SF-11]. The validators and mutators
-  * stay parameters, spec [SF-12]. Every transition goes through the `EmulatorState` transitions
-  * that revalidate the mempool, spec [DE-3].
+  * the presets of [[scalus.cardano.node.emulator.ChainConfig]] behave the same way, spec [SF-11].
+  * The validators and mutators stay parameters, spec [SF-12]. Every transition goes through the
+  * `EmulatorState` transitions that revalidate the mempool, spec [DE-3].
   *
   * This makes it suitable for use in functional state-threading patterns such as the [[Scenario]]
   * monad, where branching and backtracking require independent state copies.
@@ -230,7 +231,8 @@ object ImmutableEmulator {
     }
 
     /** An emulator on `state`, with these ledger rules, spec [SF-11]. A `Manual` emulator starts
-      * from an `EmulatorState` built with [[ChainConfig.manual]], or from [[fromEmulator]].
+      * from an `EmulatorState` built with [[scalus.cardano.node.emulator.ChainConfig.manual]], or
+      * from [[fromEmulator]].
       */
     def fromState(
         state: EmulatorState,

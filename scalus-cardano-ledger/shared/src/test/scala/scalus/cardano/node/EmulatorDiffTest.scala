@@ -3,6 +3,7 @@ package scalus.cardano.node
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
+import scalus.cardano.node.emulator.ChainConfig
 import scalus.cardano.node.stream.internal.ChainEvent
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.txbuilder.TxBuilder

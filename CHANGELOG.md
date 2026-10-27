@@ -10,6 +10,8 @@
   "every submit is a block" behaviour. `txStatus(hash)` reports `Pending`,
   `Confirmed(depth, point)`, `Dropped(reason)`, `RolledBack` or `NotFound`, and
   `findUtxos(query, view)` reads the tip, the mempool, or a `ChainView.Stable(depth)` block.
+  `ChainConfig`, `TxStatus`, `ChainView` and the other new types live in
+  `scalus.cardano.node.emulator`.
 - Forks and rollback: `produceBlock(on, txs)` forges a block anywhere in the block tree, for
   example a rival that double-spends a pending transaction's input. Chain selection switches to
   the longest resulting chain, and `rollback(n)` removes the last `n` blocks. Either way, the

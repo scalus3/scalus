@@ -117,6 +117,8 @@ The public API maps to the local mini-protocols of a node:
 - Every existing Emulator factory MUST use `ChainConfig.instant`. `[CF-4]`
 - Every Emulator factory MUST have an overload that takes a `ChainConfig`. `[CF-5]`
 
+*Implementation status (M7):* `ChainConfig`, `BlockProduction`, `AwaitTxPolicy`, `OrphanTxPolicy`, `TxStatus`, `DropReason`, `ChainView`, `ChainViewError`, `ForgeError`, `RollbackError`, `BlockForge` and (JVM) `EmulatorResult` moved from `scalus.cardano.node` to `scalus.cardano.node.emulator`: they exist only for the Emulator, while `scalus.cardano.node` also carries the provider types (`BlockchainProvider`, `BlockfrostProvider`, `UtxoQuery`) and the released `Emulator`, `EmulatorBase`, `EmulatorState`, `EmulatorJavaApi`, `JEmulator`, `AppliedTx` and `TransactionStatus`, which stay. `LedgerSnapshot` moved too and keeps `private[node]`, reachable from `EmulatorState` in `node` since `node.emulator` is nested in `node`. No behaviour change; none of the moved types had shipped in a release, so MiMa needed no filter.
+
 **Why:** `[CF-1]`, `[CF-3]`: the Emulator is an interop package, and Java and JS cannot use Scala default parameters. `[CF-4]`: hundreds of tests in `scalus-examples`, `scalus-utxo-cell` and user projects depend on submit applying at once.
 
 ## 6. State

@@ -3,6 +3,7 @@ package scalus.cardano.node
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
+import scalus.cardano.node.emulator.{ChainViewError, ForgeError, RollbackError}
 import scalus.cardano.node.stream.ChainTip
 import scalus.cardano.node.stream.internal.ChainEvent
 import scalus.cardano.txbuilder.TxBuilder

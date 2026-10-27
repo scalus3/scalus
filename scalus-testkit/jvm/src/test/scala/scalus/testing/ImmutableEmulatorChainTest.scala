@@ -5,6 +5,7 @@ import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.PlutusScriptsTransactionMutator
 import scalus.cardano.node.*
+import scalus.cardano.node.emulator.{ChainConfig, DropReason, ForgeError, RollbackError, TxStatus}
 import scalus.cardano.node.stream.ChainPoint
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
