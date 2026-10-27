@@ -92,8 +92,9 @@ finally lean.close()
 ```
 
 The later examples use this `lean`. The first argument is the budget: `Budget.LeanSteps(n)`,
-the steps of Lean's machine a check lets each test's program run, or `Budget.Auto`, with which
-the tactic finds them ("The budget rule").
+the steps of Lean's machine a check lets each test's program run, `Budget.Auto`, with which
+the tactic finds them ("The budget rule"), or `Budget.Within(n)`, a check of the statement on the
+inputs whose runs end within `n` steps, whose proof is a `ProvenWithin` and no theorem.
 
 `UplcBlaster` proves statements with universal and existential quantifiers over `BigInt`,
 `Boolean`, `ByteString`, `String`, `Data`, lists and maps, and case classes and enums of them:
@@ -575,7 +576,9 @@ Lean, and stands as it was. The old entries stay in the file as `former` results
 statement is kept again, so a run of a few tests after an update loses no budget of the others. `proofs.check(statement)` is the search; a fixed `Budget.LeanSteps` is for
 the tactic's own tests, and for a run without kept results that is to be saved the search. A
 statement no budget proves, such as one about a loop over a whole list, gets a longer
-counterexample from every check, and ends at the time limit.
+counterexample from every check, and ends at the time limit. `Budget.Within(n)` proves such a
+statement of the inputs whose runs end within `n` steps: a run the budget cuts is read in the
+statement's favour, so it is no counterexample, and the proof says the bound it holds within.
 
 ## Pinned dependencies
 

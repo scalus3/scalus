@@ -478,6 +478,26 @@ counterexamples that a budget too small gives, each of which says how many steps
 needs on it. [Finding the budget](blaster-budget-search.md) is the note about that search, and about
 keeping what it found.
 
+### A check within a budget
+
+`Budget.Within(n)` checks a statement at `n` steps with another reading of the runs the budget cuts.
+A run that has neither halted nor failed at `n` steps is read in the statement's favour: a test the
+statement claims holds of it, and one it assumes does not, and so for `denotes`. The readings are: a
+claimed test is `some true` or cut, an assumed one halted and not `some false`, a claimed `denotes`
+did not fail, an assumed one halted. Where every run ends within the budget the reading is the
+statement's own; so a proof is a proof of the statement on every input on which each test's program
+ends within `n` steps. It is a `VerificationResult.ProvenWithin`, with that bound in words, and not
+a theorem: no later statement uses it as a lemma, and a kept file keeps it as `proved within`, apart
+from a proof. A counterexample is one where the runs the statement rests on ended, so it is replayed
+as any other, and refutes the statement itself.
+
+A run the budget cuts is no witness: a check within a budget is of a statement whose quantifiers all
+stand for every value, a `forAll` in a positive position or an `exists` in a negative one, and
+another is not supported. So a statement about every list, which no budget proves ([Statements that
+do not finish](#statements-that-do-not-finish)), is proved within a budget of the lists whose runs
+end within it: that a list's `length` is not negative within 400 steps, that `filter` does not
+lengthen a list within 100.
+
 ## Lean workspace and pins
 
 The workspace is `scalus-verification/src/main/lean`: Lean 4.24.0 (`lean-toolchain`),
@@ -898,7 +918,9 @@ Lean does not finish.
 that go through the whole list, or through every round of the recursion. Some input needs more
 steps than the budget, and there a conclusion, read strongly, is false. Lean's counterexample is
 that input, a long list for instance, and the replay finds the statement true on it:
-inconclusive. Proving them takes induction, which this tactic does not do.
+inconclusive. Proving them takes induction, which this tactic does not do. Within a budget
+([A check within a budget](#a-check-within-a-budget)) they are proved of the inputs whose runs end
+within it.
 
 **Where the time goes.** There are two mechanisms. The reason of a check that is given up names
 the one it was in. They are also told apart with `set_option profiler true` in a check written

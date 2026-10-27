@@ -55,7 +55,9 @@ final case class Kept(
 
 object Kept {
     enum Result {
-        case Proved, Refuted
+
+        /** A proof, or one within a bound ([[VerificationResult.ProvenWithin]]). */
+        case Proved, ProvedWithin, Refuted
     }
 }
 
@@ -397,14 +399,16 @@ object KeptResults {
         values.view.mapValues(value => new String(value.bytes, StandardCharsets.UTF_8)).toMap
 
     private def word(result: Kept.Result): String = result match
-        case Kept.Result.Proved  => "proved"
-        case Kept.Result.Refuted => "refuted"
+        case Kept.Result.Proved       => "proved"
+        case Kept.Result.ProvedWithin => "proved within"
+        case Kept.Result.Refuted      => "refuted"
 
     /** The result `word` says, or none for a word that says none, as in a file that was edited. */
     private def result(word: String): Option[Kept.Result] = word match
-        case "proved"  => Some(Kept.Result.Proved)
-        case "refuted" => Some(Kept.Result.Refuted)
-        case _         => None
+        case "proved"        => Some(Kept.Result.Proved)
+        case "proved within" => Some(Kept.Result.ProvedWithin)
+        case "refuted"       => Some(Kept.Result.Refuted)
+        case _               => None
 
     /** What `entry` keeps, where its result is one. */
     private def kept(entry: Entry): Option[Kept] =

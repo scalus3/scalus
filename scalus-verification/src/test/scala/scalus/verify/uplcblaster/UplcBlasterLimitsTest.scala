@@ -50,6 +50,50 @@ class UplcBlasterLimitsTest extends AnyFunSuite with LeanProofsSuite {
     private def gcdIsNotNegative =
         forAll[BigInt, BigInt]((x, y) => call(gcd, (x, y))(r => r >= BigInt(0)))
 
+    test("within a budget, a loop over a whole list is proved of the lists the budget reaches") {
+        // A run the budget cuts is read in the statement's favour, so the statement is proved of
+        // the lists whose runs end within the budget: a proof within it, which is no theorem.
+        assert(provenWithin(lengthIsNotNegative, 400, length).budget == 400)
+        provenWithin(filterDoesNotLengthen, 100, positives)
+        // A counterexample is one whose runs ended, and is replayed as any other.
+        val short = forAll[Data](d => whenReturns(length, d.to[List[BigInt]])(n => n < BigInt(2)))
+        refuted(short, Budget.Within(400), length).values.toList match
+            case scala.List(scalus.uplc.Constant.Data(Data.List(items))) =>
+                assert(items.length >= BigInt(2), items)
+            case other => fail(s"expected one list, got $other")
+        // A run the budget cuts is no witness: a statement that asks for one is not checked so.
+        val own = Verifier.empty
+        own.prepare(
+          own.statement(exists[BigInt](x => x == BigInt(1))),
+          UplcBlaster(Budget.Within(100), lean)
+        ) match
+            case Left(report) => assert(report.toString.contains("stand for every value"), report)
+            case Right(_)     => fail("expected the statement to be refused")
+    }
+
+    test("a proof within a budget is kept apart from a proof") {
+        val goal = UplcBlaster.lower(lengthIsNotNegative, FunctionTable(length)) match
+            case Right(lowered) => lowered.copy(within = true)
+            case Left(reason)   => fail(reason)
+        val artifact = UplcBlaster.Artifact(
+          goal.programHashes,
+          400,
+          "",
+          Nil,
+          "",
+          ProofKind.Blaster,
+          kept = false
+        )
+        val proof: ExecutionResult =
+            VerificationResult.ProvenWithin(Proof(artifact), UplcBlaster.withinBound(400))
+        val kept = UplcBlaster.kept(goal, proof).getOrElse(fail("a proof within a budget is kept"))
+        assert(kept.result == Kept.Result.ProvedWithin)
+        assert(
+          UplcBlaster.restored(goal, kept).exists(_.isInstanceOf[VerificationResult.ProvenWithin])
+        )
+        assert(UplcBlaster.restored(goal.copy(within = false), kept).isLeft)
+    }
+
     test("a loop that only walks a list is inconclusive in seconds, at any budget", Unfinished) {
         // One path per length of the list. Lean's counterexample is a list too long for the
         // budget, on which the statement holds.

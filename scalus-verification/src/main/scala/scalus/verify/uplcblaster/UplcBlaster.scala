@@ -41,6 +41,15 @@ enum Budget {
 
     /** `steps` steps of Lean's machine. */
     case LeanSteps(steps: Int)
+
+    /** A bounded check at `steps` steps of Lean's machine: of the statement on the inputs on which
+      * each test's program ends within the budget. A run the budget cuts is read in the statement's
+      * favour, and a proof is a [[scalus.verify.VerificationResult.ProvenWithin]], no theorem. A
+      * counterexample is one where the runs the statement rests on ended, and is replayed as any
+      * other. It is for a statement whose quantifiers all stand for every value: a run that is cut
+      * is no witness of an `exists`.
+      */
+    case Within(steps: Int)
 }
 
 /** Proves [[scalus.verify.Prop]] statements about their compiled UPLC with Lean Blaster.
@@ -76,6 +85,8 @@ final class UplcBlaster private (
 
     budget match
         case Budget.LeanSteps(steps) =>
+            require(steps > 0, "the UPLC Blaster budget must be positive")
+        case Budget.Within(steps) =>
             require(steps > 0, "the UPLC Blaster budget must be positive")
         case Budget.Auto =>
     require(timeout.forall(_.length > 0), "the UPLC Blaster timeout must be positive")
@@ -167,6 +178,18 @@ final class UplcBlaster private (
     override def prepare(goal: Goal): Either[CompatibilityReport, Prepared] =
         UplcBlaster
             .lower(goal.statement.prop, goal.functions)
+            .flatMap(lowered =>
+                budget match
+                    case Budget.Within(_) if lowered.hasExistential =>
+                        Left(
+                          "a check within a budget reads a run the budget cuts in the " +
+                              "statement's favour, and such a run is no witness: it is of a " +
+                              "statement whose quantifiers all stand for every value, a forAll in " +
+                              "a positive position or an exists in a negative one"
+                        )
+                    case Budget.Within(_) => Right(lowered.copy(within = true))
+                    case _                => Right(lowered)
+            )
             .left
             .map(reason =>
                 CompatibilityReport(
@@ -190,11 +213,9 @@ final class UplcBlaster private (
         if lastChecksOnly then kept.foreach(Directories.remove)
         budget match
             case Budget.LeanSteps(steps) =>
-                servers.server() match
-                    case Left(reason) => VerificationResult.Failed(reason)
-                    case Right(server) =>
-                        val shorter = (timeout ++ attemptTimeout).minOption
-                        UplcBlaster.check(prepared, steps, maxHeartbeats, server, shorter, kept)
+                checkAt(prepared, steps, kept)
+            case Budget.Within(steps) =>
+                checkAt(prepared, steps, kept)
             // A search makes several checks, and asks for the server before each.
             case Budget.Auto =>
                 UplcBlaster.search(
@@ -207,6 +228,14 @@ final class UplcBlaster private (
                   first
                 )
     }
+
+    /** One check of `prepared` at `steps`. */
+    private def checkAt(prepared: Prepared, steps: Int, kept: Option[Path]): ExecutionResult =
+        servers.server() match
+            case Left(reason) => VerificationResult.Failed(reason)
+            case Right(server) =>
+                val shorter = (timeout ++ attemptTimeout).minOption
+                UplcBlaster.check(prepared, steps, maxHeartbeats, server, shorter, kept)
 
     /** What a result rests on: the statement as Lean is given it, the programs, and Lean's side,
       * which is read from the workspace of the tactic's servers. A tactic whose provider does not
@@ -293,7 +322,11 @@ object UplcBlaster {
         /** For each binder, the Lean predicate its values satisfy, where Lean's variable has more
           * values than its type: a function to `Bool`, applied to the variable in the quantifier.
           */
-        private[uplcblaster] val predicates: Vector[Option[String]] = Vector.empty
+        private[uplcblaster] val predicates: Vector[Option[String]] = Vector.empty,
+        /** Whether it is checked within its budget ([[Budget.Within]]): a run the budget cuts is
+          * read in the statement's favour, and a proof is one within the budget.
+          */
+        private[uplcblaster] val within: Boolean = false
     ) {
 
         /** The SHA-256 of each leaf's program CBOR, in the order of [[leaves]]. */
@@ -2147,16 +2180,19 @@ object UplcBlaster {
             else if errors then
                 VerificationResult.Failed(s"Lean reported an error: ${concise(output)}")
             else VerificationResult.Failed(s"Lean reported no verdict: ${concise(output)}")
+        def proved: ExecutionResult =
+            if goal.within then
+                VerificationResult.ProvenWithin(Proof(artifact), withinBound(budget))
+            else VerificationResult.Proven(Proof(artifact))
         if closed then
-            if !errors then Probe.Decided(VerificationResult.Proven(Proof(artifact)))
+            if !errors then Probe.Decided(proved)
             else if output.contains("`native_decide` evaluated that the proposition") then
                 replay(goal, artifact)
             else Probe.Decided(failure)
         // Lean's server goes on after a command fails, so Blaster can call a goal valid in a
         // document with an error, such as a definition the goal uses that did not elaborate. Only
         // a document without errors proves the goal.
-        else if !errors && output.contains("✅ Valid") then
-            Probe.Decided(VerificationResult.Proven(Proof(artifact)))
+        else if !errors && output.contains("✅ Valid") then Probe.Decided(proved)
         else if output.contains("❌ Falsified") then
             if goal.hasExistential then
                 Probe.Unreplayed(
@@ -2170,6 +2206,10 @@ object UplcBlaster {
             Probe.Decided(VerificationResult.Inconclusive("UPLC Blaster was undetermined"))
         else Probe.Decided(failure)
     }
+
+    /** The inputs a proof within `budget` steps holds on ([[Budget.Within]]). */
+    private[uplcblaster] def withinBound(budget: Int): String =
+        s"every input on which each test's program ends within $budget steps of Lean's machine"
 
     /** What a predicate did on concrete arguments, on the Scalus CEK. */
     private enum Outcome {
@@ -2618,10 +2658,11 @@ object UplcBlaster {
         state: Int => String,
         binder: Int => String,
         guardOf: Int => Option[String],
-        positive: Boolean
+        positive: Boolean,
+        within: Boolean
     ): String = {
         def render(inner: LeafFormula, positive: Boolean) =
-            renderFormula(inner, state, binder, guardOf, positive)
+            renderFormula(inner, state, binder, guardOf, positive, within)
         // A variable whose Lean type has more values than its own is restricted to its type's by a
         // premise: `∀ x, p x = true → body`, and so an `exists`, `¬∀¬`, to `∃ x, p x ∧ body`.
         def quantified(symbol: String, binders: List[Int], body: LeafFormula): String =
@@ -2633,13 +2674,21 @@ object UplcBlaster {
                     if guards.isEmpty then inner else s"(${guards.mkString(" ∧ ")} → $inner)"
                 s"($symbol ${binders.map(binder).mkString(" ")}, $guarded)"
         formula match
+            // Within the budget ([[Budget.Within]]) a run the budget cuts, which neither halted
+            // nor failed, is read in the statement's favour: as true where the statement claims
+            // the test, and as false where it assumes it.
             case LeafFormula.Test(leaf) =>
-                if positive then s"(fromFrameToBool ${state(leaf)} = some true)"
-                else
-                    s"(fromFrameToBool ${state(leaf)} ≠ some false ∧ failed ${state(leaf)} = false)"
+                val run = state(leaf)
+                if within then
+                    if positive then
+                        s"(fromFrameToBool $run = some true ∨ (halted $run = false ∧ failed $run = false))"
+                    else s"(halted $run = true ∧ fromFrameToBool $run ≠ some false)"
+                else if positive then s"(fromFrameToBool $run = some true)"
+                else s"(fromFrameToBool $run ≠ some false ∧ failed $run = false)"
             case LeafFormula.Denotes(leaf) =>
-                if positive then s"(halted ${state(leaf)} = true)"
-                else s"(failed ${state(leaf)} = false)"
+                val run = state(leaf)
+                if positive != within then s"(halted $run = true)"
+                else s"(failed $run = false)"
             case LeafFormula.And(left, right) =>
                 s"(${render(left, positive)} ∧ ${render(right, positive)})"
             case LeafFormula.Or(left, right) =>
@@ -2675,7 +2724,7 @@ object UplcBlaster {
         val check =
             if goal.binders.isEmpty then
                 val state = (leaf: Int) => s"(runProgramFor leaf$leaf.script [] $budget)"
-                s"example : ${renderFormula(goal.body, state, _ => "", _ => None, positive = true)} := by native_decide"
+                s"example : ${renderFormula(goal.body, state, _ => "", _ => None, positive = true, goal.within)} := by native_decide"
             else
                 val names = goal.binders.indices.map(index => s"x$index").toList
                 val declarations = goal.binders.zip(names).map { (binder, name) =>
@@ -2701,7 +2750,14 @@ object UplcBlaster {
                 val premise = (index: Int) =>
                     goal.predicates.lift(index).flatten.map(p => s"($p ${names(index)} = true)")
                 val formula =
-                    renderFormula(goal.body, state, declaration, premise, positive = true)
+                    renderFormula(
+                      goal.body,
+                      state,
+                      declaration,
+                      premise,
+                      positive = true,
+                      goal.within
+                    )
                 s"""${arguments.mkString("\n")}
                    |
                    |${prepared.mkString("\n")}
@@ -2746,6 +2802,11 @@ object UplcBlaster {
                     case artifact: Artifact =>
                         Some(Kept(Kept.Result.Proved, notes(artifact), Map.empty))
                     case _ => None
+            case VerificationResult.ProvenWithin(proof, _) =>
+                proof.artifact match
+                    case artifact: Artifact =>
+                        Some(Kept(Kept.Result.ProvedWithin, notes(artifact), Map.empty))
+                    case _ => None
             case VerificationResult.Refuted(proof) =>
                 proof.artifact match
                     case artifact: Artifact =>
@@ -2788,7 +2849,17 @@ object UplcBlaster {
         artifact: Artifact
     ): Either[String, ExecutionResult] =
         kept.result match
+            // A check within its budget proves less, and its text is another: the two are kept
+            // apart, and a proof of one is none of the other.
+            case Kept.Result.Proved if goal.within =>
+                Left("it was proved without a budget, and is checked within one")
             case Kept.Result.Proved => Right(VerificationResult.Proven(Proof(artifact)))
+            case Kept.Result.ProvedWithin if goal.within =>
+                Right(
+                  VerificationResult.ProvenWithin(Proof(artifact), withinBound(artifact.budget))
+                )
+            case Kept.Result.ProvedWithin =>
+                Left("it was proved within a budget, and is checked without one")
             // As where Lean falsifies such a statement ([[probed]]), one assignment refutes nothing.
             case Kept.Result.Refuted if goal.hasExistential =>
                 Left("one counterexample refutes no statement that asks for a witness")

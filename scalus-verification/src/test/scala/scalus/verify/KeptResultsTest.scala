@@ -48,7 +48,8 @@ class KeptResultsTest extends AnyFunSuite {
             case _ => None
         override def restore(prepared: Prepared, kept: Kept): Either[String, ExecutionResult] =
             kept.result match
-                case Kept.Result.Proved => Right(proved)
+                case Kept.Result.Proved       => Right(proved)
+                case Kept.Result.ProvedWithin => Left("this tactic proves nothing within a bound")
                 case Kept.Result.Refuted =>
                     Either.cond(
                       stands && kept.counterexample.contains("x"),
