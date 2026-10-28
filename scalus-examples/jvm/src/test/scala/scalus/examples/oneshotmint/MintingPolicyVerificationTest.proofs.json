@@ -26,21 +26,38 @@
         "the guarantees stated on mint hold of every transaction the policy accepts"
       ]
     },
-    "one_shot_mint.deployed.only_the_seed_mints.one_of_each": {
+    "one_shot_mint.deployed.only_the_seed_mints.two_of_each": {
       "tactic": "uplc-blaster",
       "result": "proved",
       "statement": "ac1544421a39aad6",
       "programs": [
-        "f1222725ef554b39",
-        "be61b4b880d1b51a",
-        "34ce4a51d2aa3c1d"
+        "ff418a018d567015",
+        "9297d02ce7e2bd0c",
+        "c7589d03e6091c00"
       ],
       "notes": {
-        "budget": "2000",
+        "budget": "2500",
         "kind": "Blaster"
       },
       "tests": [
-        "the deployed script, on every context of one input, policy and token: only the seed mints"
+        "the deployed script, on every context of at most two inputs, policies and tokens: only the seed mints"
+      ]
+    },
+    "one_shot_mint.deployed.only_the_seed_mints_as_read.two_of_each": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "ac1544421a39aad6",
+      "programs": [
+        "ff418a018d567015",
+        "278301000bc336aa",
+        "c7589d03e6091c00"
+      ],
+      "notes": {
+        "budget": "2500",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the deployed script, on every context of at most two inputs, policies and tokens, as it reads it: only the seed mints"
       ]
     },
     "one_shot_mint.mint.accepted_only_with_the_seed": {

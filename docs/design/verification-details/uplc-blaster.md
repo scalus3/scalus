@@ -574,20 +574,30 @@ them: each limited list as long as it may be, a map's keys distinct (`Limits.lar
 run ends, the guard's neither, and a counterexample would be of runs the budget cuts, which the
 solver seldom finds: at 100 steps, Blaster was undetermined.
 
-The deployed one-shot minting script on contexts of at most one input, one policy and one token
-(`MintingPolicyVerificationTest`) is proved at 2000 steps, about 30 s in Lean. Before the guards and
-the steps of `dropList`, it did not finish at any bound. A spike measured larger bounds, of the
-inputs, the policies and the tokens of each:
+The deployed one-shot minting script on contexts of at most two inputs, two policies and two tokens
+of each (`MintingPolicyVerificationTest`) is proved at 2500 steps, in about 2 min in Lean. Before
+the guards and the steps of `dropList`, it did not finish at any bound. By the bound of the inputs,
+the policies and the tokens of each:
 
 | Bound | Paths of the two tests | Lean | Solver |
 |---|---|---|---|
 | 1 | 83 and 142 | 32 s | 0.1 s, valid |
-| 2 | 1685 and 2054 | 7 min | 0.6 s, valid |
+| 2 | 1711 and 2080 | 1 min 50 s | 0.6 s, valid |
 | 3 | more than 35000 each | 3.5 h in `#prep_uplc_run` | |
 
-The paths multiply: each input is compared with the seed, each policy and token with the policy's
-own, and each comparison with a symbolic value is two paths to the end of the script; 88% of them
-end in the script's error.
+Bounds 1 and 3, and the solver's times, were measured by a spike: it also wrote out the paths and
+the solver's query, and took 7 min at bound 2. The paths multiply: each input is compared with the
+seed, each policy and token with the policy's own, and each comparison with a symbolic value is two
+paths to the end of the script; 88% of them end in the script's error.
+
+The statement can also read the context as the script reads it: with the script's deserializer,
+matching the minting context as the policy does (`onlyTheSeedMintsAsRead`). Then the two tests read
+the `Data` with the same builtins, neither has a `dropList`, and the proof does not rest on the
+steps written for it. At bound 2 it is proved in 1 min 39 s, against 1 min 50 s for the statement
+that reads the context through its type: its test has 1525 paths, against 2080, and the script's
+test has its 1711 whatever the statement reads. So how the statement reads costs little once the
+reads meet; the paths are the script's comparisons. Such a statement takes the deserializer as
+given.
 
 ## Lean workspace and pins
 
@@ -962,14 +972,16 @@ The budget bounds the steps of a path, not the length of each list, so the paths
 combinations of the lengths of the context's lists whose runs fit in it.
 
 **With limits, the script on its context is proved.** The same statement, of the contexts of at
-most one input, one policy and one token (`forAllDataLimited`), is proved at 2000 steps: of the
-`Data` the node gives the script, deserializer and all. Its other lists are not limited, and the
-script does not read them. [Limits of a variable's collections](#limits-of-a-variables-collections)
-says how, and what larger bounds cost.
+most two inputs, two policies and two tokens of each (`forAllDataLimited`), is proved at 2500 steps:
+of the `Data` the node gives the script, deserializer and all. Its other lists are not limited, and
+the script does not read them. It is proved also reading the context with the script's own
+deserializer (`onlyTheSeedMintsAsRead`), which that statement takes as given.
+[Limits of a variable's collections](#limits-of-a-variables-collections) says how, and what larger
+bounds cost.
 
-What it does not show: a transaction of any other shape (more than one input, policy or token for
-the deployed script, longer lists for the policy's statements, a transaction without an input, or
-a mint without the entry of ADA, which the ledger does not give a script of version 1 or 2); that
+What it does not show: a transaction of any other shape (more than two inputs, policies or tokens
+for the deployed script, longer lists for the policy's statements, a transaction without an input,
+or a mint without the entry of ADA, which the ledger does not give a script of version 1 or 2); that
 the tokens are minted once, which follows from the ledger spending an output once; the script on a
 larger context; and the published scripts, which `MintingPolicy` compiles with other options.
 
