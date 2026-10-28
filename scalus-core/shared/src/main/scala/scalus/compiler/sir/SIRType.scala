@@ -448,9 +448,6 @@ object SIRType {
                 //  TODO: actually this breaks case-class contract
                 //    (equal recursive base-classes become unequal)
                 //    (maybe pass some hashcode to the constructor)
-
-                // in principle now we can change this to summon[SIRHashCodeInRec[TypeProxy]].newRec(ref)
-                //  but let's wait
                 java.lang.System.identityHashCode(ref)
 
         }

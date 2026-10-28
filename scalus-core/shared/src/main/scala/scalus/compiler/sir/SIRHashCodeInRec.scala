@@ -2,6 +2,10 @@ package scalus.compiler.sir
 
 import java.util
 
+/** Unused. Its CaseClass, SumCaseClass and TypeLambda instances return 0 for every type: the trace
+  * map holds Int values, so a missing key unboxes to 0 and the cache test always passes.
+  */
+@deprecated("unused and incorrect (hashes are always 0); it will be removed", "1.4.1")
 trait SIRHashCodeInRec[T] {
 
     def apply(t: T, trace: java.util.IdentityHashMap[SIRType, Int]): Int
@@ -20,6 +24,7 @@ trait SIRHashCodeInRec[T] {
 
 }
 
+@deprecated("unused and incorrect (hashes are always 0); it will be removed", "1.4.1")
 object SIRHashCodeInRec {
 
     final val enabled = false

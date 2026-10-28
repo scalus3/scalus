@@ -402,7 +402,6 @@ lazy val scalusPlugin = project
             "scalus/compiler/sir/SIRToExpr.scala",
             "scalus/compiler/sir/SIRBuiltins.scala",
             "scalus/compiler/sir/SIRUnify.scala",
-            "scalus/compiler/sir/SIRHashCodeInRec.scala",
             "scalus/compiler/sir/RemoveRecursivity.scala",
             "scalus/compiler/sir/RenamingTypeVars.scala",
             "scalus/serialization/flat/Flat.scala",
@@ -423,6 +422,11 @@ lazy val scalusPlugin = project
           val targetDir = (Compile / sourceDirectory).value / "shared" / "scala"
           val log = streams.value.log
           copyFiles(sharedFiles, baseDir, targetDir, log)
+          // Delete copies of files that left the list, so a stale copy is not compiled.
+          val expected = sharedFiles.map(targetDir / _).toSet
+          val stale = (targetDir ** "*.scala").get.filterNot(expected)
+          stale.foreach(f => log.info(s"Deleting stale shared file $f"))
+          IO.delete(stale)
           log.info(s"Copied shared files to target $targetDir")
       },
 //      Compile / managedSources ++= {
