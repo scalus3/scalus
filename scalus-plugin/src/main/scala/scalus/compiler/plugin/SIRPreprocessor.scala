@@ -165,25 +165,13 @@ class SIRPreprocessor(thisPhase: ScalusPreparePhase, debugLevel: Int)(using ctx:
     }
 
     private def generateThrow(message: String)(using Context): tpd.Tree = {
-        val exceptionClass = defn.RuntimeExceptionClass
-        // Find the constructor that takes a String parameter
-        val ctor = exceptionClass.info.decls
-            .filter(_.isConstructor)
-            .find { c =>
-                c.info match
-                    case mt: MethodType =>
-                        mt.paramInfos.length == 1 && (mt.paramInfos.head =:= defn.StringType)
-                    case _ => false
-            }
-            .getOrElse {
-                report.error(
-                  s"Could not find RuntimeException(String) constructor"
-                )
-                exceptionClass.info.decls.filter(_.isConstructor).head
-            }
-        val newException = tpd.New(exceptionClass.typeRef)
-        val selectCtor = tpd.Select(newException, ctor.termRef)
-        val applyCtor = tpd.Apply(selectCtor, List(tpd.Literal(Constant(message))))
-        tpd.Throw(applyCtor)
+        // Overload resolution picks RuntimeException(String). A hand-written match on the
+        // parameter type breaks under -Yexplicit-nulls, where that parameter is `String | Null`
+        // (3.3) or a flexible `String?` (3.5+).
+        val newException = tpd.resolveConstructor(
+          defn.RuntimeExceptionClass.typeRef,
+          List(tpd.Literal(Constant(message)))
+        )
+        tpd.Throw(newException)
     }
 }

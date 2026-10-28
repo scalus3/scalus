@@ -26,6 +26,10 @@ trait SnippetCompilation {
     protected def compileSnippet(source: String): List[String] =
         compileSnippetWithOutput(source)._1
 
+    /** Like [[compileSnippet]], with extra compiler options, e.g. `-Yexplicit-nulls`. */
+    protected def compileSnippet(source: String, options: Seq[String]): List[String] =
+        compileSnippetWithOutput(source, options)._1
+
     /** Like [[compileSnippet]], but tolerates an exception escaping the compiler (a plugin crash):
       * returns the diagnostics collected before the crash together with the escaped exception, if
       * any. Lets tests assert that an error was reported even while crash containment is not yet
@@ -52,6 +56,12 @@ trait SnippetCompilation {
       */
     protected def compileSnippetWithOutput(
         source: String
+    ): (List[String], java.nio.file.Path) = compileSnippetWithOutput(source, Nil)
+
+    /** Like [[compileSnippetWithOutput]], with extra compiler options. */
+    protected def compileSnippetWithOutput(
+        source: String,
+        options: Seq[String]
     ): (List[String], java.nio.file.Path) = {
         val pluginJar = sys.props("scalus.plugin.jar")
         val classpath = sys.props("scalus.test.classpath")
@@ -67,9 +77,8 @@ trait SnippetCompilation {
                 "-classpath",
                 classpath,
                 "-d",
-                out.toString,
-                src.toString
-              ),
+                out.toString
+              ) ++ options ++ Array(src.toString),
               reporter
             )
         finally lastReporterErrors = reporter.collected.toList
