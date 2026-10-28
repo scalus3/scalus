@@ -57,9 +57,11 @@ object Mint
   * (see `docs/design/verification-details/uplc-blaster.md`).
   *
   * It is a one-shot policy: the transaction that spends its seed output mints the tokens, and any
-  * other transaction can only burn them. The statements are about the policy on minting contexts,
+  * other transaction can only burn them. Most statements are about the policy on minting contexts,
   * as a deserializer reads them: the guarantees `mint` states in its body, that the transaction
-  * that spends the seed mints the tokens, and that any other burns them.
+  * that spends the seed mints the tokens, and that any other burns them. The others are about the
+  * deployed script, deserializer and all, on the `Data` the node gives it, of a transaction of a
+  * few inputs, policies and tokens.
   *
   * The minting context has the shape the ledger gives a script of version 1 or 2 (see
   * `LedgerToPlutusTranslation.getMintValueV1V2`): its mint starts with an entry of zero ADA, then
@@ -70,7 +72,6 @@ object Mint
   *     tactic cannot follow a loop over a list of unknown length;
   *   - that the tokens are minted once. They are minted by the transaction that spends the seed
   *     output, and that the ledger lets an output be spent once is the ledger's;
-  *   - the deserializers, and so the script on the ledger's script context;
   *   - the published scripts' bytes. The policy is compiled here with the tactic's options
   *     (`UplcBlaster.options`): the statements are about the same source.
   *
@@ -198,21 +199,41 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test(
-      "the deployed script, on every context of one input, policy and token: only the seed mints"
+      "the deployed script, on every context of at most two inputs, policies and tokens: only the seed mints"
     ) {
         // The context is one `Data`, the encoding of a context, as the node gives the script, of
-        // a transaction of one input at most, and a mint of one policy and one token at most.
+        // a transaction of two inputs at most, and a mint of two policies of two tokens at most.
         // Each test checks the limits first, by walks that end, so the symbolic runs end too, and
         // the proof is of the statement: a theorem. The other lists of the transaction are not
         // limited, and the script does not read them.
         val limited = verifier.statement(
-          "one_shot_mint.deployed.only_the_seed_mints.one_of_each",
+          "one_shot_mint.deployed.only_the_seed_mints.two_of_each",
           forAllDataLimited[v1.ScriptContext](ctx =>
-              ctx.txInfo.inputs.length <= 1 && ctx.txInfo.mint.toSortedMap.length <= 1 &&
-                  ctx.txInfo.mint.toSortedMap.values.forall(tokens => tokens.length <= 1)
+              ctx.txInfo.inputs.length <= 2 && ctx.txInfo.mint.toSortedMap.length <= 2 &&
+                  ctx.txInfo.mint.toSortedMap.values.forall(tokens => tokens.length <= 2)
           )(ctx => succeeds(deployed, ctx.toData) ==> onlyTheSeedMints(ctx))
         )
-        check(limited, 2000)
+        check(limited, 2500)
+    }
+
+    test(
+      "the deployed script, on every context of at most two inputs, policies and tokens, as it reads it: only the seed mints"
+    ) {
+        // The statement reads the context with the script's own deserializer, and matches the
+        // minting context as `mint` does, so the two tests read the `Data` with the same builtins,
+        // and neither has a `dropList` for the tactic to write as steps: the proof does not rest
+        // on that rewriting. It takes the deserializer as given; the statement above, of the
+        // context's own type, is of the deserializer too. The two cost about the same, two
+        // minutes in Lean: the paths are mostly the comparisons of the script's own test, whatever
+        // the statement reads.
+        val asRead = verifier.statement(
+          "one_shot_mint.deployed.only_the_seed_mints_as_read.two_of_each",
+          forAllDataLimited[v1.ScriptContext](ctx =>
+              ctx.txInfo.inputs.length <= 2 && ctx.txInfo.mint.toSortedMap.length <= 2 &&
+                  ctx.txInfo.mint.toSortedMap.values.forall(tokens => tokens.length <= 2)
+          )(ctx => succeeds(deployed, ctx.toData) ==> onlyTheSeedMintsAsRead(ctx.toData))
+        )
+        check(asRead, 2500)
     }
 
     test(
@@ -267,6 +288,20 @@ object MintingPolicyVerificationTest {
                         tokens.toList.forall((_, amount) => amount < BigInt(0))
                     case prelude.Option.None => true
             case _ => true)
+
+    /** [[onlyTheSeedMints]], of the context as the deployed script reads it: with its own
+      * deserializer, `MintingPolicy.optimizedCtxDeserializer`, and the minting context matched as
+      * `mint` matches it. The checks are the statement's own, not the policy's.
+      */
+    inline def onlyTheSeedMintsAsRead(inline ctxData: Data): Boolean =
+        MintingPolicy.optimizedCtxDeserializer(ctxData) match
+            case MintingContext(inputs, minted, own) =>
+                inputs.exists { case TxOutRef(id, idx) =>
+                    id.hash == seedTxId && idx == BigInt(0)
+                } || (minted.toSortedMap.get(own) match
+                    case prelude.Option.Some(tokens) =>
+                        tokens.toList.forall((_, amount) => amount < BigInt(0))
+                    case prelude.Option.None => true)
 
     /** The tokens the policy mints: one, `name`, in the quantity `amount`. */
     inline def tokens(inline m: Mint): SortedMap[ByteString, BigInt] =
