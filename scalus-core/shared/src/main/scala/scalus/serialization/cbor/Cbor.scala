@@ -37,7 +37,17 @@ object Cbor {
         ByteString.unsafeFromArray(encode(value))
     }
 
-    /** Decodes CBOR data back to a Scala object of the specified type.
+    /** Borer's decoding configuration without its limit of 1000 nesting levels.
+      *
+      * The reference `decodeData` has no limit on the nesting depth, and the ledger reads a datum
+      * or a redeemer with it, so a transaction may nest as deep as its size allows. Borer's
+      * validation grows its state per level only as it enters the levels, so the limit costs
+      * nothing up front.
+      */
+    val decodingConfig: Cborer.DecodingConfig =
+        Cborer.DecodingConfig(maxNestingLevels = Int.MaxValue)
+
+    /** Decodes CBOR data back to a Scala object of the specified type, with [[decodingConfig]].
       *
       * @param data
       *   the CBOR-encoded byte array to decode
@@ -49,7 +59,7 @@ object Cbor {
       *   if the data cannot be decoded to the specified type
       */
     def decode[A: Decoder](data: Array[Byte]): A = {
-        Cborer.decode(data).to[A].value
+        Cborer.decode(data).withConfig(decodingConfig).to[A].value
     }
 
     /** Unwraps the CBOR byte string that `data` starts with: returns its content, without the

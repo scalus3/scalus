@@ -19,8 +19,6 @@ import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodec
 
 import java.io.InputStream
 import java.math.BigInteger
-import scala.annotation.tailrec
-import scala.collection.immutable
 import scala.collection.mutable.{ArrayBuffer, ArrayBuilder, ListBuffer}
 import scala.util.Try
 
@@ -239,62 +237,105 @@ private trait DataApi {
     end dataCborEncoder
 
     /** CBOR decoder for the [[Data]] type. The encoding and decoding logic is based on the
-      * [[https://github.com/IntersectMBO/plutus/blob/441b76d9e9745dfedb2afc29920498bdf632f162/plutus-core/plutus-core/src/PlutusCore/Data.hs#L72 Cardano node implementation]].
+      * [[https://github.com/IntersectMBO/plutus/blob/507cab8cf6192e5143f12be5b2d3005a2928dc6d/plutus-core/plutus-core/src/PlutusCore/Data.hs#L209 Cardano node implementation]].
+      *
+      * The reference has no limit on the nesting depth, so the decoder does not recurse: it keeps
+      * the arrays and maps it has opened on the heap. It reads their items one at a time, as the
+      * reference does, so the length in a header allocates nothing before the items are there.
+      * Borer's validation still stops at 1000 nesting levels; [[Data.fromCbor]] and
+      * [[scalus.serialization.cbor.Cbor.decode]] read without that limit.
       */
     given dataCborDecoder: Decoder[Data] with
 
         private val twoTo64: BigInt = BigInt(1) << 64
 
-        override def read(r: Reader): Data =
+        private val maxCborByteArraySize = 64
 
-            val maxCborByteArraySize = 64
+        /** A list, or the fields of a `Constr`, being read: the items read so far. */
+        private final class OpenArray(
+            // the index of the `Constr`, or null for a list
+            val constr: BigInt | Null,
+            // a tag-102 `Constr` in an indefinite array: a break follows the fields
+            val closingBreak: Boolean,
+            // the items still to read, or -1 for an indefinite array
+            var remaining: Long
+        ) {
+            val items: ListBuffer[Data] = ListBuffer.empty
+        }
 
-            // read sized bytes bounded by 64 bytes
-            def readBoundedSizedBytes(): Array[Byte] =
-                val bytes = r.readSizedBytes()(using ByteAccess.ForByteArray)
-                if bytes.length > maxCborByteArraySize then
-                    r.overflow(s"Bytes chunk ${bytes.length} must be <= 64 bytes")
-                bytes
+        /** A map being read: the entries read so far, and the key of the entry being read.
+          *
+          * Cardano stores a map as a list of key-value pairs and allows duplicate keys, so the
+          * entries are kept in order, duplicates and all.
+          */
+        private final class OpenMap(var remaining: Long) {
+            val entries: ListBuffer[(Data, Data)] = ListBuffer.empty
+            var key: Data = null
+        }
 
-            // read chunks of 64 bytes
-            def readBoundedBytesIndef(): Array[Byte] =
-                // Copies each chunk as one block; a generic ArrayBuffer[Byte] copies byte by byte.
-                val acc = new ArrayBuilder.ofByte
-                while !r.tryReadBreak() do acc.addAll(readBoundedSizedBytes())
-                acc.result()
+        override def read(r: Reader): Data = {
+            val open = ArrayBuffer.empty[OpenArray | OpenMap]
+            // a complete value, or null when `readItem` has opened an array or a map
+            var item = readItem(r, open)
+            while open.nonEmpty do
+                if item != null then
+                    open.last match
+                        case array: OpenArray =>
+                            array.items += item
+                            if array.remaining > 0 then array.remaining -= 1
+                        case map: OpenMap =>
+                            if map.key == null then map.key = item
+                            else
+                                map.entries += ((map.key, item))
+                                map.key = null
+                                if map.remaining > 0 then map.remaining -= 1
+                    item = null
+                else
+                    open.last match
+                        case array: OpenArray =>
+                            if isComplete(r, array.remaining) then
+                                open.dropRightInPlace(1)
+                                item = closeArray(r, array)
+                            else item = readItem(r, open)
+                        // a break between a key and its value is not the end of the map
+                        case map: OpenMap =>
+                            if map.key == null && isComplete(r, map.remaining) then
+                                open.dropRightInPlace(1)
+                                item = Map(PList.from(map.entries))
+                            else item = readItem(r, open)
+            item
+        }
 
-            // read bytes (sized or indefinite) where chunks are bounded by 64 bytes
-            def readBoundedBytes(): Array[Byte] =
-                r.dataItem() match
-                    case DI.Bytes => readBoundedSizedBytes()
-                    case DI.BytesStart =>
-                        r.readBytesStart()
-                        readBoundedBytesIndef()
-                    case _ => r.unexpectedDataItem(expected = "Bytes or BytesStart")
+        private def isComplete(r: Reader, remaining: Long): Boolean =
+            if remaining < 0 then r.tryReadBreak() else remaining == 0
 
-            // The constructor index of the tag-102 form is a CBOR unsigned 64-bit integer, so
-            // 2^63 and above reach us as borer OverLongs and have to be widened without a sign.
-            // Anything else - a negative integer, or a bignum above the range - is rejected, as
-            // the node's `decodeWord64` rejects it.
-            def readConstrIndex(): BigInt =
-                r.dataItem() match
-                    case DI.Int | DI.Long =>
-                        val i = r.readLong()
-                        if i < 0 then r.unexpectedDataItem(expected = "unsigned Constr index")
-                        BigInt(i)
-                    case DI.OverLong =>
-                        if r.overLongNegative then
-                            r.unexpectedDataItem(expected = "unsigned Constr index")
-                        BigInt(r.readOverLong()) + twoTo64
-                    case _ => r.unexpectedDataItem(expected = "unsigned Constr index")
+        private def closeArray(r: Reader, array: OpenArray): Data = {
+            val items = PList.from(array.items)
+            array.constr match
+                case null => Data.List(items)
+                case constr: BigInt =>
+                    if array.closingBreak && !r.tryReadBreak() then
+                        r.unexpectedDataItem(expected = "Break")
+                    Constr(constr, items)
+        }
 
+        /** Reads a value that holds no other, or opens an array or a map and returns null. */
+        private def readItem(r: Reader, open: ArrayBuffer[OpenArray | OpenMap]): Data =
             r.dataItem() match
                 case DI.Int | DI.Long | DI.OverLong => I(Decoder.forBigInt.read(r))
-                case DI.MapHeader | DI.MapStart     => Map(PList.from(readMap.read(r)))
+                case DI.Bytes | DI.BytesStart => B(ByteString.unsafeFromArray(readBoundedBytes(r)))
                 case DI.ArrayStart | DI.ArrayHeader =>
-                    Data.List(PList.from(Decoder.forArray[Data].read(r).toList))
-                case DI.Bytes | DI.BytesStart => B(ByteString.unsafeFromArray(readBoundedBytes()))
+                    open += openArray(r, null, closingBreak = false)
+                    null
+                case DI.MapHeader =>
+                    open += OpenMap(r.readMapHeader())
+                    null
+                case DI.MapStart =>
+                    r.readMapStart()
+                    open += OpenMap(-1)
+                    null
                 case DI.Tag =>
+                    val tagStart = r.cursor
                     r.readTag() match
                         case Other(102) =>
                             // Exactly two elements, definite- or indefinite-length, as in
@@ -304,51 +345,77 @@ private trait DataApi {
                             if indefinite then r.readArrayStart()
                             else if !r.tryReadArrayHeader(2) then
                                 r.unexpectedDataItem(expected = "Array-Header(2)")
-                            val i = readConstrIndex()
-                            val args = Decoder.forArray[Data].read(r)
-                            if indefinite && !r.tryReadBreak() then
-                                r.unexpectedDataItem(expected = "Break")
-                            Constr(i, PList.from(args.toList))
+                            val i = readConstrIndex(r)
+                            open += openArray(r, i, closingBreak = indefinite)
+                            null
                         case Other(value) if 121 <= value && value < 128 =>
-                            Constr(
-                              BigInt(value - 121),
-                              PList.from(Decoder.forArray[Data].read(r).toList)
-                            )
+                            open += openArray(r, BigInt(value - 121), closingBreak = false)
+                            null
                         case Other(value) if 1280 <= value && value < 1401 =>
-                            Constr(
-                              BigInt(value - 1280 + 7),
-                              PList.from(Decoder.forArray[Data].read(r).toList)
-                            )
-                        case PositiveBigNum => I(BigInteger(1, readBoundedBytes()))
-                        case NegativeBigNum => I(BigInteger(1, readBoundedBytes()).not)
+                            open += openArray(r, BigInt(value - 1280 + 7), closingBreak = false)
+                            null
+                        case tag @ (PositiveBigNum | NegativeBigNum) =>
+                            // cborg takes a bignum only from the one-byte heads `c2` and `c3`.
+                            // Behind a wider head, such as `d8 02`, tag 2 is a `Constr` tag that
+                            // the reference does not know. Borer reads the same tag from both
+                            // heads, but then the payload starts more than one byte after it.
+                            r.dataItem()
+                            if r.cursor - tagStart > 1 then
+                                r.unexpectedDataItem(
+                                  expected = "Bignum Tag in a one-byte head",
+                                  actual = s"$tag in a ${r.cursor - tagStart}-byte head"
+                                )
+                            val magnitude = BigInteger(1, readBoundedBytes(r))
+                            I(if tag == PositiveBigNum then magnitude else magnitude.not)
                         case tag =>
                             r.unexpectedDataItem(
                               s"Allowed Data Constr Tag or CBOR BigNum Tag, got $tag"
                             )
-                case i => r.unexpectedDataItem(s"Allowed Data Item")
+                case _ => r.unexpectedDataItem(s"Allowed Data Item")
 
-        /*
-         * Cardano stores maps as a list of key-value pairs
-         * Note, that it allows duplicate keys!
-         * This is why we don't use the `readMap` method from `Reader` here
-         */
-        private def readMap[A: Decoder, B: Decoder]: Decoder[immutable.List[(A, B)]] =
-            Decoder { r =>
-                if r.hasMapHeader then
-                    @tailrec def rec(remaining: Int, map: ListBuffer[(A, B)]): ListBuffer[(A, B)] =
-                        if remaining > 0 then rec(remaining - 1, map.append((r[A], r[B])))
-                        else map
+        /** Opens the array of a list or of the fields of a `Constr`. */
+        private def openArray(r: Reader, constr: BigInt | Null, closingBreak: Boolean): OpenArray =
+            if r.hasArrayStart then
+                r.readArrayStart()
+                OpenArray(constr, closingBreak, -1)
+            else if r.hasArrayHeader then OpenArray(constr, closingBreak, r.readArrayHeader())
+            else r.unexpectedDataItem(expected = "Array")
 
-                    val size = r.readMapHeader()
-                    if size <= Int.MaxValue then rec(size.toInt, ListBuffer.empty).toList
-                    else r.overflow(s"Cannot deserialize Map with size $size (> Int.MaxValue)")
-                else if r.hasMapStart then
-                    r.readMapStart()
-                    val map = ListBuffer.empty[(A, B)]
-                    while !r.tryReadBreak() do map.append((r[A], r[B]))
-                    map.toList
-                else r.unexpectedDataItem(expected = "Map")
-            }
+        // read sized bytes bounded by 64 bytes
+        private def readBoundedSizedBytes(r: Reader): Array[Byte] =
+            val bytes = r.readSizedBytes()(using ByteAccess.ForByteArray)
+            if bytes.length > maxCborByteArraySize then
+                r.overflow(s"Bytes chunk ${bytes.length} must be <= 64 bytes")
+            bytes
+
+        // read bytes (sized or indefinite) where chunks are bounded by 64 bytes
+        private def readBoundedBytes(r: Reader): Array[Byte] =
+            r.dataItem() match
+                case DI.Bytes => readBoundedSizedBytes(r)
+                case DI.BytesStart =>
+                    r.readBytesStart()
+                    // Copies each chunk as one block; a generic ArrayBuffer[Byte] copies byte by
+                    // byte.
+                    val acc = new ArrayBuilder.ofByte
+                    while !r.tryReadBreak() do acc.addAll(readBoundedSizedBytes(r))
+                    acc.result()
+                case _ => r.unexpectedDataItem(expected = "Bytes or BytesStart")
+
+        // The constructor index of the tag-102 form is a CBOR unsigned 64-bit integer, so
+        // 2^63 and above reach us as borer OverLongs and have to be widened without a sign.
+        // Anything else - a negative integer, or a bignum above the range - is rejected, as
+        // the node's `decodeWord64` rejects it.
+        private def readConstrIndex(r: Reader): BigInt =
+            r.dataItem() match
+                case DI.Int | DI.Long =>
+                    val i = r.readLong()
+                    if i < 0 then r.unexpectedDataItem(expected = "unsigned Constr index")
+                    BigInt(i)
+                case DI.OverLong =>
+                    if r.overLongNegative then
+                        r.unexpectedDataItem(expected = "unsigned Constr index")
+                    BigInt(r.readOverLong()) + twoTo64
+                case _ => r.unexpectedDataItem(expected = "unsigned Constr index")
     end dataCborDecoder
 
     extension [A <: Data](a: A)
@@ -387,14 +454,15 @@ private trait DataApi {
         if indent < 0 then writeToString[Data](data)(using dataJsonCodec)
         else writeToString[Data](data, WriterConfig.withIndentionStep(indent))(using dataJsonCodec)
 
-    /** Decode a [[Data]] value from CBOR */
-    def fromCbor(bytes: Array[Byte]): Data = Cbor.decode(bytes).to[Data].value
+    /** Decode a [[Data]] value from CBOR. The nesting depth of the value is not limited. */
+    def fromCbor(bytes: Array[Byte]): Data = ScalusCbor.decode[Data](bytes)
 
-    /** Decode a [[Data]] value from CBOR */
-    def fromCbor(is: InputStream): Data = Cbor.decode(is).to[Data].value
+    /** Decode a [[Data]] value from CBOR. The nesting depth of the value is not limited. */
+    def fromCbor(is: InputStream): Data =
+        Cbor.decode(is).withConfig(ScalusCbor.decodingConfig).to[Data].value
 
-    /** Decode a [[Data]] value from CBOR */
-    def fromCbor(bs: ByteString): Data = Cbor.decode(bs.bytes).to[Data].value
+    /** Decode a [[Data]] value from CBOR. The nesting depth of the value is not limited. */
+    def fromCbor(bs: ByteString): Data = ScalusCbor.decode[Data](bs.bytes)
 
     /** Tries to decode a value of type `T` from [[Data]]
       * @return
@@ -411,7 +479,7 @@ private trait DataApi {
 
         def decode(decode: DecoderState): Data =
             val bytes = summon[Flat[Array[Byte]]].decode(decode)
-            Cbor.decode(bytes).to[Data].value
+            ScalusCbor.decode[Data](bytes)
     end given
 
     /** Pretty prints Data in debug format with rainbow brackets: `<constr, [args]>`, `{k: v}`,

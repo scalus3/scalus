@@ -3,6 +3,8 @@ package scalus.uplc.builtin
 import scalus.uplc.builtin.Data.{B, Constr, I, List, Map}
 import scalus.cardano.onchain.plutus.prelude.List as PList
 
+import scala.collection.mutable.ArrayBuffer
+
 /** The universal data type for Plutus smart contracts.
   *
   * `Data` is the core serializable type used throughout Cardano for representing:
@@ -58,18 +60,43 @@ import scalus.cardano.onchain.plutus.prelude.List as PList
   */
 sealed abstract class Data {
 
-    /** Debug string representation matching the Pretty instance format */
-    override def toString: String = this match {
-        case Constr(constr, args) =>
-            s"<$constr, [${args.toScalaList.map(_.toString).mkString(", ")}]>"
-        case Map(values) =>
-            s"{${values.toScalaList.map { case (k, v) => s"$k: $v" }.mkString(", ")}}"
-        case List(values) =>
-            s"[${values.toScalaList.map(_.toString).mkString(", ")}]"
-        case I(value) =>
-            s"$value"
-        case B(value) =>
-            s"\"${value.toHex}\""
+    /** Debug string representation matching the Pretty instance format. It does not recurse, so the
+      * nesting depth is not limited by the stack.
+      */
+    override def toString: String = {
+        val out = new StringBuilder
+        // what is still to write, the next one last: a value, or the text between values
+        val pending = ArrayBuffer[Data | String](this)
+
+        def pushItems[A](items: PList[A], close: String)(push: A => Unit): Unit = {
+            pending += close
+            var separated = false
+            items.toScalaList.reverseIterator.foreach { item =>
+                if separated then pending += ", "
+                push(item)
+                separated = true
+            }
+        }
+
+        while pending.nonEmpty do
+            pending.remove(pending.length - 1) match
+                case text: String => out.append(text)
+                case Constr(constr, args) =>
+                    out.append('<').append(constr).append(", [")
+                    pushItems(args, "]>")(pending += _)
+                case Map(values) =>
+                    out.append('{')
+                    pushItems(values, "}") { (k, v) =>
+                        pending += v
+                        pending += ": "
+                        pending += k
+                    }
+                case List(values) =>
+                    out.append('[')
+                    pushItems(values, "]")(pending += _)
+                case I(value) => out.append(value)
+                case B(value) => out.append('"').append(value.toHex).append('"')
+        out.toString
     }
 }
 

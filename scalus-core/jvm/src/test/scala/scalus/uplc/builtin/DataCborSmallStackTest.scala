@@ -8,9 +8,9 @@ import scalus.uplc.test.DeepData
 
 import java.util.concurrent.atomic.AtomicReference
 
-/** `serialiseData` does not recurse over [[Data]] (#398): data nested 100000 levels deep is costed
-  * and written on a 256 KiB stack, where the recursive encoder overflowed the stack before 1000
-  * levels.
+/** `serialiseData`, `Data.fromCbor` and `Data.toString` do not recurse over [[Data]] (#398, #423):
+  * data nested 100000 levels deep is costed, written, read and printed on a 256 KiB stack, where
+  * the recursive encoder and decoder overflowed the stack before 1000 levels.
   */
 class DataCborSmallStackTest extends AnyFunSuite {
 
@@ -68,6 +68,17 @@ class DataCborSmallStackTest extends AnyFunSuite {
         }
         assert(serialised.sameElements(expected))
         assert(cbor.sameElements(expected))
+    }
+
+    test("Data.fromCbor of 100000 nested lists on a 256 KiB stack") {
+        // the decoded data is compared by its CBOR: the equality of `Data` recurses
+        val cbor = onSmallStack(Data.fromCbor(expected).toCbor)
+        assert(cbor.sameElements(expected))
+    }
+
+    test("toString of 100000 nested lists on a 256 KiB stack") {
+        val text = onSmallStack(nestedLists.toString)
+        assert(text == "[" * depth + "1" + "]" * depth)
     }
 
     test("the CEK machine costs and runs serialiseData of 100000 nested lists on a 256 KiB stack") {

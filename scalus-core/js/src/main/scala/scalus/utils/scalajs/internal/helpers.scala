@@ -44,7 +44,9 @@ extension (array: Uint8Array)
 private[scalus] object JsCbor {
     def encode[A: Encoder](value: A): Uint8Array = Cbor.encode(value).toByteArray.toUint8Array
 
-    def decode[A: Decoder](array: Uint8Array): A = Cbor.decode(array.toByteArray).to[A].value
+    // without borer's limit of 1000 nesting levels, which a datum may exceed
+    def decode[A: Decoder](array: Uint8Array): A =
+        scalus.serialization.cbor.Cbor.decode[A](array.toByteArray)
 }
 
 // ---- Numbers ----
