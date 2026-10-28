@@ -281,6 +281,16 @@ runs out. `ScalusProofs/Run.lean` defines:
   builds `fun xs => runProgramFor script (inputs xs) budget`, optimizes it with Blaster's
   `Optimize.main`, and defines `name` as noncomputable.
 
+  Blaster's optimizer can write a case split the kernel rejects (Lean-blaster#154). It rewrites
+  the type of a branch's binder apart from the condition: `¬ true = b` becomes `false = b`, and
+  `¬ (¬ p ∧ ¬ q)` becomes `p ∨ q`, where `Blaster.dite' c t f` asks for `c` and `¬ c`.
+  `repairedDite` restates the binder of each branch that does not use it as `c` or `¬ c`: a binder
+  the body does not use may be of any type, so the run means what it meant. Where the kernel still
+  rejects the run, as for a branch that uses its binder, `name` is the run as written, and
+  `#blaster` expands it again, in its own optimization. On the deployed one-shot minting script,
+  with the lists it reads limited to one element, the run as written cost `#blaster` 858 s of
+  optimization, and the repaired run 81 s.
+
 The weak readings need `runFor`. With `runSteps`, the negative reading of `denotes` could not
 reject `State.Error`, which might be an exhausted budget, so it would be `True`. A premise
 `denotes(f(x))` would then say nothing, and `!denotes(e)` could never be proved.
