@@ -29,8 +29,8 @@
 set -o pipefail
 cd "$(dirname "$0")/.." || exit 1
 
-OPT_DIR=scalus-cardano-ledger/js/target/scala-3.3.8/scalus-cardano-ledger-opt
-FASTOPT_DIR=scalus-cardano-ledger/js/target/scala-3.3.8/scalus-cardano-ledger-fastopt
+OPT_DIR=scalus-cardano-ledger/js/target/scala-3.3.9/scalus-cardano-ledger-opt
+FASTOPT_DIR=scalus-cardano-ledger/js/target/scala-3.3.9/scalus-cardano-ledger-fastopt
 BUNDLE=scalus-cardano-ledger/js/src/main/npm/scalus.js
 REPORT=scripts/js-bundle-size-report.mjs
 mkdir -p logs

@@ -47,8 +47,8 @@ if __name__ == "__main__":
     commands = parser.add_subparsers(dest="command", required=True)
     capture = commands.add_parser("snapshot")
     capture.add_argument("output", type=Path)
-    capture.add_argument("--scala-version", default="3.3.8",
-                         help="Scala version used to build the blueprints (default: 3.3.8)")
+    capture.add_argument("--scala-version", default="3.3.9",
+                         help="Scala version used to build the blueprints (default: 3.3.9)")
     capture.add_argument("--root", type=Path,
                          help="Explicit blueprint directory; overrides --scala-version")
     diff = commands.add_parser("compare")

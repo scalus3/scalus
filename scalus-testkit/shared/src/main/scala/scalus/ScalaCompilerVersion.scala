@@ -16,12 +16,12 @@ package scalus
   * The active compiler version is injected by build.sbt (`-Dscalus.test.scalaVersion`). It can't be
   * read from `scala.util.Properties.versionNumberString`, which reports the 2.13 standard-library
   * version (`2.13.x`) on the Scala 3.3 LTS rather than the compiler version. When the property is
-  * absent (e.g. an ejected project, which pins the 3.3.x LTS) it defaults to `"3.3.8"`.
+  * absent (e.g. an ejected project, which pins the 3.3.x LTS) it defaults to `"3.3.9"`.
   */
 object ScalaCompilerVersion {
 
-    /** The compiler version building the tests, e.g. `"3.3.8"` or `"3.9.0"`. */
-    val version: String = sys.props.getOrElse("scalus.test.scalaVersion", "3.3.8")
+    /** The compiler version building the tests, e.g. `"3.3.9"` or `"3.9.0"`. */
+    val version: String = sys.props.getOrElse("scalus.test.scalaVersion", "3.3.9")
 
     private val (major, minor) = {
         val parts = version.split("[.\\-]").iterator.flatMap(_.toIntOption)
