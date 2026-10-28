@@ -227,13 +227,16 @@ private[verify] object PropIdentity {
           */
         private def tpe(tp: SIRType, seen: Set[SIRType.TypeProxy]): Unit = tp match
             // A variable over the `Data` encodings of its values is checked as `Data`.
-            // The decoder is code each leaf that reads the variable runs.
+            // The decoder is code each leaf that reads the variable runs. Its limits, where it
+            // has them, are of the values it stands for.
             case annotated if DataEncoding.encoded(annotated).isDefined =>
                 node("data") {
                     DataEncoding.encoded(annotated).foreach { (inner, decoder) =>
                         tpe(inner, seen)
                         sirTerm(decoder)
                     }
+                    val limits = DataEncoding.limits(annotated)
+                    if limits.all.nonEmpty then atom(limits.toData.toString)
                 }
             case SIRType.Annotated(inner, _) => tpe(inner, seen)
             case SIRType.Fun(in, out)        => node("fun") { tpe(in, seen); tpe(out, seen) }

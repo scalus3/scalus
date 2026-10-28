@@ -26,6 +26,23 @@
         "the guarantees stated on mint hold of every transaction the policy accepts"
       ]
     },
+    "one_shot_mint.deployed.only_the_seed_mints.one_of_each": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "ac1544421a39aad6",
+      "programs": [
+        "f1222725ef554b39",
+        "be61b4b880d1b51a",
+        "34ce4a51d2aa3c1d"
+      ],
+      "notes": {
+        "budget": "2000",
+        "kind": "Blaster"
+      },
+      "tests": [
+        "the deployed script, on every context of one input, policy and token: only the seed mints"
+      ]
+    },
     "one_shot_mint.mint.accepted_only_with_the_seed": {
       "tactic": "uplc-blaster",
       "result": "refuted",

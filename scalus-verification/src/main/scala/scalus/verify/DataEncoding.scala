@@ -1,12 +1,9 @@
 package scalus.verify
 
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRPosition, SIRType}
-import scalus.compiler.sir.lowering.{LoweringContext, ProductCaseClassRepresentation, SumCaseClassRepresentation}
-import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
+import scalus.uplc.Constant
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.builtin.{ByteString, Data}
-import scalus.verify.SirTypes.*
-import scalus.verify.uplcblaster.UplcBlaster
 
 /** How the values of a type are encoded as `Data`: which `Data` is the encoding of a value of the
   * type, as the compiler's `Data` representation of the type says. [[DataEncoding.of]] derives it
@@ -178,32 +175,9 @@ object DataEncoding {
     inline def of[A]: DataEncoding = ${ PropMacro.dataEncoding[A] }
 
     /** The encoding of the values of `tp`, by the `Data` representation the compiler gives it with
-      * the verifier's options ([[UplcBlaster.options]]).
+      * the verifier's options ([[scalus.verify.uplcblaster.UplcBlaster.options]]).
       */
-    def of(tp: SIRType): DataEncoding = {
-        def derive: DataEncoding = {
-            given LoweringContext = UplcBlaster.representations
-            val parts = new Parts
-            val encoding = encodingOf(tp, Set.empty, parts)
-            // An encoding cut off is no encoding: its premise would be as large as the cut.
-            if parts.count > maxParts then
-                Unknown(s"the encoding of ${tp.show} has more than $maxParts parts")
-            else encoding
-        }
-        derived.getOrElseUpdate(typeKey(tp), derive)
-    }
-
-    /** [[of]] of each type it was asked about, by its [[SirTypes.typeKey]]. */
-    private val derived = scala.collection.concurrent.TrieMap.empty[String, DataEncoding]
-
-    /** How many parts an encoding may have: many more than a type of the ledger has, and an end to
-      * a type that contains itself under other arguments each time, which `enclosing` does not
-      * tell, and whose parts double at each level.
-      */
-    private val maxParts = 100_000
-
-    /** The parts of an encoding derived so far. */
-    private final class Parts(var count: Int = 0)
+    def of(tp: SIRType): DataEncoding = DataLayout.of(tp).encoding
 
     /** The key of the annotation that marks the type of a statement variable which ranges over the
       * `Data` encodings of its type's values ([[Props.forAllData]]). The annotation holds the
@@ -211,13 +185,29 @@ object DataEncoding {
       */
     private val EncodedKey = "scalus.verify.forAllData"
 
-    /** `variable`, ranging over the `Data` encodings of its type's values, which `decoder` reads.
+    /** The key of the annotation that holds the limits of a statement variable over the `Data`
+      * encodings of its type's values ([[Props.forAllDataLimited]]), as `Data` ([[Limits.toData]]).
+      * A variable without limits has none.
+      */
+    private val LimitsKey = "scalus.verify.limits"
+
+    /** `variable`, ranging over the `Data` encodings of its type's values, which `decoder` reads,
+      * that meet `limits`.
       */
     private[verify] def encodedVariable[A](
         variable: PropExpr.Ident[A],
-        decoder: SIR
+        decoder: SIR,
+        limits: Limits = Limits.none
     ): PropExpr.Ident[A] = {
-        val annotations = AnnotationsDecl(SIRPosition.empty, data = Map(EncodedKey -> decoder))
+        val limited = Option.when(limits.all.nonEmpty)(
+          LimitsKey -> SIR.Const(
+            Constant.Data(limits.toData),
+            SIRType.Data(),
+            AnnotationsDecl.empty
+          )
+        )
+        val annotations =
+            AnnotationsDecl(SIRPosition.empty, data = Map(EncodedKey -> decoder) ++ limited)
         new PropExpr.Ident[A](
           variable.name,
           variable.id,
@@ -232,6 +222,16 @@ object DataEncoding {
         case SIRType.Annotated(inner, annotations) =>
             annotations.data.get(EncodedKey).map(inner -> _)
         case _ => None
+
+    /** The limits of a statement variable of type `tp` over the `Data` encodings of its values
+      * ([[Props.forAllDataLimited]]): none for a variable without them, or of another type.
+      */
+    private[verify] def limits(tp: SIRType): Limits = tp match
+        case SIRType.Annotated(_, annotations) =>
+            annotations.data.get(LimitsKey) match
+                case Some(SIR.Const(Constant.Data(data), _, _)) => Limits.fromData(data)
+                case _                                          => Limits.none
+        case _ => Limits.none
 
     /** The type of the values of a statement variable of type `tp`: `tp`, without the mark of a
       * variable over their `Data` encodings ([[encoded]]). Code reads the variable's values with
@@ -304,99 +304,6 @@ object DataEncoding {
                     case _                      => None
                 })
     }
-
-    /** The encoding of the values of `tp` as `Data`. `enclosing` are the types it is derived in,
-      * and `parts` counts the parts derived so far.
-      */
-    private def encodingOf(tp: SIRType, enclosing: Set[String], parts: Parts)(using
-        LoweringContext
-    ): DataEncoding = {
-        parts.count += 1
-        if parts.count > maxParts then Unknown(s"the encoding has more than $maxParts parts")
-        else
-            unwrap(tp) match
-                case SIRType.Integer             => Integer
-                case SIRType.ByteString          => Bytes
-                case SIRType.String              => Text
-                case SIRType.Boolean             => Bool
-                case whole if isWholeData(whole) => AnyData
-                case other @ (_: SIRType.CaseClass | _: SIRType.SumCaseClass) =>
-                    if enclosing.contains(other.show) then Unknown(s"${other.show} contains itself")
-                    else if enclosing.size >= maxNesting then
-                        Unknown(s"${other.show} nests more than $maxNesting deep")
-                    else representedEncoding(other, enclosing + other.show, parts)
-                case other => Unknown(s"${other.show} has no Data encoding told here")
-    }
-
-    /** [[encodingOf]] of a case class or a sum type, by its `Data` representation. */
-    private def representedEncoding(tp: SIRType, inner: Set[String], parts: Parts)(using
-        LoweringContext
-    ): DataEncoding = {
-        def arguments: List[SIRType] = typeArgumentsOf(tp)
-        def encoding(of: SIRType): DataEncoding = encodingOf(of, inner, parts)
-        def entries(keyType: SIRType, valueType: SIRType, order: KeyOrder) =
-            Entries(encoding(keyType), encoding(valueType), order)
-        SirTypeUplcGenerator.defaultDataRepresentation(tp) match
-            case ProductCaseClassRepresentation.OneElementWrapper(_) =>
-                fieldsOf(tp) match
-                    case Some(List(field)) => encoding(field)
-                    case _                 => Unknown(s"${tp.show} does not wrap one field")
-            case ProductCaseClassRepresentation.PackedDataMap =>
-                (declarationName(tp), arguments) match
-                    case (SortedMapName, List(keyType, valueType)) =>
-                        val order = unwrap(keyType) match
-                            case SIRType.ByteString => KeyOrder.Bytes
-                            case SIRType.Integer    => KeyOrder.Integers
-                            case _                  => KeyOrder.Unchecked
-                        entries(keyType, valueType, order)
-                    case (AssocMapName, List(keyType, valueType)) =>
-                        entries(keyType, valueType, KeyOrder.Any)
-                    case _ => Unknown(s"${tp.show} is a map of no known keys and values")
-            case SumCaseClassRepresentation.SumDataAssocMap =>
-                pairTypes(tp) match
-                    case Some((keyType, valueType)) => entries(keyType, valueType, KeyOrder.Any)
-                    case None => Unknown(s"${tp.show} is a map of no known keys and values")
-            case SumCaseClassRepresentation.PackedSumDataList =>
-                arguments match
-                    case List(element) => Items(encoding(element))
-                    case _             => Unknown(s"${tp.show} is a list of no known items")
-            case ProductCaseClassRepresentation.ProdDataConstr |
-                SumCaseClassRepresentation.DataConstr =>
-                val constructors: List[Option[List[SIRType]]] = unwrap(tp) match
-                    case SIRType.CaseClass(constructor, typeArguments, None) =>
-                        List(Some(fieldTypes(constructor, typeArguments)))
-                    case SIRType.SumCaseClass(declaration, typeArguments) =>
-                        declaration.constructors.map(constructor =>
-                            ownArguments(constructor, typeArguments).map(fieldTypes(constructor, _))
-                        )
-                    case _ => Nil
-                if constructors.isEmpty || constructors.contains(None) then
-                    Unknown(s"the constructors of ${tp.show} are not told here")
-                else Constr(constructors.flatten.map(_.map(encoding)))
-            case representation =>
-                Unknown(s"${tp.show} is represented as ${representation.show}")
-    }
-
-    private val SortedMapName = "scalus.cardano.onchain.plutus.prelude.SortedMap"
-    private val AssocMapName = "scalus.cardano.onchain.plutus.prelude.AssocMap"
-
-    /** The key and value types of a list of pairs: `List[(A, B)]`, `List[BuiltinPair[A, B]]` or
-      * `PairList[A, B]`.
-      */
-    private def pairTypes(tp: SIRType): Option[(SIRType, SIRType)] =
-        typeArgumentsOf(tp) match
-            case List(element) =>
-                typeArgumentsOf(element) match
-                    case List(first, second) => Some(first -> second)
-                    case _                   => None
-            case List(first, second) => Some(first -> second)
-            case _                   => None
-
-    /** The types of the fields of a case class, or none for a type that is not one. */
-    private def fieldsOf(tp: SIRType): Option[List[SIRType]] = unwrap(tp) match
-        case SIRType.CaseClass(constructor, arguments, _) =>
-            Some(fieldTypes(constructor, arguments))
-        case _ => None
 
     /** Whether `bytes` are UTF-8. */
     private def isUtf8(bytes: Array[Byte]): Boolean = {
