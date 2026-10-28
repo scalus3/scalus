@@ -93,9 +93,9 @@ object JUplc {
 
     /** Decodes a script in any form a caller holds.
       *
-      * Only what reading the bytes requires is checked. The program's version, its padding and any
-      * bytes after it are not: whether a chain would admit this script is
-      * `PlutusScript.isWellFormed`'s question.
+      * The program is read as `unflat` in Plutus reads it: its filler must end the flat bytes, on a
+      * byte boundary. Nothing else is checked, the program's version included: whether a chain
+      * would admit this script is `PlutusScript.isWellFormed`'s question.
       */
     private[eval] def decodeScript(input: js.Any): DeBruijnedProgram =
         decodeBytes(flatOf(input, "script"), "script")(DeBruijnedProgram.fromFlatEncoded)

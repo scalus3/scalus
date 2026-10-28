@@ -25,6 +25,21 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
         assert(error.isInstanceOf[FlatDecodingError])
     }
 
+    test("the diagnostic shows the bytes around the cursor, not the whole input") {
+        val atEnd = DecoderState(Array.fill(1000)(0.toByte))
+        atEnd.currPtr = 1000
+        val error = intercept[FlatDecodingError](atEnd.bits8(1))
+        assert(
+          error.getMessage.contains("DecoderState(currPtr:1000,usedBits:0,buffer:...992 bytes,")
+        )
+        assert(error.getMessage.length < 200)
+
+        val inside = DecoderState(Array.fill(1000)(0.toByte))
+        inside.currPtr = 500
+        assert(inside.toString.contains("buffer:...492 bytes,"))
+        assert(inside.toString.endsWith(",...492 bytes)"))
+    }
+
     test("malformed Flat tags use typed decoding failures") {
         intercept[FlatDecodingError] { summon[Flat[Term]].decode(DecoderState(Array(0xa0.toByte))) }
         intercept[FlatDecodingError] {

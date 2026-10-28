@@ -51,11 +51,7 @@ class PlutusScriptWellFormedTest extends AnyFunSuite {
 
     test("the padding must end on a byte boundary") {
         // `0x82` ends the padding, `00001`, one bit before the end of the byte
-        val badPadding = withLastByte(0x82)
-        assert(
-          DeBruijnedProgram.fromFlatEncoded(badPadding) == DeBruijnedProgram.fromFlatEncoded(flat)
-        )
-        assert(wellFormed(Cbor.encode(badPadding)) == none)
+        assert(wellFormed(Cbor.encode(withLastByte(0x82))) == none)
     }
 
     test("the padding may run on into further bytes") {

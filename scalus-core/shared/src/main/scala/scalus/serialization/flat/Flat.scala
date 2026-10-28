@@ -413,10 +413,18 @@ class DecoderState(
 
     val hashConsed: HashConsed.State = HashConsed.State.empty
 
-    override def toString: String =
-        s"""DecoderState(currPtr:$currPtr,usedBits:$usedBits,buffer:${buffer
-                .map(byteAsBitString)
-                .mkString(",")})"""
+    /** The cursor and the bytes around it. Every decoding error carries this string, so it shows at
+      * most 8 bytes on each side of the cursor, not a whole script.
+      */
+    override def toString: String = {
+        val shownBytes = 8
+        val from = math.max(0, currPtr - shownBytes)
+        val until = math.min(buffer.length, currPtr + shownBytes)
+        val before = if from > 0 then s"...$from bytes," else ""
+        val after = if until < buffer.length then s",...${buffer.length - until} bytes" else ""
+        val shown = buffer.slice(from, until).map(byteAsBitString).mkString(",")
+        s"DecoderState(currPtr:$currPtr,usedBits:$usedBits,buffer:$before$shown$after)"
+    }
 
     /** Decode up to 8 bits
       * @param numBits

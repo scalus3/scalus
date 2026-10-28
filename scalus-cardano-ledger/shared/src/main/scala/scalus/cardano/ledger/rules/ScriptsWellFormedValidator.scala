@@ -5,7 +5,8 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 
 import scala.collection.View
 
-// It's Babbage.validateScriptsWellFormed in cardano-ledger
+// It's Babbage.validateScriptsWellFormed in cardano-ledger. Babbage introduced the check: before
+// it, a script that cannot be deserialised fails in phase 2, see PlutusScriptEvaluator.
 object ScriptsWellFormedValidator extends STS.Validator {
     override final type Error = TransactionException.IllFormedScriptsException
 
@@ -14,6 +15,8 @@ object ScriptsWellFormedValidator extends STS.Validator {
         val utxo = state.utxos
         val body = event.body.value
         val majorProtocolVersion = MajorProtocolVersion(context.env.params.protocolVersion.major)
+
+        if majorProtocolVersion < MajorProtocolVersion.vasilPV then return success
 
         val allWitnessesPlutusScripts = AllResolvedScripts.allWitnessesPlutusScriptsView(event)
 

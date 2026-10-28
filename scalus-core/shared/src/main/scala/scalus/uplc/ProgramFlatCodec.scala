@@ -4,6 +4,7 @@ import scalus.*
 import scalus.serialization.flat.DecoderState
 import scalus.serialization.flat.EncoderState
 import scalus.serialization.flat.Flat
+import scalus.serialization.flat.FlatDecodingError
 
 object ProgramFlatCodec:
     private val flatCodec = summon[Flat[DeBruijnedProgram]]
@@ -53,28 +54,54 @@ object ProgramFlatCodec:
 
     /** Decodes Flat-encoded [[DeBruijnedProgram]] from bytes.
       *
+      * The bytes must hold the program and its filler and nothing else, as `unflat` in Plutus
+      * requires: the filler, any number of 0 bits and then a 1 bit, ends on the last bit of the
+      * input. A filler longer than it needs to be is allowed. Use [[decodeFlatWithRemainingBytes]]
+      * when other bytes follow the program.
+      *
+      * @throws FlatDecodingError
+      *   if the filler is missing or ends inside a byte, or if bytes follow it
       * @throws IllegalArgumentException
       *   see [[requireVersionCanCarry]]
       */
-    def decodeFlat(encoded: Array[Byte]): DeBruijnedProgram =
+    def decodeFlat(encoded: Array[Byte]): DeBruijnedProgram = {
         val decoderState = DecoderState(encoded)
-        val program = flatCodec.decode(decoderState)
-        requireVersionCanCarry(program)
+        val program = decodeWithFiller(decoderState)
+        val remaining = decoderState.availableBytes()
+        if remaining != 0 then
+            throw new FlatDecodingError(s"$remaining bytes follow the filler of the program")
         program
+    }
 
     case class DecodeResult(program: DeBruijnedProgram, remainder: Array[Byte])
 
     /** Decodes Flat-encoded [[DeBruijnedProgram]] from bytes, returning any remaining bytes that
       * were not part of the program.
       *
+      * @throws FlatDecodingError
+      *   if the filler is missing or ends inside a byte
       * @throws IllegalArgumentException
       *   see [[requireVersionCanCarry]]
       */
     def decodeFlatWithRemainingBytes(
         encoded: Array[Byte]
-    ): DecodeResult =
+    ): DecodeResult = {
         val decoderState = DecoderState(encoded)
-        val deBruijnedProgram = flatCodec.decode(decoderState)
-        decoderState.filler()
-        requireVersionCanCarry(deBruijnedProgram)
+        val deBruijnedProgram = decodeWithFiller(decoderState)
         DecodeResult(deBruijnedProgram, decoderState.remainingBytes())
+    }
+
+    /** Decodes a program and the filler after it, which must end on a byte boundary, as `dFiller`
+      * and `strictDecoder` in Plutus read it.
+      */
+    private def decodeWithFiller(decoderState: DecoderState): DeBruijnedProgram = {
+        val program = flatCodec.decode(decoderState)
+        try decoderState.filler()
+        catch
+            case e: FlatDecodingError =>
+                throw new FlatDecodingError("The program has no filler after it", e)
+        if decoderState.usedBits != 0 then
+            throw new FlatDecodingError("The filler of the program ends inside a byte")
+        requireVersionCanCarry(program)
+        program
+    }

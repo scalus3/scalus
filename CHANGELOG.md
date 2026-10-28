@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`ProgramFlatCodec.decodeFlat`, `DeBruijnedProgram.fromFlatEncoded`, `fromCbor` and
+  `fromCborPrefix`, the matching `Program` methods and the `PlutusScript` accessors `program` and
+  `deBruijnedProgram` require the program's filler to end the bytes, as `unflat` in Plutus does.
+  Bytes after the filler, a missing filler and a filler that ends inside a byte throw
+  `FlatDecodingError`. Before, they were ignored, so an accessor returned a program for a script
+  that `isWellFormed` refuses. In JavaScript, `uplc.decodeProgram`, `uplc.applyArgs`,
+  `uplc.applyParamsToScript` and `evaluateScript` throw a `TypeError` for such a script. Read a
+  program that other bytes follow with
+  `decodeFlatWithRemainingBytes`, which now reports a filler that ends inside a byte as
+  `FlatDecodingError` instead of `IllegalArgumentException`.**
+
+### Fixed
+
+- `PlutusScriptEvaluator` reports a script it cannot decode as an `IllegalArgumentException` that
+  names the script, and the Emulator rejects the transaction in phase 1. Before protocol version 7
+  (Babbage), the ledger had no phase 1 check: `ScriptsWellFormedValidator` accepts the script, and
+  it fails in phase 2.
+- A flat decoding error shows the bytes around the failure, not the whole input.
+
 ## 1.4.1 (2026-10-26)
 
 ### Added
