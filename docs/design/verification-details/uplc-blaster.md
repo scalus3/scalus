@@ -547,8 +547,14 @@ takes each limited list apart as the guard walks it, into its empty list and a c
 own reads of the list find it taken apart. So a loop over a limited list runs to its end, and the
 statement of the values within the limits is proved as a theorem. The guard may check less than the
 limits say, and never more: it does not look into the constructors of a type of several, nor at the
-elements of a list that has no most. A bound is at most 64 elements, and a guard of nested walks at
-most 20000 variables: the walks are unrolled, and the tactic refuses larger limits.
+elements of a list that has no most. Such a guard is not exact: its variable has more values than
+the limits allow, and is a variable only where it stands for every value, as one whose encoding is
+not exact is. Under `!` or in a premise, where the statement asks for a witness, the guard could
+let one through that the limits exclude, so the tactic refuses it there. A counterexample is checked
+against the limits (`Limits.outside`) as it is against the type: a value outside them refutes
+nothing. A bound is at most 64 elements, and a guard of nested walks at most 20000 variables, which
+the tactic counts before it writes the guard: the walks are unrolled, and larger limits are
+refused.
 
 Lean's run relates a read to what an earlier read established only where the two are the same
 terms. Blaster's optimizer resolves `tailList` of a list it has taken apart, but not `List.drop`,

@@ -107,6 +107,19 @@ class UplcBlasterLimitsTest extends AnyFunSuite with LeanProofsSuite {
         assert(provenAt(atMostFour, total) > 0)
     }
 
+    test("a counterexample outside the limits refutes nothing, where the guard checks less") {
+        // Every collection is empty, and the guard does not look into the constructors of an
+        // `Option`: Lean's counterexample can be `Some` of a list that is not empty. The statement
+        // holds of the values within the limits, so such a value refutes nothing.
+        val empty = forAllDataLimited[Option[List[BigInt]]](x => maxCollectionLength(x) <= 0)(x =>
+            x match
+                case Option.Some(xs) => xs.isEmpty
+                case Option.None     => true
+        )
+        val reason = inconclusive(empty, UplcBlaster(Budget.LeanSteps(400), lean))
+        assert(reason.contains("outside the variable's limits"), reason)
+    }
+
     test("a proof within a budget is kept for its budget, apart from a proof") {
         // A provider that says its workspace and has no server: whatever asks Lean fails.
         val silent = new LeanServerProvider {

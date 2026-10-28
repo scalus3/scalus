@@ -532,7 +532,13 @@ object UplcBlaster {
                         binders += new PropExpr.Ident[Any](ident.name, 0L, ident.tp)
                         predicates += restriction.premise
                         if !restriction.exact then inexact += position
-                        if limits.all.nonEmpty then guard.foreach(guards(position) = _)
+                        // A guard that checks less than the limits say leaves the variable more
+                        // values than they allow, as a predicate that is not exact does.
+                        if limits.all.nonEmpty then
+                            guard.foreach { checked =>
+                                guards(position) = checked.program
+                                if !checked.exact then inexact += position
+                            }
                         Right(List(position) -> List(Binding(ident.name, valueType, decoded)))
 
             def quantifiedValues(
@@ -663,8 +669,10 @@ object UplcBlaster {
                     Left(
                       s"${claimed.map(binders(_).name).mkString(", ")}: a list, a map or a " +
                           "forAllData variable whose type cannot be told from Data exactly, as a " +
-                          "type that contains itself, has more values as a variable than its type " +
-                          "has. A statement that holds of all of them holds of the type's, but a " +
+                          "type that contains itself, or a forAllDataLimited variable whose guard " +
+                          "checks less than its limits say, as of the elements of a list that has " +
+                          "no most, has more values as a variable than its type or its limits " +
+                          "allow. A statement that holds of all of them holds of the type's, but a " +
                           "value that shows a statement of some value can be none of the type's. " +
                           "So such a variable is one only where it stands for every value: in a " +
                           "forAll in a positive position, or an exists in a negative one, and not " +
@@ -2471,6 +2479,23 @@ object UplcBlaster {
       * type's, so that a refutation never rests on it.
       */
     private[uplcblaster] def outsideType(value: Constant, tp: SIRType): Option[String] =
+        outsideEncoding(value, tp).orElse(outsideLimits(value, tp))
+
+    /** Why `value` is outside the limits of a variable of type `tp` with limits
+      * ([[Props.forAllDataLimited]]), or none where it is within them, or the variable has none. A
+      * guard may check less than the limits say, so a value it lets through is checked here.
+      */
+    private def outsideLimits(value: Constant, tp: SIRType): Option[String] = {
+        val limits = DataEncoding.limits(tp)
+        value match
+            case Constant.Data(data) if limits.all.nonEmpty =>
+                limits
+                    .outside(data, DataEncoding.valueType(tp))
+                    .map(reason => s"it is outside the variable's limits: $reason")
+            case _ => None
+    }
+
+    private def outsideEncoding(value: Constant, tp: SIRType): Option[String] =
         variableOf(tp).filter(_.isLarger).flatMap { kind =>
             (variableEncoding(tp), value) match
                 case (DataEncoding.Items(items), Constant.List(_, values)) =>

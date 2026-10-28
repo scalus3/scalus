@@ -16,7 +16,10 @@ import scalus.verify.{DataLayout, Limit, Limits, Step}
   *
   * The guard may check less than the limits say, and never more: a guard that held of fewer values
   * than the limits would prove the statement of fewer values than it claims. So it does not look
-  * into the constructors of a type of several, nor at the elements of a list that has no most.
+  * into the constructors of a type of several, nor at the elements of a list that has no most. A
+  * guard that checks less is not [[Guard.exact]], and its variable stands for more values than its
+  * limits allow: it may be one only where it stands for every value, as a variable whose encoding
+  * is not exact.
   */
 private[uplcblaster] object LimitGuards {
 
@@ -29,11 +32,17 @@ private[uplcblaster] object LimitGuards {
       */
     val maxVariables = 20_000
 
-    /** The guard of `limits` of a variable laid out as `layout`, as a program from the variable's
-      * `Data` to whether it meets them, or why there is none: a bound larger than [[maxBound]], or
-      * a guard larger than [[maxVariables]]. It is `true` of every value where it checks nothing.
+    /** A guard: `program`, from a variable's `Data` to whether it meets its limits, and whether it
+      * checks all that the limits say. One that is not `exact` holds of more values than the limits
+      * allow.
       */
-    def guard(layout: DataLayout, limits: Limits): Either[String, Term] = {
+    final case class Guard(program: Term, exact: Boolean)
+
+    /** The guard of `limits` of a variable laid out as `layout`, or why there is none: a bound
+      * larger than [[maxBound]], or a guard larger than [[maxVariables]], which is told before it
+      * is written. It is `true` of every value where it checks nothing.
+      */
+    def guard(layout: DataLayout, limits: Limits): Either[String, Guard] = {
         val bounds = limits.all.flatMap {
             case Limit.MaxCollectionLength(max) => List(max)
             case Limit.Length(_, min, max)      => min :: max.toList
@@ -46,15 +55,25 @@ private[uplcblaster] object LimitGuards {
                 )
             case None =>
                 val guarding = new Guarding(limits)
-                val data = guarding.fresh("data")
-                val body = guarding.check(layout, vr(data), Some(Nil)).getOrElse(true.asTerm)
-                if guarding.variables > maxVariables then
+                if guarding.size(layout, Nil) > maxVariables then
                     Left(
-                      s"the guard of the limits has ${guarding.variables} variables, more than " +
-                          s"$maxVariables: the walks of nested collections multiply"
+                      s"the guard of the limits would have more than $maxVariables variables: " +
+                          "the walks of nested collections multiply"
                     )
-                else Right(lam(data)(body))
+                else
+                    val data = guarding.fresh("data")
+                    val body = guarding.check(layout, vr(data), Some(Nil)).getOrElse(true.asTerm)
+                    Right(Guard(lam(data)(body), guarding.exact))
     }
+
+    /** Whether `layout` has a collection, in a field, a constructor or an element. */
+    private def hasCollection(layout: DataLayout): Boolean = layout match
+        case DataLayout.Collection(_) | DataLayout.Mapping(_, _, _) => true
+        case DataLayout.Record(fields) => fields.exists((_, f) => hasCollection(f))
+        case DataLayout.Choice(constructors) =>
+            constructors.exists((_, fields) => fields.exists((_, f) => hasCollection(f)))
+        case DataLayout.Wrapper(_, inner) => hasCollection(inner)
+        case DataLayout.Plain(_)          => false
 
     /** `test` and then `rest`, where `rest` runs only where `test` is `true`. */
     private[uplcblaster] def and(test: Term, rest: Term): Term =
@@ -73,6 +92,9 @@ private[uplcblaster] object LimitGuards {
 
         /** The variables written so far, which number the next one. */
         var variables = 0
+
+        /** Whether the guard checks all that the limits say, so far. */
+        var exact = true
 
         def fresh(what: String): String = {
             variables += 1
@@ -121,7 +143,43 @@ private[uplcblaster] object LimitGuards {
                             (check(keys, key, Some(at :+ Step.Keys)) ++
                                 check(values, item, Some(at :+ Step.Values))).reduceOption(and)
                         }
-                    case DataLayout.Choice(_) | DataLayout.Plain(_) => None
+                    // The constructors of a type of several are not looked into: where every
+                    // collection is limited, and they have one, the guard checks less.
+                    case choice @ DataLayout.Choice(_) =>
+                        if hasCollection(choice) then exact = false
+                        None
+                    case DataLayout.Plain(_) => None
+                }
+        }
+
+        /** The variables [[check]] of `layout` at `path` writes, up to one more than
+          * [[maxVariables]], told without writing them: a walk of a list writes those of its
+          * elements' check for each cell.
+          */
+        def size(layout: DataLayout, path: List[Step]): Long = {
+            val most = maxVariables.toLong + 1
+            def plus(a: Long, b: Long) = math.min(a + b, most)
+            def times(a: Long, b: Long) =
+                if b != 0 && a > most / b then most else math.min(a * b, most)
+            def walked(element: Long) = {
+                val (least, longest) = limits.bounds(Some(path))
+                if least == 0 && longest.isEmpty then 0L
+                else plus(1, times(longest.getOrElse(least).toLong + 1, plus(1, element)))
+            }
+            if !limitedUnder(Some(path)) then 0L
+            else
+                layout match {
+                    case DataLayout.Record(fields) =>
+                        fields.foldLeft(1L) { case (sum, (name, field)) =>
+                            plus(sum, size(field, path :+ Step.Field(name)))
+                        }
+                    case DataLayout.Wrapper(name, inner) => size(inner, path :+ Step.Field(name))
+                    case DataLayout.Collection(items) => walked(size(items, path :+ Step.Elements))
+                    case DataLayout.Mapping(keys, values, _) =>
+                        walked(
+                          plus(size(keys, path :+ Step.Keys), size(values, path :+ Step.Values))
+                        )
+                    case DataLayout.Choice(_) | DataLayout.Plain(_) => 0L
                 }
         }
 
@@ -167,6 +225,9 @@ private[uplcblaster] object LimitGuards {
                         most.flatMap(_ => element(cell)).fold(next)(and(_, next))
                 ifThenElse(builtin(DefaultFun.NullList, 1, cell), (before >= least).asTerm, rest)
             }
+            // A list that has no most is walked to its least, and its elements are not looked at:
+            // where they have limits, the guard checks less.
+            if most.isEmpty && element(vr(fresh("unchecked"))).isDefined then exact = false
             Option.when(least > 0 || most.isDefined)(let("list", list)(cells(_, 0)))
         }
     }
