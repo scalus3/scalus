@@ -10,7 +10,7 @@ import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, ConstrDecl, 
 import scalus.compiler.sir.linking.Wrappers
 import scalus.compiler.sir.lowering.{LoweringContext, ProductCaseClassRepresentation, SumCaseClassRepresentation}
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
-import scalus.uplc.{Constant, DeBruijn, DefaultFun, DefaultUni, Program, Term}
+import scalus.uplc.{Constant, DeBruijn, DefaultFun, DefaultUni, NamedDeBruijn, Program, Term}
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{MachineError, NoLogger, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.utils.{Hex, Utils}
@@ -440,8 +440,35 @@ object UplcBlaster {
             // clauses of a contract do. The variable indices matter: equal program bytes under two
             // different quantifiers are two differently scoped leaves.
             val indices = scala.collection.mutable.Map.empty[(String, List[Int]), Int]
+            // The guard of each binder with limits ([[LimitGuards]]), by its position.
+            val guards = scala.collection.mutable.Map.empty[Int, Term]
 
+            // A test in the scope of a binder with limits checks its guard first, and fails where
+            // the binder's value does not meet them: there the guard, the premise of what the
+            // binder's quantifier says, is false, and what the test does there says nothing. Its
+            // `dropList`s of a constant are read as the steps of a list's tail, as the guard reads
+            // a list, so that what the guard established holds for the test's reads ([[DropLists]]).
+            // Another test keeps them: the steps take more of Lean's machine than `dropList` does.
             def leaf(term: Term, scope: List[Int]): Int = {
+                val limited =
+                    scope.zipWithIndex.flatMap((binder, at) => guards.get(binder).map(_ -> at))
+                if limited.isEmpty then unguardedLeaf(term, scope)
+                else
+                    val names = scope.indices.map(at => s"scalus_limited_$at")
+                    val call = names.foldLeft(term)((f, name) =>
+                        Term.Apply(f, Term.Var(NamedDeBruijn(name)))
+                    )
+                    val meets = limited
+                        .map((guard, at) => Term.Apply(guard, Term.Var(NamedDeBruijn(names(at)))))
+                        .reduce(LimitGuards.and)
+                    val guarded = LimitGuards.ifThenElse(meets, call, Term.Error())
+                    unguardedLeaf(
+                      DropLists.unrolled(names.foldRight(guarded)(Term.LamAbs(_, _))),
+                      scope
+                    )
+            }
+
+            def unguardedLeaf(term: Term, scope: List[Int]): Int = {
                 val program = Program.plutusV3(term)
                 indices.getOrElseUpdate(
                   Hex.bytesToHex(program.cborEncoded) -> scope, {
@@ -475,7 +502,19 @@ object UplcBlaster {
                 decoder: SIR
             ): Either[String, (List[Int], List[Binding])] =
                 val decoded = Props.openVariables(decoder, List(ident.name))
+                val limits = DataEncoding.limits(ident.tp)
+                val unfit = Option.when(limits.all.nonEmpty)(limits.unfit(valueType)).flatten
+                lazy val guard = LimitGuards.guard(DataLayout.of(valueType), limits)
                 DataEncoding.of(valueType) match
+                    case _ if unfit.isDefined =>
+                        Left(
+                          s"the limits of a binder of ${valueType.show} do not fit it: ${unfit.get}"
+                        )
+                    case _ if limits.all.nonEmpty && guard.isLeft =>
+                        Left(
+                          s"the limits of a binder of ${valueType.show} are not checked: " +
+                              guard.left.toOption.mkString
+                        )
                     case DataEncoding.Unknown(reason) =>
                         Left(s"a forAllData binder of ${valueType.show} is not supported: $reason")
                     // `d.to[A]` compiles to the compiler's own reading, whatever FromData is
@@ -493,6 +532,13 @@ object UplcBlaster {
                         binders += new PropExpr.Ident[Any](ident.name, 0L, ident.tp)
                         predicates += restriction.premise
                         if !restriction.exact then inexact += position
+                        // A guard that checks less than the limits say leaves the variable more
+                        // values than they allow, as a predicate that is not exact does.
+                        if limits.all.nonEmpty then
+                            guard.foreach { checked =>
+                                guards(position) = checked.program
+                                if !checked.exact then inexact += position
+                            }
                         Right(List(position) -> List(Binding(ident.name, valueType, decoded)))
 
             def quantifiedValues(
@@ -574,11 +620,31 @@ object UplcBlaster {
                         l <- loop(left, scope, built)
                         r <- loop(right, scope, built)
                     yield LeafFormula.And(LeafFormula.Implies(l, r), LeafFormula.Implies(r, l))
+                // A binder with limits stands for the values that meet them: its guard, a test of
+                // its own, is the premise of the rest.
                 case Prop.Forall(ident, body) =>
                     quantified(ident).flatMap { (introduced, bindings) =>
-                        loop(body, scope ++ introduced, built ++ bindings)
-                            .map(LeafFormula.Forall(introduced, _))
+                        loop(body, scope ++ introduced, built ++ bindings).map { inner =>
+                            val premises = introduced.flatMap(binder =>
+                                guards
+                                    .get(binder)
+                                    .map(guard =>
+                                        LeafFormula.Test(unguardedLeaf(guard, List(binder)))
+                                    )
+                            )
+                            LeafFormula.Forall(
+                              introduced,
+                              premises.foldRight(inner)(LeafFormula.Implies(_, _))
+                            )
+                        }
                     }
+                // The limits of a binder are the premise of a universal statement, and a
+                // statement that asks for a witness has none.
+                case Prop.Exists(ident, None, _) if DataEncoding.limits(ident.tp).all.nonEmpty =>
+                    Left(
+                      s"an exists over ${ident.name}, a binder with limits, is not supported: the " +
+                          "limits of a binder are the premise of a forAll"
+                    )
                 case Prop.Exists(ident, None, body) =>
                     quantified(ident).flatMap { (introduced, bindings) =>
                         loop(body, scope ++ introduced, built ++ bindings)
@@ -603,8 +669,10 @@ object UplcBlaster {
                     Left(
                       s"${claimed.map(binders(_).name).mkString(", ")}: a list, a map or a " +
                           "forAllData variable whose type cannot be told from Data exactly, as a " +
-                          "type that contains itself, has more values as a variable than its type " +
-                          "has. A statement that holds of all of them holds of the type's, but a " +
+                          "type that contains itself, or a forAllDataLimited variable whose guard " +
+                          "checks less than its limits say, as of the elements of a list that has " +
+                          "no most, has more values as a variable than its type or its limits " +
+                          "allow. A statement that holds of all of them holds of the type's, but a " +
                           "value that shows a statement of some value can be none of the type's. " +
                           "So such a variable is one only where it stands for every value: in a " +
                           "forAll in a positive position, or an exists in a negative one, and not " +
@@ -1813,8 +1881,68 @@ object UplcBlaster {
                     case _                                                  => None
             yield result
 
-        try kept.getOrElse(at(searchStart, Nil, None))
+        // A statement with limits starts where every test ends on the largest values that meet
+        // them. Below, no run ends, the guard's neither: a counterexample would be of runs the
+        // budget cuts, which the solver seldom finds, and the search would stop undetermined.
+        //
+        // The count gets a quarter of the time of an attempt, or of the search, at most, and is
+        // written nowhere: it is of no counterexample. Where it does not end, or a run does not
+        // end within what it counts, the search starts as any other: the count is a start, not
+        // a result.
+        def start: Int =
+            (largestValues(goal), time()) match
+                case (Some(values), Some((wait, _))) =>
+                    measured(
+                      goal,
+                      flats,
+                      values,
+                      maxHeartbeats,
+                      servers,
+                      wait.map(_ / 4),
+                      None
+                    ) match
+                        case Right(runs) if runs.forall(_.end != End.Running) =>
+                            math.max(searchStart, (runs.map(_.steps).max * 5 + 3) / 4)
+                        case _ => searchStart
+                case _ => searchStart
+
+        try kept.getOrElse(at(start, Nil, None))
         finally Directories.remove(directory)
+    }
+
+    /** The values the search counts the steps of a statement with limits on: for each variable with
+      * limits, the largest value that meets them ([[Limits.largest]]), and for each other, the
+      * value of a variable Lean leaves out of a counterexample. None for a statement without
+      * limits.
+      */
+    private def largestValues(goal: Lowered): Option[List[Constant]] = {
+        val limited = goal.binders.map(binder => DataEncoding.limits(binder.tp))
+        if limited.forall(_.all.isEmpty) then None
+        else
+            val values = goal.binders.zip(limited).map { (binder, limits) =>
+                if limits.all.isEmpty then unvalued(binder.tp)
+                else
+                    limits
+                        .largest(DataLayout.of(DataEncoding.valueType(binder.tp)))
+                        .map(Constant.Data(_))
+            }
+            Option.when(values.forall(_.isDefined))(values.flatten)
+    }
+
+    /** The value of a variable of type `tp` that Lean leaves out of a counterexample: `0`, `false`,
+      * the empty string or list, `I 0`, or an example of the type of a variable over its `Data`.
+      */
+    private def unvalued(tp: SIRType): Option[Constant] = variableOf(tp).map {
+        case Variable.Integer    => Constant.Integer(BigInt(0))
+        case Variable.Boolean    => Constant.Bool(false)
+        case Variable.ByteString => Constant.ByteString(ByteString.empty)
+        case Variable.String     => Constant.String("")
+        case Variable.WholeData  => Constant.Data(Data.I(0))
+        case Variable.EncodedData =>
+            Constant.Data(variableEncoding(tp).example.getOrElse(Data.I(0)))
+        case Variable.DataList => dataList(Nil)
+        case Variable.PairList => pairList(Nil)
+        case Variable.DataMap  => Constant.Data(Data.Map(PList.Nil))
     }
 
     /** The budget to go on with after `steps` gave the spurious counterexample `values`, or the
@@ -2351,6 +2479,23 @@ object UplcBlaster {
       * type's, so that a refutation never rests on it.
       */
     private[uplcblaster] def outsideType(value: Constant, tp: SIRType): Option[String] =
+        outsideEncoding(value, tp).orElse(outsideLimits(value, tp))
+
+    /** Why `value` is outside the limits of a variable of type `tp` with limits
+      * ([[Props.forAllDataLimited]]), or none where it is within them, or the variable has none. A
+      * guard may check less than the limits say, so a value it lets through is checked here.
+      */
+    private def outsideLimits(value: Constant, tp: SIRType): Option[String] = {
+        val limits = DataEncoding.limits(tp)
+        value match
+            case Constant.Data(data) if limits.all.nonEmpty =>
+                limits
+                    .outside(data, DataEncoding.valueType(tp))
+                    .map(reason => s"it is outside the variable's limits: $reason")
+            case _ => None
+    }
+
+    private def outsideEncoding(value: Constant, tp: SIRType): Option[String] =
         variableOf(tp).filter(_.isLarger).flatMap { kind =>
             (variableEncoding(tp), value) match
                 case (DataEncoding.Items(items), Constant.List(_, values)) =>

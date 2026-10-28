@@ -518,6 +518,77 @@ do not finish](#statements-that-do-not-finish)), is proved within a budget of th
 end within it: that a list's `length` is not negative within 400 steps, that `filter` does not
 lengthen a list within 100.
 
+### Limits of a variable's collections
+
+`forAllDataLimited[A](x => limit)(x => body)` is `forAllData[A](x => limit ==> body)`, where `limit`
+says how many elements the collections of `x` have. A collection is a list or a map of the type, as
+its `Data` encoding has it: the fields of a case class are none, and neither is a list in a field of
+type `Data`. The macro turns `limit` into `Limits` at compile time, a list of `Limit`s:
+`MaxCollectionLength(n)`, every collection, and `Length(path, min, max)`, the collections at a path
+of fields, a list's elements, or a map's keys or values. A condition of another kind is a compile
+error: a limit is of the shape of the values, and the statement's other conditions are its premise.
+
+A premise does not prune the symbolic run: `#prep_uplc_run` prepares each test's program on its
+own, so the run of `body`'s tests follows every length of every list it reads, as without the
+premise. The limits act inside the programs instead:
+
+- The tactic writes a guard, a program from `x`'s `Data` to whether it meets the limits
+  (`LimitGuards`). It walks the `Data` along the limited paths with `unConstrData`, `sndPair`,
+  `headList` and `tailList`, and checks a collection's length with a walk unrolled to one cell more
+  than its most, or to its least where it has no most.
+- The guard is a test of its own, the premise of the rest under `x`'s quantifier: `∀ x,
+  guard(x) → body`.
+- Every test in `x`'s scope runs the guard first, and fails where it is false: `if guard(x) then
+  test else error`.
+
+Where the limits hold, every test is what it was. Where they do not, the premise is false, and what
+the tests do there says nothing: their failing at once is what prunes the run. Lean's run of a test
+takes each limited list apart as the guard walks it, into its empty list and a cell, and the test's
+own reads of the list find it taken apart. So a loop over a limited list runs to its end, and the
+statement of the values within the limits is proved as a theorem. The guard may check less than the
+limits say, and never more: it does not look into the constructors of a type of several, nor at the
+elements of a list that has no most. Such a guard is not exact: its variable has more values than
+the limits allow, and is a variable only where it stands for every value, as one whose encoding is
+not exact is. Under `!` or in a premise, where the statement asks for a witness, the guard could
+let one through that the limits exclude, so the tactic refuses it there. A counterexample is checked
+against the limits (`Limits.outside`) as it is against the type: a value outside them refutes
+nothing. A bound is at most 64 elements, and a guard of nested walks at most 20000 variables, which
+the tactic counts before it writes the guard: the walks are unrolled, and larger limits are
+refused.
+
+Lean's run relates a read to what an earlier read established only where the two are the same
+terms. Blaster's optimizer resolves `tailList` of a list it has taken apart, but not `List.drop`,
+Lean's reading of `dropList`, which it does not unfold. Code compiled from a field selection reads a
+field with `dropList`, and a hand-written deserializer with `tailList`: two such reads of one field
+take it apart as two lists, and a guard of one bounds the other no more. So in a test the guard
+checks, the tactic writes each `dropList` of a constant as its steps, the list where it is empty and
+its tail otherwise (`DropLists`), and every read of a field is one of tails. Other tests keep their
+`dropList`s: the steps take more of Lean's machine. A proof of a statement with limits is then of the
+programs written so, and the rewriting is trusted as the lowering is: the two agree on the Scalus
+CEK (`DropListsTest`), and a kept result's fingerprint is of the programs written so, not of the
+deployed script's bytes. Blaster resolving `List.drop` of a constant count itself would keep the
+proved programs as compiled.
+
+A search of a statement with limits starts where every test ends on the largest values that meet
+them: each limited list as long as it may be, a map's keys distinct (`Limits.largest`). Below, no
+run ends, the guard's neither, and a counterexample would be of runs the budget cuts, which the
+solver seldom finds: at 100 steps, Blaster was undetermined.
+
+The deployed one-shot minting script on contexts of at most one input, one policy and one token
+(`MintingPolicyVerificationTest`) is proved at 2000 steps, about 30 s in Lean. Before the guards and
+the steps of `dropList`, it did not finish at any bound. A spike measured larger bounds, of the
+inputs, the policies and the tokens of each:
+
+| Bound | Paths of the two tests | Lean | Solver |
+|---|---|---|---|
+| 1 | 83 and 142 | 32 s | 0.1 s, valid |
+| 2 | 1685 and 2054 | 7 min | 0.6 s, valid |
+| 3 | more than 35000 each | 3.5 h in `#prep_uplc_run` | |
+
+The paths multiply: each input is compared with the seed, each policy and token with the policy's
+own, and each comparison with a symbolic value is two paths to the end of the script; 88% of them
+end in the script's error.
+
 ## Lean workspace and pins
 
 The workspace is `scalus-verification/src/main/lean`: Lean 4.24.0 (`lean-toolchain`),
@@ -890,11 +961,17 @@ steeply with the budget:
 The budget bounds the steps of a path, not the length of each list, so the paths are the
 combinations of the lengths of the context's lists whose runs fit in it.
 
-What it does not show: a transaction of any other shape (longer lists of inputs, policies or
-tokens, a transaction without an input, or a mint without the entry of ADA, which the ledger
-does not give a script of version 1 or 2); that the tokens are minted once, which follows from
-the ledger spending an output once; the deserializers, and so the script on the ledger's script
-context; and the published scripts, which `MintingPolicy` compiles with other options.
+**With limits, the script on its context is proved.** The same statement, of the contexts of at
+most one input, one policy and one token (`forAllDataLimited`), is proved at 2000 steps: of the
+`Data` the node gives the script, deserializer and all. Its other lists are not limited, and the
+script does not read them. [Limits of a variable's collections](#limits-of-a-variables-collections)
+says how, and what larger bounds cost.
+
+What it does not show: a transaction of any other shape (more than one input, policy or token for
+the deployed script, longer lists for the policy's statements, a transaction without an input, or
+a mint without the entry of ADA, which the ledger does not give a script of version 1 or 2); that
+the tokens are minted once, which follows from the ledger spending an output once; the script on a
+larger context; and the published scripts, which `MintingPolicy` compiles with other options.
 
 ## Statements that do not finish
 

@@ -42,7 +42,220 @@ private[verify] object PropMacro {
             universal(idents, inner)
         )
 
-    /** Universal quantifiers over `idents`, outermost first, around `body`. */
+    /** [[forAllData]] of the values that meet the limits `limit` says ([[limitsOf]]). */
+    def forAllDataLimited[A: Type](
+        limit: Expr[A => Boolean],
+        body: Expr[A => Prop | Boolean],
+        decode: Expr[FromData[A]]
+    )(using Quotes): Expr[Prop] = {
+        val limits = limitsOf(limit)
+        binders(body, List(Type.of[A]), "forAllData", Some(decode), Some(limits))((idents, inner) =>
+            universal(idents, inner)
+        )
+    }
+
+    /** The limits that the lambda literal `limit` says of its parameter
+      * ([[Props.forAllDataLimited]]): limits on the length of its collections, joined with `&&`.
+      * Each is `maxCollectionLength(x) <= n`, or a comparison of the length of a collection of `x`
+      * with `n`, `isEmpty` or `nonEmpty` of one, or `forall` over a list's elements of limits of
+      * each element. A collection is named by the fields from `x` to it. Anything else is a compile
+      * error: a limit is of the shape of the values, and another condition belongs in the
+      * statement. A bound is any expression without the variable, of `BigInt` or `Int`, evaluated
+      * where the statement is built.
+      */
+    private def limitsOf[A: Type](limit: Expr[A => Boolean])(using Quotes): Expr[Limits] = {
+        import quotes.reflect.*
+        val (params, rhs) = lambdaOf(
+          limit.asTerm,
+          Some(1),
+          "the limit of forAllDataLimited must be a lambda literal of the variable"
+        )
+        val variable = params.head.symbol
+        val limits = Expr.ofList(limitsIn(rhs, variable, Nil, Map.empty, variable.owner))
+        '{ Limits($limits) }
+    }
+
+    /** What the limits of [[limitsOf]] say, and how to write another condition. */
+    private val limitForms =
+        "a limit of forAllDataLimited bounds the length of the variable's collections: " +
+            "maxCollectionLength(x) <= n, x.a.b.length <= n (or <, ==, >=, >), isEmpty, " +
+            "nonEmpty, and forall over a list, or over a map's keys or values, of the limits of " +
+            "each of them, joined with &&. A " +
+            "condition of another kind is the statement's: write it in its premise"
+
+    /** The limits `term` says of `variable`, whose collections are at `prefix`. `proxies` are the
+      * values of the bindings of the inline expansions `term` is in, such as the list that
+      * `nonEmpty` is called on. `limit` is the lambda of the limits: a bound is computed where the
+      * statement is built, outside it, and so may use nothing of it.
+      */
+    private def limitsIn(using
+        Quotes
+    )(
+        term: quotes.reflect.Term,
+        variable: quotes.reflect.Symbol,
+        prefix: List[Expr[Step]],
+        proxies: Map[quotes.reflect.Symbol, quotes.reflect.Term],
+        limit: quotes.reflect.Symbol
+    ): List[Expr[Limit]] = {
+        import quotes.reflect.*
+        def refuse(at: Tree): Nothing = report.errorAndAbort(limitForms, at.pos)
+        // The values of the bindings of the inline expansions met so far.
+        val scope = scala.collection.mutable.Map.from(proxies)
+        // `term` without its wrappers, with the bindings of its inline expansions in `scope`.
+        def unwrapped(term: Term): Term = term match
+            case Inlined(_, bindings, inner) =>
+                bindings.foreach {
+                    case binding @ ValDef(_, _, Some(value)) => scope(binding.symbol) = value
+                    case _                                   => refuse(term)
+                }
+                unwrapped(inner)
+            case Typed(inner, _)                         => unwrapped(inner)
+            case Block(Nil, inner)                       => unwrapped(inner)
+            case Ident(_) if scope.contains(term.symbol) => unwrapped(scope(term.symbol))
+            case other                                   => other
+        val here = unwrapped(term)
+        // The class of the values of `term`, through aliases: `v2.Value` is `v1.Value`.
+        def classOf(term: Term): Symbol = term.tpe.widen.dealias.typeSymbol
+        // A map, whose `Data` is its entries: `toList` and `toPairList` are the map itself.
+        def isMap(term: Term): Boolean =
+            Set(
+              "scalus.cardano.onchain.plutus.prelude.SortedMap",
+              "scalus.cardano.onchain.plutus.prelude.AssocMap"
+            ).contains(classOf(term).fullName)
+        val entries = Set("toList", "toPairList")
+        // The steps from `variable` to the collection `term` is, where it is one of its parts.
+        def path(term: Term): Option[List[Expr[Step]]] = unwrapped(term) match
+            case reference @ Ident(_) if reference.symbol == variable => Some(prefix)
+            case Select(map, name) if entries(name) && isMap(map)     => path(map)
+            case Apply(function, List(map)) if entries(function.symbol.name) && isMap(map) =>
+                path(map)
+            case Select(qualifier, name) if classOf(qualifier).caseFields.exists(_.name == name) =>
+                path(qualifier).map(_ :+ '{ Step.Field(${ Expr(name) }) })
+            case _ => None
+        // The collection a call of the method `name` is on: its receiver, or the argument of an
+        // extension method.
+        def receiver(term: Term, names: Set[String]): Option[Term] =
+            unwrapped(term) match
+                case Select(qualifier, name) if names(name) => Some(qualifier)
+                case Apply(function, List(argument)) if names(function.symbol.name) =>
+                    function match
+                        case Select(qualifier, _) if path(qualifier).isDefined => Some(qualifier)
+                        case _                                                 => Some(argument)
+                case Apply(function, Nil) if names(function.symbol.name) =>
+                    receiver(function, names)
+                case TypeApply(function, _) if names(function.symbol.name) =>
+                    receiver(function, names)
+                case _ => None
+        // What a comparison bounds: every collection, or the collection at a path.
+        def measured(term: Term): Option[Option[List[Expr[Step]]]] =
+            unwrapped(term) match
+                case Apply(function, List(argument))
+                    if function.symbol.name == "maxCollectionLength" =>
+                    // Of the variable itself: every collection of a part of it is no limit here.
+                    if prefix.nonEmpty || !path(argument).exists(_.isEmpty) then refuse(term)
+                    Some(None)
+                case other => receiver(other, Set("length", "size")).flatMap(path).map(Some(_))
+        // Whether `term` uses what is of the limit's lambda: a variable, an element, or a value
+        // of an inline expansion in it.
+        def mentions(term: Term): Boolean = {
+            def inLimit(symbol: Symbol): Boolean =
+                !symbol.isNoSymbol && (symbol == limit || inLimit(symbol.maybeOwner))
+            var found = false
+            new TreeTraverser {
+                override def traverseTree(tree: Tree)(owner: Symbol): Unit =
+                    if inLimit(tree.symbol) then found = true
+                    else super.traverseTree(tree)(owner)
+            }.traverseTree(term)(Symbol.spliceOwner)
+            found
+        }
+        def bound(term: Term): Expr[BigInt] =
+            if mentions(term) then refuse(term)
+            else if term.tpe <:< TypeRepr.of[BigInt] then term.asExprOf[BigInt]
+            else if term.tpe <:< TypeRepr.of[Int] then
+                val n = term.asExprOf[Int]
+                '{ BigInt($n) }
+            else refuse(term)
+        def length(path: List[Expr[Step]], min: Expr[Int], max: Expr[Option[Int]]) = {
+            val steps = Expr.ofList(path)
+            '{ Limit.Length($steps, $min, $max) }
+        }
+        // A bound is counted as a number of elements of `BigInt`, which is never out of range.
+        def compared(at: Term, measure: Option[List[Expr[Step]]], op: String, n: Expr[BigInt]) =
+            (measure, op) match
+                case (None, "<=")       => '{ Limit.MaxCollectionLength(Limits.count($n)) }
+                case (None, "<")        => '{ Limit.MaxCollectionLength(Limits.count($n - 1)) }
+                case (None, _)          => refuse(at)
+                case (Some(path), "<=") => length(path, '{ 0 }, '{ Some(Limits.count($n)) })
+                case (Some(path), "<")  => length(path, '{ 0 }, '{ Some(Limits.count($n - 1)) })
+                case (Some(path), "==") =>
+                    length(path, '{ Limits.count($n) }, '{ Some(Limits.count($n)) })
+                case (Some(path), ">=") => length(path, '{ Limits.count($n) }, '{ None })
+                case (Some(path), ">")  => length(path, '{ Limits.count($n + 1) }, '{ None })
+                case _                  => refuse(at)
+        // `term` negated: `!inner`, as `nonEmpty` is `!isEmpty`.
+        def negated(term: Term): Option[Term] = unwrapped(term) match
+            case Select(inner, "unary_!")             => Some(inner)
+            case Apply(Select(inner, "unary_!"), Nil) => Some(inner)
+            case _                                    => None
+        // `list.forall(element => body)`: the list, the element and the body.
+        def forall(term: Term): Option[(Term, Symbol, Term)] = unwrapped(term) match
+            case Apply(function, List(predicate)) if function.symbol.name == "forall" =>
+                val list = function match
+                    case Select(list, _)               => Some(list)
+                    case TypeApply(Select(list, _), _) => Some(list)
+                    case Apply(_, List(list))          => Some(list)
+                    case _                             => None
+                list.map { list =>
+                    val (params, body) = lambdaOf(
+                      predicate,
+                      Some(1),
+                      "the limit of each element of a list is a lambda literal of the element"
+                    )
+                    (list, params.head.symbol, body)
+                }
+            case _ => None
+        val flipped = Map("<=" -> ">=", "<" -> ">", "==" -> "==", ">=" -> "<=", ">" -> "<")
+        here match {
+            case Apply(Select(left, "&&"), List(right)) =>
+                limitsIn(left, variable, prefix, scope.toMap, limit) ++
+                    limitsIn(right, variable, prefix, scope.toMap, limit)
+            case Apply(Select(left, op), List(right)) if flipped.contains(op) =>
+                (measured(left), measured(right)) match
+                    case (Some(measure), None) => List(compared(here, measure, op, bound(right)))
+                    case (None, Some(measure)) =>
+                        List(compared(here, measure, flipped(op), bound(left)))
+                    case _ => refuse(here)
+            case _ =>
+                receiver(here, Set("isEmpty"))
+                    .flatMap(path)
+                    .map(path => List(length(path, '{ 0 }, '{ Some(0) })))
+                    .orElse(
+                      negated(here)
+                          .flatMap(receiver(_, Set("isEmpty")))
+                          .flatMap(path)
+                          .map(path => List(length(path, '{ 1 }, '{ None })))
+                    )
+                    .orElse(
+                      receiver(here, Set("nonEmpty"))
+                          .flatMap(path)
+                          .map(path => List(length(path, '{ 1 }, '{ None })))
+                    )
+                    .orElse(forall(here).flatMap { (list, element, body) =>
+                        // The elements of a list, or the keys or the values of a map.
+                        val parts = receiver(list, Set("keys", "values"))
+                            .filter(isMap)
+                            .flatMap(map =>
+                                path(map).map(_ :+ (unwrapped(list).symbol.name match
+                                    case "keys" => '{ Step.Keys }
+                                    case _      => '{ Step.Values }))
+                            )
+                            .orElse(path(list).map(_ :+ '{ Step.Elements }))
+                        parts.map(limitsIn(body, element, _, scope.toMap, limit))
+                    })
+                    .getOrElse(refuse(here))
+        }
+    }
+
     private def universal(idents: List[Expr[PropExpr.Ident[?]]], body: Expr[Prop])(using
         Quotes
     ): Expr[Prop] =
@@ -111,7 +324,8 @@ private[verify] object PropMacro {
         body: Expr[Any],
         types: List[Type[?]],
         kind: String,
-        decode: Option[Expr[Any]] = None
+        decode: Option[Expr[Any]] = None,
+        limits: Option[Expr[Limits]] = None
     )(
         build: (List[Expr[PropExpr.Ident[?]]], Expr[Prop]) => Expr[Prop]
     )(using Quotes): Expr[Prop] = {
@@ -133,7 +347,7 @@ private[verify] object PropMacro {
                 else
                     refuseDataRepresented(List(param), "a call's result, the function's,")
                     None
-            ident(param.symbol, param.pos, tpe, decoder)
+            ident(param.symbol, param.pos, tpe, decoder, limits)
         }
         build(idents, statement)
     }
@@ -205,7 +419,8 @@ private[verify] object PropMacro {
 
     /** The identifier of the statement variable a lambda's parameter stands for: over the `Data`
       * encodings of its values ([[Props.forAllData]]) where it has a `decode`, the `FromData` that
-      * reads them.
+      * reads them, of the values that meet `limits` where they are given
+      * ([[Props.forAllDataLimited]]).
       */
     private def ident(using
         Quotes
@@ -213,7 +428,8 @@ private[verify] object PropMacro {
         symbol: quotes.reflect.Symbol,
         pos: quotes.reflect.Position,
         tpe: Type[?],
-        decode: Option[Expr[Any]]
+        decode: Option[Expr[Any]],
+        limits: Option[Expr[Limits]] = None
     ): Expr[PropExpr.Ident[?]] = {
         val name = variableName(symbol)
         val id = positionId(pos)
@@ -230,10 +446,12 @@ private[verify] object PropMacro {
                     case None => variable
                     case Some(reader) =>
                         val reads = reader.asExprOf[FromData[t]]
+                        val limited = limits.getOrElse('{ Limits.none })
                         '{
                             DataEncoding.encodedVariable(
                               $variable,
-                              scalus.compiler.compile((data: Data) => data.to[t](using $reads))
+                              scalus.compiler.compile((data: Data) => data.to[t](using $reads)),
+                              $limited
                             )
                         }
     }

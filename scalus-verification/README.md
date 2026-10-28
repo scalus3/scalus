@@ -104,7 +104,13 @@ Boolean tests, calls, `denotes` and `equal`, combined with `&&`, `||`, `!`, `==>
 `forAll[Config, BigInt]((config, time) => …)`, is one variable per field for Lean;
 `forAllData[A](x => …)` makes it one `Data`, restricted to the encodings of `A`'s values, which
 the tests decode with `d.to[A]`, and so does a parameter written
-`(x: A @UplcRepr(UplcRepresentation.Data)) => …` of a quantifier. Each test becomes
+`(x: A @UplcRepr(UplcRepresentation.Data)) => …` of a quantifier.
+`forAllDataLimited[A](x => limit)(x => body)` is `forAllData` of the values that meet `limit`: limits
+on how many elements the collections of `x` have, as `maxCollectionLength(x) <= 2`,
+`x.txInfo.inputs.length <= 3`, `isEmpty`, `nonEmpty`, and `forall` over a list or a map's keys or
+values, joined with `&&` (`Limits`). Each test checks them first, with a walk that ends, so a loop
+over a limited list runs to its end, and the statement of the values within the limits is proved
+as a theorem. Each test becomes
 its own closed UPLC predicate over the quantified values in its scope. The tactic writes them
 to files, gives its Lean server a check that imports them, and reads Blaster's verdict from
 what Lean reports. The server loads the workspace once, so a small check takes a fraction of a
@@ -579,6 +585,8 @@ statement no budget proves, such as one about a loop over a whole list, gets a l
 counterexample from every check, and ends at the time limit. `Budget.Within(n)` proves such a
 statement of the inputs whose runs end within `n` steps: a run the budget cuts is read in the
 statement's favour, so it is no counterexample, and the proof says the bound it holds within.
+`forAllDataLimited` proves it of the values whose lists have at most so many elements, as a theorem;
+its search starts at the steps the tests take on the largest values the limits allow.
 
 ## Pinned dependencies
 

@@ -73,6 +73,53 @@ class UplcBlasterLimitsTest extends AnyFunSuite with LeanProofsSuite {
             case Right(_)     => fail("expected the statement to be refused")
     }
 
+    test("with limits, a loop over a whole list is proved of the lists that meet them") {
+        // Each test checks the limits first, by a walk that ends, and fails beyond them, where the
+        // limits, the premise, are false. Every run ends, so the budget a search finds proves the
+        // statement itself: a theorem, not a proof within a budget.
+        val atMostFive = forAllDataLimited[List[BigInt]](xs => xs.length <= 5)(xs =>
+            whenReturns(length, xs)(n => n <= BigInt(5))
+        )
+        assert(provenAt(atMostFive, length) > 0)
+        // A counterexample meets the limits: a list of five elements.
+        val atMostFour = forAllDataLimited[List[BigInt]](xs => xs.length <= 5)(xs =>
+            whenReturns(length, xs)(n => n <= BigInt(4))
+        )
+        refuted(atMostFour, Budget.Auto, length).values.toList match
+            case scala.List(scalus.uplc.Constant.Data(Data.List(items))) =>
+                assert(items.length == BigInt(5), items)
+            case other => fail(s"expected one list, got $other")
+        // A least length, as a most.
+        val atLeastTwo = forAllDataLimited[List[BigInt]](xs => xs.length >= 2 && xs.length <= 3)(
+          xs => whenReturns(length, xs)(n => n >= BigInt(2))
+        )
+        assert(provenAt(atLeastTwo, length) > 0)
+    }
+
+    test("a limit of each element of a list is checked with the list's own") {
+        val total = FunctionDef.named(
+          "total",
+          (xss: List[List[BigInt]]) => xss.foldLeft(BigInt(0))((sum, xs) => sum + xs.length)
+        )
+        val atMostFour = forAllDataLimited[List[List[BigInt]]](xss =>
+            xss.length <= 2 && xss.forall(xs => xs.length <= 2)
+        )(xss => whenReturns(total, xss)(n => n <= BigInt(4)))
+        assert(provenAt(atMostFour, total) > 0)
+    }
+
+    test("a counterexample outside the limits refutes nothing, where the guard checks less") {
+        // Every collection is empty, and the guard does not look into the constructors of an
+        // `Option`: Lean's counterexample can be `Some` of a list that is not empty. The statement
+        // holds of the values within the limits, so such a value refutes nothing.
+        val empty = forAllDataLimited[Option[List[BigInt]]](x => maxCollectionLength(x) <= 0)(x =>
+            x match
+                case Option.Some(xs) => xs.isEmpty
+                case Option.None     => true
+        )
+        val reason = inconclusive(empty, UplcBlaster(Budget.LeanSteps(400), lean))
+        assert(reason.contains("outside the variable's limits"), reason)
+    }
+
     test("a proof within a budget is kept for its budget, apart from a proof") {
         // A provider that says its workspace and has no server: whatever asks Lean fails.
         val silent = new LeanServerProvider {

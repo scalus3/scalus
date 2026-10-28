@@ -237,6 +237,44 @@ object Props {
     ): Prop =
         ${ PropMacro.forAllData[A]('body, 'decode) }
 
+    /** [[forAllData]] of the values of `A` that meet the limits `limit` says of the variable: on
+      * how many elements its collections have ([[Limits]]). It is the statement
+      * `forAllData[A](x => limit(x) ==> body(x))`, whose limits a tactic may take as the shape of
+      * the values it checks, and need not run.
+      *
+      * `limit` is limits joined with `&&`, each of them:
+      *   - `maxCollectionLength(x) <= n`, or `< n`: every list and map of `x` (not the fields of a
+      *     case class, nor a list in a field of type `Data`, which is any `Data`);
+      *   - a comparison of `path.length` with `n` (`<=`, `<`, `==`, `>=`, `>`), `path.isEmpty` or
+      *     `path.nonEmpty`, where `path` is fields from `x` to a list or a map:
+      *     `x.txInfo.inputs.length <= 2`;
+      *   - `path.forall(e => limit)` over a list: the limits of each element; and
+      *     `path.keys.forall(k => limit)` or `path.values.forall(v => limit)` over a map: the
+      *     limits of each key or value.
+      *
+      * A bound `n` is an expression of `BigInt` or `Int` that uses nothing of the limit's lambda,
+      * evaluated where the statement is built. `UplcBlaster` checks bounds up to 64. Another
+      * condition is a compile error: it belongs in the statement.
+      *
+      * {{{
+      * forAllDataLimited[ScriptContext](ctx =>
+      *     maxCollectionLength(ctx) <= 2 && ctx.txInfo.inputs.nonEmpty
+      * )(ctx => succeeds(validator, ctx.toData) ==> spendsTheSeed(ctx))
+      * }}}
+      */
+    inline def forAllDataLimited[A](inline limit: A => Boolean)(
+        inline body: A => Prop | Boolean
+    )(using inline decode: FromData[A]): Prop =
+        ${ PropMacro.forAllDataLimited[A]('limit, 'body, 'decode) }
+
+    /** The length of the longest list or map of `value`: of no use but in a limit of
+      * [[forAllDataLimited]], which says it of the variable, and does not run it.
+      */
+    def maxCollectionLength[A](value: A): BigInt =
+        throw new UnsupportedOperationException(
+          "maxCollectionLength is a limit of forAllDataLimited, which does not run it"
+        )
+
     /** Constructs an explicit existential quantifier from an identifier and a proposition. */
     def existsSIR[A](
         ident: PropExpr.Ident[A],
