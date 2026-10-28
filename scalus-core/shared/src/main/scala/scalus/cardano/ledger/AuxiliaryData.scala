@@ -1,6 +1,7 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.*
+import scalus.serialization.cbor.Cbor as ScalusCbor
 import scalus.uplc.builtin.ByteString
 
 import scala.collection.immutable
@@ -51,32 +52,51 @@ object Metadatum:
 
     /** CBOR decoder for TransactionMetadatum */
     given Decoder[Metadatum] with
-        def read(r: Reader): Metadatum =
-            import io.bullet.borer.DataItem as DI
+        def read(r: Reader): Metadatum = readMetadatum(r, depth = 0)
 
-            r.dataItem() match
-                case DI.MapHeader | DI.MapStart =>
-                    val entries =
-                        r.read[immutable.Map[Metadatum, Metadatum]]()
-                    Metadatum.Map(entries)
+    /** Reads a metadatum held in `depth` arrays and maps.
+      *
+      * The decoder recurses over the nesting, so it reads at most
+      * [[ScalusCbor.maxRecursiveNestingLevels]] levels: a deeper metadatum fails to decode instead
+      * of overflowing the stack. The ledger has no such limit, but it was this deep before
+      * transactions were read without borer's limit.
+      */
+    private def readMetadatum(r: Reader, depth: scala.Int): Metadatum = {
+        import io.bullet.borer.DataItem as DI
 
-                case DI.ArrayHeader | DI.ArrayStart =>
-                    val items = r.read[IndexedSeq[Metadatum]]()
-                    Metadatum.List(items)
+        // the decoder of what an array or a map holds, one level deeper
+        def nested(): Decoder[Metadatum] = {
+            if depth >= ScalusCbor.maxRecursiveNestingLevels then
+                r.overflow(
+                  s"Exceeded ${ScalusCbor.maxRecursiveNestingLevels} nesting levels of metadata"
+                )
+            Decoder(readMetadatum(_, depth + 1))
+        }
 
-                case DI.Int | DI.Long | DI.OverLong =>
-                    Metadatum.Int(r.readLong())
+        r.dataItem() match {
+            case DI.MapHeader | DI.MapStart =>
+                given Decoder[Metadatum] = nested()
+                Metadatum.Map(r.read[immutable.Map[Metadatum, Metadatum]]())
 
-                case DI.Bytes | DI.BytesStart =>
-                    val bytes = r.read[ByteString]()
-                    Metadatum.Bytes(bytes)
+            case DI.ArrayHeader | DI.ArrayStart =>
+                given Decoder[Metadatum] = nested()
+                Metadatum.List(r.read[IndexedSeq[Metadatum]]())
 
-                case DI.Text | DI.TextStart =>
-                    val text = r.readString()
-                    Metadatum.Text(text)
+            case DI.Int | DI.Long | DI.OverLong =>
+                Metadatum.Int(r.readLong())
 
-                case other =>
-                    r.validationFailure(s"Unexpected data item for TransactionMetadatum: $other")
+            case DI.Bytes | DI.BytesStart =>
+                val bytes = r.read[ByteString]()
+                Metadatum.Bytes(bytes)
+
+            case DI.Text | DI.TextStart =>
+                val text = r.readString()
+                Metadatum.Text(text)
+
+            case other =>
+                r.validationFailure(s"Unexpected data item for TransactionMetadatum: $other")
+        }
+    }
 
 /** Represents auxiliary data in a Cardano transaction */
 enum AuxiliaryData:

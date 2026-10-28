@@ -8,7 +8,7 @@ import scalus.uplc.builtin.Data.{B, Constr, I}
 import scalus.uplc.eval.{CostingInteger, MemoryUsage}
 import scalus.uplc.test.DeepData.nestedLists
 import scalus.utils.Hex.hexToBytes
-import scalus.utils.Utils
+import scalus.utils.{Pretty, Style, Utils}
 
 /** `encodeData` and `decodeData` of the reference have no limit on the nesting depth (#398, #423).
   * A transaction can reach about 12000 levels: the CPU budget of `serialiseData` alone allows that
@@ -110,6 +110,31 @@ class DataCborDepthTest extends AnyFunSuite {
     test("toString of deeply nested data") {
         val text = nestedLists(depth).toString
         assert(text == "[" * depth + "1" + "]" * depth)
+    }
+
+    test("Data.toJson of deeply nested data") {
+        val json = Data.toJson(nestedLists(depth))
+        assert(json == """{"list":[""" * depth + """{"int":1}""" + "]}" * depth)
+    }
+
+    test("Pretty of deeply nested data elides what is nested more than 100 levels deep") {
+        def pretty(data: Data) = Pretty[Data].pretty(data, Style.Normal).render(Int.MaxValue)
+        assert(pretty(nestedLists(100)) == "[" * 100 + "1" + "]" * 100)
+        assert(pretty(nestedLists(depth)) == "[" * 100 + "..." + "]" * 100)
+    }
+
+    test("a long list") {
+        // reversing the items read, and printing them, must not recurse over the list either
+        val length = 100000
+        val hex = "9f" + "00" * length + "ff"
+        val decoded = Data.fromCbor(hex.hexToBytes)
+        assert(Utils.bytesToHex(decoded.toCbor) == hex)
+        assert(decoded.toString == Seq.fill(length)("0").mkString("[", ", ", "]"))
+        assert(
+          Data.toJson(decoded) == Seq
+              .fill(length)("""{"int":0}""")
+              .mkString("""{"list":[""", ",", "]}")
+        )
     }
 
     test("memory usage of deeply nested data") {

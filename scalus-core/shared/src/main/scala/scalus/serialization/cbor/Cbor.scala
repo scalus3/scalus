@@ -42,10 +42,19 @@ object Cbor {
       * The reference `decodeData` has no limit on the nesting depth, and the ledger reads a datum
       * or a redeemer with it, so a transaction may nest as deep as its size allows. Borer's
       * validation grows its state per level only as it enters the levels, so the limit costs
-      * nothing up front.
+      * nothing up front. A decoder that recurses over the nesting must bound it itself, with
+      * [[maxRecursiveNestingLevels]].
       */
-    val decodingConfig: Cborer.DecodingConfig =
+    private[scalus] val decodingConfig: Cborer.DecodingConfig =
         Cborer.DecodingConfig(maxNestingLevels = Int.MaxValue)
+
+    /** The nesting levels of arrays and maps that a decoder recursing over them reads.
+      *
+      * It is borer's default limit, which bounded every decoder before [[decodingConfig]] lifted
+      * it. The decoders of metadata and of native scripts recurse once per level, so they check it
+      * themselves: a value nested deeper fails to decode instead of overflowing the stack.
+      */
+    private[scalus] val maxRecursiveNestingLevels: Int = 1000
 
     /** Decodes CBOR data back to a Scala object of the specified type, with [[decodingConfig]].
       *

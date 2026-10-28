@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import org.typelevel.paiges.Doc
+import scalus.serialization.cbor.Cbor as ScalusCbor
 import scalus.uplc.builtin.{platform, ByteString}
 import scalus.utils.Pretty.{ctr, inParens, lit}
 import scalus.utils.{Pretty, Style}
@@ -146,32 +147,57 @@ object Timelock:
       * exactly the fields of its constructor, tag included: 3 for `MOf`, 2 for the others, as
       * `matchSize` checks.
       */
-    given Decoder[Timelock] = Decoder: r =>
+    given Decoder[Timelock] = Decoder(readTimelock(_, depth = 0))
+
+    /** Reads a script held in `depth` arrays.
+      *
+      * The decoder recurses over the scripts of `AllOf`, `AnyOf` and `MOf`, so it reads at most
+      * [[ScalusCbor.maxRecursiveNestingLevels]] levels of arrays: a deeper script fails to decode
+      * instead of overflowing the stack. The ledger has no such limit, but it was this deep before
+      * transactions were read without borer's limit.
+      */
+    private def readTimelock(r: Reader, depth: Int): Timelock = {
+        checkDepth(r, depth)
         val unbounded = r.tryReadArrayStart()
         val size = if unbounded then -1L else r.readArrayHeader()
-        val timelock = r.readArrayClose(unbounded, readFields(r))
+        val timelock = r.readArrayClose(unbounded, readFields(r, depth + 1))
         val expected = timelock match
             case _: Timelock.MOf => 3L
             case _               => 2L
         if !unbounded && size != expected then
             r.validationFailure(s"Timelock array of size $size, expected $expected")
         else timelock
+    }
 
-    private def readFields(r: Reader): Timelock =
-        r.readInt() match
+    // fails if an array held in `depth` arrays would be too deep
+    private def checkDepth(r: Reader, depth: Int): Unit = {
+        if depth >= ScalusCbor.maxRecursiveNestingLevels then
+            r.overflow(
+              s"Exceeded ${ScalusCbor.maxRecursiveNestingLevels} nesting levels of a native script"
+            )
+    }
+
+    private def readFields(r: Reader, depth: Int): Timelock = {
+        // the list of scripts, held in `depth` arrays, and each script in it
+        def scripts(): IndexedSeq[Timelock] = {
+            checkDepth(r, depth)
+            given Decoder[Timelock] = Decoder(readTimelock(_, depth + 1))
+            r.read[IndexedSeq[Timelock]]()
+        }
+
+        r.readInt() match {
             case 0 => // Signature
                 Timelock.Signature(r.read[AddrKeyHash]())
 
             case 1 => // AllOf
-                Timelock.AllOf(r.read[IndexedSeq[Timelock]]())
+                Timelock.AllOf(scripts())
 
             case 2 => // AnyOf
-                Timelock.AnyOf(r.read[IndexedSeq[Timelock]]())
+                Timelock.AnyOf(scripts())
 
             case 3 => // MOfN
                 val m = r.read[Int]()
-                val scripts = r.read[IndexedSeq[Timelock]]()
-                Timelock.MOf(m, scripts)
+                Timelock.MOf(m, scripts())
 
             case 4 => // TimeStart
                 Timelock.TimeStart(r.read[SlotNo]())
@@ -181,6 +207,8 @@ object Timelock:
 
             case tag =>
                 r.validationFailure(s"Invalid Timelock tag: $tag")
+        }
+    }
 
     /** Reads a Timelock script from a CBOR encoded byte array
       *

@@ -5,12 +5,13 @@ import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.{Constant, DefaultFun, Term}
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.uplc.test.DeepData
+import scalus.utils.{Pretty, Style}
 
 import java.util.concurrent.atomic.AtomicReference
 
-/** `serialiseData`, `Data.fromCbor` and `Data.toString` do not recurse over [[Data]] (#398, #423):
-  * data nested 100000 levels deep is costed, written, read and printed on a 256 KiB stack, where
-  * the recursive encoder and decoder overflowed the stack before 1000 levels.
+/** `serialiseData`, `Data.fromCbor`, `toString`, `toJson` and `Pretty` do not recurse over [[Data]]
+  * (#398, #423): data nested 100000 levels deep is costed, written, read and printed on a 256 KiB
+  * stack, where the recursive encoder and decoder overflowed the stack before 1000 levels.
   */
 class DataCborSmallStackTest extends AnyFunSuite {
 
@@ -79,6 +80,24 @@ class DataCborSmallStackTest extends AnyFunSuite {
     test("toString of 100000 nested lists on a 256 KiB stack") {
         val text = onSmallStack(nestedLists.toString)
         assert(text == "[" * depth + "1" + "]" * depth)
+    }
+
+    test("Data.toJson of 100000 nested lists on a 256 KiB stack") {
+        val json = onSmallStack(Data.toJson(nestedLists))
+        assert(json == """{"list":[""" * depth + """{"int":1}""" + "]}" * depth)
+    }
+
+    test("Pretty of 100000 nested lists on a 256 KiB stack") {
+        val text = onSmallStack(Pretty[Data].pretty(nestedLists, Style.Normal).render(80))
+        // only the outer 100 levels are printed
+        assert(text.count(_ == '[') == 100)
+        assert(text.contains("..."))
+    }
+
+    test("Data.fromCbor of a list of 100000 items on a 256 KiB stack") {
+        val items = Array.fill(depth)(0.toByte)
+        val cbor = Array(0x9f.toByte) ++ items ++ Array(0xff.toByte)
+        assert(onSmallStack(Data.fromCbor(cbor).toCbor).sameElements(cbor))
     }
 
     test("the CEK machine costs and runs serialiseData of 100000 nested lists on a 256 KiB stack") {
