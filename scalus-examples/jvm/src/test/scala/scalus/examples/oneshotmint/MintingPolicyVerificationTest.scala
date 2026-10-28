@@ -4,15 +4,19 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude
 import scalus.cardano.onchain.plutus.prelude.SortedMap
+import scalus.cardano.onchain.plutus.v1
 import scalus.cardano.onchain.plutus.v1.{TxId, TxOutRef, Value}
 import scalus.compiler.Compile
-import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.Data.toData
 import scalus.verify.*
 import scalus.verify.Props.*
-import scalus.verify.uplcblaster.{LeanProofs, LeanProofsSuite}
+import scalus.verify.uplcblaster.{Budget, LeanProofs, LeanProofsSuite, Unfinished, UplcBlaster}
 
 import java.nio.file.Path
+import scala.concurrent.duration.*
 
 /** A minting of the shape the statements of [[MintingPolicyVerificationTest]] are about, as one
   * value a statement can quantify over: the policy's parameters, and what it reads of the
@@ -174,6 +178,42 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
         check(acceptedOnlyWithTheSeed)
     }
 
+    // The deployed script, on every context the node gives it
+
+    test(
+      "the deployed script, on every context the node gives it: only the seed mints",
+      Unfinished
+    ) {
+        // The script as the ledger runs it, with a seed and tokens of its own: the optimized
+        // deserializer of the context, and the policy. It is linked only where it is checked.
+        val deployed = FunctionDef.named(
+          "deployed",
+          (ctxData: Data) =>
+              MintingPolicy.mintingPolicyScript(MintingPolicy.optimizedCtxDeserializer)(
+                seedTxId,
+                BigInt(0),
+                SortedMap.singleton(tokenName, BigInt(1000))
+              )((), ctxData)
+        )
+        verifier.addFunction(deployed)
+        // Only the seed mints, of every script context, with no shape: the context is one `Data`,
+        // the encoding of a context, as the node gives a script. Checked within a budget, it would
+        // hold of every context on which the script and the test end within it. Lean does not
+        // finish it: the symbolic run follows every way a `Data` can be read, and every length of
+        // the inputs, of the mint and of the tokens, to the end of the budget.
+        val deployedOnlyTheSeedMints = verifier.statement(
+          "one_shot_mint.deployed.only_the_seed_mints",
+          forAllData[v1.ScriptContext](ctx =>
+              succeeds(deployed, ctx.toData) ==> onlyTheSeedMints(ctx)
+          )
+        )
+        // At 2000 steps Lean was still in the symbolic run of a test after 10 minutes.
+        val reason = inconclusive(
+          deployedOnlyTheSeedMints,
+          UplcBlaster(Budget.Within(2000), lean, 60.seconds)
+        )
+        assert(reason.contains("did not finish"), reason)
+    }
 }
 
 /** The values the statements of [[MintingPolicyVerificationTest]] are about. They are `inline`, so
@@ -182,6 +222,29 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
   * the test's `this` in that expression.
   */
 object MintingPolicyVerificationTest {
+
+    /** The seed of the deployed script ([[MintingPolicyVerificationTest]]'s `deployed`): the output
+      * 0 of this transaction.
+      */
+    inline def seedTxId: ByteString =
+        hex"1ab6879fc08345f51dc9571ac4f530bf8673e0d798758c470f9af6f98e2f3982"
+
+    /** The one token the deployed script mints. */
+    inline def tokenName: ByteString = hex"484f534b59"
+
+    /** Whether a context spends the deployed script's seed, or burns only of the tokens of the
+      * policy it is run for.
+      */
+    inline def onlyTheSeedMints(inline ctx: v1.ScriptContext): Boolean =
+        ctx.txInfo.inputs.exists(input =>
+            input.outRef.id.hash == seedTxId && input.outRef.idx == BigInt(0)
+        ) || (ctx.purpose match
+            case v1.ScriptPurpose.Minting(own) =>
+                ctx.txInfo.mint.toSortedMap.get(own) match
+                    case prelude.Option.Some(tokens) =>
+                        tokens.toList.forall((_, amount) => amount < BigInt(0))
+                    case prelude.Option.None => true
+            case _ => true)
 
     /** The tokens the policy mints: one, `name`, in the quantity `amount`. */
     inline def tokens(inline m: Mint): SortedMap[ByteString, BigInt] =

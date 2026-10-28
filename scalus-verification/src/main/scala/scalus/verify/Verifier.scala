@@ -180,6 +180,12 @@ final case class CompatibilityReport(issues: List[CompatibilityIssue]) {
   */
 enum VerificationResult {
     case Proven(proof: Proof)
+
+    /** The statement holds within `bound`, on the inputs it says: a proof of a weaker statement,
+      * which is no theorem, and is no lemma of another. A tactic gives it where it was asked for a
+      * bounded check, as UPLC Blaster within a budget (`Budget.Within`).
+      */
+    case ProvenWithin(proof: Proof, bound: String)
     case Refuted(proof: Proof)
     case Unsupported(report: CompatibilityReport)
     case Inconclusive(reason: String)
@@ -189,8 +195,8 @@ enum VerificationResult {
 /** A result produced after successful preparation. Its type excludes
   * [[VerificationResult.Unsupported]].
   */
-type ExecutionResult = VerificationResult.Proven | VerificationResult.Refuted |
-    VerificationResult.Inconclusive | VerificationResult.Failed
+type ExecutionResult = VerificationResult.Proven | VerificationResult.ProvenWithin |
+    VerificationResult.Refuted | VerificationResult.Inconclusive | VerificationResult.Failed
 
 /** Opaque evidence that a tactic successfully prepared a statement in a particular verifier. */
 final class PreparedRun private[verify] (
@@ -605,21 +611,29 @@ final class Verifier private (results: Option[KeptResults]) {
     /** Runs an already compatible tactic and registers a successful theorem for later goals. */
     def prove(prepared: PreparedRun): ExecutionResult = {
         require(prepared.verifier eq this, "the prepared run belongs to another verifier")
+        // A proof uses only the theorems the verifier has, and says how it was found.
+        def checked(proof: Proof): Unit = {
+            proof.usedLemmas.foreach { lemma =>
+                require(
+                  proven.get(lemma.statement.name).exists(_ eq lemma),
+                  s"tactic ${prepared.tacticName} used an unavailable lemma ${lemma.statement.name}"
+                )
+            }
+            require(
+              proof.artifact != null,
+              s"tactic ${prepared.tacticName} supplied no proof artifact"
+            )
+        }
         prepared.execute() match
             case VerificationResult.Proven(proof) =>
-                proof.usedLemmas.foreach { lemma =>
-                    require(
-                      proven.get(lemma.statement.name).exists(_ eq lemma),
-                      s"tactic ${prepared.tacticName} used an unavailable lemma ${lemma.statement.name}"
-                    )
-                }
-                require(
-                  proof.artifact != null,
-                  s"tactic ${prepared.tacticName} supplied no proof artifact"
-                )
+                checked(proof)
                 val theorem = new Theorem(prepared.statement, proof)
                 proven = proven.updated(prepared.statement.name, theorem)
                 VerificationResult.Proven(proof)
+            // A proof within a bound is of a weaker statement: no theorem is registered.
+            case within @ VerificationResult.ProvenWithin(proof, _) =>
+                checked(proof)
+                within
             case VerificationResult.Refuted(proof) => VerificationResult.Refuted(proof)
             case inconclusive @ VerificationResult.Inconclusive(_) => inconclusive
             case failed @ VerificationResult.Failed(_)             => failed
@@ -648,8 +662,9 @@ object Verifier {
 
     /** A result in a few words, for a reason. */
     private def outcome(result: ExecutionResult): String = result match
-        case VerificationResult.Proven(_)            => "a proof"
-        case VerificationResult.Refuted(_)           => "a refutation"
-        case VerificationResult.Inconclusive(reason) => s"no result: $reason"
-        case VerificationResult.Failed(reason)       => s"a failure: $reason"
+        case VerificationResult.Proven(_)              => "a proof"
+        case VerificationResult.ProvenWithin(_, bound) => s"a proof within $bound"
+        case VerificationResult.Refuted(_)             => "a refutation"
+        case VerificationResult.Inconclusive(reason)   => s"no result: $reason"
+        case VerificationResult.Failed(reason)         => s"a failure: $reason"
 }

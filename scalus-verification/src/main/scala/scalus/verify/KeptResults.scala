@@ -55,7 +55,9 @@ final case class Kept(
 
 object Kept {
     enum Result {
-        case Proved, Refuted
+
+        /** A proof, or one within a bound ([[VerificationResult.ProvenWithin]]). */
+        case Proved, ProvedWithin, Refuted
     }
 }
 
@@ -87,9 +89,11 @@ final class KeptResults private (
       */
     private val used = new java.util.concurrent.ConcurrentHashMap[String, Set[String]]
 
-    /** The programs of each statement this run looked up, by its name and its tactic's. */
+    /** The statement as the tactic has it, and the programs, of each statement this run looked up,
+      * by its name and its tactic's.
+      */
     private val looked =
-        new java.util.concurrent.ConcurrentHashMap[(String, String), List[String]]
+        new java.util.concurrent.ConcurrentHashMap[(String, String), (String, List[String])]
 
     /** Says that the test that runs uses the statement `name`. */
     private def use(name: String): Unit = {
@@ -148,7 +152,9 @@ final class KeptResults private (
       *
       * A statement names the functions it calls by their names ([[PropIdentity]]). It fails where a
       * statement was looked up in this run, for the same tactic, with other programs: two functions
-      * of one name, one kept result for both of them, which each would take from the other.
+      * of one name, one kept result for both of them, which each would take from the other. So it
+      * does where the tactic had it as another statement, as one checked in two ways: the file
+      * keeps one result for a name.
       */
     private[verify] def lookup(
         name: String,
@@ -156,12 +162,19 @@ final class KeptResults private (
         fingerprint: Fingerprint
     ): Option[Kept] = {
         use(name)
-        val before = looked.putIfAbsent((name, tactic), fingerprint.programs)
-        if before != null && before != fingerprint.programs then
+        val now = fingerprint.statement -> fingerprint.programs
+        val before = looked.putIfAbsent((name, tactic), now)
+        if before != null && before._2 != fingerprint.programs then
             throw new IllegalStateException(
               s"the statement $name is stated with other programs than before in this run: a " +
                   "function it calls is another one of the same name. A statement names a " +
                   "function by its name, so functions that are not the same need other names"
+            )
+        if before != null && before._1 != fingerprint.statement then
+            throw new IllegalStateException(
+              s"the statement $name is checked as another statement than before in this run, " +
+                  s"as in two ways, such as within two budgets, by $tactic. One result is kept " +
+                  "for a name, which each would take from the other: they need names of their own"
             )
         lock.synchronized {
             val stored = read()
@@ -397,14 +410,16 @@ object KeptResults {
         values.view.mapValues(value => new String(value.bytes, StandardCharsets.UTF_8)).toMap
 
     private def word(result: Kept.Result): String = result match
-        case Kept.Result.Proved  => "proved"
-        case Kept.Result.Refuted => "refuted"
+        case Kept.Result.Proved       => "proved"
+        case Kept.Result.ProvedWithin => "proved within"
+        case Kept.Result.Refuted      => "refuted"
 
     /** The result `word` says, or none for a word that says none, as in a file that was edited. */
     private def result(word: String): Option[Kept.Result] = word match
-        case "proved"  => Some(Kept.Result.Proved)
-        case "refuted" => Some(Kept.Result.Refuted)
-        case _         => None
+        case "proved"        => Some(Kept.Result.Proved)
+        case "proved within" => Some(Kept.Result.ProvedWithin)
+        case "refuted"       => Some(Kept.Result.Refuted)
+        case _               => None
 
     /** What `entry` keeps, where its result is one. */
     private def kept(entry: Entry): Option[Kept] =
