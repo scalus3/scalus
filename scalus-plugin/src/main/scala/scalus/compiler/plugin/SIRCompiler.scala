@@ -3036,7 +3036,7 @@ final class SIRCompiler(
                     && stringContextApply.symbol == StringContextApplySymbol =>
                 val posAnns = AnnotationsDecl.fromSrcPos(expr.srcPos)
                 try
-                    val hexString = c.stringValue.replace(" ", "")
+                    val hexString = c.stringValue.replace(" ", "").nn
                     val bs = scalus.uplc.builtin.ByteString.fromHex(hexString)
                     if bs.bytes.length != 48 then
                         error(
@@ -3084,7 +3084,7 @@ final class SIRCompiler(
                     && stringContextApply.symbol == StringContextApplySymbol =>
                 val posAnns = AnnotationsDecl.fromSrcPos(expr.srcPos)
                 try
-                    val hexString = c.stringValue.replace(" ", "")
+                    val hexString = c.stringValue.replace(" ", "").nn
                     val bs = scalus.uplc.builtin.ByteString.fromHex(hexString)
                     if bs.bytes.length != 96 then
                         error(
@@ -3692,8 +3692,9 @@ final class SIRCompiler(
         try typer.sirTypeInEnv(tp, env)
         catch
             case e: TypingException =>
-                if e.cause == null then report.error(e.getMessage, e.pos)
-                else report.error(e.getMessage + " caused by " + e.cause.getMessage, e.pos)
+                val cause = e.cause
+                if cause == null then report.error(e.msg, e.pos)
+                else report.error(s"${e.msg} caused by ${cause.getMessage}", e.pos)
                 if env.trace then e.printStackTrace()
                 if true then throw e
                 SIRType.TypeNothing

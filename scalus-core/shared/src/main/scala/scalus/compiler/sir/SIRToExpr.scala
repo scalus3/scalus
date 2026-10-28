@@ -22,11 +22,11 @@ class ToExprHS[T](
         val encoderState = HashConsedEncoderState.withSize(byteSize)
         hst.encodeHC(x, encoderState)
         val bytes = encoderState.encode.result
-        val b64 = java.util.Base64.getEncoder.encodeToString(bytes)
+        val b64 = java.util.Base64.getEncoder.nn.encodeToString(bytes).nn
         '{
             $hste.decodeHC(
               HashConsedDecoderState(
-                DecoderState(java.util.Base64.getDecoder.decode(${ Expr(b64) })),
+                DecoderState(java.util.Base64.getDecoder.nn.decode(${ Expr(b64) }).nn),
                 HashConsed.State.empty
               )
             )
@@ -149,7 +149,7 @@ object ToExprHSSIRFlat extends HashConsedFlat[SIR] {
     }
 
     def decodeBase64(base64: String): SIR = {
-        val bytes = java.util.Base64.getDecoder.decode(base64)
+        val bytes = java.util.Base64.getDecoder.nn.decode(base64).nn
         val decoderState = HashConsedDecoderState(DecoderState(bytes), HashConsed.State.empty)
         decodeHC(decoderState)
     }
@@ -159,7 +159,7 @@ object ToExprHSSIRFlat extends HashConsedFlat[SIR] {
       * Used by SIRConverter to decode the string representation of SIR.
       */
     def decodeStringLatin1(string: String): SIR = {
-        val bytes = string.getBytes(StandardCharsets.ISO_8859_1)
+        val bytes = string.getBytes(StandardCharsets.ISO_8859_1).nn
         val decoderState = HashConsedDecoderState(DecoderState(bytes), HashConsed.State.empty)
         decodeHC(decoderState)
     }
@@ -178,7 +178,7 @@ object ModuleToExpr
     ) {
 
     def decodeStringLatin1(string: String): Module = {
-        val bytes = string.getBytes(StandardCharsets.ISO_8859_1)
+        val bytes = string.getBytes(StandardCharsets.ISO_8859_1).nn
         val decoderState = HashConsedDecoderState(DecoderState(bytes), HashConsed.State.empty)
         summon[HashConsedFlat[Module]].decodeHC(decoderState)
     }

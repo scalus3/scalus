@@ -403,7 +403,8 @@ object FlatInstances:
             level: Int,
             parents: HSRIdentityHashMap
         ): SIRType = {
-            if result eq null then
+            val cached = result
+            if cached == null then
                 if !(parents.get(this) eq null) then
                     // loop detected.
                     val proxy = SIRType.TypeProxy(null)
@@ -419,7 +420,7 @@ object FlatInstances:
                     proxies.foreach(p => p.ref = unproxied)
                     result = retval
                     retval
-            else result
+            else cached
         }
 
     }

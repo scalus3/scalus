@@ -20,7 +20,7 @@ case class SIRTypeEnv(
     trace: Boolean = false
 )
 
-case class TypingException(tpe: Type, pos: SrcPos, msg: String, cause: Throwable = null)
+case class TypingException(tpe: Type, pos: SrcPos, msg: String, cause: Throwable | Null = null)
     extends RuntimeException(msg, cause)
 
 case class SIRTypeWithTypeLambda(sirType: SIRType, optSirTypeLambda: Option[SIRType.TypeLambda])
@@ -42,12 +42,13 @@ class SIRTyper(using Context) {
     private var nextBinderIdBase: Long = 1L << 33
 
     private def binderParamId(binder: LambdaType, paramNum: Int): Long = {
-        var base = binderIdBases.get(binder)
-        if base == null then
-            base = java.lang.Long.valueOf(nextBinderIdBase)
+        val known = binderIdBases.get(binder)
+        if known != null then known.longValue() + paramNum
+        else
+            val base = nextBinderIdBase
             binderIdBases.put(binder, base)
             nextBinderIdBase += math.max(binder.paramNames.length, 1)
-        base.longValue() + paramNum
+            base + paramNum
     }
 
     private val uplcReprAnnotation = Symbols.requiredClass("scalus.compiler.UplcRepr")

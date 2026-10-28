@@ -53,6 +53,6 @@ object Macros {
     }
 
     private def lowerFirst(s: String): String =
-        if s == null || s.isEmpty || !s.charAt(0).isUpper then s
+        if s.isEmpty || !s.charAt(0).isUpper then s
         else s.updated(0, s.charAt(0).toLower)
 }

@@ -41,7 +41,7 @@ object FlatCodec {
       * [[EncoderState.toString]]/[[DecoderState.toString]].
       */
     def byteAsBitString(b: Byte): String =
-        String.format("%8s", Integer.toBinaryString(b & 0xff)).replace(' ', '0')
+        String.format("%8s", Integer.toBinaryString(b & 0xff)).nn.replace(' ', '0').nn
 
     /** Number of bytes in the variable-length 7-bit encoding of `n`, treating `n` as an unsigned
       * 64-bit value.

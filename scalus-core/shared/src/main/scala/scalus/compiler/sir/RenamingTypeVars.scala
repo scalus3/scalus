@@ -261,22 +261,22 @@ object RenamingTypeVars {
                     ctx.renames(tv)
                 else tv
             case proxy: SIRType.TypeProxy =>
-                Option(ctx.proxyMap.get(proxy)) match {
-                    case Some(renamed) =>
-                        if renamed.ref != null then
-                            if renamed.ref != proxy.ref then ctx.changed = true
-                        renamed
-                    case None =>
-                        val newProxy = SIRType.TypeProxy(null)
-                        ctx.proxyMap.put(proxy, newProxy)
-                        val nCtx = ctx.copy(changed = false)
-                        val nRef = inType(proxy.ref, nCtx)
-                        if nCtx.changed then
-                            ctx.changed = true
-                            newProxy.ref = nRef
-                        else newProxy.ref = proxy.ref
-                        newProxy
-                }
+                val renamed = ctx.proxyMap.get(proxy)
+                if renamed != null then
+                    val renamedRef = renamed.ref
+                    if renamedRef != null && renamedRef != proxy.ref then ctx.changed = true
+                    renamed
+                else
+                    val ref = proxy.ref.nn
+                    val newProxy = SIRType.TypeProxy(null)
+                    ctx.proxyMap.put(proxy, newProxy)
+                    val nCtx = ctx.copy(changed = false)
+                    val nRef = inType(ref, nCtx)
+                    if nCtx.changed then
+                        ctx.changed = true
+                        newProxy.ref = nRef
+                    else newProxy.ref = ref
+                    newProxy
         }
     }
 

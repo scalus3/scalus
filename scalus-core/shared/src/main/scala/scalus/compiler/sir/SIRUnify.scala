@@ -727,30 +727,32 @@ object SIRUnify {
             case (left, SIRType.FreeUnificator) =>
                 UnificationSuccess(env, left)
             case (leftProxy: SIRType.TypeProxy, right) =>
-                if leftProxy.ref == null then
+                val leftRef = leftProxy.ref
+                if leftRef == null then
                     // TODO: more appropriate error class
                     throw new RuntimeException("TypeProxy should be resolved before unification")
                 else
-                    env.parentTypes.get(leftProxy.ref) match
+                    env.parentTypes.get(leftRef) match
                         case Some(parentRight) =>
                             // we are in the cyclic loop.
                             if parentRight eq right then UnificationSuccess(env, right)
                             else
                                 // can cause infinite loop. Mb add counter for max-level ?
                                 // UnificationFailure("proxy-loop"::env.path, left, right)
-                                unifyType(leftProxy.ref, right, env)
+                                unifyType(leftRef, right, env)
                         case None =>
-                            unifyType(leftProxy.ref, right, env)
+                            unifyType(leftRef, right, env)
             case (left, rightProxy: SIRType.TypeProxy) =>
-                if rightProxy.ref == null then
+                val rightRef = rightProxy.ref
+                if rightRef == null then
                     throw new RuntimeException("TypeProxy should be resolved before unification")
                 else
-                    env.parentTypes.get(rightProxy.ref) match
+                    env.parentTypes.get(rightRef) match
                         case Some(parentLeft) =>
                             if parentLeft eq left then UnificationSuccess(env, left)
-                            else unifyType(left, rightProxy.ref, env)
+                            else unifyType(left, rightRef, env)
                         case None =>
-                            unifyType(left, rightProxy.ref, env)
+                            unifyType(left, rightRef, env)
             case (m1: SIRType.TypeNonCaseModule, m2: SIRType.TypeNonCaseModule) =>
                 if m1.name == m2.name then UnificationSuccess(env, m1)
                 else UnificationFailure(env.path, left, right)
@@ -979,7 +981,8 @@ object SIRUnify {
                             println(s"[subtypeSeq Fun] Parameters don't unify, returning empty")
                         List.empty
             case (leftProxy: SIRType.TypeProxy, right) =>
-                if leftProxy.ref == null then
+                val leftRef = leftProxy.ref
+                if leftRef == null then
                     throw new RuntimeException("TypeProxy should be resolved before unification")
                 else
                     // since we have no F-bounded polymorphism, we can just unroll proxies
@@ -987,7 +990,7 @@ object SIRUnify {
                         case UnificationSuccess(env1, tp) =>
                             List(tp)
                         case UnificationFailure(_, _, _) =>
-                            subtypeSeq(leftProxy.ref, right, env.withoutUpcasting)
+                            subtypeSeq(leftRef, right, env.withoutUpcasting)
             case (leftLambda: SIRType.TypeLambda, right: SIRType) =>
                 // TODO: for now type parameters can be unresolved.
                 val nFilledTypes = leftLambda.params.foldLeft(env.filledTypes) { case (acc, v) =>
@@ -1006,14 +1009,15 @@ object SIRUnify {
                 }
                 subtypeSeq(left, rightLambda.body, env.copy(filledTypes = nFilledTypes))
             case (left, rightProxy: SIRType.TypeProxy) =>
-                if rightProxy.ref == null then
+                val rightRef = rightProxy.ref
+                if rightRef == null then
                     throw new RuntimeException("TypeProxy should be resolved before unification")
                 else
                     unifyType(left, rightProxy, env.withoutUpcasting) match
                         case UnificationSuccess(env1, tp) =>
                             List(tp)
                         case UnificationFailure(_, _, _) =>
-                            subtypeSeq(left, rightProxy.ref, env.withoutUpcasting)
+                            subtypeSeq(left, rightRef, env.withoutUpcasting)
             case (_, _) =>
                 List.empty
     }

@@ -3,7 +3,7 @@ package scalus.utils
 import scala.util.control.NonFatal
 
 object Hex {
-    private val HEX_ARRAY = "0123456789abcdef".toCharArray
+    private val HEX_ARRAY = "0123456789abcdef".toCharArray.nn
 
     extension (bytes: Array[Byte])
         /** Converts an array of bytes to a hex string.
@@ -41,7 +41,7 @@ object Hex {
           *   characters)
           */
         def hexToBytes: Array[Byte] = {
-            val hexString = hex.replaceAll("\\s+", "")
+            val hexString = hex.replaceAll("\\s+", "").nn
             if hexString.isEmpty then return Array.emptyByteArray
             try
                 if (hexString.length & 1) != 0 then sys.error("string length is not even")

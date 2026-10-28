@@ -131,20 +131,35 @@ case class DataDecl(
         )
     // if (name == "")
 
-    private var _tp: SIRType = null
-    private var _constrs: Map[String, SIRType] = null
+    private var _tp: SIRType | Null = null
+    private var _constrs: Map[String, SIRType] | Null = null
 
-    def tp: SIRType =
-        if _tp == null then
-            _tp = typeParams match
+    def tp: SIRType = {
+        val cached = _tp
+        if cached != null then cached
+        else
+            val computed = typeParams match
                 case Nil => SIRType.SumCaseClass(this, Nil)
                 case _   => SIRType.TypeLambda(typeParams, SIRType.SumCaseClass(this, typeParams))
-        _tp
+            _tp = computed
+            computed
+    }
 
     def constrType(constrName: String): SIRType = {
-        if _constrs == null then {
+        constructorTypes.getOrElse(
+          constrName,
+          throw new IllegalArgumentException(
+            s"Constructor for $constrName not found in $name"
+          )
+        )
+    }
+
+    private def constructorTypes: Map[String, SIRType] = {
+        val cached = _constrs
+        if cached != null then cached
+        else
             val nConstrs = constructors.length
-            _constrs = constructors
+            val computed = constructors
                 .map { c =>
                     val parent = typeParams match
                         case Nil => tp
@@ -166,14 +181,8 @@ case class DataDecl(
                     c.name -> sirType
                 }
                 .toMap[String, SIRType]
-        }
-        _constrs.getOrElse(
-          constrName,
-          throw new IllegalArgumentException(
-            s"Constructor for $constrName not found in $name"
-          )
-        )
-
+            _constrs = computed
+            computed
     }
 }
 

@@ -144,22 +144,31 @@ object HashConsed {
         override def isForward: Boolean = true
 
         override def finValue(hashConsed: State, level: Int, parents: HSRIdentityHashMap): A =
-            if ref == null then
-                ref = hashConsed.lookup(ihc, tag) match
-                    case None =>
-                        throw IllegalStateException(s"Forward reference not creaded: $ihc, $tag")
-                    case Some(Left(fw)) =>
-                        throw IllegalStateException(s"Forward reference not resolved: $ihc, $tag")
-                    case Some(Right(a)) =>
-                        if parents.get(a) != null then
-                            throw IllegalStateException(s"Cycled forward referenc: $ihc, $tag")
-                        if a eq this then
+            val cached = ref
+            val target =
+                if cached != null then cached
+                else
+                    val resolved = hashConsed.lookup(ihc, tag) match
+                        case None =>
                             throw IllegalStateException(
-                              s"Forward reference not non-rec resolved: $ihc, $tag"
+                              s"Forward reference not creaded: $ihc, $tag"
                             )
-                        a
+                        case Some(Left(fw)) =>
+                            throw IllegalStateException(
+                              s"Forward reference not resolved: $ihc, $tag"
+                            )
+                        case Some(Right(a)) =>
+                            if parents.get(a) != null then
+                                throw IllegalStateException(s"Cycled forward referenc: $ihc, $tag")
+                            if a eq this then
+                                throw IllegalStateException(
+                                  s"Forward reference not non-rec resolved: $ihc, $tag"
+                                )
+                            a
+                    ref = resolved
+                    resolved
             parents.put(this, this)
-            val retval = ref.finValue(hashConsed, level + 1, parents).asInstanceOf[A]
+            val retval = target.finValue(hashConsed, level + 1, parents).asInstanceOf[A]
             parents.remove(this)
             retval
 

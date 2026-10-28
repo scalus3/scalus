@@ -20,7 +20,7 @@ object ByteString extends ByteStringFlatInstance {
     def fromHex(bytes: String): ByteString =
         if bytes.isEmpty then ByteString.empty else new ByteString(bytes.hexToBytes)
 
-    def fromString(s: String): ByteString = new ByteString(s.getBytes("UTF-8"))
+    def fromString(s: String): ByteString = new ByteString(s.getBytes("UTF-8").nn)
 
     extension (sc: StringContext)
         /** Hex string interpolator
@@ -35,7 +35,7 @@ object ByteString extends ByteStringFlatInstance {
           *   }}}
           */
         def hex(args: Any*): ByteString =
-            val hexString = sc.s(args*).replace(" ", "")
+            val hexString = sc.s(args*).replace(" ", "").nn
             fromHex(hexString)
 
         /** UTF-8 string interpolator

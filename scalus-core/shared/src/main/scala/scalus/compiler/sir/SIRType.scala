@@ -230,7 +230,7 @@ object SIRType {
             )
         then
             if parent.isEmpty then
-                val stackTrace = new Exception().getStackTrace.take(10).mkString("\n  ")
+                val stackTrace = new Exception().getStackTrace.nn.take(10).mkString("\n  ")
                 throw new RuntimeException(
                   s"[DEBUG] Enum case class ${constrDecl.name} was created without parent!\nStack trace:\n  $stackTrace"
                 )
@@ -872,7 +872,7 @@ object SIRType {
                     collect(body, acc ++ params)
                 case SIRType.Annotated(tp1, _) =>
                     collect(tp1, acc)
-                case SIRType.TypeProxy(ref) =>
+                case SIRType.TypeProxy(ref) if ref != null =>
                     collect(ref, acc)
                 case _ =>
                     None
@@ -1003,7 +1003,7 @@ object SIRType {
                         substitute(body, env, Map.empty)
                 case Annotated(tp, _) =>
                     typeApply(tp, args)
-                case TypeProxy(ref) =>
+                case TypeProxy(ref) if ref != null =>
                     typeApply(ref, args)
                 case _ =>
                     throw TypeApplyException(
@@ -1074,7 +1074,7 @@ object SIRType {
                 case tl: SIRType.TypeLambda =>
                     if freshCondition then freshTypeLambda(tl)
                     else (tl.body, tl.params)
-                case TypeProxy(ref) =>
+                case TypeProxy(ref) if ref != null =>
                     unrollTypeLambda(ref, freshCondition)
                 case _ =>
                     (x, scala.List.empty)
@@ -1219,11 +1219,13 @@ object SIRType {
             case SumCaseClass(decl, tArgs) => SumCaseClass(decl, tArgs.map(go))
             case Fun(in, out)              => Fun(go(in), go(out))
             case tp: TypeProxy =>
-                if visited.containsKey(tp) then visited.get(tp)
+                val seen = visited.get(tp)
+                if seen != null then seen
                 else
                     val newProxy = new TypeProxy(null)
                     visited.put(tp, newProxy)
-                    if tp.ref != null then newProxy.ref = go(tp.ref)
+                    val ref = tp.ref
+                    if ref != null then newProxy.ref = go(ref)
                     newProxy
             case other => other
         go(tp)
@@ -1282,7 +1284,9 @@ object SIRType {
                     case Some(t) => t
                     case None =>
                         val newProxy = new TypeProxy(null)
-                        newProxy.ref = substitute(tp.ref, env, proxyEnv.updated(tp, newProxy))
+                        val ref = tp.ref
+                        if ref != null then
+                            newProxy.ref = substitute(ref, env, proxyEnv.updated(tp, newProxy))
                         newProxy
             case other =>
                 other
@@ -1470,12 +1474,13 @@ object SIRType {
             traceloops.put(tp, tp)
             tp match
                 case tp: TypeProxy =>
-                    if tp.ref == null then
+                    val ref = tp.ref
+                    if ref == null then
                         println("Found null typeproxe, created at: ")
                         tp.createEx.printStackTrace()
                         false
-                    else if traceloops.get(tp.ref) != null then
-                        checkAllProxiesFilledTraced(tp.ref, traceloops, log)
+                    else if traceloops.get(ref) != null then
+                        checkAllProxiesFilledTraced(ref, traceloops, log)
                     else true
                 case Fun(in, out) =>
                     checkAllProxiesFilledTraced(in, traceloops, "in" :: log) &&
@@ -1526,8 +1531,9 @@ object SIRType {
       */
     def unrollTypeProxy(tp: SIRType): SIRType = tp match {
         case proxy: TypeProxy =>
-            if proxy.ref == null then tp
-            else unrollTypeProxy(proxy.ref)
+            val ref = proxy.ref
+            if ref == null then tp
+            else unrollTypeProxy(ref)
         case _ => tp
     }
 
@@ -1598,12 +1604,13 @@ object SIRType {
                     case Annotated(tp1, _) =>
                         accept(tp1)
                     case proxy: TypeProxy =>
-                        Option(proxySet.get(proxy.ref)) match {
+                        val ref = proxy.ref.nn
+                        Option(proxySet.get(ref)) match {
                             case Some(visited) =>
                             // do nothing, already visited
                             case None =>
-                                proxySet.put(proxy.ref, proxy.ref)
-                                accept(proxy.ref)
+                                proxySet.put(ref, ref)
+                                accept(ref)
                         }
                     case TypeNonCaseModule(_) =>
                     case FreeUnificator | TypeNothing | Unit | Integer | String | Boolean |
@@ -1707,7 +1714,7 @@ object SIRType {
                           proxiedRefs,
                           LazyList(in) ++ LazyList(out) ++ initTypes.tail
                         )
-                    case TypeProxy(ref) =>
+                    case TypeProxy(ref) if ref != null =>
                         Option(proxiedRefs.get(ref)) match
                             case Some(visited) =>
                                 advance(
@@ -1755,7 +1762,7 @@ object SIRType {
                         if tv1 == tv then found = true
                     case TypeLambda(params, body) =>
                         if !params.contains(tv) then advance(body)
-                    case TypeProxy(ref) =>
+                    case TypeProxy(ref) if ref != null =>
                         Option(typeProxies.get(ref)) match {
                             case Some(visited) =>
                             // do nothing, already visited
@@ -1813,7 +1820,7 @@ object SIRType {
                             if ungrounded.contains(tv) then
                                 grounded += tv
                                 ungrounded -= tv
-                    case TypeProxy(ref) =>
+                    case TypeProxy(ref) if ref != null =>
                         Option(typeProxies.get(ref)) match {
                             case Some(visited) =>
                             // do nothing

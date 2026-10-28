@@ -69,7 +69,8 @@ type Uint8Array = Array[Byte]
   * Not sealed on purpose: a caller may want to distinguish a truncated buffer from an invalid tag,
   * and a decoder for its own format may want a more specific subtype.
   */
-class FlatDecodingError(message: String, cause: Throwable) extends RuntimeException(message, cause):
+class FlatDecodingError(message: String, cause: Throwable | Null)
+    extends RuntimeException(message, cause):
     def this(message: String) = this(message, null)
 
 /** Prealigned Arrays of bytes PreAligned a ≡ PreAligned {preFiller :: Filler, preValue :: a}
@@ -221,10 +222,10 @@ given Flat[Natural] with
 
 given Flat[String] with
     def bitSize(a: String): Int =
-        summon[Flat[Array[Byte]]].bitSize(a.getBytes("UTF-8"))
+        summon[Flat[Array[Byte]]].bitSize(a.getBytes("UTF-8").nn)
 
     def encode(a: String, encode: EncoderState): Unit =
-        summon[Flat[Array[Byte]]].encode(a.getBytes("UTF-8"), encode)
+        summon[Flat[Array[Byte]]].encode(a.getBytes("UTF-8").nn, encode)
 
     def decode(decode: DecoderState): String =
         val baDecoder = summon[Flat[Array[Byte]]]

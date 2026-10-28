@@ -90,7 +90,8 @@ object HashConsedReprFlat {
             level: Int,
             parents: HSRIdentityHashMap
         ): List[A] =
-            if !(result eq null) then result
+            val cached = result
+            if cached != null then cached
             else
                 // if parents.get(this) != null then
                 //    throw new Exception(s"Cycle detected, this=${this}")
@@ -147,7 +148,8 @@ object HashConsedReprFlat {
             level: Int,
             parents: HSRIdentityHashMap
         ): Map[String, A] =
-            if !(result eq null) then result
+            val cached = result
+            if cached != null then cached
             else
                 // if parents.get(this) != null then
                 //    throw new Exception(s"Cycle detected, this=${this}")

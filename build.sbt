@@ -360,6 +360,9 @@ lazy val scalusPlugin = project
       // version gets its own published artifact – including the plugin-only 3.3.7.
       crossScalaVersions := pluginScalaVersions,
       scalacOptions ++= commonScalacOptions,
+      // Explicit nulls are being adopted module by module. The copied scalus-core files below
+      // must compile both with this flag (here) and without it (in scalus-core).
+      scalacOptions += "-Yexplicit-nulls",
       // The plugin compiles copies of some scalus-core files (src/main/shared), without the rest of
       // scalus-core. Their Scaladoc links to the missing core types cannot resolve here, and the
       // real documentation of those files is published with scalus-core.

@@ -32,7 +32,7 @@ class Plugin extends PluginCompat {
     protected def scalusPhases(options: List[String]): List[PluginPhase] = {
         val debugLevel = options
             .find(_.startsWith("debugLevel="))
-            .map(_.substring("debugLevel=".length))
+            .map(_.substring("debugLevel=".length).nn)
             .map(_.toInt)
             .getOrElse(0)
         new ScalusPreparePhase(debugLevel) :: ScalusPhase(debugLevel) :: Nil
@@ -229,7 +229,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
         val existing =
             try
                 val path = java.nio.file.Path.of(
-                  outputDir.file.toPath.toString,
+                  outputDir.file.nn.toPath.toString,
                   "META-INF",
                   "scalus",
                   "blueprint-modules"
