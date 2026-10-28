@@ -16,7 +16,12 @@ case class CapeScenario(
     program: () => Program,
     implementationNotes: String,
     readmeApproach: String,
-    sourceSubdir: String
+    sourceSubdir: String,
+    /** For a fixed scenario: the file, relative to `sourceSubdir`, that translates the prescribed
+      * algorithm. Its source goes into the README, because CAPE reviews fixed submissions by
+      * source.
+      */
+    prescribedSource: Option[String] = None
 )
 
 /** Registry of all Scalus CAPE benchmark submissions. */
@@ -46,7 +51,8 @@ object CapeScenarios {
         () => FactorialContract.baseProgram,
         compiledNote,
         "Direct @Compile of the prescribed naive recursion.",
-        "factorial"
+        "factorial",
+        prescribedSource = Some("FactorialBase.scala")
       ),
       CapeScenario(
         "fibonacci",
@@ -68,7 +74,8 @@ object CapeScenarios {
         () => FibonacciContract.baseProgram,
         compiledNote,
         "Direct @Compile of the prescribed naive recursion.",
-        "fibonacci"
+        "fibonacci",
+        prescribedSource = Some("FibonacciBase.scala")
       ),
       CapeScenario(
         "ecd",
@@ -76,7 +83,8 @@ object CapeScenarios {
         compiledNote + " Direct translation of the prescribed Euclidean algorithm; " +
             "the only compiler-automatic transforms are recursion encoding and inlining.",
         "Direct @Compile of the prescribed naive recursive GCD.",
-        "ecd"
+        "ecd",
+        prescribedSource = Some("EcdBase.scala")
       ),
       CapeScenario(
         "htlc",

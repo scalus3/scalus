@@ -55,6 +55,21 @@ import scala.util.Try
 private def readme(s: CapeScenario, version: String, commit: String): String = {
     val submissionId = s"Scalus_${version}_nau"
     val sourcePath = s"scalus-examples/jvm/src/main/scala/scalus/examples/cape/${s.sourceSubdir}/"
+    // A fixed scenario is reviewed by its source, so quote the file that translates the algorithm.
+    val compliance = s.prescribedSource.fold("") { file =>
+        val code = Files.readString(Path.of(sourcePath, file)).trim
+        s"""
+           |## Algorithm Compliance
+           |
+           |`$file` translates the prescribed algorithm one to one: the same base case, and the same
+           |recursive calls with the same arguments. The Scalus compiler adds only general-purpose
+           |optimizations, such as the recursion encoding and inlining.
+           |
+           |```scala
+           |$code
+           |```
+           |""".stripMargin
+    }
     s"""# Benchmark Implementation Notes
        |
        |**Scenario**: `${s.name}`
@@ -70,7 +85,7 @@ private def readme(s: CapeScenario, version: String, commit: String): String = {
        |## Performance Results
        |
        |- See [metrics.json](metrics.json) for detailed performance measurements
-       |
+       |$compliance
        |## Reproducibility
        |
        |### Source Code
@@ -83,7 +98,21 @@ private def readme(s: CapeScenario, version: String, commit: String): String = {
        |- **Repository**: ${CapeMetadata.SourceRepository}
        |- **Tag/Commit**: `$commit`
        |- **Source Path**: `$sourcePath`
-       |- **Build Instructions**: See repository README
+       |
+       |### Build Instructions
+       |
+       |```sh
+       |git clone ${CapeMetadata.SourceRepository}
+       |cd scalus
+       |git checkout $commit
+       |nix develop   # provides JDK 21 and sbt
+       |sbt "scalusExamplesJVM/runMain scalus.examples.cape.GenerateSubmissions <path-to-UPLC-CAPE> $version"
+       |```
+       |
+       |This writes `submissions/<scenario>/$submissionId/` for all 8 scenarios: the `.uplc` file,
+       |`metadata.json` and this README. Then run `treefmt` in the UPLC-CAPE checkout to apply the
+       |`pretty-uplc` layout, which changes only whitespace. `scripts/cape-submit.sh` in the
+       |Scalus repository runs all of this, then `cape submission verify` and `measure`.
        |
        |### Compilation Configuration
        |
@@ -94,11 +123,5 @@ private def readme(s: CapeScenario, version: String, commit: String): String = {
        |## Notes
        |
        |${s.implementationNotes}
-       |
-       |Reproduce with, at commit `$commit`:
-       |
-       |```
-       |sbtn "scalusExamplesJVM/runMain scalus.examples.cape.GenerateSubmissions <path-to-UPLC-CAPE>"
-       |```
        |""".stripMargin
 }
