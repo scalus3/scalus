@@ -36,16 +36,15 @@ object UsdcxMintingPolicy {
     def validate(pparamsCs: Data)(ctxData: Data): Unit = {
         val ctx = ctxData.to[ScriptContext]
         val txInfo = ctx.txInfo
+        // The minting logic is looked up once, first, as IOG's statements of the policy read it.
+        // The original looks it up when it compares a withdrawal, again for each: so where there
+        // is no withdrawal it never looks, and traces where this fails without a trace. Looked
+        // up first, the statements are checked in minutes; looked up only where there is a
+        // withdrawal, or in the loop as the original does, they ran for hours.
+        val mintingLogic = mintingLogicCredential(pparamsCs, txInfo.referenceInputs)
         // Both checks are evaluated, as in the original, so a failing transaction traces both.
-        // The original looks the minting logic up when it compares the first withdrawal, and
-        // again for each next one; this looks it up once, at the same point: not at all when
-        // there is no withdrawal.
-        val withdrawals = txInfo.withdrawals
         val inWithdrawals = traceIfFalse(NoMintingLogicInWithdrawals)(
-          if withdrawals.isEmpty then false
-          else
-              val mintingLogic = mintingLogicCredential(pparamsCs, txInfo.referenceInputs)
-              withdrawals.exists { case (credential, _) => credential.toData == mintingLogic }
+          txInfo.withdrawals.exists { case (credential, _) => credential.toData == mintingLogic }
         )
         val isMinting = traceIfFalse(NotMinting)(ctx.scriptInfo match
             case ScriptInfo.MintingScript(_) => true
