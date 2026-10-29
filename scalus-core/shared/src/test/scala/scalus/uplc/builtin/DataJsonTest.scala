@@ -1,12 +1,15 @@
 package scalus.uplc.builtin
 
+import com.github.plokhotnyuk.jsoniter_scala.core.{writeToString, WriterConfig}
 import org.scalatest.funsuite.AnyFunSuite
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.uplc.test.ArbitraryInstances
 
 /** Pins the JSON encoding of [[Data]], which is public API and, through `Data.fromJson`, backs the
   * exported JavaScript function `applyDataArgToScript`.
   */
-class DataJsonTest extends AnyFunSuite {
+class DataJsonTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances {
 
     private def roundTrip(data: Data, json: String): Unit = {
         assert(Data.toJson(data) == json)
@@ -107,4 +110,36 @@ class DataJsonTest extends AnyFunSuite {
         // A fractional "int" is rejected rather than silently truncated, as the old reader did.
         assertThrows[Exception](Data.fromJson("""{"int":1.5}"""))
     }
+
+    test("the output is that of the derived codec it replaced, indented or not") {
+        forAll { (data: Data) =>
+            val mirror = recursiveMirror(data)
+            assert(Data.toJson(data) == writeToString(mirror)(using DataJson.codec))
+            assert(
+              Data.toJson(data, 2) ==
+                  writeToString(mirror, WriterConfig.withIndentionStep(2))(using DataJson.codec)
+            )
+        }
+    }
+
+    /** The recursive mapping to [[DataJson]] that `toJson` wrote through before it stopped
+      * recursing (#423), kept as an oracle.
+      */
+    private def recursiveMirror(data: Data): DataJson = data match
+        case Data.Constr(constructor, args) =>
+            DataJson(
+              constructor = Some(constructor),
+              fields = Some(args.toScalaList.map(recursiveMirror))
+            )
+        case Data.Map(entries) =>
+            DataJson(map =
+                Some(
+                  entries.toScalaList.map((k, v) =>
+                      DataJsonMapEntry(recursiveMirror(k), recursiveMirror(v))
+                  )
+                )
+            )
+        case Data.List(values) => DataJson(list = Some(values.toScalaList.map(recursiveMirror)))
+        case Data.I(value)     => DataJson(int = Some(value))
+        case Data.B(value)     => DataJson(bytes = Some(value.toHex))
 }

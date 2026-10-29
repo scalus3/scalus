@@ -19,9 +19,7 @@ import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodec
 
 import java.io.InputStream
 import java.math.BigInteger
-import scala.annotation.tailrec
-import scala.collection.immutable
-import scala.collection.mutable.{ArrayBuffer, ArrayBuilder, ListBuffer}
+import scala.collection.mutable.{ArrayBuffer, ArrayBuilder}
 import scala.util.Try
 
 private trait DataApi {
@@ -50,8 +48,7 @@ private trait DataApi {
         override def decodeValue(in: JsonReader, default: Data): Data =
             DataJson.toData(DataJson.codec.decodeValue(in, null), in)
 
-        override def encodeValue(data: Data, out: JsonWriter): Unit =
-            DataJson.codec.encodeValue(DataJson.fromData(data), out)
+        override def encodeValue(data: Data, out: JsonWriter): Unit = DataJson.write(data, out)
     }
 
     /** JSON ReadWriter for the [[Data]] type.
@@ -239,116 +236,219 @@ private trait DataApi {
     end dataCborEncoder
 
     /** CBOR decoder for the [[Data]] type. The encoding and decoding logic is based on the
-      * [[https://github.com/IntersectMBO/plutus/blob/441b76d9e9745dfedb2afc29920498bdf632f162/plutus-core/plutus-core/src/PlutusCore/Data.hs#L72 Cardano node implementation]].
+      * [[https://github.com/IntersectMBO/plutus/blob/507cab8cf6192e5143f12be5b2d3005a2928dc6d/plutus-core/plutus-core/src/PlutusCore/Data.hs#L209 Cardano node implementation]].
+      *
+      * The reference has no limit on the nesting depth, so the decoder does not recurse: it keeps
+      * the arrays and maps it has opened on the heap. It reads their items one at a time, as the
+      * reference does, so the length in a header allocates nothing before the items are there.
+      * Borer's validation still stops at 1000 nesting levels; [[Data.fromCbor]] and
+      * [[scalus.serialization.cbor.Cbor.decode]] read without that limit.
       */
     given dataCborDecoder: Decoder[Data] with
 
         private val twoTo64: BigInt = BigInt(1) << 64
 
-        override def read(r: Reader): Data =
+        private val maxCborByteArraySize = 64
 
-            val maxCborByteArraySize = 64
+        /** An array or a map being read. */
+        private sealed abstract class Open {
 
-            // read sized bytes bounded by 64 bytes
-            def readBoundedSizedBytes(): Array[Byte] =
-                val bytes = r.readSizedBytes()(using ByteAccess.ForByteArray)
-                if bytes.length > maxCborByteArraySize then
-                    r.overflow(s"Bytes chunk ${bytes.length} must be <= 64 bytes")
-                bytes
+            /** Whether all its items are read. Reads the break that ends an indefinite one. */
+            def isComplete(r: Reader): Boolean
 
-            // read chunks of 64 bytes
-            def readBoundedBytesIndef(): Array[Byte] =
-                // Copies each chunk as one block; a generic ArrayBuffer[Byte] copies byte by byte.
-                val acc = new ArrayBuilder.ofByte
-                while !r.tryReadBreak() do acc.addAll(readBoundedSizedBytes())
-                acc.result()
+            def add(item: Data): Unit
 
-            // read bytes (sized or indefinite) where chunks are bounded by 64 bytes
-            def readBoundedBytes(): Array[Byte] =
-                r.dataItem() match
-                    case DI.Bytes => readBoundedSizedBytes()
-                    case DI.BytesStart =>
-                        r.readBytesStart()
-                        readBoundedBytesIndef()
-                    case _ => r.unexpectedDataItem(expected = "Bytes or BytesStart")
+            /** The value read, once it is complete. */
+            def close(r: Reader): Data
+        }
 
-            // The constructor index of the tag-102 form is a CBOR unsigned 64-bit integer, so
-            // 2^63 and above reach us as borer OverLongs and have to be widened without a sign.
-            // Anything else - a negative integer, or a bignum above the range - is rejected, as
-            // the node's `decodeWord64` rejects it.
-            def readConstrIndex(): BigInt =
-                r.dataItem() match
-                    case DI.Int | DI.Long =>
-                        val i = r.readLong()
-                        if i < 0 then r.unexpectedDataItem(expected = "unsigned Constr index")
-                        BigInt(i)
-                    case DI.OverLong =>
-                        if r.overLongNegative then
-                            r.unexpectedDataItem(expected = "unsigned Constr index")
-                        BigInt(r.readOverLong()) + twoTo64
-                    case _ => r.unexpectedDataItem(expected = "unsigned Constr index")
+        /** A list, or the fields of a `Constr`, being read: the items read so far, last first. */
+        private final class OpenArray(
+            // the index of the `Constr`, or null for a list
+            constr: BigInt | Null,
+            // a tag-102 `Constr` in an indefinite array: a break follows the fields
+            closingBreak: Boolean,
+            // the items still to read, or -1 for an indefinite array
+            private var remaining: Long
+        ) extends Open {
+            private var items: PList[Data] = PList.Nil
 
-            r.dataItem() match
-                case DI.Int | DI.Long | DI.OverLong => I(Decoder.forBigInt.read(r))
-                case DI.MapHeader | DI.MapStart     => Map(PList.from(readMap.read(r)))
-                case DI.ArrayStart | DI.ArrayHeader =>
-                    Data.List(PList.from(Decoder.forArray[Data].read(r).toList))
-                case DI.Bytes | DI.BytesStart => B(ByteString.unsafeFromArray(readBoundedBytes()))
-                case DI.Tag =>
-                    r.readTag() match
-                        case Other(102) =>
-                            // Exactly two elements, definite- or indefinite-length, as in
-                            // `decodeConstrExtended`. The length used to be read and discarded,
-                            // which let a three-element array through as a two-element list.
-                            val indefinite = r.hasArrayStart
-                            if indefinite then r.readArrayStart()
-                            else if !r.tryReadArrayHeader(2) then
-                                r.unexpectedDataItem(expected = "Array-Header(2)")
-                            val i = readConstrIndex()
-                            val args = Decoder.forArray[Data].read(r)
-                            if indefinite && !r.tryReadBreak() then
-                                r.unexpectedDataItem(expected = "Break")
-                            Constr(i, PList.from(args.toList))
-                        case Other(value) if 121 <= value && value < 128 =>
-                            Constr(
-                              BigInt(value - 121),
-                              PList.from(Decoder.forArray[Data].read(r).toList)
-                            )
-                        case Other(value) if 1280 <= value && value < 1401 =>
-                            Constr(
-                              BigInt(value - 1280 + 7),
-                              PList.from(Decoder.forArray[Data].read(r).toList)
-                            )
-                        case PositiveBigNum => I(BigInteger(1, readBoundedBytes()))
-                        case NegativeBigNum => I(BigInteger(1, readBoundedBytes()).not)
-                        case tag =>
-                            r.unexpectedDataItem(
-                              s"Allowed Data Constr Tag or CBOR BigNum Tag, got $tag"
-                            )
-                case i => r.unexpectedDataItem(s"Allowed Data Item")
+            def isComplete(r: Reader): Boolean = isEnd(r, remaining)
 
-        /*
-         * Cardano stores maps as a list of key-value pairs
-         * Note, that it allows duplicate keys!
-         * This is why we don't use the `readMap` method from `Reader` here
-         */
-        private def readMap[A: Decoder, B: Decoder]: Decoder[immutable.List[(A, B)]] =
-            Decoder { r =>
-                if r.hasMapHeader then
-                    @tailrec def rec(remaining: Int, map: ListBuffer[(A, B)]): ListBuffer[(A, B)] =
-                        if remaining > 0 then rec(remaining - 1, map.append((r[A], r[B])))
-                        else map
-
-                    val size = r.readMapHeader()
-                    if size <= Int.MaxValue then rec(size.toInt, ListBuffer.empty).toList
-                    else r.overflow(s"Cannot deserialize Map with size $size (> Int.MaxValue)")
-                else if r.hasMapStart then
-                    r.readMapStart()
-                    val map = ListBuffer.empty[(A, B)]
-                    while !r.tryReadBreak() do map.append((r[A], r[B]))
-                    map.toList
-                else r.unexpectedDataItem(expected = "Map")
+            def add(item: Data): Unit = {
+                items = PList.Cons(item, items)
+                if remaining > 0 then remaining -= 1
             }
+
+            def close(r: Reader): Data = {
+                constr match
+                    case null => Data.List(items.reverse)
+                    case constr: BigInt =>
+                        if closingBreak && !r.tryReadBreak() then
+                            r.unexpectedDataItem(expected = "Break")
+                        Constr(constr, items.reverse)
+            }
+        }
+
+        /** A map being read: the entries read so far, last first, and the key of the entry being
+          * read.
+          *
+          * Cardano stores a map as a list of key-value pairs and allows duplicate keys, so the
+          * entries are kept in order, duplicates and all.
+          */
+        private final class OpenMap(private var remaining: Long) extends Open {
+            private var entries: PList[(Data, Data)] = PList.Nil
+            private var key: Data = null
+
+            // a break between a key and its value is not the end of the map
+            def isComplete(r: Reader): Boolean = (key eq null) && isEnd(r, remaining)
+
+            def add(item: Data): Unit = {
+                if key eq null then key = item
+                else
+                    entries = PList.Cons((key, item), entries)
+                    key = null
+                    if remaining > 0 then remaining -= 1
+            }
+
+            def close(r: Reader): Data = Map(entries.reverse)
+        }
+
+        override def read(r: Reader): Data = {
+            readItem(r) match
+                case value: Data => value
+                case open: Open  => readNested(r, open)
+        }
+
+        /** Reads the items of `outermost` and all they hold. What is open is kept on the heap,
+          * innermost last.
+          */
+        private def readNested(r: Reader, outermost: Open): Data = {
+            val open = ArrayBuffer[Open](outermost)
+            var result: Data = null
+            while result eq null do
+                val innermost = open.last
+                if innermost.isComplete(r) then
+                    open.dropRightInPlace(1)
+                    val value = innermost.close(r)
+                    if open.isEmpty then result = value else open.last.add(value)
+                else
+                    readItem(r) match
+                        case value: Data  => innermost.add(value)
+                        case nested: Open => open += nested
+            result
+        }
+
+        // whether an array or a map with `remaining` items to read, or -1 if indefinite, is read
+        private def isEnd(r: Reader, remaining: Long): Boolean = {
+            if remaining < 0 then r.tryReadBreak() else remaining == 0
+        }
+
+        /** Reads a value that holds no other, or opens an array or a map. */
+        private def readItem(r: Reader): Data | Open = {
+            r.dataItem() match {
+                case DI.Int | DI.Long | DI.OverLong => I(Decoder.forBigInt.read(r))
+                case DI.Bytes | DI.BytesStart => B(ByteString.unsafeFromArray(readBoundedBytes(r)))
+                case DI.ArrayStart | DI.ArrayHeader => openArray(r, null, closingBreak = false)
+                case DI.MapHeader                   => OpenMap(r.readMapHeader())
+                case DI.MapStart =>
+                    r.readMapStart()
+                    OpenMap(-1)
+                case DI.Tag => readTagged(r)
+                case _      => r.unexpectedDataItem(s"Allowed Data Item")
+            }
+        }
+
+        /** Reads a big number, or opens the fields of a `Constr`. */
+        private def readTagged(r: Reader): Data | Open = {
+            val tagStart = r.cursor
+            r.readTag() match {
+                case Other(102) =>
+                    // Exactly two elements, definite- or indefinite-length, as in
+                    // `decodeConstrExtended`. The length used to be read and discarded,
+                    // which let a three-element array through as a two-element list.
+                    val indefinite = r.hasArrayStart
+                    if indefinite then r.readArrayStart()
+                    else if !r.tryReadArrayHeader(2) then
+                        r.unexpectedDataItem(expected = "Array-Header(2)")
+                    val i = readConstrIndex(r)
+                    openArray(r, i, closingBreak = indefinite)
+                case Other(value) if 121 <= value && value < 128 =>
+                    openArray(r, BigInt(value - 121), closingBreak = false)
+                case Other(value) if 1280 <= value && value < 1401 =>
+                    openArray(r, BigInt(value - 1280 + 7), closingBreak = false)
+                case tag @ (PositiveBigNum | NegativeBigNum) =>
+                    // cborg takes a bignum only from the one-byte heads `c2` and `c3`. Behind a
+                    // wider head, such as `d8 02`, tag 2 is a `Constr` tag that the reference does
+                    // not know. Borer reads the same tag from both heads, but then the payload
+                    // starts more than one byte after it. This needs a reader that parses the
+                    // bytes as it goes, as every Scalus entry point does: one that replays items,
+                    // from a borer stash or from a DOM, does not move its cursor, so the head is
+                    // not seen and not checked.
+                    r.dataItem()
+                    if r.cursor - tagStart > 1 then
+                        r.unexpectedDataItem(
+                          expected = "Bignum Tag in a one-byte head",
+                          actual = s"$tag in a ${r.cursor - tagStart}-byte head"
+                        )
+                    val magnitude = BigInteger(1, readBoundedBytes(r))
+                    I(if tag == PositiveBigNum then magnitude else magnitude.not)
+                case tag =>
+                    r.unexpectedDataItem(s"Allowed Data Constr Tag or CBOR BigNum Tag, got $tag")
+            }
+        }
+
+        /** Opens the array of a list or of the fields of a `Constr`. */
+        private def openArray(
+            r: Reader,
+            constr: BigInt | Null,
+            closingBreak: Boolean
+        ): OpenArray = {
+            if r.hasArrayStart then
+                r.readArrayStart()
+                OpenArray(constr, closingBreak, -1)
+            else if r.hasArrayHeader then OpenArray(constr, closingBreak, r.readArrayHeader())
+            else r.unexpectedDataItem(expected = "Array")
+        }
+
+        // read sized bytes bounded by 64 bytes
+        private def readBoundedSizedBytes(r: Reader): Array[Byte] = {
+            val bytes = r.readSizedBytes()(using ByteAccess.ForByteArray)
+            if bytes.length > maxCborByteArraySize then
+                r.overflow(s"Bytes chunk ${bytes.length} must be <= 64 bytes")
+            bytes
+        }
+
+        // read bytes (sized or indefinite) where chunks are bounded by 64 bytes
+        private def readBoundedBytes(r: Reader): Array[Byte] = {
+            r.dataItem() match
+                case DI.Bytes => readBoundedSizedBytes(r)
+                case DI.BytesStart =>
+                    r.readBytesStart()
+                    // Copies each chunk as one block; a generic ArrayBuffer[Byte] copies byte by
+                    // byte.
+                    val acc = new ArrayBuilder.ofByte
+                    while !r.tryReadBreak() do acc.addAll(readBoundedSizedBytes(r))
+                    acc.result()
+                case _ => r.unexpectedDataItem(expected = "Bytes or BytesStart")
+        }
+
+        // The constructor index of the tag-102 form is a CBOR unsigned 64-bit integer, so
+        // 2^63 and above reach us as borer OverLongs and have to be widened without a sign.
+        // Anything else - a negative integer, or a bignum above the range - is rejected, as
+        // the node's `decodeWord64` rejects it.
+        private def readConstrIndex(r: Reader): BigInt = {
+            r.dataItem() match
+                case DI.Int | DI.Long =>
+                    val i = r.readLong()
+                    if i < 0 then r.unexpectedDataItem(expected = "unsigned Constr index")
+                    BigInt(i)
+                case DI.OverLong =>
+                    if r.overLongNegative then
+                        r.unexpectedDataItem(expected = "unsigned Constr index")
+                    BigInt(r.readOverLong()) + twoTo64
+                case _ => r.unexpectedDataItem(expected = "unsigned Constr index")
+        }
     end dataCborDecoder
 
     extension [A <: Data](a: A)
@@ -387,14 +487,15 @@ private trait DataApi {
         if indent < 0 then writeToString[Data](data)(using dataJsonCodec)
         else writeToString[Data](data, WriterConfig.withIndentionStep(indent))(using dataJsonCodec)
 
-    /** Decode a [[Data]] value from CBOR */
-    def fromCbor(bytes: Array[Byte]): Data = Cbor.decode(bytes).to[Data].value
+    /** Decode a [[Data]] value from CBOR. The nesting depth of the value is not limited. */
+    def fromCbor(bytes: Array[Byte]): Data = ScalusCbor.decode[Data](bytes)
 
-    /** Decode a [[Data]] value from CBOR */
-    def fromCbor(is: InputStream): Data = Cbor.decode(is).to[Data].value
+    /** Decode a [[Data]] value from CBOR. The nesting depth of the value is not limited. */
+    def fromCbor(is: InputStream): Data =
+        Cbor.decode(is).withConfig(ScalusCbor.decodingConfig).to[Data].value
 
-    /** Decode a [[Data]] value from CBOR */
-    def fromCbor(bs: ByteString): Data = Cbor.decode(bs.bytes).to[Data].value
+    /** Decode a [[Data]] value from CBOR. The nesting depth of the value is not limited. */
+    def fromCbor(bs: ByteString): Data = ScalusCbor.decode[Data](bs.bytes)
 
     /** Tries to decode a value of type `T` from [[Data]]
       * @return
@@ -411,43 +512,87 @@ private trait DataApi {
 
         def decode(decode: DecoderState): Data =
             val bytes = summon[Flat[Array[Byte]]].decode(decode)
-            Cbor.decode(bytes).to[Data].value
+            ScalusCbor.decode[Data](bytes)
     end given
 
     /** Pretty prints Data in debug format with rainbow brackets: `<constr, [args]>`, `{k: v}`,
-      * `[v]`, `123`, `"hex"`
+      * `[v]`, `123`, `"hex"`.
+      *
+      * A list, map or `Constr` nested more than [[maxDepth]] levels deep is printed as `...`.
+      * paiges lays out nested groups with a recursion over the nesting, and in memory that grows
+      * faster than the depth: 10000 levels exhaust a 3 GB heap. The document is built without
+      * recursion.
       */
     given Pretty[Data] with
-        def pretty(a: Data, style: Style): Doc = prettyWithDepth(a, style, 0)
 
-        private def prettyWithDepth(a: Data, style: Style, depth: Int): Doc = a match
-            case Constr(constr, args) =>
-                val argsDoc =
-                    fill(comma + space, args.toScalaList.map(prettyWithDepth(_, style, depth + 1)))
-                val inner = lit(str(constr), style) + comma & rainbowBracket(
-                  argsDoc,
-                  '[',
-                  ']',
-                  depth + 1,
-                  style
-                )
-                rainbowBracket(inner, '<', '>', depth, style).grouped
-            case Map(values) =>
-                val entries = values.toScalaList.map { case (k, v) =>
-                    prettyWithDepth(k, style, depth + 1) + char(':') + space + prettyWithDepth(
-                      v,
-                      style,
-                      depth + 1
-                    )
-                }
-                rainbowBracket(fill(comma + space, entries), '{', '}', depth, style).grouped
-            case Data.List(values) =>
-                val items = values.toScalaList.map(prettyWithDepth(_, style, depth + 1))
-                rainbowBracket(fill(comma + space, items), '[', ']', depth, style).grouped
-            case I(value) =>
-                lit(str(value), style)
-            case B(value) =>
-                lit(char('"') + text(value.toHex) + char('"'), style)
+        /** The nesting printed in full. */
+        private val maxDepth = 100
+
+        /** A list, a map or a `Constr` being printed: the documents of what it holds so far. */
+        private final class Open(val data: Data, val depth: Int, val items: Iterator[Data]) {
+            val docs: ArrayBuffer[Doc] = ArrayBuffer.empty
+        }
+
+        def pretty(a: Data, style: Style): Doc = {
+            // the document of a value that holds no other, or what is to print of one that does
+            def start(data: Data, depth: Int): Doc | Open = {
+                data match
+                    case I(value) => lit(str(value), style)
+                    case B(value) => lit(char('"') + text(value.toHex) + char('"'), style)
+                    case _ if depth >= maxDepth => text("...")
+                    case Constr(_, args)        => Open(data, depth, args.toScalaList.iterator)
+                    case Map(entries) =>
+                        val keysAndValues =
+                            entries.toScalaList.iterator.flatMap((k, v) => Seq(k, v))
+                        Open(data, depth, keysAndValues)
+                    case Data.List(values) => Open(data, depth, values.toScalaList.iterator)
+            }
+
+            def close(open: Open): Doc = {
+                open.data match
+                    case Constr(constr, _) =>
+                        val argsDoc = fill(comma + space, open.docs)
+                        val inner = lit(str(constr), style) + comma &
+                            rainbowBracket(argsDoc, '[', ']', open.depth + 1, style)
+                        rainbowBracket(inner, '<', '>', open.depth, style).grouped
+                    case Map(_) =>
+                        val entries =
+                            open.docs.grouped(2).map(kv => kv(0) + char(':') + space + kv(1))
+                        rainbowBracket(
+                          fill(comma + space, entries.toList),
+                          '{',
+                          '}',
+                          open.depth,
+                          style
+                        ).grouped
+                    case _ =>
+                        rainbowBracket(
+                          fill(comma + space, open.docs),
+                          '[',
+                          ']',
+                          open.depth,
+                          style
+                        ).grouped
+            }
+
+            start(a, 0) match
+                case doc: Doc        => doc
+                case outermost: Open =>
+                    // what is open, innermost last
+                    val open = ArrayBuffer(outermost)
+                    var result: Doc = null
+                    while result eq null do
+                        val innermost = open.last
+                        if innermost.items.hasNext then
+                            start(innermost.items.next(), innermost.depth + 1) match
+                                case doc: Doc     => innermost.docs += doc
+                                case nested: Open => open += nested
+                        else
+                            open.dropRightInPlace(1)
+                            val doc = close(innermost)
+                            if open.isEmpty then result = doc else open.last.docs += doc
+                    result
+        }
 }
 
 /** The shape of [[Data]]'s standard JSON encoding, as something `JsonCodecMaker` can derive.
@@ -487,19 +632,68 @@ private object DataJson {
           .withBigIntDigitsLimit(65536)
     )
 
-    def fromData(data: Data): DataJson = data match
-        case Data.Constr(constructor, args) =>
-            DataJson(
-              constructor = Some(constructor),
-              fields = Some(args.toScalaList.map(fromData))
-            )
-        case Data.Map(entries) =>
-            DataJson(map = Some(entries.toScalaList.map { entry =>
-                DataJsonMapEntry(fromData(entry._1), fromData(entry._2))
-            }))
-        case Data.List(values) => DataJson(list = Some(values.toScalaList.map(fromData)))
-        case Data.I(value)     => DataJson(int = Some(value))
-        case Data.B(value)     => DataJson(bytes = Some(value.toHex))
+    /** What is still to write of a value after its start: the end of an object or an array, a key,
+      * or a map entry.
+      */
+    private enum Step {
+        case EndObject, EndArray
+        case Key(name: String)
+        case Entry(key: Data, value: Data)
+    }
+
+    /** Writes `data` as [[codec]] writes the [[DataJson]] that mirrors it, call for call, so the
+      * output is the same. It does not recurse over the nesting: what is still to write is kept on
+      * the heap, the next one last.
+      */
+    def write(data: Data, out: JsonWriter): Unit = {
+        val pending = ArrayBuffer[Data | Step](data)
+
+        // opens the array under the key just written; the items, the array and the object follow
+        def writeItems(items: List[Data | Step]): Unit = {
+            out.writeArrayStart()
+            pending += Step.EndObject
+            pending += Step.EndArray
+            items.reverseIterator.foreach(pending += _)
+        }
+
+        while pending.nonEmpty do
+            pending.remove(pending.length - 1) match {
+                case Step.EndObject => out.writeObjectEnd()
+                case Step.EndArray  => out.writeArrayEnd()
+                case Step.Key(name) => out.writeNonEscapedAsciiKey(name)
+                case Step.Entry(key, value) =>
+                    out.writeObjectStart()
+                    out.writeNonEscapedAsciiKey("k")
+                    pending += Step.EndObject
+                    pending += value
+                    pending += Step.Key("v")
+                    pending += key
+                case Data.Constr(constructor, args) =>
+                    out.writeObjectStart()
+                    out.writeNonEscapedAsciiKey("constructor")
+                    out.writeVal(constructor)
+                    out.writeNonEscapedAsciiKey("fields")
+                    writeItems(args.toScalaList)
+                case Data.Map(entries) =>
+                    out.writeObjectStart()
+                    out.writeNonEscapedAsciiKey("map")
+                    writeItems(entries.toScalaList.map((key, value) => Step.Entry(key, value)))
+                case Data.List(values) =>
+                    out.writeObjectStart()
+                    out.writeNonEscapedAsciiKey("list")
+                    writeItems(values.toScalaList)
+                case Data.I(value) =>
+                    out.writeObjectStart()
+                    out.writeNonEscapedAsciiKey("int")
+                    out.writeVal(value)
+                    out.writeObjectEnd()
+                case Data.B(value) =>
+                    out.writeObjectStart()
+                    out.writeNonEscapedAsciiKey("bytes")
+                    out.writeVal(value.toHex)
+                    out.writeObjectEnd()
+            }
+    }
 
     def toData(json: DataJson, in: JsonReader): Data =
         if json.constructor.isDefined then

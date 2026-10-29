@@ -97,4 +97,4 @@ object BlockFile:
 
     def fromCborArray(bytes: Array[Byte]): BlockFile =
         given OriginalCborByteArray = OriginalCborByteArray(bytes)
-        Cbor.decode(bytes).to[BlockFile].value
+        scalus.serialization.cbor.Cbor.decode[BlockFile](bytes)

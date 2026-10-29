@@ -1,6 +1,6 @@
 package scalus.uplc.eval
 
-import io.bullet.borer.Cbor
+import scalus.serialization.cbor.Cbor
 import scalus.cardano.ledger.*
 import scalus.interop.{TsName, TsType}
 import scalus.utils.scalajs.internal.*
@@ -163,7 +163,7 @@ object JEvaluator {
                 val utxo = value.asInstanceOf[JsUtxo]
                 (utxo.input, utxo.output)
             else if js.typeOf(value) == "string" || value.isInstanceOf[Uint8Array] then
-                decodeOf(value, name)(Cbor.decode(_).to[Utxo].value.toTuple)
+                decodeOf(value, name)(Cbor.decode[Utxo](_).toTuple)
             else typeError(s"$name must be a hexadecimal string, a Uint8Array or a Utxo")
         }.toMap
 

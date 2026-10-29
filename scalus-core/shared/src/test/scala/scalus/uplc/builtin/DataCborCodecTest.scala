@@ -179,6 +179,58 @@ class DataCborCodecTest extends AnyFunSuite with ScalaCheckPropertyChecks with A
         assert(decodeHex("d8 66 9f 1b 8000000000000000 80 ff") == Constr(twoTo63, PList.Nil))
     }
 
+    // cborg's `peekTokenType` takes a bignum only from the heads `c2` and `c3`. Tag 2 or 3 in a
+    // wider head goes to `decodeConstr`, which knows no such tag (#423).
+    test("a bignum tag must be in a one-byte head") {
+        assert(decodeHex("c2 41 01") == I(1))
+        assert(decodeHex("c3 41 01") == I(-2))
+        assert(decodeHex("c2 5f 41 01 ff") == I(1))
+        assert(decodeHex("81 c2 41 01") == (List(PList(I(1))): Data))
+        assertRejects("d8 02 41 01")
+        assertRejects("d9 0003 41 01")
+        assertRejects("da 00000002 41 01")
+        assertRejects("db 0000000000000003 41 01")
+        assertRejects("81 d8 02 41 01")
+        assertRejects("c2")
+    }
+
+    test("a length in a header allocates nothing before the items are there") {
+        // 2^31 - 1 items announced and none present: the array used to be allocated first,
+        // which ran out of memory (#423)
+        assertRejects("9a 7fffffff")
+        assertRejects("d8 79 9a 7fffffff")
+        assertRejects("d8 66 82 00 9a 7fffffff")
+        assertRejects("ba 7fffffff")
+        assertRejects("9b 00000000ffffffff")
+    }
+
+    test("a break between a key and its value does not end a map") {
+        assertRejects("bf 01 ff")
+        assertRejects("82 bf 01 ff 00")
+    }
+
+    test("definite and indefinite arrays and maps nest in each other") {
+        val expected: Data = List(
+          PList(
+            Map(PList((I(1), List(PList(I(2), Map(PList.Nil)))), (List(PList.Nil), I(3)))),
+            Constr(1, PList(Map(PList((I(4), I(5)))))),
+            List(PList.Nil)
+          )
+        )
+        assert(decodeHex("9f a2 01 82 02 a0 9f ff 03 d8 7a 81 bf 04 05 ff 80 ff") == expected)
+        assert(decodeHex("83 bf 01 9f 02 bf ff ff 80 03 ff d8 7a 9f a1 04 05 ff 9f ff") == expected)
+    }
+
+    test("Data inside other CBOR takes exactly its own bytes") {
+        val (d1, d2, n) = Cbor
+            .decode("83 9f 01 9f ff ff a1 02 bf ff 07".hexToBytes)
+            .to[(Data, Data, Int)]
+            .value
+        assert(d1 == (List(PList(I(1), List(PList.Nil))): Data))
+        assert(d2 == Map(PList((I(2), Map(PList.Nil)))))
+        assert(n == 7)
+    }
+
     test("Encoding/decoding of Lists") {
         assert(
           encodeHex(
