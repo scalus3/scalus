@@ -65,10 +65,7 @@ The blockchain enforces these bounds, and our validator checks they're set corre
 Now let's implement. In Scalus, we define types with automatic serialization:
 
 ```scala
-import scalus.compiler.Compile
 import scalus.uplc.builtin.Builtins.sha3_256
-import scalus.uplc.builtin.Data.{FromData, ToData}
-import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 
@@ -360,7 +357,7 @@ import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.uplc.PlutusV3
 import java.time.Instant
 

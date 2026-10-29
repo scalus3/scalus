@@ -279,7 +279,9 @@ retired: the templates enable the plugin instead (`.claude/settings.json`).
    versions. To add or rebuild other versions, list their tags, for example `v1.3.0 v1.4.0`.
 3. Check that the first line of https://scalus.org/llms-api.txt names the new tag, and that
    https://scalus.org/api/versions.json lists it.
-4. Bump the Scalus version in the `hello.g8` and `validator.g8` templates.
+4. Bump the Scalus version in the `hello.g8` and `validator.g8` templates. The `HelloCardano.scala`
+   snippet in `scalus-site/content/get-started/index.mdx` shows the file that `hello.g8`
+   generates; change both together.
 
 ## Run benchmarks
 

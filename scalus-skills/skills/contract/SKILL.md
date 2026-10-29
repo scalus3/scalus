@@ -35,6 +35,26 @@ Study existing validators before creating new ones:
 
 ## Key Patterns
 
+**Imports:** an on-chain file needs two imports.
+
+```scala
+import scalus.cardano.onchain.plutus.v3.*     // ledger types, OutputDatum, ByteString, Data, FromData, ToData, @Compile
+import scalus.cardano.onchain.plutus.prelude.* // List, Option, require, fail, log
+```
+
+- Add `import scalus.uplc.builtin.Data.toData` and `import scalus.uplc.builtin.ByteString.{hex, utf8}`
+  only when the file uses them. They are methods, so `v3` cannot re-export them.
+- Do not import `v1`/`v2` types next to `v3.*`; `v3` re-exports the ones it uses.
+  Import members through `v3` too: `import scalus.cardano.onchain.plutus.v3.Value.*`.
+  `v1.TxId`, `v1.TxOutRef` and `v1.TxInfo` are different types from the `v3` ones.
+  Exception: a file that also imports `scalus.cardano.ledger.*` keeps explicit imports such as
+  `scalus.cardano.onchain.plutus.v3.{Credential, Value}`. Both wildcards define `Value`,
+  `Credential`, `PolicyId` and more, and the explicit import resolves the ambiguity.
+- Do not import `prelude.*` in off-chain files: its `List(...)` and `Option(...)` replace Scala's.
+- Scalus 1.4.1 and older do not re-export `OutputDatum`, `ByteString`, `Data`, `FromData`,
+  `ToData` or `Compile` from `v3`. There, import them from `scalus.cardano.onchain.plutus.v2`,
+  `scalus.uplc.builtin` and `scalus.compiler`.
+
 **Annotations:**
 - `@Compile` - marks code for Plutus compilation
 - `@Ignore` - excludes from compilation (off-chain helpers only)

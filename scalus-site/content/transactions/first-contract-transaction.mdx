@@ -18,7 +18,6 @@ Start with a simple spending validator that checks whether the transaction is si
 
 ```scala copy
 import scalus.Compiler.compile
-import scalus.uplc.builtin.Data
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.Compiled.*
@@ -100,9 +99,9 @@ Here's the full lock-then-spend flow:
 
 ```scala copy
 import scalus.Compiler.compile
-import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address.addr
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.Value // ledger.* and v3.* both define Value
 import scalus.cardano.node.BlockfrostProvider
 import scalus.cardano.txbuilder.*
 import scalus.cardano.onchain.plutus.v3.*
