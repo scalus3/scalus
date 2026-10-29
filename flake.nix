@@ -34,6 +34,32 @@
       };
       uplc = plutus.packages.${system}.uplc;
 
+      # Z3 for Lean-blaster, which needs 5.3.1 or later since it sets the Z3 tactic
+      # `recfun-finder` (input-output-hk/Lean-blaster 88588c5). nixpkgs 26.05 has 4.16.0 and
+      # unstable 5.1.0, so it is built here from the release's source, as nixpkgs builds Z3.
+      # Blaster runs the `z3` executable only: no Python bindings.
+      blasterZ3 = (pkgs.z3.override { pythonBindings = false; }).overrideAttrs (finalAttrs: old: {
+        version = "5.3.1";
+        src = pkgs.fetchFromGitHub {
+          owner = "Z3Prover";
+          repo = "z3";
+          rev = "z3-${finalAttrs.version}";
+          hash = "sha256-WjVLuYMWHrwFQMTwLxt8r+QaSSPi33LTuxL/sCKKzPU=";
+        };
+        # nixpkgs' patch of `z3.pc.cmake.in` does not apply since Z3 rewrote that file
+        # (Z3Prover/z3#10734). This does what it did: Nix's install directories are absolute,
+        # so the file names them whole instead of joining them to the prefix, which the fixup
+        # rejects (NixOS/nixpkgs#144170).
+        patches = [ ];
+        postPatch = (old.postPatch or "") + ''
+          substituteInPlace z3.pc.cmake.in \
+            --replace-fail 'libdir=''${exec_prefix}/@CMAKE_INSTALL_LIBDIR@' \
+                           'libdir=@CMAKE_INSTALL_FULL_LIBDIR@' \
+            --replace-fail 'includedir=''${prefix}/@CMAKE_INSTALL_INCLUDEDIR@' \
+                           'includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@'
+        '';
+      });
+
       # secp256k1 with static library and required modules for JNI builds
       secp256k1Static = pkgs.secp256k1.overrideAttrs (old: {
         dontDisableStatic = true;
@@ -230,7 +256,7 @@
               # Lean 4 + Z3, as in the `lean` shell, so UplcBlasterTest can run its proofs
               # (after `lake build` in scalus-verification/src/main/lean).
               elan
-              z3
+              blasterZ3
               # cardano-cli
             ];
             shellHook = ''
@@ -251,12 +277,12 @@
           };
         # Lean 4 + Z3 for the scalus-verification module. `elan` fetches the exact
         # toolchain named in scalus-verification/src/main/lean/lean-toolchain (v4.24.0).
-        # Blaster documents Z3 4.15.2; nixpkgs 25.11 ships 4.15.4, which works.
+        # Z3 is the one Lean-blaster needs (see `blasterZ3`).
         lean = pkgs.mkShell {
           buildInputs = [ pkgs.bashInteractive ];
           packages = with pkgs; [
             elan
-            z3
+            blasterZ3
             git
           ];
         };
@@ -357,7 +383,7 @@
               # the scalus-verification proofs through sbt. Without a built workspace, as in
               # ci-jvm, the tests that run Lean are canceled.
               elan
-              z3
+              blasterZ3
             ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.chromium ];
             shellHook = ''
               unlink plutus-conformance 2>/dev/null || true
