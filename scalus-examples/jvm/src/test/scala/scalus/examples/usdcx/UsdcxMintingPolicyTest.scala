@@ -1,7 +1,6 @@
 package scalus.examples.usdcx
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.ScalaCompilerVersion
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
@@ -11,7 +10,6 @@ import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{PlutusVM, Result}
-import scalus.utils.Hex
 
 import scala.io.Source
 
@@ -22,8 +20,11 @@ import scala.io.Source
   *
   * They are not the same term. Besides how the two compilers hoist builtins and encode recursion,
   * the original looks the minting logic up again for each withdrawal it compares, where the
-  * recreation looks it up once. So they behave the same, and the original costs more when the
-  * minting logic's withdrawal is not the first.
+  * recreation looks it up once, first. So they accept the same contexts, the original costs more
+  * when the minting logic's withdrawal is not the first, and where there is no withdrawal and no
+  * protocol parameters, only the original traces (the last test).
+  *
+  * What is proved of the recreation is in [[UsdcxMintingPolicyVerificationTest]].
   */
 class UsdcxMintingPolicyTest extends AnyFunSuite {
     import UsdcxMintingPolicyTest.*
@@ -49,17 +50,6 @@ class UsdcxMintingPolicyTest extends AnyFunSuite {
         info(s"original:  ${original.flatEncoded.length} bytes")
         info(s"recreated: ${recreated.flatEncoded.length} bytes")
         assert(recreated.flatEncoded.length <= original.flatEncoded.length)
-    }
-
-    test("the script of the Lean workspace is the one compiled here") {
-        // `src/test/lean/UsdcxMintingPolicy` checks IOG's statements of the script kept as
-        // `minting_policy_scalus.hex`. Scala 3.8 and later compile some code more leanly, so the
-        // script kept is that of the Scala 3.3 LTS build.
-        assume(
-          !ScalaCompilerVersion.hasLeanDesugaring,
-          s"the kept script is Scala 3.3's; this is ${ScalaCompilerVersion.version}"
-        )
-        assert(Hex.bytesToHex(recreated.cborEncoded) == resource("minting_policy_scalus.hex"))
     }
 
     private def agree(name: String, ctx: ScriptContext, accepted: Boolean): Unit = {
@@ -106,12 +96,6 @@ class UsdcxMintingPolicyTest extends AnyFunSuite {
     agree(
       "neither withdrawn from nor minting: both are traced",
       context(withdrawals = List.Nil, scriptInfo = ScriptInfo.SpendingScript(seedRef)),
-      accepted = false
-    )
-
-    agree(
-      "no withdrawal, and no reference input holds the protocol parameters",
-      context(referenceInputs = List(otherInput(0)), withdrawals = List.Nil),
       accepted = false
     )
 
@@ -167,6 +151,19 @@ class UsdcxMintingPolicyTest extends AnyFunSuite {
             assert(expected.isSuccess && actual.isSuccess, version)
             assert(actual.budget.steps < expected.budget.steps, version)
             assert(actual.budget.memory < expected.budget.memory, version)
+    }
+
+    test("with no withdrawal and no protocol parameters, only the original traces") {
+        // Both reject. The original finds no withdrawal to compare, so never looks for the
+        // protocol parameters, and traces that the minting logic is not withdrawn from. The
+        // recreation looks for them first, finds none, and fails without a trace.
+        val ctx = context(referenceInputs = List(otherInput(0)), withdrawals = List.Nil)
+        for (version, vm) <- vms do
+            val expected = run(original, ctx, vm)
+            val actual = run(recreated, ctx, vm)
+            assert(expected.isFailure && actual.isFailure, version)
+            assert(expected.logs == Seq(UsdcxMintingPolicy.NoMintingLogicInWithdrawals), version)
+            assert(actual.logs.isEmpty, version)
     }
 }
 

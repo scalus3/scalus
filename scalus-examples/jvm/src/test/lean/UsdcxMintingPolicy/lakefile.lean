@@ -8,9 +8,10 @@ open Lake DSL
 -- Unlike the vesting workspace, it does not share Scalus's packages: `CardanoLedgerApi` is
 -- built with its own Blaster and PlutusCore, pinned here to the revisions the statements were
 -- checked with. That Blaster sets the Z3 simplifier `recfun-finder`, so it needs Z3 5.3.1 or
--- later. CI does not build this workspace; to check the statements, run `lake build` here
--- with such a Z3 on the PATH (about 7 minutes, after a first build of the packages of about
--- 30).
+-- later: the flake's `lean-z3-5` shell (#437) has it, the others not yet. CI does not build
+-- this workspace. To check the statements, run `lake build` here in `nix develop .#lean-z3-5`,
+-- or `UsdcxMintingPolicyVerificationTest`, which runs it, with that Z3 on the PATH: about 7
+-- minutes, after a first build of the packages of about 30.
 package «UsdcxMintingPolicy» where
   moreGlobalServerArgs := #["--threads=4"]
   moreLeanArgs := #["--threads=4"]
