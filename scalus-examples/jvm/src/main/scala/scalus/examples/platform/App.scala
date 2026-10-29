@@ -1,7 +1,7 @@
 package scalus.examples.platform
 
 import scalus.cardano.ledger.{AssetName, ScriptHash, Transaction, TransactionOutput}
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.uplc.builtin.ByteString
 
 import scala.concurrent.duration.*

@@ -2,7 +2,7 @@ package scalus.examples.auction
 
 import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data}
-import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.{Address, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{Datum as _, *}
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.Validator

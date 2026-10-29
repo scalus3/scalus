@@ -1,10 +1,7 @@
 package scalus.examples.crowdfunding
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.SpendingScript
 import scalus.cardano.onchain.plutus.prelude.{List, Option}

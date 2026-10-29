@@ -11,7 +11,8 @@ import scalus.uplc.builtin.Data.toData
 import scalus.compiler.{compile, offsetOf, Options}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.cardano.ledger.MajorProtocolVersion
-import scalus.cardano.onchain.plutus.v1.{PubKeyHash, TxId}
+import scalus.cardano.onchain.plutus.v1.TxId
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.v2.*
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.uplc.*

@@ -9,7 +9,7 @@ import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator}
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{RedeemerPurpose, TxBuilder}
 import scalus.compiler.Options
-import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.{PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.prelude.Option as ScalusOption
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.{ScalusTest, TestUtil}

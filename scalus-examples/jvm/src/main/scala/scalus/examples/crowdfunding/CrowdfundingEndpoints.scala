@@ -6,7 +6,7 @@ import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, Shelle
 import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, Script, ScriptHash, Transaction, Utxo, Value as LedgerValue}
 import scalus.cardano.node.BlockchainProvider
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.uplc.PlutusV3
 
 import java.time.Instant

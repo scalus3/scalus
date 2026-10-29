@@ -1,11 +1,8 @@
 package scalus.examples.cape.htlc
 
-import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.uplc.builtin.Builtins.sha2_256
-import scalus.uplc.builtin.{ByteString, Data}
-import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.*
 
 case class HtlcDatum(

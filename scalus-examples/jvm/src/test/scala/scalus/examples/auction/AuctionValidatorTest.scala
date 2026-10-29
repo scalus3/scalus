@@ -8,7 +8,7 @@ import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.RedeemerPurpose
-import scalus.cardano.onchain.plutus.v1.PosixTime
+import scalus.cardano.onchain.plutus.v3.PosixTime
 import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}

@@ -1,11 +1,6 @@
 package scalus.examples.editablenft
 
-import scalus.compiler.Compile
-import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.ByteString.hex
-import scalus.uplc.builtin.Data.{FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.{Credential, PolicyId}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 

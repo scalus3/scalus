@@ -5,7 +5,7 @@ import scalus.*
 import scalus.cardano.onchain.plutus.prelude
 import scalus.compiler.Compile
 import scalus.uplc.builtin.Data.{FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
+import scalus.cardano.onchain.plutus.v3.{Address, Credential, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v3.{Interval, ScriptContext, ScriptInfo, TxId, TxInInfo, TxInfo, TxOut, TxOutRef}
 import scalus.uplc.builtin.Builtins.{constrData, mkCons, mkNilData, unConstrData}
 import scalus.uplc.builtin.ByteString

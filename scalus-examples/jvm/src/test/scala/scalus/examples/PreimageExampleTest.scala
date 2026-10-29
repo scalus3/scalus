@@ -6,7 +6,8 @@ import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.cardano.onchain.plutus.v1.{PubKeyHash, TxId}
+import scalus.cardano.onchain.plutus.v1.TxId
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.v2.*
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.testing.assertions.Expected

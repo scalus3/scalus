@@ -1,12 +1,10 @@
 package scalus.examples.usdcx
 
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.compiler.{Compile, Options}
+import scalus.compiler.Options
 import scalus.uplc.PlutusV3
 import scalus.uplc.builtin.Builtins.*
-import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 
 /** The USDCx minting policy, recreated in Scalus from its compiled script.

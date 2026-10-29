@@ -1,10 +1,7 @@
 package scalus.examples.cape.linearvesting
 
-import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.uplc.builtin.{ByteString, Data}
-import scalus.uplc.builtin.Data.{FromData, ToData}
 
 case class VestingAsset(currencySymbol: ByteString, tokenName: ByteString) derives FromData, ToData
 

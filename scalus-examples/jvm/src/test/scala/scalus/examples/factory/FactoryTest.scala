@@ -2,11 +2,9 @@ package scalus.examples.factory
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.given
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.onchain.{OnchainError, RequirementError}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit

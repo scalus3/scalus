@@ -1,12 +1,9 @@
 package scalus.examples.crowdfunding
 
-import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.Options
-import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.PlutusV3
-import scalus.compiler.Compile
 import scalus.cardano.blueprint.{Blueprint, Contract}
 
 // ============================================================================

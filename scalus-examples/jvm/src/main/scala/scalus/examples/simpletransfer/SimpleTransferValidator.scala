@@ -1,11 +1,7 @@
 package scalus.examples.simpletransfer
 
-import scalus.compiler.Compile
-import scalus.uplc.builtin.{Data, FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v3.Validator
 
 // Datum
 case class Parties(

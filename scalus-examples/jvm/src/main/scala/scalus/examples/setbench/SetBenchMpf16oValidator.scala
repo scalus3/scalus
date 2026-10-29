@@ -1,11 +1,6 @@
 package scalus.examples.setbench
 
-import scalus.compiler.Compile
-
 import scalus.*
-import scalus.uplc.builtin.Data
-import scalus.cardano.onchain.plutus.v1.Value.getLovelace
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*

@@ -5,7 +5,8 @@ import scalus.*
 import scalus.cardano.onchain.plutus.prelude
 import scalus.cardano.onchain.plutus.prelude.SortedMap
 import scalus.cardano.onchain.plutus.v1
-import scalus.cardano.onchain.plutus.v1.{TxId, TxOutRef, Value}
+import scalus.cardano.onchain.plutus.v1.{TxId, TxOutRef}
+import scalus.cardano.onchain.plutus.v3.Value
 import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.ByteString.hex

@@ -6,7 +6,7 @@ import scalus.uplc.builtin.Data.toData
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
 import scalus.uplc.PlutusV3
 

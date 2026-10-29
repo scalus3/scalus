@@ -6,7 +6,7 @@ import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, S
 import scalus.cardano.ledger.*
 import scalus.cardano.node.{Emulator, EmulatorBase}
 import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}

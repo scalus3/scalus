@@ -8,7 +8,7 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{TwoArgumentPlutusScriptWitness, TxBuilder}
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.testing.kit.{Party, ScalusTest, TestUtil}
 import scalus.utils.await
 

@@ -12,7 +12,6 @@ import scalus.cardano.onchain.plutus.v3.*
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.uplc.builtin.Data.{toData, B, Constr, I}
-import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{ExBudgetCategory, PlutusVM, Result}
 import scalus.uplc.{Constant, PlutusV3, Program, Term}
 import scalus.uplc.Term.asTerm

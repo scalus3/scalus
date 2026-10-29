@@ -1,11 +1,9 @@
 package scalus.examples.midgard
 
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, List, Option}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.uplc.builtin.Builtins.blake2b_256
 import scalus.uplc.builtin.Data.toData
-import scalus.uplc.builtin.{ByteString, Data}
 
 /** Port of the fixture builders in Midgard `validators/da-bond-pool.test.ak`.
   *

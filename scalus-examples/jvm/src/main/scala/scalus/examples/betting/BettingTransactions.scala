@@ -5,7 +5,7 @@ import scalus.uplc.builtin.Data
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
-import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.{PosixTime, PubKeyHash}
 import scalus.uplc.PlutusV3
 
 case class BettingTransactions(

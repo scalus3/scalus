@@ -1,10 +1,7 @@
 package scalus.examples.setbench
 
-import scalus.compiler.Compile
-
 import scalus.*
 import scalus.uplc.builtin.Builtins.unBData
-import scalus.uplc.builtin.Data
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*

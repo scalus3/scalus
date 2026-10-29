@@ -2,7 +2,7 @@ package scalus.examples.lottery
 
 import scalus.uplc.builtin.Builtins.sha2_256
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.{Credential, PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef, Validator}
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.compiler.Compile

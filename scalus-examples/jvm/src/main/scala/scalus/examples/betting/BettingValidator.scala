@@ -1,16 +1,9 @@
 package scalus.examples.betting
 
-import scalus.compiler.Compile
-
 import scalus.uplc.builtin.ByteString.*
-import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.Data.FromData
-import scalus.uplc.builtin.Data.ToData
 import scalus.uplc.builtin.ToData.*
-import scalus.cardano.onchain.plutus.v1.Address
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v3.Validator
 
 // Datum
 /** Represents the state of a two-player betting game The bet starts with player1 creating it, then

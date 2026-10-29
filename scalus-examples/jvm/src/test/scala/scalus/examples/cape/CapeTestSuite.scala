@@ -1,11 +1,8 @@
 package scalus.examples.cape
 
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.cardano.onchain.plutus.v1.{IntervalBound, IntervalBoundType}
 import scalus.cardano.onchain.plutus.prelude.{List as SList, Option as SOption}
 import scalus.uplc.{Term, UplcParser}
-import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
 
 /** One resolved input of a CAPE test case. */

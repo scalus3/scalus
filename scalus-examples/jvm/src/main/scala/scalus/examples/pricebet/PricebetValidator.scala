@@ -4,9 +4,8 @@ import scalus.compiler.Compile
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.uplc.builtin.Data
-import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.{PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, TxInInfo, TxInfo, TxOutRef}
-import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Ord.>
 

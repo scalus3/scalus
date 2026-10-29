@@ -6,12 +6,10 @@ import scalus.ScalaCompilerVersion
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.{CardanoInfo, ExUnits, RefScriptFee}
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, List, Option}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.uplc.Program
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.builtin.Builtins.{blake2b_256, serialiseData}
-import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data.toData
 
 import scala.collection.mutable

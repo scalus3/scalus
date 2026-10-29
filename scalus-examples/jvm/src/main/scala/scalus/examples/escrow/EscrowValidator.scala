@@ -1,12 +1,7 @@
 package scalus.examples.escrow
 
-import scalus.compiler.Compile
-
-import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.cardano.onchain.plutus.prelude.Option.*
 
 // Datum

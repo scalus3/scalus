@@ -5,7 +5,7 @@ import scalus.*
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.ScalusTest
 

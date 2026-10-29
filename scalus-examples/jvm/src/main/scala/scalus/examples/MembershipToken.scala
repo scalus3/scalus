@@ -1,18 +1,11 @@
 package scalus.examples
 
-import scalus.compiler.Compile
-
 import scalus.*
 import scalus.compiler.Options
 import scalus.uplc.PlutusV3
 import scalus.uplc.builtin.Builtins.unBData
-import scalus.uplc.builtin.{ByteString, Data}
-import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v1.Value.getLovelace
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.cardano.onchain.plutus.v3.ParameterizedValidator
 
 // ============================================================================
 // DATA MODELS

@@ -3,12 +3,10 @@ package scalus.examples.usdcx
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.uplc.Program
 import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.toData
-import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.eval.{PlutusVM, Result}
 
 import scala.io.Source

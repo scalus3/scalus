@@ -6,7 +6,7 @@ import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, S
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.{BlockchainReader, Emulator}
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.testing.*
 import scalus.testing.kit.Party

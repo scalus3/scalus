@@ -3,7 +3,6 @@ package scalus.examples
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Data.toData
-import scalus.uplc.builtin.{ByteString, FromData, ToData}
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.ExUnits
 import scalus.cardano.ledger.Script.PlutusV3

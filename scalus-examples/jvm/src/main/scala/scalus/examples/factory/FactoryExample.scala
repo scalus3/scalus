@@ -1,14 +1,10 @@
 package scalus.examples.factory
 
-import scalus.compiler.Compile
-
 import scalus.*
-import scalus.uplc.builtin.Data
 import scalus.compiler.Options
 import scalus.cardano.blueprint.{Blueprint, Contract}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.uplc.PlutusV3
 
 /** Factory Pattern Example — a combined minting + spending validator.

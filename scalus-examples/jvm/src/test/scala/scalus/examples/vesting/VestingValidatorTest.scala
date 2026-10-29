@@ -2,14 +2,11 @@ package scalus.examples.vesting
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.ByteString.hex
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compileWithOptions, Options}
-import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
-import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, StakingCredential}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.Credential.ScriptCredential
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*

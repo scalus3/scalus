@@ -4,7 +4,7 @@ import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.cardano.onchain.plutus.v1.PosixTime
+import scalus.cardano.onchain.plutus.v3.PosixTime
 import scalus.uplc.PlutusV3
 
 import java.time.Instant

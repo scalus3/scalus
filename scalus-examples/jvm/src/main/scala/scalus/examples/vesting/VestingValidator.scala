@@ -1,10 +1,6 @@
 package scalus.examples.vesting
 
-import scalus.compiler.Compile
-import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.Data.{FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.Value
-import scalus.cardano.onchain.plutus.v1.Value.*
+import scalus.cardano.onchain.plutus.v3.Value.*
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*

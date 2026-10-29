@@ -1,11 +1,8 @@
 package scalus.examples.cape
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.cardano.onchain.plutus.v1.IntervalBoundType
 import scalus.cardano.onchain.plutus.prelude.{List, Option}
-import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data.{fromData, toData}
 

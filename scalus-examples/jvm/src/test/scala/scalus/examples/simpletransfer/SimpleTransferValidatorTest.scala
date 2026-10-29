@@ -3,10 +3,8 @@ package scalus.examples.simpletransfer
 import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.ScalusTest

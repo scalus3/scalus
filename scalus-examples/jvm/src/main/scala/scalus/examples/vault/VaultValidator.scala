@@ -4,10 +4,7 @@ import scalus.compiler.Compile
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.examples.vault.Action.{Cancel, Deposit, FinalizeWithdrawal, InitiateWithdrawal}
-import scalus.cardano.onchain.plutus.v1
-import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime}
-import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
-import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef, Validator}
+import scalus.cardano.onchain.plutus.v3.{Credential, PosixTime, PubKeyHash, TxInInfo, TxInfo, TxOut, TxOutRef, Validator}
 import scalus.cardano.onchain.plutus.prelude.*
 
 // Datum
@@ -116,7 +113,7 @@ object VaultValidator extends Validator {
 
         // Owner must sign to initiate withdrawal
         require(
-          tx.isSignedBy(v1.PubKeyHash(datum.owner)),
+          tx.isSignedBy(PubKeyHash(datum.owner)),
           OwnerMustSign
         )
 
@@ -153,7 +150,7 @@ object VaultValidator extends Validator {
 
         val scriptOutputs = tx.findOutputsByCredential(ownInput.resolved.address.credential)
         require(scriptOutputs.isEmpty, WithdrawalsMustNotSendBackToVault)
-        val ownerCredential = Credential.PubKeyCredential(v1.PubKeyHash(datum.owner))
+        val ownerCredential = Credential.PubKeyCredential(PubKeyHash(datum.owner))
         val ownerOutputs = tx.findOutputsByCredential(ownerCredential)
         require(ownerOutputs.nonEmpty, WrongAddressWithdrawal)
         val totalToOwner =
@@ -166,7 +163,7 @@ object VaultValidator extends Validator {
         // survive a stolen owner key, so cancellation must use a separate credential the attacker
         // does not hold.
         require(
-          tx.isSignedBy(v1.PubKeyHash(datum.recoveryKey)),
+          tx.isSignedBy(PubKeyHash(datum.recoveryKey)),
           RecoveryKeyMustSign
         )
         // There must be a pending request to cancel.

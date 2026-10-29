@@ -3,11 +3,8 @@ package scalus.examples.paymentsplitter
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.ScalaCompilerVersion
 import scalus.*
-import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.onchain.plutus.v1.Credential.{PubKeyCredential, ScriptCredential}
-import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash, Value}
-import scalus.cardano.onchain.plutus.v2.TxOut
+import scalus.cardano.onchain.plutus.v3.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.SpendingScript
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, List as SList, Option as SOption}

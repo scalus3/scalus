@@ -7,7 +7,7 @@ import scalus.cardano.address.{Address as CardanoAddress, Network, ShelleyAddres
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.PlutusScriptsTransactionMutator
 import scalus.cardano.node.{BlockchainReader, Emulator}
-import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.{PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.*

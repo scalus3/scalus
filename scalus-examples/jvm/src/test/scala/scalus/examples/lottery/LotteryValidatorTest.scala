@@ -7,7 +7,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.{RedeemerPurpose, TxBuilder}
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.v3.ScriptContext
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}

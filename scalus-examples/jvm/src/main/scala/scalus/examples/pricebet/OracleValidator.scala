@@ -3,8 +3,7 @@ package scalus.examples.pricebet
 import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.examples.pricebet.MintOracleRedeemer.{Burn, Mint}
-import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime, PubKeyHash}
-import scalus.cardano.onchain.plutus.v2
+import scalus.cardano.onchain.plutus.v3.{Credential, PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, PolicyId, TxInfo, TxOutRef}
 import scalus.cardano.onchain.plutus.prelude.*
 

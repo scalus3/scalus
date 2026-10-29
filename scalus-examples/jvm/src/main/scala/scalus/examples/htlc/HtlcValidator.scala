@@ -1,9 +1,6 @@
 package scalus.examples.htlc
 
-import scalus.compiler.Compile
 import scalus.uplc.builtin.Builtins.sha3_256
-import scalus.uplc.builtin.Data.{FromData, ToData}
-import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 

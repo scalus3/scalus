@@ -8,7 +8,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.{BlockchainProvider, Emulator}
 import scalus.cardano.txbuilder.TransactionSigner
-import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.{PosixTime, PubKeyHash}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.testing.kit.TestUtil.genesisHash
 import scalus.testing.kit.ScalusTest

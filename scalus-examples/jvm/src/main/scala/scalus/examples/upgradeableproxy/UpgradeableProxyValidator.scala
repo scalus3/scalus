@@ -1,11 +1,7 @@
 package scalus.examples.upgradeableproxy
 
-import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v1.{Credential, PubKeyHash}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.uplc.builtin.{Data, FromData, ToData}
 
 /** Upgradeable proxy pattern for Cardano smart contracts.
   *

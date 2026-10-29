@@ -3,7 +3,7 @@ package scalus.examples.htlc
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude
-import scalus.cardano.onchain.plutus.v1.{IntervalBound, IntervalBoundType, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.{IntervalBound, IntervalBoundType, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{Interval, ScriptContext, ScriptInfo, TxId, TxInfo, TxOutRef}
 import scalus.compiler.Compile
 import scalus.examples.vesting.VestingVerificationTest.{noDatum, scriptContext, someDatum, spendingInfo}

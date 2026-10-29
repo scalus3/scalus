@@ -1,15 +1,10 @@
 package scalus.examples.paymentsplitter
 
-import scalus.compiler.Compile
-
 import scalus.*
-import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.Value.*
-import scalus.cardano.onchain.plutus.v1.{Credential, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.Value.*
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.StakeValidator
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v3.DataParameterizedValidator
 import scalus.cardano.onchain.plutus.prelude.List.*
 import scalus.cardano.onchain.plutus.prelude.Option.*
 

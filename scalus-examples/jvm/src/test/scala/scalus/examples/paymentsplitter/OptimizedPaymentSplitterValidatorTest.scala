@@ -5,9 +5,7 @@ import scalus.ScalaCompilerVersion
 import scalus.*
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
-import scalus.cardano.onchain.plutus.v1.Credential.{PubKeyCredential, ScriptCredential}
-import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
-import scalus.cardano.onchain.plutus.v2.TxOut
+import scalus.cardano.onchain.plutus.v3.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.{RewardingScript, SpendingScript}
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, List as SList, Option as SOption, SortedMap}

@@ -1,11 +1,8 @@
 package scalus.examples.cape.twopartyescrow
 
-import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.uplc.builtin.ByteString.*
-import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.*
 
 // CAPE spec: datum is Constr(0, [state, depositTime])

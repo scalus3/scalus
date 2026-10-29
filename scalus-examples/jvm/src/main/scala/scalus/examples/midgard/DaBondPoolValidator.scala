@@ -1,11 +1,8 @@
 package scalus.examples.midgard
 
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.compiler.Compile
 import scalus.uplc.builtin.Builtins.{blake2b_256, unBData, unConstrData}
-import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 
 /** The pooled DA committee bond of Midgard (spec #685 §2.1, §4.1; ticket #687).

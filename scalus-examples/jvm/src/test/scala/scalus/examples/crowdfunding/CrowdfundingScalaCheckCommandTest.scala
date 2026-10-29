@@ -5,7 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.{BlockchainReader, Emulator}
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.cardano.wallet.hd.{HdAccount, HdKeyPair}
 import scalus.crypto.ed25519.given

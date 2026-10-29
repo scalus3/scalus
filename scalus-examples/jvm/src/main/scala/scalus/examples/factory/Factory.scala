@@ -1,11 +1,7 @@
 package scalus.examples.factory
 
-import scalus.compiler.Compile
-
 import scalus.*
-import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.ByteString.given
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 
