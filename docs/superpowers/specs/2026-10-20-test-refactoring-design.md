@@ -359,6 +359,42 @@ get lost; the pilot found two (F-33, F-34).
 - `helpers.md` MUST show, for each new or changed helper: its signature, one before/after
   example from a real test, and the number of call sites it replaces. `[P3-10]`
 - The owner MUST approve each helper in `helpers.md` before any unit applies it. `[P3-11]`
+- The owner approves `helpers.md` in steps D1 to D8, one decision at a time. Each step has a
+  decision note, then a pilot on one or two suites, then the rollout as backlog units. `[P3-11a]`
+
+  | Step | Topic | Pilot |
+  |---|---|---|
+  | D1 | Pin core: `Pin`, the per-suite budget table, the update command, the failure message | `MathTest` |
+  | D2 | Pins in prelude and stdlib assertions, labels | part of `ListTest` |
+  | D3 | Pins of validators and transactions, tx fee, CAPE | `AmmTest`, `BettingValidatorTest` |
+  | D4 | One assertion family, one `Benchmark` tag, Emulator setup helpers | 2 to 3 suites |
+  | D5 | Generators (`ArbitraryInstances`) | `ValueTest` |
+  | D6 | Ledger rules kits | 2 cert suites |
+  | D7 | Compiler and SIR test DSLs | 1 lowering suite |
+  | D8 | Module-local kits | per kit |
+
+  *Decisions (2026-10-29), D1:* a generated table per suite (`<Suite>Budgets.scala`), `Pin` as an
+  enum `Eval | Tx | Size`, numbers in groups of three (`1_101`), the compiler generation read by a
+  macro at the table's compile site.
+
+  *Decisions (2026-10-29), D2:* the label of a pin is the source text of the evaluated code,
+  whitespace collapsed, and an explicit label overrides it; failures are never pinned (`[BP-1c]`);
+  `EvalTestKit` mixes in `BudgetPinsSuite`; the old `assertEvalWithBudget*` methods keep working
+  until the `budget-pin` units migrate their callers, and the last unit deletes them.
+
+  *Decisions (2026-10-30), D2 revision:* `assertEvalEq` takes the expected value first:
+  `assertEvalEq(expected)(code)`, or `assertEvalEq(expected, arg = a)(code)` for a function of a
+  Data argument; the legacy order `assertEvalEq(code, expected)` stays for the published testkit.
+  An explicit label is a scope, `pinLabel("sum") { ... }`, not a parameter: a `label: String`
+  parameter made `assertEvalEq(code, expected)` with a `String` result resolve to the wrong
+  overload. The label macro lives in scalus-core main, `scalus.testing.internal` (F-91).
+
+  *Decisions (2026-10-30), D2 split:* two forms. `assertEvalEq(expected)(code)` checks correctness
+  of a closed expression and never pins (`[BP-1d]`). `assertEvalEq(expected)(f).at(args)` applies a
+  function of 1 to 3 arguments to runtime Data arguments, checks the result and pins the budget;
+  the arguments come after the code, so the code types them (`(min).at(1, 2)` needs no `BigInt`).
+  A test that never calls `.at` on such a check fails. `MathTest` drops `optimizeUplc = false`.
+  `test(...) { }` uses braces; a `:` block is for a long code argument.
 - The Fable reviewer MUST choose the helper API from what the code base already has, plus
   what the findings ask for. It MUST name the existing helper that each new helper replaces or
   extends. `[P3-12]`
@@ -411,15 +447,21 @@ Definitions for this section:
 | on-chain test | A test that evaluates UPLC compiled from Scalus code: a validator, or a prelude or stdlib function. |
 | budget pin | An exact expected value of memory, CPU steps and fee for one evaluation. |
 | execution fee | `ExUnits.fee(CardanoInfo.mainnet.protocolParams.executionUnitPrices)` (ceiling). The prices come from the checked-in snapshot `blockfrost-params-epoch-645.json`. A snapshot change updates every fee pin in one commit, with the tool. |
+| combined fee | The execution fee plus the Conway tiered reference-script fee of the script's size (`RefScriptFee.fee`, mainnet `minFeeRefScriptCostPerByte`). Model: one evaluation per transaction, with the script as a reference script. |
 
-- Each on-chain test MUST pin the budget of each fixed-input evaluation whose result it
-  asserts, also when the expected result is a failure. `[BP-1]`
+- Each on-chain operation that validators call MUST have at least one pinned evaluation with
+  runtime inputs: `assertEvalEq(expected)(f).at(args)`. `[BP-1]`
+- A closed expression, `assertEvalEq(expected)(code)`, MUST NOT be pinned. `[BP-1d]`
+- An evaluation whose expected result is a failure MUST NOT be pinned. `[BP-1c]`
 - An evaluation with ScalaCheck inputs is exempt from `[BP-1]`. A property test SHOULD keep one
   fixed-input case with a pin. `[BP-1a]`
 - A differential test that asserts one budget equals another (for example JIT = CEK) is exempt
   from `[BP-1]`. `[BP-1b]`
 - A budget pin MUST compare exact values. It MUST NOT be an upper bound. `[BP-2]`
-- A budget pin MUST include memory, CPU steps and the execution fee. `[BP-3]`
+- A budget pin of an evaluation MUST include memory, CPU steps, the script size in bytes, and the
+  combined fee. `[BP-3]`
+- The failure message of an evaluation pin MUST split the combined fee into its execution and
+  reference-script parts. `[BP-3a]`
 - A test that builds and balances a transaction MUST pin `tx.body.value.fee` of the transaction
   under test. A fee that the test forces is not a pin. `[BP-4]`
 - A test of a validator SHOULD also pin the script size in bytes. `[BP-5]`
@@ -445,7 +487,17 @@ fails when an optimization lowers memory to `25 100`, with the message
 `memory 25 694 -> 25 100 (-2.3 %)`. The developer updates the pin, and the commit message records
 the improvement.
 
-**Why:** `[BP-2]`: an upper bound catches a regression but hides an improvement; the owner wants
+**Why:** `[BP-1]`, `[BP-1d]`: the Inliner's partial evaluation runs the CEK machine on a closed
+expression at compile time and folds it to a constant. The result check still holds, but the budget
+is the cost of a constant (memory 200, steps 16_100; 60 of 71 closed pins in `ListTest`). Whether
+an expression folds depends on the optimizer, so a pin on it would turn into noise. Runtime
+arguments arrive as Data and cannot fold.
+
+`[BP-3]`: optimizer decisions trade script size against execution (inlining, unrolling, constant
+pooling); size is most of a script's fee. A pin on the execution fee alone would report an unrolling
+as an improvement while the transaction gets more expensive.
+
+`[BP-2]`: an upper bound catches a regression but hides an improvement; the owner wants
 both visible. `[BP-3]`: the owner compares on fee and memory, not on CPU. `[BP-5]`: script size is
 most of the script fee. `[BP-8]`: `scripts/update-budgets.py` rewrites `ExUnits` literals by
 value, so two tests with the same literal overwrite each other's pin: `ValueTest` has

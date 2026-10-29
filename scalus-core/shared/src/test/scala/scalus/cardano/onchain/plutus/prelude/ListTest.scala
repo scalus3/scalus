@@ -6,16 +6,18 @@ import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
 import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
 import scalus.cardano.onchain.plutus.prelude.{asScalus, identity, Eq, List, Option, Ord, Order, SortedMap}
-import scalus.cardano.ledger.{Coin, ExUnits, MajorProtocolVersion}
+import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
 import scalus.compiler.Options
+import scalus.testing.budget.BudgetTable
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.PlutusV3
 import scalus.uplc.eval.PlutusVM
 
 class ListTest extends AnyFunSuite with EvalTestKit {
+    override protected def budgetTable: BudgetTable = ListTestBudgets
 
     test("empty") {
-        assertEvalEq(List.empty[BigInt], Nil)
+        assertEvalEq(Nil)(List.empty[BigInt])
         assertEval(List.empty[BigInt].isEmpty)
 
         assert(scala.List.empty[BigInt].asScalus === List.empty[BigInt])
@@ -33,32 +35,19 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             ) && scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
 
-        assertEvalWithBudgets(
-          (n: BigInt) => List.singleton(n),
-          BigInt(1),
-          Cons(BigInt(1), Nil),
-          Seq(
-            compilerOptions -> ExUnits(memory = 1032, steps = 216462)
-          )
-        )
+        assertEvalEq(Cons(BigInt(1), Nil))((n: BigInt) => List.singleton(n)).at(BigInt(1))
     }
 
     test("findUniqueOrFail") {
-        assertEvalEq(
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
-              .findUniqueOrFail(_ > 2, "expected one"),
-          BigInt(3)
-        )
-        assertEvalEq(
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
-              .findUniqueOrFail(_ < 2, "expected one"),
-          BigInt(1)
-        )
-        assertEvalEq(
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
-              .findUniqueOrFail(_ === BigInt(2), "expected one"),
-          BigInt(2)
-        )
+        assertEvalEq[BigInt](3):
+            Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
+                .findUniqueOrFail(_ > 2, "expected one")
+        assertEvalEq[BigInt](1):
+            Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
+                .findUniqueOrFail(_ < 2, "expected one")
+        assertEvalEq[BigInt](2):
+            Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
+                .findUniqueOrFail(_ === BigInt(2), "expected one")
         assertEvalFailsWithMessage[OnchainError]("expected one")(
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
               .findUniqueOrFail(_ > 1, "expected one")
@@ -71,20 +60,12 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt].findUniqueOrFail(_ > 0, "expected one")
         )
         // Exact budget pin, ten elements, unique match in the middle.
-        assertEvalWithBudgetAndFee(
-          (xs: List[BigInt]) => xs.findUniqueOrFail(_ === BigInt(5), "expected one"),
-          List.range(1, 10),
-          BigInt(5),
-          ExUnits(memory = 25694, steps = 4_809547),
-          Coin(1830)
-        )
-        assertEvalWithBudgetAndFee(
-          (xs: List[BigInt]) => xs.findUniqueOrElse(_ === BigInt(5), _ => BigInt(0)),
-          List.range(1, 10),
-          BigInt(5),
-          ExUnits(memory = 25694, steps = 4_809547),
-          Coin(1830)
-        )
+        assertEvalEq(BigInt(5)): (xs: List[BigInt]) =>
+            xs.findUniqueOrFail(_ === BigInt(5), "expected one")
+        .at(List.range(1, 10))
+        assertEvalEq(BigInt(5)): (xs: List[BigInt]) =>
+            xs.findUniqueOrElse(_ === BigInt(5), _ => BigInt(0))
+        .at(List.range(1, 10))
         // One pass and no intermediate list: cheaper than filter(p).length === 1 on the same input.
         val fused = PlutusV3.compile { (xs: List[BigInt]) =>
             xs.findUniqueOrFail(_ === BigInt(5), "expected one")
@@ -103,14 +84,10 @@ class ListTest extends AnyFunSuite with EvalTestKit {
     }
 
     test("singleOrFail") {
-        assertEvalEq(List.singleton(BigInt(7)).singleOrFail("expected one"), BigInt(7))
-        assertEvalWithBudgetAndFee(
-          (xs: List[BigInt]) => xs.singleOrFail("expected one"),
-          List.singleton(BigInt(7)),
-          BigInt(7),
-          ExUnits(memory = 1964, steps = 334777),
-          Coin(138)
-        )
+        assertEvalEq[BigInt](7)(List.singleton(BigInt(7)).singleOrFail("expected one"))
+        assertEvalEq(BigInt(7)): (xs: List[BigInt]) =>
+            xs.singleOrFail("expected one")
+        .at(List.singleton(BigInt(7)))
         assertEvalFailsWithMessage[OnchainError]("expected one")(
           List.empty[BigInt].singleOrFail("expected one")
         )
@@ -127,17 +104,13 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
 
-        assertEvalEq(
-          List(BigInt(1), BigInt(2), BigInt(3)),
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
-        )
+        assertEvalEq(Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))):
+            List(BigInt(1), BigInt(2), BigInt(3))
     }
 
     test("apply list of pairs") {
-        assertEvalEq(
-          List((BigInt(1), BigInt(2)), (BigInt(3), BigInt(4))),
-          Cons((BigInt(1), BigInt(2)), Cons((BigInt(3), BigInt(4)), Nil))
-        )
+        assertEvalEq(Cons((BigInt(1), BigInt(2)), Cons((BigInt(3), BigInt(4)), Nil))):
+            List((BigInt(1), BigInt(2)), (BigInt(3), BigInt(4)))
     }
 
     test("from IterableOnce") {
@@ -169,30 +142,11 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             assert(scalusResult.asScala == scalaResult)
         }
 
-        assertEvalWithBudgets(
-          (n: BigInt) => List.range(n, 0),
-          BigInt(0),
-          List.singleton(BigInt(0)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 5200, steps = 1_097387)
-          )
-        )
-        assertEvalWithBudgets(
-          (n: BigInt) => List.range(n, 3),
-          BigInt(1),
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 9934, steps = 2_298799)
-          )
-        )
-        assertEvalWithBudgets(
-          (n: BigInt) => List.range(n, -1),
-          BigInt(0),
-          List.empty[BigInt],
-          Seq(
-            compilerOptions -> ExUnits(memory = 2833, steps = 496681)
-          )
-        )
+        assertEvalEq(List.singleton(BigInt(0)))((n: BigInt) => List.range(n, 0)).at(BigInt(0))
+        assertEvalEq(Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))): (n: BigInt) =>
+            List.range(n, 3)
+        .at(BigInt(1))
+        assertEvalEq(List.empty[BigInt])((n: BigInt) => List.range(n, -1)).at(BigInt(0))
     }
 
     test("rangeUntil") {
@@ -204,38 +158,14 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             assert(scalusResult.asScala == scalaResult)
         }
 
-        assertEvalWithBudgets(
-          (n: BigInt) => List.rangeUntil(n, 1),
-          BigInt(0),
-          List.singleton(BigInt(0)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 5200, steps = 1_100293)
-          )
-        )
-        assertEvalWithBudgets(
-          (n: BigInt) => List.rangeUntil(n, 4),
-          BigInt(1),
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 9934, steps = 2_304611)
-          )
-        )
-        assertEvalWithBudgets(
-          (n: BigInt) => List.rangeUntil(n, 0),
-          BigInt(0),
-          List.empty[BigInt],
-          Seq(
-            compilerOptions -> ExUnits(memory = 2833, steps = 498134)
-          )
-        )
-        assertEvalWithBudgets(
-          (n: BigInt) => List.rangeUntil(n, -1),
-          BigInt(0),
-          List.empty[BigInt],
-          Seq(
-            compilerOptions -> ExUnits(memory = 2833, steps = 498134)
-          )
-        )
+        assertEvalEq(List.singleton(BigInt(0))): (n: BigInt) =>
+            List.rangeUntil(n, 1)
+        .at(BigInt(0))
+        assertEvalEq(Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))): (n: BigInt) =>
+            List.rangeUntil(n, 4)
+        .at(BigInt(1))
+        assertEvalEq(List.empty[BigInt])((n: BigInt) => List.rangeUntil(n, 0)).at(BigInt(0))
+        assertEvalEq(List.empty[BigInt])((n: BigInt) => List.rangeUntil(n, -1)).at(BigInt(0))
     }
 
     test("fill") {
@@ -253,41 +183,15 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             assert(scalusResult.asScala == scalaResult)
         }
 
-        assertEvalWithBudgets(
-          (n: BigInt) => List.fill(n, 1),
-          BigInt(1),
-          List.singleton(BigInt(1)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 4136, steps = 904250)
-          )
-        )
+        assertEvalEq(List.singleton(BigInt(1)))((n: BigInt) => List.fill(n, 1)).at(BigInt(1))
 
-        assertEvalWithBudgets(
-          (n: BigInt) => List.fill(n, 3),
-          BigInt(1),
-          Cons(BigInt(1), Cons(BigInt(1), Cons(BigInt(1), Nil))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 8406, steps = 2_013970)
-          )
-        )
+        assertEvalEq(Cons(BigInt(1), Cons(BigInt(1), Cons(BigInt(1), Nil)))): (n: BigInt) =>
+            List.fill(n, 3)
+        .at(BigInt(1))
 
-        assertEvalWithBudgets(
-          (n: BigInt) => List.fill(n, 0),
-          BigInt(1),
-          List.empty[BigInt],
-          Seq(
-            compilerOptions -> ExUnits(memory = 2001, steps = 349390)
-          )
-        )
+        assertEvalEq(List.empty[BigInt])((n: BigInt) => List.fill(n, 0)).at(BigInt(1))
 
-        assertEvalWithBudgets(
-          (n: BigInt) => List.fill(n, -1),
-          BigInt(1),
-          List.empty[BigInt],
-          Seq(
-            compilerOptions -> ExUnits(memory = 2001, steps = 349390)
-          )
-        )
+        assertEvalEq(List.empty[BigInt])((n: BigInt) => List.fill(n, -1)).at(BigInt(1))
     }
 
     test("map2") {
@@ -303,32 +207,17 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             List.map2(List.empty[BigInt], list)(_ + _) === List.empty[BigInt]
         }
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => List.map2(list, List.empty[BigInt])(_ + _),
-          Cons(1, Cons(2, Nil)),
-          List.empty[BigInt],
-          Seq(
-            compilerOptions -> ExUnits(memory = 3232, steps = 522033)
-          )
-        )
+        assertEvalEq(List.empty[BigInt]): (list: List[BigInt]) =>
+            List.map2(list, List.empty[BigInt])(_ + _)
+        .at(Cons(1, Cons(2, Nil)))
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => List.map2(List.empty[BigInt], list)(_ + _),
-          Cons(3, Cons(4, Nil)),
-          List.empty[BigInt],
-          Seq(
-            compilerOptions -> ExUnits(memory = 2632, steps = 426033)
-          )
-        )
+        assertEvalEq(List.empty[BigInt]): (list: List[BigInt]) =>
+            List.map2(List.empty[BigInt], list)(_ + _)
+        .at(Cons(3, Cons(4, Nil)))
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => List.map2(list, Cons(BigInt(3), Cons(BigInt(4), Nil)))(_ + _),
-          Cons(1, Cons(2, Nil)),
-          Cons(BigInt(4), Cons(BigInt(6), Nil)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 11092, steps = 2_198747)
-          )
-        )
+        assertEvalEq(Cons(BigInt(4), Cons(BigInt(6), Nil))): (list: List[BigInt]) =>
+            List.map2(list, Cons(BigInt(3), Cons(BigInt(4), Nil)))(_ + _)
+        .at(Cons(1, Cons(2, Nil)))
     }
 
     test("ToData <-> FromData") {
@@ -339,32 +228,17 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             fromDataList === list
         }
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => fromData[List[BigInt]](list.toData),
-          List.empty[BigInt],
-          List.empty[BigInt],
-          Seq(
-            compilerOptions -> ExUnits(memory = 432, steps = 74033)
-          )
-        )
+        assertEvalEq(List.empty[BigInt]): (list: List[BigInt]) =>
+            fromData[List[BigInt]](list.toData)
+        .at(List.empty[BigInt])
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => fromData[List[BigInt]](list.toData),
-          List.singleton(1),
-          List.singleton(BigInt(1)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 432, steps = 74033)
-          )
-        )
+        assertEvalEq(List.singleton(BigInt(1))): (list: List[BigInt]) =>
+            fromData[List[BigInt]](list.toData)
+        .at(List.singleton(1))
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => fromData[List[BigInt]](list.toData),
-          Cons(1, Cons(2, Cons(3, Nil))),
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 432, steps = 74033)
-          )
-        )
+        assertEvalEq(Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))):
+            (list: List[BigInt]) => fromData[List[BigInt]](list.toData)
+        .at(Cons(1, Cons(2, Cons(3, Nil))))
     }
 
     test("Eq") {
@@ -377,32 +251,17 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             scalusResult === scalaResult
         }
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list === List.empty[BigInt],
-          List.empty[BigInt],
-          true,
-          Seq(
-            compilerOptions -> ExUnits(memory = 901, steps = 1_135364)
-          )
-        )
+        assertEvalEq(true): (list: List[BigInt]) =>
+            list === List.empty[BigInt]
+        .at(List.empty[BigInt])
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list === List.singleton(BigInt(1)),
-          List.singleton(1),
-          true,
-          Seq(
-            compilerOptions -> ExUnits(memory = 901, steps = 1_271759)
-          )
-        )
+        assertEvalEq(true): (list: List[BigInt]) =>
+            list === List.singleton(BigInt(1))
+        .at(List.singleton(1))
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list === Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          Cons(1, Cons(2, Cons(3, Nil))),
-          true,
-          Seq(
-            compilerOptions -> ExUnits(memory = 901, steps = 1_544549)
-          )
-        )
+        assertEvalEq(true): (list: List[BigInt]) =>
+            list === Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
+        .at(Cons(1, Cons(2, Cons(3, Nil))))
 
         assertEvalNotEq(
           List.empty[BigInt],
@@ -515,19 +374,12 @@ class ListTest extends AnyFunSuite with EvalTestKit {
       * be correct in Scala and still fail to lower.
       */
     test("insertionSort, sortWith, isSorted and isStrictlyAscending lower and run on-chain") {
-        assertEvalEq(
-          Cons(BigInt(3), Cons(BigInt(1), Cons(BigInt(2), Nil))).insertionSort,
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
-        )
-        assertEvalEq(List.empty[BigInt].insertionSort, List.empty[BigInt])
-        assertEvalEq(
-          Cons(BigInt(3), Cons(BigInt(1), Cons(BigInt(2), Nil))).sortWith((a, b) => a < b),
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
-        )
-        assertEvalEq(
-          List.empty[BigInt].sortWith((a, b) => a < b),
-          List.empty[BigInt]
-        )
+        assertEvalEq(Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))):
+            Cons(BigInt(3), Cons(BigInt(1), Cons(BigInt(2), Nil))).insertionSort
+        assertEvalEq(List.empty[BigInt])(List.empty[BigInt].insertionSort)
+        assertEvalEq(Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))):
+            Cons(BigInt(3), Cons(BigInt(1), Cons(BigInt(2), Nil))).sortWith((a, b) => a < b)
+        assertEvalEq(List.empty[BigInt])(List.empty[BigInt].sortWith((a, b) => a < b))
         assertEval(Cons(BigInt(1), Cons(BigInt(2), Nil)).isSorted)
         assertEval(!Cons(BigInt(2), Cons(BigInt(1), Nil)).isSorted)
         assertEval(Cons(BigInt(1), Cons(BigInt(2), Nil)).isStrictlyAscending)
@@ -551,32 +403,17 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.quicksort,
-          List.empty[BigInt],
-          List.empty[BigInt],
-          Seq(
-            compilerOptions -> ExUnits(memory = 6432, steps = 1_034033)
-          )
-        )
+        assertEvalEq(List.empty[BigInt]): (list: List[BigInt]) =>
+            list.quicksort
+        .at(List.empty[BigInt])
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.quicksort,
-          List.singleton(1),
-          List.singleton(BigInt(1)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 12292, steps = 2_222_904)
-          )
-        )
+        assertEvalEq(List.singleton(BigInt(1))): (list: List[BigInt]) =>
+            list.quicksort
+        .at(List.singleton(1))
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.quicksort,
-          Cons(3, Cons(1, Cons(2, Nil))),
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 42101, steps = 8_029_557)
-          )
-        )
+        assertEvalEq(Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))):
+            (list: List[BigInt]) => list.quicksort
+        .at(Cons(3, Cons(1, Cons(2, Nil))))
     }
 
     test("flatten") {
@@ -594,31 +431,20 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
 
-        assertEvalWithBudgets(
-          (list: List[List[BigInt]]) => list.flatten,
-          List.empty[List[BigInt]],
-          List.empty[BigInt],
-          Seq(
-            compilerOptions -> ExUnits(memory = 2064, steps = 355_966)
-          )
-        )
+        assertEvalEq(List.empty[BigInt]): (list: List[List[BigInt]]) =>
+            list.flatten
+        .at(List.empty[List[BigInt]])
 
-        assertEvalWithBudgets(
-          (list: List[List[BigInt]]) => list.flatten,
-          List.singleton(Cons(3, Cons(1, Cons(2, Nil)))),
-          Cons(BigInt(3), Cons(BigInt(1), Cons(BigInt(2), Nil))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 6092, steps = 1_140_117)
-          )
-        )
+        assertEvalEq(Cons(BigInt(3), Cons(BigInt(1), Cons(BigInt(2), Nil)))):
+            (list: List[List[BigInt]]) => list.flatten
+        .at(List.singleton(Cons(3, Cons(1, Cons(2, Nil)))))
 
-        assertEvalWithBudgets(
-          (list: List[List[BigInt]]) => list.flatten,
-          Cons[List[BigInt]](Cons(1, Cons(2, Nil)), List.singleton(List.singleton(3))),
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 13684, steps = 2_628_992)
-          )
+        assertEvalEq(Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))):
+            (list: List[List[BigInt]]) => list.flatten
+        .at(
+          Cons[List[BigInt]](Cons(1, Cons(2, Nil)), List.singleton(List.singleton(3))): List[
+            List[BigInt]
+          ]
         )
     }
 
@@ -677,91 +503,49 @@ class ListTest extends AnyFunSuite with EvalTestKit {
     }
 
     test("get - empty list, idx 0") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.get(0),
-          List.empty[BigInt],
-          None,
-          Seq(
-            compilerOptions -> ExUnits(memory = 3233, steps = 567323)
-          )
-        )
+        assertEvalEq(None)((list: List[BigInt]) => list.get(0)).at(List.empty[BigInt])
     }
 
     test("get - single element, idx 0") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.get(0),
-          List.singleton(1),
-          Some(BigInt(1)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 4998, steps = 986169)
-          )
-        )
+        assertEvalEq(Some(BigInt(1))): (list: List[BigInt]) =>
+            list.get(0)
+        .at(List.singleton(1))
     }
 
     test("get - single element, idx 1 (out of bounds)") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.get(1),
-          List.singleton(1),
-          None,
-          Seq(
-            compilerOptions -> ExUnits(memory = 5436, steps = 1_072864)
-          )
-        )
+        assertEvalEq(None): (list: List[BigInt]) =>
+            list.get(1)
+        .at(List.singleton(1))
     }
 
     test("get - single element, idx -1") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.get(-1),
-          List.singleton(1),
-          None,
-          Seq(
-            compilerOptions -> ExUnits(memory = 1933, steps = 359323)
-          )
-        )
+        assertEvalEq(None): (list: List[BigInt]) =>
+            list.get(-1)
+        .at(List.singleton(1))
     }
 
     test("get - two-element list, idx 0") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.get(0),
-          Cons(1, Cons(2, Nil)),
-          Some(BigInt(1)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 4998, steps = 986169)
-          )
-        )
+        assertEvalEq(Some(BigInt(1))): (list: List[BigInt]) =>
+            list.get(0)
+        .at(Cons(1, Cons(2, Nil)))
     }
 
     test("get - two-element list, idx 1") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.get(1),
-          Cons(1, Cons(2, Nil)),
-          Some(BigInt(2)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 7201, steps = 1_491710)
-          )
-        )
+        assertEvalEq(Some(BigInt(2))): (list: List[BigInt]) =>
+            list.get(1)
+        .at(Cons(1, Cons(2, Nil)))
     }
 
     test("get - two-element list, idx 2 (out of bounds)") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.get(2),
-          Cons(1, Cons(2, Nil)),
-          None,
-          Seq(
-            compilerOptions -> ExUnits(memory = 7639, steps = 1_578405)
-          )
-        )
+        assertEvalEq(None): (list: List[BigInt]) =>
+            list.get(2)
+        .at(Cons(1, Cons(2, Nil)))
     }
 
     test("get - two-element list, idx -1") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.get(-1),
-          Cons(1, Cons(2, Nil)),
-          None,
-          Seq(
-            compilerOptions -> ExUnits(memory = 1933, steps = 359323)
-          )
-        )
+        assertEvalEq(None): (list: List[BigInt]) =>
+            list.get(-1)
+        .at(Cons(1, Cons(2, Nil)))
     }
 
     test("at") {
@@ -774,29 +558,11 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalFails[NoSuchElementException](List.empty[BigInt].at(0))
-        assertEvalWithBudgets(
-          List.singleton(BigInt(1)).at(0),
-          BigInt(1),
-          Seq(
-            compilerOptions -> ExUnits(memory = 1464, steps = 244143)
-          )
-        )
+        assertEvalEq[BigInt](1)(List.singleton(BigInt(1)).at(0))
         assertEvalFails[NoSuchElementException](List.singleton(BigInt(1)).at(1))
         assertEvalFails[NoSuchElementException](List.singleton(BigInt(1)).at(-1))
-        assertEvalWithBudgets(
-          Cons(BigInt(1), Cons(BigInt(2), Nil)).at(0),
-          BigInt(1),
-          Seq(
-            compilerOptions -> ExUnits(memory = 1464, steps = 244143)
-          )
-        )
-        assertEvalWithBudgets(
-          Cons(BigInt(1), Cons(BigInt(2), Nil)).at(1),
-          BigInt(2),
-          Seq(
-            compilerOptions -> ExUnits(memory = 1464, steps = 244143)
-          )
-        )
+        assertEvalEq[BigInt](1)(Cons(BigInt(1), Cons(BigInt(2), Nil)).at(0))
+        assertEvalEq[BigInt](2)(Cons(BigInt(1), Cons(BigInt(2), Nil)).at(1))
         assertEvalFails[NoSuchElementException](Cons(BigInt(1), Cons(BigInt(2), Nil)).at(2))
         assertEvalFails[NoSuchElementException](Cons(BigInt(1), Cons(BigInt(2), Nil)).at(-1))
     }
@@ -811,29 +577,11 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalFails[NoSuchElementException](List.empty[BigInt].!!(0))
-        assertEvalWithBudgets(
-          List.singleton(BigInt(1)).!!(0),
-          BigInt(1),
-          Seq(
-            compilerOptions -> ExUnits(memory = 1464, steps = 244143)
-          )
-        )
+        assertEvalEq[BigInt](1)(List.singleton(BigInt(1)).!!(0))
         assertEvalFails[NoSuchElementException](List.singleton(BigInt(1)).!!(1))
         assertEvalFails[NoSuchElementException](List.singleton(BigInt(1)).!!(-1))
-        assertEvalWithBudgets(
-          Cons(BigInt(1), Cons(BigInt(2), Nil)).!!(0),
-          BigInt(1),
-          Seq(
-            compilerOptions -> ExUnits(memory = 1464, steps = 244143)
-          )
-        )
-        assertEvalWithBudgets(
-          Cons(BigInt(1), Cons(BigInt(2), Nil)).!!(1),
-          BigInt(2),
-          Seq(
-            compilerOptions -> ExUnits(memory = 1464, steps = 244143)
-          )
-        )
+        assertEvalEq[BigInt](1)(Cons(BigInt(1), Cons(BigInt(2), Nil)).!!(0))
+        assertEvalEq[BigInt](2)(Cons(BigInt(1), Cons(BigInt(2), Nil)).!!(1))
         assertEvalFails[NoSuchElementException](Cons(BigInt(1), Cons(BigInt(2), Nil)).!!(2))
         assertEvalFails[NoSuchElementException](Cons(BigInt(1), Cons(BigInt(2), Nil)).!!(-1))
     }
@@ -867,35 +615,24 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             }
         }
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.groupBy(_ % 2),
-          List.empty[BigInt],
-          SortedMap.empty[BigInt, List[BigInt]],
-          Seq(
-            compilerOptions -> ExUnits(memory = 7396, steps = 1_270902)
-          )
-        )
+        assertEvalEq(SortedMap.empty[BigInt, List[BigInt]]): (list: List[BigInt]) =>
+            list.groupBy(_ % 2)
+        .at(List.empty[BigInt])
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.groupBy(_ % 2),
-          List.singleton(1),
-          SortedMap.singleton(BigInt(1), List.singleton(BigInt(1))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 28261, steps = 6_140_745)
-          )
-        )
+        assertEvalEq(SortedMap.singleton(BigInt(1), List.singleton(BigInt(1)))):
+            (list: List[BigInt]) => list.groupBy(_ % 2)
+        .at(List.singleton(1))
 
-        assertEvalWithBudget(
-          (list: List[BigInt]) => list.groupBy(_ % 2),
-          Cons(1, Cons(2, Nil)),
+        assertEvalEq(
           SortedMap.unsafeFromList(
             Cons(
               (BigInt(0), List.singleton(BigInt(2))),
               Cons((BigInt(1), List.singleton(BigInt(1))), Nil)
             )
-          ),
-          ExUnits(memory = 55256, steps = 12_144_144)
-        )
+          )
+        ): (list: List[BigInt]) =>
+            list.groupBy(_ % 2)
+        .at(Cons(1, Cons(2, Nil)))
 
     }
 
@@ -912,35 +649,24 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             }
         }
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.groupMap(_ % 2)(identity),
-          List.empty[BigInt],
-          SortedMap.empty[BigInt, List[BigInt]],
-          Seq(
-            compilerOptions -> ExUnits(memory = 7596, steps = 1_302902)
-          )
-        )
+        assertEvalEq(SortedMap.empty[BigInt, List[BigInt]]): (list: List[BigInt]) =>
+            list.groupMap(_ % 2)(identity)
+        .at(List.empty[BigInt])
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.groupMap(_ % 2)(identity),
-          List.singleton(1),
-          SortedMap.singleton(BigInt(1), List.singleton(BigInt(1))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 29525, steps = 6_368_788)
-          )
-        )
+        assertEvalEq(SortedMap.singleton(BigInt(1), List.singleton(BigInt(1)))):
+            (list: List[BigInt]) => list.groupMap(_ % 2)(identity)
+        .at(List.singleton(1))
 
-        assertEvalWithBudget(
-          (list: List[BigInt]) => list.groupMap(_ % 2)(identity),
-          Cons(1, Cons(2, Nil)),
+        assertEvalEq(
           SortedMap.unsafeFromList(
             Cons(
               (BigInt(0), List.singleton(BigInt(2))),
               Cons((BigInt(1), List.singleton(BigInt(1))), Nil)
             )
-          ),
-          ExUnits(memory = 57584, steps = 12_568_230)
-        )
+          )
+        ): (list: List[BigInt]) =>
+            list.groupMap(_ % 2)(identity)
+        .at(Cons(1, Cons(2, Nil)))
     }
 
     test("groupMapReduce") {
@@ -956,32 +682,21 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             }
         }
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.groupMapReduce(_ % 2)(identity)(_ + _),
-          List.empty[BigInt],
-          SortedMap.empty[BigInt, BigInt],
-          Seq(
-            compilerOptions -> ExUnits(memory = 5032, steps = 810033)
-          )
-        )
+        assertEvalEq(SortedMap.empty[BigInt, BigInt]): (list: List[BigInt]) =>
+            list.groupMapReduce(_ % 2)(identity)(_ + _)
+        .at(List.empty[BigInt])
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.groupMapReduce(_ % 2)(identity)(_ + _),
-          List.singleton(1),
-          SortedMap.singleton(BigInt(1), BigInt(1)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 16545, steps = 3_535030)
-          )
-        )
+        assertEvalEq(SortedMap.singleton(BigInt(1), BigInt(1))): (list: List[BigInt]) =>
+            list.groupMapReduce(_ % 2)(identity)(_ + _)
+        .at(List.singleton(1))
 
-        assertEvalWithBudget(
-          (list: List[BigInt]) => list.groupMapReduce(_ % 2)(identity)(_ + _),
-          Cons(1, Cons(2, Cons(3, Cons(4, Nil)))),
+        assertEvalEq(
           SortedMap.unsafeFromList(
             Cons((BigInt(0), BigInt(6)), Cons((BigInt(1), BigInt(4)), Nil))
-          ),
-          ExUnits(memory = 87894, steps = 19_431_647)
-        )
+          )
+        ): (list: List[BigInt]) =>
+            list.groupMapReduce(_ % 2)(identity)(_ + _)
+        .at(Cons(1, Cons(2, Cons(3, Cons(4, Nil)))))
     }
 
     test("zip - property") {
@@ -994,69 +709,39 @@ class ListTest extends AnyFunSuite with EvalTestKit {
     }
 
     test("zip - empty zip empty") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.zip(List.empty[BigInt]),
-          List.empty[BigInt],
-          List.empty[(BigInt, BigInt)],
-          Seq(
-            compilerOptions -> ExUnits(memory = 2832, steps = 458033)
-          )
-        )
+        assertEvalEq(List.empty[(BigInt, BigInt)]): (list: List[BigInt]) =>
+            list.zip(List.empty[BigInt])
+        .at(List.empty[BigInt])
     }
 
     test("zip - single zip empty") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.zip(List.empty[BigInt]),
-          List.singleton(1),
-          List.empty[(BigInt, BigInt)],
-          Seq(
-            compilerOptions -> ExUnits(memory = 3232, steps = 522033)
-          )
-        )
+        assertEvalEq(List.empty[(BigInt, BigInt)]): (list: List[BigInt]) =>
+            list.zip(List.empty[BigInt])
+        .at(List.singleton(1))
     }
 
     test("zip - empty zip single") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => List.empty[BigInt].zip(list),
-          List.singleton(1),
-          List.empty[(BigInt, BigInt)],
-          Seq(
-            compilerOptions -> ExUnits(memory = 2832, steps = 458033)
-          )
-        )
+        assertEvalEq(List.empty[(BigInt, BigInt)]): (list: List[BigInt]) =>
+            List.empty[BigInt].zip(list)
+        .at(List.singleton(1))
     }
 
     test("zip - single zip single") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.zip(List.singleton(BigInt(2))),
-          List.singleton(1),
-          List.singleton((BigInt(1), BigInt(2))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 6160, steps = 1_209270)
-          )
-        )
+        assertEvalEq(List.singleton((BigInt(1), BigInt(2)))): (list: List[BigInt]) =>
+            list.zip(List.singleton(BigInt(2)))
+        .at(List.singleton(1))
     }
 
     test("zip - two zip two") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.zip(Cons(BigInt(3), Cons(BigInt(4), Nil))),
-          Cons(1, Cons(2, Nil)),
-          Cons((BigInt(1), BigInt(3)), Cons((BigInt(2), BigInt(4)), Nil)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 9488, steps = 1_960507)
-          )
-        )
+        assertEvalEq(Cons((BigInt(1), BigInt(3)), Cons((BigInt(2), BigInt(4)), Nil))):
+            (list: List[BigInt]) => list.zip(Cons(BigInt(3), Cons(BigInt(4), Nil)))
+        .at(Cons(1, Cons(2, Nil)))
     }
 
     test("zip - two zip single") {
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.zip(List.singleton(BigInt(3))),
-          Cons(1, Cons(2, Nil)),
-          List.singleton((BigInt(1), BigInt(3))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 6560, steps = 1_273270)
-          )
-        )
+        assertEvalEq(List.singleton((BigInt(1), BigInt(3)))): (list: List[BigInt]) =>
+            list.zip(List.singleton(BigInt(3)))
+        .at(Cons(1, Cons(2, Nil)))
     }
 
     test("prepended") {
@@ -1067,32 +752,17 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.prepended(BigInt(1)),
-          List.empty[BigInt],
-          List.singleton(BigInt(1)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 1264, steps = 274395)
-          )
-        )
+        assertEvalEq(List.singleton(BigInt(1))): (list: List[BigInt]) =>
+            list.prepended(BigInt(1))
+        .at(List.empty[BigInt])
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.prepended(BigInt(1)),
-          List.singleton(2),
-          Cons(BigInt(1), Cons(BigInt(2), Nil)),
-          Seq(
-            compilerOptions -> ExUnits(memory = 1264, steps = 274395)
-          )
-        )
+        assertEvalEq(Cons(BigInt(1), Cons(BigInt(2), Nil))): (list: List[BigInt]) =>
+            list.prepended(BigInt(1))
+        .at(List.singleton(2))
 
-        assertEvalWithBudgets(
-          (list: List[BigInt]) => list.prepended(BigInt(1)),
-          Cons(2, Cons(3, Nil)),
-          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          Seq(
-            compilerOptions -> ExUnits(memory = 1264, steps = 274395)
-          )
-        )
+        assertEvalEq(Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))):
+            (list: List[BigInt]) => list.prepended(BigInt(1))
+        .at(Cons(2, Cons(3, Nil)))
     }
 
     test("+:") {
@@ -3180,10 +2850,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         given opts: Options = compilerOptions.copy(
           targetProtocolVersion = MajorProtocolVersion.vanRossemPV
         )
-        assertEvalEq(
-          Cons(BigInt(10), Cons(BigInt(20), Cons(BigInt(30), Nil))).at(1),
-          BigInt(20)
-        )
+        assertEvalEq[BigInt](20)(Cons(BigInt(10), Cons(BigInt(20), Cons(BigInt(30), Nil))).at(1))
         // Compare budget: vanRossemPV at(1) should be cheaper than changPV at(1).
         // The PV11-compiled term uses the dropList builtin, so it must be evaluated on a PV11 VM
         // (which costs dropList via the van Rossem reference cost model) rather than the default

@@ -8,7 +8,7 @@ import org.scalatest.Assertions
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{toData, FromData, ToData}
-import scalus.cardano.ledger.{CardanoInfo, Coin, ExUnits}
+import scalus.cardano.ledger.{CardanoInfo, Coin, ExUnits, Script}
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.cardano.onchain.plutus.prelude.{Eq, Option as ScalusOption}
@@ -17,7 +17,11 @@ import scalus.uplc.Constant.given
 import scalus.uplc.Term.asTerm
 import scalus.uplc.test.ArbitraryInstances
 import scalus.uplc.eval.*
+import scalus.testing.budget.{BudgetPins, BudgetPinsSuite}
+import scalus.testing.internal.SourceText
+import org.scalatest.TestSuite
 
+import scala.annotation.targetName
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
@@ -31,7 +35,12 @@ import scala.util.control.NonFatal
   *
   * This trait provides the core functionality for testing Scalus code evaluation.
   */
-trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with ArbitraryInstances {
+trait EvalTestKit
+    extends Assertions
+    with ScalaCheckPropertyChecks
+    with ArbitraryInstances
+    with BudgetPins
+    with BudgetPinsSuite { this: TestSuite =>
     export org.scalatestplus.scalacheck.Checkers.*
     export org.scalacheck.{Arbitrary, Gen, Shrink}
     export scalus.cardano.onchain.plutus.prelude.{!==, <=>, ===}
@@ -65,36 +74,191 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
 
     // ----- Inline Compilation Assertions -----
 
-    /** Assert that code evaluates to true on both JVM and PlutusVM. */
+    /** Evaluates `term` on the PlutusVM and returns the result term and its budget. Fails the test
+      * when the evaluation fails.
+      */
+    protected final def evalSuccess(term: Term)(using
+        vm: PlutusVM,
+        pos: source.Position
+    ): (Term, ExUnits) =
+        term.evaluateDebug match
+            case Result.Success(result, budget, _, _) => (result, budget)
+            case Result.Failure(exception, budget, costs, _) =>
+                fail(s"""Expected success, but got failure: $exception;
+                       |budget: $budget;
+                       |costs: ${costs.toMap}""".stripMargin)
+
+    protected final def assertTermEq(actual: Term, expected: Term)(using source.Position): Unit =
+        assert(actual α_== expected, s"Expected term $expected, but got ${actual.show}")
+
+    // ----- Correctness: closed expressions, never pinned -----
+    //
+    // A closed expression can fold to a constant at compile time (partial evaluation in the
+    // Inliner runs the CEK machine on it). The result check still holds, but its budget is the cost
+    // of a constant, so these forms never pin. Use the `.at` forms below for budgets.
+
+    /** Assert that code evaluates to true on both JVM and PlutusVM. No budget pin. */
     protected final inline def assertEval(
         inline code: Boolean
-    )(using vm: PlutusVM, options: Options): Unit =
+    )(using vm: PlutusVM, options: Options, pos: source.Position): Unit =
         val compiled = PlutusV3.compile(code)
         assert(compiled.code)
-        val codeTerm = compiled.program.term.evaluate
-        assert(codeTerm α_== trueTerm)
+        assertTermEq(evalSuccess(compiled.program.term)._1, trueTerm)
 
-    /** Assert that code evaluates to expected value on both JVM and PlutusVM. */
-    protected final inline def assertEvalEq[T: Eq](
-        inline code: T,
-        inline expected: T
-    )(using vm: PlutusVM, options: Options): Unit =
+    /** Assert that `code` evaluates to `expected` on both the JVM and the PlutusVM. No budget pin:
+      * for a budget, pass the inputs at runtime with `assertEvalEq(expected)(f).at(...)`.
+      * {{{
+      * assertEvalEq[BigInt](1)(min(1, 2))
+      * assertEvalEq(Cons(BigInt(4), Nil)):
+      *     List.range(BigInt(1), BigInt(3)).map(_ * 2).filter(_ > 2)
+      * }}}
+      */
+    protected final inline def assertEvalEq[T: Eq](inline expected: T)(
+        inline code: T
+    )(using vm: PlutusVM, options: Options, pos: source.Position): Unit =
         val compiled = PlutusV3.compile(code)
         val compiledExpected = PlutusV3.compile(expected)
-
         assert(
           compiled.code === compiledExpected.code,
           s"Expected ${compiledExpected.code}, but got ${compiled.code}"
         )
-
-        val codeTerm = compiled.program.term.evaluate
-        val expectedTerm = compiledExpected.program.term.evaluate
-        assert(
-          codeTerm α_== expectedTerm,
-          s"Expected term $expectedTerm, but got $codeTerm"
+        assertTermEq(
+          evalSuccess(compiled.program.term)._1,
+          compiledExpected.program.term.evaluate
         )
 
-    /** Assert that code evaluates to expected value with budget limit check (upper bound). */
+    /** Legacy order, kept for users of the published testkit: prefer
+      * `assertEvalEq(expected)(code)`. No budget pin. The JVM name differs only because both forms
+      * erase to the same signature.
+      */
+    @targetName("assertEvalEqLegacyOrder")
+    protected final inline def assertEvalEq[T: Eq](
+        inline code: T,
+        inline expected: T
+    )(using vm: PlutusVM, options: Options, pos: source.Position): Unit =
+        assertEvalEq(expected)(code)
+
+    // ----- Budget: a function applied to runtime arguments, pinned -----
+    //
+    // The arguments reach the script as Data at runtime, like a datum or a redeemer, so constant
+    // folding cannot remove the work. The pin label is the source text of `f`, then `@` and the
+    // arguments: "min @ (1, 2)". `.at` checks the result on the JVM and on the PlutusVM, then pins.
+    // A test that creates an `assertEvalEq(expected)(f)` and never calls `.at` fails.
+
+    /** `assertEvalEq(expected)(f).at(a1)`: `f(a1)` evaluates to `expected`; pins the budget.
+      * {{{
+      * assertEvalEq(BigInt(3))((l: List[BigInt]) => l.length).at(Cons(1, Cons(2, Cons(3, Nil))))
+      * }}}
+      */
+    protected final inline def assertEvalEq[A1, T: Eq](inline expected: T)(
+        inline f: A1 => T
+    )(using
+        vm: PlutusVM,
+        options: Options,
+        inline a1FromData: FromData[A1],
+        inline a1ToData: ToData[A1],
+        pos: source.Position
+    ): EvalTestKit.At1[A1] =
+        val compiled = PlutusV3.compile { (d1: Data) => f(d1.to[A1]) }
+        val compiledExpected = PlutusV3.compile(expected)
+        val label = SourceText.of(f)
+        // The ledger's size of the deployed script: the compiled function, without its arguments.
+        val size = Script.PlutusV3(compiled.program).script.size.toLong
+        val toData1 = (a: A1) => toData[A1](a)
+        EvalTestKit.At1(
+          registerPendingAt(),
+          a1 =>
+              assert(
+                f(a1) === compiledExpected.code,
+                s"Expected ${compiledExpected.code}, but got ${f(a1)}"
+              )
+              val (result, budget) = evalSuccess(compiled.program.term $ toData1(a1).asTerm)
+              assertTermEq(result, compiledExpected.program.term.evaluate)
+              pinEval(s"$label @ $a1", budget, size)
+        )
+
+    /** `assertEvalEq(expected)(f).at(a1, a2)`: `f(a1, a2)` evaluates to `expected`; pins the
+      * budget.
+      * {{{
+      * assertEvalEq(BigInt(1))(min).at(1, 2)
+      * }}}
+      */
+    protected final inline def assertEvalEq[A1, A2, T: Eq](inline expected: T)(
+        inline f: (A1, A2) => T
+    )(using
+        vm: PlutusVM,
+        options: Options,
+        inline a1FromData: FromData[A1],
+        inline a1ToData: ToData[A1],
+        inline a2FromData: FromData[A2],
+        inline a2ToData: ToData[A2],
+        pos: source.Position
+    ): EvalTestKit.At2[A1, A2] =
+        val compiled = PlutusV3.compile { (d1: Data, d2: Data) => f(d1.to[A1], d2.to[A2]) }
+        val compiledExpected = PlutusV3.compile(expected)
+        val label = SourceText.of(f)
+        // The ledger's size of the deployed script: the compiled function, without its arguments.
+        val size = Script.PlutusV3(compiled.program).script.size.toLong
+        val toData1 = (a: A1) => toData[A1](a)
+        val toData2 = (a: A2) => toData[A2](a)
+        EvalTestKit.At2(
+          registerPendingAt(),
+          (a1, a2) =>
+              assert(
+                f(a1, a2) === compiledExpected.code,
+                s"Expected ${compiledExpected.code}, but got ${f(a1, a2)}"
+              )
+              val applied = compiled.program.term $ toData1(a1).asTerm $ toData2(a2).asTerm
+              val (result, budget) = evalSuccess(applied)
+              assertTermEq(result, compiledExpected.program.term.evaluate)
+              pinEval(s"$label @ ($a1, $a2)", budget, size)
+        )
+
+    /** `assertEvalEq(expected)(f).at(a1, a2, a3)`: `f(a1, a2, a3)` evaluates to `expected`; pins
+      * the budget.
+      */
+    protected final inline def assertEvalEq[A1, A2, A3, T: Eq](inline expected: T)(
+        inline f: (A1, A2, A3) => T
+    )(using
+        vm: PlutusVM,
+        options: Options,
+        inline a1FromData: FromData[A1],
+        inline a1ToData: ToData[A1],
+        inline a2FromData: FromData[A2],
+        inline a2ToData: ToData[A2],
+        inline a3FromData: FromData[A3],
+        inline a3ToData: ToData[A3],
+        pos: source.Position
+    ): EvalTestKit.At3[A1, A2, A3] =
+        val compiled = PlutusV3.compile { (d1: Data, d2: Data, d3: Data) =>
+            f(d1.to[A1], d2.to[A2], d3.to[A3])
+        }
+        val compiledExpected = PlutusV3.compile(expected)
+        val label = SourceText.of(f)
+        // The ledger's size of the deployed script: the compiled function, without its arguments.
+        val size = Script.PlutusV3(compiled.program).script.size.toLong
+        val toData1 = (a: A1) => toData[A1](a)
+        val toData2 = (a: A2) => toData[A2](a)
+        val toData3 = (a: A3) => toData[A3](a)
+        EvalTestKit.At3(
+          registerPendingAt(),
+          (a1, a2, a3) =>
+              assert(
+                f(a1, a2, a3) === compiledExpected.code,
+                s"Expected ${compiledExpected.code}, but got ${f(a1, a2, a3)}"
+              )
+              val applied = compiled.program.term $ toData1(a1).asTerm $ toData2(a2).asTerm $
+                  toData3(a3).asTerm
+              val (result, budget) = evalSuccess(applied)
+              assertTermEq(result, compiledExpected.program.term.evaluate)
+              pinEval(s"$label @ ($a1, $a2, $a3)", budget, size)
+        )
+
+    /** Assert that code evaluates to expected value with budget limit check (upper bound).
+      *
+      * Legacy: use `assertEvalEq`, which pins the budget in the suite's budget table. The
+      * `budget-pin` units migrate the callers, then this method goes.
+      */
     protected final inline def assertEvalWithinBudget[T: Eq](
         inline code: T,
         inline expected: T,
@@ -122,7 +286,11 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                        |budget: $budget;
                        |costs: ${costs.toMap}""".stripMargin)
 
-    /** Assert that code evaluates to expected value with exact budget match. */
+    /** Assert that code evaluates to expected value with exact budget match.
+      *
+      * Legacy: use `assertEvalEq`, which pins the budget in the suite's budget table. The
+      * `budget-pin` units migrate the callers, then this method goes.
+      */
     protected final inline def assertEvalWithBudget[T: Eq](
         inline code: T,
         inline expected: T,
@@ -306,7 +474,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                        |budget: $budget;
                        |costs: ${costs.toMap}""".stripMargin)
 
-    /** Same as the one-argument [[assertEvalWithBudgetAndFee]], with the argument passed as Data at
+    /** Same as the one-argument `assertEvalWithBudgetAndFee`, with the argument passed as Data at
       * runtime so constant folding cannot remove the work being measured.
       */
     protected final inline def assertEvalWithBudgetAndFee[A1, T: Eq](
@@ -346,11 +514,11 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                        |budget: $budget;
                        |costs: ${costs.toMap}""".stripMargin)
 
-    /** Assert that code evaluates to different value than expected. */
+    /** Assert that code evaluates to different value than expected. No budget pin. */
     protected final inline def assertEvalNotEq[T: Eq](
         inline code: T,
         inline expected: T
-    )(using vm: PlutusVM, options: Options): Unit =
+    )(using vm: PlutusVM, options: Options, pos: source.Position): Unit =
         val compiled = PlutusV3.compile(code)
         val compiledExpected = PlutusV3.compile(expected)
 
@@ -359,7 +527,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
           s"Expected not equal to ${compiledExpected.code}, but got ${compiled.code}"
         )
 
-        val codeTerm = compiled.program.term.evaluate
+        val codeTerm = evalSuccess(compiled.program.term)._1
         val expectedTerm = compiledExpected.program.term.evaluate
         assert(
           !(codeTerm α_== expectedTerm),
@@ -577,4 +745,25 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         check(handler, configParams*)
 
     private val trueTerm = true.asTerm
+}
+
+object EvalTestKit {
+
+    /** The pending check of `assertEvalEq(expected)(f)`: `.at(a1)` runs it. */
+    final class At1[A1](pending: BudgetPins.PendingAt, check: A1 => Unit) {
+        def at(a1: A1): Unit = { pending.applied(); check(a1) }
+    }
+
+    /** The pending check of `assertEvalEq(expected)(f)`: `.at(a1, a2)` runs it. */
+    final class At2[A1, A2](pending: BudgetPins.PendingAt, check: (A1, A2) => Unit) {
+        def at(a1: A1, a2: A2): Unit = { pending.applied(); check(a1, a2) }
+    }
+
+    /** The pending check of `assertEvalEq(expected)(f)`: `.at(a1, a2, a3)` runs it. */
+    final class At3[A1, A2, A3](
+        pending: BudgetPins.PendingAt,
+        check: (A1, A2, A3) => Unit
+    ) {
+        def at(a1: A1, a2: A2, a3: A3): Unit = { pending.applied(); check(a1, a2, a3) }
+    }
 }

@@ -2205,3 +2205,47 @@ Two security reviews of OracleValidator, PricebetValidator, LotteryValidator and
   and a vault `Finalize` at once (DS-2); a tagged payout (`hasPaidTagged`) closes it.
 - Vault: `Cancel` does not check `requireEntireVaultIsSpent`; `Finalize` matches the owner by
   payment credential only; a lost owner key leaves no exit (design). Token stripping is F-85.
+
+## P3 – Budget pins pilot (D1, D2), 2026-10-29
+
+### F-90 `source.Position.filePathname` is empty without an environment variable – fixed (workaround)
+
+Evidence: the first update run wrote the table to a file named "Please set the environment
+variable SCALACTIC_FILL_FILE_PATHNAMES to yes at compile time to enable this feature." in the
+worktree root. `javap` on `MathTestBudgets$.class` shows that string as the path constant.
+
+Resolution: `BudgetTable` captures its own path with a small macro (`SourcePathMacro`), not with
+scalactic's `Position`.
+
+### F-91 A same-project macro called from inline methods crashes the compiler – fixed (workaround)
+
+Evidence: `SourceText.of(code)` (a macro in scalus-core test sources) inside the inline asserts of
+`EvalTestKit` crashes Scala 3.3.8 on a clean test compile, phase `sbt-api`:
+`asTerm called on not-a-Term val <none>`, while compiling `IntervalTest.scala`
+(`/tmp/trp3-dbg.log`). An incremental compile after a macro edit passed only because zinc did not
+recompile the callers: a macro body change does not invalidate them.
+
+Correction: a first reading blamed the span of the `Inlined` wrapper. Unwrapping fixed the labels
+(below) but not the crash; the clean compile showed it again.
+
+Resolution: the macro lives in scalus-core main, `scalus.testing.internal.SourceText`, so the tests
+use it precompiled. The table macros (`Generation.current`, `SourcePath`) stay in test sources:
+no inline method calls them, and they compile clean.
+
+Label detail: an inline argument arrives wrapped in `Inlined(None, ...)` nodes whose span is the
+parameter's name in the inline body. The macro unwraps only those and stops at
+`Inlined(Some(call), ...)`, an inline call the user wrote (`BigInt(0).absolute`); else the label is the
+method's body (`if x >= 0 then x else -x`). Regression test: `SourceTextTest`.
+
+Lesson: after changing a macro, compile its callers from clean before trusting a result.
+
+### F-92 `sourcecode.Text` returns wrong text inside inline methods – rejected as a dependency
+
+Evidence: `sourcecode.Text.generate(code).source` in `EvalTestKit` gave `"impo"` for every call:
+the wrapper span sliced from the caller's file. So `sourcecode` (0.4.4) is no alternative to the
+own macro, and no new dependency was added.
+
+### F-93 Upper-bound budget assertions hid real numbers – info
+
+Evidence: `MathTest`'s 12 `assertEvalWithinBudget` calls became exact pins. Example: `clamp` was
+bounded at memory 4_904; it uses 3_502 (29 % below). `[BP-2]` exists for this.

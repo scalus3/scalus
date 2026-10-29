@@ -744,6 +744,13 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
             "scalus/cardano/address/ArbitraryInstances.scala",
             "scalus/cardano/ledger/ArbitraryInstances.scala",
             "scalus/testing/kit/EvalTestKit.scala",
+            // Budget pins: EvalTestKit mixes in BudgetPins.
+            "scalus/testing/budget/Pin.scala",
+            "scalus/testing/budget/Generation.scala",
+            "scalus/testing/budget/BudgetTable.scala",
+            "scalus/testing/budget/SourcePathMacro.scala",
+            "scalus/testing/budget/BudgetText.scala",
+            "scalus/testing/budget/BudgetPins.scala",
           )
           copyFiles(files, baseDir, targetDir, streams.value.log)
           files.map(targetDir / _)
@@ -776,7 +783,10 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
           val baseDir =
               (scalus.jvm / crossProjectBaseDirectory).value / "jvm" / "src" / "test" / "scala"
           val targetDir = (Compile / sourceManaged).value
-          val files = Seq("scalus/testing/kit/KeyPairGenerator.scala")
+          val files = Seq(
+            "scalus/testing/kit/KeyPairGenerator.scala",
+            "scalus/testing/budget/BudgetFiles.scala"
+          )
           copyFiles(files, baseDir, targetDir, streams.value.log)
           files.map(targetDir / _)
       }.taskValue,
@@ -793,7 +803,10 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
           val baseDir =
               (scalus.js / crossProjectBaseDirectory).value / "js" / "src" / "test" / "scala"
           val targetDir = (Compile / sourceManaged).value
-          val files = Seq("scalus/testing/kit/KeyPairGenerator.scala")
+          val files = Seq(
+            "scalus/testing/kit/KeyPairGenerator.scala",
+            "scalus/testing/budget/BudgetFiles.scala"
+          )
           copyFiles(files, baseDir, targetDir, streams.value.log)
           files.map(targetDir / _)
       }.taskValue
@@ -1458,6 +1471,20 @@ commandSequence(
   "scalusCardanoLedgerJS/mimaReportBinaryIssues"
 )
 commandSequence("mima", "mima-jvm", "mima-js")
+// Budget pins (spec "Budget pins"): rewrite every <Suite>Budgets.scala table from JVM test runs,
+// then format. updateBudgets runs both compiler generations: a run on one generation splits a
+// changed row per generation, and the run on the other generation joins equal rows again.
+// One suite, one generation: sbtn "scalusJVM/testOnly *MathTest -- -Dscalus.budgets.update=true".
+commandSequence("updateBudgetsCurrent", "jvm/testOnly -- -Dscalus.budgets.update=true")
+commandSequence(
+  "updateBudgets",
+  s"++$scala3LtsVersion",
+  "updateBudgetsCurrent",
+  s"++$scala3NextLtsVersion",
+  "updateBudgetsCurrent",
+  s"++$scala3LtsVersion",
+  "scalafmtAll"
+)
 commandSequence(
   "quick",
   "scalafmtAll",
