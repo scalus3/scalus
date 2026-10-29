@@ -13,6 +13,9 @@ on:
       - 'scalus-examples/**/scalus/examples/paymentsplitter/**'
       - 'scalus-examples/**/scalus/examples/oneshotmint/**'
       - '.github/workflows/lean-proofs.yml'
+      # The toolchain: Z3 and elan come from the flake.
+      - 'flake.nix'
+      - 'flake.lock'
   schedule:
     # 03:17 UTC daily. Off the hour to avoid the GitHub Actions rush.
     - cron: '17 3 * * *'
