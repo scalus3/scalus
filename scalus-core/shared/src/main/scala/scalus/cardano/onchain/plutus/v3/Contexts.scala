@@ -3,12 +3,9 @@ package scalus.cardano.onchain.plutus.v3
 import scalus.compiler.Compile
 import scala.annotation.tailrec
 import scalus.compiler.{UplcRepr, UplcRepresentation}
-import scalus.uplc.builtin
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.Data.FromData
-import scalus.uplc.builtin.Data.ToData
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.FromData
 import scalus.uplc.builtin.ToData
@@ -20,14 +17,19 @@ import scalus.uplc.builtin.ByteString.*
 export scalus.cardano.onchain.plutus.v1.Hash
 export scalus.cardano.onchain.plutus.v1.Address
 export scalus.cardano.onchain.plutus.v1.Closure
-//export scalus.cardano.onchain.plutus.v1.Credential
+// The enums (Credential, DCert, IntervalBoundType, StakingCredential, OutputDatum) are a
+// type/val pair, not an `export`. A case type written through an export forwarder, such as
+// `Credential.PubKeyCredential`, finds its companion's givens twice (through the forwarder and
+// the companion), so `Eq` for an AssocMap key is ambiguous. V3ExportsTest covers each one.
 type Credential = scalus.cardano.onchain.plutus.v1.Credential
 val Credential = scalus.cardano.onchain.plutus.v1.Credential
 export scalus.cardano.onchain.plutus.v1.PolicyId
-export scalus.cardano.onchain.plutus.v1.DCert
+type DCert = scalus.cardano.onchain.plutus.v1.DCert
+val DCert = scalus.cardano.onchain.plutus.v1.DCert
 export scalus.cardano.onchain.plutus.v1.Datum
 export scalus.cardano.onchain.plutus.v1.DatumHash
-export scalus.cardano.onchain.plutus.v1.IntervalBoundType
+type IntervalBoundType = scalus.cardano.onchain.plutus.v1.IntervalBoundType
+val IntervalBoundType = scalus.cardano.onchain.plutus.v1.IntervalBoundType
 export scalus.cardano.onchain.plutus.v1.Interval
 export scalus.cardano.onchain.plutus.v1.IntervalBound
 export scalus.cardano.onchain.plutus.v1.PosixTime
@@ -36,10 +38,17 @@ export scalus.cardano.onchain.plutus.v1.PubKeyHash
 export scalus.cardano.onchain.plutus.v1.Redeemer
 export scalus.cardano.onchain.plutus.v1.RedeemerHash
 export scalus.cardano.onchain.plutus.v1.ScriptHash
-export scalus.cardano.onchain.plutus.v1.StakingCredential
+type StakingCredential = scalus.cardano.onchain.plutus.v1.StakingCredential
+val StakingCredential = scalus.cardano.onchain.plutus.v1.StakingCredential
 export scalus.cardano.onchain.plutus.v1.TokenName
 export scalus.cardano.onchain.plutus.v1.ValidatorHash
 export scalus.cardano.onchain.plutus.v2.TxOut
+type OutputDatum = scalus.cardano.onchain.plutus.v2.OutputDatum
+val OutputDatum = scalus.cardano.onchain.plutus.v2.OutputDatum
+// Only types and objects: an exported method (hex, toData) is a new symbol, so
+// `import ByteString.*` plus `import v3.*` would make it ambiguous.
+export scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+export scalus.compiler.Compile
 //type Value = scalus.cardano.onchain.plutus.v1.Value
 export scalus.cardano.onchain.plutus.v1.Value
 import scalus.uplc.builtin.Builtins
