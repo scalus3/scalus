@@ -34,10 +34,15 @@
       };
       uplc = plutus.packages.${system}.uplc;
 
-      # Z3 for Lean-blaster, which needs 5.3.1 or later since it sets the Z3 tactic
-      # `recfun-finder` (input-output-hk/Lean-blaster 88588c5). nixpkgs 26.05 has 4.16.0 and
-      # unstable 5.1.0, so it is built here from the release's source, as nixpkgs builds Z3.
-      # Blaster runs the `z3` executable only: no Python bindings.
+      # Z3 5.3.1, for the `lean-z3-5` shell. Lean-blaster's `beta-lambda-cache-optimization`
+      # branch, which IOG's CardanoLedgerApiBlaster pins, sets the Z3 simplifier
+      # `recfun-finder` and needs 5.3.1 or later (Lean-blaster 88588c5). Blaster `main`, which
+      # Scalus pins, stays on nixpkgs' Z3 in the other shells: with Z3 5.x and without
+      # `recfun-finder` it finds no counterexample of a recursive predicate (Z3Prover/z3#10825),
+      # so its refutations end undetermined. When the beta branch reaches `main`, the shells move
+      # to this Z3 together with the pin. nixpkgs 26.05 has 4.16.0 and unstable 5.1.0, so it is
+      # built here from the release's source, as nixpkgs builds Z3. Blaster runs the `z3`
+      # executable only: no Python bindings.
       blasterZ3 = (pkgs.z3.override { pythonBindings = false; }).overrideAttrs (finalAttrs: old: {
         version = "5.3.1";
         src = pkgs.fetchFromGitHub {
@@ -256,7 +261,7 @@
               # Lean 4 + Z3, as in the `lean` shell, so UplcBlasterTest can run its proofs
               # (after `lake build` in scalus-verification/src/main/lean).
               elan
-              blasterZ3
+              z3
               # cardano-cli
             ];
             shellHook = ''
@@ -277,13 +282,24 @@
           };
         # Lean 4 + Z3 for the scalus-verification module. `elan` fetches the exact
         # toolchain named in scalus-verification/src/main/lean/lean-toolchain (v4.24.0).
-        # Z3 is the one Lean-blaster needs (see `blasterZ3`).
+        # Blaster `main`, which Scalus pins, documents Z3 4.15.2; nixpkgs 26.05 ships 4.16.0, which works.
         lean = pkgs.mkShell {
           buildInputs = [ pkgs.bashInteractive ];
           packages = with pkgs; [
             elan
-            blasterZ3
+            z3
             git
+          ];
+        };
+        # Lean 4 + Z3 5.3.1, for a Lean workspace whose Blaster needs it (see `blasterZ3`): the
+        # USDCx example's (scalus-examples/jvm/src/test/lean/UsdcxMintingPolicy) and IOG's
+        # CardanoLedgerApiBlaster. No CI job uses it, so CI does not build this Z3.
+        lean-z3-5 = pkgs.mkShell {
+          buildInputs = [ pkgs.bashInteractive ];
+          packages = [
+            pkgs.elan
+            blasterZ3
+            pkgs.git
           ];
         };
         bench =
@@ -383,7 +399,7 @@
               # the scalus-verification proofs through sbt. Without a built workspace, as in
               # ci-jvm, the tests that run Lean are canceled.
               elan
-              blasterZ3
+              z3
             ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.chromium ];
             shellHook = ''
               unlink plutus-conformance 2>/dev/null || true
