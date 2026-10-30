@@ -1,5 +1,6 @@
 package scalus.uplc.eval
 
+import scalus.testing.Benchmark
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.Tag
 import scalus.*
@@ -39,12 +40,6 @@ import scalus.uplc.builtin.Data.{fromData, toData}
   * is what would fail if a quadratic sort were ever reintroduced.
   */
 class SortBudgetTest extends AnyFunSuite {
-
-    /** Mirrors `BilinearAccumulatorBenchmarkTest`: scalus-core tests cannot see
-      * `scalus.testing.Benchmark` (it lives in scalus-testkit), so the tag is declared locally with
-      * the same name that `build.sbt` excludes.
-      */
-    private object Benchmark extends Tag("scalus.testing.Benchmark")
 
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 

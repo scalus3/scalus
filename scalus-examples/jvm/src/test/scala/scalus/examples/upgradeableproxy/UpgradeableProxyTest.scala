@@ -4,7 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.address.{StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.{Context, DefaultMutators}
 import scalus.cardano.node.{Emulator, NodeSubmitError}
 import scalus.cardano.txbuilder.{ScriptWitness, TwoArgumentPlutusScriptWitness, TxBuilder}
 import scalus.compiler.Options
@@ -74,14 +73,10 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
         ProxyTransactions(env = env, evaluator = evaluator, contract = contract)
 
     private def createProvider(): Emulator =
-        Emulator(
-          initialUtxos = Map(
-            Input(TestUtil.genesisHash, 0) -> Output(Alice.address, Value.ada(5000)),
-            Input(TestUtil.genesisHash, 1) -> Output(Alice.address, Value.ada(5000)),
-            Input(TestUtil.genesisHash, 2) -> Output(Bob.address, Value.ada(5000))
-          ),
-          initialContext = Context.testMainnet(),
-          mutators = DefaultMutators.all
+        Emulator.withOutputs(
+          Output(Alice.address, Value.ada(5000)),
+          Output(Alice.address, Value.ada(5000)),
+          Output(Bob.address, Value.ada(5000))
         )
 
     private def assertSubmitScriptFail(provider: Emulator, expectedError: String)(

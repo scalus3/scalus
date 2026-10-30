@@ -1,5 +1,7 @@
 package scalus.testing.assertions
 
+import scala.annotation.nowarn
+
 import scalus.cardano.ledger.ExUnits
 import scalus.testing.eval.MultiEvalResult
 import scalus.uplc.{Constant, Term}
@@ -11,6 +13,8 @@ import scala.reflect.ClassTag
   *
   * Uses predicate-based matching for flexible assertions.
   */
+@deprecated("use EvalTestKit.assertEvalEq, or ScalusTest.checkResult for a Result", "1.4.1")
+@nowarn("cat=deprecation") // uses its deprecated siblings
 enum Expected:
     /** Any successful evaluation */
     case SuccessAny
@@ -24,6 +28,8 @@ enum Expected:
     /** Evaluation should fail, with predicate for matching */
     case Failure(predicate: Result.Failure => Boolean)
 
+@deprecated("use EvalTestKit.assertEvalEq, or ScalusTest.checkResult for a Result", "1.4.1")
+@nowarn("cat=deprecation") // uses its deprecated siblings
 object Expected:
     // ----- Success smart constructors -----
 
@@ -53,6 +59,8 @@ object Expected:
         }
 
 /** Assertion error with detailed information. */
+@deprecated("use EvalTestKit.assertEvalEq, or ScalusTest.checkResult for a Result", "1.4.1")
+@nowarn("cat=deprecation") // uses its deprecated siblings
 case class AssertionError(
     message: String,
     expected: Expected,
@@ -63,6 +71,8 @@ case class AssertionError(
     )
 
 /** Budget assertion error. */
+@deprecated("use EvalTestKit.assertEvalEq, or ScalusTest.checkResult for a Result", "1.4.1")
+@nowarn("cat=deprecation") // uses its deprecated siblings
 case class BudgetAssertionError(
     message: String,
     expected: ExUnits,
@@ -76,6 +86,8 @@ case class BudgetAssertionError(
   * These are framework-agnostic - they throw exceptions on failure. Test frameworks can catch these
   * and convert to their assertion format.
   */
+@deprecated("use EvalTestKit.assertEvalEq, or ScalusTest.checkResult for a Result", "1.4.1")
+@nowarn("cat=deprecation") // uses its deprecated siblings
 object ResultAssertions:
 
     /** Assert that the result matches the expected outcome.
@@ -171,6 +183,8 @@ object ResultAssertions:
                 )
 
 /** Assertions for multi-backend evaluation results. */
+@deprecated("use EvalTestKit.assertEvalEq, or ScalusTest.checkResult for a Result", "1.4.1")
+@nowarn("cat=deprecation") // uses its deprecated siblings
 object MultiResultAssertions:
 
     /** Assert all evaluations succeeded with the same result (alpha-equivalent). */

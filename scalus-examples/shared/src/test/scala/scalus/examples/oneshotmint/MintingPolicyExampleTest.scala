@@ -9,14 +9,45 @@ import scalus.cardano.onchain.plutus.v1.*
 import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*
-import scalus.testing.assertions.Expected
-import scalus.testing.kit.BaseValidatorTest
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.uplc.TermDSL.given
 import scalus.uplc.*
 
 import scala.language.implicitConversions
 
-class MintingPolicyExampleTest extends BaseValidatorTest {
+class MintingPolicyExampleTest extends AnyFunSuite {
+
+    // Plutus V2 scripts: evaluated on the V2 machine, as BaseValidatorTest did.
+    private given PlutusVM = PlutusVM.makePlutusV2VM()
+
+    /** The program evaluates successfully to `()`. */
+    private def assertReturnsUnit(program: Program): Unit =
+        program.deBruijnedProgram.evaluateDebug match
+            case Result.Success(term, _, _, _) =>
+                assert(term α_== Term.Const(Constant.Unit), s"Expected (), got ${term.show}")
+            case failure: Result.Failure => fail(s"Expected success, got $failure")
+
+    /** The program evaluation fails. */
+    private def assertFails(program: Program): Unit =
+        val result = program.deBruijnedProgram.evaluateDebug
+        assert(result.isFailure, s"Expected failure, got $result")
+
+    private val hoskyMintTxOutRef = TxOutRef(
+      TxId(hex"1ab6879fc08345f51dc9571ac4f530bf8673e0d798758c470f9af6f98e2f3982"),
+      0
+    )
+
+    private val hoskyMintTxOut = TxOut(
+      address = Address(
+        Credential.PubKeyCredential(
+          PubKeyHash(hex"61822dde476439a526070f36d3d1667ad099b462c111cd85e089f5e7f6")
+        ),
+        None
+      ),
+      Value.lovelace(BigInt("10000000")),
+      None
+    )
 
     private def scriptContextV1(
         txInfoInputs: scalus.cardano.onchain.plutus.prelude.List[TxInInfo],
@@ -91,7 +122,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         ) => Program
     ) = {
         // The minting policy script should succeed when the TxOutRef is spent and the minted tokens are correct
-        assertEvalResult(Expected.success(()))(
+        assertReturnsUnit(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
@@ -103,7 +134,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
           )
         )
         // Successful burn, the minted tokens are negative and TxOutRef is not spent
-        assertEvalResult(Expected.success(()))(
+        assertReturnsUnit(
           withScriptContext(
             validator,
             List.empty,
@@ -115,7 +146,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertEvalResult(Expected.failure)(
+        assertFails(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
@@ -123,7 +154,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertEvalResult(Expected.failure)(
+        assertFails(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
@@ -131,7 +162,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertEvalResult(Expected.failure)(
+        assertFails(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
@@ -143,7 +174,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertEvalResult(Expected.failure)(
+        assertFails(
           withScriptContext(
             validator,
             List.empty,
@@ -155,7 +186,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertEvalResult(Expected.failure)(
+        assertFails(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),

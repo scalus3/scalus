@@ -6,6 +6,8 @@ import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators,
 import scalus.cardano.ledger.*
 import scalus.cardano.node.emulator.ChainConfig
 
+import scala.annotation.varargs
+
 /** An in-memory bare-bones node implementation (JS version with single-threaded state).
   *
   * Allows submitting transaction and querying UTxO state. Runs [[validators]] and [[mutators]]
@@ -140,6 +142,18 @@ object Emulator {
           chainConfig
         )
     }
+
+    /** Creates an Emulator with one UTxO per output, in the given order. Use it when addresses need
+      * different values, more than one UTxO, a datum or a reference script; [[withAddresses]]
+      * covers equal values.
+      */
+    @varargs
+    def withOutputs(outputs: TransactionOutput*): Emulator =
+        Emulator(
+          initialUtxos = EmulatorBase.initialUtxosOf(outputs),
+          initialContext = Context.testMainnet(),
+          mutators = defaultMutators
+        )
 
     def withState(
         initState: EmulatorInitialState,

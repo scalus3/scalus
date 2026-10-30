@@ -30,7 +30,6 @@ class GenStatsTest extends AnyFunSuite {
 }
 
 object GenStatsTest {
-    private object Benchmark extends Tag("scalus.testing.Benchmark")
 
     val Samples = 10_000
 

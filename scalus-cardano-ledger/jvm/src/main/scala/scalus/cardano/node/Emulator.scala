@@ -7,7 +7,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.node.emulator.ChainConfig
 
 import java.util.concurrent.atomic.AtomicReference
-import scala.annotation.tailrec
+import scala.annotation.{tailrec, varargs}
 
 /** An in-memory bare-bones node implementation (JVM version with thread-safe state).
   *
@@ -177,6 +177,21 @@ object Emulator {
         import scala.jdk.CollectionConverters.*
         withAddresses(addresses.asScala.toSeq, initialValue, chainConfig)
     }
+
+    /** Creates an Emulator with one UTxO per output, in the given order. Use it when addresses need
+      * different values, more than one UTxO, a datum or a reference script; [[withAddresses]]
+      * covers equal values.
+      * {{{
+      * Emulator.withOutputs(Output(Alice.address, Value.ada(5000)), Output(Bob.address, Value.ada(5000)))
+      * }}}
+      */
+    @varargs
+    def withOutputs(outputs: TransactionOutput*): Emulator =
+        Emulator(
+          initialUtxos = EmulatorBase.initialUtxosOf(outputs),
+          initialContext = Context.testMainnet(),
+          mutators = defaultMutators
+        )
 
     def withState(initState: EmulatorInitialState): Emulator =
         withState(initState, Context.testMainnet())

@@ -1,5 +1,7 @@
 package scalus.testing.eval
 
+import scala.annotation.nowarn
+
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.Options
 import scalus.compiler.sir.{SIR, TargetLoweringBackend}
@@ -53,6 +55,8 @@ object EvalConfig:
   * @param uplcCliResult
   *   Optional result from UplcCli (JVM-only)
   */
+@deprecated("use Program.evaluateDebug", "1.4.1")
+@nowarn("cat=deprecation") // uses its deprecated siblings
 case class MultiEvalResult(
     results: Map[(TargetLoweringBackend, PlutusVM), Result],
     uplcCliResult: Option[UplcEvalResult] = None
@@ -83,6 +87,8 @@ case class MultiEvalResult(
   *
   * These primitives form the foundation of the testing API.
   */
+@deprecated("use Program.evaluateDebug", "1.4.1")
+@nowarn("cat=deprecation") // uses its deprecated siblings
 object Evaluator:
 
     /** Evaluate a Term on a specific PlutusVM.

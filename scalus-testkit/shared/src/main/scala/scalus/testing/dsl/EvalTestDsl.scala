@@ -1,5 +1,7 @@
 package scalus.testing.dsl
 
+import scala.annotation.nowarn
+
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.sir.{SIR, TargetLoweringBackend}
 import scalus.testing.assertions.{MultiResultAssertions, ResultAssertions}
@@ -18,6 +20,10 @@ import scalus.uplc.eval.{PlutusVM, Result}
   *     .assertBudgetWithin(1000, 10000)
   * }}}
   */
+@deprecated(
+  "use EvalTestKit: assertEvalEq(expected)(code), or assertEvalEq(expected)(f).at(args) for a budget",
+  "1.4.1"
+)
 class EvalTestBuilder[A](
     private val subject: EvalSubject[A],
     private val config: EvalConfig = EvalConfig.default
@@ -103,6 +109,7 @@ enum EvalSubject[A]:
     case FromProgram(program: Program) extends EvalSubject[Program]
 
 /** Result of an evaluation test with additional assertion methods */
+@nowarn("cat=deprecation") // delegates to the deprecated ResultAssertions; goes with them
 case class EvalTestResult(result: Result, config: EvalConfig):
 
     def assertSuccess(): EvalTestResult =
@@ -143,6 +150,10 @@ case class EvalTestResult(result: Result, config: EvalConfig):
     def logs: Seq[String] = result.logs
 
 /** DSL entry points */
+@deprecated(
+  "use EvalTestKit: assertEvalEq(expected)(code), or assertEvalEq(expected)(f).at(args) for a budget",
+  "1.4.1"
+)
 object EvalTestDsl:
 
     /** Start testing from SIR */

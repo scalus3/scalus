@@ -131,12 +131,9 @@ class AuctionCellSpec extends AnyFunSuite {
       testEnv.slotConfig.slotToTime(100)
     )
 
-    private def createEmulator(): Emulator = Emulator(
-      initialUtxos = Map(
-        Input(genesisHash, 0) -> Output(Alice.address, LedgerValue.ada(1000)),
-        Input(genesisHash, 1) -> Output(Bob.address, LedgerValue.ada(1000)),
-        Input(genesisHash, 2) -> Output(Charles.address, LedgerValue.ada(1000))
-      )
+    private def createEmulator(): Emulator = Emulator.withAddresses(
+      Seq(Alice.address, Bob.address, Charles.address),
+      LedgerValue.ada(1000)
     )
 
     private def initialState = AuctionState(

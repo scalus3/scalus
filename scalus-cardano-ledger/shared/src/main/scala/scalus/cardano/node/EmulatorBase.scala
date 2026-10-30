@@ -949,6 +949,19 @@ object EmulatorBase {
         }.toMap
     }
 
+    /** Creates initial UTxOs from outputs, one UTxO per output, in the given order. An address may
+      * appear more than once: it then gets several UTxOs.
+      *
+      * The inputs are `Input(genesis, i)` with the all-zero genesis hash, as in
+      * [[createInitialUtxos]].
+      */
+    def initialUtxosOf(outputs: Seq[TransactionOutput]): Utxos = {
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        outputs.zipWithIndex.map { case (output, index) =>
+            Input(genesisHash, index) -> output
+        }.toMap
+    }
+
     /** Resolve the inputs a transaction consumes against a UTxO set.
       *
       * Returns the subset of `utxos` whose inputs appear in `transaction`'s input set — i.e. the

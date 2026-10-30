@@ -1,5 +1,7 @@
 package scalus.testing.kit
 
+import scala.annotation.nowarn
+
 import scalus.testing.assertions.Expected
 import scalus.uplc.*
 import scalus.uplc.eval.BuiltinError
@@ -11,6 +13,8 @@ import scala.util.{Failure, Success, Try}
   * Extends BaseValidatorTest with UplcCli support for comparing results across different
   * evaluators.
   */
+@deprecated("use AnyFunSuite with ScalusTest and checkResult", "1.4.1")
+@nowarn("cat=deprecation") // uses its deprecated siblings
 abstract class BaseValidatorTestJvm extends BaseValidatorTest {
 
     /** Assert that both the CEK machine and UplcCli produce the same result.

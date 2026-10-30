@@ -10,11 +10,31 @@ import scalus.cardano.onchain.plutus.v1.TxId
 import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.v2.*
 import scalus.cardano.onchain.plutus.prelude.List
-import scalus.testing.assertions.Expected
-import scalus.testing.kit.BaseValidatorTest
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.uplc.*
 
-class PreimageExampleTest extends BaseValidatorTest {
+class PreimageExampleTest extends AnyFunSuite {
+
+    // Plutus V2 scripts: evaluated on the V2 machine, as BaseValidatorTest did.
+    private given PlutusVM = PlutusVM.makePlutusV2VM()
+
+    /** The program evaluates successfully to `()`. */
+    private def assertReturnsUnit(program: Program): Unit =
+        program.deBruijnedProgram.evaluateDebug match
+            case Result.Success(term, _, _, _) =>
+                assert(term α_== Term.Const(Constant.Unit), s"Expected (), got ${term.show}")
+            case failure: Result.Failure => fail(s"Expected success, got $failure")
+
+    /** The program evaluation fails. */
+    private def assertFails(program: Program): Unit =
+        val result = program.deBruijnedProgram.evaluateDebug
+        assert(result.isFailure, s"Expected failure, got $result")
+
+    private val hoskyMintTxOutRef = TxOutRef(
+      TxId(hex"1ab6879fc08345f51dc9571ac4f530bf8673e0d798758c470f9af6f98e2f3982"),
+      0
+    )
 
     private def scriptContext(signatories: scalus.cardano.onchain.plutus.prelude.List[PubKeyHash]) =
         ScriptContext(
@@ -47,7 +67,7 @@ class PreimageExampleTest extends BaseValidatorTest {
             val ctx = scriptContext(signatories)
             validator $ datum $ redeemer $ ctx.toData
 
-        assertEvalResult(Expected.success(()))(
+        assertReturnsUnit(
           appliedScript(
             preimage = ByteString.fromArray("Scalus rocks!".getBytes("UTF-8")),
             pubKeyHash =
@@ -58,7 +78,7 @@ class PreimageExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertEvalResult(Expected.failure)(
+        assertFails(
           appliedScript(
             preimage = ByteString.fromArray("Scalus rocks!".getBytes("UTF-8")),
             pubKeyHash =
@@ -69,7 +89,7 @@ class PreimageExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertEvalResult(Expected.failure)(
+        assertFails(
           appliedScript(
             preimage = ByteString.fromArray("Scalus rocks!".getBytes("UTF-8")),
             pubKeyHash =

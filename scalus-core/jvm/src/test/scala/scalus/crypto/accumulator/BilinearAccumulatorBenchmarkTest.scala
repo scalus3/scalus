@@ -1,8 +1,8 @@
 package scalus.crypto.accumulator
 
+import scalus.testing.Benchmark
 import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.*
-import org.scalatest.Tag
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.prelude.bls12_381.{G1, G2}
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
@@ -92,8 +92,6 @@ class BilinearAccumulatorBenchmarkTest extends AnyFunSuite {
 }
 
 object BilinearAccumulatorBenchmarkTest {
-
-    private object Benchmark extends Tag("scalus.testing.Benchmark")
 
     /** JSON structure matching the Ethereum KZG ceremony format. */
     private case class EthereumCeremony(

@@ -401,6 +401,14 @@ get lost; the pilot found two (F-33, F-34).
   `emulator.submitPinned(tx)` pins the transaction under test as `Pin.Tx`; `emulator.submitOk(tx)` submits a
   setup transaction without a pin (`[BP-4a]`); `pinSize(bytes)` pins a script size. Failing runs are
   never pinned. A test name that embeds a measured value becomes a fixed name plus `pinSize`.
+
+  *Decisions (2026-10-30), D4:* `EvalTestKit` and `ScalusTest` are the only assertion family. The
+  entry points of `EvalTestDsl`, `ResultAssertions`, `Evaluator` and `BaseValidatorTest(+Jvm)` are
+  `@deprecated` since 1.4.1 and go in the next release. One `scalus.testing.Benchmark` tag lives in
+  core test sources and is copied into the testkit. `Emulator.withOutputs(Output(address, value), ...)`
+  (ledger main, JVM and JS) builds an Emulator with one UTxO per output; `withAddresses` stays for
+  equal values. The local copies of `genesisHash`, `given Options` and `given PlutusVM` go to the
+  `adopt-helper` rollout units, not to D4.
 - The Fable reviewer MUST choose the helper API from what the code base already has, plus
   what the findings ask for. It MUST name the existing helper that each new helper replaces or
   extends. `[P3-12]`

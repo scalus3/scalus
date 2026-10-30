@@ -744,6 +744,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
             "scalus/cardano/address/ArbitraryInstances.scala",
             "scalus/cardano/ledger/ArbitraryInstances.scala",
             "scalus/testing/kit/EvalTestKit.scala",
+            // The Benchmark tag lives in core test sources: core tests cannot see the testkit.
+            "scalus/testing/Benchmark.scala",
             // Budget pins: EvalTestKit mixes in BudgetPins.
             "scalus/testing/budget/Pin.scala",
             "scalus/testing/budget/Generation.scala",

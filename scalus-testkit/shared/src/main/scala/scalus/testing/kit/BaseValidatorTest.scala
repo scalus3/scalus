@@ -1,5 +1,7 @@
 package scalus.testing.kit
 
+import scala.annotation.nowarn
+
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.uplc.builtin.ByteString.*
@@ -16,6 +18,8 @@ import scalus.uplc.eval.{BuiltinError, PlutusVM}
   *
   * For JVM-only testing with UplcCli support, use `BaseValidatorTestJvm` instead.
   */
+@deprecated("use AnyFunSuite with ScalusTest and checkResult", "1.4.1")
+@nowarn("cat=deprecation") // uses its deprecated siblings
 abstract class BaseValidatorTest
     extends AnyFunSuite
     with ScalaCheckPropertyChecks

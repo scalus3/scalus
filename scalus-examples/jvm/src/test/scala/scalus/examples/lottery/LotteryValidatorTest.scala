@@ -4,13 +4,12 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.Builtins.sha2_256
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.{RedeemerPurpose, TxBuilder}
 import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.v3.ScriptContext
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
-import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
+import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
 
@@ -966,29 +965,15 @@ object LotteryValidatorTest extends ScalusTest {
     // Bet amount
     private val betAmount: Coin = Coin(10_000_000L)
 
-    private def createProvider(): Emulator = {
-        // Create multiple UTXOs per player so they have funds after initiate tx
-        val initialUtxos = Map(
-          // Alice gets 2 UTXOs
-          Input(genesisHash, 0) -> Output(Alice.address, Value.ada(5000)),
-          Input(genesisHash, 1) -> Output(
-            Alice.address,
-            Value.ada(5000)
-          ),
-          // Bob gets 2 UTXOs
-          Input(genesisHash, 2) -> Output(Bob.address, Value.ada(5000)),
-          Input(genesisHash, 3) -> Output(
-            Bob.address,
-            Value.ada(5000)
-          ),
-          // Eve gets 1 UTXO
-          Input(genesisHash, 4) -> Output(Eve.address, Value.ada(10000))
+    // Alice and Bob get 2 UTxOs each, so they have funds after the initiate tx.
+    private def createProvider(): Emulator =
+        Emulator.withOutputs(
+          Output(Alice.address, Value.ada(5000)),
+          Output(Alice.address, Value.ada(5000)),
+          Output(Bob.address, Value.ada(5000)),
+          Output(Bob.address, Value.ada(5000)),
+          Output(Eve.address, Value.ada(10000))
         )
-        Emulator(
-          initialUtxos = initialUtxos,
-          initialContext = Context.testMainnet(),
-        )
-    }
 
     private def getScriptContext(
         provider: Emulator,
