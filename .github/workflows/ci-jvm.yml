@@ -16,13 +16,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # One job per supported compiler version. 3.3.9 is the default LTS and the version the
-          # `_3` library artifacts are published from, so it also carries the format + MiMa checks.
+          # One job per supported compiler version. The first is the default LTS and the version
+          # the `_3` library artifacts are published from, so it also carries the format + MiMa
+          # checks.
           - { name: "3.3.9", task: ci-jvm-3_3_9 }
-          # 3.3.7 and 3.3.8 are supported for the compiler plugin only, so their jobs are the
+          # Previous LTS patches are supported for the compiler plugin only, so their jobs are the
           # cheaper canary: plugin compile plus the scalus.compiler.* compile-and-evaluate suite.
           - { name: "3.3.8", task: ci-jvm-3_3_8 }
-          - { name: "3.3.7", task: ci-jvm-3_3_7 }
           - { name: "3.8.4", task: ci-jvm-3_8_4 }
           - { name: "3.9.0", task: ci-jvm-3_9_0 }
     permissions:

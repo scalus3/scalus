@@ -4,6 +4,8 @@
 
 ### Changed
 
+- **`scalus-plugin` is no longer published for Scala 3.3.7. A project on Scala 3.3.x must use
+  3.3.8 or 3.3.9.** The `_3` library artifacts are built with Scala 3.3.9.
 - **`ProgramFlatCodec.decodeFlat`, `DeBruijnedProgram.fromFlatEncoded`, `fromCbor` and
   `fromCborPrefix`, the matching `Program` methods and the `PlutusScript` accessors `program` and
   `deBruijnedProgram` require the program's filler to end the bytes, as `unflat` in Plutus does.

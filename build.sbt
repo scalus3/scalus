@@ -39,15 +39,15 @@ val jsoniterScalaVersion = "2.41.2"
 // compiler plugin (which depends on the unstable scala3-compiler internal API).
 val scala3LtsVersion = "3.3.9"
 val scala3NextVersion = "3.8.4"
-// Next LTS, released 2026-09-03.
+// Next LTS series.
 val scala3NextLtsVersion = "3.9.0"
 // Previous LTS patches, supported for the compiler plugin only. Downstream projects may still be
-// pinned to one of them, and a compiler plugin has to match the compiler exactly, so
-// scalus-plugin_3.3.7 and scalus-plugin_3.3.8 keep being published. Nothing else needs to be built
-// here: every 3.3.x emits the same TASTy version, so a 3.3.7 or 3.3.8 compiler reads the
-// 3.3.9-built `_3` library artifacts. scalus-core cross-builds here only so the plugin has
-// something to be tested against.
-val scala3LtsPrevVersions = Seq("3.3.7", "3.3.8")
+// pinned to one of them, and a compiler plugin has to match the compiler exactly, so each keeps a
+// published scalus-plugin_<version>. Nothing else needs to be built here: every 3.3.x emits the
+// same TASTy version, so an older 3.3.x compiler reads the `_3` library artifacts built by
+// scala3LtsVersion.
+// scalus-core cross-builds here only so the plugin has something to be tested against.
+val scala3LtsPrevVersions = Seq("3.3.8")
 
 // The versions the whole build cross-builds and tests.
 val supportedScalaVersions = Seq(scala3LtsVersion, scala3NextVersion, scala3NextLtsVersion)
@@ -357,7 +357,7 @@ lazy val scalusPlugin = project
       name := "scalus-plugin",
       crossVersion := CrossVersion.full,
       // A Scala 3 compiler plugin must match the compiler version exactly, so every supported
-      // version gets its own published artifact – including the plugin-only 3.3.7 and 3.3.8.
+      // version gets its own published artifact – including the plugin-only scala3LtsPrevVersions.
       crossScalaVersions := pluginScalaVersions,
       scalacOptions ++= commonScalacOptions,
       // Explicit nulls are being adopted module by module. The copied scalus-core files below
@@ -463,7 +463,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       publishOnlyLts,
       scalaVersion := scalaVersion.value,
       // Cross-built on every version the plugin is published for, so each plugin variant is
-      // exercised against core – 3.3.7 and 3.3.8 included, which is why core and not just the
+      // exercised against core – scala3LtsPrevVersions included, which is why core and not just the
       // plugin lists them.
       // publishOnlyLts still publishes the `_3` artifact from scala3LtsVersion only.
       crossScalaVersions := pluginScalaVersions,
@@ -559,9 +559,9 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Test / doc / sources := Seq.empty,
     )
     .nativeSettings(
-      // Scala Native 0.5.12 supports both 3.8.4 and 3.9.0 (`nscplugin_3.9.0` and
-      // `scala3lib_native0.5_3:3.9.0+0.5.12` are published), so Native tracks the same versions as
-      // JVM/JS. Run the next-version native tests with `++3.8.4 scalusNative/test` (or `++3.9.0`).
+      // Native tracks the same versions as JVM/JS. A new Scala version needs Scala Native's
+      // `nscplugin_<version>` and `scala3lib_native0.5_3:<version>+<native version>` on Maven
+      // Central first. Run another version's native tests with `++<version> scalusNative/test`.
       crossScalaVersions := supportedScalaVersions,
       // Each native test group runs as its own statically-linked binary with its own
       // immix-GC heap. Running them in parallel exhausted RAM on 16GB CI runners and the
@@ -622,8 +622,9 @@ lazy val scalusUplcJitCompiler = project
       Test / testOptions += Tests.Argument("-oF"),
       inConfig(Test)(PluginDependency),
       // Published (experimental, no MiMa) so that external benchmarks can run the JIT. The
-      // staging compiler is scala3-compiler at this build's version, 3.3.9, so a consumer must
-      // build on Scala 3.3.x: a 3.3 compiler rejects the TASTy of a newer scala3-library.
+      // staging compiler is scala3-compiler at this build's version (scala3LtsVersion), so a
+      // consumer must build on Scala 3.3.x: a 3.3 compiler rejects the TASTy of a newer
+      // scala3-library.
       publishOnlyLts,
       jvmReleaseTarget
     )
@@ -1089,7 +1090,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     )
     .jsSettings(jsModuleSettings *)
     .jsSettings(
-      // Scaladoc 3.3.8 resolves @throws targets such as TypeError without the Scala.js
+      // Scaladoc (seen on 3.3.8) resolves @throws targets such as TypeError without the Scala.js
       // classpath, so they warn here. The tags go into scalus.d.ts verbatim, so keep them.
       Compile / doc / scalacOptions += "-no-link-warnings",
       // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).
@@ -1380,7 +1381,7 @@ val crossVersionCiTasks = {
     // them drifting from the vals above. A stale `++` argument matches no project's
     // crossScalaVersions, so sbt silently keeps the default version and the job reports green for
     // a version it never built.
-    val spelledOutInAliases = Seq("3.3.7", "3.3.8", "3.3.9", "3.8.4", "3.9.0")
+    val spelledOutInAliases = Seq("3.3.8", "3.3.9", "3.8.4", "3.9.0")
     if (spelledOutInAliases != pluginScalaVersions)
         sys.error(
           s"The ci-jvm-* aliases build ${spelledOutInAliases.mkString(", ")}, but " +
@@ -1424,16 +1425,15 @@ commandSequence(
   "jvm/doc",
   "docs/unidoc"
 )
-// Plugin-only versions: prove the plugin builds against the 3.3.7 and 3.3.8 compilers and still
-// emits correct contracts, via the scalus.compiler.* compile-and-evaluate suite. Cheaper than a
-// full re-test – 3.3.7, 3.3.8 and 3.3.9 share the `pre38` desugaring generation.
+// Plugin-only versions (scala3LtsPrevVersions): prove the plugin builds against each of those
+// compilers and still emits correct contracts, via the scalus.compiler.* compile-and-evaluate
+// suite. Cheaper than a full re-test – every 3.3.x shares the `pre38` desugaring generation.
 // `testOnly` runs benchmark-tagged tests, which `test` leaves out, so they are excluded here.
 val pluginOnlyCiTasks = Seq(
   "clean",
   "scalusPlugin/Test/compile",
   "scalusJVM/testOnly scalus.compiler.* -- -l scalus.testing.Benchmark"
 )
-commandSequence("ci-jvm-3_3_7", ("++3.3.7" +: pluginOnlyCiTasks) *)
 commandSequence("ci-jvm-3_3_8", ("++3.3.8" +: pluginOnlyCiTasks) *)
 commandSequence("ci-jvm-3_8_4", ("++3.8.4" +: crossVersionCiTasks) *)
 commandSequence("ci-jvm-3_9_0", ("++3.9.0" +: crossVersionCiTasks) *)
