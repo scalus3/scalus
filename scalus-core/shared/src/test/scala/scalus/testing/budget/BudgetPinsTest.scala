@@ -23,6 +23,14 @@ class BudgetPinsTest extends AnyFunSuite {
         assert(BudgetText.group(-1000) == "-1_000")
     }
 
+    test("render: a value beyond Int gets the L suffix, so scalafmt can parse the table") {
+        // scalac adapts a large literal to the Long parameter, scalafmt's parser does not.
+        assert(
+          BudgetText.render(Pin.Eval(31_290_337L, 8_992_712_599L, 1_359, 2_474_213L)) ==
+              "Pin.Eval(memory = 31_290_337, steps = 8_992_712_599L, size = 1_359, fee = 2_474_213)"
+        )
+    }
+
     test("percent: signed, one decimal, relative to the expected value") {
         assert(BudgetText.percent(1101, 1085) == "-1.5 %")
         assert(BudgetText.percent(1000, 1001) == "+0.1 %")

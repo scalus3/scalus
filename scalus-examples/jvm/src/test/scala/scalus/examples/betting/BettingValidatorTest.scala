@@ -8,12 +8,15 @@ import scalus.cardano.onchain.plutus.v3.PubKeyHash.*
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*
-import scalus.cardano.ledger.ExUnits
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 
 import scala.language.implicitConversions
 
-class BettingValidatorTest extends AnyFunSuite, ScalusTest:
+class BettingValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+
+    override protected def budgetTable: BudgetTable = BettingValidatorTestBudgets
+
     private val contract = BettingContract.compiled.withErrorTraces
 
     /*
@@ -37,7 +40,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             result
      */
 
-    test("Verify that a bet can be properly initialized"):
+    test("Verify that a bet can be properly initialized") {
         val player1 = TestUtil.mockPubKeyHash(1)
         // Create test betting config for a new bet
         val initialBettingConfig = Config(
@@ -78,15 +81,10 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         if result.isFailure then
             result.logs.foreach(println)
             println(result)
-        assert(result.isSuccess, "Script execution should succeed for initial minting")
-        assert(
-          result.budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 67489, steps = 23_432519),
-            since38 = ExUnits(memory = 65329, steps = 22_719832)
-          )
-        )
+        checkResult(success, result, contract.program)
+    }
 
-    test("Fail: minting the bet token outside the script output"):
+    test("Fail: minting the bet token outside the script output") {
         val player1 = TestUtil.mockPubKeyHash(1)
         val config = Config(
           player1,
@@ -124,8 +122,9 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           result.logs.exists(_.contains("must hold the minted bet token")),
           s"Expected bet token error, got: ${result.logs.mkString(", ")}"
         )
+    }
 
-    test("Verify that player2 can join an existing bet"):
+    test("Verify that player2 can join an existing bet") {
         val player1 = TestUtil.mockPubKeyHash(1)
         val player2 = TestUtil.mockPubKeyHash(2)
         val oracle = TestUtil.mockPubKeyHash(3)
@@ -195,12 +194,10 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         if result.isFailure then
             result.logs.foreach(println)
             println(result)
-        assert(result.isSuccess, "Script execution should succeed for player2 joining spending")
-        assert(
-          result.budget == (ExUnits(memory = 104705, steps = 39_483_383))
-        )
+        checkResult(success, result, contract.program)
+    }
 
-    test("Verify that the oracle can announce winner and trigger payout"):
+    test("Verify that the oracle can announce winner and trigger payout") {
         val player1 = TestUtil.mockPubKeyHash(1)
         val player2 = TestUtil.mockPubKeyHash(2)
         val oracle = TestUtil.mockPubKeyHash(3)
@@ -258,12 +255,10 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         if result.isFailure then
             result.logs.foreach(println)
             println(result)
-        assert(result.isSuccess, "Script execution should succeed for announce winner spending")
-        assert(
-          result.budget == (ExUnits(memory = 94693, steps = 35_583_296))
-        )
+        checkResult(success, result, contract.program)
+    }
 
-    test("Verify that announcing the winner fails if the bet token is not burned"):
+    test("Verify that announcing the winner fails if the bet token is not burned") {
         val player1 = TestUtil.mockPubKeyHash(1)
         val player2 = TestUtil.mockPubKeyHash(2)
         val oracle = TestUtil.mockPubKeyHash(3)
@@ -305,6 +300,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           result.logs.exists(_.contains("must be burned")),
           s"Expected burn error, got: ${result.logs.mkString(", ")}"
         )
+    }
 
     /** Build a joined-bet timeout transaction with the given outputs and validity range. */
     private def timeoutTx(
@@ -333,7 +329,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           validRange = validRange
         )
 
-    test("Verify that both players can reclaim the pot after a timeout"):
+    test("Verify that both players can reclaim the pot after a timeout") {
         val player1 = TestUtil.mockPubKeyHash(1)
         val player2 = TestUtil.mockPubKeyHash(2)
         val oracle = TestUtil.mockPubKeyHash(3)
@@ -361,12 +357,10 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           )
         )
         if result.isFailure then result.logs.foreach(println)
-        assert(result.isSuccess, "Reclaim after expiration should succeed")
-        assert(
-          result.budget == (ExUnits(memory = 118173, steps = 46_239_533))
-        )
+        checkResult(success, result, contract.program)
+    }
 
-    test("Verify that reclaim before expiration fails"):
+    test("Verify that reclaim before expiration fails") {
         val player1 = TestUtil.mockPubKeyHash(1)
         val player2 = TestUtil.mockPubKeyHash(2)
         val oracle = TestUtil.mockPubKeyHash(3)
@@ -396,8 +390,9 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           )
         )
         assert(result.isFailure, "Reclaim before expiration must fail")
+    }
 
-    test("Verify that reclaim fails if a player is not refunded"):
+    test("Verify that reclaim fails if a player is not refunded") {
         val player1 = TestUtil.mockPubKeyHash(1)
         val player2 = TestUtil.mockPubKeyHash(2)
         val oracle = TestUtil.mockPubKeyHash(3)
@@ -419,3 +414,5 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           )
         )
         assert(result.isFailure, "Reclaim must refund both players")
+    }
+}

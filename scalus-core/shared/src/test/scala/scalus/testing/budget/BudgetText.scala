@@ -32,8 +32,8 @@ object BudgetText {
     private def fields(pin: Pin): Seq[(String, Long)] = pin match
         case Pin.Eval(memory, steps, size, fee) =>
             Seq("memory" -> memory, "steps" -> steps, "size" -> size, "fee" -> fee)
-        case Pin.Tx(memory, steps, fee) =>
-            Seq("memory" -> memory, "steps" -> steps, "tx fee" -> fee)
+        case Pin.Tx(memory, steps, size, fee) =>
+            Seq("memory" -> memory, "steps" -> steps, "tx size" -> size, "tx fee" -> fee)
         case Pin.Size(bytes) => Seq("bytes" -> bytes)
 
     /** One line per pinned quantity: `memory 1_101 -> 1_085 (-1.5 %)`. For an evaluation, one more
@@ -47,7 +47,21 @@ object BudgetText {
             }
             (expected, actual) match
                 case (e: Pin.Eval, a: Pin.Eval) => lines :+ feeParts(e, a)
+                case (e: Pin.Tx, a: Pin.Tx)     => lines :+ txFeeParts(e, a)
                 case _                          => lines
+
+    /** `tx fee = size 180_000 -> 179_800 + execution 40_000 -> 39_000 + rest 5_000 -> 5_000`. The
+      * rest is the reference-script fee and any margin the balancer added.
+      */
+    private def txFeeParts(e: Pin.Tx, a: Pin.Tx): String =
+        def parts(p: Pin.Tx) =
+            val size = Pin.sizeFee(p.size)
+            val execution = Pin.executionFee(p.memory, p.steps)
+            (size, execution, p.fee - size - execution)
+        val (es, ee, er) = parts(e)
+        val (as, ae, ar) = parts(a)
+        s"tx fee = size ${group(es)} -> ${group(as)} + execution ${group(ee)} -> ${group(ae)} + " +
+            s"rest ${group(er)} -> ${group(ar)}"
 
     /** `fee = execution 151 -> 160 + reference script 1_305 -> 1_230` */
     private def feeParts(e: Pin.Eval, a: Pin.Eval): String =
@@ -118,10 +132,16 @@ object BudgetText {
     /** `Pin.Eval(memory = 2_097, steps = 410_169, size = 20, fee = 451)` */
     def render(pin: Pin): String = pin match
         case Pin.Eval(m, s, z, f) =>
-            s"Pin.Eval(memory = ${group(m)}, steps = ${group(s)}, size = ${group(z)}, fee = ${group(f)})"
-        case Pin.Tx(m, s, f) =>
-            s"Pin.Tx(memory = ${group(m)}, steps = ${group(s)}, fee = ${group(f)})"
+            s"Pin.Eval(memory = ${long(m)}, steps = ${long(s)}, size = ${group(z)}, fee = ${long(f)})"
+        case Pin.Tx(m, s, z, f) =>
+            s"Pin.Tx(memory = ${long(m)}, steps = ${long(s)}, size = ${group(z)}, fee = ${long(f)})"
         case Pin.Size(b) => s"Pin.Size(bytes = ${group(b)})"
+
+    /** A Long literal: `group(n)`, with an `L` beyond the Int range. scalac adapts a large literal
+      * to a Long parameter, but scalafmt's parser rejects it.
+      */
+    private def long(n: Long): String =
+        if n.isValidInt then group(n) else group(n) + "L"
 
     private def literal(s: String): String =
         "\"" + s.flatMap {

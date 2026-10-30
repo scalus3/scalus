@@ -395,6 +395,12 @@ get lost; the pilot found two (F-33, F-34).
   the arguments come after the code, so the code types them (`(min).at(1, 2)` needs no `BigInt`).
   A test that never calls `.at` on such a check fails. `MathTest` drops `optimizeUplc = false`.
   `test(...) { }` uses braces; a `:` block is for a long code argument.
+
+  *Decisions (2026-10-30), D3:* `ScalusTest` gets the budget pins: `checkResult(expected, result,
+  program)` pins a successful validator run as `Pin.Eval` (the program's size, the combined fee);
+  `emulator.submitPinned(tx)` pins the transaction under test as `Pin.Tx`; `emulator.submitOk(tx)` submits a
+  setup transaction without a pin (`[BP-4a]`); `pinSize(bytes)` pins a script size. Failing runs are
+  never pinned. A test name that embeds a measured value becomes a fixed name plus `pinSize`.
 - The Fable reviewer MUST choose the helper API from what the code base already has, plus
   what the findings ask for. It MUST name the existing helper that each new helper replaces or
   extends. `[P3-12]`
@@ -462,8 +468,12 @@ Definitions for this section:
   combined fee. `[BP-3]`
 - The failure message of an evaluation pin MUST split the combined fee into its execution and
   reference-script parts. `[BP-3a]`
-- A test that builds and balances a transaction MUST pin `tx.body.value.fee` of the transaction
-  under test. A fee that the test forces is not a pin. `[BP-4]`
+- A test that builds and balances a transaction MUST pin the transaction under test: the sum of
+  its redeemer budgets, its size as the fee rule counts it (`toCborForFeeCalculation`), and
+  `tx.body.value.fee`. A fee that the test forces is not a pin. `[BP-4]`
+- A setup transaction MUST NOT be pinned. `[BP-4a]`
+- The failure message of a transaction pin MUST split the fee into its size part, its execution
+  part and the rest (reference scripts and balancer margin). `[BP-4b]`
 - A test of a validator SHOULD also pin the script size in bytes. `[BP-5]`
 - When the pinned values differ between compiler generations, the pin MUST hold one value per
   generation. `[BP-6]`

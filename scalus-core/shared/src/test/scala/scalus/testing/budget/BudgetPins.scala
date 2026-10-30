@@ -1,9 +1,9 @@
 package scalus.testing.budget
 
 import org.scalactic.source
-import org.scalatest.exceptions.TestFailedException
-import org.scalatest.{Args, Assertions, Failed, Outcome, Status, Succeeded, TestSuite, TestSuiteMixin}
-import scalus.cardano.ledger.ExUnits
+import org.scalatest.exceptions.{StackDepthException, TestFailedException}
+import org.scalatest.{Args, Failed, Outcome, Status, Succeeded, TestSuite, TestSuiteMixin}
+import scalus.cardano.ledger.{ExUnits, Transaction}
 
 import scala.collection.mutable
 
@@ -61,26 +61,40 @@ trait BudgetPins {
     ): Unit =
         pinValue(Some(label), Pin.eval(budget, size))
 
-    private def pinValue(label: Option[String], actual: Pin)(using source.Position): Unit = {
+    /** Pins a balanced transaction under the current test name: redeemer budgets, size and fee. */
+    protected final def pinTx(tx: Transaction)(using source.Position): Unit =
+        pinValue(None, Pin.tx(tx))
+
+    /** Pins a script size in bytes under the current test name (`[BP-5]`). */
+    protected final def pinSize(bytes: Long)(using source.Position): Unit =
+        pinValue(None, Pin.Size(bytes))
+
+    /** Fails at `pos`, the caller's position. ScalaTest's `fail` is an inline macro that would
+      * report this file instead.
+      */
+    private def failAt(message: String)(using pos: source.Position): Nothing =
+        throw TestFailedException((_: StackDepthException) => Some(message), None, pos)
+
+    private def pinValue(label: Option[String], actual: Pin)(using pos: source.Position): Unit = {
         val table = budgetTable
         if !table.isUnpinned then
             val state = budgetPinState
             val suite = BudgetPins.suiteName(this)
             val test = state.currentTest.getOrElse(
-              Assertions.fail(s"$suite: no current test: mix BudgetPinsSuite into the suite class")
+              failAt(s"$suite: no current test: mix BudgetPinsSuite into the suite class")
             )
             val key = state.labelOverride.orElse(label).fold(test)(l => s"$test / $l")
             if !state.use(key, actual) then
-                Assertions.fail(
+                failAt(
                   s"$suite: budget pin key \"$key\" pinned twice: add a label, " +
                       "or use checkEval for a property test"
                 )
             if !state.updateMode then
                 table.get(key) match
                     case None =>
-                        Assertions.fail(BudgetText.missing(suite, key, table.generation, actual))
+                        failAt(BudgetText.missing(suite, key, table.generation, actual))
                     case Some(expected) if expected != actual =>
-                        Assertions.fail(
+                        failAt(
                           BudgetText.mismatch(suite, key, table.generation, expected, actual)
                         )
                     case Some(_) => ()

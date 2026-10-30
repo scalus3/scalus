@@ -1,6 +1,7 @@
 package scalus.testing.kit
 
 import org.scalacheck.Arbitrary
+import org.scalactic.source
 import org.scalatest.Assertions
 import scalus.*
 import scalus.uplc.builtin.ByteString
@@ -8,7 +9,9 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.{CardanoInfo, EvaluatorReportConfig, ExUnits, Language, ProfileLevel, RedeemerTag}
 import scalus.cardano.ledger.Script
-import scalus.cardano.ledger.Transaction
+import scalus.cardano.ledger.{Transaction, TransactionHash}
+import scalus.cardano.node.EmulatorBase
+import scalus.testing.budget.BudgetPins
 import scalus.cardano.txbuilder.TxBuilderException
 import scalus.cardano.onchain.plutus.v1.Credential.PubKeyCredential
 import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
@@ -28,7 +31,7 @@ import scala.util.control.NonFatal
 // `prelude.Option.*` above shadows the standard Some; alias it for the off-chain APIs that take one.
 import scala.Some as ScalaSome
 
-trait ScalusTest extends ArbitraryInstances, Assertions {
+trait ScalusTest extends ArbitraryInstances, Assertions, BudgetPins {
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()
     protected given PlutusVM = plutusVM
 
@@ -263,6 +266,45 @@ trait ScalusTest extends ArbitraryInstances, Assertions {
                 )
             case _ =>
     }
+
+    /** `checkResult` that also pins the budget of a successful run (`[BP-1]`): memory, steps, the
+      * size of `program` and the combined fee. A failure is never pinned (`[BP-1c]`). The pin is a
+      * no-op until the suite sets its budget table and mixes in `BudgetPinsSuite`.
+      * {{{
+      * val result = contract.program.runWithDebug(scriptContext)
+      * checkResult(success, result, contract.program)
+      * }}}
+      */
+    protected def checkResult(
+        expected: (String | Unit, Option[ExUnits]),
+        actual: Result,
+        program: Program
+    )(using pos: source.Position): Unit = {
+        checkResult(expected, actual)
+        if expected._1 == () then
+            pinEval(actual.budget, Script.PlutusV3(program).script.size.toLong)
+    }
+
+    extension (emulator: EmulatorBase)
+
+        /** Submits a setup transaction and asserts it is accepted. Not pinned: it is not the
+          * transaction under test (`[BP-4a]`).
+          */
+        def submitOk(tx: Transaction)(using pos: source.Position): TransactionHash =
+            emulator.submitSync(tx) match
+                case Right(hash) => hash
+                case Left(error) => fail(s"Transaction rejected: $error")
+
+        /** Submits the transaction under test, asserts it is accepted, and pins it (`[BP-4]`): the
+          * sum of its redeemer budgets, its size and its fee.
+          * {{{
+          * provider.submitPinned(depositTx)
+          * }}}
+          */
+        def submitPinned(tx: Transaction)(using pos: source.Position): TransactionHash =
+            val hash = emulator.submitOk(tx)
+            pinTx(tx)
+            hash
 
     def compareBudgetWithReferenceValue(
         testName: String,

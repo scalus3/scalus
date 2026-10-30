@@ -1,6 +1,6 @@
 package scalus.testing.budget
 
-import scalus.cardano.ledger.{CardanoInfo, ExUnits, RefScriptFee}
+import scalus.cardano.ledger.{CardanoInfo, ExUnits, RefScriptFee, Transaction}
 
 /** One pinned measurement of a budget (spec "Budget pins", `[BP-1]` to `[BP-9]`).
   *
@@ -18,10 +18,12 @@ enum Pin {
       */
     case Eval(memory: Long, steps: Long, size: Long, fee: Long)
 
-    /** One balanced transaction. `memory` and `steps` are the sum over all redeemers; `fee` is the
-      * transaction fee in lovelace, which already contains the reference-script fee.
+    /** One balanced transaction under test. `memory` and `steps` are the sum over all redeemers,
+      * `size` is the transaction's size in bytes as the fee rule counts it
+      * (`toCborForFeeCalculation`), and `fee` is its fee in lovelace, as the balancer set it: the
+      * size fee, the execution fee and the reference-script fee.
       */
-    case Tx(memory: Long, steps: Long, fee: Long)
+    case Tx(memory: Long, steps: Long, size: Long, fee: Long)
 
     /** The size of a script in bytes (`[BP-5]`). */
     case Size(bytes: Long)
@@ -38,6 +40,22 @@ object Pin {
     /** The Conway tiered reference-script fee of `size` bytes at mainnet parameters. */
     def referenceScriptFee(size: Long): Long =
         RefScriptFee.fee(size.toInt, params.minFeeRefScriptCostPerByte).value
+
+    /** The size fee of a transaction of `size` bytes at mainnet parameters. */
+    def sizeFee(size: Long): Long = params.txFeePerByte * size + params.txFeeFixed
+
+    /** The pin of a balanced transaction. */
+    def tx(transaction: Transaction): Pin.Tx = {
+        val budget = transaction.witnessSet.redeemers
+            .map(_.value.totalExUnits)
+            .getOrElse(ExUnits.zero)
+        Pin.Tx(
+          budget.memory,
+          budget.steps,
+          transaction.toCborForFeeCalculation.length.toLong,
+          transaction.body.value.fee.value
+        )
+    }
 
     /** The pin of one evaluation: the budget, the script size and the combined fee.
       *
