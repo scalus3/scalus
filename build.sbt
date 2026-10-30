@@ -1488,11 +1488,18 @@ logo :=
      |
      |""".stripMargin
 
+// `.noAlias`: no single-letter aliases (a, b, c, ...). They made sbt parse whole alias bodies
+// while it read any command with the same first letter (`clean` -> `c` = `precommit`), which cost
+// minutes per CI job before `commandSequence` (sbt/sbt#9945, finding F-2), and `c` alone ran a full
+// `precommit`.
 usefulTasks := Seq(
-  UsefulTask("~compile", "Compile with file-watch enabled"),
-  UsefulTask("quick", "Format all, compile and quick test everything on JVM"),
-  UsefulTask("precommit", "Format all, clean compile and test everything on JVM"),
-  UsefulTask("ci", "ci-jvm, ci-js, ci-native: format check, MiMa, tests on JVM, JS and Native"),
-  UsefulTask("benchmark", "Run benchmarks"),
-  UsefulTask("mima", "Check binary compatibility with the previous version using MiMa"),
+  UsefulTask("~compile", "Compile with file-watch enabled").noAlias,
+  UsefulTask("quick", "Format all, compile and quick test everything on JVM").noAlias,
+  UsefulTask("precommit", "Format all, clean compile and test everything on JVM").noAlias,
+  UsefulTask(
+    "ci",
+    "ci-jvm, ci-js, ci-native: format check, MiMa, tests on JVM, JS and Native"
+  ).noAlias,
+  UsefulTask("benchmark", "Run benchmarks").noAlias,
+  UsefulTask("mima", "Check binary compatibility with the previous version using MiMa").noAlias,
 )
