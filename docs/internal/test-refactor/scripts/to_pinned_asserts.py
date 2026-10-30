@@ -4,6 +4,14 @@
 Usage: to_pinned_asserts.py <file.scala> [<first-line> <last-line>]
        to_pinned_asserts.py --flip <file.scala>
        to_pinned_asserts.py --int-literals <file.scala>
+       to_pinned_asserts.py --migrate <file.scala>
+
+--migrate moves the legacy budget assertions to the D2 forms in one pass:
+  assertEvalWithBudget(s)(AndFee)(code, arg, expected, <budget>) -> assertEvalEq(expected)(code).at(arg)
+  assertEvalWith...(code, expected, <budget>)  (closed)          -> assertEvalEq(expected)(code)
+It prints one line per call to stdout: <line> TAB at|closed TAB <old literals>. A closed call keeps
+only its correctness check ([BP-1d]); its pin must be lifted to `.at` by hand, or dropped when the
+test already pins that operation.
 
 --int-literals shortens BigInt literals where the type argument makes them safe:
   assertEvalEq(BigInt(1))(min(BigInt(1), BigInt(2)))  -> assertEvalEq[BigInt](1)(min(1, 2))
@@ -185,8 +193,50 @@ def int_literals(path: str) -> None:
     print(f"{path}: {n} calls shortened")
 
 
+def migrate(path: str) -> None:
+    text = open(path).read()
+    out, pos = [], 0
+    for m in CALL.finditer(text):
+        if m.start() < pos:
+            continue
+        name = m.group(1)
+        spans, close = scan_args(text, m.end() - 1)
+        args = [text[a:b].strip() for a, b in spans]
+        budget, kept = args[-LEGACY[name]:], args[: -LEGACY[name]]
+        if name == "assertEvalWithBudgets" and not re.fullmatch(
+            r"Seq\(\s*compilerOptions\s*->\s*ExUnits\([^()]*\)\s*,?\s*\)", budget[0]
+        ):
+            print(f"{text.count(chr(10), 0, m.start()) + 1}\tSKIPPED\t{budget[0]}")
+            continue
+        line_start = text.rfind("\n", 0, m.start()) + 1
+        indent = re.match(r"\s*", text[line_start:]).group(0)
+        code, expected = kept[0], kept[-1]
+        at = f".at({kept[1]})" if len(kept) == 3 else ""
+        one_line = f"assertEvalEq({expected})({code}){at}"
+        if "\n" not in one_line and len(indent) + len(one_line) <= 100:
+            call = one_line
+        else:
+            lines = code.split("\n")
+            body = [indent + "    " + lines[0]] + [
+                indent + "    " + (l[len(indent) + 2 :] if l.startswith(indent + "  ") else l.lstrip())
+                for l in lines[1:]
+            ]
+            call = f"assertEvalEq({expected}):\n" + "\n".join(body)
+            if at:
+                call += f"\n{indent}{at}"
+        out.append(text[pos : m.start()] + call)
+        pos = close + 1
+        literals = " ".join(re.findall(r"ExUnits\([^()]*\)|Coin\([^()]*\)", " ".join(budget)))
+        line = text.count("\n", 0, m.start()) + 1
+        print(f"{line}\t{'at' if at else 'closed'}\t{literals}")
+    out.append(text[pos:])
+    open(path, "w").write("".join(out))
+
+
 if __name__ == "__main__":
-    if sys.argv[1] == "--int-literals":
+    if sys.argv[1] == "--migrate":
+        migrate(sys.argv[2])
+    elif sys.argv[1] == "--int-literals":
         int_literals(sys.argv[2])
     elif sys.argv[1] == "--flip":
         flip(sys.argv[2])

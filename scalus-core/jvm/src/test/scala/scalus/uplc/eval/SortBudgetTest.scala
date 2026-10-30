@@ -2,7 +2,6 @@ package scalus.uplc.eval
 
 import scalus.testing.Benchmark
 import org.scalatest.funsuite.AnyFunSuite
-import org.scalatest.Tag
 import scalus.*
 import scalus.cardano.ledger.{CardanoInfo, ExUnits}
 import scalus.cardano.onchain.plutus.prelude.List as SList

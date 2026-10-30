@@ -2,7 +2,6 @@ package scalus.testing
 
 import org.scalacheck.rng.Seed
 import org.scalacheck.{Arbitrary, Gen}
-import org.scalatest.Tag
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.ByteString
 

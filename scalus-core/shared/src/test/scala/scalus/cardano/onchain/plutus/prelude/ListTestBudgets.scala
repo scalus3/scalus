@@ -229,4 +229,640 @@ object ListTestBudgets extends BudgetTable {
       "prepended / (list: List[BigInt]) => list.prepended(BigInt(1)) @ Cons(2,Cons(3,Nil))",
       Pin.Eval(memory = 1_264, steps = 274_395, size = 16, fee = 333)
     )
+    pin(
+      "+: / (list: List[BigInt]) => BigInt(1) +: list @ Nil",
+      Pin.Eval(memory = 1_264, steps = 274_395, size = 16, fee = 333)
+    )
+    pin(
+      "+: / (list: List[BigInt]) => BigInt(1) +: list @ Cons(2,Nil)",
+      Pin.Eval(memory = 1_264, steps = 274_395, size = 16, fee = 333)
+    )
+    pin(
+      "+: / (list: List[BigInt]) => BigInt(1) +: list @ Cons(2,Cons(3,Nil))",
+      Pin.Eval(memory = 1_264, steps = 274_395, size = 16, fee = 333)
+    )
+    pin(
+      "prependedAll - empty prepend empty / (list: List[BigInt]) => list.prependedAll(List.empty[BigInt]) @ Nil",
+      Pin.Eval(memory = 2_032, steps = 330_033, size = 47, fee = 847)
+    )
+    pin(
+      "prependedAll - empty prepend single / (list: List[BigInt]) => list.prependedAll(List.singleton(BigInt(1))) @ Nil",
+      Pin.Eval(memory = 2_332, steps = 378_033, size = 53, fee = 957)
+    )
+    pin(
+      "prependedAll - single prepend empty / (list: List[BigInt]) => list.prependedAll(List.empty[BigInt]) @ Cons(1,Nil)",
+      Pin.Eval(memory = 2_964, steps = 499_966, size = 47, fee = 913)
+    )
+    pin(
+      "prependedAll - single prepend single / (list: List[BigInt]) => list.prependedAll(List.singleton(BigInt(1))) @ Cons(2,Nil)",
+      Pin.Eval(memory = 5_260, steps = 984_113, size = 53, fee = 1_170)
+    )
+    pin(
+      "prependedAll - two prepend single / (list: List[BigInt]) => list.prependedAll(List.singleton(BigInt(1))) @ Cons(2,Cons(3,Nil))",
+      Pin.Eval(memory = 5_260, steps = 984_113, size = 53, fee = 1_170)
+    )
+    pin(
+      "++: - empty ++: empty / (list: List[BigInt]) => List.empty[BigInt] ++: list @ Nil",
+      Pin.Eval(memory = 2_032, steps = 330_033, size = 47, fee = 847)
+    )
+    pin(
+      "++: - empty ++: single / (list: List[BigInt]) => List.empty[BigInt] ++: list @ Cons(1,Nil)",
+      Pin.Eval(memory = 2_964, steps = 499_966, size = 47, fee = 913)
+    )
+    pin(
+      "++: - single ++: empty / (list: List[BigInt]) => list ++: List.empty[BigInt] @ Cons(1,Nil)",
+      Pin.Eval(memory = 1_832, steps = 298_033, size = 41, fee = 743)
+    )
+    pin(
+      "++: - single ++: single / (list: List[BigInt]) => list ++: List.singleton(BigInt(2)) @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_328, steps = 814_180, size = 45, fee = 984)
+    )
+    pin(
+      "++: - two ++: single / (list: List[BigInt]) => list ++: List.singleton(BigInt(3)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 5_860, steps = 1_126_542, size = 45, fee = 1_095)
+    )
+    pin(
+      "appended / (list: List[BigInt]) => list.appended(BigInt(1)) @ Nil",
+      Pin.Eval(memory = 3_264, steps = 594_395, size = 46, fee = 922)
+    )
+    pin(
+      "appended / (list: List[BigInt]) => list.appended(BigInt(2)) @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_696, steps = 890_757, size = 46, fee = 1_026)
+    )
+    pin(
+      "appended / (list: List[BigInt]) => list.appended(BigInt(3)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 6_128, steps = 1_187_119, size = 46, fee = 1_130)
+    )
+    pin(
+      ":+ / (list: List[BigInt]) => list :+ BigInt(1) @ Nil",
+      Pin.Eval(memory = 3_264, steps = 594_395, size = 46, fee = 922)
+    )
+    pin(
+      ":+ / (list: List[BigInt]) => list :+ BigInt(2) @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_696, steps = 890_757, size = 46, fee = 1_026)
+    )
+    pin(
+      ":+ / (list: List[BigInt]) => list :+ BigInt(3) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 6_128, steps = 1_187_119, size = 46, fee = 1_130)
+    )
+    pin(
+      "appendedAll - empty append empty / (list: List[BigInt]) => list.appendedAll(List.empty[BigInt]) @ Nil",
+      Pin.Eval(memory = 2_764, steps = 516_466, size = 45, fee = 872)
+    )
+    pin(
+      "appendedAll - empty append single / (list: List[BigInt]) => list.appendedAll(List.singleton(BigInt(1))) @ Nil",
+      Pin.Eval(memory = 3_264, steps = 596_466, size = 49, fee = 967)
+    )
+    pin(
+      "appendedAll - single append empty / (list: List[BigInt]) => list.appendedAll(List.empty[BigInt]) @ Cons(1,Nil)",
+      Pin.Eval(memory = 2_764, steps = 516_466, size = 45, fee = 872)
+    )
+    pin(
+      "appendedAll - single append single / (list: List[BigInt]) => list.appendedAll(List.singleton(BigInt(2))) @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_796, steps = 908_828, size = 49, fee = 1_078)
+    )
+    pin(
+      "appendedAll - two append single / (list: List[BigInt]) => list.appendedAll(List.singleton(BigInt(3))) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 6_328, steps = 1_221_190, size = 49, fee = 1_189)
+    )
+    pin(
+      ":++ - empty :++ empty / (list: List[BigInt]) => list :++ List.empty[BigInt] @ Nil",
+      Pin.Eval(memory = 2_764, steps = 516_466, size = 45, fee = 872)
+    )
+    pin(
+      ":++ - empty :++ single / (list: List[BigInt]) => List.empty[BigInt] :++ list @ Cons(1,Nil)",
+      Pin.Eval(memory = 2_964, steps = 548_466, size = 44, fee = 871)
+    )
+    pin(
+      ":++ - single :++ empty / (list: List[BigInt]) => list :++ List.empty[BigInt] @ Cons(1,Nil)",
+      Pin.Eval(memory = 2_764, steps = 516_466, size = 45, fee = 872)
+    )
+    pin(
+      ":++ - single :++ single / (list: List[BigInt]) => list :++ List.singleton(BigInt(2)) @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_796, steps = 908_828, size = 49, fee = 1_078)
+    )
+    pin(
+      ":++ - two :++ single / (list: List[BigInt]) => list :++ List.singleton(BigInt(3)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 6_328, steps = 1_221_190, size = 49, fee = 1_189)
+    )
+    pin(
+      "concat - empty concat empty / (list: List[BigInt]) => list.concat(List.empty[BigInt]) @ Nil",
+      Pin.Eval(memory = 2_764, steps = 516_466, size = 45, fee = 872)
+    )
+    pin(
+      "concat - empty concat single / (list: List[BigInt]) => list.concat(List.singleton(BigInt(1))) @ Nil",
+      Pin.Eval(memory = 3_264, steps = 596_466, size = 49, fee = 967)
+    )
+    pin(
+      "concat - single concat empty / (list: List[BigInt]) => list.concat(List.empty[BigInt]) @ Cons(1,Nil)",
+      Pin.Eval(memory = 2_764, steps = 516_466, size = 45, fee = 872)
+    )
+    pin(
+      "concat - single concat single / (list: List[BigInt]) => list.concat(List.singleton(BigInt(2))) @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_796, steps = 908_828, size = 49, fee = 1_078)
+    )
+    pin(
+      "concat - two concat single / (list: List[BigInt]) => list.concat(List.singleton(BigInt(3))) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 6_328, steps = 1_221_190, size = 49, fee = 1_189)
+    )
+    pin(
+      "++ - empty ++ empty / (list: List[BigInt]) => list ++ List.empty[BigInt] @ Nil",
+      Pin.Eval(memory = 2_764, steps = 516_466, size = 45, fee = 872)
+    )
+    pin(
+      "++ - empty ++ single / (list: List[BigInt]) => List.empty[BigInt] ++ list @ Cons(1,Nil)",
+      Pin.Eval(memory = 2_964, steps = 548_466, size = 44, fee = 871)
+    )
+    pin(
+      "++ - single ++ empty / (list: List[BigInt]) => list ++ List.empty[BigInt] @ Cons(1,Nil)",
+      Pin.Eval(memory = 2_764, steps = 516_466, size = 45, fee = 872)
+    )
+    pin(
+      "++ - single ++ single / (list: List[BigInt]) => list ++ List.singleton(BigInt(2)) @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_796, steps = 908_828, size = 49, fee = 1_078)
+    )
+    pin(
+      "++ - two ++ single / (list: List[BigInt]) => list ++ List.singleton(BigInt(3)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 6_328, steps = 1_221_190, size = 49, fee = 1_189)
+    )
+    pin(
+      "map / (list: List[BigInt]) => list.map(_ + 1) @ Nil",
+      Pin.Eval(memory = 2_664, steps = 451_966, size = 55, fee = 1_012)
+    )
+    pin(
+      "map / (list: List[BigInt]) => list.map(_ + 1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 5_826, steps = 1_201_364, size = 55, fee = 1_248)
+    )
+    pin(
+      "map / (list: List[BigInt]) => list.map(_ + 1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 8_988, steps = 1_950_762, size = 55, fee = 1_485)
+    )
+    pin(
+      "flatMap - empty list, single mapper / (list: List[BigInt]) => list.flatMap(x => List.singleton(x + 1)) @ Nil",
+      Pin.Eval(memory = 3_464, steps = 579_966, size = 95, fee = 1_667)
+    )
+    pin(
+      "flatMap - single, single mapper / (list: List[BigInt]) => list.flatMap(x => List.singleton(x + 1)) @ Cons(1,Nil)",
+      Pin.Eval(memory = 8_458, steps = 1_691_797, size = 95, fee = 2_036)
+    )
+    pin(
+      "flatMap - two, single mapper / (list: List[BigInt]) => list.flatMap(x => List.singleton(x + 1)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 15_384, steps = 3_179_990, size = 95, fee = 2_542)
+    )
+    pin(
+      "flatMap - two, empty mapper / (list: List[BigInt]) => list.flatMap(_ => Nil) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 11_320, steps = 2_105_890, size = 82, fee = 2_035)
+    )
+    pin(
+      "flatMap - two, two-element mapper / (list: List[BigInt]) => list.flatMap(x => Cons(x + 10, Cons(x + 100, Nil))) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 19_548, steps = 4_270_090, size = 109, fee = 3_071)
+    )
+    pin(
+      "filter / (list: List[BigInt]) => list.filter(_ > 1) @ Nil",
+      Pin.Eval(memory = 2_664, steps = 451_966, size = 59, fee = 1_072)
+    )
+    pin(
+      "filter / (list: List[BigInt]) => list.filter(_ > 1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 5_561, steps = 1_025_785, size = 59, fee = 1_280)
+    )
+    pin(
+      "filter / (list: List[BigInt]) => list.filter(_ > 1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 8_990, steps = 1_751_966, size = 59, fee = 1_531)
+    )
+    pin(
+      "filterNot / (list: List[BigInt]) => list.filterNot(_ > 1) @ Nil",
+      Pin.Eval(memory = 2_664, steps = 451_966, size = 63, fee = 1_132)
+    )
+    pin(
+      "filterNot / (list: List[BigInt]) => list.filterNot(_ > 1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 6_293, steps = 1_210_147, size = 63, fee = 1_396)
+    )
+    pin(
+      "filterNot / (list: List[BigInt]) => list.filterNot(_ > 1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 9_390, steps = 1_815_966, size = 63, fee = 1_618)
+    )
+    pin(
+      "filterMap / (list: List[BigInt]) => list.filterMap(x => if x > 1 then Some(x + 1) else None) @ Nil",
+      Pin.Eval(memory = 3_564, steps = 595_966, size = 105, fee = 1_824)
+    )
+    pin(
+      "filterMap / (list: List[BigInt]) => list.filterMap(x => if x > 1 then Some(x + 1) else None) @ Cons(1,Nil)",
+      Pin.Eval(memory = 7_925, steps = 1_560_268, size = 105, fee = 2_145)
+    )
+    pin(
+      "filterMap / (list: List[BigInt]) => list.filterMap(x => if x > 1 then Some(x + 1) else None) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 14_780, steps = 3_401_094, size = 105, fee = 2_674)
+    )
+    pin(
+      "find / (list: List[BigInt]) => list.find(_ > 1) @ Nil",
+      Pin.Eval(memory = 2_432, steps = 394_033, size = 59, fee = 1_054)
+    )
+    pin(
+      "find / (list: List[BigInt]) => list.find(_ > 1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_565, steps = 796_067, size = 59, fee = 1_206)
+    )
+    pin(
+      "find / (list: List[BigInt]) => list.find(_ > 1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 6_862, steps = 1_308_614, size = 59, fee = 1_376)
+    )
+    pin(
+      "findMap / (list: List[BigInt]) => list.findMap(x => if x > 1 then Some(x + 1) else None) @ Nil",
+      Pin.Eval(memory = 2_432, steps = 394_033, size = 88, fee = 1_489)
+    )
+    pin(
+      "findMap / (list: List[BigInt]) => list.findMap(x => if x > 1 then Some(x + 1) else None) @ Cons(1,Nil)",
+      Pin.Eval(memory = 6_229, steps = 1_218_550, size = 88, fee = 1_768)
+    )
+    pin(
+      "findMap / (list: List[BigInt]) => list.findMap(x => if x > 1 then Some(x + 1) else None) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 10_824, steps = 2_366_087, size = 88, fee = 2_116)
+    )
+    pin(
+      "foldLeft / (list: List[BigInt]) => list.foldLeft(BigInt(0))(_ + _) @ Nil",
+      Pin.Eval(memory = 3_064, steps = 510_777, size = 64, fee = 1_174)
+    )
+    pin(
+      "foldLeft / (list: List[BigInt]) => list.foldLeft(BigInt(0))(_ + _) @ Cons(1,Nil)",
+      Pin.Eval(memory = 6_262, steps = 1_164_772, size = 64, fee = 1_406)
+    )
+    pin(
+      "foldLeft / (list: List[BigInt]) => list.foldLeft(BigInt(0))(_ + _) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 9_460, steps = 1_818_767, size = 64, fee = 1_637)
+    )
+    pin(
+      "foldRight / (list: List[BigInt]) => list.foldRight(BigInt(0))(_ + _) @ Nil",
+      Pin.Eval(memory = 2_864, steps = 478_777, size = 57, fee = 1_055)
+    )
+    pin(
+      "foldRight / (list: List[BigInt]) => list.foldRight(BigInt(0))(_ + _) @ Cons(1,Nil)",
+      Pin.Eval(memory = 5_862, steps = 1_100_772, size = 57, fee = 1_273)
+    )
+    pin(
+      "foldRight / (list: List[BigInt]) => list.foldRight(BigInt(0))(_ + _) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 8_860, steps = 1_722_767, size = 57, fee = 1_491)
+    )
+    pin(
+      "count - empty list / (list: List[BigInt]) => list.count(_ > 1) @ Nil",
+      Pin.Eval(memory = 2_864, steps = 478_777, size = 69, fee = 1_235)
+    )
+    pin(
+      "count - single, _ > 0 / (list: List[BigInt]) => list.count(_ > 0) @ Cons(1,Nil)",
+      Pin.Eval(memory = 6_663, steps = 1_274_062, size = 69, fee = 1_512)
+    )
+    pin(
+      "count - single, _ > 1 / (list: List[BigInt]) => list.count(_ > 1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 6_261, steps = 1_108_854, size = 69, fee = 1_477)
+    )
+    pin(
+      "count - two, _ > 1 / (list: List[BigInt]) => list.count(_ > 1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 10_060, steps = 1_904_139, size = 69, fee = 1_753)
+    )
+    pin(
+      "count - two, _ > 2 / (list: List[BigInt]) => list.count(_ > 2) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 9_658, steps = 1_738_931, size = 69, fee = 1_718)
+    )
+    pin(
+      "indexOfOption - empty list / (list: List[BigInt]) => list.indexOfOption(BigInt(1)) @ Nil",
+      Pin.Eval(memory = 2_832, steps = 458_033, size = 86, fee = 1_487)
+    )
+    pin(
+      "indexOfOption - single, found / (list: List[BigInt]) => list.indexOfOption(BigInt(1)) @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_829, steps = 1_906_388, size = 86, fee = 1_707)
+    )
+    pin(
+      "indexOfOption - single, not found / (list: List[BigInt]) => list.indexOfOption(BigInt(2)) @ Cons(1,Nil)",
+      Pin.Eval(memory = 5_035, steps = 1_945_784, size = 86, fee = 1_721)
+    )
+    pin(
+      "indexOfOption - two, found at 1 / (list: List[BigInt]) => list.indexOfOption(BigInt(2)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 7_032, steps = 3_394_139, size = 86, fee = 1_941)
+    )
+    pin(
+      "indexOfOption - two, not found / (list: List[BigInt]) => list.indexOfOption(BigInt(3)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 7_238, steps = 3_433_535, size = 86, fee = 1_956)
+    )
+    pin(
+      "indexOf - empty list / (list: List[BigInt]) => list.indexOf(BigInt(1)) @ Nil",
+      Pin.Eval(memory = 2_632, steps = 426_033, size = 55, fee = 1_008)
+    )
+    pin(
+      "indexOf - single, found / (list: List[BigInt]) => list.indexOf(BigInt(1)) @ Cons(1,Nil)",
+      Pin.Eval(memory = 3_433, steps = 1_588_576, size = 55, fee = 1_138)
+    )
+    pin(
+      "indexOf - single, not found / (list: List[BigInt]) => list.indexOf(BigInt(2)) @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_835, steps = 1_913_784, size = 55, fee = 1_242)
+    )
+    pin(
+      "indexOf - two, found at 1 / (list: List[BigInt]) => list.indexOf(BigInt(2)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 5_636, steps = 3_076_327, size = 55, fee = 1_373)
+    )
+    pin(
+      "indexOf - two, not found / (list: List[BigInt]) => list.indexOf(BigInt(3)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 7_038, steps = 3_401_535, size = 55, fee = 1_477)
+    )
+    pin(
+      "lastOption / (list: List[BigInt]) => list.lastOption @ Nil",
+      Pin.Eval(memory = 2_132, steps = 346_033, size = 50, fee = 898)
+    )
+    pin(
+      "lastOption / (list: List[BigInt]) => list.lastOption @ Cons(1,Nil)",
+      Pin.Eval(memory = 3_828, steps = 770_979, size = 50, fee = 1_027)
+    )
+    pin(
+      "lastOption / (list: List[BigInt]) => list.lastOption @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 5_360, steps = 1_085_412, size = 50, fee = 1_138)
+    )
+    pin(
+      "last / (l: List[BigInt]) => l.last @ Cons(1,Nil)",
+      Pin.Eval(memory = 6_288, steps = 1_551_348, size = 95, fee = 1_900)
+    )
+    pin(
+      "last / (l: List[BigInt]) => l.last @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 7_820, steps = 1_865_781, size = 95, fee = 2_011)
+    )
+    pin(
+      "headOption / (list: List[BigInt]) => list.headOption @ Nil",
+      Pin.Eval(memory = 932, steps = 154_033, size = 30, fee = 515)
+    )
+    pin(
+      "headOption / (list: List[BigInt]) => list.headOption @ Cons(1,Nil)",
+      Pin.Eval(memory = 2_096, steps = 424_546, size = 30, fee = 602)
+    )
+    pin(
+      "headOption / (list: List[BigInt]) => list.headOption @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 2_096, steps = 424_546, size = 30, fee = 602)
+    )
+    pin(
+      "head / (list: List[BigInt]) => list.head @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 4_256, steps = 1_156_915, size = 73, fee = 1_424)
+    )
+    pin(
+      "length / (list: List[BigInt]) => list.length @ Nil",
+      Pin.Eval(memory = 2_264, steps = 382_777, size = 51, fee = 924)
+    )
+    pin(
+      "length / (list: List[BigInt]) => list.length @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_930, steps = 936_028, size = 51, fee = 1_117)
+    )
+    pin(
+      "length / (list: List[BigInt]) => list.length @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 7_596, steps = 1_489_279, size = 51, fee = 1_311)
+    )
+    pin(
+      "size / (list: List[BigInt]) => list.size @ Nil",
+      Pin.Eval(memory = 2_264, steps = 382_777, size = 51, fee = 924)
+    )
+    pin(
+      "size / (list: List[BigInt]) => list.size @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_930, steps = 936_028, size = 51, fee = 1_117)
+    )
+    pin(
+      "size / (list: List[BigInt]) => list.size @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 7_596, steps = 1_489_279, size = 51, fee = 1_311)
+    )
+    pin(
+      "tail / (list: List[BigInt]) => list.tail @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 1_132, steps = 186_033, size = 39, fee = 664)
+    )
+    pin(
+      "drop - empty drop 1 / (list: List[BigInt]) => list.drop(1) @ Nil",
+      Pin.Eval(memory = 3_033, steps = 533_870, size = 44, fee = 874)
+    )
+    pin(
+      "drop - single drop 1 / (list: List[BigInt]) => list.drop(1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 3_839, steps = 879_789, size = 44, fee = 945)
+    )
+    pin(
+      "drop - two drop 1 / (list: List[BigInt]) => list.drop(1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 3_839, steps = 879_789, size = 44, fee = 945)
+    )
+    pin(
+      "drop - two drop 2 / (list: List[BigInt]) => list.drop(2) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 3_839, steps = 881_746, size = 44, fee = 946)
+    )
+    pin(
+      "drop - two drop 0 / (list: List[BigInt]) => list.drop(0) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 2_833, steps = 501_870, size = 44, fee = 860)
+    )
+    pin(
+      "drop - two drop -1 / (list: List[BigInt]) => list.drop(-1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 2_833, steps = 501_870, size = 44, fee = 860)
+    )
+    pin(
+      "dropRight - empty drop 1 / (list: List[BigInt]) => list.dropRight(1) @ Nil",
+      Pin.Eval(memory = 8_421, steps = 1_841_559, size = 159, fee = 3_004)
+    )
+    pin(
+      "dropRight - single drop 1 / (list: List[BigInt]) => list.dropRight(1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 14_412, steps = 3_434_368, size = 159, fee = 3_465)
+    )
+    pin(
+      "dropRight - two drop 1 / (list: List[BigInt]) => list.dropRight(1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 21_097, steps = 5_221_967, size = 159, fee = 3_979)
+    )
+    pin(
+      "dropRight - two drop 2 / (list: List[BigInt]) => list.dropRight(2) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 20_403, steps = 5_027_177, size = 159, fee = 3_925)
+    )
+    pin(
+      "dropRight - two drop 0 / (list: List[BigInt]) => list.dropRight(0) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 4_197, steps = 769_655, size = 159, fee = 2_683)
+    )
+    pin(
+      "dropRight - two drop -1 / (list: List[BigInt]) => list.dropRight(-1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 4_197, steps = 769_655, size = 159, fee = 2_683)
+    )
+    pin(
+      "dropWhile - empty list / (list: List[BigInt]) => list.dropWhile(_ < 1) @ Nil",
+      Pin.Eval(memory = 2_432, steps = 394_033, size = 45, fee = 844)
+    )
+    pin(
+      "dropWhile - single, _ < 1 / (list: List[BigInt]) => list.dropWhile(_ < 1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 3_765, steps = 668_067, size = 45, fee = 941)
+    )
+    pin(
+      "dropWhile - two, _ < 3 / (list: List[BigInt]) => list.dropWhile(_ < 3) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 6_698, steps = 1_198_101, size = 45, fee = 1_148)
+    )
+    pin(
+      "dropWhile - two, _ < 2 / (list: List[BigInt]) => list.dropWhile(_ < 2) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 5_898, steps = 1_070_101, size = 45, fee = 1_093)
+    )
+    pin(
+      "dropWhile - two, _ < 1 / (list: List[BigInt]) => list.dropWhile(_ < 1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 3_765, steps = 668_067, size = 45, fee = 941)
+    )
+    pin(
+      "deleteFirst - empty list / (list: List[BigInt]) => list.deleteFirst(BigInt(1)) @ Nil",
+      Pin.Eval(memory = 2_432, steps = 394_033, size = 48, fee = 889)
+    )
+    pin(
+      "deleteFirst - single, found / (list: List[BigInt]) => list.deleteFirst(BigInt(1)) @ Cons(1,Nil)",
+      Pin.Eval(memory = 3_233, steps = 1_556_576, size = 48, fee = 1_019)
+    )
+    pin(
+      "deleteFirst - two, head match / (list: List[BigInt]) => list.deleteFirst(BigInt(1)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 3_233, steps = 1_556_576, size = 48, fee = 1_019)
+    )
+    pin(
+      "deleteFirst - two, no match / (list: List[BigInt]) => list.deleteFirst(BigInt(3)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 6_698, steps = 3_279_843, size = 48, fee = 1_343)
+    )
+    pin(
+      "deleteFirst - two, tail match / (list: List[BigInt]) => list.deleteFirst(BigInt(2)) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 5_366, steps = 2_999_481, size = 48, fee = 1_246)
+    )
+    pin(
+      "deleteFirst - two duplicates, head only / (list: List[BigInt]) => list.deleteFirst(BigInt(1)) @ Cons(1,Cons(1,Nil))",
+      Pin.Eval(memory = 3_233, steps = 1_556_576, size = 48, fee = 1_019)
+    )
+    pin(
+      "take - empty take 1 / (list: List[BigInt]) => list.take(1) @ Nil",
+      Pin.Eval(memory = 3_033, steps = 533_870, size = 55, fee = 1_039)
+    )
+    pin(
+      "take - single take 1 / (list: List[BigInt]) => list.take(1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 5_568, steps = 1_151_277, size = 55, fee = 1_230)
+    )
+    pin(
+      "take - two take 1 / (list: List[BigInt]) => list.take(1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 5_568, steps = 1_151_277, size = 55, fee = 1_230)
+    )
+    pin(
+      "take - two take 3 / (list: List[BigInt]) => list.take(3) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 8_503, steps = 1_832_684, size = 55, fee = 1_448)
+    )
+    pin(
+      "take - two take 0 / (list: List[BigInt]) => list.take(0) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 2_833, steps = 501_870, size = 55, fee = 1_025)
+    )
+    pin(
+      "take - two take -1 / (list: List[BigInt]) => list.take(-1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 2_833, steps = 501_870, size = 55, fee = 1_025)
+    )
+    pin(
+      "takeRight - empty take 1 / (list: List[BigInt]) => list.takeRight(1) @ Nil",
+      Pin.Eval(memory = 5_461, steps = 1_177_533, size = 125, fee = 2_275)
+    )
+    pin(
+      "takeRight - single take 1 / (list: List[BigInt]) => list.takeRight(1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 11_880, steps = 3_032_186, size = 125, fee = 2_780)
+    )
+    pin(
+      "takeRight - two take 1 / (list: List[BigInt]) => list.takeRight(1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 15_673, steps = 4_026_311, size = 125, fee = 3_070)
+    )
+    pin(
+      "takeRight - two take 3 / (list: List[BigInt]) => list.takeRight(3) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 18_299, steps = 4_886_839, size = 125, fee = 3_284)
+    )
+    pin(
+      "takeRight - two take 0 / (list: List[BigInt]) => list.takeRight(0) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 3_665, steps = 655_803, size = 125, fee = 2_134)
+    )
+    pin(
+      "takeRight - two take -1 / (list: List[BigInt]) => list.takeRight(-1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 3_665, steps = 655_803, size = 125, fee = 2_134)
+    )
+    pin(
+      "takeWhile - empty list / (list: List[BigInt]) => list.takeWhile(_ < 1) @ Nil",
+      Pin.Eval(memory = 2_432, steps = 394_033, size = 50, fee = 919)
+    )
+    pin(
+      "takeWhile - single, _ < 1 / (list: List[BigInt]) => list.takeWhile(_ < 1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 3_765, steps = 668_067, size = 50, fee = 1_016)
+    )
+    pin(
+      "takeWhile - two, _ < 3 / (list: List[BigInt]) => list.takeWhile(_ < 3) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 7_762, steps = 1_502_825, size = 50, fee = 1_307)
+    )
+    pin(
+      "takeWhile - two, _ < 2 / (list: List[BigInt]) => list.takeWhile(_ < 2) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 6_430, steps = 1_222_463, size = 50, fee = 1_210)
+    )
+    pin(
+      "takeWhile - two, _ < 1 / (list: List[BigInt]) => list.takeWhile(_ < 1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 3_765, steps = 668_067, size = 50, fee = 1_016)
+    )
+    pin(
+      "distinct - empty / (list: List[BigInt]) => list.distinct @ Nil",
+      Pin.Eval(memory = 3_732, steps = 602_033, size = 104, fee = 1_819)
+    )
+    pin(
+      "distinct - single / (list: List[BigInt]) => list.distinct @ Cons(1,Nil)",
+      Pin.Eval(memory = 8_296, steps = 1_466_757, size = 104, fee = 2_145)
+    )
+    pin(
+      "distinct - two unique / (list: List[BigInt]) => list.distinct @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 14_461, steps = 3_622_024, size = 104, fee = 2_656)
+    )
+    pin(
+      "distinct - two duplicates / (list: List[BigInt]) => list.distinct @ Cons(1,Cons(1,Nil))",
+      Pin.Eval(memory = 11_597, steps = 3_029_300, size = 104, fee = 2_448)
+    )
+    pin(
+      "distinct - three with one duplicate / (list: List[BigInt]) => list.distinct @ Cons(1,Cons(2,Cons(1,Nil)))",
+      Pin.Eval(memory = 19_363, steps = 6_475_110, size = 104, fee = 3_145)
+    )
+    pin(
+      "diff - empty diff empty / (list: List[BigInt]) => list.diff(List.empty[BigInt]) @ Nil",
+      Pin.Eval(memory = 2_032, steps = 330_033, size = 70, fee = 1_192)
+    )
+    pin(
+      "diff - single diff empty / (list: List[BigInt]) => list.diff(List.empty[BigInt]) @ Cons(1,Nil)",
+      Pin.Eval(memory = 2_432, steps = 394_033, size = 70, fee = 1_219)
+    )
+    pin(
+      "diff - empty diff single / (list: List[BigInt]) => list.diff(List.singleton(BigInt(1))) @ Nil",
+      Pin.Eval(memory = 2_032, steps = 330_033, size = 73, fee = 1_237)
+    )
+    pin(
+      "diff - single diff matching single / (list: List[BigInt]) => list.diff(List.singleton(BigInt(1))) @ Cons(1,Nil)",
+      Pin.Eval(memory = 5_533, steps = 1_924_576, size = 73, fee = 1_554)
+    )
+    pin(
+      "diff - two diff matching tail / (list: List[BigInt]) => list.diff(List.singleton(BigInt(2))) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 8_066, steps = 3_431_481, size = 73, fee = 1_808)
+    )
+    pin(
+      "diff - two diff non-matching / (list: List[BigInt]) => list.diff(List.singleton(BigInt(3))) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 9_398, steps = 3_711_843, size = 73, fee = 1_905)
+    )
+    pin(
+      "init / (l: List[BigInt]) => l.init @ Cons(1,Nil)",
+      Pin.Eval(memory = 15_312, steps = 3_578_368, size = 194, fee = 4_052)
+    )
+    pin(
+      "init / (l: List[BigInt]) => l.init @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 21_997, steps = 5_365_967, size = 194, fee = 4_567)
+    )
+    pin(
+      "reverse / (list: List[BigInt]) => list.reverse @ Nil",
+      Pin.Eval(memory = 2_264, steps = 387_966, size = 51, fee = 924)
+    )
+    pin(
+      "reverse / (list: List[BigInt]) => list.reverse @ Cons(1,Nil)",
+      Pin.Eval(memory = 5_060, steps = 952_113, size = 51, fee = 1_126)
+    )
+    pin(
+      "reverse / (list: List[BigInt]) => list.reverse @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 7_856, steps = 1_516_260, size = 51, fee = 1_328)
+    )
+    pin(
+      "reverse / (list: List[BigInt]) => list.reverse @ Cons(1,Cons(2,Cons(3,Nil)))",
+      Pin.Eval(memory = 10_652, steps = 2_080_407, size = 51, fee = 1_530)
+    )
+    pin(
+      "foreach / (list: List[BigInt]) => list.foreach(_ + 1) @ Nil",
+      Pin.Eval(memory = 2_432, steps = 394_033, size = 40, fee = 769)
+    )
+    pin(
+      "foreach / (list: List[BigInt]) => list.foreach(_ + 1) @ Cons(1,Nil)",
+      Pin.Eval(memory = 4_564, steps = 750_777, size = 40, fee = 918)
+    )
+    pin(
+      "foreach / (list: List[BigInt]) => list.foreach(_ + 1) @ Cons(1,Cons(2,Nil))",
+      Pin.Eval(memory = 6_696, steps = 1_107_521, size = 40, fee = 1_067)
+    )
 }
