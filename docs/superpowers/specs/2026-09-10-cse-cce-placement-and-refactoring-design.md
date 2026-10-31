@@ -386,6 +386,7 @@ quantified rather than assumed, and it belongs in the CHANGELOG.
   matches exist in the transform layer today, 13 of them full rewrites. Plutus writes
   congruence once in 12 lines (`Core/Plated.hs:56-76`) and 20 passes use it. Estimated
   -200 to -300 lines. Independent of this work.
+  Superseded by [One traversal for UPLC `Term`](2026-10-27-term-traversal-design.md).
 - **Not doing:** Kiama (measured 34-46x hand-written, unmaintained since 2023, JVM-only,
   and `Constructor.newInstance` cannot construct Scala 3 `enum` cases); recursion schemes
   and `Fix` (real allocation cost in Scala); Trees That Grow (GHC's own record: +20%
