@@ -13,6 +13,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.cardano.ledger.Word64
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.test.ArbitraryInstances
+import scalus.uplc.internal.TermTraversal.foldLeft
 
 import scala.language.implicitConversions
 import scala.util.Try
@@ -780,18 +781,10 @@ class CommonSubexpressionEliminationTest
         assert(termBits(db) > 0)
     }
 
-    private def maxVarIndex(t: Term): Int = t match
-        case Var(n, _)          => n.index
-        case Const(_, _)        => Int.MinValue
-        case Builtin(_, _)      => Int.MinValue
-        case Error(_)           => Int.MinValue
-        case LamAbs(_, body, _) => maxVarIndex(body)
-        case Apply(f, arg, _)   => maxVarIndex(f) max maxVarIndex(arg)
-        case Force(inner, _)    => maxVarIndex(inner)
-        case Delay(inner, _)    => maxVarIndex(inner)
-        case Constr(_, args, _) => args.map(maxVarIndex).foldLeft(Int.MinValue)(_ max _)
-        case Case(arg, cases, _) =>
-            cases.map(maxVarIndex).foldLeft(maxVarIndex(arg))(_ max _)
+    private def maxVarIndex(t: Term): Int = t.foldLeft(Int.MinValue) {
+        case (max, Var(n, _)) => max.max(n.index)
+        case (max, _)         => max
+    }
 
     test("termBits agrees with the flat encoder on Constr, Case and Error") {
         val named = Case(

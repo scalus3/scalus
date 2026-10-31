@@ -5,6 +5,7 @@ import scalus.*
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.{BuiltinList, ByteString}
 import scalus.compiler.compile
+import scalus.uplc.internal.TermTraversal.exists
 
 /** Tests for the dropList builtin function.
   *
@@ -219,13 +220,10 @@ class DropListTest extends AnyFunSuite {
         val uplc = sir.toUplc()
 
         // Helper to check if term contains DropList
-        def containsDropList(term: Term): Boolean = term match
+        def containsDropList(term: Term): Boolean = term.exists {
             case Builtin(DefaultFun.DropList, _) => true
-            case Apply(f, arg, _)                => containsDropList(f) || containsDropList(arg)
-            case LamAbs(_, body, _)              => containsDropList(body)
-            case Force(t, _)                     => containsDropList(t)
-            case Delay(t, _)                     => containsDropList(t)
             case _                               => false
+        }
 
         assert(
           containsDropList(uplc),

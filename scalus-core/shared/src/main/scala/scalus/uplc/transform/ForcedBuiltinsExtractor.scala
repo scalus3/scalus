@@ -4,6 +4,7 @@ import scalus.*
 import scalus.uplc.Term.*
 import scalus.uplc.{DefaultFun, Meaning, Term}
 import scalus.uplc.eval.{Log, Logger}
+import scalus.uplc.internal.TermTraversal.{mapChildren, visit}
 
 import scala.collection.mutable
 
@@ -36,25 +37,28 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
                 case None    => Some(increment)
             }
 
-        def count(term: Term, insideLambda: Boolean): Unit = term match
-            case Apply(f, arg, _)   => count(f, insideLambda); count(arg, insideLambda)
-            case LamAbs(_, body, _) => count(body, insideLambda = true)
+        // Lambdas entered and not yet exited: a node is inside a lambda when this is positive.
+        var lambdaDepth = 0
+        term.visit {
+            case LamAbs(_, _, _) =>
+                lambdaDepth += 1
+                true
+            // A fully forced builtin is counted as one occurrence; its inner Force is not visited.
             case Force(Force(Builtin(bn, _), _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 2
                     && !exceptBuiltins.contains(bn) =>
-                countForcedBuiltin(bn, insideLambda)
+                countForcedBuiltin(bn, lambdaDepth > 0)
+                false
             case Force(Builtin(bn, _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 1
                     && !exceptBuiltins.contains(bn) =>
-                countForcedBuiltin(bn, insideLambda)
-            case Force(t, _)        => count(t, insideLambda)
-            case Delay(t, _)        => count(t, insideLambda)
-            case Constr(_, args, _) => args.foreach(count(_, insideLambda))
-            case Case(scrutinee, cases, _) =>
-                count(scrutinee, insideLambda); cases.foreach(count(_, insideLambda))
-            case _: Var | _: Const | _: Builtin | _: Error => ()
-
-        count(term, insideLambda = false)
+                countForcedBuiltin(bn, lambdaDepth > 0)
+                false
+            case _ => true
+        } {
+            case LamAbs(_, _, _) => lambdaDepth -= 1
+            case _               => ()
+        }
 
         // Pass 2: extract only builtins used 2+ times
         var counter = 0
@@ -69,7 +73,6 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
         val extracted = mutable.Map.empty[DefaultFun, (Term, String)]
 
         def go(term: Term, env: Map[String, Term]): Term = term match
-            case Apply(f, arg, ann)      => Apply(go(f, env), go(arg, env), ann)
             case LamAbs(name, body, ann) => LamAbs(name, go(body, env - name), ann)
             case Force(Force(Builtin(bn, _), _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 2
@@ -87,16 +90,7 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
                     extracted.getOrElseUpdate(bn, (term, freshName(s"__$bn", env)))
                 logger.log(s"Replacing Forced builtin with Var: $name")
                 vr(name)
-            case Force(t, ann)          => Force(go(t, env), ann)
-            case Delay(t, ann)          => Delay(go(t, env), ann)
-            case Constr(tag, args, ann) => Constr(tag, args.map(arg => go(arg, env)), ann)
-            case Case(scrutinee, cases, ann) =>
-                Case(
-                  go(scrutinee, env),
-                  cases.map(c => go(c, env)),
-                  ann
-                )
-            case _: Var | _: Const | _: Builtin | _: Error => term
+            case _ => term.mapChildren(go(_, env))
 
         val term1 = go(term, Map.empty)
         // optimization should be deterministic, so we sort the extracted terms by name

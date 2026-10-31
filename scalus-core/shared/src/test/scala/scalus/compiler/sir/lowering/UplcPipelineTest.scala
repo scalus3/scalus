@@ -61,21 +61,13 @@ class UplcPipelineTest extends AnyFunSuite {
     }
 
     test("bug 3: V1-targeted optimization uses V1V2Optimizer (no Case/Constr terms)") {
-        def containsCaseOrConstr(t: Term): Boolean = t match
-            case Term.Case(_, _, _)   => true
-            case Term.Constr(_, _, _) => true
-            case Term.Apply(f, a, _)  => containsCaseOrConstr(f) || containsCaseOrConstr(a)
-            case Term.LamAbs(_, b, _) => containsCaseOrConstr(b)
-            case Term.Force(b, _)     => containsCaseOrConstr(b)
-            case Term.Delay(b, _)     => containsCaseOrConstr(b)
-            case _                    => false
         val opts = Options(
           targetLoweringBackend = TargetLoweringBackend.ScottEncodingLowering,
           targetLanguage = Language.PlutusV1,
           targetProtocolVersion = MajorProtocolVersion.plominPV
         )
         val term = fixtureSir.toUplc(using opts)(optimizeUplc = true)
-        assert(!containsCaseOrConstr(term), "V1 scripts must not contain Case/Constr")
+        assert(!term.usesConstrOrCase, "V1 scripts must not contain Case/Constr")
     }
 
     test("bug 4: given Options.release strips traces on the toUplc path") {

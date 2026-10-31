@@ -3,6 +3,9 @@ package scalus.uplc.transform
 import scalus.uplc.{DefaultFun, DefaultUni, Meaning, NamedDeBruijn, Term, TypeScheme}
 import scalus.uplc.Term.*
 
+import scalus.uplc.internal.TermTraversal
+import scalus.uplc.internal.TermTraversal.foreach
+
 import scala.collection.mutable
 
 /** Static analysis utilities for UPLC terms.
@@ -15,16 +18,11 @@ object TermAnalysis:
     /** Reserve bound and free names: lam x. Apply(x, y) contributes both x and y. */
     private[transform] def collectNames(t: Term): mutable.HashSet[String] = {
         val names = mutable.HashSet.empty[String]
-        def go(t: Term): Unit = t match
-            case Var(NamedDeBruijn(n, _), _)      => names += n
-            case LamAbs(n, body, _)               => names += n; go(body)
-            case Apply(f, arg, _)                 => go(f); go(arg)
-            case Force(inner, _)                  => go(inner)
-            case Delay(inner, _)                  => go(inner)
-            case Constr(_, args, _)               => args.foreach(go)
-            case Case(arg, cases, _)              => go(arg); cases.foreach(go)
-            case _: Const | _: Builtin | _: Error => ()
-        go(t)
+        t.foreach {
+            case Var(NamedDeBruijn(n, _), _) => names += n
+            case LamAbs(n, _, _)             => names += n
+            case _                           => ()
+        }
         names
     }
 
@@ -182,15 +180,7 @@ object TermAnalysis:
           * @return
           *   the set of free variable names
           */
-        def freeVars: Set[String] = term match
-            case Var(NamedDeBruijn(n, _), _)      => Set(n)
-            case LamAbs(n, body, _)               => body.freeVars - n
-            case Apply(f, a, _)                   => f.freeVars ++ a.freeVars
-            case Force(t, _)                      => t.freeVars
-            case Delay(t, _)                      => t.freeVars
-            case Constr(_, args, _)               => args.flatMap(_.freeVars).toSet
-            case Case(scrut, cases, _)            => scrut.freeVars ++ cases.flatMap(_.freeVars)
-            case _: Const | _: Builtin | _: Error => Set.empty
+        def freeVars: Set[String] = TermTraversal.freeVars(term)
 
         /** Checks if this term is pure (guaranteed not to fail during evaluation).
           *

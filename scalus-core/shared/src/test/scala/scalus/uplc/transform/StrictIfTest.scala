@@ -8,6 +8,7 @@ import scalus.uplc.Term
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM
+import scalus.utils.ScalusSourcePos
 
 import scala.language.implicitConversions
 
@@ -386,4 +387,13 @@ class StrictIfTest extends AnyFunSuite:
 
         assert(once == twice)
         assert(twice == thrice)
+    }
+
+    test("a lazy if that stays lazy keeps its source position") {
+        val pos = ScalusSourcePos("Foo.scala", 7, 4, 7, 30)
+        // An Apply branch cannot be strict, so the if stays lazy.
+        val input = lazyIf(vr"c", Apply(vr"g", vr"x"), vr"y").withPos(pos)
+        val result = StrictIf(input)
+        assert(result == input)
+        assert(result.annotation.pos == pos)
     }

@@ -15,6 +15,7 @@ import scalus.uplc.builtin.Data.{toData, B, Constr, I}
 import scalus.uplc.eval.{ExBudgetCategory, PlutusVM, Result}
 import scalus.uplc.{Constant, PlutusV3, Program, Term}
 import scalus.uplc.Term.asTerm
+import scalus.uplc.internal.TermTraversal.{foreach, nodeCount}
 
 /** Cost analysis: per-builtin breakdown comparing Scalus MPF16o vs Aiken MPF.
   *
@@ -37,6 +38,16 @@ class MpfCostAnalysisTest extends AnyFunSuite {
     )
 
     private given PlutusVM = PlutusVM.makePlutusV3VM()
+
+    /** How often each builtin occurs in `term`, by name. */
+    private def countBuiltins(term: Term): Map[String, Int] = {
+        val counts = collection.mutable.Map[String, Int]().withDefaultValue(0)
+        term.foreach {
+            case Term.Builtin(fun, _) => counts(fun.toString) += 1
+            case _                    => ()
+        }
+        counts.toMap
+    }
 
     private val exPrices = ExUnitPrices(
       priceMemory = NonNegativeInterval(0.0577, precision = 15),
@@ -236,55 +247,18 @@ class MpfCostAnalysisTest extends AnyFunSuite {
               s"$name: ${prog.cborEncoded.length} CBOR bytes, ${uplc.split('\n').length} UPLC lines"
             )
             // Also show builtin usage
-            val builtins = scala.collection.mutable.Map[String, Int]().withDefaultValue(0)
-            def walk(t: Term): Unit = t match
-                case Term.Builtin(fun, _)      => builtins(fun.toString) += 1
-                case Term.LamAbs(_, body, _)   => walk(body)
-                case Term.Apply(f, arg, _)     => walk(f); walk(arg)
-                case Term.Force(t, _)          => walk(t)
-                case Term.Delay(t, _)          => walk(t)
-                case Term.Constr(_, args, _)   => args.foreach(walk)
-                case Term.Case(scrut, alts, _) => walk(scrut); alts.foreach(walk)
-                case _                         => ()
-            walk(prog.term)
+            val builtins = countBuiltins(prog.term)
             info(
               s"  builtins: ${builtins.toSeq.sortBy(-_._2).map((n, c) => s"$n($c)").mkString(", ")}"
             )
     }
 
     test("UPLC term count comparison", Benchmark) {
-        def countTerms(term: Term): Int = term match
-            case Term.Var(_, _)            => 1
-            case Term.LamAbs(_, body, _)   => 1 + countTerms(body)
-            case Term.Apply(f, arg, _)     => 1 + countTerms(f) + countTerms(arg)
-            case Term.Force(t, _)          => 1 + countTerms(t)
-            case Term.Delay(t, _)          => 1 + countTerms(t)
-            case Term.Const(_, _)          => 1
-            case Term.Builtin(_, _)        => 1
-            case _: Term.Error             => 1
-            case Term.Constr(_, args, _)   => 1 + args.map(countTerms).sum
-            case Term.Case(scrut, alts, _) => 1 + countTerms(scrut) + alts.map(countTerms).sum
-
-        def countBuiltins(term: Term): Map[String, Int] = {
-            val counts = collection.mutable.Map[String, Int]().withDefaultValue(0)
-            def walk(t: Term): Unit = t match
-                case Term.Builtin(fun, _)      => counts(fun.toString) += 1
-                case Term.LamAbs(_, body, _)   => walk(body)
-                case Term.Apply(f, arg, _)     => walk(f); walk(arg)
-                case Term.Force(t, _)          => walk(t)
-                case Term.Delay(t, _)          => walk(t)
-                case Term.Constr(_, args, _)   => args.foreach(walk)
-                case Term.Case(scrut, alts, _) => walk(scrut); alts.foreach(walk)
-                case _                         => ()
-            walk(term)
-            counts.toMap
-        }
-
         val scalusTerm = mpf16oHasProgram.program.term
         val aikenTerm = aikenProgram.term
 
-        info(s"Scalus MPF16o: ${countTerms(scalusTerm)} UPLC terms")
-        info(s"Aiken MPF:     ${countTerms(aikenTerm)} UPLC terms")
+        info(s"Scalus MPF16o: ${scalusTerm.nodeCount} UPLC terms")
+        info(s"Aiken MPF:     ${aikenTerm.nodeCount} UPLC terms")
 
         info(s"\nScalus CBOR size: ${mpf16oHasProgram.program.cborEncoded.length} bytes")
         info(s"Aiken CBOR size:  ${aikenProgram.cborEncoded.length} bytes")

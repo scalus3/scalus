@@ -3,10 +3,9 @@ package scalus.uplc.transform
 import scalus.*
 import scalus.uplc.Term.*
 import scalus.uplc.eval.{Log, Logger}
+import scalus.uplc.internal.TermTraversal.{foreachChild, foreachChildIndexed, mapChildren}
 import scalus.uplc.transform.TermAnalysis.{freeVars, isPure, isValueForm}
 import scalus.uplc.{NamedDeBruijn, Term}
-
-import java.util.IdentityHashMap
 
 /** Optimizer that performs function inlining, beta-reduction, and dead code elimination.
   *
@@ -56,40 +55,16 @@ import java.util.IdentityHashMap
 class Inliner(logger: Logger = new Log()) extends Optimizer:
     private var sizeOf = CommonSubexpressionElimination.cachedTermBits()
 
-    /** Free variables per term node, for one pass. `tryPartialEval` asks for the free variables of
-      * each `Apply`, `Force` and `Case` that `go` rebuilds; without the cache, each query walks the
-      * whole subterm, which is quadratic for deep terms. The rebuilt node is new, but its children
-      * are mostly subterms already seen, so they hit the cache. Keyed by identity: two equal
-      * subterms at different places are different nodes.
-      */
-    private var freeVarsCache = new IdentityHashMap[Term, Set[String]]()
+    /** Free variables per term node, for one pass; see [[FreeVarsCache]]. */
+    private var freeVarsCache = new FreeVarsCache()
 
     def apply(term: Term): Term = {
         sizeOf = CommonSubexpressionElimination.cachedTermBits()
-        freeVarsCache = new IdentityHashMap[Term, Set[String]]()
+        freeVarsCache = new FreeVarsCache()
         try go(term)
         finally
             sizeOf = CommonSubexpressionElimination.cachedTermBits()
-            freeVarsCache = new IdentityHashMap[Term, Set[String]]()
-    }
-
-    /** Same result as [[TermAnalysis.freeVars]], memoized per node in [[freeVarsCache]]. */
-    private def cachedFreeVars(term: Term): Set[String] = {
-        val cached = freeVarsCache.get(term)
-        if cached != null then cached
-        else
-            val result = term match
-                case Var(NamedDeBruijn(n, _), _) => Set(n)
-                case LamAbs(n, body, _)          => cachedFreeVars(body) - n
-                case Apply(f, a, _)              => cachedFreeVars(f) ++ cachedFreeVars(a)
-                case Force(t, _)                 => cachedFreeVars(t)
-                case Delay(t, _)                 => cachedFreeVars(t)
-                case Constr(_, args, _) => args.foldLeft(Set.empty[String])(_ ++ cachedFreeVars(_))
-                case Case(scrut, cases, _) =>
-                    cases.foldLeft(cachedFreeVars(scrut))(_ ++ cachedFreeVars(_))
-                case _: Const | _: Builtin | _: Error => Set.empty[String]
-            freeVarsCache.put(term, result)
-            result
+            freeVarsCache = new FreeVarsCache()
     }
 
     def logs: Seq[String] = logger.getLogs.toSeq
@@ -110,18 +85,6 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
         case OnceGuarded
         case Many(uses: Int)
 
-        def count: Int = this match
-            case Zero                     => 0
-            case OnceDirect | OnceGuarded => 1
-            case Many(n)                  => n
-
-    private object OccurrenceInfo:
-        def combine(a: OccurrenceInfo, b: OccurrenceInfo): OccurrenceInfo =
-            (a, b) match
-                case (Zero, x) => x
-                case (x, Zero) => x
-                case _         => Many(a.count + b.count)
-
     /** Analyzes how a variable occurs in a term, tracking whether occurrences are in direct
       * (always-evaluated) or guarded (deferred/conditional) positions.
       *
@@ -138,30 +101,27 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
         term: Term,
         name: String,
         guarded: Boolean = false
-    ): OccurrenceInfo =
-        import OccurrenceInfo.*
-        term match
+    ): OccurrenceInfo = {
+        // The result depends only on the number of uses, and for exactly one use on whether its
+        // position is guarded. So count the uses and keep the kind of the first one.
+        var uses = 0
+        var firstGuarded = false
+        def go(t: Term, guarded: Boolean): Unit = t match
             case Var(NamedDeBruijn(n, _), _) =>
-                if n == name then if guarded then OnceGuarded else OnceDirect else Zero
-            case LamAbs(n, body, _) =>
-                if n == name then Zero // shadowed
-                else analyzeOccurrence(body, name, guarded = true)
-            case Apply(f, arg, _) =>
-                combine(analyzeOccurrence(f, name, guarded), analyzeOccurrence(arg, name, guarded))
-            case Force(t, _) => analyzeOccurrence(t, name, guarded)
-            case Delay(t, _) => analyzeOccurrence(t, name, guarded = true)
-            case Constr(_, args, _) =>
-                args.foldLeft(Zero: OccurrenceInfo) { (acc, a) =>
-                    combine(acc, analyzeOccurrence(a, name, guarded))
-                }
-            case Case(scrutinee, cases, _) =>
-                combine(
-                  analyzeOccurrence(scrutinee, name, guarded),
-                  cases.foldLeft(Zero: OccurrenceInfo) { (acc, c) =>
-                      combine(acc, analyzeOccurrence(c, name, guarded = true))
-                  }
-                )
-            case _: Const | _: Builtin | _: Error => Zero
+                if n == name then
+                    if uses == 0 then firstGuarded = guarded
+                    uses += 1
+            case LamAbs(n, body, _) => if n != name then go(body, guarded = true) // else shadowed
+            case Delay(body, _)     => go(body, guarded = true)
+            // The scrutinee (index 0) keeps the position's kind; every branch is guarded.
+            case _: Case => t.foreachChildIndexed((c, i) => go(c, guarded || i > 0))
+            case _       => t.foreachChild(go(_, guarded))
+        go(term, guarded)
+        uses match
+            case 0 => OccurrenceInfo.Zero
+            case 1 => if firstGuarded then OccurrenceInfo.OnceGuarded else OccurrenceInfo.OnceDirect
+            case n => OccurrenceInfo.Many(n)
+    }
 
     /** Determines if a term is safe to inline based on its type and occurrence info.
       *
@@ -225,7 +185,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
     private def tryPartialEval(term: Term, constants: Map[String, Const]): Term =
         // Substitute known constants only into a candidate for evaluation. If evaluation fails,
         // retain the original term and its shared variables instead of duplicating constants.
-        val free = cachedFreeVars(term)
+        val free = freeVarsCache(term)
         if !free.forall(constants.contains) then return term
         val candidate = free.foldLeft(term) { (t, name) =>
             substitute(t, name, constants(name))
@@ -394,21 +354,6 @@ object Inliner:
                     )
                 else LamAbs(n, go(body, boundVars + n), ann)
 
-            case Apply(f, arg, ann) => Apply(go(f, boundVars), go(arg, boundVars), ann)
-
-            case Force(t, ann) => Force(go(t, boundVars), ann)
-            case Delay(t, ann) => Delay(go(t, boundVars), ann)
-
-            case Constr(tag, args, ann) =>
-                Constr(tag, args.map(arg => go(arg, boundVars)), ann)
-
-            case Case(scrutinee, cases, ann) =>
-                Case(
-                  go(scrutinee, boundVars),
-                  cases.map(c => go(c, boundVars)),
-                  ann
-                )
-
-            case _: Const | _: Builtin | _: Error => t
+            case _ => t.mapChildren(go(_, boundVars))
 
         go(term, Set.empty)

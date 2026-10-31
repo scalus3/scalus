@@ -7,6 +7,7 @@ import scalus.compiler.sir.*
 import scalus.uplc.*
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.Term.*
+import scalus.uplc.internal.TermTraversal.exists
 
 /** Tests for the IntrinsicResolver — verifies that intrinsic substitution produces optimized UPLC
   * (e.g., `nullList` instead of match-based `chooseList`).
@@ -390,11 +391,8 @@ class IntrinsicResolverTest extends AnyFunSuite {
     // --- Helpers ---
 
     /** Check if a UPLC term tree contains a reference to the given builtin. */
-    private def containsBuiltin(term: Term, fun: DefaultFun): Boolean = term match
-        case Term.Builtin(f, _) if f == fun => true
-        case Term.Apply(f, arg, _)          => containsBuiltin(f, fun) || containsBuiltin(arg, fun)
-        case Term.LamAbs(_, body, _)        => containsBuiltin(body, fun)
-        case Term.Force(inner, _)           => containsBuiltin(inner, fun)
-        case Term.Delay(inner, _)           => containsBuiltin(inner, fun)
-        case _                              => false
+    private def containsBuiltin(term: Term, fun: DefaultFun): Boolean = term.exists {
+        case Term.Builtin(f, _) => f == fun
+        case _                  => false
+    }
 }

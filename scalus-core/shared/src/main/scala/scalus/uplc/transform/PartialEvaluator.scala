@@ -4,6 +4,7 @@ import scalus.cardano.ledger.ExUnits
 import scalus.uplc.*
 import scalus.uplc.Term.*
 import scalus.uplc.eval.*
+import scalus.uplc.internal.TermTraversal.exists
 import scalus.uplc.transform.TermAnalysis.{freeVars, isValueForm}
 
 /** Compile-time partial evaluator for UPLC terms.
@@ -83,14 +84,8 @@ object PartialEvaluator {
       * Trace has a logging side effect that would be lost during compile-time evaluation (since we
       * use NoLogger), so we must preserve such expressions for runtime.
       */
-    private def containsTrace(term: Term): Boolean = term match
+    private def containsTrace(term: Term): Boolean = term.exists {
         case Builtin(DefaultFun.Trace, _) => true
-        case Builtin(_, _)                => false
-        case Apply(f, arg, _)             => containsTrace(f) || containsTrace(arg)
-        case Force(t, _)                  => containsTrace(t)
-        case Delay(t, _)                  => containsTrace(t)
-        case LamAbs(_, body, _)           => containsTrace(body)
-        case Constr(_, args, _)           => args.exists(containsTrace)
-        case Case(scrut, cases, _)        => containsTrace(scrut) || cases.exists(containsTrace)
-        case _: Var | _: Const | _: Error => false
+        case _                            => false
+    }
 }

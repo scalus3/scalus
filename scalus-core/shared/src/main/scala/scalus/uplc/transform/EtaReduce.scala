@@ -6,6 +6,7 @@ import scalus.uplc.Term.*
 import scalus.uplc.transform.TermAnalysis.{freeVars, isPure}
 import scalus.uplc.Term
 import scalus.uplc.eval.{Log, Logger}
+import scalus.uplc.internal.TermTraversal.mapChildren
 
 /** Performs eta-reduction on a term.
   *
@@ -108,15 +109,10 @@ class EtaReduce(logger: Logger = new Log()) extends Optimizer:
                                 case None => reduced
                 case other => etaReduce(other, arities)
             Apply(f1, arg1, ann)
-        case Force(term, ann) => Force(etaReduce(term, arities), ann)
-        case Delay(term, ann) => Delay(etaReduce(term, arities), ann)
-        // Constr/Case carry subterms like every other node and must be traversed. PV11 lowering
-        // emits Case throughout, so a wrapper nested under one is the common shape, not a corner
-        // case. Neither node binds anything, so `arities` carries through unchanged.
-        case Constr(tag, args, ann) => Constr(tag, args.map(etaReduce(_, arities)), ann)
-        case Case(scrut, cases, ann) =>
-            Case(etaReduce(scrut, arities), cases.map(etaReduce(_, arities)), ann)
-        case _ => term
+        // Force, Delay, Constr and Case bind nothing, so `arities` carries through unchanged.
+        // Constr/Case must be walked too: PV11 lowering emits Case throughout, so a wrapper
+        // nested under one is the common shape, not a corner case.
+        case _ => term.mapChildren(etaReduce(_, arities))
 
     /** Matches the case-constr encoding of a multi-argument eta-wrapper:
       *

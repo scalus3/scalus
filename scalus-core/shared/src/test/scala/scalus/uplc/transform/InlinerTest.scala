@@ -221,6 +221,15 @@ class InlinerTest extends AnyFunSuite {
         assert(Inliner(input) == expected)
     }
 
+    test("a single use in a Case scrutinee is direct, in a branch it is guarded") {
+        // [f a] is neither pure nor a value, so only a direct single use may inline it.
+        val arg = vr"f" $ vr"a"
+        val inScrutinee = λ("x")(Case(vr"x", List(vr"b1", vr"b2"))) $ arg
+        assert(Inliner(inScrutinee) == Case(arg, List(vr"b1", vr"b2")))
+        val inBranch = λ("x")(Case(vr"s", List(vr"x", vr"b2"))) $ arg
+        assert(Inliner(inBranch) == inBranch)
+    }
+
     test("fold through a shared constant without duplicating its remaining uses") {
         val value = Data.I(42).asTerm
         val term = λ(x => Constr(Word64.Zero, List(UnIData $ x, x, x, x))) $ value

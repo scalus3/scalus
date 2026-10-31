@@ -11,6 +11,7 @@ import scalus.uplc.Term.*
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.eval.Result.Success
 import scalus.uplc.{Constant, DeBruijn}
+import scalus.utils.ScalusSourcePos
 
 import scala.language.implicitConversions
 
@@ -52,5 +53,14 @@ class CaseConstrApplyTest extends AnyFunSuite {
                 assert(opt.budget == ExUnits(memory = 1000, steps = 144100))
                 assert(opt.budget.fitsWithin(orig.budget) && opt.budget != orig.budget)
             case _ => fail("Evaluation failed")
+    }
+
+    test("a spine of two arguments keeps the source positions of its Apply nodes") {
+        val pos = ScalusSourcePos("Foo.scala", 3, 4, 3, 20)
+        val inner = Apply(vr"f", vr"a").withPos(pos)
+        val term = Apply(inner, vr"b").withPos(pos)
+        val Apply(optimizedInner, _, ann) = CaseConstrApply(term): @unchecked
+        assert(ann.pos == pos)
+        assert(optimizedInner.annotation.pos == pos)
     }
 }

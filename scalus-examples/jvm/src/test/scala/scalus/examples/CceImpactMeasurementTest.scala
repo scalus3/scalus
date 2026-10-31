@@ -5,6 +5,7 @@ import scalus.*
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.uplc.{PlutusV3, Program, Term}
+import scalus.uplc.internal.TermTraversal.nodeCount
 import scalus.uplc.transform.V3Optimizer
 import scalus.cardano.ledger.{ExUnitPrices, NonNegativeInterval}
 import scalus.examples.auction.AuctionValidator
@@ -57,36 +58,23 @@ class CceImpactMeasurementTest extends AnyFunSuite {
             val optimized = optimizer(rawUplc)
             val program = Program.plutusV3(optimized)
             val flatSize = program.flatEncoded.length
-            val nodeCount = countNodes(optimized)
-            (cfg, flatSize, nodeCount)
+            (cfg, flatSize, optimized.nodeCount)
         }
 
         val (_, baselineFlat, baselineNodes) = results.head
 
-        results.foreach { case (cfg, flatSize, nodeCount) =>
+        results.foreach { case (cfg, flatSize, nodes) =>
             val flatDelta = flatSize - baselineFlat
             val flatPct =
                 if baselineFlat > 0 then f"${flatDelta.toDouble / baselineFlat * 100}%+.1f%%"
                 else "N/A"
-            val nodeDelta = nodeCount - baselineNodes
+            val nodeDelta = nodes - baselineNodes
             val nodePct =
                 if baselineNodes > 0 then f"${nodeDelta.toDouble / baselineNodes * 100}%+.1f%%"
                 else "N/A"
-            info(f"${cfg.name}%-25s $flatSize%12d $flatPct%8s $nodeCount%12d $nodePct%8s")
+            info(f"${cfg.name}%-25s $flatSize%12d $flatPct%8s $nodes%12d $nodePct%8s")
         }
     }
-
-    private def countNodes(t: Term): Int = t match
-        case Term.Var(_, _)          => 1
-        case Term.Const(_, _)        => 1
-        case Term.Builtin(_, _)      => 1
-        case Term.Error(_)           => 1
-        case Term.LamAbs(_, body, _) => 1 + countNodes(body)
-        case Term.Apply(f, arg, _)   => 1 + countNodes(f) + countNodes(arg)
-        case Term.Force(inner, _)    => 1 + countNodes(inner)
-        case Term.Delay(inner, _)    => 1 + countNodes(inner)
-        case Term.Constr(_, args, _) => 1 + args.map(countNodes).sum
-        case Term.Case(s, cases, _)  => 1 + countNodes(s) + cases.map(countNodes).sum
 
     /** Compiles a contract to raw UPLC (with standard passes but no CSE/CCE). */
     private def compileRaw(compiled: PlutusV3[?]): Term = {

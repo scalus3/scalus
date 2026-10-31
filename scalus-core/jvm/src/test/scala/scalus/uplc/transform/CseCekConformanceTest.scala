@@ -11,6 +11,7 @@ import scalus.uplc.DefaultFun.*
 import scalus.uplc.TermDSL.given
 import scalus.uplc.transform.TermAnalysis.freeVars
 import scalus.uplc.eval.{Log, MachineError, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
+import scalus.uplc.internal.TermTraversal.foreachChild
 
 import scala.language.implicitConversions
 
@@ -84,13 +85,10 @@ class CseCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     private def nonLetNodes(t: Term): Int = t match
         case Apply(LamAbs(_, body, _), arg, _)         => nonLetNodes(body) + nonLetNodes(arg)
         case _: Var | _: Const | _: Builtin | _: Error => 0
-        case LamAbs(_, body, _)                        => 1 + nonLetNodes(body)
-        case Delay(body, _)                            => 1 + nonLetNodes(body)
-        case Force(body, _)                            => 1 + nonLetNodes(body)
-        case Apply(f, arg, _)                          => 1 + nonLetNodes(f) + nonLetNodes(arg)
-        case Constr(_, fields, _)                      => 1 + fields.map(nonLetNodes).sum
-        case Case(scrutinee, branches, _) =>
-            1 + nonLetNodes(scrutinee) + branches.map(nonLetNodes).sum
+        case _ =>
+            var count = 1
+            t.foreachChild(c => count += nonLetNodes(c))
+            count
 
     private def check(t: Term): Term = {
         val cse = new CommonSubexpressionElimination()

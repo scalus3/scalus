@@ -4,6 +4,7 @@ import scalus.uplc.{Constant, Term}
 import scalus.uplc.Term.*
 import scalus.uplc.{DeBruijn, DefaultFun, NamedDeBruijn}
 import scalus.uplc.eval.{Log, Logger}
+import scalus.uplc.internal.TermTraversal.{foreachChildIndexed, mapChildren, mapChildrenIndexed, nodeCount}
 import scalus.uplc.transform.TermAnalysis.{collectNames, freeVars, isValueForm}
 import scalus.cardano.ledger.Word64
 import scalus.serialization.flat.Flat
@@ -104,7 +105,7 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
                 val unique = if boundNames.add(n) then n else freshName(s"${n}_cse")
                 boundNames += unique
                 LamAbs(unique, uniqueBinders(body, env.updated(n, unique)), ann)
-            case _ => mapChildren(t)((child, _) => uniqueBinders(child, env))
+            case _ => t.mapChildren(uniqueBinders(_, env))
 
         var current = uniqueBinders(term, Map.empty)
         var changed = false
@@ -228,8 +229,10 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
                         val p = path :+ (i + 1)
                         go(branch, p, p)
                     }
+                // Child indices [TT-2] must agree with `extract`, which uses mapChildrenIndexed.
+                // For Apply(f, Case(s, [b0, b1])), path [1, 2] identifies b1 in both walks.
                 case _ =>
-                    children(t).zipWithIndex.foreach((child, i) => go(child, path :+ i, region))
+                    t.foreachChildIndexed((child, i) => go(child, path :+ i, region))
         }
 
         go(term, Vector.empty, Vector.empty)
@@ -281,7 +284,9 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         def go(t: Term, path: Path): Term = {
             if candidate.occurrences.contains(path) then Var(NamedDeBruijn(name), t.annotation)
             else {
-                val body = mapChildren(t)((child, i) => go(child, path :+ i))
+                // Unchanged subtrees keep their identity, so the per-pass size and key caches
+                // survive extraction rounds.
+                val body = t.mapChildrenIndexed((child, i) => go(child, path :+ i))
                 if path == candidate.bindAt then
                     Apply(LamAbs(name, body, t.annotation), candidate.expr, t.annotation)
                 else body
@@ -289,44 +294,6 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         }
         go(term, Vector.empty)
     }
-
-    // Child numbering is shared by collection and rewriting: Apply uses 0=function, 1=argument;
-    // Case uses 0=scrutinee, 1..n=branches. These indices must agree with mapChildren below.
-    // For Apply(f, Case(s, [b0, b1])), path [1, 2] must identify b1 in both walks.
-    private def children(t: Term): List[Term] = t match
-        case LamAbs(_, body, _)           => List(body)
-        case Apply(f, arg, _)             => List(f, arg)
-        case Force(body, _)               => List(body)
-        case Delay(body, _)               => List(body)
-        case Constr(_, args, _)           => args
-        case Case(scrutinee, branches, _) => scrutinee :: branches
-        case _                            => Nil
-
-    // Preserve unchanged subtree identities so per-pass size/key caches survive extraction rounds.
-    private def mapChildren(t: Term)(f: (Term, Int) => Term): Term = t match
-        case LamAbs(n, body, ann) =>
-            val next = f(body, 0)
-            if next eq body then t else LamAbs(n, next, ann)
-        case Apply(fn, arg, ann) =>
-            val nextFn = f(fn, 0)
-            val nextArg = f(arg, 1)
-            if (nextFn eq fn) && (nextArg eq arg) then t else Apply(nextFn, nextArg, ann)
-        case Force(body, ann) =>
-            val next = f(body, 0)
-            if next eq body then t else Force(next, ann)
-        case Delay(body, ann) =>
-            val next = f(body, 0)
-            if next eq body then t else Delay(next, ann)
-        case Constr(tag, args, ann) =>
-            val next = args.zipWithIndex.map(f.tupled)
-            if next.corresponds(args)(_ eq _) then t else Constr(tag, next, ann)
-        case Case(scrutinee, branches, ann) =>
-            val nextScrutinee = f(scrutinee, 0)
-            val nextBranches = branches.zipWithIndex.map((b, i) => f(b, i + 1))
-            if (nextScrutinee eq scrutinee) && nextBranches.corresponds(branches)(_ eq _)
-            then t
-            else Case(nextScrutinee, nextBranches, ann)
-        case _ => t
 }
 
 object CommonSubexpressionElimination {
@@ -501,17 +468,8 @@ object CommonSubexpressionElimination {
         size
     }
 
-    /** AST node count: Apply(Var(f), Const(bytes)) has 3 nodes even for a kilobyte of bytes. Unlike
-      * termBits, this does not measure script-size savings.
-      */
-    private[transform] def termSize(t: Term): Int = t match
-        case Var(_, _) | Const(_, _) | Builtin(_, _) | Error(_) => 1
-        case LamAbs(_, body, _)                                 => 1 + termSize(body)
-        case Apply(f, arg, _)                                   => 1 + termSize(f) + termSize(arg)
-        case Force(inner, _)                                    => 1 + termSize(inner)
-        case Delay(inner, _)                                    => 1 + termSize(inner)
-        case Constr(_, args, _)                                 => 1 + args.map(termSize).sum
-        case Case(arg, cases, _) => 1 + termSize(arg) + cases.map(termSize).sum
+    /** Kept because released bytecode has it; use `t.nodeCount` from TermTraversal. */
+    private[transform] def termSize(t: Term): Int = t.nodeCount
 
     /** Convenience entry point: CSE(term) runs a fresh CSE instance with its default logger. */
     def apply(term: Term): Term = {

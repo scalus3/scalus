@@ -3,6 +3,7 @@ package scalus.uplc
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.Term.*
 import scalus.utils.ScalusSourcePos
+import scalus.uplc.internal.TermTraversal.exists
 
 class TermPositionFillTest extends AnyFunSuite {
 
@@ -10,15 +11,7 @@ class TermPositionFillTest extends AnyFunSuite {
     private def ann(line: Int) = UplcAnnotation(pos(line))
     private val x = NamedDeBruijn("x", 1)
 
-    private def allLocated(t: Term): Boolean =
-        !t.annotation.isEmpty && (t match
-            case Apply(f, a, _)     => allLocated(f) && allLocated(a)
-            case LamAbs(_, b, _)    => allLocated(b)
-            case Force(b, _)        => allLocated(b)
-            case Delay(b, _)        => allLocated(b)
-            case Constr(_, args, _) => args.forall(allLocated)
-            case Case(s, cs, _)     => allLocated(s) && cs.forall(allLocated)
-            case _                  => true)
+    private def allLocated(t: Term): Boolean = !t.exists(_.annotation.isEmpty)
 
     test("fillEmptyPosBottomUp: a spine node inherits the function leaf's position") {
         val t = Apply(Var(x, ann(10)), Const(Constant.Integer(1)))

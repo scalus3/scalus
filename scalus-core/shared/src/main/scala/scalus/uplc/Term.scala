@@ -11,6 +11,7 @@ import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, FlatDecodingError, given}
 import scalus.uplc.Constant.flatConstant
 import scalus.uplc.eval.*
+import scalus.uplc.internal.TermTraversal.{exists, foreach}
 import scalus.utils.{Macros, Pretty, ScalusSourcePos, Style}
 
 import scala.annotation.targetName
@@ -269,35 +270,33 @@ enum Term:
     /** Delays the term. */
     def unary_~ : Term = Term.Delay(this)
 
-    def applyToList: (Term, immutable.List[Term]) =
-        this match
-            case Term.Apply(f, arg, _) =>
-                val (f1, args) = f.applyToList
-                (f1, args :+ arg)
-            case f => (f, Nil)
+    /** Splits an application spine: `[[[f a] b] c]` gives `(f, List(a, b, c))`. Walks down the
+      * spine and prepends each argument, so it is linear in the number of arguments and does not
+      * recurse.
+      */
+    def applyToList: (Term, immutable.List[Term]) = {
+        var head = this
+        var args: immutable.List[Term] = Nil
+        while head.isInstanceOf[Term.Apply] do
+            val app = head.asInstanceOf[Term.Apply]
+            args = app.arg :: args
+            head = app.f
+        (head, args)
+    }
 
     /** True if this term contains a `constr` or `case` node anywhere, i.e. it needs UPLC 1.1.0. */
-    def usesConstrOrCase: Boolean = this match
-        case _: Term.Constr | _: Term.Case                     => true
-        case Term.Var(_, _) | Term.Const(_, _) | _: Term.Error => false
-        case Term.Builtin(_, _)                                => false
-        case Term.LamAbs(_, body, _)                           => body.usesConstrOrCase
-        case Term.Force(body, _)                               => body.usesConstrOrCase
-        case Term.Delay(body, _)                               => body.usesConstrOrCase
-        case Term.Apply(f, arg, _) => f.usesConstrOrCase || arg.usesConstrOrCase
+    def usesConstrOrCase: Boolean = this.exists {
+        case _: Term.Constr | _: Term.Case => true
+        case _                             => false
+    }
 
     def collectBuiltins: Set[DefaultFun] = {
-        this match
-            case Term.Builtin(bn, _)                               => Set(bn)
-            case Term.Var(_, _) | Term.Const(_, _) | _: Term.Error => Set.empty
-            case Term.LamAbs(_, body, _)                           => body.collectBuiltins
-            case Term.Force(body, _)                               => body.collectBuiltins
-            case Term.Delay(body, _)                               => body.collectBuiltins
-            case Term.Apply(f, arg, _) => f.collectBuiltins ++ arg.collectBuiltins
-            case Term.Constr(_, args, _) =>
-                args.foldLeft(Set.empty[DefaultFun])((acc, x) => acc ++ x.collectBuiltins)
-            case Term.Case(arg, cases, _) =>
-                cases.foldLeft(arg.collectBuiltins)((acc, x) => acc ++ x.collectBuiltins)
+        val builtins = Set.newBuilder[DefaultFun]
+        this.foreach {
+            case Term.Builtin(bn, _) => builtins += bn
+            case _                   => ()
+        }
+        builtins.result()
     }
 
     override def toString: String = this match

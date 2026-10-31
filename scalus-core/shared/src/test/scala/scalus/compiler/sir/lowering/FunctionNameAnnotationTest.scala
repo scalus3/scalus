@@ -6,6 +6,7 @@ import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.{compile, Compile, Options}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.uplc.Term
+import scalus.uplc.internal.TermTraversal.{foldLeft, foreach}
 
 @Compile
 object FunctionNameAnnotationFixtures {
@@ -26,21 +27,11 @@ class FunctionNameAnnotationTest extends AnyFunSuite {
       optimizeUplc = false
     )
 
-    private def collectFunctionNames(t: Term): Set[String] = {
-        def go(t: Term, acc: Set[String]): Set[String] = {
-            val acc1 =
-                if t.annotation.functionName.nonEmpty then acc + t.annotation.functionName else acc
-            t match
-                case Term.LamAbs(_, body, _)  => go(body, acc1)
-                case Term.Apply(f, arg, _)    => go(arg, go(f, acc1))
-                case Term.Force(b, _)         => go(b, acc1)
-                case Term.Delay(b, _)         => go(b, acc1)
-                case Term.Constr(_, args, _)  => args.foldLeft(acc1)((a, x) => go(x, a))
-                case Term.Case(arg, cases, _) => cases.foldLeft(go(arg, acc1))((a, x) => go(x, a))
-                case _                        => acc1
+    private def collectFunctionNames(t: Term): Set[String] =
+        t.foldLeft(Set.empty[String]) { (names, n) =>
+            val name = n.annotation.functionName
+            if name.nonEmpty then names + name else names
         }
-        go(t, Set.empty)
-    }
 
     test("lowered terms carry the enclosing function name") {
         val sir = compile {
@@ -74,15 +65,14 @@ class FunctionNameAnnotationTest extends AnyFunSuite {
         // References to the helper variable re-emit the variable's own functionName (see
         // VariableLoweredValue.termInternal), so they must carry the label too, not the name of
         // whichever function triggered helper generation first.
-        def collectVars(t: Term): List[Term.Var] = t match
-            case v: Term.Var           => List(v)
-            case Term.LamAbs(_, b, _)  => collectVars(b)
-            case Term.Apply(f, a, _)   => collectVars(f) ++ collectVars(a)
-            case Term.Force(b, _)      => collectVars(b)
-            case Term.Delay(b, _)      => collectVars(b)
-            case Term.Constr(_, as, _) => as.flatMap(collectVars)
-            case Term.Case(a, cs, _)   => collectVars(a) ++ cs.flatMap(collectVars)
-            case _                     => Nil
+        def collectVars(t: Term): List[Term.Var] = {
+            val vars = List.newBuilder[Term.Var]
+            t.foreach {
+                case v: Term.Var => vars += v
+                case _           => ()
+            }
+            vars.result()
+        }
         val helperRefs = collectVars(term).filter(_.name.name.contains("sumEq"))
         assert(helperRefs.nonEmpty, "expected at least one reference to the sumEq helper")
         // "" is fine (the let-rec wrapper is emitted outside any function scope); any other

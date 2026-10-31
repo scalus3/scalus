@@ -4,6 +4,7 @@ import scalus.uplc.Term
 import scalus.uplc.Term.*
 import scalus.uplc.{DefaultFun, NamedDeBruijn}
 import scalus.uplc.eval.{CekMachineCosts, Log, Logger}
+import scalus.uplc.internal.TermTraversal.{exists, foreachChild, foreachChildIndexed, mapChildren, mapChildrenIndexed, transformUp}
 import scalus.uplc.transform.CommonSubexpressionElimination.{cachedTermBits, TermKey, TermTagBits, VarBits}
 import scalus.uplc.transform.TermAnalysis.{collectNames, freeVars, isValueForm}
 
@@ -93,27 +94,12 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                         if sizeOf(template).exists(_ >= MinTemplateBits) && !containsError(template)
                         then addOccurrence(new TermKey(template), path, leaf)
                     }
-                // Always recurse into subterms
-                nonLeaf match
-                    case Apply(f, arg, _) =>
-                        collectPass(f, path)
-                        collectPass(arg, path)
-                    case Force(inner, _) =>
-                        collectPass(inner, path)
-                    case Delay(inner, _) =>
-                        val id = freshPathId()
-                        conditionalPathIds += id
-                        collectPass(inner, path :+ id)
-                    case Constr(_, args, _) =>
-                        args.foreach(collectPass(_, path))
-                    case Case(scrutinee, cases, _) =>
-                        collectPass(scrutinee, path)
-                        cases.foreach { c =>
-                            val id = freshPathId()
-                            conditionalPathIds += id
-                            collectPass(c, path :+ id)
-                        }
-                    case _ => () // LamAbs already handled above
+                // Always recurse into subterms.
+                foreachChildByRegion(nonLeaf)(collectPass(_, path)) { child =>
+                    val id = freshPathId()
+                    conditionalPathIds += id
+                    collectPass(child, path :+ id)
+                }
 
         collectPass(term, Vector.empty)
 
@@ -219,26 +205,11 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                             reOccurrences += ((path, leaf))
                             return // Don't recurse into matched subterms
                         case None => ()
-                    nonLeaf match
-                        case Apply(f, arg, _) =>
-                            reCollect(f, path)
-                            reCollect(arg, path)
-                        case Force(inner, _) =>
-                            reCollect(inner, path)
-                        case Delay(inner, _) =>
-                            val id = reFreshId()
-                            reConditionalPathIds += id
-                            reCollect(inner, path :+ id)
-                        case Constr(_, args, _) =>
-                            args.foreach(reCollect(_, path))
-                        case Case(scrutinee, cases, _) =>
-                            reCollect(scrutinee, path)
-                            cases.foreach { c =>
-                                val id = reFreshId()
-                                reConditionalPathIds += id
-                                reCollect(c, path :+ id)
-                            }
-                        case _ => ()
+                    foreachChildByRegion(nonLeaf)(reCollect(_, path)) { child =>
+                        val id = reFreshId()
+                        reConditionalPathIds += id
+                        reCollect(child, path :+ id)
+                    }
 
             reCollect(currentTerm, Vector.empty)
 
@@ -289,24 +260,10 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                                     case None       => substituteChildren(nonLeaf, path)
                             else substituteChildren(nonLeaf, path)
 
-                    def substituteChildren(t: Term, path: Path): Term = t match
-                        case Apply(f, arg, ann) =>
-                            Apply(doSubstitute(f, path), doSubstitute(arg, path), ann)
-                        case Force(inner, ann) =>
-                            Force(doSubstitute(inner, path), ann)
-                        case Delay(inner, ann) =>
-                            val id = subFreshId()
-                            Delay(doSubstitute(inner, path :+ id), ann)
-                        case Constr(tag, args, ann) =>
-                            Constr(tag, args.map(doSubstitute(_, path)), ann)
-                        case Case(scrutinee, cases, ann) =>
-                            val newScrutinee = doSubstitute(scrutinee, path)
-                            val newCases = cases.map { c =>
-                                val id = subFreshId()
-                                doSubstitute(c, path :+ id)
-                            }
-                            Case(newScrutinee, newCases, ann)
-                        case other => other
+                    def substituteChildren(t: Term, path: Path): Term =
+                        mapChildrenByRegion(t)(doSubstitute(_, path)) { child =>
+                            doSubstitute(child, path :+ subFreshId())
+                        }
 
                     val substituted = doSubstitute(currentTerm, Vector.empty)
 
@@ -347,29 +304,14 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                     if remaining.size == 1 then LamAbs(n, Apply(LamAbs(name, body), expr), ann)
                     else LamAbs(n, go(body, remaining.tail), ann)
                 else LamAbs(n, go(body, remaining), ann)
-            case Apply(f, arg, ann) =>
-                Apply(go(f, remaining), go(arg, remaining), ann)
-            case Force(inner, ann) =>
-                Force(go(inner, remaining), ann)
-            case Delay(inner, ann) =>
-                val id = freshId()
-                if remaining.nonEmpty && remaining.head == id then
-                    if remaining.size == 1 then Delay(Apply(LamAbs(name, inner), expr), ann)
-                    else Delay(go(inner, remaining.tail), ann)
-                else Delay(go(inner, remaining), ann)
-            case Constr(tag, args, ann) =>
-                Constr(tag, args.map(go(_, remaining)), ann)
-            case Case(scrutinee, cases, ann) =>
-                val newScrutinee = go(scrutinee, remaining)
-                val newCases = cases.map { c =>
+            case _ =>
+                mapChildrenByRegion(t)(go(_, remaining)) { child =>
                     val id = freshId()
                     if remaining.nonEmpty && remaining.head == id then
-                        if remaining.size == 1 then Apply(LamAbs(name, c), expr)
-                        else go(c, remaining.tail)
-                    else go(c, remaining)
+                        if remaining.size == 1 then Apply(LamAbs(name, child), expr)
+                        else go(child, remaining.tail)
+                    else go(child, remaining)
                 }
-                Case(newScrutinee, newCases, ann)
-            case _ => t
 
         go(term, bindPath)
     }
@@ -437,17 +379,34 @@ object CommonContextExtraction {
     /** Whether a term contains an Error node anywhere, including deferred bodies. This syntactic
       * filter is not a proof that evaluating the term fails.
       */
-    private[transform] def containsError(t: Term): Boolean = t match
-        case _: Error                       => true
-        case _: Var | _: Const | _: Builtin => false
-        case LamAbs(_, body, _)             => containsError(body)
-        case Delay(inner, _)                => containsError(inner)
-        case Apply(f, arg, _)               => containsError(f) || containsError(arg)
-        case Force(inner, _)                => containsError(inner)
-        case Constr(_, args, _)             => args.exists(containsError)
-        case Case(arg, cases, _)            => containsError(arg) || cases.exists(containsError)
+    private[transform] def containsError(t: Term): Boolean =
+        t.exists(_.isInstanceOf[Error])
 
     private type Path = Vector[Int]
+
+    /** The path-ID rule that every CCE walk shares. A `Delay` body and each `Case` branch is a
+      * conditional region and gets a fresh path ID: `newRegion` handles it. The `Case` scrutinee
+      * and the children of `Apply`, `Force` and `Constr` stay on the parent path: `sameRegion`
+      * handles them. Children come in child order, so every walk allocates IDs in the same order
+      * (the "Path ID synchronization invariant"). `LamAbs` also takes a fresh ID; each walk handles
+      * it before calling these helpers.
+      */
+    private inline def foreachChildByRegion(t: Term)(inline sameRegion: Term => Unit)(
+        inline newRegion: Term => Unit
+    ): Unit = t match
+        case _: Delay => t.foreachChild(newRegion)
+        case _: Case =>
+            t.foreachChildIndexed((c, i) => if i == 0 then sameRegion(c) else newRegion(c))
+        case _ => t.foreachChild(sameRegion)
+
+    /** [[foreachChildByRegion]] for a rewrite. */
+    private inline def mapChildrenByRegion(t: Term)(inline sameRegion: Term => Term)(
+        inline newRegion: Term => Term
+    ): Term = t match
+        case _: Delay => t.mapChildren(newRegion)
+        case _: Case =>
+            t.mapChildrenIndexed((c, i) => if i == 0 then sameRegion(c) else newRegion(c))
+        case _ => t.mapChildren(sameRegion)
 
     /** Check visibility and shadowing using the scope metadata from the current traversal. For
       * example, f(x) must stay within x's binding and cannot cross a shadowing lambda x.
@@ -695,28 +654,18 @@ object CommonContextExtraction {
     }
 
     /** Checks whether a term contains the HOLE sentinel anywhere. */
-    private[transform] def containsHole(t: Term): Boolean = t match
-        case Var(NamedDeBruijn(name, _), _) if name == holeSentinelName => true
-        case _: Var | _: Const | _: Builtin | _: Error                  => false
-        case LamAbs(_, body, _)                                         => containsHole(body)
-        case Apply(f, arg, _)   => containsHole(f) || containsHole(arg)
-        case Force(inner, _)    => containsHole(inner)
-        case Delay(inner, _)    => containsHole(inner)
-        case Constr(_, args, _) => args.exists(containsHole)
-        case Case(s, cases, _)  => containsHole(s) || cases.exists(containsHole)
+    private[transform] def containsHole(t: Term): Boolean = t.exists {
+        case Var(NamedDeBruijn(name, _), _) => name == holeSentinelName
+        case _                              => false
+    }
 
     /** Replace the HOLE sentinel in a template with the given replacement term. */
-    private[transform] def replaceHole(template: Term, replacement: Term): Term = template match
-        case Var(NamedDeBruijn(name, _), _) if name == holeSentinelName => replacement
-        case _: Var | _: Const | _: Builtin | _: Error                  => template
-        case LamAbs(name, body, ann) => LamAbs(name, replaceHole(body, replacement), ann)
-        case Apply(f, arg, ann) =>
-            Apply(replaceHole(f, replacement), replaceHole(arg, replacement), ann)
-        case Force(inner, ann)      => Force(replaceHole(inner, replacement), ann)
-        case Delay(inner, ann)      => Delay(replaceHole(inner, replacement), ann)
-        case Constr(tag, args, ann) => Constr(tag, args.map(replaceHole(_, replacement)), ann)
-        case Case(scrutinee, cases, ann) =>
-            Case(replaceHole(scrutinee, replacement), cases.map(replaceHole(_, replacement)), ann)
+    private[transform] def replaceHole(template: Term, replacement: Term): Term =
+        // Bottom-up, so the replacement itself is not walked.
+        template.transformUp {
+            case Var(NamedDeBruijn(name, _), _) if name == holeSentinelName => replacement
+            case t                                                          => t
+        }
 
     private def isAncestorOrSelf(ancestor: Path, descendant: Path): Boolean =
         descendant.startsWith(ancestor)

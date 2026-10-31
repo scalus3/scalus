@@ -2,6 +2,7 @@ package scalus.verify.uplcblaster
 
 import scalus.uplc.{Constant, DefaultFun, NamedDeBruijn, Term}
 import scalus.uplc.Term.{lam, vr}
+import scalus.uplc.internal.TermTraversal.mapChildren
 
 /** A program's `dropList k xs` of a constant `k`, written as `k` steps of a list's tail.
   *
@@ -50,15 +51,7 @@ private[uplcblaster] object DropLists {
                 Term.Case(apply(constr, aliases), List(bound(branch, fields, aliases)), annotation)
             case Term.LamAbs(name, body, annotation) =>
                 Term.LamAbs(name, apply(body, aliases - name), annotation)
-            case Term.Apply(function, argument, annotation) =>
-                Term.Apply(apply(function, aliases), apply(argument, aliases), annotation)
-            case Term.Force(inner, annotation) => Term.Force(apply(inner, aliases), annotation)
-            case Term.Delay(inner, annotation) => Term.Delay(apply(inner, aliases), annotation)
-            case Term.Constr(tag, fields, annotation) =>
-                Term.Constr(tag, fields.map(apply(_, aliases)), annotation)
-            case Term.Case(scrutinee, cases, annotation) =>
-                Term.Case(apply(scrutinee, aliases), cases.map(apply(_, aliases)), annotation)
-            case Term.Var(_, _) | Term.Const(_, _) | Term.Builtin(_, _) | Term.Error(_) => term
+            case _ => term.mapChildren(apply(_, aliases))
 
         /** `branch` of a `case` over a constructor of `fields`, whose lambdas bind them in order.
           */

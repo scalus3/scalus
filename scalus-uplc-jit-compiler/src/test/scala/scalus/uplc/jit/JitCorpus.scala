@@ -3,6 +3,7 @@ package scalus.uplc.jit
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.{DeBruijnedProgram, Term}
+import scalus.uplc.internal.TermTraversal.nodeCount
 
 import java.nio.file.{Files, Path, Paths}
 import scala.jdk.CollectionConverters.*
@@ -82,5 +83,5 @@ object JitCorpus {
     }
 
     /** Term nodes of `t`, the size measure of the staging compiler. */
-    def nodes(t: Term): Long = StagingCompilerThread.nodeCount(t)
+    def nodes(t: Term): Long = t.nodeCount
 }

@@ -1,6 +1,7 @@
 package scalus.uplc.jit
 
 import scalus.uplc.Term
+import scalus.uplc.internal.TermTraversal.nodeCount
 
 import java.util.concurrent.{Callable, ExecutionException, Executors}
 import scala.quoted.{staging, Expr, Quotes}
@@ -70,7 +71,7 @@ private[jit] object StagingCompilerThread {
         if compiler == null || compiledNodes >= NodesPerCompiler then
             compiler = staging.Compiler.make(getClass.getClassLoader)(using settings)
             compiledNodes = 0
-        compiledNodes += nodeCount(term)
+        compiledNodes += term.nodeCount
         try staging.run(code)(using compiler.nn)
         catch
             case e: Throwable =>
@@ -79,14 +80,4 @@ private[jit] object StagingCompilerThread {
                 compiler = null
                 throw e
     }
-
-    /** The number of term nodes in `t`: the size measure of a compile. */
-    private[jit] def nodeCount(t: Term): Long = t match
-        case Term.LamAbs(_, b, _)  => 1 + nodeCount(b)
-        case Term.Apply(f, a, _)   => 1 + nodeCount(f) + nodeCount(a)
-        case Term.Force(b, _)      => 1 + nodeCount(b)
-        case Term.Delay(b, _)      => 1 + nodeCount(b)
-        case Term.Constr(_, as, _) => 1 + as.map(nodeCount).sum
-        case Term.Case(s, cs, _)   => 1 + nodeCount(s) + cs.map(nodeCount).sum
-        case _                     => 1
 }

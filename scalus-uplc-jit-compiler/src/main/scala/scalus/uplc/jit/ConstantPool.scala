@@ -1,6 +1,7 @@
 package scalus.uplc.jit
 
 import scalus.uplc.{Constant, Term}
+import scalus.uplc.internal.TermTraversal.foreach
 
 import scala.collection.mutable
 import scala.quoted.*
@@ -33,17 +34,12 @@ object ConstantPool {
     /** Collects the constants of `term`. */
     def apply(term: Term): ConstantPool = {
         val index = mutable.LinkedHashMap.empty[Constant, Int]
-        def collect(t: Term): Unit = t match
+        // Pre-order, so a constant's index is the order of its first occurrence.
+        term.foreach {
             case Term.Const(const, _) =>
                 if !index.contains(const) then index(const) = index.size
-            case Term.LamAbs(_, body, _)  => collect(body)
-            case Term.Apply(f, arg, _)    => collect(f); collect(arg)
-            case Term.Force(body, _)      => collect(body)
-            case Term.Delay(body, _)      => collect(body)
-            case Term.Constr(_, args, _)  => args.foreach(collect)
-            case Term.Case(arg, cases, _) => collect(arg); cases.foreach(collect)
-            case _                        => ()
-        collect(term)
+            case _ => ()
+        }
         // an `Object[]`, the erasure of `Array[UplcValue]`; filled by an iterator, not
         // `keys.map`: `keys` is a set, which a map could merge
         val values = new Array[AnyRef](index.size).asInstanceOf[Array[UplcValue]]

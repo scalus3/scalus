@@ -13,6 +13,7 @@ import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.{MachineError, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 import scalus.uplc.test.TermGen.{branch, smallConst}
 import scalus.uplc.transform.TermAnalysis.{freeVars, isPure}
+import scalus.uplc.internal.TermTraversal.mapChildren
 
 import scala.collection.mutable.ListBuffer
 import scala.language.implicitConversions
@@ -140,14 +141,7 @@ class EtaReduceCekConformanceTest extends AnyFunSuite with ScalaCheckPropertyChe
     private def caseConstrToApply(term: Term): Term = term match
         case Case(Constr(tag, args, _), f :: Nil, _) if tag == Word64.Zero =>
             args.map(caseConstrToApply).foldLeft(caseConstrToApply(f))(Apply(_, _))
-        case Case(scrut, cases, ann) =>
-            Case(caseConstrToApply(scrut), cases.map(caseConstrToApply), ann)
-        case Constr(tag, args, ann) => Constr(tag, args.map(caseConstrToApply), ann)
-        case Apply(f, arg, ann)     => Apply(caseConstrToApply(f), caseConstrToApply(arg), ann)
-        case LamAbs(n, body, ann)   => LamAbs(n, caseConstrToApply(body), ann)
-        case Force(t, ann)          => Force(caseConstrToApply(t), ann)
-        case Delay(t, ann)          => Delay(caseConstrToApply(t), ann)
-        case _                      => term
+        case _ => term.mapChildren(caseConstrToApply)
 
     // ------------------------------------------------------------------
     // Generators

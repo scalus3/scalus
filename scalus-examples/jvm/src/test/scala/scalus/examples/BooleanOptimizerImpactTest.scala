@@ -8,6 +8,7 @@ import scalus.compiler.sir.lowering.UplcPipeline
 import scalus.compiler.sir.transform.BooleanOptimizer
 import scalus.compiler.sir.{AnnotatedSIR, SIR}
 import scalus.uplc.{PlutusV3, Program, Term}
+import scalus.uplc.internal.TermTraversal.nodeCount
 
 /** Measures what [[BooleanOptimizer]] buys on the example contract suite.
   *
@@ -20,18 +21,6 @@ import scalus.uplc.{PlutusV3, Program, Term}
   * tests.
   */
 class BooleanOptimizerImpactTest extends AnyFunSuite {
-
-    private def countNodes(t: Term): Int = t match
-        case Term.Var(_, _)          => 1
-        case Term.Const(_, _)        => 1
-        case Term.Builtin(_, _)      => 1
-        case Term.Error(_)           => 1
-        case Term.LamAbs(_, body, _) => 1 + countNodes(body)
-        case Term.Apply(f, arg, _)   => 1 + countNodes(f) + countNodes(arg)
-        case Term.Force(inner, _)    => 1 + countNodes(inner)
-        case Term.Delay(inner, _)    => 1 + countNodes(inner)
-        case Term.Constr(_, args, _) => 1 + args.map(countNodes).sum
-        case Term.Case(s, cases, _)  => 1 + countNodes(s) + cases.map(countNodes).sum
 
     /** Lowers through the real pipeline with the boolean pass forced on or off, so both arms differ
       * in exactly one step. In production the pass follows `optimizeUplc`.
@@ -107,8 +96,8 @@ class BooleanOptimizerImpactTest extends AnyFunSuite {
           flat(rawOn),
           flat(optOff),
           flat(optOn),
-          countNodes(optOff),
-          countNodes(optOn),
+          optOff.nodeCount,
+          optOn.nodeCount,
           stats.hits,
           legacyReachableSwaps(detraced)
         )

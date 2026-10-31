@@ -8,6 +8,7 @@ import scalus.uplc.Term.asTerm
 import scalus.uplc.builtin.Data
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.transform.Inliner
+import scalus.uplc.internal.TermTraversal.{exists, foldLeft}
 
 /** A validator that can fail, so its compiled term has `(error)` nodes to carry the tag. */
 @Compile
@@ -163,23 +164,10 @@ class ScalusTagTest extends AnyFunSuite {
         assert(ScalusTag.isTagged(legacy))
     }
 
-    private def hasErrorNode(t: Term): Boolean = t match
-        case _: Term.Error           => true
-        case Term.LamAbs(_, b, _)    => hasErrorNode(b)
-        case Term.Apply(f, a, _)     => hasErrorNode(f) || hasErrorNode(a)
-        case Term.Force(b, _)        => hasErrorNode(b)
-        case Term.Delay(b, _)        => hasErrorNode(b)
-        case Term.Constr(_, args, _) => args.exists(hasErrorNode)
-        case Term.Case(s, cs, _)     => hasErrorNode(s) || cs.exists(hasErrorNode)
-        case _                       => false
+    private def hasErrorNode(t: Term): Boolean = t.exists(_.isInstanceOf[Term.Error])
 
-    private def countMarkers(t: Term): Int = t match
-        case Term.Apply(_: Term.Error, Term.Const(ScalusTag.marker, _), _) => 1
-        case Term.LamAbs(_, b, _)                                          => countMarkers(b)
-        case Term.Apply(f, a, _)     => countMarkers(f) + countMarkers(a)
-        case Term.Force(b, _)        => countMarkers(b)
-        case Term.Delay(b, _)        => countMarkers(b)
-        case Term.Constr(_, args, _) => args.map(countMarkers).sum
-        case Term.Case(s, cs, _)     => countMarkers(s) + cs.map(countMarkers).sum
-        case _                       => 0
+    private def countMarkers(t: Term): Int = t.foldLeft(0) {
+        case (n, Term.Apply(_: Term.Error, Term.Const(ScalusTag.marker, _), _)) => n + 1
+        case (n, _)                                                             => n
+    }
 }

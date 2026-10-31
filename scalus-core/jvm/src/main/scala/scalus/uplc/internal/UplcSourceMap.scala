@@ -4,6 +4,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}
 import org.typelevel.paiges.Doc
 import scalus.uplc.{Constant, Term, TermPrinter, TermSanitizer}
+import scalus.uplc.internal.TermTraversal.exists
 import scalus.utils.Style
 
 import java.util.IdentityHashMap
@@ -115,15 +116,10 @@ object UplcSourceMapRenderer {
       * identifiers, hex, or digits. When this is false, every marker character in the marked render
       * is a genuine marker and stripping is exact, so [[render]] skips its verification pass.
       */
-    private def mayCollideWithMarkers(t: Term): Boolean = t match
-        case Term.Const(c, _)      => constantHasMarkerChar(c)
-        case Term.LamAbs(_, b, _)  => mayCollideWithMarkers(b)
-        case Term.Apply(f, a, _)   => mayCollideWithMarkers(f) || mayCollideWithMarkers(a)
-        case Term.Force(b, _)      => mayCollideWithMarkers(b)
-        case Term.Delay(b, _)      => mayCollideWithMarkers(b)
-        case Term.Constr(_, as, _) => as.exists(mayCollideWithMarkers)
-        case Term.Case(a, cs, _)   => mayCollideWithMarkers(a) || cs.exists(mayCollideWithMarkers)
-        case _                     => false
+    private def mayCollideWithMarkers(t: Term): Boolean = t.exists {
+        case Term.Const(c, _) => constantHasMarkerChar(c)
+        case _                => false
+    }
 
     private def constantHasMarkerChar(c: Constant): Boolean = c match
         case Constant.String(s)    => s.exists(ch => ch == MarkerStart || ch == MarkerEnd)
@@ -137,14 +133,7 @@ object UplcSourceMapRenderer {
       * and a source map for them would map nothing.
       */
     def hasSourceInfo(term: Term): Boolean =
-        !term.annotation.pos.effectivePos.isEffectivelyEmpty || (term match
-            case Term.LamAbs(_, b, _)  => hasSourceInfo(b)
-            case Term.Apply(f, a, _)   => hasSourceInfo(f) || hasSourceInfo(a)
-            case Term.Force(b, _)      => hasSourceInfo(b)
-            case Term.Delay(b, _)      => hasSourceInfo(b)
-            case Term.Constr(_, as, _) => as.exists(hasSourceInfo)
-            case Term.Case(a, cs, _)   => hasSourceInfo(a) || cs.exists(hasSourceInfo)
-            case _                     => false)
+        term.exists(n => !n.annotation.pos.effectivePos.isEffectivelyEmpty)
 
     /** Renders `term` and maps every positioned node to the text it printed.
       *

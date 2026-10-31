@@ -2,6 +2,7 @@ package scalus.uplc.jit
 
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.uplc.{DeBruijnedProgram, Term}
+import scalus.uplc.internal.TermTraversal.nodeCount
 
 import java.lang.management.ManagementFactory
 import java.nio.file.{Files, Paths}
@@ -100,7 +101,7 @@ object JitCodegenProbe {
         )(pool.values)
     }
 
-    def nodes(t: Term): Long = StagingCompilerThread.nodeCount(t)
+    def nodes(t: Term): Long = t.nodeCount
 
     /** Maximum number of nested LamAbs/Delay (closure) levels on any path. */
     def depth(t: Term): Int = t match

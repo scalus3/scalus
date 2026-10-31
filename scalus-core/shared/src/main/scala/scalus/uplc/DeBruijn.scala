@@ -1,5 +1,6 @@
 package scalus.uplc
 import Term.*
+import scalus.uplc.internal.TermTraversal.mapChildren
 
 import scala.collection.mutable
 
@@ -48,16 +49,7 @@ object DeBruijn:
                     val processed = process(body, level + 1)
                     if shadowed == 0 then levels.remove(name) else levels(name) = shadowed
                     LamAbs(name, processed, ann)
-                case Apply(f, arg, ann) =>
-                    Apply(process(f, level), process(arg, level), ann)
-                case Force(term, ann)       => Force(process(term, level), ann)
-                case Delay(term, ann)       => Delay(process(term, level), ann)
-                case Constr(tag, args, ann) => Constr(tag, args.map(process(_, level)), ann)
-                case Case(arg, cases, ann) =>
-                    Case(process(arg, level), cases.map(process(_, level)), ann)
-                case _: Const   => term
-                case _: Builtin => term
-                case _: Error   => term
+                case _ => term.mapChildren(process(_, level))
 
         process(term, 0)
 
@@ -77,6 +69,8 @@ object DeBruijn:
                 val body = go(term)
                 binders.pop()
                 LamAbs(binderName, body, ann)
+            // Hand-written, not mapChildren: every Var is renamed, so every node above one is
+            // rebuilt and the identity checks only cost time (JMH: 2% slower on auction_1-1).
             case Apply(f, arg, ann) => Apply(go(f), go(arg), ann)
             case Force(term, ann)   => Force(go(term), ann)
             case Delay(term, ann)   => Delay(go(term), ann)

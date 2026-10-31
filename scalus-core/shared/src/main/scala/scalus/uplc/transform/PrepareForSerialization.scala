@@ -2,6 +2,7 @@ package scalus.uplc.transform
 
 import scalus.uplc.*
 import scalus.uplc.Term.*
+import scalus.uplc.internal.TermTraversal.transformUp
 
 /** Prepares a UPLC term for flat serialization by replacing BLS12-381 constants that cannot be
   * directly flat-encoded with equivalent runtime expressions.
@@ -35,16 +36,11 @@ object PrepareForSerialization {
             containsBLSElement(a) || containsBLSElement(b)
         case _ => false
 
-    private def transform(term: Term): Term = term match
-        case Const(c, a) if containsBLSElement(c.tpe) =>
-            transformBLSConstant(c, a)
-        case Apply(f, arg, a)     => Apply(transform(f), transform(arg), a)
-        case LamAbs(n, body, a)   => LamAbs(n, transform(body), a)
-        case Force(t, a)          => Force(transform(t), a)
-        case Delay(t, a)          => Delay(transform(t), a)
-        case Constr(tag, args, a) => Constr(tag, args.map(transform), a)
-        case Case(scrut, alts, a) => Case(transform(scrut), alts.map(transform), a)
-        case _                    => term
+    /** Bottom-up, so the runtime expression that replaces a constant is not walked again. */
+    private def transform(term: Term): Term = term.transformUp {
+        case Const(c, a) if containsBLSElement(c.tpe) => transformBLSConstant(c, a)
+        case t                                        => t
+    }
 
     /** Transform a BLS constant into a runtime expression */
     private def transformBLSConstant(c: Constant, a: UplcAnnotation): Term = c match

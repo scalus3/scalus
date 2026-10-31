@@ -11,6 +11,7 @@ import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.uplc.eval.{CaseDataNotSupportedError, PlutusVM}
+import scalus.uplc.internal.TermTraversal.exists
 
 object CaseOnDataConstrLoweringTest {
 
@@ -67,24 +68,16 @@ class CaseOnDataConstrLoweringTest extends AnyFunSuite:
       * \- the shape of a Case on Data? (`contains("(case")` would also match Case on
       * integer/bool/list.)
       */
-    private def hasCaseOnDataShape(term: Term, branchCount: Int): Boolean = {
-        def go(t: Term): Boolean = t match
-            case Term.Case(scrutinee, cases, _) =>
-                val isShape = cases.length == branchCount && cases.forall {
-                    case Term.LamAbs(_, body, _) =>
-                        body match
-                            case _: Term.LamAbs => false
-                            case _              => true
-                    case _ => false
-                }
-                isShape || go(scrutinee) || cases.exists(go)
-            case Term.LamAbs(_, body, _) => go(body)
-            case Term.Apply(f, arg, _)   => go(f) || go(arg)
-            case Term.Force(inner, _)    => go(inner)
-            case Term.Delay(inner, _)    => go(inner)
-            case Term.Constr(_, args, _) => args.exists(go)
-            case _                       => false
-        go(term)
+    private def hasCaseOnDataShape(term: Term, branchCount: Int): Boolean = term.exists {
+        case Term.Case(_, cases, _) =>
+            cases.length == branchCount && cases.forall {
+                case Term.LamAbs(_, body, _) =>
+                    body match
+                        case _: Term.LamAbs => false
+                        case _              => true
+                case _ => false
+            }
+        case _ => false
     }
 
     private def fieldsSirFun(using Options): SIR = compile { (d: Data) =>

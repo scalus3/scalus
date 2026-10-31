@@ -1,6 +1,7 @@
 package scalus.uplc
 
 import scalus.uplc.Term.{Apply, Case, Const, Constr, Delay, Force, LamAbs}
+import scalus.uplc.internal.TermTraversal.exists
 
 /** Marker injected into a compiled UPLC program to identify it as Scalus-generated.
   *
@@ -66,14 +67,8 @@ object ScalusTag {
                 .map(_ :: tail)
                 .orElse(tagFirstInList(tail).map(head :: _))
 
-    private def containsMarkedError(term: Term): Boolean = term match
+    private def containsMarkedError(term: Term): Boolean = term.exists {
         case Apply(_: Term.Error, Const(`marker`, _), _) => true
-        case LamAbs(_, body, _)                          => containsMarkedError(body)
-        case Apply(f, arg, _)   => containsMarkedError(f) || containsMarkedError(arg)
-        case Force(body, _)     => containsMarkedError(body)
-        case Delay(body, _)     => containsMarkedError(body)
-        case Constr(_, args, _) => args.exists(containsMarkedError)
-        case Case(scrutinee, cases, _) =>
-            containsMarkedError(scrutinee) || cases.exists(containsMarkedError)
-        case _ => false
+        case _                                           => false
+    }
 }

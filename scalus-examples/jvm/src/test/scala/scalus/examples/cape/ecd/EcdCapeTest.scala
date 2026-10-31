@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{CardanoInfo, ExUnits}
 import scalus.examples.cape.{CapeHarness, CapeTestSuite}
 import scalus.testing.kit.ScalusTest
-import scalus.uplc.{DefaultFun, Term}
+import scalus.uplc.DefaultFun
 
 class EcdCapeTest extends AnyFunSuite with ScalusTest {
     private given CardanoInfo = CardanoInfo.mainnet
@@ -15,16 +15,7 @@ class EcdCapeTest extends AnyFunSuite with ScalusTest {
     // for negative inputs: ecd(-12, 8) must recurse into ecd(8, 4), not ecd(8, -4). The results
     // agree either way, so only the builtin used shows the difference.
     test("recursion uses modInteger, as the prescribed algorithm does") {
-        def builtins(t: Term): Set[DefaultFun] = t match
-            case Term.Builtin(bn, _)     => Set(bn)
-            case Term.LamAbs(_, body, _) => builtins(body)
-            case Term.Apply(f, a, _)     => builtins(f) ++ builtins(a)
-            case Term.Force(t, _)        => builtins(t)
-            case Term.Delay(t, _)        => builtins(t)
-            case Term.Constr(_, args, _) => args.flatMap(builtins).toSet
-            case Term.Case(s, cases, _)  => builtins(s) ++ cases.flatMap(builtins)
-            case _                       => Set.empty
-        val used = builtins(program.term)
+        val used = program.term.collectBuiltins
         assert(used.contains(DefaultFun.ModInteger))
         assert(!used.contains(DefaultFun.RemainderInteger))
     }

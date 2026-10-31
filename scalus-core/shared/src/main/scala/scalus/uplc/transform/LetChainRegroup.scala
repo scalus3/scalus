@@ -3,6 +3,7 @@ package scalus.uplc.transform
 import scalus.uplc.{Term, UplcAnnotation}
 import scalus.uplc.Term.*
 import scalus.uplc.eval.{Log, Logger}
+import scalus.uplc.internal.TermTraversal.{mapChildren, mapChildrenIndexed}
 import scalus.uplc.transform.TermAnalysis.freeVars
 
 /** Re-associates a chain of nested lets into multi-argument applications.
@@ -120,13 +121,9 @@ class LetChainRegroup(
             val (chain, body) = collectChain(term)
             val optimised = chain.map(b => b.copy(rhs = go(b.rhs)))
             rebuild(runs(optimised), go(body), suppressOutermost = inFunctionPosition)
-        case Apply(f, arg, ann)          => Apply(go(f, inFunctionPosition = true), go(arg), ann)
-        case LamAbs(name, body, ann)     => LamAbs(name, go(body), ann)
-        case Force(t, ann)               => Force(go(t), ann)
-        case Delay(t, ann)               => Delay(go(t), ann)
-        case Constr(tag, args, ann)      => Constr(tag, args.map(go(_)), ann)
-        case Case(scrutinee, cases, ann) => Case(go(scrutinee), cases.map(go(_)), ann)
-        case _: Var | _: Const | _: Builtin | _: Error => term
+        case _: Apply =>
+            term.mapChildrenIndexed((c, i) => go(c, inFunctionPosition = i == 0))
+        case _ => term.mapChildren(go(_))
 
     /** Peels a maximal chain of nested lets, outermost first. */
     private def collectChain(term: Term): (List[Binding], Term) = term match

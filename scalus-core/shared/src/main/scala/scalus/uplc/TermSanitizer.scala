@@ -1,5 +1,7 @@
 package scalus.uplc
 
+import scalus.uplc.internal.TermTraversal.transformDown
+
 import scala.collection.mutable
 
 /** Sanitizes UPLC Terms to ensure all variable names conform to the identifier grammar accepted by
@@ -42,38 +44,17 @@ object TermSanitizer:
               }
             )
 
-        def sanitizeTerm(t: Term): Term = t match
+        // Top-down: names are assigned in pre-order, so a binder is renamed before its body.
+        term.transformDown {
             case Var(name, ann) =>
                 val sanitizedName = getSanitizedName(name.name)
                 Var(name.copy(name = sanitizedName), ann)
-
             case LamAbs(name, body, ann) =>
                 val sanitizedName = getSanitizedName(name)
                 usedNames.add(sanitizedName)
-                LamAbs(sanitizedName, sanitizeTerm(body), ann)
-
-            case Apply(f, arg, ann) =>
-                Apply(sanitizeTerm(f), sanitizeTerm(arg), ann)
-
-            case Force(term, ann) =>
-                Force(sanitizeTerm(term), ann)
-
-            case Delay(term, ann) =>
-                Delay(sanitizeTerm(term), ann)
-
-            case _: Const => t
-
-            case _: Builtin => t
-
-            case _: Error => t
-
-            case Constr(tag, args, ann) =>
-                Constr(tag, args.map(sanitizeTerm), ann)
-
-            case Case(scrutinee, cases, ann) =>
-                Case(sanitizeTerm(scrutinee), cases.map(sanitizeTerm), ann)
-
-        sanitizeTerm(term)
+                LamAbs(sanitizedName, body, ann)
+            case t => t
+        }
 
     /** Sanitizes a single name to conform to UPLC identifier rules.
       *
