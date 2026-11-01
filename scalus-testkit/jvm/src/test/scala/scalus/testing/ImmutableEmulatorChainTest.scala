@@ -51,6 +51,13 @@ class ImmutableEmulatorChainTest extends AnyFunSuite {
         assert(toBob(pending).isEmpty, "produceBlock is pure: the receiver is unchanged")
     }
 
+    test("withAddresses with a ChainConfig starts in that preset") {
+        // spec [CF-5], [SF-11]
+        val start = ImmutableEmulator.withAddresses(Seq(alice), Value.ada(1000), ChainConfig.manual)
+        val tx = payment(start, 2_000_000)
+        assert(submitted(start, tx).txStatus(tx.id) == TxStatus.Pending)
+    }
+
     test("rollback is pure and returns the tx to the mempool") {
         // spec [SF-14], [RB-7], [OR-1]
         val start = immutable(ChainConfig.manual)

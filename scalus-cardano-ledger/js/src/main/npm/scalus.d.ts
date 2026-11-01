@@ -317,7 +317,9 @@ export class Emulator {
    */
   setTime(posixMillis: number): void;
   /**
-   * Whether a transaction with this hash was accepted by this emulator.
+   * Whether the transaction is confirmed: in a block on the selected chain. A pending
+   * transaction, with `blockProduction: "manual"`, reads `false`; `getTxStatus` tells pending
+   * from unknown.
    *
    * @param txHashHex Hex-encoded 32-byte transaction hash.
    */

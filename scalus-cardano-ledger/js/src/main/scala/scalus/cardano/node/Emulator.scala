@@ -19,7 +19,7 @@ import scalus.cardano.node.emulator.ChainConfig
   * @see
   *   [[scalus.cardano.ledger.rules]] for the ledger rules
   */
-class Emulator(
+class Emulator private (
     initialUtxos: Utxos,
     initialContext: Context,
     val validators: Iterable[STS.Validator],
@@ -30,10 +30,35 @@ class Emulator(
     chainConfig: ChainConfig
 ) extends EmulatorBase {
 
+    /** An emulator in the preset of `chainConfig`, spec [CF-1]. It has no default arguments: Scala
+      * allows them on one overload only, and Java and JavaScript cannot use them.
+      */
+    def this(
+        initialUtxos: Utxos,
+        initialContext: Context,
+        validators: Iterable[STS.Validator],
+        mutators: Iterable[STS.Mutator],
+        initialCertState: CertState,
+        initialDatums: Map[DataHash, Data],
+        chainConfig: ChainConfig
+    ) = this(
+      initialUtxos,
+      initialContext,
+      validators,
+      mutators,
+      initialCertState,
+      initialDatums,
+      Vector.empty,
+      chainConfig
+    )
+
     /** The 1.4 constructor, in the `Instant` preset, spec [CF-4]. It keeps its default arguments,
-      * so Scala callers can name only the fields they set. The constructor with a [[ChainConfig]]
-      * has none: Scala allows default arguments on one overload only, and Java and JavaScript
-      * cannot use them, spec [CF-1].
+      * so Scala callers can name only the fields they set.
+      *
+      * @param initialAppliedTxLog
+      *   Deprecated since 1.4.1: the log has no blocks, so status APIs report `NotFound` for its
+      *   txs; use `snapshot()` or `ImmutableEmulator.fromEmulator`/`toEmulator`, which keep the
+      *   blocks. No compiler warning: the parameter has a default.
       */
     def this(
         initialUtxos: Utxos = Map.empty,
@@ -112,7 +137,6 @@ object Emulator {
           defaultMutators,
           CertState.empty,
           Map.empty,
-          Vector.empty,
           chainConfig
         )
     }
@@ -136,7 +160,6 @@ object Emulator {
           defaultMutators,
           certState,
           datums,
-          Vector.empty,
           chainConfig
         )
     }
@@ -182,7 +205,6 @@ object Emulator {
           defaultMutators,
           EmulatorBase.certStateWithRegisteredCredentials(initialStakeRewards, initialContext),
           Map.empty,
-          Vector.empty,
           chainConfig
         )
     }

@@ -445,7 +445,9 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     def setTime(posixMillis: Double): Unit =
         setSlot(emulator.currentContext.slotConfig.timeToSlot(posixMillis.toLong).toDouble)
 
-    /** Whether a transaction with this hash was accepted by this emulator.
+    /** Whether the transaction is confirmed: in a block on the selected chain. A pending
+      * transaction, with `blockProduction: "manual"`, reads `false`; `getTxStatus` tells pending
+      * from unknown.
       *
       * @param txHashHex
       *   Hex-encoded 32-byte transaction hash.
@@ -1320,8 +1322,8 @@ object JEmulator {
                     .asInstanceOf[JChainResult]
             case Left(error) =>
                 val message = error match
-                    case ForgeError.InvalidTx(index, e) => s"txs[$index] is invalid: ${e.message}"
-                    case other                          => other.toString
+                    case e: ForgeError    => e.message
+                    case e: RollbackError => e.message
                 js.Dynamic
                     .literal(isSuccess = false, error = message, errorKind = error.productPrefix)
                     .asInstanceOf[JChainResult]

@@ -4,7 +4,7 @@ import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator, STS, State, UtxoEnv}
 import scalus.cardano.node.*
-import scalus.cardano.node.emulator.{ForgeError, RollbackError, TxStatus}
+import scalus.cardano.node.emulator.{ChainConfig, ForgeError, RollbackError, TxStatus}
 import scalus.cardano.node.stream.ChainPoint
 import scalus.uplc.builtin.Data
 
@@ -126,10 +126,16 @@ final case class ImmutableEmulator private (
         result.map(point => (point, withState(next)))
     }
 
-    /** The status of the tx `txHash`, spec [TS-1]. */
+    /** The status of the tx `txHash`, spec [TS-1]. It reads the mempool and the blocks, not the
+      * applied-tx log: a tx known only from the log the emulator was built with is `NotFound`.
+      */
     def txStatus(txHash: TransactionHash): TxStatus = emulatorState.txStatus(txHash)
 
-    /** True if the given transaction has been applied to this emulator. */
+    /** Whether the tx is in [[appliedTxLog]]: in a block of the selected chain above the
+      * `clearAppliedTxs` cursor, or in the log the emulator was built with. A pending tx, in the
+      * `Manual` preset, reads `false`. [[txStatus]] reads the blocks only, so a tx of the imported
+      * log is `NotFound` there.
+      */
     def hasTx(txHash: TransactionHash): Boolean = appliedTxIndex.contains(txHash)
 
     /** Look up a previously applied transaction by hash, or `None` if it was never applied. */
@@ -203,6 +209,10 @@ object ImmutableEmulator {
 
     /** An emulator that starts from `state` at `env.slot`, in the `Instant` preset, spec [CF-4].
       *
+      * @param appliedTxLog
+      *   Deprecated since 1.4.1: the log has no blocks, so status APIs report `NotFound` for its
+      *   txs; use `ImmutableEmulator.fromEmulator`/`toEmulator` or `Emulator.snapshot()`, which
+      *   keep the blocks. No compiler warning: the parameter has a default.
       * @param appliedTxIndex
       *   derived from `appliedTxLog`; kept for source compatibility. A non-empty index must equal
       *   the index of `appliedTxLog`.
@@ -292,14 +302,16 @@ object ImmutableEmulator {
     def withAddresses(
         addresses: Seq[Address],
         initialValue: Value = Value.ada(10_000L)
+    ): ImmutableEmulator = withAddresses(addresses, initialValue, ChainConfig.instant)
+
+    /** [[withAddresses]] with a [[scalus.cardano.node.emulator.ChainConfig]], spec [CF-5]. */
+    def withAddresses(
+        addresses: Seq[Address],
+        initialValue: Value,
+        chainConfig: ChainConfig
     ): ImmutableEmulator = {
         val utxos = EmulatorBase.createInitialUtxos(addresses, initialValue)
-        val env = UtxoEnv.testMainnet()
-        ImmutableEmulator(
-          state = State(utxos = utxos),
-          env = env,
-          mutators = Set(PlutusScriptsTransactionMutator)
-        )
+        create(utxos, chainConfig)
     }
 
     /** Create an ImmutableEmulator from a [[Preconfiguration]].
@@ -309,13 +321,17 @@ object ImmutableEmulator {
     def fromPreconfiguration(
         config: Preconfiguration,
         network: Network = Network.Testnet
+    ): ImmutableEmulator = fromPreconfiguration(config, network, ChainConfig.instant)
+
+    /** [[fromPreconfiguration]] with a [[scalus.cardano.node.emulator.ChainConfig]], spec [CF-5].
+      */
+    def fromPreconfiguration(
+        config: Preconfiguration,
+        network: Network,
+        chainConfig: ChainConfig
     ): ImmutableEmulator = {
         val utxos = Preconfiguration.resolveUtxos(config, network)
-        ImmutableEmulator(
-          state = State(utxos = utxos),
-          env = UtxoEnv.testMainnet(),
-          mutators = Set(PlutusScriptsTransactionMutator)
-        )
+        create(utxos, chainConfig)
     }
 
     /** Create an ImmutableEmulator from a JSON string.
@@ -326,5 +342,24 @@ object ImmutableEmulator {
     def fromJson(
         json: String,
         network: Network = Network.Testnet
-    ): ImmutableEmulator = fromPreconfiguration(Preconfiguration.fromJson(json), network)
+    ): ImmutableEmulator = fromJson(json, network, ChainConfig.instant)
+
+    /** [[fromJson]] with a [[scalus.cardano.node.emulator.ChainConfig]], spec [CF-5]. */
+    def fromJson(json: String, network: Network, chainConfig: ChainConfig): ImmutableEmulator =
+        fromPreconfiguration(Preconfiguration.fromJson(json), network, chainConfig)
+
+    /** An emulator on `utxos` at slot 0 of test mainnet, as the 1.4 factories build it. */
+    private def create(utxos: Utxos, chainConfig: ChainConfig): ImmutableEmulator = {
+        val context = Context(
+          env = UtxoEnv.testMainnet(),
+          slotConfig = SlotConfig.mainnet,
+          evaluatorMode = EvaluatorMode.Validate
+        )
+        fromState(
+          EmulatorState
+              .initial(State(utxos = utxos), context, Map.empty, chainConfig),
+          Emulator.defaultValidators,
+          Set(PlutusScriptsTransactionMutator)
+        )
+    }
 }

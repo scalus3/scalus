@@ -3,12 +3,13 @@ package scalus.cardano.node
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
-import scalus.cardano.node.emulator.{ChainViewError, ForgeError, RollbackError}
-import scalus.cardano.node.stream.ChainTip
+import scalus.cardano.node.emulator.{ChainConfig, ChainViewError, ForgeError, OrphanTxPolicy, RollbackError}
+import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.ChainEvent
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
 
+import java.time.Instant
 import scala.jdk.CollectionConverters.*
 
 /** Drives [[JavaEmulatorChainInterop]], the proof that the chain members of the Emulator are usable
@@ -52,6 +53,42 @@ class JavaEmulatorChainInteropTest extends AnyFunSuite {
         assert(!tooDeep.isSuccess)
         assert(tooDeep.getValueOrNull == null)
         assert(tooDeep.getErrorOrNull == ChainViewError.DepthOutOfRange(5, 1))
+    }
+
+    test("Java reads a dropped tx's reason through the static DropReason forwarders") {
+        val e = manual()
+        e.setSlot(99)
+        val tx = TxBuilder(testEnv)
+            .payTo(bob, Value.lovelace(2_000_000))
+            .validTo(Instant.ofEpochMilli(testEnv.slotConfig.slotToTime(100)))
+            .complete(e.utxos, alice)
+            .sign(Alice.signer)
+            .transaction
+        assert(e.trySubmit(tx).isSuccess)
+        assert(!JavaEmulatorChainInterop.isExpired(e, tx.id))
+        e.setSlot(100)
+        assert(JavaEmulatorChainInterop.isExpired(e, tx.id))
+    }
+
+    test("Java names every TxStatus and DropReason case through the static forwarders") {
+        val config = ChainConfig.manual.withOrphanTxs(OrphanTxPolicy.Drop)
+        val e = Emulator.withAddresses(Seq(alice), Value.ada(1000), config)
+        def word(tx: Transaction) = JavaEmulatorChainInterop.statusWord(e, tx.id)
+        val tx = payment(e.utxos, 2_000_000)
+        assert(word(tx) == "notFound")
+        assert(e.trySubmit(tx).isSuccess)
+        assert(word(tx) == "pending")
+        e.produceBlock()
+        assert(word(tx) == "confirmed")
+        assert(e.rollback(1).isRight)
+        assert(word(tx) == "rolledBack")
+
+        val other = Emulator.withAddresses(Seq(alice), Value.ada(1000), ChainConfig.manual)
+        val pending = payment(other.utxos, 2_000_000)
+        assert(other.trySubmit(pending).isSuccess)
+        val rival = payment(other.utxos, 3_000_000)
+        assert(other.produceBlock(ChainPoint.origin, Seq(rival)).isRight)
+        assert(JavaEmulatorChainInterop.statusWord(other, pending.id) == "inputsSpent")
     }
 
     test("Java forges on a branch, rolls back, and reads the ChainSync diff") {

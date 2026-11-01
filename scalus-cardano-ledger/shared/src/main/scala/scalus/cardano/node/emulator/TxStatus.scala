@@ -22,8 +22,25 @@ enum TxStatus {
     /** In a block that left the selected chain, under [[OrphanTxPolicy.Drop]], spec [OR-4]. */
     case RolledBack
 
-    /** Never seen. */
+    /** In neither the mempool nor a block. A tx known only from the applied-tx log the emulator was
+      * built with has no block, so it is `NotFound`, as on a node, spec [TS-4].
+      */
     case NotFound
+}
+
+object TxStatus {
+
+    // Java names a case of a Scala 3 enum only through the module class, `TxStatus$.Pending`, as
+    // for `ChainView`. These forward as static methods, `TxStatus.pending()`, spec [SF-5].
+
+    /** [[Pending]], for Java. */
+    def pending: TxStatus = Pending
+
+    /** [[RolledBack]], for Java. */
+    def rolledBack: TxStatus = RolledBack
+
+    /** [[NotFound]], for Java. */
+    def notFound: TxStatus = NotFound
 }
 
 /** Why revalidation removed a tx from the mempool, spec [RV-4] .. [RV-6]. */
@@ -40,6 +57,12 @@ enum DropReason {
 }
 
 object DropReason {
+
+    /** [[Expired]], for Java, as [[TxStatus.pending]]. */
+    def expired: DropReason = Expired
+
+    /** [[InputsSpent]], for Java, as [[TxStatus.pending]]. */
+    def inputsSpent: DropReason = InputsSpent
 
     /** The drop reason for the error of the rule that failed, spec [RV-4] .. [RV-6]. */
     private[node] def of(error: SubmitError): DropReason = error match

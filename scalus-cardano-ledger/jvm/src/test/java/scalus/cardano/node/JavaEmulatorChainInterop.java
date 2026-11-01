@@ -7,11 +7,11 @@ import scalus.cardano.ledger.Value;
 import scalus.cardano.node.emulator.ChainConfig;
 import scalus.cardano.node.emulator.ChainView;
 import scalus.cardano.node.emulator.ChainViewError;
+import scalus.cardano.node.emulator.DropReason;
 import scalus.cardano.node.emulator.EmulatorResult;
 import scalus.cardano.node.emulator.ForgeError;
 import scalus.cardano.node.emulator.RollbackError;
 import scalus.cardano.node.emulator.TxStatus;
-import scalus.cardano.node.emulator.TxStatus$;
 import scalus.cardano.node.stream.ChainPoint;
 import scalus.cardano.node.stream.ChainTip;
 import scalus.cardano.node.stream.internal.ChainEvent;
@@ -24,9 +24,9 @@ import java.util.List;
  * are Java-usable.
  *
  * <p>A case of a Scala 3 enum is a static field of the enum's module class, such as
- * {@code TxStatus$.Pending}. Java cannot write {@code new ChainView.Stable(3)}, because the class
- * carries the enum flag, so a view is built with {@code ChainView.tip()}, {@code mempool()} or
- * {@code stable(n)}.
+ * {@code TxStatus$.Pending}, and Java cannot write {@code new ChainView.Stable(3)}, because the
+ * class carries the enum flag. So the companions forward the cases as static methods:
+ * {@code ChainView.tip()}, {@code TxStatus.pending()}, {@code DropReason.expired()}.
  */
 public final class JavaEmulatorChainInterop {
     private JavaEmulatorChainInterop() {}
@@ -64,7 +64,29 @@ public final class JavaEmulatorChainInterop {
     }
 
     public static boolean isPending(Emulator emulator, ByteString txHash) {
-        return emulator.txStatus(txHash) == TxStatus$.Pending;
+        return emulator.txStatus(txHash) == TxStatus.pending();
+    }
+
+    /** The status as one word, through every static TxStatus forwarder. */
+    public static String statusWord(Emulator emulator, ByteString txHash) {
+        TxStatus status = emulator.txStatus(txHash);
+        if (status == TxStatus.pending()) return "pending";
+        if (status == TxStatus.rolledBack()) return "rolledBack";
+        if (status == TxStatus.notFound()) return "notFound";
+        if (status instanceof TxStatus.Dropped) {
+            DropReason reason = ((TxStatus.Dropped) status).reason();
+            if (reason == DropReason.expired()) return "expired";
+            if (reason == DropReason.inputsSpent()) return "inputsSpent";
+            return "invalid";
+        }
+        return "confirmed";
+    }
+
+    /** Whether revalidation dropped the tx because its validity interval ended. */
+    public static boolean isExpired(Emulator emulator, ByteString txHash) {
+        TxStatus status = emulator.txStatus(txHash);
+        return status instanceof TxStatus.Dropped
+                && ((TxStatus.Dropped) status).reason() == DropReason.expired();
     }
 
     /** The depth of a confirmed tx, or -1. */

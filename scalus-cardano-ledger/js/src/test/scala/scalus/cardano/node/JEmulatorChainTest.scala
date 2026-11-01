@@ -145,6 +145,44 @@ class JEmulatorChainTest extends AnyFunSuite {
         assert(tooFar.error.isDefined)
     }
 
+    test("a failed forge or rollback says what went wrong in prose") {
+        // spec [SF-7]: error is for people, errorKind for code
+        val e = create("blockProduction" -> "manual", "securityParam" -> 1)
+        val origin = js.Dynamic.literal(slot = 0, blockHash = "00" * 32).asInstanceOf[JsChainPoint]
+        val unknown =
+            js.Dynamic.literal(slot = 7, blockHash = "ff" * 32).asInstanceOf[JsChainPoint]
+        val none = js.Array[js.typedarray.Uint8Array]()
+        val spent = payment(initialUtxos, 2_000_000)
+        def error(result: JChainResult): Option[String] = result.error.toOption
+
+        assert(
+          error(e.produceBlockOn(origin, none, 0)) ==
+              Some("slot 0 is not after slot 0 of the parent block")
+        )
+        assert(
+          error(e.produceBlockOn(unknown, none)) ==
+              Some(s"no block at slot 7 with hash ${"ff" * 32} in the block tree")
+        )
+        assert(e.rollback(0).error.toOption == Some("rollback(0): n must be at least 1"))
+        assert(
+          e.rollback(1).error.toOption ==
+              Some("rollback(1): n is above the tip height 0")
+        )
+        e.produceBlock()
+        e.produceBlock()
+        e.produceBlock()
+        assert(
+          error(e.produceBlockOn(origin, none)) ==
+              Some("the fork point is at depth 4, deeper than securityParam 1")
+        )
+        assert(
+          e.rollback(2).error.toOption ==
+              Some("rollback(2): n is above securityParam 1, or past the oldest snapshot kept")
+        )
+        val invalid = error(e.produceBlockOn(e.getTip(), js.Array(bytes(spent), bytes(spent))))
+        assert(invalid.exists(_.startsWith("the tx at index 1 is invalid: ")), invalid)
+    }
+
     test("a tx dropped by revalidation reads Dropped with its reason") {
         // spec [SF-8], [RV-4]
         val e = create("blockProduction" -> "manual")

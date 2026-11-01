@@ -143,6 +143,10 @@ class EmulatorForkTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         )
         val before = stateOf(e)
         assert(e.produceBlock(ChainPoint.origin, txs) == Left(ForgeError.BlockTooBig))
+        assert(
+          ForgeError.BlockTooBig.message ==
+              "the txs exceed the block body size or execution unit limits"
+        )
         assert(stateOf(e) eq before)
         assert(e.produceBlock(ChainPoint.origin, txs.take(1)).isRight)
     }

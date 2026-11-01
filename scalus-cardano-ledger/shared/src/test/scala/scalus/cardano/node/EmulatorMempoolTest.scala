@@ -329,16 +329,9 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val source = emulator(ChainConfig.instant)
         val tx = payment(source.utxos, 2_000_000)
         assert(source.submitSync(tx).isRight)
-        val restored = new Emulator(
-          source.utxos,
-          rules.Context.testMainnet(),
-          Emulator.defaultValidators,
-          Emulator.defaultMutators,
-          CertState.empty,
-          Map.empty,
-          source.appliedTxLog,
-          ChainConfig.manual
-        )
+        // the 1.4 constructor is the only one that imports a log (deprecated in its scaladoc)
+        val restored =
+            Emulator(initialUtxos = source.utxos, initialAppliedTxLog = source.appliedTxLog)
         assert(restored.checkTransaction(tx.id).value.get.get == TransactionStatus.NotFound)
         assert(restored.txStatus(tx.id) == TxStatus.NotFound)
         assert(restored.hasTx(tx.id), "the log still holds it")

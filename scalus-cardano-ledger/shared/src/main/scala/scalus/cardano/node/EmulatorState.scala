@@ -719,6 +719,11 @@ object EmulatorState {
       * emulator restored from a log — a snapshot, say — cannot disagree with the one the log came
       * from. The datum store also picks up the inline datums of the seeded `utxos`, so seeding a
       * script UTxO with its datum inline is enough for `getDatum` to answer.
+      *
+      * @param appliedTxLog
+      *   Deprecated since 1.4.1: the log has no blocks, so status APIs report `NotFound` for its
+      *   txs. Pass an empty log; keep a whole emulator with `snapshot()` or
+      *   `ImmutableEmulator.fromEmulator`/`toEmulator`, which keep the blocks.
       */
     def initial(
         utxos: Utxos,
@@ -729,8 +734,17 @@ object EmulatorState {
     ): EmulatorState =
         initial(utxos, certState, context, datums, appliedTxLog, ChainConfig.instant)
 
-    /** [[initial]] with a [[ChainConfig]], spec [CF-5]. */
+    /** [[initial]] in the preset of `config`, with no imported log, spec [CF-5]. */
     def initial(
+        utxos: Utxos,
+        certState: CertState,
+        context: Context,
+        datums: Map[DataHash, Data],
+        config: ChainConfig
+    ): EmulatorState = initial(utxos, certState, context, datums, Vector.empty, config)
+
+    /** [[initial]] with an imported log and a `config`, for the 1.4 `Emulator` constructor. */
+    private[node] def initial(
         utxos: Utxos,
         certState: CertState,
         context: Context,
@@ -748,6 +762,9 @@ object EmulatorState {
 
     /** The state an emulator starts from, with the whole ledger state given: its fees and donations
       * too, not only the UTxOs and the certificate state. `datums` keep their bytes.
+      *
+      * @param appliedTxLog
+      *   Deprecated since 1.4.1, as for the overload above.
       */
     def initial(
         ledger: State,
@@ -756,8 +773,18 @@ object EmulatorState {
         appliedTxLog: Vector[AppliedTx]
     ): EmulatorState = initial(ledger, context, datums, appliedTxLog, ChainConfig.instant)
 
-    /** [[initial]] with a [[ChainConfig]], spec [CF-5]. The given state is the genesis snapshot. */
+    /** [[initial]] in the preset of `config`, with no imported log, spec [CF-5]. The given state is
+      * the genesis snapshot.
+      */
     def initial(
+        ledger: State,
+        context: Context,
+        datums: Map[DataHash, KeepRaw[Data]],
+        config: ChainConfig
+    ): EmulatorState = initial(ledger, context, datums, Vector.empty, config)
+
+    /** [[initial]] with an imported log and a `config`, for the 1.4 `Emulator` constructor. */
+    private[node] def initial(
         ledger: State,
         context: Context,
         datums: Map[DataHash, KeepRaw[Data]],

@@ -90,7 +90,8 @@ trait EmulatorBase extends BlockchainProvider {
     def appliedTxIndex: Map[TransactionHash, AppliedTx] = readState.appliedTxIndex
 
     /** Ordered log of transactions applied to this emulator, oldest first: the log the emulator was
-      * built with, then the txs of the blocks of the selected chain, spec [TS-5].
+      * built with, then the txs of the blocks of the selected chain, spec [TS-5]. The imported txs
+      * have no block, so [[txStatus]] and [[checkTransaction]] report them `NotFound`.
       *
       * Unlike [[appliedTxs]] (hashes only), each entry retains the full transaction together with
       * the slot it was applied at and the inputs it consumed (resolved against the pre-application
@@ -184,6 +185,11 @@ trait EmulatorBase extends BlockchainProvider {
 
     def tick(n: Long): Unit = setSlot(currentContext.env.slot + n)
 
+    /** Whether the tx is in [[appliedTxLog]]: in a block of the selected chain above the
+      * `clearAppliedTxs` cursor, or in the log the emulator was built with. A pending tx, in the
+      * `Manual` preset, reads `false`. [[txStatus]] reads the blocks only, so a tx of the imported
+      * log is `NotFound` there.
+      */
     def hasTx(txHash: TransactionHash): Boolean = appliedTxIndex.contains(txHash)
 
     /** Look up a previously applied transaction by hash, or `None` if it was never applied. */
@@ -345,7 +351,9 @@ trait EmulatorBase extends BlockchainProvider {
     def rollback(n: Int): Either[RollbackError, ChainPoint] =
         modifyState(_.rollback(n, processTransaction))
 
-    /** The status of the tx `txHash`, spec [TS-1]. */
+    /** The status of the tx `txHash`, spec [TS-1]. It reads the mempool and the blocks, not the
+      * applied-tx log: a tx known only from the log the emulator was built with is `NotFound`.
+      */
     def txStatus(txHash: TransactionHash): TxStatus = readState.txStatus(txHash)
 
     /** The pending txs, oldest first. */

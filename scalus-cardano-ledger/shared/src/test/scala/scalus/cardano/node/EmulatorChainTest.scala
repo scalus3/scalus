@@ -249,16 +249,9 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val source = emulator(ChainConfig.instant)
         val imported = payment(source.utxos, 2_000_000)
         assert(source.submitSync(imported).isRight)
-        val restored = new Emulator(
-          source.utxos,
-          rules.Context.testMainnet(),
-          Emulator.defaultValidators,
-          Emulator.defaultMutators,
-          CertState.empty,
-          Map.empty,
-          source.appliedTxLog,
-          ChainConfig.instant
-        )
+        // the 1.4 constructor is the only one that imports a log (deprecated in its scaladoc)
+        val restored =
+            Emulator(initialUtxos = source.utxos, initialAppliedTxLog = source.appliedTxLog)
         val next = payment(restored.utxos, 3_000_000)
         assert(restored.submitSync(next).isRight)
         assert(restored.appliedTxLog.map(_.txHash) == Vector(imported.id, next.id))

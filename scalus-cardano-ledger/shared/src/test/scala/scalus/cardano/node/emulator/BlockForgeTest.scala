@@ -128,6 +128,19 @@ class BlockForgeTest extends AnyFunSuite {
         assert(prefix(txs, Long.MaxValue) == 3)
     }
 
+    test("the prefix is exact past 23 txs, where the CBOR heads and indices grow a byte") {
+        // spec [FG-4], [BH-4], [BH-9]: aux data and invalid txs at indices on both sides of 24
+        val txs = IndexedSeq.tabulate(30) { i =>
+            if i % 3 == 0 then withAux
+            else if i % 5 == 0 then first.copy(isValid = false)
+            else first
+        }
+        for n <- 1 to txs.size do
+            val size = forge(txs.take(n)).header.headerBody.blockBodySize
+            assert(prefix(txs, size) == n, s"n = $n")
+            if n > 1 then assert(prefix(txs, size - 1) == n - 1, s"n = $n, one byte less")
+    }
+
     private def withExUnits(tx: Transaction, memory: Long, steps: Long): Transaction = {
         val redeemer = Redeemer(RedeemerTag.Spend, 0, Data.I(0), ExUnits(memory, steps))
         tx.withWitness(_.copy(redeemers = Some(KeepRaw(Redeemers.Array(IndexedSeq(redeemer))))))
