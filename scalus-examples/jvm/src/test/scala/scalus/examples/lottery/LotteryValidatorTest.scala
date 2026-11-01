@@ -42,7 +42,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertSuccess(
+        assertTxSucceeds(
           provider,
           revealTx,
           lotteryUtxo._1,
@@ -69,7 +69,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertSuccess(
+        assertTxSucceeds(
           provider,
           revealTx,
           lotteryUtxo._1,
@@ -96,7 +96,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(deadlineSlot)
-        assertSuccess(
+        assertTxSucceeds(
           provider,
           revealTx,
           lotteryUtxo._1,
@@ -123,7 +123,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(provider, revealTx, lotteryUtxo._1, "Fraudulent attempt")
+        assertTxFails(provider, revealTx, lotteryUtxo._1, "Fraudulent attempt")
     }
 
     test("FAIL: P2 reveal with wrong preimage") {
@@ -145,7 +145,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(provider, revealTx, lotteryUtxo._1, "Fraudulent attempt")
+        assertTxFails(provider, revealTx, lotteryUtxo._1, "Fraudulent attempt")
     }
 
     test("FAIL: P1 reveal attempts to change player two secret") {
@@ -170,7 +170,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(provider, revealTx, lotteryUtxo._1, "Player two secret must not change")
+        assertTxFails(provider, revealTx, lotteryUtxo._1, "Player two secret must not change")
     }
 
     test("FAIL: P2 reveal attempts to change deadline") {
@@ -195,7 +195,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(provider, revealTx, lotteryUtxo._1, "Reveal deadline must not change")
+        assertTxFails(provider, revealTx, lotteryUtxo._1, "Reveal deadline must not change")
     }
 
     test("P2 reveals with even sum (32 + 16 = 48)") {
@@ -237,7 +237,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertSuccess(
+        assertTxSucceeds(
           provider,
           p2RevealTx,
           lotteryUtxo2._1,
@@ -284,7 +284,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(afterSlot)
-        assertSuccess(
+        assertTxSucceeds(
           provider,
           timeoutTx,
           lotteryUtxo2._1,
@@ -329,7 +329,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(provider, timeoutTx, lotteryUtxo2._1, "Deadline not reached")
+        assertTxFails(provider, timeoutTx, lotteryUtxo2._1, "Deadline not reached")
     }
 
     // Lose/Concede
@@ -372,7 +372,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertSuccess(
+        assertTxSucceeds(
           provider,
           loseTx,
           lotteryUtxo2._1,
@@ -417,7 +417,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(afterSlot)
-        assertSuccess(
+        assertTxSucceeds(
           provider,
           timeoutTx,
           lotteryUtxo2._1,
@@ -461,7 +461,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           signer = Eve.signer
         )
         provider.setSlot(afterSlot)
-        assertFailure(provider, theftTx, lotteryUtxo2._1, "Timeout must pay the revealer")
+        assertTxFails(provider, theftTx, lotteryUtxo2._1, "Timeout must pay the revealer")
     }
 
     test("FAIL: one Timeout payout cannot settle two lottery pots (double satisfaction)") {
@@ -482,7 +482,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
             .sign(Eve.signer)
             .transaction
         provider.setSlot(afterSlot)
-        assertFailure(provider, theftTx, game1.input, LotteryValidator.OneLotteryInput)
+        assertTxFails(provider, theftTx, game1.input, LotteryValidator.OneLotteryInput)
     }
 
     test("FAIL: one Lose payout cannot settle two lottery pots (double satisfaction)") {
@@ -504,7 +504,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
             .sign(Eve.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertFailure(provider, loseTx, game1.input, LotteryValidator.OneLotteryInput)
+        assertTxFails(provider, loseTx, game1.input, LotteryValidator.OneLotteryInput)
     }
 
     test("FAIL: P2-revealed Timeout payout cannot settle two lottery pots (double satisfaction)") {
@@ -523,7 +523,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
             .sign(Eve.signer)
             .transaction
         provider.setSlot(afterSlot)
-        assertFailure(provider, theftTx, game1.input, LotteryValidator.OneLotteryInput)
+        assertTxFails(provider, theftTx, game1.input, LotteryValidator.OneLotteryInput)
     }
 
     test("FAIL: P2-revealed Lose payout cannot settle two lottery pots (double satisfaction)") {
@@ -542,7 +542,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
             .sign(Eve.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertFailure(provider, loseTx, game1.input, LotteryValidator.OneLotteryInput)
+        assertTxFails(provider, loseTx, game1.input, LotteryValidator.OneLotteryInput)
     }
 
     test("FAIL: P1 first reveal cannot take part of the pot") {
@@ -561,7 +561,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
             .sign(Alice.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertFailure(provider, drainTx, lotteryUtxo.input, LotteryValidator.PotMustStay)
+        assertTxFails(provider, drainTx, lotteryUtxo.input, LotteryValidator.PotMustStay)
     }
 
     test("FAIL: P2 first reveal cannot take part of the pot") {
@@ -578,7 +578,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
             .sign(Bob.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertFailure(provider, drainTx, lotteryUtxo.input, LotteryValidator.PotMustStay)
+        assertTxFails(provider, drainTx, lotteryUtxo.input, LotteryValidator.PotMustStay)
     }
 
     // The revealed datum is larger than the Empty one, so its min-ADA can be higher than the pot:
@@ -641,7 +641,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
             .sign(Alice.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertFailure(provider, revealTx, game1.input, LotteryValidator.OneLotteryInput)
+        assertTxFails(provider, revealTx, game1.input, LotteryValidator.OneLotteryInput)
     }
 
     test("FAIL: P2 reveals with odd sum (32 + 17 = 49) - Unlucky") {
@@ -706,7 +706,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(provider, p2RevealTx, lotteryUtxo2._1, "Unlucky")
+        assertTxFails(provider, p2RevealTx, lotteryUtxo2._1, "Unlucky")
     }
 
     test("P1 concedes after P2 revealed - P2 gets pot") {
@@ -747,7 +747,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertSuccess(
+        assertTxSucceeds(
           provider,
           loseTx,
           lotteryUtxo2._1,
@@ -794,7 +794,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(provider, p2RevealTx, lotteryUtxo2._1, "Fraudulent attempt")
+        assertTxFails(provider, p2RevealTx, lotteryUtxo2._1, "Fraudulent attempt")
     }
 
     test("FAIL: P2 lose with wrong preimage") {
@@ -835,7 +835,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(provider, loseTx, lotteryUtxo2._1, "Fraudulent attempt")
+        assertTxFails(provider, loseTx, lotteryUtxo2._1, "Fraudulent attempt")
     }
 
     test("FAIL: P1 timeout with wrong preimage") {
@@ -875,7 +875,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(afterSlot)
-        assertFailure(provider, timeoutTx, lotteryUtxo2._1, "Fraudulent attempt")
+        assertTxFails(provider, timeoutTx, lotteryUtxo2._1, "Fraudulent attempt")
     }
 
     test("P1 reveals with even sum (32 + 16 = 48) after P2 revealed") {
@@ -917,7 +917,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertSuccess(
+        assertTxSucceeds(
           provider,
           p1RevealTx,
           lotteryUtxo2._1,
@@ -1076,7 +1076,7 @@ object LotteryValidatorTest extends ScalusTest {
       lotteryState = lotteryState
     )
 
-    private def assertSuccess(
+    private def assertTxSucceeds(
         provider: Emulator,
         tx: Transaction,
         lotteryInput: TransactionInput,
@@ -1093,7 +1093,7 @@ object LotteryValidatorTest extends ScalusTest {
         assert(submissionResult.isRight, s"Emulator submission failed: $submissionResult")
     }
 
-    /** Like [[assertSuccess]], for a transaction whose budget no other test pins. */
+    /** Like [[assertTxSucceeds]], for a transaction whose budget no other test pins. */
     private def assertAccepted(
         provider: Emulator,
         tx: Transaction,
@@ -1106,7 +1106,7 @@ object LotteryValidatorTest extends ScalusTest {
         assert(submissionResult.isRight, s"Emulator submission failed: $submissionResult")
     }
 
-    private def assertFailure(
+    private def assertTxFails(
         provider: Emulator,
         tx: Transaction,
         lotteryInput: TransactionInput,

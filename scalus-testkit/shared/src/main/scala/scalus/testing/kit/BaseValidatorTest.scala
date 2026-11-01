@@ -18,7 +18,7 @@ import scalus.uplc.eval.{BuiltinError, PlutusVM}
   *
   * For JVM-only testing with UplcCli support, use `BaseValidatorTestJvm` instead.
   */
-@deprecated("use AnyFunSuite with ScalusTest and checkResult", "1.4.1")
+@deprecated("use AnyFunSuite with ScalusTest, assertSuccess and assertFailure", "1.5.0")
 @nowarn("cat=deprecation") // uses its deprecated siblings
 abstract class BaseValidatorTest
     extends AnyFunSuite

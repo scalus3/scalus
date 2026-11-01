@@ -402,9 +402,19 @@ get lost; the pilot found two (F-33, F-34).
   setup transaction without a pin (`[BP-4a]`); `pinSize(bytes)` pins a script size. Failing runs are
   never pinned. A test name that embeds a measured value becomes a fixed name plus `pinSize`.
 
+  *Decisions (2026-11-01), D3 revision:* one family of names. `assertSuccess(result, program)` pins
+  a successful run, `assertSuccess(result)` does not; `assertFailure(result, message)` checks the
+  log message; `assertOutcome(result, expectedError)` serves tests that take the outcome as a
+  parameter. `emulator.submitOk(tx)` asserts acceptance and pins the transaction under test,
+  `emulator.submitSetup(tx)` asserts acceptance without a pin, `emulator.submitFails(tx, message)`
+  asserts a rejection. `buildFails(message)(tx)` replaces `assertScriptFail`. `checkResult`,
+  `success`, `failure`, `assertScriptFail` and `compareBudgetWithReferenceValue` are deprecated
+  since 1.5.0; the reference budgets of the benchmarks stay as comments. `EmulatorBase.initialUtxosOf`
+  is `private[node]`; `Emulator.withOutputs(outputs: TransactionOutput*)` is the public form.
+
   *Decisions (2026-10-30), D4:* `EvalTestKit` and `ScalusTest` are the only assertion family. The
   entry points of `EvalTestDsl`, `ResultAssertions`, `Evaluator` and `BaseValidatorTest(+Jvm)` are
-  `@deprecated` since 1.4.1 and go in the next release. One `scalus.testing.Benchmark` tag lives in
+  `@deprecated` since 1.5.0 and go in the next release. One `scalus.testing.Benchmark` tag lives in
   core test sources and is copied into the testkit. `Emulator.withOutputs(Output(address, value), ...)`
   (ledger main, JVM and JS) builds an Emulator with one UTxO per output; `withAddresses` stays for
   equal values. The local copies of `genesisHash`, `given Options` and `given PlutusVM` go to the

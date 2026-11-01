@@ -13,7 +13,7 @@ import scala.util.{Failure, Success, Try}
   * Extends BaseValidatorTest with UplcCli support for comparing results across different
   * evaluators.
   */
-@deprecated("use AnyFunSuite with ScalusTest and checkResult", "1.4.1")
+@deprecated("use AnyFunSuite with ScalusTest, assertSuccess and assertFailure", "1.5.0")
 @nowarn("cat=deprecation") // uses its deprecated siblings
 abstract class BaseValidatorTestJvm extends BaseValidatorTest {
 

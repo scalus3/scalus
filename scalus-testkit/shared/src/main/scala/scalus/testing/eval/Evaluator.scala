@@ -55,7 +55,7 @@ object EvalConfig:
   * @param uplcCliResult
   *   Optional result from UplcCli (JVM-only)
   */
-@deprecated("use Program.evaluateDebug", "1.4.1")
+@deprecated("use Program.evaluateDebug", "1.5.0")
 @nowarn("cat=deprecation") // uses its deprecated siblings
 case class MultiEvalResult(
     results: Map[(TargetLoweringBackend, PlutusVM), Result],
@@ -87,7 +87,7 @@ case class MultiEvalResult(
   *
   * These primitives form the foundation of the testing API.
   */
-@deprecated("use Program.evaluateDebug", "1.4.1")
+@deprecated("use Program.evaluateDebug", "1.5.0")
 @nowarn("cat=deprecation") // uses its deprecated siblings
 object Evaluator:
 

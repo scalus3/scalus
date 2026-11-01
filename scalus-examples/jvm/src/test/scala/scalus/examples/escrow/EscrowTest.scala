@@ -127,7 +127,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         val escrowUtxo = initialize(provider)
         val utxos = provider.findUtxos(Eve.address).await().toOption.get
 
-        assertScriptFail("Buyer must sign deposit transaction") {
+        buildFails("Buyer must sign deposit transaction") {
             txCreator.deposit(
               utxos = utxos,
               escrowUtxo = escrowUtxo,
@@ -147,7 +147,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         // The deposit precondition requires the contract to hold ONLY the initialization amount
         // beforehand (`contractBalance === initializationAmount`). A re-deposit onto an already
         // funded contract (balance = escrowAmount + initializationAmount) must therefore fail.
-        assertScriptFail("Contract must contain only initialization amount before deposit") {
+        buildFails("Contract must contain only initialization amount before deposit") {
             txCreator.deposit(
               utxos = utxos,
               escrowUtxo = fundedUtxo,
@@ -228,7 +228,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
 
         // The validator checks buyerOutputs.nonEmpty before checking isSignedBy.
         // Since Eve's address != Bob's address (the buyer), buyerOutputs is empty.
-        assertScriptFail("Buyer outputs must not be empty") {
+        buildFails("Buyer outputs must not be empty") {
             txCreator.pay(
               utxos = utxos,
               escrowUtxo = fundedUtxo,
@@ -246,7 +246,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         val escrowUtxo = initialize(provider) // Not deposited yet
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
-        assertScriptFail("Contract must be fully funded before payment") {
+        buildFails("Contract must be fully funded before payment") {
             txCreator.pay(
               utxos = utxos,
               escrowUtxo = escrowUtxo,
@@ -266,7 +266,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         val builder = TxBuilder(env)
 
         // Try to pay seller less than required amount
-        assertScriptFail("Seller must receive exactly escrow amount plus initialization amount") {
+        buildFails("Seller must receive exactly escrow amount plus initialization amount") {
             builder
                 .spend(fundedUtxo, Action.Pay, contract.script)
                 .requireSignature(Bob.addrKeyHash)
@@ -313,7 +313,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
 
         // The validator checks sellerOutputs.nonEmpty before checking isSignedBy.
         // Since Eve's address != Alice's address (the seller), sellerOutputs is empty.
-        assertScriptFail("Seller outputs must not be empty") {
+        buildFails("Seller outputs must not be empty") {
             txCreator.refund(
               utxos = utxos,
               escrowUtxo = fundedUtxo,
@@ -331,7 +331,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         val escrowUtxo = initialize(provider) // Not deposited yet
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
 
-        assertScriptFail("Contract must be fully funded before refund") {
+        buildFails("Contract must be fully funded before refund") {
             txCreator.refund(
               utxos = utxos,
               escrowUtxo = escrowUtxo,
@@ -351,7 +351,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         val builder = TxBuilder(env)
 
         // Try to refund buyer less than required amount
-        assertScriptFail("Buyer must receive exactly the escrow amount back") {
+        buildFails("Buyer must receive exactly the escrow amount back") {
             builder
                 .spend(fundedUtxo, Action.Refund, contract.script)
                 .requireSignature(Alice.addrKeyHash)

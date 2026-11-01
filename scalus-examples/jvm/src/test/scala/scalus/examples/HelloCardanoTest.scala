@@ -40,11 +40,6 @@ class HelloCardanoTest extends AnyFunSuite with ScalusTest {
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 
-        compareBudgetWithReferenceValue(
-          testName = "HelloCardanoTest.Hello Cardano",
-          scalusBudget = scalusBudget,
-          refBudget = ExUnits(memory = 28554L, steps = 9375627L),
-          isPrintComparison = false
-        )
+        // Reference budget of the original benchmark: ExUnits(memory = 28554L, steps = 9375627L)
     }
 }

@@ -10,28 +10,17 @@ import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.eval.{PlutusVM, Result}
+import scalus.testing.kit.ScalusTest
+import scalus.uplc.eval.PlutusVM
 import scalus.uplc.TermDSL.given
 import scalus.uplc.*
 
 import scala.language.implicitConversions
 
-class MintingPolicyExampleTest extends AnyFunSuite {
+class MintingPolicyExampleTest extends AnyFunSuite, ScalusTest {
 
     // Plutus V2 scripts: evaluated on the V2 machine, as BaseValidatorTest did.
-    private given PlutusVM = PlutusVM.makePlutusV2VM()
-
-    /** The program evaluates successfully to `()`. */
-    private def assertReturnsUnit(program: Program): Unit =
-        program.deBruijnedProgram.evaluateDebug match
-            case Result.Success(term, _, _, _) =>
-                assert(term α_== Term.Const(Constant.Unit), s"Expected (), got ${term.show}")
-            case failure: Result.Failure => fail(s"Expected success, got $failure")
-
-    /** The program evaluation fails. */
-    private def assertFails(program: Program): Unit =
-        val result = program.deBruijnedProgram.evaluateDebug
-        assert(result.isFailure, s"Expected failure, got $result")
+    override protected def plutusVM: PlutusVM = PlutusVM.makePlutusV2VM()
 
     private val hoskyMintTxOutRef = TxOutRef(
       TxId(hex"1ab6879fc08345f51dc9571ac4f530bf8673e0d798758c470f9af6f98e2f3982"),
@@ -122,7 +111,7 @@ class MintingPolicyExampleTest extends AnyFunSuite {
         ) => Program
     ) = {
         // The minting policy script should succeed when the TxOutRef is spent and the minted tokens are correct
-        assertReturnsUnit(
+        assertSuccess(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
@@ -131,10 +120,10 @@ class MintingPolicyExampleTest extends AnyFunSuite {
               hex"484f534b59",
               BigInt("1000000000000000")
             )
-          )
+          ).evaluateDebug
         )
         // Successful burn, the minted tokens are negative and TxOutRef is not spent
-        assertReturnsUnit(
+        assertSuccess(
           withScriptContext(
             validator,
             List.empty,
@@ -143,26 +132,26 @@ class MintingPolicyExampleTest extends AnyFunSuite {
               hex"484f534b59",
               BigInt(-100)
             )
-          )
+          ).evaluateDebug
         )
 
-        assertFails(
+        assertFailure(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
             Value(hex"a0028f350aaabe0545fdcb56b039bfb08e4bb4d8c4d7c3c7d481c235", hex"484f534b59", 2)
-          )
+          ).evaluateDebug
         )
 
-        assertFails(
+        assertFailure(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
             Value(hex"cc", hex"484f534b59", BigInt("1000000000000000"))
-          )
+          ).evaluateDebug
         )
 
-        assertFails(
+        assertFailure(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
@@ -171,10 +160,10 @@ class MintingPolicyExampleTest extends AnyFunSuite {
               hex"deadbeef",
               BigInt("1000000000000000")
             )
-          )
+          ).evaluateDebug
         )
 
-        assertFails(
+        assertFailure(
           withScriptContext(
             validator,
             List.empty,
@@ -183,10 +172,10 @@ class MintingPolicyExampleTest extends AnyFunSuite {
               hex"484f534b59",
               BigInt("1000000000000000")
             )
-          )
+          ).evaluateDebug
         )
 
-        assertFails(
+        assertFailure(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
@@ -200,7 +189,7 @@ class MintingPolicyExampleTest extends AnyFunSuite {
                   hex"deadbeef",
                   BigInt("1000000000000000")
                 )
-          )
+          ).evaluateDebug
         )
     }
 

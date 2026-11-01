@@ -163,7 +163,7 @@ trait EvalTestKit
         val compiledExpected = PlutusV3.compile(expected)
         val label = SourceText.of(f)
         // The ledger's size of the deployed script: the compiled function, without its arguments.
-        val size = Script.PlutusV3(compiled.program).script.size.toLong
+        val size = Script.PlutusV3(compiled.program).script.size
         val toData1 = (a: A1) => toData[A1](a)
         EvalTestKit.At1(
           registerPendingAt(),
@@ -198,7 +198,7 @@ trait EvalTestKit
         val compiledExpected = PlutusV3.compile(expected)
         val label = SourceText.of(f)
         // The ledger's size of the deployed script: the compiled function, without its arguments.
-        val size = Script.PlutusV3(compiled.program).script.size.toLong
+        val size = Script.PlutusV3(compiled.program).script.size
         val toData1 = (a: A1) => toData[A1](a)
         val toData2 = (a: A2) => toData[A2](a)
         EvalTestKit.At2(
@@ -236,7 +236,7 @@ trait EvalTestKit
         val compiledExpected = PlutusV3.compile(expected)
         val label = SourceText.of(f)
         // The ledger's size of the deployed script: the compiled function, without its arguments.
-        val size = Script.PlutusV3(compiled.program).script.size.toLong
+        val size = Script.PlutusV3(compiled.program).script.size
         val toData1 = (a: A1) => toData[A1](a)
         val toData2 = (a: A2) => toData[A2](a)
         val toData3 = (a: A3) => toData[A3](a)

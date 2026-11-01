@@ -156,7 +156,7 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val depositTx =
             txCreator.deposit(utxos, poolUtxo1, x0 = 1000L, x1 = 4000L, Alice.address, Alice.signer)
-        provider.submitPinned(depositTx)
+        provider.submitOk(depositTx)
     }
 
     test("budget: redeem") {
@@ -166,7 +166,7 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val halfLp = (initialDatum.lpSupply / 2).toLong
         val redeemTx = txCreator.redeem(utxos, poolUtxo1, halfLp, Alice.address, Alice.signer)
-        provider.submitPinned(redeemTx)
+        provider.submitOk(redeemTx)
     }
 
     test("swap t0 to t1 correctly") {

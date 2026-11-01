@@ -37,7 +37,7 @@ trait BudgetPins {
         budgetPinState.registerPending(s"${pos.fileName}:${pos.lineNumber}")
 
     /** Pins one evaluation of a script of `size` bytes under the current test name. */
-    protected final def pinEval(budget: ExUnits, size: Long)(using source.Position): Unit =
+    protected final def pinEval(budget: ExUnits, size: Int)(using source.Position): Unit =
         pinValue(None, Pin.eval(budget, size))
 
     /** Runs `body` with every pin key labelled `label`, instead of the automatic label (the source
@@ -56,7 +56,7 @@ trait BudgetPins {
     }
 
     /** Pins one evaluation of a script of `size` bytes under `"<test name> / <label>"`. */
-    protected final def pinEval(label: String, budget: ExUnits, size: Long)(using
+    protected final def pinEval(label: String, budget: ExUnits, size: Int)(using
         source.Position
     ): Unit =
         pinValue(Some(label), Pin.eval(budget, size))
@@ -66,7 +66,7 @@ trait BudgetPins {
         pinValue(None, Pin.tx(tx))
 
     /** Pins a script size in bytes under the current test name (`[BP-5]`). */
-    protected final def pinSize(bytes: Long)(using source.Position): Unit =
+    protected final def pinSize(bytes: Int)(using source.Position): Unit =
         pinValue(None, Pin.Size(bytes))
 
     /** Fails at `pos`, the caller's position. ScalaTest's `fail` is an inline macro that would

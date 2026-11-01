@@ -53,7 +53,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
           signer = Bob.signer
         )
 
-        val joinResult = assertSuccess(provider, joinTx, pricebetUtxo._1)
+        val joinResult = assertTxSucceeds(provider, joinTx, pricebetUtxo._1)
         assert(
           // Slightly higher than before: the exchange-rate check now uses RationalEq.equals
           // (cross-multiplication) instead of the previous structural equalsData on Rational.
@@ -75,7 +75,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
           sponsor = Bob.address,
           signer = Bob.signer
         )
-        assertSuccess(provider, joinTx1, pricebetUtxo._1)
+        assertTxSucceeds(provider, joinTx1, pricebetUtxo._1)
 
         // Find the new pricebet UTXO after join
         val pricebetUtxos =
@@ -92,7 +92,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
 
-        assertFailure(provider, joinTx2, newPricebetUtxo._1, "Player already joined")
+        assertTxFails(provider, joinTx2, newPricebetUtxo._1, "Player already joined")
     }
 
     test("Player wins with oracle rate above threshold") {
@@ -110,7 +110,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
           sponsor = Bob.address,
           signer = Bob.signer
         )
-        assertSuccess(provider, joinTx, pricebetUtxo._1)
+        assertTxSucceeds(provider, joinTx, pricebetUtxo._1)
 
         // Find the pricebet UTXO after join
         val pricebetUtxos =
@@ -131,7 +131,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        val winResult = assertSuccess(provider, winTx, joinedPricebetUtxo._1)
+        val winResult = assertTxSucceeds(provider, winTx, joinedPricebetUtxo._1)
         assert(
           winResult.budget == (ExUnits(memory = 62975, steps = 23_982_006))
         )
@@ -151,7 +151,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
           sponsor = Bob.address,
           signer = Bob.signer
         )
-        assertSuccess(provider, joinTx, pricebetUtxo._1)
+        assertTxSucceeds(provider, joinTx, pricebetUtxo._1)
         val joinedPricebetUtxo = {
             val pricebetUtxos =
                 provider.findUtxos(txCreator.pricebetScriptAddress).await().toOption.get
@@ -173,7 +173,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(
+        assertTxFails(
           provider,
           winTx,
           joinedPricebetUtxo._1,
@@ -196,7 +196,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
           sponsor = Bob.address,
           signer = Bob.signer
         )
-        assertSuccess(provider, joinTx, pricebetUtxo._1)
+        assertTxSucceeds(provider, joinTx, pricebetUtxo._1)
 
         // Find the pricebet UTXO after join
         val pricebetUtxos =
@@ -217,7 +217,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(provider, winTx, joinedPricebetUtxo._1, "Oracle rate must exceed bet rate")
+        assertTxFails(provider, winTx, joinedPricebetUtxo._1, "Oracle rate must exceed bet rate")
     }
 
     test("Owner times out after deadline") {
@@ -236,7 +236,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(afterDeadlineSlot)
-        val timeoutResult = assertSuccess(provider, timeoutTx, pricebetUtxo._1)
+        val timeoutResult = assertTxSucceeds(provider, timeoutTx, pricebetUtxo._1)
         assert(
           timeoutResult.budget == (ExUnits(memory = 29783, steps = 11_632_207))
         )
@@ -258,7 +258,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(provider, timeoutTx, pricebetUtxo._1, "Deadline not reached")
+        assertTxFails(provider, timeoutTx, pricebetUtxo._1, "Deadline not reached")
     }
 
     test("Oracle updates successfully") {
@@ -280,7 +280,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(updateSlot)
-        val updateResult = assertSuccess(provider, updateTx, oracleUtxo._1)
+        val updateResult = assertTxSucceeds(provider, updateTx, oracleUtxo._1)
         assert(
           updateResult.budget == (ExUnits(memory = 52447, steps = 22_737_257))
         )
@@ -317,7 +317,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
             .transaction
 
         provider.setSlot(updateSlot)
-        assertFailure(provider, updateTx, oracleUtxo._1, "Must be signed by the authorized signer")
+        assertTxFails(provider, updateTx, oracleUtxo._1, "Must be signed by the authorized signer")
     }
 
     // An Update to a zero rate or a zero denominator would lock the oracle UTxO and its beacon:
@@ -592,7 +592,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(
+        assertTxFails(
           provider,
           winTxLowRate,
           pricebetUtxoAfterJoin._1,
@@ -637,7 +637,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertSuccess(provider, winTxHighRate, pricebetUtxoAfterJoin._1)
+        assertTxSucceeds(provider, winTxHighRate, pricebetUtxoAfterJoin._1)
     }
 }
 
@@ -894,7 +894,7 @@ object PricebetValidatorTest extends ScalusTest {
         assert(provider.submit(updateTx).await().isLeft, "Emulator must reject the update")
     }
 
-    def assertSuccess(
+    def assertTxSucceeds(
         provider: Emulator,
         tx: Transaction,
         scriptInput: TransactionInput
@@ -910,7 +910,7 @@ object PricebetValidatorTest extends ScalusTest {
         result
     }
 
-    def assertFailure(
+    def assertTxFails(
         provider: Emulator,
         tx: Transaction,
         scriptInput: TransactionInput,

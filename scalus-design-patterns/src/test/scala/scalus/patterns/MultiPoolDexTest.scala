@@ -57,7 +57,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
         // k_before = 1000 * 1000 = 1_000_000
         // k_after = (1000 + 100) * (1000 - 90) = 1100 * 910 = 1_001_000
         val result = evalPool(poolAApplied, poolAHash, swap)
-        checkResult(success, result)
+        assertSuccess(result)
     }
 
     test("pool: failure - constant product violated") {
@@ -69,7 +69,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
         )
         // k_after = 1100 * 800 = 880_000 < 1_000_000
         val result = evalPool(poolAApplied, poolAHash, swap)
-        checkResult(failure("Constant product invariant violated"), result)
+        assertFailure(result, "Constant product invariant violated")
     }
 
     test("pool: failure - insufficient liquidity") {
@@ -80,7 +80,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
           reserveBBefore = 1000
         )
         val result = evalPool(poolAApplied, poolAHash, swap)
-        checkResult(failure("Insufficient pool liquidity"), result)
+        assertFailure(result, "Insufficient pool liquidity")
     }
 
     // -- Order validator tests with single pool --
@@ -103,7 +103,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
               resB = 1000
             )
           ),
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -122,7 +122,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
               resB = 1000
             )
           ),
-          expectedResult = failure("Output below minimum (slippage exceeded)")
+          expectedError = Some("Output below minimum (slippage exceeded)")
         ).run()
     }
 
@@ -143,7 +143,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
               resB = 1000
             )
           ),
-          expectedResult = failure("Order not filled at fair rate")
+          expectedError = Some("Order not filled at fair rate")
         ).run()
     }
 
@@ -178,7 +178,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
           )
         )
         val result = (orderContract.program $ ctx.toData).evaluateDebug
-        checkResult(success, result)
+        assertSuccess(result)
     }
 
     test("order: failure - cancel without owner signature") {
@@ -212,7 +212,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
           )
         )
         val result = (orderContract.program $ ctx.toData).evaluateDebug
-        checkResult(failure("Cancel requires owner signature"), result)
+        assertFailure(result, "Cancel requires owner signature")
     }
 
     // -- Multiple pool tests (the main demonstration) --
@@ -243,7 +243,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
               resB = 2000
             )
           ),
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -275,7 +275,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
               resB = 2000
             )
           ),
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -304,7 +304,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
               resB = 2000
             ) // kAfter = 2200 * 100 = 220000 < kBefore = 4000000
           ),
-          expectedResult = failure("Constant product invariant violated")
+          expectedError = Some("Constant product invariant violated")
         ).run()
     }
 
@@ -333,7 +333,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
               resB = 2000
             )
           ),
-          expectedResult = success
+          expectedError = None
         )
 
         val (poolABudget, poolBBudget, orderBudget) = testCase.runWithBudget()
@@ -379,7 +379,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
     case class OrderTestCase(
         orders: scala.List[Order],
         pools: scala.List[Pool],
-        expectedResult: (String | Unit, POption[ExUnits])
+        expectedError: Option[String]
     ) {
         private def buildTxInfo(): TxInfo = {
             // Build order inputs
@@ -454,18 +454,18 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
                     evalPool(pool.applied, pool.hash, swap, txInfo)
                 }
                 .find { poolResult =>
-                    expectedResult._1 match
-                        case msg: String =>
+                    expectedError match
+                        case Some(msg) =>
                             poolResult.isFailure && poolResult.logs.exists(_.contains(msg))
-                        case () =>
-                            checkResult(success, poolResult)
+                        case None =>
+                            assertSuccess(poolResult)
                             false
                 }
 
             poolFailure match
                 case Some(result) =>
                     // A pool failed as expected
-                    checkResult(expectedResult, result)
+                    assertOutcome(result, expectedError)
                 case None =>
                     // All pools passed; test each order's spend endpoint
                     for (order, idx) <- orders.zipWithIndex do {
@@ -484,7 +484,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
                           )
                         )
                         val result = (orderContract.program $ ctx.toData).evaluateDebug
-                        checkResult(expectedResult, result)
+                        assertOutcome(result, expectedError)
                     }
         }
 

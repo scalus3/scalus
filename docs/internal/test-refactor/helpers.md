@@ -6,6 +6,10 @@ approves it (`[P3-11]`). Inputs: the P2 digests in `p3/findings-by-scope/`, `hel
 helper sources cited below. Counts come from `grep` over `**/src/test/**/*.scala` (regex per count
 in Appendix A) or from the evidence lines of the finding ("evidence sites").
 
+The owner decisions D1 to D4 in the spec (`[P3-11a]`) supersede the names in this draft. Example:
+the D3 revision (2026-11-01) renames `checkResult` to `assertSuccess` and `assertFailure`, and
+`submitPinned` to `submitOk`.
+
 ## 1. Summary
 
 | Test kind | Layer | Lives in | Platforms |
@@ -49,7 +53,7 @@ Rejected: inline literals (status quo, 810 `ExUnits(` literals in 79 files, A-1)
   set only for scalus (`build.sbt:474`), the bloxbean library (`build.sbt:865`) and the ledger
   (`build.sbt:1043`). The task brief says testkit is MiMa-checked; the build says it is not. Testkit
   is still a published artifact (`publishOnlyLts`, `build.sbt:672`), so removed members get a
-  `@deprecated("...", "1.4.1")` cycle, not a silent delete.
+  `@deprecated("...", "1.5.0")` cycle, not a silent delete.
 - `scalus-core` tests cannot depend on `scalus-testkit` (`findings.md:172-173`, the F-8 correction).
   So the pin core must sit in scalus-core test sources. The build already copies
   `scalus/testing/kit/EvalTestKit.scala` and the six `ArbitraryInstances` files into testkit main
@@ -492,7 +496,7 @@ line of every table (2.5, 2.8). Resolves `[BP-8]`, `[BP-8a]`, `[BP-8b]`, `[BP-9]
 **H-04 `ScalaCompilerVersion`** – `change`. Moves from `scalus-testkit/shared/src/main/scala/scalus/ScalaCompilerVersion.scala`
 to `scalus-core/shared/src/test/scala/scalus/ScalaCompilerVersion.scala` with the same FQN, copied
 into testkit main. `version` becomes the compile-time macro of 2.5; `hasLeanDesugaring` stays;
-`baseline` is `@deprecated("use the suite budget table", "1.4.1")`. Resolves `[BP-6a]`. Call sites:
+`baseline` is `@deprecated("use the suite budget table", "1.5.0")`. Resolves `[BP-6a]`. Call sites:
 21 `baseline` calls in 9 files (A-5), migrated by `budget-pin` units. Before/after: 2.12 (b).
 
 **H-05 `EvalTestKit` pinned assertions** – `change`. Location `scalus-core/shared/src/test/scala/scalus/testing/kit/EvalTestKit.scala`.
@@ -959,7 +963,7 @@ cannot see testkit). Replaces 4 `private object Benchmark` (A-30: `BilinearAccum
 
 ## 4. Retire list
 
-All `proposed`. Published members get `@deprecated("...", "1.4.1")` (latest tag `v1.4.1`) for one
+All `proposed`. Published members get `@deprecated("...", "1.5.0")` (latest tag `v1.5.0`) for one
 release, then a delete; test-only members are deleted in the unit that replaces them.
 
 | Helper | Location | Users today | Replaced by | Also update |

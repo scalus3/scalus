@@ -166,7 +166,7 @@ class HtlcIntegrationTest extends AnyFunSuite with IntegrationTest {
         val lockedUtxo = lock(s)
         val bobUtxos = s.ctx.provider.findUtxos(s.ctx.bob.address).await().toOption.get
 
-        assertScriptFail(HtlcValidator.InvalidReceiverPreimage) {
+        buildFails(HtlcValidator.InvalidReceiverPreimage) {
             s.txCreator.reveal(
               utxos = bobUtxos,
               lockedUtxo = lockedUtxo,
@@ -185,7 +185,7 @@ class HtlcIntegrationTest extends AnyFunSuite with IntegrationTest {
         val lockedUtxo = lock(s)
         val eveUtxos = s.ctx.provider.findUtxos(s.ctx.eve.address).await().toOption.get
 
-        assertScriptFail(HtlcValidator.UnsignedReceiverTransaction) {
+        buildFails(HtlcValidator.UnsignedReceiverTransaction) {
             s.txCreator.reveal(
               utxos = eveUtxos,
               lockedUtxo = lockedUtxo,
@@ -211,7 +211,7 @@ class HtlcIntegrationTest extends AnyFunSuite with IntegrationTest {
         )
         val bobUtxos = s.ctx.provider.findUtxos(s.ctx.bob.address).await().toOption.get
 
-        assertScriptFail(HtlcValidator.InvalidReceiverTimePoint) {
+        buildFails(HtlcValidator.InvalidReceiverTimePoint) {
             s.txCreator.reveal(
               utxos = bobUtxos,
               lockedUtxo = lockedUtxo,
@@ -235,7 +235,7 @@ class HtlcIntegrationTest extends AnyFunSuite with IntegrationTest {
         )
         val eveUtxos = s.ctx.provider.findUtxos(s.ctx.eve.address).await().toOption.get
 
-        assertScriptFail(HtlcValidator.UnsignedCommitterTransaction) {
+        buildFails(HtlcValidator.UnsignedCommitterTransaction) {
             s.txCreator.timeout(
               utxos = eveUtxos,
               lockedUtxo = lockedUtxo,
@@ -258,7 +258,7 @@ class HtlcIntegrationTest extends AnyFunSuite with IntegrationTest {
         )
         val aliceUtxos = s.ctx.provider.findUtxos(s.ctx.alice.address).await().toOption.get
 
-        assertScriptFail(HtlcValidator.InvalidCommitterTimePoint) {
+        buildFails(HtlcValidator.InvalidCommitterTimePoint) {
             s.txCreator.timeout(
               utxos = aliceUtxos,
               lockedUtxo = lockedUtxo,

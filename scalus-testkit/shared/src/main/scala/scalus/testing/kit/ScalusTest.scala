@@ -10,7 +10,7 @@ import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.{CardanoInfo, EvaluatorReportConfig, ExUnits, Language, ProfileLevel, RedeemerTag}
 import scalus.cardano.ledger.Script
 import scalus.cardano.ledger.{Transaction, TransactionHash}
-import scalus.cardano.node.EmulatorBase
+import scalus.cardano.node.{EmulatorBase, NodeSubmitError}
 import scalus.testing.budget.BudgetPins
 import scalus.cardano.txbuilder.TxBuilderException
 import scalus.cardano.onchain.plutus.v1.Credential.PubKeyCredential
@@ -29,20 +29,23 @@ import scalus.uplc.internal.ProfileReportWriter
 import scala.util.control.NonFatal
 
 // `prelude.Option.*` above shadows the standard Some; alias it for the off-chain APIs that take one.
-import scala.Some as ScalaSome
+import scala.{Option as ScalaOption, Some as ScalaSome}
 
 trait ScalusTest extends ArbitraryInstances, Assertions, BudgetPins {
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()
     protected given PlutusVM = plutusVM
 
-    /** Verifies that transaction building fails with the expected error.
-      *
-      * @param expectedError
-      *   Substring expected in error message or script logs
-      * @param buildTx
-      *   The transaction building code that should fail
+    /** Asserts that building a transaction fails, and that `expectedError` is in the error message
+      * or in the script logs.
+      * {{{
+      * buildFails(HtlcValidator.InvalidReceiverPreimage) {
+      *     txCreator.reveal(...)
+      * }
+      * }}}
       */
-    protected def assertScriptFail(expectedError: String)(buildTx: => Transaction): Unit = {
+    protected def buildFails(expectedError: String)(buildTx: => Transaction)(using
+        pos: source.Position
+    ): Unit = {
         try
             val tx = buildTx
             fail(s"Transaction building should have failed but succeeded: $tx")
@@ -58,6 +61,11 @@ trait ScalusTest extends ArbitraryInstances, Assertions, BudgetPins {
                 if !message.contains(expectedError) then
                     fail(s"Expected error containing '$expectedError' but got: $message")
     }
+
+    /** Verifies that transaction building fails with the expected error. */
+    @deprecated("use buildFails", "1.5.0")
+    protected def assertScriptFail(expectedError: String)(buildTx: => Transaction): Unit =
+        buildFails(expectedError)(buildTx)
 
     extension (self: SIR)
         def runScript(using
@@ -222,42 +230,77 @@ trait ScalusTest extends ArbitraryInstances, Assertions, BudgetPins {
         )
     }
 
+    /** Asserts that an evaluation succeeded. Pins nothing: use the overload with the program when
+      * the evaluation is the operation under test.
+      */
+    protected def assertSuccess(result: Result)(using pos: source.Position): Unit =
+        if !result.isSuccess then
+            fail(s"Expected success, but got: $result, logs: ${result.logs.mkString(", ")}")
+
+    /** Asserts that an evaluation succeeded, and pins it (`[BP-1]`): memory, steps, the size of
+      * `program` and the combined fee. The pin is a no-op until the suite sets its budget table and
+      * mixes in `BudgetPinsSuite`.
+      * {{{
+      * val result = contract.program.runWithDebug(scriptContext)
+      * assertSuccess(result, contract.program)
+      * }}}
+      */
+    protected def assertSuccess(result: Result, program: Program)(using
+        pos: source.Position
+    ): Unit = {
+        assertSuccess(result)
+        pinEval(result.budget, Script.PlutusV3(program).script.size)
+    }
+
+    /** Asserts that an evaluation failed with `expectedError` in its logs. A failure is never
+      * pinned (`[BP-1c]`).
+      */
+    protected def assertFailure(result: Result, expectedError: String)(using
+        pos: source.Position
+    ): Unit = {
+        if !result.isFailure then fail(s"Expected failure with: $expectedError, but got success")
+        if !result.logs.exists(_.contains(expectedError)) then
+            fail(
+              s"Expected error containing: $expectedError, but got: ${result.logs.mkString(", ")}"
+            )
+    }
+
+    /** Asserts that an evaluation failed, with any error. Prefer the overload with the expected
+      * error: this one also passes when the script fails for an unrelated reason.
+      */
+    protected def assertFailure(result: Result)(using pos: source.Position): Unit =
+        if !result.isFailure then fail(s"Expected failure, but got success: $result")
+
+    /** [[assertSuccess]] when `expectedError` is `None`, else [[assertFailure]]. For tests that
+      * take the expected outcome as a parameter.
+      */
+    protected def assertOutcome(result: Result, expectedError: ScalaOption[String])(using
+        pos: source.Position
+    ): Unit =
+        expectedError match
+            case ScalaSome(error) => assertFailure(result, error)
+            case _                => assertSuccess(result)
+
+    @deprecated("use assertFailure", "1.5.0")
     final protected def failure(message: String): (String, Option[ExUnits]) =
         (message, Option.None)
+    @deprecated("use assertFailure; budgets are pinned in the budget table", "1.5.0")
     final protected def failure(message: String, budget: ExUnits): (String, Option[ExUnits]) =
         (message, Option.Some(budget))
+    @deprecated("use assertSuccess", "1.5.0")
     protected val success: (Unit, Option[ExUnits]) = ((), Option.None)
+    @deprecated("use assertSuccess; budgets are pinned in the budget table", "1.5.0")
     final protected def success(budget: ExUnits): (Unit, Option[ExUnits]) =
         ((), Option.Some(budget))
 
+    @deprecated("use assertSuccess or assertFailure", "1.5.0")
     protected def checkResult(
         expected: (String | Unit, Option[ExUnits]),
         actual: Result
     ): Unit = {
         expected._1 match
-            case errorMsg: String =>
-                assert(
-                  actual.isFailure,
-                  s"Expected failure with: $errorMsg, but got success"
-                )
-                // If a specific error message is provided, check it matches
-                assert(
-                  actual.logs.exists(_.contains(errorMsg)),
-                  s"Expected error containing: $errorMsg, but got: ${actual.logs.mkString(", ")}"
-                )
-            case () =>
-                actual match
-                    case Result.Failure(ex, budget, cost, logs) =>
-                        ex match
-                            case be: scalus.uplc.eval.BuiltinError =>
-                                be.cause.printStackTrace()
-                            case _ =>
-                    case _ =>
-                assert(
-                  actual.isSuccess,
-                  s"Expected success, but got: ${actual.toString}, logs0: ${actual.logs.mkString(", ")}"
-                )
-
+            case errorMsg: String => assertFailure(actual, errorMsg)
+            case ()               => assertSuccess(actual)
         expected._2 match
             case Option.Some(budget) if budget != ExUnits(0, 0) =>
                 assert(
@@ -267,45 +310,51 @@ trait ScalusTest extends ArbitraryInstances, Assertions, BudgetPins {
             case _ =>
     }
 
-    /** `checkResult` that also pins the budget of a successful run (`[BP-1]`): memory, steps, the
-      * size of `program` and the combined fee. A failure is never pinned (`[BP-1c]`). The pin is a
-      * no-op until the suite sets its budget table and mixes in `BudgetPinsSuite`.
-      * {{{
-      * val result = contract.program.runWithDebug(scriptContext)
-      * checkResult(success, result, contract.program)
-      * }}}
-      */
-    protected def checkResult(
-        expected: (String | Unit, Option[ExUnits]),
-        actual: Result,
-        program: Program
-    )(using pos: source.Position): Unit = {
-        checkResult(expected, actual)
-        if expected._1 == () then
-            pinEval(actual.budget, Script.PlutusV3(program).script.size.toLong)
-    }
-
     extension (emulator: EmulatorBase)
-
-        /** Submits a setup transaction and asserts it is accepted. Not pinned: it is not the
-          * transaction under test (`[BP-4a]`).
-          */
-        def submitOk(tx: Transaction)(using pos: source.Position): TransactionHash =
-            emulator.submitSync(tx) match
-                case Right(hash) => hash
-                case Left(error) => fail(s"Transaction rejected: $error")
 
         /** Submits the transaction under test, asserts it is accepted, and pins it (`[BP-4]`): the
           * sum of its redeemer budgets, its size and its fee.
           * {{{
-          * provider.submitPinned(depositTx)
+          * provider.submitOk(depositTx)
           * }}}
           */
-        def submitPinned(tx: Transaction)(using pos: source.Position): TransactionHash =
-            val hash = emulator.submitOk(tx)
+        def submitOk(tx: Transaction)(using pos: source.Position): TransactionHash =
+            val hash = emulator.submitSetup(tx)
             pinTx(tx)
             hash
 
+        /** Submits a setup transaction and asserts it is accepted. Not pinned: it is not the
+          * transaction under test (`[BP-4a]`).
+          */
+        def submitSetup(tx: Transaction)(using pos: source.Position): TransactionHash =
+            emulator.submitSync(tx) match
+                case Right(hash) => hash
+                case Left(error) => fail(s"Transaction rejected: $error")
+
+        /** Submits a transaction, asserts it is rejected, and that `expectedError` is in the script
+          * logs or in the error message. A rejection is never pinned (`[BP-1c]`).
+          * {{{
+          * provider.submitFails(tx, "Deadline not reached")
+          * }}}
+          */
+        def submitFails(tx: Transaction, expectedError: String)(using
+            pos: source.Position
+        ): Unit =
+            emulator.submitSync(tx) match
+                case Right(_) => fail("Transaction accepted, but a rejection was expected")
+                case Left(sf: NodeSubmitError.ScriptFailure) =>
+                    if !sf.logs.exists(_.contains(expectedError)) &&
+                        !sf.message.contains(expectedError)
+                    then
+                        fail(
+                          s"Expected error containing '$expectedError' but got: ${sf.message}, " +
+                              s"logs: ${sf.logs.mkString(", ")}"
+                        )
+                case Left(error) =>
+                    if !error.message.contains(expectedError) then
+                        fail(s"Expected error containing '$expectedError' but got: $error")
+
+    @deprecated("pin the budget with assertSuccess(result, program) instead", "1.5.0")
     def compareBudgetWithReferenceValue(
         testName: String,
         scalusBudget: ExUnits,

@@ -118,7 +118,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
-        assertScriptFail(HtlcValidator.InvalidReceiverPreimage) {
+        buildFails(HtlcValidator.InvalidReceiverPreimage) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -137,7 +137,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Eve.address).await().toOption.get
 
-        assertScriptFail(HtlcValidator.UnsignedReceiverTransaction) {
+        buildFails(HtlcValidator.UnsignedReceiverTransaction) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -156,7 +156,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
-        assertScriptFail(HtlcValidator.InvalidReceiverTimePoint) {
+        buildFails(HtlcValidator.InvalidReceiverTimePoint) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -198,7 +198,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Eve.address).await().toOption.get
 
-        assertScriptFail(HtlcValidator.UnsignedCommitterTransaction) {
+        buildFails(HtlcValidator.UnsignedCommitterTransaction) {
             txCreator.timeout(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -216,7 +216,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
 
-        assertScriptFail(HtlcValidator.InvalidCommitterTimePoint) {
+        buildFails(HtlcValidator.InvalidCommitterTimePoint) {
             txCreator.timeout(
               utxos = utxos,
               lockedUtxo = lockedUtxo,

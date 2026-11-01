@@ -31,10 +31,10 @@ object BudgetText {
 
     private def fields(pin: Pin): Seq[(String, Long)] = pin match
         case Pin.Eval(memory, steps, size, fee) =>
-            Seq("memory" -> memory, "steps" -> steps, "size" -> size, "fee" -> fee)
+            Seq("memory" -> memory, "steps" -> steps, "size" -> size.toLong, "fee" -> fee)
         case Pin.Tx(memory, steps, size, fee) =>
-            Seq("memory" -> memory, "steps" -> steps, "tx size" -> size, "tx fee" -> fee)
-        case Pin.Size(bytes) => Seq("bytes" -> bytes)
+            Seq("memory" -> memory, "steps" -> steps, "tx size" -> size.toLong, "tx fee" -> fee)
+        case Pin.Size(bytes) => Seq("bytes" -> bytes.toLong)
 
     /** One line per pinned quantity: `memory 1_101 -> 1_085 (-1.5 %)`. For an evaluation, one more
       * line splits the fee into its execution and reference-script parts.

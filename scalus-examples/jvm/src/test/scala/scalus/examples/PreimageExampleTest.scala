@@ -11,25 +11,14 @@ import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.v2.*
 import scalus.cardano.onchain.plutus.prelude.List
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.eval.{PlutusVM, Result}
+import scalus.testing.kit.ScalusTest
+import scalus.uplc.eval.PlutusVM
 import scalus.uplc.*
 
-class PreimageExampleTest extends AnyFunSuite {
+class PreimageExampleTest extends AnyFunSuite, ScalusTest {
 
     // Plutus V2 scripts: evaluated on the V2 machine, as BaseValidatorTest did.
-    private given PlutusVM = PlutusVM.makePlutusV2VM()
-
-    /** The program evaluates successfully to `()`. */
-    private def assertReturnsUnit(program: Program): Unit =
-        program.deBruijnedProgram.evaluateDebug match
-            case Result.Success(term, _, _, _) =>
-                assert(term α_== Term.Const(Constant.Unit), s"Expected (), got ${term.show}")
-            case failure: Result.Failure => fail(s"Expected success, got $failure")
-
-    /** The program evaluation fails. */
-    private def assertFails(program: Program): Unit =
-        val result = program.deBruijnedProgram.evaluateDebug
-        assert(result.isFailure, s"Expected failure, got $result")
+    override protected def plutusVM: PlutusVM = PlutusVM.makePlutusV2VM()
 
     private val hoskyMintTxOutRef = TxOutRef(
       TxId(hex"1ab6879fc08345f51dc9571ac4f530bf8673e0d798758c470f9af6f98e2f3982"),
@@ -67,7 +56,7 @@ class PreimageExampleTest extends AnyFunSuite {
             val ctx = scriptContext(signatories)
             validator $ datum $ redeemer $ ctx.toData
 
-        assertReturnsUnit(
+        assertSuccess(
           appliedScript(
             preimage = ByteString.fromArray("Scalus rocks!".getBytes("UTF-8")),
             pubKeyHash =
@@ -75,10 +64,10 @@ class PreimageExampleTest extends AnyFunSuite {
             hash = hex"36c71edaf0affadf6dd9c5f8df3dc90ec0fc01bf9f8cf0f18268db24b2a3da49",
             signatories =
                 List(PubKeyHash(hex"61822dde476439a526070f36d3d1667ad099b462c111cd85e089f5e7f6"))
-          )
+          ).evaluateDebug
         )
 
-        assertFails(
+        assertFailure(
           appliedScript(
             preimage = ByteString.fromArray("Scalus rocks!".getBytes("UTF-8")),
             pubKeyHash =
@@ -86,17 +75,17 @@ class PreimageExampleTest extends AnyFunSuite {
             hash = hex"000000",
             signatories =
                 List(PubKeyHash(hex"61822dde476439a526070f36d3d1667ad099b462c111cd85e089f5e7f6"))
-          )
+          ).evaluateDebug
         )
 
-        assertFails(
+        assertFailure(
           appliedScript(
             preimage = ByteString.fromArray("Scalus rocks!".getBytes("UTF-8")),
             pubKeyHash =
                 PubKeyHash(hex"61822dde476439a526070f36d3d1667ad099b462c111cd85e089f5e7f6"),
             hash = hex"36c71edaf0affadf6dd9c5f8df3dc90ec0fc01bf9f8cf0f18268db24b2a3da49",
             signatories = List(PubKeyHash(hex"000000"))
-          )
+          ).evaluateDebug
         )
 
     }

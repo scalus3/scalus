@@ -11,7 +11,7 @@ import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v2.TxOut
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.{RewardingScript, SpendingScript}
-import scalus.cardano.onchain.plutus.prelude.{AssocMap, List, Option as POption, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{AssocMap, List, SortedMap}
 import scalus.testing.kit.ScalusTest
 
 /** Tests for the Stake Validator Payment Splitter pattern.
@@ -36,7 +36,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           outputs = scala.List(A -> 38L),
           fee = 2L,
           splitPerPayee = 30L,
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -48,7 +48,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           outputs = scala.List(A -> 23L, B -> 15L),
           fee = 2L,
           splitPerPayee = 15L,
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -60,7 +60,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           outputs = scala.List(A -> 18L, B -> 10L, C -> 10L),
           fee = 2L,
           splitPerPayee = 10L,
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -73,7 +73,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           outputs = scala.List(A -> 28L, B -> 20L, C -> 20L),
           fee = 2L,
           splitPerPayee = 20L,
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -85,7 +85,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           outputs = scala.List(A -> 21L, B -> 10L, C -> 10L, D -> 10L, E -> 10L),
           fee = 2L,
           splitPerPayee = 10L,
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -98,7 +98,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           fee = 2L,
           splitPerPayee = 15L,
           overrideSumContractInputs = scala.Some(50L), // Wrong value!
-          expectedResult = failure("sumContractInputs mismatch")
+          expectedError = Some("sumContractInputs mismatch")
         ).run()
     }
 
@@ -111,7 +111,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           fee = 2L,
           splitPerPayee = 10L,
           overrideNPayed = scala.Some(2L),
-          expectedResult = failure("Not all payees were paid")
+          expectedError = Some("Not all payees were paid")
         ).run()
     }
 
@@ -125,7 +125,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           fee = 2L,
           splitPerPayee = 10L,
           overrideNPayed = scala.Some(3L),
-          expectedResult = failure("Output must be to a payee not paid yet")
+          expectedError = Some("Output must be to a payee not paid yet")
         ).run()
     }
 
@@ -139,7 +139,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           fee = 2L,
           splitPerPayee = 15L,
           overrideNPayed = scala.Some(2L),
-          expectedResult = failure("Not all payees were paid")
+          expectedError = Some("Not all payees were paid")
         ).run()
     }
 
@@ -153,7 +153,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           fee = 2L,
           splitPerPayee = 15L,
           firstContractInputTokens = Value(genByteStringOfN(28).sample.get, ByteString.empty, 1),
-          expectedResult = failure("Contract input must contain only ADA")
+          expectedError = Some("Contract input must contain only ADA")
         ).run()
     }
 
@@ -165,7 +165,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           outputs = scala.List(A -> 18L, B -> 15L, C -> 5L), // B and C wrong
           fee = 2L,
           splitPerPayee = 10L,
-          expectedResult = failure("Payee must receive exact split")
+          expectedError = Some("Payee must receive exact split")
         ).run()
     }
 
@@ -179,7 +179,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           fee = 2L,
           splitPerPayee = 10L,
           overrideNPayed = scala.Some(3L),
-          expectedResult = failure("Output must be to a payee")
+          expectedError = Some("Output must be to a payee")
         ).run()
     }
 
@@ -193,7 +193,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
           outputs = scala.List(A -> 28L, B -> 20L, C -> 20L),
           fee = 2L,
           splitPerPayee = 20L,
-          expectedResult = success
+          expectedError = None
         )
 
         // Run and get budget
@@ -233,7 +233,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
         overrideSumContractInputs: scala.Option[Long] = scala.None,
         overrideNPayed: scala.Option[Long] = scala.None,
         firstContractInputTokens: Value = Value.zero,
-        expectedResult: (String | Unit, POption[ExUnits])
+        expectedError: Option[String]
     ) {
         def run(): Unit = {
             val payeesList = List.from(payees.map(_.pkh))
@@ -327,17 +327,17 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
               scriptInfo = RewardingScript(stakingCredential)
             )
             val rewardResult = (applied $ rewardContext.toData).evaluateDebug
-            checkResult(expectedResult, rewardResult)
+            assertOutcome(rewardResult, expectedError)
 
             // Also test spending endpoint if reward succeeded
-            if expectedResult._1.isInstanceOf[Unit] then {
+            if expectedError.isEmpty then {
                 val spendContext = ScriptContext(
                   txInfo = txInfo,
                   redeemer = spendingRedeemer,
                   scriptInfo = SpendingScript(txOutRef = firstScriptOutRef)
                 )
                 val spendResult = (applied $ spendContext.toData).evaluateDebug
-                checkResult(expectedResult, spendResult)
+                assertOutcome(spendResult, expectedError)
             }
         }
 

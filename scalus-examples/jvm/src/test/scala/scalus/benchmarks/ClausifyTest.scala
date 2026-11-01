@@ -61,12 +61,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 
-        compareBudgetWithReferenceValue(
-          testName = "ClausifyTest.F1",
-          scalusBudget = scalusBudget,
-          refBudget = ExUnits(memory = 39891097L, steps = 12325496028L),
-          isPrintComparison = true
-        )
+        // Reference budget of the original benchmark: ExUnits(memory = 39891097L, steps = 12325496028L)
     }
 
     test("F2") {
@@ -100,12 +95,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 
-        compareBudgetWithReferenceValue(
-          testName = "ClausifyTest.F2",
-          scalusBudget = scalusBudget,
-          refBudget = ExUnits(memory = 50524767L, steps = 15570882882L),
-          isPrintComparison = true
-        )
+        // Reference budget of the original benchmark: ExUnits(memory = 50524767L, steps = 15570882882L)
     }
 
     test("F3") {
@@ -131,12 +121,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 
-        compareBudgetWithReferenceValue(
-          testName = "ClausifyTest.F3",
-          scalusBudget = scalusBudget,
-          refBudget = ExUnits(memory = 136054751L, steps = 41872495549L),
-          isPrintComparison = true
-        )
+        // Reference budget of the original benchmark: ExUnits(memory = 136054751L, steps = 41872495549L)
     }
 
     test("F4") {
@@ -1105,12 +1090,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 
-        compareBudgetWithReferenceValue(
-          testName = "ClausifyTest.F4",
-          scalusBudget = scalusBudget,
-          refBudget = ExUnits(memory = 181055087L, steps = 56754761923L),
-          isPrintComparison = true
-        )
+        // Reference budget of the original benchmark: ExUnits(memory = 181055087L, steps = 56754761923L)
     }
 
     test("F5") {
@@ -1135,12 +1115,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 
-        compareBudgetWithReferenceValue(
-          testName = "ClausifyTest.F5",
-          scalusBudget = scalusBudget,
-          refBudget = ExUnits(memory = 660668247L, steps = 203182153626L),
-          isPrintComparison = true
-        )
+        // Reference budget of the original benchmark: ExUnits(memory = 660668247L, steps = 203182153626L)
     }
 
 end ClausifyTest

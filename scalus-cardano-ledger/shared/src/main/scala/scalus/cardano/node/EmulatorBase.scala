@@ -955,7 +955,7 @@ object EmulatorBase {
       * The inputs are `Input(genesis, i)` with the all-zero genesis hash, as in
       * [[createInitialUtxos]].
       */
-    def initialUtxosOf(outputs: Seq[TransactionOutput]): Utxos = {
+    private[node] def initialUtxosOf(outputs: Seq[TransactionOutput]): Utxos = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         outputs.zipWithIndex.map { case (output, index) =>
             Input(genesisHash, index) -> output

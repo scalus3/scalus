@@ -22,7 +22,7 @@ import scalus.uplc.eval.{PlutusVM, Result}
   */
 @deprecated(
   "use EvalTestKit: assertEvalEq(expected)(code), or assertEvalEq(expected)(f).at(args) for a budget",
-  "1.4.1"
+  "1.5.0"
 )
 class EvalTestBuilder[A](
     private val subject: EvalSubject[A],
@@ -152,7 +152,7 @@ case class EvalTestResult(result: Result, config: EvalConfig):
 /** DSL entry points */
 @deprecated(
   "use EvalTestKit: assertEvalEq(expected)(code), or assertEvalEq(expected)(f).at(args) for a budget",
-  "1.4.1"
+  "1.5.0"
 )
 object EvalTestDsl:
 

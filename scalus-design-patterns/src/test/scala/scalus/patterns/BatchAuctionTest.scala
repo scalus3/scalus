@@ -41,7 +41,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
           totalUnitsAvailable = 10,
           actions = scala.List(BidAction(bidderA, BidRedeemer.Fill)),
           outputs = scala.List(BidderOutput(bidderA, 500)), // Bidder receives tokens
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -52,7 +52,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
           totalUnitsAvailable = 10,
           actions = scala.List(BidAction(bidderA, BidRedeemer.Fill)),
           outputs = scala.List(BidderOutput(bidderA, 500)),
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -63,7 +63,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
           totalUnitsAvailable = 10,
           actions = scala.List(BidAction(bidderA, BidRedeemer.Refund)),
           outputs = scala.List(BidderOutput(bidderA, 500)), // Full refund
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -89,7 +89,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
             BidderOutput(bidderB, 200),
             BidderOutput(bidderC, 500) // Refund
           ),
-          expectedResult = success
+          expectedError = None
         ).run()
     }
 
@@ -100,7 +100,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
           totalUnitsAvailable = 10,
           actions = scala.List(BidAction(bidderA, BidRedeemer.Fill)), // Wrong action!
           outputs = scala.List(BidderOutput(bidderA, 500)),
-          expectedResult = failure("Bid price must be >= clearing price to fill")
+          expectedError = Some("Bid price must be >= clearing price to fill")
         ).run()
     }
 
@@ -111,7 +111,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
           totalUnitsAvailable = 10,
           actions = scala.List(BidAction(bidderA, BidRedeemer.Refund)), // Wrong action!
           outputs = scala.List(BidderOutput(bidderA, 1500)),
-          expectedResult = failure("Can only refund if bid price < clearing price")
+          expectedError = Some("Can only refund if bid price < clearing price")
         ).run()
     }
 
@@ -132,7 +132,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
             BidderOutput(bidderA, 500),
             BidderOutput(bidderB, 250)
           ),
-          expectedResult = failure("Demand at clearing price exceeds supply")
+          expectedError = Some("Demand at clearing price exceeds supply")
         ).run()
     }
 
@@ -143,7 +143,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
           totalUnitsAvailable = 10,
           actions = scala.List(BidAction(bidderA, BidRedeemer.Fill)),
           outputs = scala.List(BidderOutput(bidderA, 500)),
-          expectedResult = failure("Clearing price must be positive")
+          expectedError = Some("Clearing price must be positive")
         ).run()
     }
 
@@ -154,7 +154,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
           totalUnitsAvailable = 10,
           actions = scala.List(BidAction(bidderA, BidRedeemer.Fill)),
           outputs = scala.List(BidderOutput(bidderB, 500)), // Wrong recipient!
-          expectedResult = failure("Bidder must receive output")
+          expectedError = Some("Bidder must receive output")
         ).run()
     }
 
@@ -177,7 +177,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
             BidderOutput(bidderB, 200),
             BidderOutput(bidderC, 500)
           ),
-          expectedResult = success
+          expectedError = None
         )
 
         val (rewardBudget, spendBudget) = testCase.runWithBudget()
@@ -210,7 +210,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
         totalUnitsAvailable: Long,
         actions: scala.List[BidAction],
         outputs: scala.List[BidderOutput],
-        expectedResult: (String | Unit, POption[ExUnits])
+        expectedError: Option[String]
     ) {
         // Build bid datums - used by both run() and runWithBudget()
         private def buildBidDatums(): scala.List[BidDatum] = bids.map { bid =>
@@ -301,7 +301,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
             val rewardResult = (applied $ rewardContext.toData).evaluateDebug
 
             // For reward failures, check result immediately
-            if !expectedResult._1.isInstanceOf[Unit] && rewardResult.isSuccess then {
+            if expectedError.nonEmpty && rewardResult.isSuccess then {
                 // Expected failure in reward but it succeeded - test spend endpoint
                 val firstOutRef = TxOutRef(auctionTxId, 0)
                 val firstDatum = bidDatums.head
@@ -314,13 +314,13 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
                   )
                 )
                 val spendResult = (applied $ spendContext.toData).evaluateDebug
-                checkResult(expectedResult, spendResult)
+                assertOutcome(spendResult, expectedError)
             } else {
-                checkResult(expectedResult, rewardResult)
+                assertOutcome(rewardResult, expectedError)
             }
 
             // Also test spending endpoint if reward succeeded
-            if expectedResult._1.isInstanceOf[Unit] && rewardResult.isSuccess then {
+            if expectedError.isEmpty && rewardResult.isSuccess then {
                 actions.zip(bidDatums).zipWithIndex.foreach { case ((action, datum), idx) =>
                     val outRef = TxOutRef(auctionTxId, idx)
                     val spendContext = ScriptContext(
@@ -330,7 +330,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
                           SpendingScript(txOutRef = outRef, datum = POption.Some(datum.toData))
                     )
                     val spendResult = (applied $ spendContext.toData).evaluateDebug
-                    checkResult(expectedResult, spendResult)
+                    assertOutcome(spendResult, expectedError)
                 }
             }
         }

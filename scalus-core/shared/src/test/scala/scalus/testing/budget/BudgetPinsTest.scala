@@ -229,7 +229,7 @@ object BudgetPinsTest {
     val eval2 = Pin.Eval(1085, 201002, 100, 1578)
     val units1 = ExUnits(1101, 203937)
     val units2 = ExUnits(1085, 201002)
-    val size1 = 100L
+    val size1 = 100
 
     private def table(value: Pin): BudgetTable = new BudgetTable {
         val generation: Generation = Generation.Scala33

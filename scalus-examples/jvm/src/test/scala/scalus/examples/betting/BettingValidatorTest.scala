@@ -81,7 +81,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         if result.isFailure then
             result.logs.foreach(println)
             println(result)
-        checkResult(success, result, contract.program)
+        assertSuccess(result, contract.program)
     }
 
     test("Fail: minting the bet token outside the script output") {
@@ -194,7 +194,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         if result.isFailure then
             result.logs.foreach(println)
             println(result)
-        checkResult(success, result, contract.program)
+        assertSuccess(result, contract.program)
     }
 
     test("Verify that the oracle can announce winner and trigger payout") {
@@ -255,7 +255,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         if result.isFailure then
             result.logs.foreach(println)
             println(result)
-        checkResult(success, result, contract.program)
+        assertSuccess(result, contract.program)
     }
 
     test("Verify that announcing the winner fails if the bet token is not burned") {
@@ -357,7 +357,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           )
         )
         if result.isFailure then result.logs.foreach(println)
-        checkResult(success, result, contract.program)
+        assertSuccess(result, contract.program)
     }
 
     test("Verify that reclaim before expiration fails") {

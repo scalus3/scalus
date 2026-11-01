@@ -34,7 +34,6 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
       warnListConversions = false
     )
 
-    val printComparison = true
     val profilingEnabled = false
     val ignoreBudgetAssertions = false
 
@@ -101,12 +100,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             assertBudgetClose(result.budget, scalusBudget)
         }
 
-        compareBudgetWithReferenceValue(
-          testName = "KnightsTest (historical reference).100_4x4",
-          scalusBudget = result.budget,
-          refBudget = ExUnits(memory = 160_204421L, steps = 54958_831939L),
-          isPrintComparison = printComparison
-        )
+        // Reference budget of the original benchmark: ExUnits(memory = 160_204421L, steps = 54958_831939L)
     }
 
     test("100_4x4_experiment_copy") {
@@ -217,12 +211,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             assertBudgetClose(result.budget, scalusBudget)
         }
 
-        compareBudgetWithReferenceValue(
-          testName = "KnightsTest (historical reference).100_6x6",
-          scalusBudget = result.budget,
-          refBudget = ExUnits(memory = 292_216349L, steps = 131954_064320L),
-          isPrintComparison = printComparison
-        )
+        // Reference budget of the original benchmark: ExUnits(memory = 292_216349L, steps = 131954_064320L)
     }
 
     test("100_8x8") {
@@ -323,11 +312,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             assertBudgetClose(result.budget, scalusBudget)
         }
 
-        compareBudgetWithReferenceValue(
-          testName = "KnightsTest (historical reference).100_8x8",
-          scalusBudget = result.budget,
-          refBudget = ExUnits(memory = 540_217437L, steps = 270266_226527L),
-        )
+        // Reference budget of the original benchmark: ExUnits(memory = 540_217437L, steps = 270266_226527L)
     }
 
 end KnightsTest
