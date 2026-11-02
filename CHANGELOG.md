@@ -96,6 +96,10 @@
 
 ### Fixed
 
+- The flat decoder reads a `data` constant as Plutus does: it takes the first CBOR item of the
+  constant's bytes and ignores the bytes after it, where it used to reject the script.
+  `Data.fromCbor` still rejects trailing bytes, as the ledger does for a datum or a redeemer. A
+  malformed `data` constant fails with `FlatDecodingError`, like other malformed flat input.
 - `PlutusScriptEvaluator` reports a script it cannot decode as an `IllegalArgumentException` that
   names the script, and the Emulator rejects the transaction in phase 1. Before protocol version 7
   (Babbage), the ledger had no phase 1 check: `ScriptsWellFormedValidator` accepts the script, and
