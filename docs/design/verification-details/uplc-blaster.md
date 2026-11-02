@@ -162,6 +162,182 @@ its values, and the replayed assignment refutes the statement. That includes `!e
 which is `∀ x, ¬ p x`: a value with `p` refutes it. `Refuted` is also available for `existsLet`,
 because its witness has already been fixed and eliminated.
 
+## Mapping a variable (proposed)
+
+Today the statement chooses how a variable of a case class or an enum reaches Lean: `forAll` maps
+it by its fields, and `forAllData` as one `Data`. This section proposes that the tactic choose,
+part by part of the variable's type, from the statement and the types alone.
+
+Status: step 1 of [the steps](#steps) is built. `lower` records the plan as it maps each variable,
+and `Lowered.plan`, a `MappingPlan`, carries it. The plan is still the one the statement writes.
+
+### The mapping does not change what a statement means
+
+The values of a type and their `toData` encodings correspond one to one, so `forAll[A]` and
+`forAllData[A]` state the same ([The fragment](#the-fragment)). The mapping changes only whether
+the tactic accepts a statement and what its check costs. Both mappings are sound, and a refutation
+counts only once its values are replayed on the Scalus CEK, so one mapping cannot prove what the
+other refutes. Without a bound, they can differ only between a verdict and none: a proof or a
+refutation under one, and under the other an inconclusive result, an undetermined one, a time
+limit, or a refusal.
+
+Two things depend on the mapping:
+
+- the budget that `Budget.Auto` finds: decoding a `Data` takes steps that building a value from
+  fields does not, and the other way round. A proof at any budget is the same proof;
+- the inputs a `ProvenWithin(n)` is of: those on which each test's program ends within `n` steps,
+  and its steps include the decoding or the building. So within a budget, one mapping can refute a
+  statement on an input whose run ends within `n` steps, where the other proves it within the
+  budget, because there the same input's run takes more than `n` steps. The refutation is of the
+  statement; the proof within the budget is of a weaker one, which the refutation does not
+  contradict.
+
+The mapping shows in the check's text as its variables and its programs, and so in its
+fingerprint: two plans that map a node differently give two checks. The reasons of the plan are
+not in the text.
+
+### Nodes
+
+A node is a part of the variable's value, named by its path of fields and constructors from the
+variable, which is the root. The nodes are the parts `lower` expands a variable into: a case class
+into its fields, an enum into the fields of its constructors. For a variable `out : TxOut`:
+
+```
+out : TxOut                                    case class  ← decided
+├─ address : Address                           case class  ← decided
+│  ├─ credential : Credential                  enum        ← decided
+│  │  ├─ PubKeyCredential.hash : PubKeyHash     case class  ← decided, of one ByteString
+│  │  └─ ScriptCredential.hash : ValidatorHash  ByteString
+│  └─ stakingCredential : Option[StakingCredential]   enum ← decided
+│     └─ Some.value : StakingCredential        enum        ← decided
+│        ├─ StakingHash.cred : Credential      enum        ← decided
+│        │  └─ … as credential above
+│        └─ StakingPtr.a / .b / .c : BigInt    BigInt
+├─ value : Value                               a map: one variable
+├─ datum : OutputDatum                         enum        ← decided
+│  ├─ OutputDatumHash.datumHash : DatumHash    ByteString
+│  └─ OutputDatum.datum : Datum                Data
+└─ referenceScript : Option[ScriptHash]        enum        ← decided
+   └─ Some.value : ScriptHash                  ByteString
+```
+
+A node is decided where it is a case class or an enum, and is not inside a list or a map.
+
+- A leaf, an integer, a byte string, a Boolean, a string or a `Data`, is one Lean variable of its
+  own type. There is nothing to decide.
+- A class of one field, as `PubKeyHash`, is a node like any case class. By fields it is its
+  field's variable; as `Data` it is its field's encoding, which the compiler gives a class marked
+  `@UplcRepr(ProductCaseOneElement)`. The choice matters for a field of a string, which is exact
+  by fields and not as `Data` (rule 2 below).
+- A list or a map is one Lean variable, and nothing below it is decided: a list of any length
+  cannot be split into fields, and its items are restricted by the list's predicate. `Value` is
+  one, a map.
+- The root of a variable mapped as `Data` is a node whatever its type, as that of a `forAllData`
+  variable of a list.
+
+A decided node is mapped one of two ways.
+
+- **By fields.** The node is its children, and each of them is decided in turn. A case class is
+  its fields. An enum is an integer that chooses the constructor, and the fields of every
+  constructor ([The fragment](#the-fragment)).
+- **As `Data`.** The node and all below it are one Lean `Data` variable, restricted by the premise
+  of the node's encoding, as a `forAllData` variable is. The test decodes it with
+  `UniversalDataConversion.fromData`, the form the compiler gives `d.to[A]`, which the tactic writes
+  itself. Nothing below the node is decided.
+
+`forAll` today is the plan with every node by fields, and `forAllData` the one with the root as
+`Data`. By fields, `out` is 17 Lean variables, of which `stakingCredential` is 8: the case of the
+`Option`, that of the `StakingCredential`, the case of its `Credential` and two hashes, and the
+three integers of a pointer. As `Data` at the root, it is one. A plan between them maps `address`
+by fields and `address.stakingCredential` as `Data`, in 10 variables:
+
+```lean
+∀ (x0 : Integer) (x1 : ByteString) (x2 : ByteString) (x3 : Data) (x4 : List (Data × Data))
+  (x5 : Integer) (x6 : ByteString) (x7 : Data) (x8 : Integer) (x9 : ByteString),
+  ((p3 x3 = true) ∧ (p4 x4 = true)) → …
+```
+
+with each test starting with
+
+```scala
+val out = TxOut(
+  Address(
+    if x0 == 0 then PubKeyCredential(PubKeyHash(x1)) else ScriptCredential(x2),
+    fromData[Option[StakingCredential]](x3)
+  ),
+  x4,
+  if x5 == 0 then NoOutputDatum else if x5 == 1 then OutputDatumHash(x6) else OutputDatum(x7),
+  if x8 == 0 then Some(x9) else None
+)
+```
+
+where `p3` is the predicate of the encoding of `Option[StakingCredential]`, and `p4` that of a
+`Value`'s map.
+
+### The plan
+
+`lower` decides each node of a variable as it maps the variable, from the root down, and a node's
+mapping is final before any test that uses the variable is compiled. Rules 1 and 2 decide a node
+before anything below it is mapped; rule 3 decides after the node is expanded by fields, and may
+replace that expansion with one `Data` variable. The plan is recorded by the same walk that makes
+the Lean variables, with each node's final mapping, so it is what they are. A decision reads only
+the statement and the types: the node's type and the types on its path, the encoding of the
+node's type (`DataEncoding.of`) and whether it is exact, whether the compiler gives the type a
+`Data` form at all (`canBeConvertedToData`), how many Lean variables the node is by fields, the
+limits, and whether the variable asks for a witness, which the quantifier's position tells as
+`lower` goes.
+
+1. **What the type forces.**
+   - A type that contains itself is a node of the same type again on its path, and by fields would
+     have no end: the node where it repeats is `Data`. The walk tells it by the types on the path,
+     as `expand` does now, not by the encoding. As `Data`, the node is any `Data` to Lean below its
+     first level: `DataLayout` describes no more of it, and its premise is not exact. So the
+     variable must stand for every value, or the statement is refused, as it is now.
+   - A node that the compiler gives no `Data` form, as a class with a function field, cannot be
+     `Data`: it is by fields, or the statement is refused where its fields cannot be either. Nor is
+     a node `Data` whose encoding `DataLayout` cannot describe at all, as a type nested too deep:
+     its premise would hold of every `Data`.
+   - A variable with limits (`forAllDataLimited`) is `Data` at the root: the guards walk its `Data`
+     ([Limits of a variable's collections](#limits-of-a-variables-collections)).
+2. **A witness needs an exact mapping.** Where the variable asks for a witness, a node whose
+   encoding as `Data` is not exact while its fields are, as one with a string field, is by fields:
+   a string is a Lean `String` variable, while as `Data` it is a byte string whose UTF-8 the
+   premise does not check. A list or a map whose own predicate is not exact, as a map with keys in
+   an order that is not checked, is one variable either way, and is not exact either way.
+3. **Otherwise by fields,** unless the node by fields is more than a number of Lean variables:
+   then it is `Data`. By fields, a test builds its value from typed variables, with no run that
+   fails, and the solver reasons over integers and byte strings. As `Data`, every decoding of a
+   symbolic `Data` is also a run that fails, which its premise does not prune (`#prep_uplc_run`
+   prepares each test for every value), and Z3 seldom finds a witness through a recursive premise.
+   One `Data` is still cheaper than thousands of variables. A node is expanded by fields first,
+   and is one `Data` variable instead where it comes to more; the expansion below it is then not
+   used, and its nodes are not in the plan. The number is to be measured.
+
+The plan depends only on the statement and the types, never on a time or an earlier run, so a
+statement has the same plan, and the same check, in every run. Nothing chooses another mapping:
+`forAllData` and a parameter written `A @UplcRepr(UplcRepresentation.Data)` state what `forAll`
+states, and become another way to write it.
+
+### What is reported
+
+`Lowered.plan`, a `MappingPlan`, carries the plan (built): each decided node's variable, by its
+place among the statement's variables, since two variables can have one name; its path; its type;
+its mapping; and why, a `MappingPlan.Reason`. The result's notes are to keep it. The variables of a
+counterexample are named by their nodes' paths, as now
+(`out.address.credential.PubKeyCredential.hash.hash`, the field of the `PubKeyHash`); a node as
+`Data` is one value, written as Plutus writes `Data`.
+
+### Steps
+
+1. The analysis and the plan in `Lowered`, with the plans of today: by fields for `forAll`, `Data`
+   at the root for `forAllData`. No check changes. Built: `lower` records the plan as it maps each
+   variable (`MappingPlan`); `MappingPlanTest` also pins the 17 Lean variables of `out` above.
+2. A node as `Data` below the root: `fromData` of a variable as a part of the value a test builds.
+3. Rules 1 and 2. A type that contains itself is then a `forAll` variable, where it stands for
+   every value.
+4. Rule 3: the suites run under fixed plans, to measure the number.
+5. `forAllData` as `forAll`, and its parameter annotation with it.
+
 ## Leaves and `LeafFormula`
 
 The leaves of a statement are the nodes of its `Prop` tree that are not connectives. `lower`

@@ -17,6 +17,7 @@ import scalus.utils.{Hex, Utils}
 import scalus.verify.*
 import scalus.verify.SirTypes.*
 import scalus.verify.lean.{Directories, LeanServer, LeanServerProvider, LeanWorkspace}
+import scalus.verify.uplcblaster.MappingPlan.Quantifier
 
 import java.nio.file.{Files, Path}
 import scala.collection.mutable.ArrayBuffer
@@ -326,7 +327,11 @@ object UplcBlaster {
         /** The budget it is checked within ([[Budget.Within]]), where it is: a run the budget cuts
           * is read in the statement's favour, and a proof is one within the budget.
           */
-        private[uplcblaster] val within: Option[Int] = None
+        private[uplcblaster] val within: Option[Int] = None,
+        /** How each variable of a case class or an enum reaches Lean: each decided node by fields
+          * or as `Data` ([[MappingPlan]]).
+          */
+        plan: MappingPlan = MappingPlan.empty
     ) {
 
         /** The SHA-256 of each leaf's program CBOR, in the order of [[leaves]]. */
@@ -429,6 +434,10 @@ object UplcBlaster {
       */
     def lower(prop: Prop, functions: FunctionTable): Either[String, Lowered] =
         checkSignatures(prop, functions).flatMap { _ =>
+            // How each variable reaches Lean: its decided nodes, each recorded as it is mapped, and
+            // the number of variables quantified so far, which tells the nodes of each apart.
+            val planned = ArrayBuffer.empty[MappingPlan.Node]
+            var quantifiedSoFar = 0
             val binders = ArrayBuffer.empty[PropExpr.Ident[?]]
             // The predicate of each binder, in the order of `binders`.
             val predicates = ArrayBuffer.empty[Option[String]]
@@ -479,18 +488,43 @@ object UplcBlaster {
                 )
             }
 
-            /** The primitive Lean binders for one statement binder, and a binding that rebuilds a
-              * case class from its fields in every leaf in its scope.
+            /** The primitive Lean binders for one statement binder that `quantifier` introduces,
+              * and a binding that rebuilds a case class from its fields in every leaf in its scope.
+              * The binder is one `Data` where the statement quantifies over the `Data` encodings of
+              * its type, and is mapped by fields otherwise; its decided nodes are recorded in
+              * `planned` as they are mapped ([[MappingPlan]]).
               *
               * A list's or a map's items are any `Data` to Lean: the quantifier restricts them to
               * the type's with a predicate derived from the type. Where the predicate is not exact,
               * the variable keeps more values than its type, and is checked to stand for every
               * value once the statement is lowered.
               */
-            def quantified(ident: PropExpr.Ident[?]): Either[String, (List[Int], List[Binding])] =
+            def quantified(
+                ident: PropExpr.Ident[?],
+                quantifier: Quantifier
+            ): Either[String, (List[Int], List[Binding])] = {
+                val variable = quantifiedSoFar
+                quantifiedSoFar += 1
                 DataEncoding.encoded(ident.tp) match
-                    case Some((valueType, decoder)) => quantifiedData(ident, valueType, decoder)
-                    case None                       => quantifiedValues(ident)
+                    case Some((valueType, decoder)) =>
+                        val reason =
+                            if DataEncoding.limits(ident.tp).all.nonEmpty then
+                                MappingPlan.Reason.Limited
+                            else MappingPlan.Reason.OverEncodings(quantifier)
+                        quantifiedData(ident, valueType, decoder).map { mapped =>
+                            planned += MappingPlan.Node(
+                              variable,
+                              ident.name,
+                              valueType,
+                              MappingPlan.Mapping.AsData,
+                              reason
+                            )
+                            mapped
+                        }
+                    case None =>
+                        val reason = MappingPlan.Reason.Quantified(quantifier)
+                        quantifiedValues(ident, new Expansion(variable, reason))
+            }
 
             /** A [[Props.forAllData]] variable: one Lean `Data`, restricted to the encodings of its
               * type's values, and the binding that decodes it in every leaf in its scope. The
@@ -542,9 +576,11 @@ object UplcBlaster {
                         Right(List(position) -> List(Binding(ident.name, valueType, decoded)))
 
             def quantifiedValues(
-                ident: PropExpr.Ident[?]
+                ident: PropExpr.Ident[?],
+                expansion: Expansion
             ): Either[String, (List[Int], List[Binding])] =
-                expand(ident.name, ident.tp).map { (variables, built) =>
+                expand(ident.name, ident.tp, Set.empty, expansion).map { (variables, built) =>
+                    planned ++= expansion.nodes
                     val restrictions = variables.map(v =>
                         variableOf(v.tp)
                             .filter(_.isLarger)
@@ -623,7 +659,7 @@ object UplcBlaster {
                 // A binder with limits stands for the values that meet them: its guard, a test of
                 // its own, is the premise of the rest.
                 case Prop.Forall(ident, body) =>
-                    quantified(ident).flatMap { (introduced, bindings) =>
+                    quantified(ident, Quantifier.ForAll).flatMap { (introduced, bindings) =>
                         loop(body, scope ++ introduced, built ++ bindings).map { inner =>
                             val premises = introduced.flatMap(binder =>
                                 guards
@@ -646,7 +682,7 @@ object UplcBlaster {
                           "limits of a binder are the premise of a forAll"
                     )
                 case Prop.Exists(ident, None, body) =>
-                    quantified(ident).flatMap { (introduced, bindings) =>
+                    quantified(ident, Quantifier.Exists).flatMap { (introduced, bindings) =>
                         loop(body, scope ++ introduced, built ++ bindings)
                             .map(LeafFormula.Exists(introduced, _))
                     }
@@ -698,7 +734,8 @@ object UplcBlaster {
                         formula,
                         leaves.toVector,
                         leafBinders.toVector,
-                        predicates.toVector
+                        predicates.toVector,
+                        plan = MappingPlan(planned.toList)
                       )
                     )
             }
@@ -893,8 +930,8 @@ object UplcBlaster {
     private def expand(
         name: String,
         tp: SIRType,
-        enclosing: Set[String] = Set.empty,
-        count: Expansion = new Expansion
+        enclosing: Set[String],
+        count: Expansion
     ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] = {
         count.parts += 1
         if count.parts > maxParts then
@@ -923,15 +960,29 @@ object UplcBlaster {
               constructor.typeParams,
               constructor.annotations
             )
-            nested(product, enclosing).flatMap(inner =>
-                constructed(name, declaration, constructor, typeArguments, product, inner, count)
-            )
+            nested(product, enclosing).flatMap { inner =>
+                count.decide(name, product) match
+                    case MappingPlan.Mapping.ByFields =>
+                        constructed(
+                          name,
+                          declaration,
+                          constructor,
+                          typeArguments,
+                          product,
+                          inner,
+                          count
+                        )
+                    case MappingPlan.Mapping.AsData => asDataBelowRoot(name)
+            }
         case sum @ SIRType.SumCaseClass(declaration, _) if declaration.constructors.isEmpty =>
             Left(s"a ${sum.show} binder is not supported: the type has no constructors")
         case sum @ SIRType.SumCaseClass(declaration, typeArguments) =>
-            nested(sum, enclosing).flatMap(inner =>
-                expandSum(name, sum, declaration, typeArguments, inner, count)
-            )
+            nested(sum, enclosing).flatMap { inner =>
+                count.decide(name, sum) match
+                    case MappingPlan.Mapping.ByFields =>
+                        expandSum(name, sum, declaration, typeArguments, inner, count)
+                    case MappingPlan.Mapping.AsData => asDataBelowRoot(name)
+            }
         case one @ SIRType.CaseClass(_, _, Some(parent)) =>
             Left(
               s"a ${one.show} binder is not supported: it is one constructor of ${parent.show}, " +
@@ -959,10 +1010,32 @@ object UplcBlaster {
             case _ => false
     }
 
-    /** The parts of one statement variable expanded so far ([[expand]]): its fields, and theirs,
-      * whether they are Lean variables or are expanded in turn.
+    /** One statement variable, the `variable`-th the statement quantifies over, as [[expand]]
+      * expands it: the parts expanded so far, its fields and theirs, whether they are Lean
+      * variables or are expanded in turn; and its decided nodes, each as it was decided
+      * ([[MappingPlan]]).
       */
-    private final class Expansion(var parts: Int = 0)
+    private final class Expansion(variable: Int, reason: MappingPlan.Reason) {
+        var parts: Int = 0
+        val nodes: ArrayBuffer[MappingPlan.Node] = ArrayBuffer.empty
+
+        /** The mapping of the node at `path`, of type `tp`, a case class or an enum, recorded with
+          * why. Today every node of a variable that is not over `Data` encodings is by fields.
+          */
+        def decide(path: String, tp: SIRType): MappingPlan.Mapping = {
+            val mapping = MappingPlan.Mapping.ByFields
+            nodes += MappingPlan.Node(variable, path, tp, mapping, reason)
+            mapping
+        }
+    }
+
+    /** Why a part of a variable below its root, at `path`, is not mapped as `Data`: it is not built
+      * yet (docs/design/verification-details/uplc-blaster.md, "Mapping a variable", step 2).
+      */
+    private def asDataBelowRoot(
+        path: String
+    ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] =
+        Left(s"${PropIdentity.written(path)}: a part of a variable as Data is not supported yet")
 
     /** How many parts one statement variable may have: many more than a type of the ledger has, and
       * an end to a type that contains itself under other arguments each time, which [[nested]] does
@@ -1037,9 +1110,8 @@ object UplcBlaster {
                     )
                 case Some(own) =>
                     val tp = SIRType.typeApply(declaration.constrType(constructor.name), own)
-                    val label = constructor.name.split('.').last.stripPrefix("$")
                     constructed(
-                      s"$name.$label",
+                      s"$name.${constructorLabel(constructor)}",
                       declaration,
                       constructor,
                       own,
@@ -1077,6 +1149,12 @@ object UplcBlaster {
                     }
                     Right((tag :: binders.flatten) -> Some(value))
     }
+
+    /** The name of a constructor in the path of a variable's part: `PubKeyCredential` in
+      * `out.address.credential.PubKeyCredential.hash`.
+      */
+    private def constructorLabel(constructor: ConstrDecl): String =
+        constructor.name.split('.').last.stripPrefix("$")
 
     /** `sir` with the variables in `built` that it uses bound to their values, inside its data
       * declarations.
