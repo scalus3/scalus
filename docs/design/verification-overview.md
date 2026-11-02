@@ -1,7 +1,7 @@
 # Verification in Scalus — overview
 
 Status: **draft design**, partly built (§1, §9). Date: 2026-10-01; §1 and §9 brought up to date
-2026-10-14.
+2026-11-02.
 
 This document fixes the design. The details are in
 [`verification-details/`](verification-details/):
@@ -32,7 +32,11 @@ side stays in the backends: Lean 4, Blaster and Z3 today.
 - the `scalus.verify` statement model, and the macros that capture statements (§4.3);
 - the first tactic, `blaster-uplc` (`UplcBlaster`), which proves `Prop` statements about compiled
   UPLC through Lean and Blaster (§6.2), at a budget the caller gives or one it finds
-  (`Budget.Auto`);
+  (`Budget.Auto`), or proves them of the inputs whose runs end within a budget
+  (`Budget.Within`);
+- quantified variables of `BigInt`, `Boolean`, `ByteString`, `String`, `Data`, lists and maps,
+  and case classes and enums of them; `forAllData`, over a type's `Data` encodings, and
+  `forAllDataLimited`, which bounds the lengths of a variable's collections (§6.2);
 - contracts (§3.7): `contract`, `totalContract`, `returnsWhen` and `failsWhen` beside a function,
   and in its body `Spec.expects`, `Spec.ensures` and `ensuring`, which are in scalus-core's prelude,
   are erased before lowering and are read by `FunctionContract.inSource`. `verifier.guarantees` and
@@ -48,9 +52,13 @@ side stays in the backends: Lean 4, Blaster and Z3 today.
 The statements are about real code. `PreludeProofsTest` restates the theorems first written by
 hand in Lean (§8.1). In the examples, `VestingVerificationTest`, `HtlcVerificationTest`,
 `PaymentSplitterVerificationTest` and `MintingPolicyVerificationTest` prove properties of
-validators over script contexts written as `Data`. ci-jvm passes on the kept results, and the
-Lean-Proofs workflow recalculates them nightly and on a push that changes what the proofs are made
-of.
+validators over script contexts written as `Data`. The one-shot minting script, with its
+deserializer, as the ledger runs it, is proved on every context of at most two inputs, two
+policies and two tokens of each. ci-jvm passes on the kept results, and the Lean-Proofs workflow
+recalculates them nightly and on a push that changes what the proofs are made of.
+
+Outside `scalus.verify`, `UsdcxMintingPolicyVerificationTest` checks IOG's own statements of the
+USDCx minting policy against the script Scalus compiles, in a Lean workspace of their own (§8.4).
 
 `Spec` replaces the `spec.requires` / `spec.ensures` clauses of the first prototype, and
 `VestingValidator` states its guarantees with it (§8.2), as does the one-shot `MintingPolicy`
@@ -60,9 +68,19 @@ context that a deserializer reads.
 Statements are declared by name, `statement` or `refute` for a negative control, and run as
 `VerificationRequest`s by `LeanProofs`, which holds each to its `ExpectedOutcome` (§4.5, §5.2).
 
-Not built yet: the other tactics (§6.3–§6.7); script targets, target capture and
-`Verifier.default` (§3.6, §4.5); a serializable `Prop`; and the `sbt verify` runner (§5.4). Proofs
-run as test suites instead. §9 has the plan with the status of each phase.
+Not built yet:
+
+- the other tactics (§6.3–§6.7), and what rests on `lean-direct`: induction, Lean mappings,
+  lemmas in a proof, `split` and `cases`, and the contract VCG for modular proofs (§3.7, §5.5);
+- script targets, target capture and `Verifier.default` (§3.6, §4.5), and function tables read
+  from `@Compile` objects
+  ([statement capture](verification-details/prop-capture.md#function-tables-from-compile-objects-proposed));
+- a serializable `Prop`;
+- the `sbt verify` runner (§5.4) and a report. Proofs run as test suites instead;
+- failing a suite without a negative control (§7);
+- statements harvested from `require` (§8.3).
+
+§9 has the plan with the status of each phase.
 
 ---
 
@@ -249,6 +267,14 @@ supply its own generator registry without changing this marker.
 | v1 | `BigInt`, `Boolean`, `ByteString`, `String`, `Data` |
 | v2 | case classes and enums deriving `ToData`/`FromData` (Lean `structure`/`inductive` plus `IsData` are generated); `List` and `Option` of quantifiable types |
 | later | ledger types (`ScriptContext`, …) with the ledger validity predicate (§6.2) |
+
+Built for `blaster-uplc`: v1; case classes and enums of quantifiable types, `Option` among them;
+and lists and maps (`List`, `SortedMap`, `AssocMap`, `Value`). A case class is passed to Lean as
+its fields, and an enum as a constructor's number and the fields of every constructor, not as a
+generated `structure` or `inductive`
+([the tactic's fragment](verification-details/uplc-blaster.md#the-fragment)). Ledger types such as
+`ScriptContext` are quantified over with `forAllData` and `forAllDataLimited`, as values of their
+type: the ledger's validity predicate is not built.
 
 Type parameters and function-typed binders are out of scope for quantifiers. Function types appear
 only as targets (§3.6).
@@ -575,23 +601,31 @@ enum PropExpr[A]:
 // `arg` closes over the enclosing binders; `result` is in scope only in `body`.
 // `total = true` means `call`; `total = false` means `whenReturns`.
 
-enum TargetRef:
+enum TargetRef:                                  // planned, with target capture (§3.6)
     case Function(fullName: String, sir: SIR)   // a @Compile definition, or an inline def's eta-expansion
     case Script(program: Program)                // a compiled script, e.g. `PlutusV3[A].program`
 
 enum Origin:
     case Explicit                                // statement(...) / refute(...)
-    case Contract(contract: FunctionContract[?, ?])      // contract(f)(...); later Spec.* clauses
-    case Harvested                               // from a `require` (§8.4)
+    case Contract(contract: FunctionContract[?, ?])      // contract(f)(...)
+    case Obligation(caller: FunctionRef[?, ?], callee: FunctionRef[?, ?],
+                    contract: String, line: Int) // obligations(g): a call owes the callee's precondition
+    case Guarantee(function: FunctionRef[?, ?], line: Int)         // guarantees(f): one Spec clause
+    case Guarantees(function: FunctionRef[?, ?], lines: List[Int]) // guarantees(f): all together
+    case Harvested                               // planned: from a `require` (§8.3)
 
 final case class Statement(
     name: String,
-    targets: List[TargetRef],
+    targets: List[TargetRef],                    // planned
     prop: Prop,
     origin: Origin,
-    pos: SIRPosition
+    expected: ExpectedOutcome,                   // Valid, or Falsified for a refute (§5.2)
+    pos: SIRPosition                             // planned
 )
 ```
+
+Built: a `Statement` has its name, `Prop`, origin and expected outcome. `targets` and `pos` wait
+for target capture, and `Harvested` for harvesting (§8.3).
 
 `SIR` and `SIRType` already have flat codecs. `Prop` needs its own codec for the logical nodes,
 including `Call`; the call's `FunctionRef` is serialized by name, while `arg` and `result` retain
@@ -671,8 +705,8 @@ Here `tactic` is a proof backend implementing `Tactic`. The following source syn
 target capture is not implemented yet.
 
 `UplcBlaster`, in `scalus.verify.uplcblaster`, is the first `Tactic`. It accepts universal and
-existential quantifiers over `BigInt`, `Boolean`, `ByteString`, `String`, `Data` and case classes
-of them.
+existential quantifiers over `BigInt`, `Boolean`, `ByteString`, `String`, `Data`, lists and maps,
+and case classes and enums of them.
 `existsLet` is eliminated by applying the statement body to its supplied witness.
 
 - Each leaf of the body (a Boolean test, a total call, `denotes`, `equal`) is compiled to its own
@@ -775,6 +809,7 @@ enum Verdict:
 // The public result of Verifier.verify; Verdict is the lower-level backend result.
 enum VerificationResult:
     case Proven(proof: Proof)
+    case ProvenWithin(proof: Proof, bound: String) // of the inputs whose runs end within `bound`
     case Refuted(proof: Proof)
     case Unsupported(report: CompatibilityReport)
     case Inconclusive(reason: String)
@@ -792,7 +827,13 @@ final class Verifier {
     def addFunction(definition: FunctionDef[?, ?]): Unit
     def addFunctions(table: FunctionTable): Unit
     def statement(name: String, prop: Prop): Statement
-    def statement(prop: Prop): Statement                  // generated local name
+    def statement(prop: Prop): Statement                  // named by its content (§4.4)
+    def refute(name: String, prop: Prop): Statement       // a negative control (§5.2)
+    def refute(prop: Prop): Statement
+    def contract(name: String, contract: FunctionContract[?, ?]): Statement // §3.7
+    def contracts(function: FunctionRef[?, ?]): List[Statement]
+    def guarantees(function: FunctionRef[?, ?]): StatedGuarantees
+    def obligations(caller: FunctionRef[?, ?]): CallObligations
     def addTheorem(theorem: Theorem): Unit
     def prepare(statement: Statement, tactic: Tactic): Either[CompatibilityReport, PreparedRun]
     def prove(prepared: PreparedRun): ExecutionResult
@@ -802,6 +843,7 @@ final class Verifier {
 
 object Verifier {
     def empty: Verifier
+    def keeping(results: KeptResults): Verifier          // §5.6
 }
 
 enum ProofKind:
@@ -826,6 +868,12 @@ is registered and that used lemmas are available. Each tactic resolves the funct
 supports from the goal's function table. The proof retains its artifact and lemma dependencies. A spurious
 model, timeout, or unsupported goal is `Inconclusive`. The result has explicit proven, refuted,
 and inconclusive cases.
+
+`VerificationResult.ProvenWithin` is the result of a bounded check, such as `blaster-uplc`'s
+`Budget.Within`. It proves a weaker statement: the statement on the inputs on which each test's
+program ends within the bound. It is not a theorem and no later goal uses it as a lemma. A kept
+file keeps it as `proved within`, apart from a proof
+([a check within a budget](verification-details/uplc-blaster.md#a-check-within-a-budget)).
 
 `VerificationResult.Refuted` carries a `Proof` of the negated claim. Its artifact may contain a
 replayed, concrete falsifying execution or backend proof material for the negation. A concrete
@@ -884,6 +932,7 @@ statement's fingerprint, and Lean is to be asked every time.
 |---|---|---|---|
 | `Refuted` | the counterexample's values | replayed on the Scalus CEK, without the backend | nothing: it is checked again each time |
 | `Proven` | that it was proved, and with what | taken as it is | the run that proved it |
+| `ProvenWithin` | the same, as `proved within`, with the bound in its fingerprint | taken as it is | the run that proved it |
 | `Inconclusive`, `Failed` | nothing | the tactic runs | |
 
 - **A refutation is its own evidence.** The replay of §5.2 takes milliseconds and needs no Lean.
@@ -923,7 +972,8 @@ For `blaster-uplc` it is over:
   lemmas a proof used into its own, or a kept proof would outlive what it was proved from.
 
 The budget is not in it. A proof at any budget holds without the budget, and a refutation is
-replayed without one.
+replayed without one. A check within a budget (`Budget.Within`) is the exception: its proof is of
+the inputs whose runs end within that budget, so the budget is in its fingerprint.
 
 A fingerprint is kept in its parts, not as one hash of them all: the statement, each program,
 the Lean side. Two fingerprints are the same where every part is. A reader of the file then
@@ -1052,6 +1102,7 @@ programs differ, and a build with another finds no entry.
 ```scala
 enum VerificationResult:
     case Proven(proof: Proof)
+    case ProvenWithin(proof: Proof, bound: String)
     case Refuted(proof: Proof)
     case Unsupported(report: CompatibilityReport)
     case Inconclusive(reason: String)
@@ -1138,7 +1189,11 @@ without a step limit (§5.2).
 guessed. `Budget.Auto` starts small; where Lean's counterexample is spurious, it has Lean's own
 machine count each program's steps on that counterexample, and goes on at the least budget at
 which the statement holds there ([the budget search](verification-details/blaster-budget-search.md)).
-No calibration between Scalus's metering and Lean's steps is needed.
+No calibration between Scalus's metering and Lean's steps is needed. `Budget.Within(n)` reads a run
+that the budget cuts in the statement's favour, and so proves the statement of the inputs whose
+runs end within `n` steps: a `ProvenWithin`, not a theorem (§5.3). It is for statements that no
+budget proves, as one about every list
+([a check within a budget](verification-details/uplc-blaster.md#a-check-within-a-budget)).
 
 **Limits.**
 
@@ -1146,6 +1201,13 @@ No calibration between Scalus's metering and Lean's steps is needed.
   (as their representation passes them, restricted to their type's values by a predicate derived
   from the type), or case classes and enums of them; values inside tests, such as call arguments
   and results, can have any type.
+- A loop over a list of unknown length has no budget that proves a statement about every length.
+  `forAllDataLimited` bounds the lengths of a variable's collections, with a guard that every test
+  runs first, so the loops end and the statement is proved of the values within the limits
+  ([limits of a variable's collections](verification-details/uplc-blaster.md#limits-of-a-variables-collections)).
+  The paths of the symbolic run multiply with the bound: the one-shot minting script is proved at
+  two inputs, policies and tokens in about 2 minutes, and at three Lean's symbolic run alone took
+  3.5 hours.
 - Programs must be compiled without the CIP-153 `Value` and CIP-138 array builtins, which the
   Lean model lacks. A ledger `Value` represented as `Data` is unaffected.
 - Programs that read single bytes or reach the CIP-121/122 bitwise builtins cannot be proved over
@@ -1283,8 +1345,10 @@ Unproved premises leave the goal open.
   - Z3;
   - for a closed statement decided by `native_decide`, the Lean compiler, through the axiom
     `Lean.ofReduceBool`, instead of Blaster and Z3;
-  - our own lowering: the polarity rule, the value lifting, the verbatim target embedding, and
-    the `runFor` runner. Proving that a program fails takes the model's `State.Error` as a
+  - our own lowering: the polarity rule, the value lifting, the verbatim target embedding, the
+    `runFor` runner, and, for a statement with limits, the guards and the rewriting of `dropList`
+    into its steps (`DropLists`), which the proved programs carry in place of the compiled ones.
+    Proving that a program fails takes the model's `State.Error` as a
     Plutus evaluation failure, so the model must not fail where Plutus returns a value. The
     conformance suite's success cases check exactly that; its failure cases run on `runSteps`,
     and cannot tell a failure from an exhausted budget;
@@ -1329,18 +1393,38 @@ Every `require(cond, msg)` in a validator compiles to `if cond then () else erro
 harvested into statements automatically, for example "the script does not succeed unless `cond`".
 Every existing contract then gets checkable obligations with no new syntax. The obligation model
 above is designed so that harvested, `spec`-derived and hand-written statements all land in the
-same place.
+same place. Not built.
+
+### 8.4 IOG's statements of the USDCx minting policy
+
+`scalus.examples.usdcx` recreates IOG's USDCx minting policy from its compiled Plinth script, which
+CardanoLedgerApiBlaster ships; the Plinth source is not public.
+`UsdcxMintingPolicyVerificationTest` checks IOG's three statements of that policy, unchanged,
+against the script Scalus compiles: two are valid, and the third is falsified, as IOG states it to
+be. Another test checks that the script the workspace reads is the one compiled from the Scala
+source, in the Scala 3.3 build.
+
+None of it goes through `scalus.verify`: there is no `Prop`, no tactic and no kept result. The
+statements are Lean, over CardanoLedgerApi's ledger types, and the test runs `lake build` in a
+workspace of their own, `scalus-examples/jvm/src/test/lean/UsdcxMintingPolicy`. It pins Blaster,
+PlutusCore and CardanoLedgerApi to the revisions IOG checked the statements with. That Blaster
+needs Z3 5.3.1 or later (the flake's `lean-z3-5` shell), the first build of the packages takes
+about 30 minutes, and CI does not build the workspace.
+
+Its statements quantify over script contexts as CardanoLedgerApi models them, with that library's
+validity predicate `validMintingContext` as a premise. Stating such claims as `Prop`s, with the
+ledger's validity predicates as premises, is phase 3 (§9).
 
 ---
 
 ## 9. Plan
 
-| Phase | Deliverables | Exit criterion | Status (2026-10-14) |
+| Phase | Deliverables | Exit criterion | Status (2026-11-02) |
 |---|---|---|---|
-| **0** | `scalus.verify` surface (`Prop`, `forAll`, connectives, `Quantifiable` for `BigInt`/`Boolean`/`ByteString`); verifier-owned `statement` / `refute` methods; generated verifier descriptors; statement capture by macros (§4.3); `Prop` with flat serialization; `@Compile` function and script targets; `blaster-uplc` for ∀-prefix statements with the polarity rule; `sbt verify` generating a Lean workspace and parsing verdicts | the `Math.lean` theorems and controls, restated in Scala over `Math.*` targets, give the same verdicts; generated files replace the hand-written ones | Built, in part by other means: the surface (`Quantifiable` also for `Data` and case classes), capture by macros, `@Compile` function targets, `blaster-uplc` with the polarity rule. The `Math.lean` theorems are restated in `PreludeProofsTest`, and the hand-written files are gone (§8.1). Proofs run as ScalaTest suites, not through `sbt verify`. Not built: verifier descriptors, script targets, a serialized `Prop`. |
-| **1** | `exists` / `existsLet`, `denotes`, `equal`; `refute` with replay; `scalacheck`; external contracts (`verifier.contract(f)`); `Theorem`, report, cache; PR-time freshness check and nightly run | a suite without a negative control fails; a planted spurious counterexample is reported as spurious; `Math.clamp`'s contract proved about its compiled code | Built: `exists` / `existsLet`, `denotes`, `equal`; replayed refutations, and spurious counterexamples reported as such; external contracts, proved about compiled code; `Theorem`; the kept results, with ci-jvm passing on them and the Lean-Proofs workflow nightly and on a push; and `refute`, `ExpectedOutcome` and `VerificationRequest`, run by `LeanProofs.check`; statements without a name named by their content hash (§4.4), and kept results pruned. Not built: `scalacheck`, a report, and failing a suite without a negative control. |
+| **0** | `scalus.verify` surface (`Prop`, `forAll`, connectives, `Quantifiable` for `BigInt`/`Boolean`/`ByteString`); verifier-owned `statement` / `refute` methods; generated verifier descriptors; statement capture by macros (§4.3); `Prop` with flat serialization; `@Compile` function and script targets; `blaster-uplc` for ∀-prefix statements with the polarity rule; `sbt verify` generating a Lean workspace and parsing verdicts | the `Math.lean` theorems and controls, restated in Scala over `Math.*` targets, give the same verdicts; generated files replace the hand-written ones | Built, in part by other means: the surface (`Quantifiable` also for `String`, `Data`, lists, maps, case classes and enums), capture by macros, `@Compile` function targets, `blaster-uplc` with the polarity rule. The `Math.lean` theorems are restated in `PreludeProofsTest`, and the hand-written files are gone (§8.1). Proofs run as ScalaTest suites, not through `sbt verify`. Not built: verifier descriptors, script targets, a serialized `Prop`. |
+| **1** | `exists` / `existsLet`, `denotes`, `equal`; `refute` with replay; `scalacheck`; external contracts (`verifier.contract(f)`); `Theorem`, report, cache; PR-time freshness check and nightly run | a suite without a negative control fails; a planted spurious counterexample is reported as spurious; `Math.clamp`'s contract proved about its compiled code | Built: `exists` / `existsLet`, `denotes`, `equal`; replayed refutations, and spurious counterexamples reported as such; external contracts, proved about compiled code; `Theorem`; the kept results, with ci-jvm passing on them and the Lean-Proofs workflow nightly and on a push; and `refute`, `ExpectedOutcome` and `VerificationRequest`, run by `LeanProofs.check`; statements without a name named by their content hash (§4.4), and kept results pruned. Beyond the plan: budgets the tactic finds (`Budget.Auto`), and checks within a budget (`Budget.Within`, `ProvenWithin`). Not built: `scalacheck`, a report, and failing a suite without a negative control. |
 | **2** | in-body `spec` capture in the plugin; `lean-direct` for integers, `Bool`, `ByteString`, `List`, `Option` and case classes; declared Lean mappings, proved by `blaster-uplc`; `using`, `split`, `cases`; contract VCG for modular proofs | adding clauses leaves the script hash unchanged; a list lemma proved with `induction xs <;> blaster`; a Mathlib `Int.gcd` theorem transferred to the compiled `Math.gcd` through a proved mapping; a caller's obligation discharged with its callee's contract | Built: in-body `Spec` capture, with the script's bytes unchanged (`SpecTest`), and the caller's side of contracts (`obligations`). Not built: `lean-direct`, mappings, `using` / `split` / `cases`, the VCG. |
-| **3** | validators: `ScriptContext` targets with the CardanoLedgerApiBlaster validity predicates; bring the first prototype's Vesting annotations forward (§8.2) | one real contract (Vesting) with authorisation and conservation properties proved about its script hash | In part: Vesting, HTLC and the payment splitters have properties proved about their validators, over script contexts written as `Data`, and Vesting's annotations are back (§8.2). Not built: the validity predicates, and proofs about the published script hash, which wait for Value and array builtins in PlutusCoreBlaster. |
+| **3** | validators: `ScriptContext` targets with the CardanoLedgerApiBlaster validity predicates; bring the first prototype's Vesting annotations forward (§8.2) | one real contract (Vesting) with authorisation and conservation properties proved about its script hash | In part: Vesting, HTLC and the payment splitters have properties proved about their validators, over script contexts written as `Data`, and Vesting's annotations are back (§8.2). The one-shot minting policy states its guarantees in its code and has them proved, and its script, with its deserializer, is proved on every context of at most two inputs, two policies and two tokens of each (`forAllDataLimited`). IOG's statements of the USDCx policy hold of the script Scalus compiles, in a Lean workspace outside `scalus.verify` (§8.4). Not built: the validity predicates as premises of a `Prop`, and proofs about the published script hash, which wait for Value and array builtins in PlutusCoreBlaster: the proved programs are compiled with the tactic's options. |
 | **4** | a Scala kernel only if a lemma backlog demands it | representative lemmas elaborate and discharge through `Prop` | Not started. |
 
 ---

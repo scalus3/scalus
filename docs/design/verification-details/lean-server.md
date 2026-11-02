@@ -8,8 +8,9 @@ Lean.
 
 Status: built, up to and with the tactic. `LeanServer` is in `scalus.verify.lean`, with
 `JsonRpcSession` under it and `LeanServers`, which gives a tactic its server, over it.
-`UplcBlaster` and `LeanProofs`, which states proofs, run on them. "Exporting
-to the workspace" and "Keeping prepared leaves" are proposed. "What was measured" records an
+`UplcBlaster` and `LeanProofs`, which states proofs, run on them. Of "Exporting to the
+workspace", the library is built, in another form than proposed; the checks are in part, and the
+generated Lean is not. "Keeping prepared leaves" is proposed. "What was measured" records an
 experiment made before any of it, outside the code base, with checks written by
 `UplcBlaster.writeCheck`, on Lean 4.24.0 (language server 0.3.0), the version in
 `lean-toolchain`.
@@ -443,6 +444,22 @@ Proofs written by hand are the fourth thing a workspace holds. They are not expo
 the project's own sources, in the workspace the generated modules are written to, or in one
 that requires it ("Several workspaces").
 
+**What is built.**
+
+- **The library**, in another form than above. `LeanWorkspaceTool.init(directory)` unpacks
+  `ScalusProofs` from the jar into `.scalus/ScalusProofs`, once for a project, and writes only
+  the files that changed; it creates the workspace where its directory has no lakefile, and
+  never writes it again. Every workspace of the project requires the library by its path and
+  uses its `packagesDir`, so Blaster and PlutusCore are built once for the project. `init` runs
+  no Lean: the build is `lake build`, or the sbt plugin's `leanBuild`. The plugin's
+  `leanWorkspace` setting names a project's workspace and `leanInit` makes it ready
+  (`scalus-verification/README.md`, "The workspace of a project outside these sources").
+- **The checks**, in part. A suite can keep its checks in its workspace
+  (`LeanProofsSuite.keptChecksDirectory`, as `PaymentSplitterVerificationTest` does, under
+  `KeptChecks/`). That is not the default, and the leaf files of the checks that run are still
+  written to a temporary directory.
+- **The generated Lean** is not: it waits for `lean-direct`.
+
 ## Keeping prepared leaves
 
 A further step, not measured on a heavy program.
@@ -486,7 +503,8 @@ cost together. The document is opened anew when it has grown beyond a number of 
 
 1. **Steps.** The server alone, with its tests, and then the tactic moved onto it, with the run
    of a process per check removed: both done. After those, in either order, the export of a
-   workspace and kept leaves.
+   workspace and kept leaves. The export of the library is done; the rest of the export, and
+   kept leaves, are left.
 2. **Who owns a server.** Decided: the code that creates its provider. A server is for one
    workspace directory, there can be several, and one may first have to be exported, so no
    place is left to choose a server silently.
@@ -503,7 +521,10 @@ cost together. The document is opened anew when it has grown beyond a number of 
    own worker; what it costs in memory is not measured.
 5. **Structured results.** The verdict stays text in a message. A command of the workspace that
    reports JSON, or Lean's RPC over the same connection, would remove the reading of text.
-6. **Where an exported workspace lies.**
+6. **Where an exported workspace lies.** Decided, as none of the three below: the workspace is in
+   the project's sources (`src/test/lean/<Project>` by default), and the library and its packages
+   are in the project's `.scalus`, once for the project. Each project builds Blaster and
+   PlutusCore once for itself.
    - *One per project, under its build directory:* nothing shared and nothing to clean up, and
      every project builds Blaster and PlutusCore for itself.
    - *One per Scalus version, in a cache directory of the user* (recommended): the build of the
