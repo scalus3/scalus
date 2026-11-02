@@ -100,6 +100,9 @@
   constant's bytes and ignores the bytes after it, where it used to reject the script.
   `Data.fromCbor` still rejects trailing bytes, as the ledger does for a datum or a redeemer. A
   malformed `data` constant fails with `FlatDecodingError`, like other malformed flat input.
+- The flat decoder rejects a `string` constant that is not UTF-8, as Plutus does. Before,
+  malformed bytes became U+FFFD. The `decodeUtf8` builtin uses the same check, which is written out
+  so that JVM, Scala.js and Scala Native reject the same bytes.
 - `PlutusScriptEvaluator` reports a script it cannot decode as an `IllegalArgumentException` that
   names the script, and the Emulator rejects the transaction in phase 1. Before protocol version 7
   (Babbage), the ledger had no phase 1 check: `ScriptsWellFormedValidator` accepts the script, and

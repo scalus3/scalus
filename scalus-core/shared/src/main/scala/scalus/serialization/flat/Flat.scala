@@ -230,7 +230,11 @@ given Flat[String] with
     def decode(decode: DecoderState): String =
         val baDecoder = summon[Flat[Array[Byte]]]
         val bytes = baDecoder.decode(decode)
-        new String(bytes, "UTF-8")
+        // `dUTF8` decodes with the strict `decodeUtf8'` and fails on invalid input
+        // (PlutusCore/Flat/Decoder/Strict.hs); `new String` would replace it with U+FFFD
+        if !scalus.utils.Utf8.isWellFormed(bytes) then
+            throw new FlatDecodingError("Input contains invalid UTF-8 data")
+        new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
 
 /** Flat encoding for collections as flat lists: each element is prefixed by a `1` bit, terminated
   * by a `0` bit (`List a = Nil | Cons a (List a)` with one tag bit per node).

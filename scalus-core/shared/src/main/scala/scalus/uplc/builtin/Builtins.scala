@@ -3,10 +3,6 @@ import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.serialization.cbor.Cbor
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
-import java.nio.ByteBuffer
-import java.nio.CharBuffer
-import java.nio.charset.CharsetDecoder
-import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.util.Arrays
 import scalus.uplc.eval.BuiltinException
@@ -415,7 +411,11 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       *   if the bytestring is not valid UTF-8
       */
     def decodeUtf8(bs: ByteString): String =
-        UTF8Decoder.decode(bs.bytes)
+        // the same check as the flat decoder of `string` constants, so every platform rejects the
+        // bytes that the strict `decodeUtf8'` of the reference rejects
+        if !scalus.utils.Utf8.isWellFormed(bs.bytes) then
+            throw new IllegalArgumentException("Invalid UTF-8 sequence")
+        new String(bs.bytes, StandardCharsets.UTF_8)
 
     // ============================================================================
     // Control Flow
@@ -1467,24 +1467,3 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       */
     def scaleValue(scalar: BigInt, value: BuiltinValue): BuiltinValue =
         scalus.uplc.eval.BuiltinValueOps.scaleValue(scalar, value)
-
-private object UTF8Decoder {
-    def decode(bytes: Array[Byte]): String = {
-        val decoder: CharsetDecoder = StandardCharsets.UTF_8.newDecoder()
-        decoder.onMalformedInput(CodingErrorAction.REPORT)
-        decoder.onUnmappableCharacter(CodingErrorAction.REPORT)
-
-        val inputBuffer: ByteBuffer = ByteBuffer.wrap(bytes)
-        val outputBuffer: CharBuffer = CharBuffer.allocate(bytes.length)
-
-        try
-            val result = decoder.decode(inputBuffer, outputBuffer, true)
-            if result.isUnderflow then
-                outputBuffer.flip()
-                outputBuffer.toString
-            else throw new IllegalArgumentException("Invalid UTF-8 sequence")
-        catch
-            case e: java.nio.charset.CharacterCodingException =>
-                throw new IllegalArgumentException("Invalid UTF-8 sequence", e)
-    }
-}
