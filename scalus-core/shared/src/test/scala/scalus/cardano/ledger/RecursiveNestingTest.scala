@@ -9,16 +9,13 @@ import scalus.utils.Utils
 
 /** Transactions are read without borer's limit of 1000 nesting levels, which a datum may exceed
   * (#423). The decoders of metadata and of native scripts keep that limit themselves: a deeper
-  * value fails to decode with borer's `Overflow`. How deep they read does not depend on the stack
-  * (NestingStackTest, on the JVM).
+  * value fails to decode with borer's `Overflow`. How deep they read and write does not depend on
+  * the stack (NestingStackTest, on the JVM).
   */
 class RecursiveNestingTest extends AnyFunSuite {
     import RecursiveNestingTest.*
 
-    private val limit = Cbor.maxRecursiveNestingLevels
-
-    private def reencoded[A: io.bullet.borer.Encoder](value: A): String =
-        Utils.bytesToHex(Cbor.encode(value))
+    private val limit = Cbor.maxMetadataAndScriptNestingLevels
 
     test("metadata nested as deep as the limit decodes") {
         val hex = nestedLists(limit)
@@ -32,9 +29,10 @@ class RecursiveNestingTest extends AnyFunSuite {
             Cbor.decode[Metadatum](nestedLists(limit + 1).hexToBytes)
         }
         assert(lists.getMessage.contains(s"Exceeded $limit nesting levels of metadata"))
-        intercept[Borer.Error.Overflow[?]] {
+        val maps = intercept[Borer.Error.Overflow[?]] {
             Cbor.decode[Metadatum](nestedMaps(limit + 1).hexToBytes)
         }
+        assert(maps.getMessage.contains(s"Exceeded $limit nesting levels of metadata"))
     }
 
     test("a transaction with metadata nested 20000 levels deep fails to decode") {
@@ -67,6 +65,10 @@ class RecursiveNestingTest extends AnyFunSuite {
 }
 
 object RecursiveNestingTest {
+
+    /** `value` encoded, in hexadecimal. */
+    def reencoded[A: io.bullet.borer.Encoder](value: A): String =
+        Utils.bytesToHex(Cbor.encode(value))
 
     /** `levels` arrays of one item around the integer 0. */
     def nestedLists(levels: Int): String = "81" * levels + "00"

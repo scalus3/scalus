@@ -1,7 +1,7 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.*
-import scalus.serialization.cbor.Cbor as ScalusCbor
+import scalus.serialization.cbor.NestedCbor
 import scalus.uplc.builtin.ByteString
 
 import scala.collection.immutable
@@ -28,135 +28,125 @@ object Metadatum:
     /** Text metadata */
     final case class Text(value: String) extends Metadatum
 
-    /** CBOR encoder for TransactionMetadatum */
+    /** CBOR encoder for TransactionMetadatum.
+      *
+      * It does not recurse over the nesting: what is still to write is kept on the heap, last
+      * first, so how deep it writes does not depend on the stack of the thread that writes. A list
+      * is written as borer writes an `IndexedSeq`, and a map entry by entry, in its order.
+      */
     given Encoder[Metadatum] with
-        def write(w: Writer, value: Metadatum): Writer = value match
-            case Metadatum.Map(entries) =>
-                w.writeMapHeader(entries.size)
-                entries.foreach { case (k, v) =>
-                    write(w, k)
-                    write(w, v)
-                }
-                w
+        def write(w: Writer, value: Metadatum): Writer = {
+            val pending = ArrayBuffer[Metadatum | ArrayEnd.type](value)
+            while pending.nonEmpty do
+                pending.remove(pending.size - 1) match
+                    case ArrayEnd => w.writeArrayClose()
 
-            case Metadatum.List(items) =>
-                w.writeIndexedSeq(items)
+                    case Metadatum.Map(entries) =>
+                        w.writeMapHeader(entries.size)
+                        entries.toVector.reverseIterator.foreach { (k, v) =>
+                            pending += v
+                            pending += k
+                        }
 
-            case Metadatum.Int(value) =>
-                w.writeLong(value)
+                    case Metadatum.List(items) =>
+                        w.writeArrayOpen(items.size)
+                        pending += ArrayEnd
+                        items.reverseIterator.foreach(pending += _)
 
-            case Metadatum.Bytes(value) =>
-                w.writeBytes(value.bytes)
+                    case Metadatum.Int(value) =>
+                        w.writeLong(value)
 
-            case Metadatum.Text(value) =>
-                w.writeString(value)
+                    case Metadatum.Bytes(value) =>
+                        w.writeBytes(value.bytes)
+
+                    case Metadatum.Text(value) =>
+                        w.writeString(value)
+            w
+        }
+
+    /** Where a list that the encoder has opened ends. */
+    private object ArrayEnd
 
     /** CBOR decoder for TransactionMetadatum.
       *
-      * It does not recurse over the nesting: it keeps the arrays and maps it has opened on the
-      * heap, as the decoder of `Data` does, so how deep it reads does not depend on the stack of
-      * the thread that reads. It reads at most [[ScalusCbor.maxRecursiveNestingLevels]] levels: a
-      * deeper metadatum fails to decode. The ledger has no such limit, but it was this deep before
-      * transactions were read without borer's limit.
+      * It does not recurse over the nesting: it keeps the arrays and maps it has opened on the heap
+      * ([[NestedCbor]]), so how deep it reads does not depend on the stack of the thread that
+      * reads, with one exception: a map hashes its keys, and the hash of a key recurses over it, as
+      * that of a case class does. It reads at most
+      * [[scalus.serialization.cbor.Cbor.maxMetadataAndScriptNestingLevels]] levels: a deeper
+      * metadatum fails to decode.
       *
       * An array is read as borer reads an `IndexedSeq`, into a `Vector`, and a map as borer reads
       * an `immutable.Map`: a later entry of a key replaces an earlier one.
       */
     given Decoder[Metadatum] with
 
-        /** An array or a map being read. */
-        private sealed abstract class Open {
-
-            /** Whether all its items are read. Reads the break that ends an indefinite one. */
-            def isComplete(r: Reader): Boolean
-
-            def add(item: Metadatum): Unit
-
-            /** The metadatum read, once it is complete. */
-            def close(): Metadatum
-        }
-
         /** A list being read: the items read so far, and how many are still to read, or -1 for an
           * indefinite array.
           */
-        private final class OpenList(private var remaining: Long) extends Open {
+        private final class OpenList(private var remaining: scala.Int)
+            extends NestedCbor.Open[Metadatum] {
             private val items = IndexedSeq.newBuilder[Metadatum]
 
-            def isComplete(r: Reader): Boolean = isEnd(r, remaining)
+            def isComplete(r: Reader): Boolean = NestedCbor.isEnd(r, remaining)
 
             def add(item: Metadatum): Unit = {
                 items += item
                 if remaining > 0 then remaining -= 1
             }
 
-            def close(): Metadatum = Metadatum.List(items.result())
+            def close(r: Reader): Metadatum = Metadatum.List(items.result())
         }
 
         /** A map being read: the entries read so far, the key of the entry being read, and how many
           * entries are still to read, or -1 for an indefinite map.
           */
-        private final class OpenMap(private var remaining: Long) extends Open {
-            private var entries = immutable.Map.empty[Metadatum, Metadatum]
+        private final class OpenMap(private var remaining: scala.Int)
+            extends NestedCbor.Open[Metadatum] {
+            private val entries = immutable.Map.newBuilder[Metadatum, Metadatum]
             private var key: Metadatum = null
 
             // a break between a key and its value is not the end of the map
-            def isComplete(r: Reader): Boolean = (key eq null) && isEnd(r, remaining)
+            def isComplete(r: Reader): Boolean = (key eq null) && NestedCbor.isEnd(r, remaining)
 
             def add(item: Metadatum): Unit = {
                 if key eq null then key = item
                 else
-                    entries = entries.updated(key, item)
+                    entries += key -> item
                     key = null
                     if remaining > 0 then remaining -= 1
             }
 
-            def close(): Metadatum = Metadatum.Map(entries)
+            def close(r: Reader): Metadatum = Metadatum.Map(entries.result())
         }
 
-        def read(r: Reader): Metadatum =
+        def read(r: Reader): Metadatum = {
             readItem(r, depth = 0) match
                 case metadatum: Metadatum => metadatum
-                case open: Open           => readNested(r, open)
-
-        /** Reads the items of `outermost` and all they hold. What is open is kept on the heap,
-          * innermost last.
-          */
-        private def readNested(r: Reader, outermost: Open): Metadatum = {
-            val open = ArrayBuffer[Open](outermost)
-            var result: Metadatum = null
-            while result eq null do
-                val innermost = open.last
-                if innermost.isComplete(r) then
-                    open.dropRightInPlace(1)
-                    val value = innermost.close()
-                    if open.isEmpty then result = value else open.last.add(value)
-                else
-                    readItem(r, depth = open.size) match
-                        case value: Metadatum => innermost.add(value)
-                        case nested: Open     => open += nested
-            result
+                case open: NestedCbor.Open[Metadatum @unchecked] =>
+                    NestedCbor.readNested(open, r)(depth => readItem(r, depth))
         }
-
-        // whether an array or a map with `remaining` items to read, or -1 if indefinite, is read
-        private def isEnd(r: Reader, remaining: Long): Boolean =
-            if remaining < 0 then r.tryReadBreak() else remaining == 0
 
         /** Reads a metadatum held in `depth` arrays and maps that holds no other, or opens an array
           * or a map.
           */
-        private def readItem(r: Reader, depth: scala.Int): Metadatum | Open = {
+        private def readItem(
+            r: Reader,
+            depth: scala.Int
+        ): Metadatum | NestedCbor.Open[Metadatum] = {
             import io.bullet.borer.DataItem as DI
             r.dataItem() match {
                 case DI.MapHeader | DI.MapStart =>
-                    checkDepth(r, depth)
-                    if r.hasMapHeader then OpenMap(definite(r, r.readMapHeader(), "Map"))
+                    NestedCbor.checkDepth(r, depth, "metadata")
+                    if r.hasMapHeader then OpenMap(NestedCbor.definite(r, r.readMapHeader(), "Map"))
                     else
                         r.readMapStart()
                         OpenMap(-1)
 
                 case DI.ArrayHeader | DI.ArrayStart =>
-                    checkDepth(r, depth)
-                    if r.hasArrayHeader then OpenList(definite(r, r.readArrayHeader(), "Iterable"))
+                    NestedCbor.checkDepth(r, depth, "metadata")
+                    if r.hasArrayHeader then
+                        OpenList(NestedCbor.definite(r, r.readArrayHeader(), "Iterable"))
                     else
                         r.readArrayStart()
                         OpenList(-1)
@@ -174,18 +164,6 @@ object Metadatum:
                     r.validationFailure(s"Unexpected data item for TransactionMetadatum: $other")
             }
         }
-
-        // fails if an array or a map held in `depth` arrays and maps would be too deep
-        private def checkDepth(r: Reader, depth: scala.Int): Unit =
-            if depth >= ScalusCbor.maxRecursiveNestingLevels then
-                r.overflow(
-                  s"Exceeded ${ScalusCbor.maxRecursiveNestingLevels} nesting levels of metadata"
-                )
-
-        // the length in the header of a `what`, at most the size of a collection, as borer reads it
-        private def definite(r: Reader, size: Long, what: String): Long =
-            if size <= scala.Int.MaxValue then size
-            else r.overflow(s"Cannot deserialize $what with size $size (> Int.MaxValue)")
 
 /** Represents auxiliary data in a Cardano transaction */
 enum AuxiliaryData:

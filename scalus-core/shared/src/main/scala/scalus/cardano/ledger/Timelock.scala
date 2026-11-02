@@ -2,7 +2,7 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import org.typelevel.paiges.Doc
-import scalus.serialization.cbor.Cbor as ScalusCbor
+import scalus.serialization.cbor.NestedCbor
 import scalus.uplc.builtin.{platform, ByteString}
 import scalus.utils.Pretty.{ctr, inParens, lit}
 import scalus.utils.{Pretty, Style}
@@ -109,39 +109,58 @@ enum Timelock:
 
 // Companion object with factory methods
 object Timelock:
-    // Timelock encoder - based on the Haskell code which uses sum types with tags
+    /** Timelock encoder, based on the Haskell code, which uses sum types with tags.
+      *
+      * It does not recurse over the scripts of `AllOf`, `AnyOf` and `MOf`: what is still to write
+      * is kept on the heap, last first, so how deep it writes does not depend on the stack of the
+      * thread that writes. A list of scripts is written as borer writes an `IndexedSeq`.
+      */
     given Encoder[Timelock] = Encoder: (w, value) =>
-        value match
-            case Timelock.Signature(hash) =>
-                w.writeArrayHeader(2)
-                    .write(0) // Tag for Signature
-                    .write(hash)
+        val pending = ArrayBuffer[Timelock | ListEnd.type](value)
+        // opens the list of `scripts`, to write them next, in order
+        def holding(scripts: IndexedSeq[Timelock]): Unit = {
+            w.writeArrayOpen(scripts.size)
+            pending += ListEnd
+            scripts.reverseIterator.foreach(pending += _)
+        }
+        while pending.nonEmpty do
+            pending.remove(pending.size - 1) match
+                case ListEnd => w.writeArrayClose()
 
-            case Timelock.AllOf(scripts) =>
-                w.writeArrayHeader(2)
-                    .write(1) // Tag for AllOf
-                    .write(scripts)
+                case Timelock.Signature(hash) =>
+                    w.writeArrayHeader(2)
+                        .write(0) // Tag for Signature
+                        .write(hash)
 
-            case Timelock.AnyOf(scripts) =>
-                w.writeArrayHeader(2)
-                    .write(2) // Tag for AnyOf
-                    .write(scripts)
+                case Timelock.AllOf(scripts) =>
+                    w.writeArrayHeader(2)
+                        .write(1) // Tag for AllOf
+                    holding(scripts)
 
-            case Timelock.MOf(m, scripts) =>
-                w.writeArrayHeader(3)
-                    .write(3) // Tag for MOfN
-                    .write(m)
-                    .write(scripts)
+                case Timelock.AnyOf(scripts) =>
+                    w.writeArrayHeader(2)
+                        .write(2) // Tag for AnyOf
+                    holding(scripts)
 
-            case Timelock.TimeStart(slot) =>
-                w.writeArrayHeader(2)
-                    .write(4) // Tag for TimeStart
-                    .write(slot)
+                case Timelock.MOf(m, scripts) =>
+                    w.writeArrayHeader(3)
+                        .write(3) // Tag for MOfN
+                        .write(m)
+                    holding(scripts)
 
-            case Timelock.TimeExpire(slot) =>
-                w.writeArrayHeader(2)
-                    .write(5) // Tag for TimeExpire
-                    .write(slot)
+                case Timelock.TimeStart(slot) =>
+                    w.writeArrayHeader(2)
+                        .write(4) // Tag for TimeStart
+                        .write(slot)
+
+                case Timelock.TimeExpire(slot) =>
+                    w.writeArrayHeader(2)
+                        .write(5) // Tag for TimeExpire
+                        .write(slot)
+        w
+
+    /** Where a list of scripts that the encoder has opened ends. */
+    private object ListEnd
 
     /** Reads a definite- or indefinite-length array, as `decodeRecordSum` in cardano-ledger. The
       * nested lists accept both too, as `decodeStrictSeq`. A definite-length array must hold
@@ -149,34 +168,34 @@ object Timelock:
       * `matchSize` checks.
       *
       * The decoder does not recurse over the scripts of `AllOf`, `AnyOf` and `MOf`: it keeps those
-      * it has opened on the heap, so how deep it reads does not depend on the stack of the thread
-      * that reads. It reads at most [[ScalusCbor.maxRecursiveNestingLevels]] levels of arrays: a
-      * deeper script fails to decode. The ledger has no such limit, but it was this deep before
-      * transactions were read without borer's limit.
+      * it has opened on the heap ([[NestedCbor]]), so how deep it reads does not depend on the
+      * stack of the thread that reads. It reads at most
+      * [[scalus.serialization.cbor.Cbor.maxMetadataAndScriptNestingLevels]] levels of arrays: a
+      * deeper script fails to decode.
       */
     given Decoder[Timelock] = Decoder(readTimelock(_))
 
-    private def readTimelock(r: Reader): Timelock =
+    private def readTimelock(r: Reader): Timelock = {
         readScript(r, depth = 0) match
             case script: Timelock  => script
-            case open: OpenScripts => readNested(r, open)
+            case open: OpenScripts =>
+                // each open script is two arrays deep: its own and its list's
+                NestedCbor.readNested(open, r)(opened => readScript(r, depth = 2 * opened))
+    }
 
-    /** A script of scripts, `AllOf`, `AnyOf` or `MOf`, whose list of scripts is being read: whether
-      * its array is indefinite, the size of its array otherwise, the script it makes of its list,
-      * the scripts read so far, and how many are still to read, or -1 for an indefinite list.
+    /** A script of scripts, `AllOf`, `AnyOf` or `MOf`, whose list of scripts is being read: the
+      * size of its array, or -1 if indefinite; the script it makes of its list; the scripts read so
+      * far; and how many are still to read, or -1 for an indefinite list.
       */
     private final class OpenScripts(
-        unbounded: Boolean,
         size: Long,
         make: IndexedSeq[Timelock] => Timelock,
-        private var remaining: Long
-    ) {
+        private var remaining: Int
+    ) extends NestedCbor.Open[Timelock] {
         // as borer reads an `IndexedSeq`
         private val scripts = IndexedSeq.newBuilder[Timelock]
 
-        /** Whether all its scripts are read. Reads the break that ends an indefinite list. */
-        def isComplete(r: Reader): Boolean =
-            if remaining < 0 then r.tryReadBreak() else remaining == 0
+        def isComplete(r: Reader): Boolean = NestedCbor.isEnd(r, remaining)
 
         def add(script: Timelock): Unit = {
             scripts += script
@@ -184,40 +203,19 @@ object Timelock:
         }
 
         /** The script, once its list is read, with its array closed. */
-        def close(r: Reader): Timelock = closed(r, unbounded, size, make(scripts.result()))
-    }
-
-    /** Reads the scripts of `outermost` and all they hold. What is open is kept on the heap,
-      * innermost last.
-      */
-    private def readNested(r: Reader, outermost: OpenScripts): Timelock = {
-        val open = ArrayBuffer(outermost)
-        var result: Timelock = null
-        while result eq null do
-            val innermost = open.last
-            if innermost.isComplete(r) then
-                open.dropRightInPlace(1)
-                val script = innermost.close(r)
-                if open.isEmpty then result = script else open.last.add(script)
-            else
-                // each open script is two arrays deep: its own and its list's
-                readScript(r, depth = 2 * open.size) match
-                    case script: Timelock    => innermost.add(script)
-                    case nested: OpenScripts => open += nested
-        result
+        def close(r: Reader): Timelock = closed(r, size, make(scripts.result()))
     }
 
     /** Reads a script held in `depth` arrays that holds no other, or opens one that does. */
     private def readScript(r: Reader, depth: Int): Timelock | OpenScripts = {
-        checkDepth(r, depth)
-        val unbounded = r.tryReadArrayStart()
-        val size = if unbounded then -1L else r.readArrayHeader()
+        NestedCbor.checkDepth(r, depth, "a native script")
+        val size = if r.tryReadArrayStart() then -1L else r.readArrayHeader()
         def holding(make: IndexedSeq[Timelock] => Timelock): OpenScripts =
-            openScripts(r, depth + 1, unbounded, size, make)
+            openScripts(r, depth + 1, size, make)
 
         r.readInt() match {
             case 0 => // Signature
-                closed(r, unbounded, size, Timelock.Signature(r.read[AddrKeyHash]()))
+                closed(r, size, Timelock.Signature(r.read[AddrKeyHash]()))
 
             case 1 => // AllOf
                 holding(Timelock.AllOf(_))
@@ -230,54 +228,44 @@ object Timelock:
                 holding(Timelock.MOf(m, _))
 
             case 4 => // TimeStart
-                closed(r, unbounded, size, Timelock.TimeStart(r.read[SlotNo]()))
+                closed(r, size, Timelock.TimeStart(r.read[SlotNo]()))
 
             case 5 => // TimeExpire
-                closed(r, unbounded, size, Timelock.TimeExpire(r.read[SlotNo]()))
+                closed(r, size, Timelock.TimeExpire(r.read[SlotNo]()))
 
             case tag =>
                 r.validationFailure(s"Invalid Timelock tag: $tag")
         }
     }
 
-    /** Opens the list of scripts, held in `depth` arrays, of a script whose array is `unbounded`,
-      * or of `size`. The list is read as borer reads an `IndexedSeq`, definite or indefinite.
+    /** Opens the list of scripts, held in `depth` arrays, of a script whose array has `size`
+      * fields, or -1 if indefinite. The list is read as borer reads an `IndexedSeq`, definite or
+      * indefinite.
       */
     private def openScripts(
         r: Reader,
         depth: Int,
-        unbounded: Boolean,
         size: Long,
         make: IndexedSeq[Timelock] => Timelock
     ): OpenScripts = {
-        checkDepth(r, depth)
+        NestedCbor.checkDepth(r, depth, "a native script")
         if r.hasArrayHeader then
-            val length = r.readArrayHeader()
-            if length <= Int.MaxValue then OpenScripts(unbounded, size, make, length)
-            else r.overflow(s"Cannot deserialize Iterable with size $length (> Int.MaxValue)")
-        else if r.tryReadArrayStart() then OpenScripts(unbounded, size, make, -1)
+            OpenScripts(size, make, NestedCbor.definite(r, r.readArrayHeader(), "Iterable"))
+        else if r.tryReadArrayStart() then OpenScripts(size, make, -1)
         else r.unexpectedDataItem(expected = "Array for deserializing an Iterable instance")
     }
 
-    /** `script`, whose fields are read from an array that is `unbounded`, or of `size`: closes the
-      * array, which must hold exactly the fields of the script's constructor.
+    /** `script`, whose fields are read from an array of `size` fields, or -1 if indefinite: closes
+      * the array, which must hold exactly the fields of the script's constructor.
       */
-    private def closed(r: Reader, unbounded: Boolean, size: Long, script: Timelock): Timelock = {
-        r.readArrayClose(unbounded, script)
+    private def closed(r: Reader, size: Long, script: Timelock): Timelock = {
+        r.readArrayClose(size < 0, script)
         val expected = script match
             case _: Timelock.MOf => 3L
             case _               => 2L
-        if !unbounded && size != expected then
+        if size >= 0 && size != expected then
             r.validationFailure(s"Timelock array of size $size, expected $expected")
         else script
-    }
-
-    // fails if an array held in `depth` arrays would be too deep
-    private def checkDepth(r: Reader, depth: Int): Unit = {
-        if depth >= ScalusCbor.maxRecursiveNestingLevels then
-            r.overflow(
-              s"Exceeded ${ScalusCbor.maxRecursiveNestingLevels} nesting levels of a native script"
-            )
     }
 
     /** Reads a Timelock script from a CBOR encoded byte array

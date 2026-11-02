@@ -53,11 +53,13 @@ object Cbor {
       * read.
       *
       * It is borer's default limit, which bounded every decoder before [[decodingConfig]] lifted
-      * it, and they keep it: a value nested deeper fails to decode. They once recursed once per
-      * level, and kept it so as not to overflow the stack. They no longer recurse, so they read as
-      * deep on any stack; the ledger has no such limit.
+      * it, and they keep it: a value nested deeper fails to decode. The ledger has no such limit.
+      * The decoders and encoders no longer recurse over the nesting ([[NestedCbor]]), but what is
+      * done with a value afterwards still may: its equality, its hash, as a map computes for its
+      * keys, its `toString`, and the evaluation of a native script recurse over it as case classes
+      * do. The limit bounds them too.
       */
-    private[scalus] val maxRecursiveNestingLevels: Int = 1000
+    private[scalus] val maxMetadataAndScriptNestingLevels: Int = 1000
 
     /** Decodes CBOR data back to a Scala object of the specified type, with [[decodingConfig]].
       *
