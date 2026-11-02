@@ -1,15 +1,42 @@
 package scalus.serialization.cbor
 
-import io.bullet.borer.Reader
+import io.bullet.borer.{Reader, Writer}
 
 import scala.collection.mutable.ArrayBuffer
 
-/** Reading CBOR nested as deep as the input chooses without recursing over the nesting: what has
-  * been opened is kept on the heap, so how deep a decoder reads does not depend on the stack of the
-  * thread that reads. The decoders of metadata and of native scripts read so, as borer reads their
-  * collections: an array into an `IndexedSeq`, definite or indefinite, and a map item by item.
+/** Reading and writing CBOR nested as deep as a value chooses without recursing over the nesting:
+  * what has been opened is kept on the heap, so how deep a codec reads or writes does not depend on
+  * the stack of the thread. The codecs of metadata and of native scripts work so, as borer reads
+  * and writes their collections: an array as an `IndexedSeq`, definite or indefinite, and a map
+  * item by item.
   */
 private[scalus] object NestedCbor {
+
+    /** The values a value holds, which [[writeNested]] writes after it, in the order of `items`;
+      * `array` says whether they are the items of an array opened with `writeArrayOpen`, which
+      * `writeArrayClose` ends.
+      */
+    final class Held[A](val items: Iterator[A], val array: Boolean)
+
+    /** Writes `value` and all it holds without recursing over the nesting. `head` writes a value
+      * without the values it holds, so all of one that holds none, and returns what it holds, or
+      * null. What is open is kept on the heap, one iterator per level: a value that holds none is
+      * written without it.
+      */
+    def writeNested[A](w: Writer, value: A)(head: A => Held[A] | Null): Writer = {
+        val outermost = head(value)
+        if outermost ne null then
+            val open = ArrayBuffer[Held[A]](outermost)
+            while open.nonEmpty do
+                val innermost = open.last
+                if innermost.items.hasNext then
+                    val held = head(innermost.items.next())
+                    if held ne null then open += held
+                else
+                    open.dropRightInPlace(1)
+                    if innermost.array then w.writeArrayClose()
+        w
+    }
 
     /** An array or a map being read, which is a value of type `A` once it is complete. */
     abstract class Open[A] {

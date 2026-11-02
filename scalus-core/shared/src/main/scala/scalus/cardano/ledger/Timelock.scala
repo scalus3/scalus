@@ -8,7 +8,6 @@ import scalus.utils.Pretty.{ctr, inParens, lit}
 import scalus.utils.{Pretty, Style}
 
 import scala.annotation.tailrec
-import scala.collection.mutable.ArrayBuffer
 
 // SlotNo wrapped value
 type SlotNo = Long
@@ -111,56 +110,56 @@ enum Timelock:
 object Timelock:
     /** Timelock encoder, based on the Haskell code, which uses sum types with tags.
       *
-      * It does not recurse over the scripts of `AllOf`, `AnyOf` and `MOf`: what is still to write
-      * is kept on the heap, last first, so how deep it writes does not depend on the stack of the
-      * thread that writes. A list of scripts is written as borer writes an `IndexedSeq`.
+      * It does not recurse over the scripts of `AllOf`, `AnyOf` and `MOf`: it keeps the lists of
+      * scripts it has opened on the heap ([[NestedCbor.writeNested]]), so how deep it writes does
+      * not depend on the stack of the thread that writes. A list of scripts is written as borer
+      * writes an `IndexedSeq`.
       */
-    given Encoder[Timelock] = Encoder: (w, value) =>
-        val pending = ArrayBuffer[Timelock | ListEnd.type](value)
-        // opens the list of `scripts`, to write them next, in order
-        def holding(scripts: IndexedSeq[Timelock]): Unit = {
+    given Encoder[Timelock] = Encoder((w, value) => NestedCbor.writeNested(w, value)(head(w, _)))
+
+    /** Writes `script` without the scripts it holds, and returns those, or null. */
+    private def head(w: Writer, script: Timelock): NestedCbor.Held[Timelock] | Null = {
+        // opens the list of `scripts`, which are written next
+        def holding(scripts: IndexedSeq[Timelock]): NestedCbor.Held[Timelock] = {
             w.writeArrayOpen(scripts.size)
-            pending += ListEnd
-            scripts.reverseIterator.foreach(pending += _)
+            NestedCbor.Held(scripts.iterator, true)
         }
-        while pending.nonEmpty do
-            pending.remove(pending.size - 1) match
-                case ListEnd => w.writeArrayClose()
 
-                case Timelock.Signature(hash) =>
-                    w.writeArrayHeader(2)
-                        .write(0) // Tag for Signature
-                        .write(hash)
+        script match
+            case Timelock.Signature(hash) =>
+                w.writeArrayHeader(2)
+                    .write(0) // Tag for Signature
+                    .write(hash)
+                null
 
-                case Timelock.AllOf(scripts) =>
-                    w.writeArrayHeader(2)
-                        .write(1) // Tag for AllOf
-                    holding(scripts)
+            case Timelock.AllOf(scripts) =>
+                w.writeArrayHeader(2)
+                    .write(1) // Tag for AllOf
+                holding(scripts)
 
-                case Timelock.AnyOf(scripts) =>
-                    w.writeArrayHeader(2)
-                        .write(2) // Tag for AnyOf
-                    holding(scripts)
+            case Timelock.AnyOf(scripts) =>
+                w.writeArrayHeader(2)
+                    .write(2) // Tag for AnyOf
+                holding(scripts)
 
-                case Timelock.MOf(m, scripts) =>
-                    w.writeArrayHeader(3)
-                        .write(3) // Tag for MOfN
-                        .write(m)
-                    holding(scripts)
+            case Timelock.MOf(m, scripts) =>
+                w.writeArrayHeader(3)
+                    .write(3) // Tag for MOfN
+                    .write(m)
+                holding(scripts)
 
-                case Timelock.TimeStart(slot) =>
-                    w.writeArrayHeader(2)
-                        .write(4) // Tag for TimeStart
-                        .write(slot)
+            case Timelock.TimeStart(slot) =>
+                w.writeArrayHeader(2)
+                    .write(4) // Tag for TimeStart
+                    .write(slot)
+                null
 
-                case Timelock.TimeExpire(slot) =>
-                    w.writeArrayHeader(2)
-                        .write(5) // Tag for TimeExpire
-                        .write(slot)
-        w
-
-    /** Where a list of scripts that the encoder has opened ends. */
-    private object ListEnd
+            case Timelock.TimeExpire(slot) =>
+                w.writeArrayHeader(2)
+                    .write(5) // Tag for TimeExpire
+                    .write(slot)
+                null
+    }
 
     /** Reads a definite- or indefinite-length array, as `decodeRecordSum` in cardano-ledger. The
       * nested lists accept both too, as `decodeStrictSeq`. A definite-length array must hold

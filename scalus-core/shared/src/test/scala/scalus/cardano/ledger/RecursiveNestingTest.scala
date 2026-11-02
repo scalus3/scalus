@@ -35,6 +35,37 @@ class RecursiveNestingTest extends AnyFunSuite {
         assert(maps.getMessage.contains(s"Exceeded $limit nesting levels of metadata"))
     }
 
+    test("metadata in indefinite-length arrays and maps decodes as in definite ones") {
+        // [_ [_ 0]] and {_ 0: {_ 1: 2}}
+        assert(
+          Cbor.decode[Metadatum]("9f9f00ffff".hexToBytes) ==
+              Metadatum.List(Vector(Metadatum.List(Vector(Metadatum.Int(0)))))
+        )
+        assert(
+          Cbor.decode[Metadatum]("bf00bf0102ffff".hexToBytes) ==
+              Metadatum.Map(
+                Map(Metadatum.Int(0) -> Metadatum.Map(Map(Metadatum.Int(1) -> Metadatum.Int(2))))
+              )
+        )
+        // as deep as the limit, and one level deeper fails
+        val hex = nestedIndefiniteLists(limit)
+        assert(reencoded(Cbor.decode[Metadatum](hex.hexToBytes)) == nestedLists(limit))
+        val deeper = intercept[Borer.Error.Overflow[?]] {
+            Cbor.decode[Metadatum](nestedIndefiniteLists(limit + 1).hexToBytes)
+        }
+        assert(deeper.getMessage.contains(s"Exceeded $limit nesting levels of metadata"))
+    }
+
+    test("a break between a key and its value does not end an indefinite-length map") {
+        // {_ 0: and the break
+        intercept[Borer.Error[?]](Cbor.decode[Metadatum]("bf00ff".hexToBytes))
+        // {_ 0: 1} is complete before its break
+        assert(
+          Cbor.decode[Metadatum]("bf0001ff".hexToBytes) ==
+              Metadatum.Map(Map(Metadatum.Int(0) -> Metadatum.Int(1)))
+        )
+    }
+
     test("a transaction with metadata nested 20000 levels deep fails to decode") {
         val input =
             TransactionInput(TransactionHash.fromByteString(ByteString.fromHex("1" * 64)), 0)
@@ -72,6 +103,9 @@ object RecursiveNestingTest {
 
     /** `levels` arrays of one item around the integer 0. */
     def nestedLists(levels: Int): String = "81" * levels + "00"
+
+    /** `levels` indefinite-length arrays of one item around the integer 0. */
+    def nestedIndefiniteLists(levels: Int): String = "9f" * levels + "00" + "ff" * levels
 
     /** `levels` maps of one entry, its key 0, around the integer 0. */
     def nestedMaps(levels: Int): String = "a100" * levels + "00"

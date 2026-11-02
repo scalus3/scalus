@@ -5,7 +5,6 @@ import scalus.serialization.cbor.NestedCbor
 import scalus.uplc.builtin.ByteString
 
 import scala.collection.immutable
-import scala.collection.mutable.ArrayBuffer
 
 /** Metadata is a map from metadatum labels to metadatum values */
 type Metadata = Map[Word64, Metadatum]
@@ -30,49 +29,45 @@ object Metadatum:
 
     /** CBOR encoder for TransactionMetadatum.
       *
-      * It does not recurse over the nesting: what is still to write is kept on the heap, last
-      * first, so how deep it writes does not depend on the stack of the thread that writes. A list
-      * is written as borer writes an `IndexedSeq`, and a map entry by entry, in its order.
+      * It does not recurse over the nesting: it keeps the lists and maps it has opened on the heap
+      * ([[NestedCbor.writeNested]]), so how deep it writes does not depend on the stack of the
+      * thread that writes. A list is written as borer writes an `IndexedSeq`, and a map entry by
+      * entry, in its order.
       */
     given Encoder[Metadatum] with
-        def write(w: Writer, value: Metadatum): Writer = {
-            val pending = ArrayBuffer[Metadatum | ArrayEnd.type](value)
-            while pending.nonEmpty do
-                pending.remove(pending.size - 1) match
-                    case ArrayEnd => w.writeArrayClose()
+        def write(w: Writer, value: Metadatum): Writer =
+            NestedCbor.writeNested(w, value)(head(w, _))
 
-                    case Metadatum.Map(entries) =>
-                        w.writeMapHeader(entries.size)
-                        entries.toVector.reverseIterator.foreach { (k, v) =>
-                            pending += v
-                            pending += k
-                        }
+        /** Writes `metadatum` without what it holds, and returns what it holds, or null. */
+        private def head(w: Writer, metadatum: Metadatum): NestedCbor.Held[Metadatum] | Null = {
+            metadatum match
+                case Metadatum.Map(entries) =>
+                    w.writeMapHeader(entries.size)
+                    NestedCbor.Held(entries.iterator.flatMap((k, v) => Iterator(k, v)), false)
 
-                    case Metadatum.List(items) =>
-                        w.writeArrayOpen(items.size)
-                        pending += ArrayEnd
-                        items.reverseIterator.foreach(pending += _)
+                case Metadatum.List(items) =>
+                    w.writeArrayOpen(items.size)
+                    NestedCbor.Held(items.iterator, true)
 
-                    case Metadatum.Int(value) =>
-                        w.writeLong(value)
+                case Metadatum.Int(value) =>
+                    w.writeLong(value)
+                    null
 
-                    case Metadatum.Bytes(value) =>
-                        w.writeBytes(value.bytes)
+                case Metadatum.Bytes(value) =>
+                    w.writeBytes(value.bytes)
+                    null
 
-                    case Metadatum.Text(value) =>
-                        w.writeString(value)
-            w
+                case Metadatum.Text(value) =>
+                    w.writeString(value)
+                    null
         }
-
-    /** Where a list that the encoder has opened ends. */
-    private object ArrayEnd
 
     /** CBOR decoder for TransactionMetadatum.
       *
       * It does not recurse over the nesting: it keeps the arrays and maps it has opened on the heap
       * ([[NestedCbor]]), so how deep it reads does not depend on the stack of the thread that
-      * reads, with one exception: a map hashes its keys, and the hash of a key recurses over it, as
-      * that of a case class does. It reads at most
+      * reads, with one exception: a map compares and hashes its keys, and the equality and the hash
+      * of a key recurse over it, as those of a case class do. It reads at most
       * [[scalus.serialization.cbor.Cbor.maxMetadataAndScriptNestingLevels]] levels: a deeper
       * metadatum fails to decode.
       *

@@ -2,12 +2,10 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.Borer
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.RecursiveNestingTest.{nestedAllOf, nestedLists, nestedMaps, reencoded}
+import scalus.cardano.ledger.RecursiveNestingTest.*
 import scalus.serialization.cbor.Cbor
 import scalus.uplc.test.SmallStack
 import scalus.utils.Hex.hexToBytes
-
-import java.util.concurrent.FutureTask
 
 /** The decoders of metadata and of native scripts read as deep as their limit on a thread with a
   * small stack, and fail with their `Overflow` beyond it; their encoders write as deep. How deep a
@@ -24,9 +22,10 @@ class NestingStackTest extends AnyFunSuite {
 
     /** How deep a recursion that does nothing else goes before it overflows the stack. */
     private def deepestRecursion(): Int = {
-        def down(depth: Int): Int =
+        def down(depth: Int): Int = {
             try down(depth + 1)
             catch case _: StackOverflowError => depth
+        }
         down(0)
     }
 
@@ -66,24 +65,24 @@ class NestingStackTest extends AnyFunSuite {
 
     // The stack size of a thread is only a hint to the JVM. Unless the small stack is smaller than
     // a thread's default, on which the recursive decoders overflowed at the limit only at random,
-    // the tests below prove nothing.
+    // the tests below prove nothing. The recursion runs first to be compiled, so that both stacks
+    // are measured with the same frames.
     test("the small stack is smaller than a thread's default") {
+        for _ <- 1 to 3 do SmallStack.onStack(0)(deepestRecursion())
+        val default = SmallStack.onStack(0)(deepestRecursion())
         val small = SmallStack.run(deepestRecursion())
-        val onDefault = FutureTask[Int](() => deepestRecursion())
-        Thread(onDefault).start()
-        val default = onDefault.get()
         assert(small * 2 < default, s"$small levels on the small stack, $default on the default")
     }
 
     test("metadata as deep as the limit decodes on a small stack") {
-        val lists = SmallStack.run(Cbor.decode[Metadatum](nestedLists(limit).hexToBytes))
-        assert(levels(lists) == limit)
-        val maps = SmallStack.run(Cbor.decode[Metadatum](nestedMaps(limit).hexToBytes))
-        assert(levels(maps) == limit)
+        for hex <- List(nestedLists(limit), nestedIndefiniteLists(limit), nestedMaps(limit)) do
+            val metadatum = SmallStack.run(Cbor.decode[Metadatum](hex.hexToBytes))
+            assert(levels(metadatum) == limit, hex.take(8))
     }
 
     test("metadata deeper than the limit fails with Overflow on a small stack, not by the stack") {
-        for deeper <- List(nestedLists(limit + 1), nestedMaps(limit + 1)) do
+        val inputs = List(nestedLists, nestedIndefiniteLists, nestedMaps).map(_(limit + 1))
+        for deeper <- inputs do
             val error = SmallStack.run(
               intercept[Borer.Error.Overflow[?]](Cbor.decode[Metadatum](deeper.hexToBytes))
             )
