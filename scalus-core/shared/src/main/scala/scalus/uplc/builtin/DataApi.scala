@@ -10,7 +10,7 @@ import scalus.compiler.fieldAsData
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.serialization.cbor.Cbor as ScalusCbor
 import scalus.serialization.flat
-import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
+import scalus.serialization.flat.{DecoderState, EncoderState, Flat, FlatDecodingError, given}
 import scalus.utils.Pretty.{lit, rainbowBracket}
 import scalus.utils.{Pretty, Style}
 import upickle.default.*
@@ -510,9 +510,15 @@ private trait DataApi {
         def encode(a: Data, encode: EncoderState): Unit =
             flat.encode(ScalusCbor.encode(a), encode)
 
+        // The reference reads the constant through `FlatViaSerialise`, whose `deserialiseOrFail`
+        // (serialise 0.2.6.1) returns the first CBOR item and drops the bytes after it. A datum or
+        // a redeemer is read with `fromCbor`, which still rejects trailing bytes.
         def decode(decode: DecoderState): Data =
             val bytes = summon[Flat[Array[Byte]]].decode(decode)
-            ScalusCbor.decode[Data](bytes)
+            ScalusCbor.decodePrefix[Data](bytes) match
+                case Right(data) => data
+                case Left(e) =>
+                    throw new FlatDecodingError(s"Invalid data constant: ${e.getMessage}", e)
     end given
 
     /** Pretty prints Data in debug format with rainbow brackets: `<constr, [args]>`, `{k: v}`,

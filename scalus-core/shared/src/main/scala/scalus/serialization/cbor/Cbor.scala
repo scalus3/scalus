@@ -1,6 +1,6 @@
 package scalus.serialization.cbor
 
-import io.bullet.borer.{Cbor as Cborer, Decoder, Encoder, Input, Output, Receiver}
+import io.bullet.borer.{Borer, Cbor as Cborer, Decoder, Encoder, Input, Output, Receiver}
 import scalus.uplc.builtin.ByteString
 
 /** Utility object for CBOR (Concise Binary Object Representation) encoding and decoding operations.
@@ -70,6 +70,21 @@ object Cbor {
     def decode[A: Decoder](data: Array[Byte]): A = {
         Cborer.decode(data).withConfig(decodingConfig).to[A].value
     }
+
+    /** Decodes the first CBOR item of `data` and ignores the bytes after it, with
+      * [[decodingConfig]].
+      *
+      * @return
+      *   the value, or the error that borer reports for input that is not a valid `A`. An exception
+      *   that the decoder itself throws is a bug, not bad input, and is rethrown as it is, where
+      *   borer would wrap it in a [[io.bullet.borer.Borer.Error.General]].
+      */
+    private[scalus] def decodePrefix[A: Decoder](
+        data: Array[Byte]
+    ): Either[Borer.Error[Input.Position], A] =
+        Cborer.decode(data).withPrefixOnly.withConfig(decodingConfig).to[A].valueEither match
+            case Left(e: Borer.Error.General[?]) => throw e.getCause.nn
+            case result                          => result
 
     /** Unwraps the CBOR byte string that `data` starts with: returns its content, without the
       * header, and the bytes after that byte string.

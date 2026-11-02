@@ -5,9 +5,8 @@ import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.{Constant, DefaultFun, Term}
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.uplc.test.DeepData
+import scalus.uplc.test.SmallStack.run as onSmallStack
 import scalus.utils.{Pretty, Style}
-
-import java.util.concurrent.atomic.AtomicReference
 
 /** `serialiseData`, `Data.fromCbor`, `toString`, `toJson` and `Pretty` do not recurse over [[Data]]
   * (#398, #423): data nested 100000 levels deep is costed, written, read and printed on a 256 KiB
@@ -24,27 +23,6 @@ class DataCborSmallStackTest extends AnyFunSuite {
         Array.fill(depth)(0x9f.toByte) ++ Array(1.toByte) ++ Array.fill(depth)(0xff.toByte)
 
     private def nestedLists: Data = DeepData.nestedLists(depth)
-
-    private def onSmallStack[A](body: => A): A = {
-        val result = new AtomicReference[Either[Throwable, A]]()
-        val thread = new Thread(
-          null,
-          () =>
-              result.set(
-                try Right(body)
-                catch { case e: Throwable => Left(e) }
-              ),
-          "data-cbor-small-stack",
-          256L * 1024
-        )
-        // a regression of the encoding loop is more likely to loop forever than to fail, and a
-        // thread stuck in a loop must not keep the test JVM alive
-        thread.setDaemon(true)
-        thread.start()
-        thread.join(60000)
-        if thread.isAlive then fail("did not finish within 60 s on a 256 KiB stack")
-        result.get().fold(e => fail(s"failed on a 256 KiB stack: $e"), identity)
-    }
 
     // The stack size of a thread is only a hint to the JVM. A recursion over the nesting, which
     // takes less stack per level than the recursive encoder did, must overflow this stack, or the
