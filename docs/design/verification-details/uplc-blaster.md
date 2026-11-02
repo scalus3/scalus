@@ -1092,6 +1092,8 @@ What could change this:
 - **Prepare a conclusion under its premise.** For `p ==> fails(f(a))`, one program that tests
   `p` first and runs `f(a)` only then. The runs that `p` excludes disappear only if the symbolic
   run asks the solver whether a path is feasible, which Blaster's does not.
-- **Bound a list in the statement,** as the withdrawal statements do by hand: a quantifier over
-  lists of at most `n` elements, expanded into `n + 1` shapes.
+- **Bound a list in the statement.** Done for a variable's collections, with a guard that every
+  test runs first instead of one shape per length: `forAllDataLimited`
+  ([Limits of a variable's collections](#limits-of-a-variables-collections)). The withdrawal
+  statements still write their shapes by hand.
 - **Induction,** in `lean-direct` (overview §6.3), for statements about every length.

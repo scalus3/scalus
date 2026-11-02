@@ -364,6 +364,8 @@ Three sources can describe when a function may be called.
   `Spec.expects`, to discharge trivial obligations, and to check that a stated precondition
   makes the function total (`expects ⇒ denotes(f(args))`, the total contract).
 
+Built: `Spec.expects`. Not built: harvesting `require`, and inference.
+
 ### 8.2 Whether `Spec.expects` has runtime semantics
 
 - **On chain: none, by default (built).** The clause is erased before lowering, so the script's
@@ -413,6 +415,9 @@ A `Spec.expects` on a validator's entry point is unsound (§6), so the verifier 
 The validator's specification is `ensures` clauses about success, and its robustness is the
 total claim that it never fails in an unexpected way on any `Data`.
 
+Not built: the verifier does not reject a `Spec.expects` on a validator's entry point yet. The
+validators in the examples state only `ensures` clauses.
+
 ### 8.5 Function types
 
 Higher-order functions need quantification over functions: `map`'s contract is about every
@@ -421,3 +426,6 @@ handles this natively, with `∀ (f : A → Option B)` and Z3's uninterpreted fu
 `blaster-uplc` cannot quantify over UPLC lambdas; within a step budget a function is observed at
 finitely many points, so it can quantify over table functions instead, a finite map with a
 default (and a failure entry), passed as `λx. lookup(table, x)`.
+
+Not built: neither form. A variable cannot be of a function type: there is no `Quantifiable` for
+one (overview §3.4).
