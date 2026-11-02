@@ -5,6 +5,7 @@ import scalus.serialization.cbor.Cbor as ScalusCbor
 import scalus.uplc.builtin.ByteString
 
 import scala.collection.immutable
+import scala.collection.mutable.ArrayBuffer
 
 /** Metadata is a map from metadatum labels to metadatum values */
 type Metadata = Map[Word64, Metadatum]
@@ -50,53 +51,141 @@ object Metadatum:
             case Metadatum.Text(value) =>
                 w.writeString(value)
 
-    /** CBOR decoder for TransactionMetadatum */
-    given Decoder[Metadatum] with
-        def read(r: Reader): Metadatum = readMetadatum(r, depth = 0)
-
-    /** Reads a metadatum held in `depth` arrays and maps.
+    /** CBOR decoder for TransactionMetadatum.
       *
-      * The decoder recurses over the nesting, so it reads at most
-      * [[ScalusCbor.maxRecursiveNestingLevels]] levels: a deeper metadatum fails to decode instead
-      * of overflowing the stack. The ledger has no such limit, but it was this deep before
+      * It does not recurse over the nesting: it keeps the arrays and maps it has opened on the
+      * heap, as the decoder of `Data` does, so how deep it reads does not depend on the stack of
+      * the thread that reads. It reads at most [[ScalusCbor.maxRecursiveNestingLevels]] levels: a
+      * deeper metadatum fails to decode. The ledger has no such limit, but it was this deep before
       * transactions were read without borer's limit.
+      *
+      * An array is read as borer reads an `IndexedSeq`, into a `Vector`, and a map as borer reads
+      * an `immutable.Map`: a later entry of a key replaces an earlier one.
       */
-    private def readMetadatum(r: Reader, depth: scala.Int): Metadatum = {
-        import io.bullet.borer.DataItem as DI
+    given Decoder[Metadatum] with
 
-        // the decoder of what an array or a map holds, one level deeper
-        def nested(): Decoder[Metadatum] = {
+        /** An array or a map being read. */
+        private sealed abstract class Open {
+
+            /** Whether all its items are read. Reads the break that ends an indefinite one. */
+            def isComplete(r: Reader): Boolean
+
+            def add(item: Metadatum): Unit
+
+            /** The metadatum read, once it is complete. */
+            def close(): Metadatum
+        }
+
+        /** A list being read: the items read so far, and how many are still to read, or -1 for an
+          * indefinite array.
+          */
+        private final class OpenList(private var remaining: Long) extends Open {
+            private val items = IndexedSeq.newBuilder[Metadatum]
+
+            def isComplete(r: Reader): Boolean = isEnd(r, remaining)
+
+            def add(item: Metadatum): Unit = {
+                items += item
+                if remaining > 0 then remaining -= 1
+            }
+
+            def close(): Metadatum = Metadatum.List(items.result())
+        }
+
+        /** A map being read: the entries read so far, the key of the entry being read, and how many
+          * entries are still to read, or -1 for an indefinite map.
+          */
+        private final class OpenMap(private var remaining: Long) extends Open {
+            private var entries = immutable.Map.empty[Metadatum, Metadatum]
+            private var key: Metadatum = null
+
+            // a break between a key and its value is not the end of the map
+            def isComplete(r: Reader): Boolean = (key eq null) && isEnd(r, remaining)
+
+            def add(item: Metadatum): Unit = {
+                if key eq null then key = item
+                else
+                    entries = entries.updated(key, item)
+                    key = null
+                    if remaining > 0 then remaining -= 1
+            }
+
+            def close(): Metadatum = Metadatum.Map(entries)
+        }
+
+        def read(r: Reader): Metadatum =
+            readItem(r, depth = 0) match
+                case metadatum: Metadatum => metadatum
+                case open: Open           => readNested(r, open)
+
+        /** Reads the items of `outermost` and all they hold. What is open is kept on the heap,
+          * innermost last.
+          */
+        private def readNested(r: Reader, outermost: Open): Metadatum = {
+            val open = ArrayBuffer[Open](outermost)
+            var result: Metadatum = null
+            while result eq null do
+                val innermost = open.last
+                if innermost.isComplete(r) then
+                    open.dropRightInPlace(1)
+                    val value = innermost.close()
+                    if open.isEmpty then result = value else open.last.add(value)
+                else
+                    readItem(r, depth = open.size) match
+                        case value: Metadatum => innermost.add(value)
+                        case nested: Open     => open += nested
+            result
+        }
+
+        // whether an array or a map with `remaining` items to read, or -1 if indefinite, is read
+        private def isEnd(r: Reader, remaining: Long): Boolean =
+            if remaining < 0 then r.tryReadBreak() else remaining == 0
+
+        /** Reads a metadatum held in `depth` arrays and maps that holds no other, or opens an array
+          * or a map.
+          */
+        private def readItem(r: Reader, depth: scala.Int): Metadatum | Open = {
+            import io.bullet.borer.DataItem as DI
+            r.dataItem() match {
+                case DI.MapHeader | DI.MapStart =>
+                    checkDepth(r, depth)
+                    if r.hasMapHeader then OpenMap(definite(r, r.readMapHeader(), "Map"))
+                    else
+                        r.readMapStart()
+                        OpenMap(-1)
+
+                case DI.ArrayHeader | DI.ArrayStart =>
+                    checkDepth(r, depth)
+                    if r.hasArrayHeader then OpenList(definite(r, r.readArrayHeader(), "Iterable"))
+                    else
+                        r.readArrayStart()
+                        OpenList(-1)
+
+                case DI.Int | DI.Long | DI.OverLong =>
+                    Metadatum.Int(r.readLong())
+
+                case DI.Bytes | DI.BytesStart =>
+                    Metadatum.Bytes(r.read[ByteString]())
+
+                case DI.Text | DI.TextStart =>
+                    Metadatum.Text(r.readString())
+
+                case other =>
+                    r.validationFailure(s"Unexpected data item for TransactionMetadatum: $other")
+            }
+        }
+
+        // fails if an array or a map held in `depth` arrays and maps would be too deep
+        private def checkDepth(r: Reader, depth: scala.Int): Unit =
             if depth >= ScalusCbor.maxRecursiveNestingLevels then
                 r.overflow(
                   s"Exceeded ${ScalusCbor.maxRecursiveNestingLevels} nesting levels of metadata"
                 )
-            Decoder(readMetadatum(_, depth + 1))
-        }
 
-        r.dataItem() match {
-            case DI.MapHeader | DI.MapStart =>
-                given Decoder[Metadatum] = nested()
-                Metadatum.Map(r.read[immutable.Map[Metadatum, Metadatum]]())
-
-            case DI.ArrayHeader | DI.ArrayStart =>
-                given Decoder[Metadatum] = nested()
-                Metadatum.List(r.read[IndexedSeq[Metadatum]]())
-
-            case DI.Int | DI.Long | DI.OverLong =>
-                Metadatum.Int(r.readLong())
-
-            case DI.Bytes | DI.BytesStart =>
-                val bytes = r.read[ByteString]()
-                Metadatum.Bytes(bytes)
-
-            case DI.Text | DI.TextStart =>
-                val text = r.readString()
-                Metadatum.Text(text)
-
-            case other =>
-                r.validationFailure(s"Unexpected data item for TransactionMetadatum: $other")
-        }
-    }
+        // the length in the header of a `what`, at most the size of a collection, as borer reads it
+        private def definite(r: Reader, size: Long, what: String): Long =
+            if size <= scala.Int.MaxValue then size
+            else r.overflow(s"Cannot deserialize $what with size $size (> Int.MaxValue)")
 
 /** Represents auxiliary data in a Cardano transaction */
 enum AuxiliaryData:

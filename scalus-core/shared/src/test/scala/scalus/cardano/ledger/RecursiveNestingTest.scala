@@ -8,19 +8,14 @@ import scalus.utils.Hex.hexToBytes
 import scalus.utils.Utils
 
 /** Transactions are read without borer's limit of 1000 nesting levels, which a datum may exceed
-  * (#423). The decoders of metadata and of native scripts recurse over the nesting, so they keep
-  * that limit themselves: a deeper value fails to decode with borer's `Overflow` instead of
-  * overflowing the stack.
+  * (#423). The decoders of metadata and of native scripts keep that limit themselves: a deeper
+  * value fails to decode with borer's `Overflow`. How deep they read does not depend on the stack
+  * (NestingStackTest, on the JVM).
   */
 class RecursiveNestingTest extends AnyFunSuite {
+    import RecursiveNestingTest.*
 
     private val limit = Cbor.maxRecursiveNestingLevels
-
-    // `levels` arrays of one item around the integer 0
-    private def nestedLists(levels: Int): String = "81" * levels + "00"
-
-    // `levels` AllOf around a signature: two arrays per AllOf, and one for the signature
-    private def nestedAllOf(levels: Int): String = "820181" * levels + "8200581c" + "00" * 28
 
     private def reencoded[A: io.bullet.borer.Encoder](value: A): String =
         Utils.bytesToHex(Cbor.encode(value))
@@ -28,7 +23,7 @@ class RecursiveNestingTest extends AnyFunSuite {
     test("metadata nested as deep as the limit decodes") {
         val hex = nestedLists(limit)
         assert(reencoded(Cbor.decode[Metadatum](hex.hexToBytes)) == hex)
-        val maps = "a100" * limit + "00"
+        val maps = nestedMaps(limit)
         assert(reencoded(Cbor.decode[Metadatum](maps.hexToBytes)) == maps)
     }
 
@@ -38,7 +33,7 @@ class RecursiveNestingTest extends AnyFunSuite {
         }
         assert(lists.getMessage.contains(s"Exceeded $limit nesting levels of metadata"))
         intercept[Borer.Error.Overflow[?]] {
-            Cbor.decode[Metadatum](("a100" * (limit + 1) + "00").hexToBytes)
+            Cbor.decode[Metadatum](nestedMaps(limit + 1).hexToBytes)
         }
     }
 
@@ -69,4 +64,16 @@ class RecursiveNestingTest extends AnyFunSuite {
         assert(error.getMessage.contains(s"Exceeded $limit nesting levels of a native script"))
         intercept[Borer.Error.Overflow[?]](Cbor.decode[Timelock](nestedAllOf(20000).hexToBytes))
     }
+}
+
+object RecursiveNestingTest {
+
+    /** `levels` arrays of one item around the integer 0. */
+    def nestedLists(levels: Int): String = "81" * levels + "00"
+
+    /** `levels` maps of one entry, its key 0, around the integer 0. */
+    def nestedMaps(levels: Int): String = "a100" * levels + "00"
+
+    /** `levels` AllOf around a signature: two arrays per AllOf, and one for the signature. */
+    def nestedAllOf(levels: Int): String = "820181" * levels + "8200581c" + "00" * 28
 }

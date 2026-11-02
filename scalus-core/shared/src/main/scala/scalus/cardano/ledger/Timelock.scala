@@ -8,6 +8,7 @@ import scalus.utils.Pretty.{ctr, inParens, lit}
 import scalus.utils.{Pretty, Style}
 
 import scala.annotation.tailrec
+import scala.collection.mutable.ArrayBuffer
 
 // SlotNo wrapped value
 type SlotNo = Long
@@ -146,27 +147,129 @@ object Timelock:
       * nested lists accept both too, as `decodeStrictSeq`. A definite-length array must hold
       * exactly the fields of its constructor, tag included: 3 for `MOf`, 2 for the others, as
       * `matchSize` checks.
-      */
-    given Decoder[Timelock] = Decoder(readTimelock(_, depth = 0))
-
-    /** Reads a script held in `depth` arrays.
       *
-      * The decoder recurses over the scripts of `AllOf`, `AnyOf` and `MOf`, so it reads at most
-      * [[ScalusCbor.maxRecursiveNestingLevels]] levels of arrays: a deeper script fails to decode
-      * instead of overflowing the stack. The ledger has no such limit, but it was this deep before
+      * The decoder does not recurse over the scripts of `AllOf`, `AnyOf` and `MOf`: it keeps those
+      * it has opened on the heap, so how deep it reads does not depend on the stack of the thread
+      * that reads. It reads at most [[ScalusCbor.maxRecursiveNestingLevels]] levels of arrays: a
+      * deeper script fails to decode. The ledger has no such limit, but it was this deep before
       * transactions were read without borer's limit.
       */
-    private def readTimelock(r: Reader, depth: Int): Timelock = {
+    given Decoder[Timelock] = Decoder(readTimelock(_))
+
+    private def readTimelock(r: Reader): Timelock =
+        readScript(r, depth = 0) match
+            case script: Timelock  => script
+            case open: OpenScripts => readNested(r, open)
+
+    /** A script of scripts, `AllOf`, `AnyOf` or `MOf`, whose list of scripts is being read: whether
+      * its array is indefinite, the size of its array otherwise, the script it makes of its list,
+      * the scripts read so far, and how many are still to read, or -1 for an indefinite list.
+      */
+    private final class OpenScripts(
+        unbounded: Boolean,
+        size: Long,
+        make: IndexedSeq[Timelock] => Timelock,
+        private var remaining: Long
+    ) {
+        // as borer reads an `IndexedSeq`
+        private val scripts = IndexedSeq.newBuilder[Timelock]
+
+        /** Whether all its scripts are read. Reads the break that ends an indefinite list. */
+        def isComplete(r: Reader): Boolean =
+            if remaining < 0 then r.tryReadBreak() else remaining == 0
+
+        def add(script: Timelock): Unit = {
+            scripts += script
+            if remaining > 0 then remaining -= 1
+        }
+
+        /** The script, once its list is read, with its array closed. */
+        def close(r: Reader): Timelock = closed(r, unbounded, size, make(scripts.result()))
+    }
+
+    /** Reads the scripts of `outermost` and all they hold. What is open is kept on the heap,
+      * innermost last.
+      */
+    private def readNested(r: Reader, outermost: OpenScripts): Timelock = {
+        val open = ArrayBuffer(outermost)
+        var result: Timelock = null
+        while result eq null do
+            val innermost = open.last
+            if innermost.isComplete(r) then
+                open.dropRightInPlace(1)
+                val script = innermost.close(r)
+                if open.isEmpty then result = script else open.last.add(script)
+            else
+                // each open script is two arrays deep: its own and its list's
+                readScript(r, depth = 2 * open.size) match
+                    case script: Timelock    => innermost.add(script)
+                    case nested: OpenScripts => open += nested
+        result
+    }
+
+    /** Reads a script held in `depth` arrays that holds no other, or opens one that does. */
+    private def readScript(r: Reader, depth: Int): Timelock | OpenScripts = {
         checkDepth(r, depth)
         val unbounded = r.tryReadArrayStart()
         val size = if unbounded then -1L else r.readArrayHeader()
-        val timelock = r.readArrayClose(unbounded, readFields(r, depth + 1))
-        val expected = timelock match
+        def holding(make: IndexedSeq[Timelock] => Timelock): OpenScripts =
+            openScripts(r, depth + 1, unbounded, size, make)
+
+        r.readInt() match {
+            case 0 => // Signature
+                closed(r, unbounded, size, Timelock.Signature(r.read[AddrKeyHash]()))
+
+            case 1 => // AllOf
+                holding(Timelock.AllOf(_))
+
+            case 2 => // AnyOf
+                holding(Timelock.AnyOf(_))
+
+            case 3 => // MOfN
+                val m = r.read[Int]()
+                holding(Timelock.MOf(m, _))
+
+            case 4 => // TimeStart
+                closed(r, unbounded, size, Timelock.TimeStart(r.read[SlotNo]()))
+
+            case 5 => // TimeExpire
+                closed(r, unbounded, size, Timelock.TimeExpire(r.read[SlotNo]()))
+
+            case tag =>
+                r.validationFailure(s"Invalid Timelock tag: $tag")
+        }
+    }
+
+    /** Opens the list of scripts, held in `depth` arrays, of a script whose array is `unbounded`,
+      * or of `size`. The list is read as borer reads an `IndexedSeq`, definite or indefinite.
+      */
+    private def openScripts(
+        r: Reader,
+        depth: Int,
+        unbounded: Boolean,
+        size: Long,
+        make: IndexedSeq[Timelock] => Timelock
+    ): OpenScripts = {
+        checkDepth(r, depth)
+        if r.hasArrayHeader then
+            val length = r.readArrayHeader()
+            if length <= Int.MaxValue then OpenScripts(unbounded, size, make, length)
+            else r.overflow(s"Cannot deserialize Iterable with size $length (> Int.MaxValue)")
+        else if r.tryReadArrayStart() then OpenScripts(unbounded, size, make, -1)
+        else r.unexpectedDataItem(expected = "Array for deserializing an Iterable instance")
+    }
+
+    /** `script`, whose fields are read from an array that is `unbounded`, or of `size`: closes the
+      * array, which must hold exactly the fields of the script's constructor.
+      */
+    private def closed(r: Reader, unbounded: Boolean, size: Long, script: Timelock): Timelock = {
+        r.readArrayClose(unbounded, script)
+        val expected = script match
             case _: Timelock.MOf => 3L
             case _               => 2L
         if !unbounded && size != expected then
             r.validationFailure(s"Timelock array of size $size, expected $expected")
-        else timelock
+        else script
     }
 
     // fails if an array held in `depth` arrays would be too deep
@@ -175,39 +278,6 @@ object Timelock:
             r.overflow(
               s"Exceeded ${ScalusCbor.maxRecursiveNestingLevels} nesting levels of a native script"
             )
-    }
-
-    private def readFields(r: Reader, depth: Int): Timelock = {
-        // the list of scripts, held in `depth` arrays, and each script in it
-        def scripts(): IndexedSeq[Timelock] = {
-            checkDepth(r, depth)
-            given Decoder[Timelock] = Decoder(readTimelock(_, depth + 1))
-            r.read[IndexedSeq[Timelock]]()
-        }
-
-        r.readInt() match {
-            case 0 => // Signature
-                Timelock.Signature(r.read[AddrKeyHash]())
-
-            case 1 => // AllOf
-                Timelock.AllOf(scripts())
-
-            case 2 => // AnyOf
-                Timelock.AnyOf(scripts())
-
-            case 3 => // MOfN
-                val m = r.read[Int]()
-                Timelock.MOf(m, scripts())
-
-            case 4 => // TimeStart
-                Timelock.TimeStart(r.read[SlotNo]())
-
-            case 5 => // TimeExpire
-                Timelock.TimeExpire(r.read[SlotNo]())
-
-            case tag =>
-                r.validationFailure(s"Invalid Timelock tag: $tag")
-        }
     }
 
     /** Reads a Timelock script from a CBOR encoded byte array
