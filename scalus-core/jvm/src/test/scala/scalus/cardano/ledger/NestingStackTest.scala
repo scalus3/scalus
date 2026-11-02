@@ -19,7 +19,8 @@ import scalus.utils.Hex.hexToBytes
   * The size of a thread's stack is only a hint to the JVM. Where it does not give the small stack
   * that is asked for, these tests prove nothing, and are canceled. On CI (OpenJDK 21, x86_64
   * Linux), a recursion went as deep on a thread that asked for 256 KiB as on one of the default
-  * size.
+  * size, 23561 levels, and 207061 on one that asked for 8 MiB: the JVM there gives a thread at
+  * least about the default.
   */
 class NestingStackTest extends AnyFunSuite {
 
@@ -54,13 +55,14 @@ class NestingStackTest extends AnyFunSuite {
     }
 
     /** Cancels the test where the JVM does not give a thread the small stack it asks for: smaller,
-      * by far, than one it asks 8 MiB for.
+      * by far, than a thread's default, which the recursive decoders needed about as much of at the
+      * limit.
       */
     private def requireSmallStack(): Unit = {
-        val (small, _, large) = depths
+        val (small, default, _) = depths
         assume(
-          small * 4 < large,
-          s"the JVM does not give a thread the stack size it asks for, so a small stack cannot " +
+          small * 2 < default,
+          s"the JVM does not give a thread the small stack it asks for, so a small stack cannot " +
               s"be tested here: $measured"
         )
     }
@@ -99,8 +101,9 @@ class NestingStackTest extends AnyFunSuite {
         count
     }
 
-    // The recursive decoders needed about 1 MiB at the limit, and 256 KiB is far less: where the JVM
-    // gives what is asked, the tests below test the decoders, and are canceled where it does not.
+    // The recursive decoders needed about a thread's default stack at the limit, and 256 KiB is far
+    // less: where the JVM gives what is asked, the tests below test the decoders, and they are
+    // canceled where it does not.
     test("the JVM gives a thread the small stack it asks for") {
         info(measured)
         requireSmallStack()
