@@ -17,7 +17,7 @@ import scalus.verify.PropIdentity
   * is mapped, and records the decision: so the plan is what the Lean variables are. A decision
   * reads only the statement and the types. Today it is the one the statement writes: every node by
   * fields for a `forAll` or an `exists` variable, and the variable as `Data` for a `forAllData`
-  * one.
+  * one. A plan [[MappingPlan.Fixed]] for a check maps the nodes it names as it says instead.
   *
   * @param nodes
   *   the decided nodes of the statement's variables, in the order the variables are quantified, and
@@ -90,13 +90,70 @@ object MappingPlan {
           */
         case Limited
 
+        /** The plan the check was given maps the node so ([[MappingPlan.Fixed]]). */
+        case ByFixedPlan
+
         /** The reason in words. */
         def describe: String = this match
             case Quantified(quantifier) =>
                 s"${word(quantifier)}, which maps every case class and enum by fields"
             case OverEncodings(quantifier) =>
                 s"${word(quantifier)} over the Data encodings of its type, which maps it as Data"
-            case Limited => "forAllDataLimited, whose guards walk the variable's Data"
+            case Limited     => "forAllDataLimited, whose guards walk the variable's Data"
+            case ByFixedPlan => "fixed by the plan the check was given"
+    }
+
+    /** Mappings fixed for a check in place of the tactic's own decisions: for the tactic's tests,
+      * and for measuring its rules on the suites (docs/design/verification-details/uplc-blaster.md,
+      * "Mapping a variable", step 4). A statement has no way to choose a mapping, and a user none
+      * to fix one.
+      *
+      * It is asked about each decided node of a `forAll` or an `exists` variable, from the root
+      * down, before the node is expanded: a node it maps as `Data` is not expanded, and nothing
+      * below it is asked about. A variable over `Data` encodings is mapped before it is expanded,
+      * and is not asked about. The mapping it fixes is the node's in the check's text, and so in
+      * its fingerprint.
+      *
+      * @param name
+      *   what the plan is, in the tactic's name ([[UplcBlaster.name]]): the results kept for one
+      *   statement under two plans are two, and each stays where the other is checked
+      * @param paths
+      *   the nodes it names, each written as the statement writes it: lowering fails where one is
+      *   no decided node of the statement's variables, so that a check that misses it does not run
+      *   as if it had not
+      * @param decide
+      *   the mapping of the node at a path written as the statement writes it,
+      *   `out.address.stakingCredential`, of a type, a case class or an enum, in the variable of a
+      *   place ([[Node.variable]]); none for the tactic's own
+      */
+    private[verify] final class Fixed(
+        val name: String,
+        val paths: Set[String],
+        decide: (Int, String, SIRType) => Option[Mapping]
+    ) {
+
+        /** The mapping of the node at `path`, of type `tp`, in the `variable`-th variable, or none
+          * for the tactic's own.
+          */
+        def mapping(variable: Int, path: String, tp: SIRType): Option[Mapping] =
+            decide(variable, path, tp)
+    }
+
+    private[verify] object Fixed {
+
+        /** No mapping fixed: every node is the tactic's to decide. */
+        val none: Fixed = new Fixed("", Set.empty, (_, _, _) => None)
+
+        /** The nodes at `paths`, in any variable, as `Data`, and the others as the tactic decides.
+          */
+        def asData(paths: String*): Fixed = {
+            val fixed = paths.toSet
+            new Fixed(
+              s"${fixed.toList.sorted.mkString(", ")} as Data",
+              fixed,
+              (_, path, _) => Option.when(fixed.contains(path))(Mapping.AsData)
+            )
+        }
     }
 
     /** A quantifier as a statement writes it. */

@@ -52,23 +52,41 @@ private[verify] object DataLayout {
     /** The layout of the values of `tp`, by the `Data` representation the compiler gives it with
       * the verifier's options ([[UplcBlaster.options]]).
       */
-    def of(tp: SIRType): DataLayout = {
-        def derive: DataLayout = {
+    def of(tp: SIRType): DataLayout = derivation(tp).layout
+
+    /** The type of a part of the values of `tp` that has no `Data` form, if one has none: a
+      * function, `Unit`, a value of a Miller loop, or a type the compiler represents without `Data`
+      * because it holds one of these, in a field or a type argument. The compiler says which
+      * (`canBeConvertedToData`). A value with such a part is the decoding of no `Data`, so a `Data`
+      * variable does not stand for it. Its part's layout is an unknown encoding.
+      */
+    def withoutDataForm(tp: SIRType): Option[SIRType] = derivation(tp).withoutDataForm
+
+    /** The layout of the values of a type, and the first part of them that has no `Data` form. */
+    private final case class Derivation(layout: DataLayout, withoutDataForm: Option[SIRType])
+
+    private def derivation(tp: SIRType): Derivation = {
+        def derive: Derivation = {
             given LoweringContext = UplcBlaster.representations
             val parts = new Parts
             val layout = layoutOf(tp, Set.empty, parts)
             // A layout cut off is no layout: its encoding's premise would be as large as the cut.
             if parts.count > maxParts then
-                Plain(
-                  DataEncoding.Unknown(s"the encoding of ${tp.show} has more than $maxParts parts")
+                Derivation(
+                  Plain(
+                    DataEncoding.Unknown(
+                      s"the encoding of ${tp.show} has more than $maxParts parts"
+                    )
+                  ),
+                  parts.withoutDataForm
                 )
-            else layout
+            else Derivation(layout, parts.withoutDataForm)
         }
         derived.getOrElseUpdate(typeKey(tp), derive)
     }
 
-    /** [[of]] of each type it was asked about, by its [[SirTypes.typeKey]]. */
-    private val derived = scala.collection.concurrent.TrieMap.empty[String, DataLayout]
+    /** [[derivation]] of each type it was asked about, by its [[SirTypes.typeKey]]. */
+    private val derived = scala.collection.concurrent.TrieMap.empty[String, Derivation]
 
     /** How many parts a layout may have: many more than a type of the ledger has, and an end to a
       * type that contains itself under other arguments each time, which `enclosing` does not tell,
@@ -76,8 +94,8 @@ private[verify] object DataLayout {
       */
     private val maxParts = 100_000
 
-    /** The parts of a layout derived so far. */
-    private final class Parts(var count: Int = 0)
+    /** The parts of a layout derived so far, and the first that has no `Data` form. */
+    private final class Parts(var count: Int = 0, var withoutDataForm: Option[SIRType] = None)
 
     /** The layout of the values of `tp`. `enclosing` are the types it is derived in, and `parts`
       * counts the parts derived so far.
@@ -95,6 +113,10 @@ private[verify] object DataLayout {
                 case SIRType.String              => Plain(DataEncoding.Text)
                 case SIRType.Boolean             => Plain(DataEncoding.Bool)
                 case whole if isWholeData(whole) => Plain(DataEncoding.AnyData)
+                // Asked before its representation, which the compiler does not give such a type.
+                case other if !SirTypeUplcGenerator.canBeConvertedToData(other) =>
+                    if parts.withoutDataForm.isEmpty then parts.withoutDataForm = Some(other)
+                    Plain(DataEncoding.Unknown(s"${other.show} has no Data form"))
                 case other @ (_: SIRType.CaseClass | _: SIRType.SumCaseClass) =>
                     if enclosing.contains(other.show) then
                         Plain(DataEncoding.Unknown(s"${other.show} contains itself"))

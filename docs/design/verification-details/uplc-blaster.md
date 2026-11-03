@@ -168,8 +168,9 @@ Today the statement chooses how a variable of a case class or an enum reaches Le
 it by its fields, and `forAllData` as one `Data`. This section proposes that the tactic choose,
 part by part of the variable's type, from the statement and the types alone.
 
-Status: step 1 of [the steps](#steps) is built. `lower` records the plan as it maps each variable,
-and `Lowered.plan`, a `MappingPlan`, carries it. The plan is still the one the statement writes.
+Status: steps 1 and 2 of [the steps](#steps) are built. `lower` records the plan as it maps each
+variable, and `Lowered.plan`, a `MappingPlan`, carries it; a node below the root can be `Data`. The
+plan is still the one the statement writes, unless a check is given a fixed one (step 2).
 
 ### The mapping does not change what a statement means
 
@@ -302,7 +303,11 @@ limits, and whether the variable asks for a witness, which the quantifier's posi
 2. **A witness needs an exact mapping.** Where the variable asks for a witness, a node whose
    encoding as `Data` is not exact while its fields are, as one with a string field, is by fields:
    a string is a Lean `String` variable, while as `Data` it is a byte string whose UTF-8 the
-   premise does not check. A list or a map whose own predicate is not exact, as a map with keys in
+   premise does not check. Found in step 2: by fields, a class with a string field is refused
+   today wherever a test builds the value in its `Data` representation, as `PlanNamed(name,
+   amount)` is, because building it applies `encodeUtf8` to the variable
+   (input-output-hk/Lean-blaster#389). Then the rule leaves no mapping, and the statement is
+   refused either way. A list or a map whose own predicate is not exact, as a map with keys in
    an order that is not checked, is one variable either way, and is not exact either way.
 3. **Otherwise by fields,** unless the node by fields is more than a number of Lean variables:
    then it is `Data`. By fields, a test builds its value from typed variables, with no run that
@@ -322,7 +327,8 @@ states, and become another way to write it.
 
 `Lowered.plan`, a `MappingPlan`, carries the plan (built): each decided node's variable, by its
 place among the statement's variables, since two variables can have one name; its path; its type;
-its mapping; and why, a `MappingPlan.Reason`. The result's notes are to keep it. The variables of a
+its mapping; and why, a `MappingPlan.Reason`, which is `ByFixedPlan` for a node a fixed plan
+maps. The result's notes are to keep it. The variables of a
 counterexample are named by their nodes' paths, as now
 (`out.address.credential.PubKeyCredential.hash.hash`, the field of the `PubKeyHash`); a node as
 `Data` is one value, written as Plutus writes `Data`.
@@ -333,6 +339,28 @@ counterexample are named by their nodes' paths, as now
    at the root for `forAllData`. No check changes. Built: `lower` records the plan as it maps each
    variable (`MappingPlan`); `MappingPlanTest` also pins the 17 Lean variables of `out` above.
 2. A node as `Data` below the root: `fromData` of a variable as a part of the value a test builds.
+   Built. `Expansion.decide` maps a node as `Data` where a fixed plan says so
+   (`MappingPlan.Fixed`, given to `lower` or with `UplcBlaster.withFixedPlan`), as no rule does
+   yet. It is internal, for the tactic's tests and for step 4: a statement still has no way to
+   choose. A fixed plan has a name, which is in the tactic's name, so that the results kept for a
+   statement under two plans are two; and the paths it names, each of which must be a decided node
+   of the statement, or lowering fails. A node is decided before it is expanded, so a plan can map
+   a type that contains itself as `Data` where it repeats, which rule 1 will do. The node is one
+   Lean `Data` variable named by its path, of the type a `forAllData` variable has, so its
+   premise, its default value and the check of a counterexample's value are those of the node's
+   type. The test reads it with `UniversalDataConversion.fromData`, written as the linker writes
+   it. A node with a part that has no `Data` form is refused: a function, `Unit`, a value of a
+   Miller loop, or a type that holds one, in a field or a type argument. The compiler says which
+   (`canBeConvertedToData`, false where it gives the type a representation without `Data`), and
+   `DataLayout` asks it of every part before it reads the part's representation. So is a node
+   whose encoding is not told. `MappingPlanTest` pins the 10 variables of `out` above, and
+   `UplcBlasterTest` proves and refutes through a `Data` node in Lean: `o.owner` of a
+   `BlasterOwned`, whose key a test reads, and the subtrees of a `BlasterTree`, in seconds. For
+   step 4: with `out` mapped as above, a check of a test that reads only which constructor
+   `out.address.stakingCredential` has, `None` or `Some`, did not finish within 3 minutes at 100
+   steps, as Z3 works through the exact premise of the `Option[StakingCredential]`; a match down
+   to the pointer's fields did not finish within 5 minutes at 100 steps by fields either
+   (2026-11-03).
 3. Rules 1 and 2. A type that contains itself is then a `forAll` variable, where it stands for
    every value.
 4. Rule 3: the suites run under fixed plans, to measure the number.
