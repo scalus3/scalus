@@ -42,19 +42,24 @@ object Cbor {
       * The reference `decodeData` has no limit on the nesting depth, and the ledger reads a datum
       * or a redeemer with it, so a transaction may nest as deep as its size allows. Borer's
       * validation grows its state per level only as it enters the levels, so the limit costs
-      * nothing up front. A decoder that recurses over the nesting must bound it itself, with
-      * [[maxRecursiveNestingLevels]].
+      * nothing up front. A decoder must not recurse over a nesting the input chooses, or the stack
+      * of the thread that reads would bound it: the decoders of `Data`, of metadata and of native
+      * scripts keep the arrays and maps they have opened on the heap.
       */
     private[scalus] val decodingConfig: Cborer.DecodingConfig =
         Cborer.DecodingConfig(maxNestingLevels = Int.MaxValue)
 
-    /** The nesting levels of arrays and maps that a decoder recursing over them reads.
+    /** The nesting levels of arrays and maps that the decoders of metadata and of native scripts
+      * read.
       *
       * It is borer's default limit, which bounded every decoder before [[decodingConfig]] lifted
-      * it. The decoders of metadata and of native scripts recurse once per level, so they check it
-      * themselves: a value nested deeper fails to decode instead of overflowing the stack.
+      * it, and they keep it: a value nested deeper fails to decode. The ledger has no such limit.
+      * The decoders and encoders no longer recurse over the nesting ([[NestedCbor]]), but what is
+      * done with a value afterwards still may: its equality, its hash, as a map computes for its
+      * keys, its `toString`, and the evaluation of a native script recurse over it as case classes
+      * do. The limit bounds them too.
       */
-    private[scalus] val maxRecursiveNestingLevels: Int = 1000
+    private[scalus] val maxMetadataAndScriptNestingLevels: Int = 1000
 
     /** Decodes CBOR data back to a Scala object of the specified type, with [[decodingConfig]].
       *
