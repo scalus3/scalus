@@ -605,6 +605,12 @@ object UplcBlaster {
                   functions
                 )
 
+            // A variable hides an outer one of its name in the tests in its scope, as a lambda's
+            // parameter does: a test's program takes both as parameters of that name, and reads the
+            // innermost, so the value built or decoded for the outer one is not bound there either.
+            def hiddenBy(ident: PropExpr.Ident[?], built: List[Binding]): List[Binding] =
+                built.filterNot(_.name == ident.name)
+
             def loop(
                 current: Prop,
                 scope: List[Int],
@@ -660,18 +666,19 @@ object UplcBlaster {
                 // its own, is the premise of the rest.
                 case Prop.Forall(ident, body) =>
                     quantified(ident, Quantifier.ForAll).flatMap { (introduced, bindings) =>
-                        loop(body, scope ++ introduced, built ++ bindings).map { inner =>
-                            val premises = introduced.flatMap(binder =>
-                                guards
-                                    .get(binder)
-                                    .map(guard =>
-                                        LeafFormula.Test(unguardedLeaf(guard, List(binder)))
-                                    )
-                            )
-                            LeafFormula.Forall(
-                              introduced,
-                              premises.foldRight(inner)(LeafFormula.Implies(_, _))
-                            )
+                        loop(body, scope ++ introduced, hiddenBy(ident, built) ++ bindings).map {
+                            inner =>
+                                val premises = introduced.flatMap(binder =>
+                                    guards
+                                        .get(binder)
+                                        .map(guard =>
+                                            LeafFormula.Test(unguardedLeaf(guard, List(binder)))
+                                        )
+                                )
+                                LeafFormula.Forall(
+                                  introduced,
+                                  premises.foldRight(inner)(LeafFormula.Implies(_, _))
+                                )
                         }
                     }
                 // The limits of a binder are the premise of a universal statement, and a
@@ -683,7 +690,7 @@ object UplcBlaster {
                     )
                 case Prop.Exists(ident, None, body) =>
                     quantified(ident, Quantifier.Exists).flatMap { (introduced, bindings) =>
-                        loop(body, scope ++ introduced, built ++ bindings)
+                        loop(body, scope ++ introduced, hiddenBy(ident, built) ++ bindings)
                             .map(LeafFormula.Exists(introduced, _))
                     }
                 case Prop.Exists(ident, Some(witness), body) =>

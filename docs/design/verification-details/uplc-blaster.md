@@ -355,6 +355,13 @@ replaces each leaf with its index in `Lowered.leaves`.
 Every program takes the binders in scope at its leaf, in declaration order, whether that leaf uses
 all of them or not. This matters when a connective has a quantified proposition on only one side.
 
+Lean's variables are named by their places (`x0`, `x1`, …), and a program takes the binders as
+parameters of their own names. Where two binders in scope have one name, which only a statement
+built by hand, or two files with a lambda of one parameter name at one place, can make, a test reads
+the innermost, as a lambda's parameter hides an outer one. The value a test builds for an outer
+case-class variable, or decodes for an outer variable over `Data` encodings, is hidden with it
+(`VariableScopeTest`).
+
 A partial call, `whenReturns(f, a)(r => k)`, is rewritten to `denotes(f(a)) ==> call(f, a)(r => k)`
 before it is lowered: if the function returns, the continuation holds of its result. The
 `denotes` leaf returns the function's result rather than a Boolean. Where the call is a
