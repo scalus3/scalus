@@ -151,7 +151,11 @@ object LedgerStateComparison {
                         .mkString
             List(FieldMismatch("govState.proposals", detail))
 
-    private def compareValue[A](field: String, expected: A, actual: A): List[FieldMismatch] =
+    private[conformance] def compareValue[A](
+        field: String,
+        expected: A,
+        actual: A
+    ): List[FieldMismatch] =
         if expected == actual then Nil
         else List(FieldMismatch(field, s"expected ${show(expected)}, got ${show(actual)}"))
 
@@ -159,7 +163,7 @@ object LedgerStateComparison {
       * projection in `parts` is reported under `field.part`. With no `parts`, any value difference
       * is reported under `field`.
       */
-    private def compareMap[K, V](
+    private[conformance] def compareMap[K, V](
         field: String,
         expected: Map[K, V],
         actual: Map[K, V],

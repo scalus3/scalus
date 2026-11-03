@@ -499,7 +499,47 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         // report writer) whose contract is the on-disk artifact formats, not the Scala API.
         ProblemFilters.exclude[Problem]("scalus.uplc.internal.*"),
         // scalus.utils.scalajs.internal: Scala.js-only conversion helpers, all private[scalus].
-        ProblemFilters.exclude[Problem]("scalus.utils.scalajs.internal.*")
+        ProblemFilters.exclude[Problem]("scalus.utils.scalajs.internal.*"),
+        // Intentional break (ledger rules spec [DM-18], [DM-19], [DM-21], D79): the reward pparams
+        // rho, tau and a0 change from Double to the ledger's exact UnitInterval and
+        // NonNegativeInterval, so the reward calculation can use them exactly. No Double
+        // forwarders. The constructor, apply and copy have one overload each.
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams.this"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams.apply"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams.copy"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams.monetaryExpansion"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams.poolPledgeInfluence"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams.treasuryCut"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams._20"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams._21"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams._28"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams.copy$default$20"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams.copy$default$21"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.ProtocolParams.copy$default$28"
+        )
       ),
 
       // enable when debug compilation of tests
@@ -1081,20 +1121,48 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // UTxOState.govState change type: their constructor, apply, copy, accessor, product
         // accessor and default-argument methods. A deprecated Array[Element] form would have no
         // meaning, so none is kept; the CHANGELOG lists the break as a migration hazard.
-        ProblemFilters.exclude[MissingClassProblem]("scalus.cardano.ledger.Entities$package$GovState$"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.UTxOState.this(scala.collection.immutable.Map,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)Unit"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.UTxOState.govState()Array[io.bullet.borer.Dom#Element]"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.UTxOState.copy(scala.collection.immutable.Map,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.UTxOState"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.UTxOState.copy$default$4()Array[io.bullet.borer.Dom#Element]"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.UTxOState._4()Array[io.bullet.borer.Dom#Element]"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.UTxOState.apply(scala.collection.immutable.Map,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.UTxOState"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.rules.State.this(scala.collection.immutable.Map,scalus.cardano.ledger.CertState,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)Unit"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.rules.State.govState()Array[io.bullet.borer.Dom#Element]"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.rules.State.copy(scala.collection.immutable.Map,scalus.cardano.ledger.CertState,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.rules.State"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.rules.State.copy$default$5()Array[io.bullet.borer.Dom#Element]"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.rules.State._5()Array[io.bullet.borer.Dom#Element]"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.rules.State.apply(scala.collection.immutable.Map,scalus.cardano.ledger.CertState,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.rules.State"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.rules.State.<init>$default$5()Array[io.bullet.borer.Dom#Element]"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.cardano.ledger.Entities$package$GovState$"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.UTxOState.this(scala.collection.immutable.Map,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)Unit"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.UTxOState.govState()Array[io.bullet.borer.Dom#Element]"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.UTxOState.copy(scala.collection.immutable.Map,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.UTxOState"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.UTxOState.copy$default$4()Array[io.bullet.borer.Dom#Element]"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.UTxOState._4()Array[io.bullet.borer.Dom#Element]"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.UTxOState.apply(scala.collection.immutable.Map,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.UTxOState"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.rules.State.this(scala.collection.immutable.Map,scalus.cardano.ledger.CertState,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)Unit"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.State.govState()Array[io.bullet.borer.Dom#Element]"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.rules.State.copy(scala.collection.immutable.Map,scalus.cardano.ledger.CertState,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.rules.State"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.State.copy$default$5()Array[io.bullet.borer.Dom#Element]"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.State._5()Array[io.bullet.borer.Dom#Element]"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.rules.State.apply(scala.collection.immutable.Map,scalus.cardano.ledger.CertState,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.rules.State"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.rules.State.<init>$default$5()Array[io.bullet.borer.Dom#Element]"
+        ),
         // EmulatorState holds a block tree and a mempool now (emulator-chain spec [CP-2]), so its
         // case-class product accessors return the new fields. Its constructor is private, so
         // only a pattern match on its product elements can see the change.
@@ -1182,6 +1250,28 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ),
         ProblemFilters.exclude[ReversedMissingMethodProblem](
           "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$reserves_="
+        ),
+        // JsEmulatorOptions gains blockIssuer, ledger-rules spec [ES-10a], D75; a JS-object facade
+        // as above.
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.blockIssuer"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$blockIssuer_="
+        ),
+        // JsEmulatorOptions gains poolPerformance and activeSlotsCoeff, ledger-rules spec
+        // [ES-10a], D75; a JS-object facade as above.
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.poolPerformance"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$poolPerformance_="
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.activeSlotsCoeff"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$activeSlotsCoeff_="
         )
       ),
       crossScalaVersions := supportedScalaVersions,

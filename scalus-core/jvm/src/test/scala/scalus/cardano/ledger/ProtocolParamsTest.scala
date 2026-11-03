@@ -17,6 +17,52 @@ class ProtocolParamsTest extends AnyFunSuite {
             assert(back == params, ProtocolParams.diff(params, back).mkString("\n"))
     }
 
+    // The resources CardanoInfo inlines. The older epoch files predate Conway and lack its
+    // governance fields, so the Blockfrost reader does not take them.
+    private val blockfrostResources = Seq(
+      "blockfrost-params-epoch-645.json",
+      "blockfrost-params-preprod-310.json",
+      "blockfrost-params-preview-1370.json"
+    )
+
+    private def resource(name: String) = {
+        val in = getClass.getClassLoader.getResourceAsStream(name)
+        assert(in != null, s"missing resource $name")
+        in
+    }
+
+    private def assertExactRewardParams(source: String, p: ProtocolParams): Unit = {
+        assert(p.monetaryExpansion == UnitInterval(3, 1000), source)
+        assert(p.treasuryCut == UnitInterval(1, 5), source)
+        assert(p.poolPledgeInfluence.numerator == 3L, source)
+        assert(p.poolPledgeInfluence.denominator == 10L, source)
+    }
+
+    test("every Blockfrost resource reads rho, tau and a0 exactly") {
+        // spec [DM-20a]
+        for name <- blockfrostResources do
+            assertExactRewardParams(name, ProtocolParams.fromBlockfrostJson(resource(name)))
+    }
+
+    test("the cardano-cli resource reads rho, tau and a0 exactly") {
+        // spec [DM-20b]
+        val p = ProtocolParams.fromCardanoCliJson(resource("protocol-params.json"))
+        assertExactRewardParams("protocol-params.json", p)
+    }
+
+    test(
+      "the Blockfrost writer emits the rho, tau and a0 numbers of each resource (spec [DM-21a])"
+    ) {
+        for name <- blockfrostResources do
+            val original = ujson.read(resource(name))
+            val written =
+                ujson.read(
+                  ProtocolParams.toBlockfrostJson(ProtocolParams.fromBlockfrostJson(resource(name)))
+                )
+            for field <- Seq("rho", "tau", "a0") do
+                assert(written(field) == original(field), s"$name: $field")
+    }
+
     /** Blockfrost's `/epochs/{n}/parameters` schema, by JSON type rather than by value.
       *
       * The round-trip test above cannot see this: the reader accepts a number and a decimal string

@@ -3,7 +3,8 @@ package scalus.cardano.node
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
-import scalus.cardano.node.emulator.{ChainConfig, ChainViewError, ForgeError, OrphanTxPolicy, RollbackError}
+import scalus.cardano.ledger.epoch.PoolPerformance
+import scalus.cardano.node.emulator.{BlockIssuer, ChainConfig, ChainViewError, ForgeError, OrphanTxPolicy, RollbackError}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.ChainEvent
 import scalus.cardano.txbuilder.TxBuilder
@@ -31,6 +32,21 @@ class JavaEmulatorChainInteropTest extends AnyFunSuite {
             .complete(utxos.filter(_._2.address == alice), alice)
             .sign(Alice.signer)
             .transaction
+
+    test("Java builds a ChainConfig with a pool block issuer") {
+        // ledger-rules spec [ES-1a], [ES-3]
+        val pool = PoolKeyHash.fromHex("b7" * 28)
+        assert(JavaEmulatorChainInterop.issuedBy(pool).blockIssuer == BlockIssuer.Pool(pool))
+        assert(JavaEmulatorChainInterop.unattributed() == BlockIssuer.Unattributed)
+    }
+
+    test("Java sets the pool performance and the active slots coefficient") {
+        // ledger-rules spec [ES-1], [ES-2a], [ES-1a]
+        val config = JavaEmulatorChainInterop.measured(1, 10)
+        assert(config.poolPerformance == PoolPerformance.Measured)
+        assert(config.activeSlotsCoeff == UnitInterval(1, 10))
+        assert(JavaEmulatorChainInterop.ideal() == PoolPerformance.Ideal)
+    }
 
     test("Java submits to the mempool, reads the views, and forges") {
         val e = manual()
@@ -114,5 +130,17 @@ class JavaEmulatorChainInteropTest extends AnyFunSuite {
           JavaEmulatorChainInterop.rollback(e, 1).getErrorOrNull ==
               RollbackError.PastGenesis(1, 0)
         )
+    }
+
+    test("Java reads the stake snapshots and the pending reward update") {
+        // ledger-rules spec [ES-9a] (D82): getPendingRewardsOrNull is null at the genesis
+        val e = Emulator.withAddresses(Seq(alice), Value.ada(1000), ChainConfig.instant)
+        assert(JavaEmulatorChainInterop.snapshots(e) == e.snapshots)
+        assert(JavaEmulatorChainInterop.pendingRewards(e) == null)
+        val slotConfig = e.cardanoInfo.slotConfig
+        e.setSlot(slotConfig.firstSlotOfEpoch(e.currentEpoch + 1))
+        val update = JavaEmulatorChainInterop.pendingRewards(e)
+        assert(update != null)
+        assert(e.pendingRewards.contains(update))
     }
 }

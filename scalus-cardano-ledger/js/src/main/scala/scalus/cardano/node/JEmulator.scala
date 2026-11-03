@@ -8,12 +8,13 @@ import scalus.utils.scalajs.internal.*
 import scalus.cardano.address.{Address, StakeAddress, StakePayload}
 import scalus.cardano.ledger.rules.{Context, UtxoEnv}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.AccountState
+import scalus.cardano.ledger.epoch.{AccountState, PoolPerformance, StakeSnapshot}
 import scalus.cardano.ledger.utils.AllResolvedScripts
-import scalus.cardano.node.emulator.{AwaitTxPolicy, BlockProduction, ChainConfig, ChainView, ChainViewError, DropReason, ForgeError, OrphanTxPolicy, RollbackError, TxStatus}
+import scalus.cardano.node.emulator.{AwaitTxPolicy, BlockIssuer, BlockProduction, ChainConfig, ChainView, ChainViewError, DropReason, ForgeError, OrphanTxPolicy, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 
 import scala.annotation.nowarn
+import scala.util.Try
 import scala.util.control.NonFatal
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -700,6 +701,61 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         )
     }
 
+    /** The stake snapshots of the last epoch boundary: `mark`, `set` and `go`, each with one row
+      * per credential that has active stake, and the fee snapshot. The genesis fills all three from
+      * the initial state; each boundary moves `set` to `go`, `mark` to `set`, and takes a new
+      * `mark`.
+      */
+    // ledger-rules spec [ES-9a], D82
+    def getStakeSnapshots(): JsStakeSnapshots = {
+        val snapshots = emulator.snapshots
+        js.Dynamic
+            .literal(
+              mark = stakeRows(snapshots.mark),
+              set = stakeRows(snapshots.set),
+              go = stakeRows(snapshots.go),
+              fee = snapshots.fee.value.toJsBigInt
+            )
+            .asInstanceOf[JsStakeSnapshots]
+    }
+
+    private def stakeRows(snapshot: StakeSnapshot): js.Array[JsStakeSnapshotEntry] =
+        snapshot.activeStake.toSeq.map { (credential, stake) =>
+            js.Dynamic
+                .literal(
+                  credential = credentialHex(credential),
+                  rewardAddress = rewardAddressOf(credential),
+                  pool = snapshot.delegations(credential).toHex,
+                  stake = stake.value.toJsBigInt
+                )
+                .asInstanceOf[JsStakeSnapshotEntry]
+        }.toJSArray
+
+    /** The reward update the last epoch boundary computed, which the next boundary pays, or
+      * `undefined` before the first boundary.
+      */
+    // ledger-rules spec [ES-9a], D82
+    def getPendingRewards(): js.UndefOr[JsRewardUpdate] =
+        emulator.pendingRewards.map { update =>
+            val rewards = update.rewards.toSeq.map { (credential, amount) =>
+                js.Dynamic
+                    .literal(
+                      credential = credentialHex(credential),
+                      rewardAddress = rewardAddressOf(credential),
+                      amount = amount.value.toJsBigInt
+                    )
+                    .asInstanceOf[JsRewardEntry]
+            }.toJSArray
+            js.Dynamic
+                .literal(
+                  deltaT = update.deltaT.value.toJsBigInt,
+                  deltaR = update.deltaR.value.toJsBigInt,
+                  deltaF = update.deltaF.value.toJsBigInt,
+                  rewards = rewards
+                )
+                .asInstanceOf[JsRewardUpdate]
+        }.orUndefined
+
     private def credentialHex(credential: Credential): String = credential match
         case Credential.KeyHash(hash)    => hash.toHex
         case Credential.ScriptHash(hash) => hash.toHex
@@ -859,6 +915,75 @@ trait JAppliedTxInfo extends js.Object {
 
     /** The emulator slot at the time this transaction was applied. */
     val slot: Double
+}
+
+/** The result of `Emulator.getStakeSnapshots`. */
+@TsName("StakeSnapshots")
+trait JsStakeSnapshots extends js.Object {
+
+    /** The stake taken at the last epoch boundary. */
+    val mark: js.Array[JsStakeSnapshotEntry]
+
+    /** The stake taken at the boundary before. */
+    val set: js.Array[JsStakeSnapshotEntry]
+
+    /** The stake taken two boundaries ago, which the reward update of the last boundary read. */
+    val go: js.Array[JsStakeSnapshotEntry]
+
+    /** The fees of the epoch before the last boundary, in lovelace. */
+    val fee: js.BigInt
+}
+
+/** One row of a stake snapshot of `Emulator.getStakeSnapshots`: a registered credential that
+  * delegates to a pool and has stake above 0.
+  */
+@TsName("StakeSnapshotEntry")
+trait JsStakeSnapshotEntry extends js.Object {
+
+    /** Hex-encoded 28-byte credential hash, a key hash or a script hash, with no discriminator. */
+    val credential: String
+
+    /** The reward (stake) address of this credential in bech32, on the emulator's network. */
+    val rewardAddress: String
+
+    /** Hex-encoded 28-byte key hash of the pool this credential delegated to. */
+    val pool: String
+
+    /** The stake in lovelace: the coin of its base-address outputs plus its reward balance. */
+    val stake: js.BigInt
+}
+
+/** The result of `Emulator.getPendingRewards`. The four parts sum to 0. */
+@TsName("RewardUpdate")
+trait JsRewardUpdate extends js.Object {
+
+    /** The change to the treasury, in lovelace. */
+    val deltaT: js.BigInt
+
+    /** The change to the reserves, in lovelace, with its sign. */
+    val deltaR: js.BigInt
+
+    /** The change to the fees, in lovelace, with its sign. */
+    val deltaF: js.BigInt
+
+    /** The reward of each credential. The next boundary pays it to the credential's balance if it
+      * is registered then, and to the treasury if not.
+      */
+    val rewards: js.Array[JsRewardEntry]
+}
+
+/** One reward of `RewardUpdate.rewards`. */
+@TsName("RewardEntry")
+trait JsRewardEntry extends js.Object {
+
+    /** Hex-encoded 28-byte credential hash, a key hash or a script hash, with no discriminator. */
+    val credential: String
+
+    /** The reward (stake) address of this credential in bech32, on the emulator's network. */
+    val rewardAddress: String
+
+    /** The reward in lovelace: the leader and member rewards of this credential, summed. */
+    val amount: js.BigInt
 }
 
 /** One row of `Emulator.getStakeDistribution`. */
@@ -1175,6 +1300,23 @@ trait JsEmulatorOptions extends js.Object {
 
     /** The deepest rollback the emulator allows, at least 1. Defaults to 2160. */
     val securityParam: js.UndefOr[Double] = js.undefined
+
+    /** How the reward calculation rates the pools: `"ideal"`, the default, pays every pool with
+      * stake as a perfect pool; `"measured"` pays by the blocks each pool made in the epoch before,
+      * as the ledger does, so a pool with no block earns nothing.
+      */
+    @TsType("\"ideal\" | \"measured\"")
+    val poolPerformance: js.UndefOr[String] = js.undefined
+
+    /** `f`, the share of slots with a block, above 0 and at most 1: it sets the blocks an epoch is
+      * expected to have under `"measured"`. Defaults to 1/20.
+      */
+    val activeSlotsCoeff: js.UndefOr[JFraction] = js.undefined
+
+    /** The hex id of the pool, 28 bytes, that each forged block counts for, registered or not.
+      * Leave it out for blocks that count for no pool, the default.
+      */
+    val blockIssuer: js.UndefOr[String] = js.undefined
 }
 
 /** A block of the emulator's chain: its slot and its block id, the hex hash of its header. The
@@ -1534,6 +1676,38 @@ object JEmulator {
                   val k = longOf(value, "securityParam")
                   if k < 1 then typeError(s"securityParam must be at least 1, got: $k")
                   k
+              }
+            )
+            .withPoolPerformance(
+              // ledger-rules spec [ES-10a]
+              choice(
+                options.poolPerformance,
+                "poolPerformance",
+                defaults.poolPerformance,
+                "ideal" -> PoolPerformance.Ideal,
+                "measured" -> PoolPerformance.Measured
+              )
+            )
+            .withActiveSlotsCoeff(
+              // ledger-rules spec [ES-2a], [ES-10a]: checked here, not by the require of
+              // ChainConfig, so the TypeError names the option
+              options.activeSlotsCoeff.toOption.fold(defaults.activeSlotsCoeff) { f =>
+                  def fail: Nothing = typeError(
+                    s"activeSlotsCoeff must be a fraction in (0, 1], got: ${js.JSON.stringify(f)}"
+                  )
+                  val n = Try(longOf(f.numerator, "activeSlotsCoeff")).getOrElse(fail)
+                  val d = Try(longOf(f.denominator, "activeSlotsCoeff")).getOrElse(fail)
+                  if n <= 0 || d <= 0 || n > d then fail
+                  UnitInterval(n, d)
+              }
+            )
+            .withBlockIssuer(
+              // ledger-rules spec [ES-10a]: absent is Unattributed
+              options.blockIssuer.toOption.fold(defaults.blockIssuer) { hex =>
+                  Try(PoolKeyHash.fromHex(hex)).toOption match
+                      case Some(pool) => BlockIssuer.pool(pool)
+                      case None =>
+                          typeError(s"blockIssuer must be the hex of 28 bytes, got: \"$hex\"")
               }
             )
     }

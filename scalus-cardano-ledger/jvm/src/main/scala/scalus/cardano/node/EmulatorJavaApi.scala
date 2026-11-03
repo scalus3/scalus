@@ -5,6 +5,7 @@ import scalus.uplc.DebugScript
 import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.epoch.{RewardUpdate, SnapShots}
 import scalus.cardano.node.emulator.{ChainView, ChainViewError, EmulatorResult, ForgeError, RollbackError}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.ChainEvent
@@ -67,6 +68,16 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
 
     /** The epoch of the current slot, ledger-rules spec [ES-9]. */
     final def getCurrentEpoch: Long = currentEpoch
+
+    /** The stake snapshots and the fee snapshot of the last epoch boundary, ledger-rules spec
+      * [ES-9a].
+      */
+    final def getSnapshots: SnapShots = snapshots
+
+    /** The reward update the next epoch boundary pays, or `null` before the first boundary,
+      * ledger-rules spec [ES-9a].
+      */
+    final def getPendingRewardsOrNull: RewardUpdate = pendingRewards.orNull
 
     // ─── Submission ─────────────────────────────────────────────────────────
 

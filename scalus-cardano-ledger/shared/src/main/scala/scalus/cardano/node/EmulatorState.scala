@@ -1,10 +1,10 @@
 package scalus.cardano.node
 
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.AccountState
+import scalus.cardano.ledger.epoch.{AccountState, RewardUpdate, SnapShots}
 import scalus.cardano.ledger.epoch.internal.{EpochState, EpochTransition}
 import scalus.cardano.ledger.rules.{Context, State, TxRefScriptsSizeValidator}
-import scalus.cardano.node.emulator.{BlockForge, BlockProduction, ChainConfig, ChainView, ChainViewError, DropReason, ForgeError, LedgerSnapshot, OrphanTxPolicy, RollbackError, TxStatus}
+import scalus.cardano.node.emulator.{BlockForge, BlockIssuer, BlockProduction, ChainConfig, ChainView, ChainViewError, DropReason, ForgeError, LedgerSnapshot, OrphanTxPolicy, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.{AppliedBlock, AppliedTransaction, ChainEvent}
 import scalus.uplc.builtin.Data
@@ -100,7 +100,7 @@ case class EmulatorState private (
       * on every read. The state is immutable and every transition is a `copy`, which drops the
       * memo, so the memo can never be stale (D48).
       */
-    private[node] lazy val tipSnapshot: LedgerSnapshot = storedTip.atSlot(currentSlot)
+    private[node] lazy val tipSnapshot: LedgerSnapshot = storedTip.atSlot(currentSlot, config)
 
     /** The ledger state of the tip snapshot, spec [ST-8]. */
     def ledger: State = tipSnapshot.ledger
@@ -115,6 +115,16 @@ case class EmulatorState private (
       * `context.env.treasury`, spec [DM-13].
       */
     def accountState: AccountState = tipSnapshot.epoch.accountState
+
+    /** The stake snapshots `mark`, `set`, `go` and the fee snapshot of the tip snapshot,
+      * ledger-rules spec [ES-9a].
+      */
+    def snapshots: SnapShots = tipSnapshot.epoch.snapshots
+
+    /** The reward update the last boundary of the tip snapshot computed and the next one pays, or
+      * `None` before the first boundary, ledger-rules spec [ES-9a], [RW-21].
+      */
+    def pendingRewards: Option[RewardUpdate] = tipSnapshot.epoch.pendingRewards
 
     /** Every datum this state has seen, decoded. */
     @deprecated("use binaryDatums, which keeps the datum bytes", "1.3.0")
@@ -172,7 +182,7 @@ case class EmulatorState private (
       * is empty, at the current slot, spec [MP-1], [MP-2].
       */
     private def validationBase: LedgerSnapshot =
-        mempool.lastOption.fold(tipSnapshot)(_.snapshot).atSlot(currentSlot)
+        mempool.lastOption.fold(tipSnapshot)(_.snapshot).atSlot(currentSlot, config)
 
     /** The state after a valid tx: its `entry` joins the mempool, spec [MP-6], and in the `Instant`
       * preset the mempool is forged at once, spec [MP-8]. `Manual` forges nothing here.
@@ -235,8 +245,9 @@ case class EmulatorState private (
       */
     private def forge(entries: Vector[MempoolEntry], slot: SlotNo): EmulatorState = {
         // ledger-rules spec [EB-3a]: at the current slot the ticked tip is computed already
-        val before = if slot == currentSlot then tipSnapshot else storedTip.atSlot(slot)
-        val node = BlockNode.of(chain.lastOption.map(blocks), slot, entries, before)
+        val before = if slot == currentSlot then tipSnapshot else storedTip.atSlot(slot, config)
+        val node =
+            BlockNode.of(chain.lastOption.map(blocks), slot, entries, before, config.blockIssuer)
         val txs = node.txs
         copy(
           blocks = blocks.updated(node.id, node),
@@ -291,12 +302,12 @@ case class EmulatorState private (
                 val depth = forkDepth(parent.map(_.id))
                 parent.fold(genesisSnapshot)(_.snapshot) match
                     case Some(snapshot) if depth <= config.securityParam =>
-                        val base = snapshot.atSlot(slot)
+                        val base = snapshot.atSlot(slot, config)
                         if !BlockForge.fitsBlock(txs, base.context.env.params, base.ledger.utxos)
                         then Left(ForgeError.BlockTooBig) // spec [FG-18], [BB-2]
                         else
                             applied(base, txs, slot, validate)
-                                .map(BlockNode.of(parent, slot, _, base))
+                                .map(BlockNode.of(parent, slot, _, base, config.blockIssuer))
                     case _ =>
                         Left(ForgeError.TooDeep(depth, config.securityParam)) // spec [FG-14]
     }
@@ -837,9 +848,17 @@ object EmulatorState {
         val binaryDatums = appliedTxLog.foldLeft(
           datums ++ ledger.utxos.valuesIterator.flatMap(EmulatorBase.inlineBinaryDatumOf)
         )((acc, a) => acc ++ EmulatorBase.binaryDatumsOf(a.tx))
+        // ledger-rules spec [ES-8], [ES-8a]: mark, set and go are the stake of the genesis ledger,
+        // so seeded stake earns from the second boundary on; no fee, no blocks made and no
+        // pending rewards
+        val stake = EpochTransition.stakeSnapshot(ledger)
         val epoch = EpochState(
           AccountState(context.env.treasury, reserves),
-          context.slotConfig.epochOf(context.env.slot)
+          context.slotConfig.epochOf(context.env.slot),
+          SnapShots(stake, stake, stake, Coin.zero),
+          Map.empty,
+          Map.empty,
+          None
         )
         val genesis = LedgerSnapshot(ledger, context, binaryDatums, epoch)
         val empty = new EmulatorState(
@@ -904,17 +923,30 @@ private[node] final case class BlockNode(
 
 private[node] object BlockNode {
 
-    /** The block of `entries` at `slot` on `parent`, or on genesis when `None`. `entries` are
-      * validated in order on `before`, so the snapshot of the last one is the block snapshot, spec
-      * [FG-6]. With no entries, it is `before`.
+    /** The block of `entries` at `slot` on `parent`, or on genesis when `None`, made by `issuer`.
+      * `entries` are validated in order on `before`, so the snapshot of the last one is the block
+      * snapshot, spec [FG-6]; with no entries, it is `before`.
+      *
+      * The epoch state of the block snapshot is that of `before` with the block counted for the
+      * issuer's pool, registered or not, ledger-rules spec [ES-4], [ES-4a] (`incrBlocks`, alonzo
+      * Rules/Bbody.hs:250-257); an `Unattributed` block counts for none, [ES-5]. It is never the
+      * epoch state of the last entry: an entry keeps the epoch state of the snapshot it was
+      * validated on, which misses the blocks forged since, when a forge left it in the mempool. No
+      * tx rule writes the epoch state, so `before`'s is the right one.
       */
     def of(
         parent: Option[BlockNode],
         slot: SlotNo,
         entries: Vector[MempoolEntry],
-        before: LedgerSnapshot
+        before: LedgerSnapshot,
+        issuer: BlockIssuer
     ): BlockNode = {
-        val snapshot = entries.lastOption.fold(before)(_.snapshot)
+        val epoch = issuer match
+            case BlockIssuer.Unattributed => before.epoch
+            case BlockIssuer.Pool(pool) =>
+                val made = before.epoch.blocksMadeCur
+                before.epoch.copy(blocksMadeCur = made.updated(pool, made.getOrElse(pool, 0L) + 1))
+        val snapshot = entries.lastOption.fold(before)(_.snapshot).copy(epoch = epoch)
         val block = BlockForge.forge(
           parent = parent.map(_.id),
           height = parent.fold(0L)(_.height) + 1,

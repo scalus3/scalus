@@ -91,6 +91,8 @@ The public API maps to the local mini-protocols of a node:
 - The forge MUST fill `issuerVkey`, `vrfVkey`, `vrfResult`, `operationalCert` and `bodySignature` with fixed bytes of the correct size. `[BH-8]`
 - The forge MUST put the index of each tx with `isValid = false` in `invalidTransactions`. `[BH-9]`
 
+*Implementation status (ledger rules, phase 4):* the forge counts each block for the `blockIssuer` of the `ChainConfig` in `blocksMadeCur` of the block snapshot, on the `EpochState` of the ticked base, not of the last mempool entry (`[FG-6]`); see `2026-11-02-emulator-ledger-rules-design.md` `[ES-4a]`, `[CS-5]`. The header keeps the fixed issuer bytes of `[BH-8]`.
+
 *Example, illustrative,* for `[BH-2]`. Two empty blocks at slot 10, one on parent A and one on parent B:
 
 | | Today (`blockBodyHash`) | `[BH-2]` (header hash) |
@@ -122,6 +124,8 @@ The public API maps to the local mini-protocols of a node:
 *Implementation status (M7):* `ChainConfig`, `BlockProduction`, `AwaitTxPolicy`, `OrphanTxPolicy`, `TxStatus`, `DropReason`, `ChainView`, `ChainViewError`, `ForgeError`, `RollbackError`, `BlockForge` and (JVM) `EmulatorResult` moved from `scalus.cardano.node` to `scalus.cardano.node.emulator`: they exist only for the Emulator, while `scalus.cardano.node` also carries the provider types (`BlockchainProvider`, `BlockfrostProvider`, `UtxoQuery`) and the released `Emulator`, `EmulatorBase`, `EmulatorState`, `EmulatorJavaApi`, `JEmulator`, `AppliedTx` and `TransactionStatus`, which stay. `LedgerSnapshot` moved too and keeps `private[node]`, reachable from `EmulatorState` in `node` since `node.emulator` is nested in `node`. No behaviour change; none of the moved types had shipped in a release, so MiMa needed no filter.
 
 **Why:** `[CF-1]`, `[CF-3]`: the Emulator is an interop package, and Java and JS cannot use Scala default parameters. `[CF-4]`: hundreds of tests in `scalus-examples`, `scalus-utxo-cell` and user projects depend on submit applying at once.
+
+*Implementation status (ledger rules, phase 4):* `ChainConfig` gains `poolPerformance` (`Ideal` in both presets), `activeSlotsCoeff` (`UnitInterval(1, 20)` in both presets, 0 rejected) and `blockIssuer` (`Unattributed` in both presets) as fields 5 to 7, with `withPoolPerformance`, `withActiveSlotsCoeff` and `withBlockIssuer` (`2026-11-02-emulator-ledger-rules-design.md` `[ES-1]` to `[ES-3]`, `[ES-1a]`, `[ES-2a]`, `[CS-5]`). They have no default parameters, so `[CF-1]` holds.
 
 ## 6. State
 

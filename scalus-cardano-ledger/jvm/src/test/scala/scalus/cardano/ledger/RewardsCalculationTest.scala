@@ -4,6 +4,10 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 import scalus.cardano.ledger.*
 
+import scala.annotation.nowarn
+
+// tests of the deprecated RewardsCalculation, kept while it ships (ledger-rules spec [DM-15], D80)
+@nowarn("msg=deprecated")
 class RewardsCalculationTest extends AnyFunSuite with Matchers:
 
     test("compute total rewards with simple mock data") {

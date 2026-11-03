@@ -468,6 +468,18 @@ export class Emulator {
    */
   getStakeDistribution(): StakeDistributionEntry[];
   /**
+   * The stake snapshots of the last epoch boundary: `mark`, `set` and `go`, each with one row
+   * per credential that has active stake, and the fee snapshot. The genesis fills all three from
+   * the initial state; each boundary moves `set` to `go`, `mark` to `set`, and takes a new
+   * `mark`.
+   */
+  getStakeSnapshots(): StakeSnapshots;
+  /**
+   * The reward update the last epoch boundary computed, which the next boundary pays, or
+   * `undefined` before the first boundary.
+   */
+  getPendingRewards(): RewardUpdate | undefined;
+  /**
    * Looks a datum up by its hash, across the datums seeded into this emulator and the ones
    * witnessed by accepted transactions.
    *
@@ -613,6 +625,22 @@ export interface EmulatorOptions {
   readonly orphanTxs?: "returnToMempool" | "drop";
   /** The deepest rollback the emulator allows, at least 1. Defaults to 2160. */
   readonly securityParam?: number;
+  /**
+   * How the reward calculation rates the pools: `"ideal"`, the default, pays every pool with
+   * stake as a perfect pool; `"measured"` pays by the blocks each pool made in the epoch before,
+   * as the ledger does, so a pool with no block earns nothing.
+   */
+  readonly poolPerformance?: "ideal" | "measured";
+  /**
+   * `f`, the share of slots with a block, above 0 and at most 1: it sets the blocks an epoch is
+   * expected to have under `"measured"`. Defaults to 1/20.
+   */
+  readonly activeSlotsCoeff?: Fraction;
+  /**
+   * The hex id of the pool, 28 bytes, that each forged block counts for, registered or not.
+   * Leave it out for blocks that count for no pool, the default.
+   */
+  readonly blockIssuer?: string;
 }
 
 /**
@@ -1055,6 +1083,31 @@ export class RedeemerBudget {
   readonly budget: ExUnits;
 }
 
+/** One reward of `RewardUpdate.rewards`. */
+export interface RewardEntry {
+  /** Hex-encoded 28-byte credential hash, a key hash or a script hash, with no discriminator. */
+  readonly credential: string;
+  /** The reward (stake) address of this credential in bech32, on the emulator's network. */
+  readonly rewardAddress: string;
+  /** The reward in lovelace: the leader and member rewards of this credential, summed. */
+  readonly amount: bigint;
+}
+
+/** The result of `Emulator.getPendingRewards`. The four parts sum to 0. */
+export interface RewardUpdate {
+  /** The change to the treasury, in lovelace. */
+  readonly deltaT: bigint;
+  /** The change to the reserves, in lovelace, with its sign. */
+  readonly deltaR: bigint;
+  /** The change to the fees, in lovelace, with its sign. */
+  readonly deltaF: bigint;
+  /**
+   * The reward of each credential. The next boundary pays it to the credential's balance if it
+   * is registered then, and to the treasury if not.
+   */
+  readonly rewards: RewardEntry[];
+}
+
 /**
  * The `Scalus` namespace object.
  *
@@ -1219,6 +1272,33 @@ export interface StakeRegistration {
    * credential that is registered but delegates to nothing.
    */
   readonly delegatedTo?: string;
+}
+
+/**
+ * One row of a stake snapshot of `Emulator.getStakeSnapshots`: a registered credential that
+ * delegates to a pool and has stake above 0.
+ */
+export interface StakeSnapshotEntry {
+  /** Hex-encoded 28-byte credential hash, a key hash or a script hash, with no discriminator. */
+  readonly credential: string;
+  /** The reward (stake) address of this credential in bech32, on the emulator's network. */
+  readonly rewardAddress: string;
+  /** Hex-encoded 28-byte key hash of the pool this credential delegated to. */
+  readonly pool: string;
+  /** The stake in lovelace: the coin of its base-address outputs plus its reward balance. */
+  readonly stake: bigint;
+}
+
+/** The result of `Emulator.getStakeSnapshots`. */
+export interface StakeSnapshots {
+  /** The stake taken at the last epoch boundary. */
+  readonly mark: StakeSnapshotEntry[];
+  /** The stake taken at the boundary before. */
+  readonly set: StakeSnapshotEntry[];
+  /** The stake taken two boundaries ago, which the reward update of the last boundary read. */
+  readonly go: StakeSnapshotEntry[];
+  /** The fees of the epoch before the last boundary, in lovelace. */
+  readonly fee: bigint;
 }
 
 /**

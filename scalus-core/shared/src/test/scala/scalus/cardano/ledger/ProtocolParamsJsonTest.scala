@@ -59,6 +59,116 @@ class ProtocolParamsJsonTest extends AnyFunSuite {
         assert(back.executionUnitPrices.priceSteps.toDouble == 7.21e-5)
     }
 
+    // spec [DM-18] to [DM-20a]: rho, tau and a0 are exact rationals, read from the decimal.
+
+    private val networks = Seq(
+      "mainnet" -> CardanoInfo.mainnet.protocolParams,
+      "preprod" -> CardanoInfo.preprod.protocolParams,
+      "preview" -> CardanoInfo.preview.protocolParams
+    )
+
+    private def assertExactRewardParams(network: String, p: ProtocolParams): Unit = {
+        assert(p.monetaryExpansion == UnitInterval(3, 1000), network)
+        assert(p.treasuryCut == UnitInterval(1, 5), network)
+        // NonNegativeInterval equality reduces both sides, so pin the terms too.
+        assert(p.poolPledgeInfluence.numerator == 3L, network)
+        assert(p.poolPledgeInfluence.denominator == 10L, network)
+    }
+
+    test("CardanoInfo carries rho 3/1000, tau 1/5 and a0 3/10 on every network") {
+        // spec [DM-20a]
+        // The compile-time read of the Blockfrost resources, then ToExpr.
+        for (network, params) <- networks do assertExactRewardParams(network, params)
+    }
+
+    test("Blockfrost write-then-read keeps rho, tau and a0 exact") {
+        // spec [DM-20a], [DM-21a]
+        for (network, params) <- networks do
+            val json = ProtocolParams.toBlockfrostJson(params)
+            val tree = ujson.read(json)
+            // spec [DM-21a]: the writer emits JSON numbers, as Blockfrost does.
+            assert(tree("rho") == ujson.Num(0.003), network)
+            assert(tree("tau") == ujson.Num(0.2), network)
+            assert(tree("a0") == ujson.Num(0.3), network)
+            assertExactRewardParams(network, ProtocolParams.fromBlockfrostJson(json))
+    }
+
+    test("cardano-cli write-then-read keeps rho, tau and a0 exact") {
+        // spec [DM-20b]
+        for (network, params) <- networks do
+            val json = write(params)(using ProtocolParams.cardanoCliParamsReadWriter)
+            val tree = ujson.read(json)
+            assert(tree("monetaryExpansion") == ujson.Num(0.003), network)
+            assertExactRewardParams(network, ProtocolParams.fromCardanoCliJson(json))
+    }
+
+    private def blockfrostWith(field: String, value: ujson.Value): String = {
+        val tree = ujson.read(ProtocolParams.toBlockfrostJson(mainnet))
+        tree(field) = value
+        ujson.write(tree)
+    }
+
+    test("Blockfrost rho as the string \"0.003\" and as the number 3e-3 reads 3/1000") {
+        val fromString =
+            ProtocolParams.fromBlockfrostJson(blockfrostWith("rho", ujson.Str("0.003")))
+        assert(fromString.monetaryExpansion == UnitInterval(3, 1000))
+        val written = ProtocolParams.toBlockfrostJson(mainnet)
+        assert(written.contains("\"rho\":0.003"))
+        val fromNumber =
+            ProtocolParams.fromBlockfrostJson(written.replace("\"rho\":0.003", "\"rho\":3e-3"))
+        assert(fromNumber.monetaryExpansion == UnitInterval(3, 1000))
+    }
+
+    test("Blockfrost reads a decimal past Double precision exactly, in lowest terms") {
+        // A Double holds 0.123456789012345678 as 0.12345678901234568; the string text is exact.
+        val p = ProtocolParams.fromBlockfrostJson(
+          blockfrostWith("tau", ujson.Str("0.123456789012345678"))
+        )
+        assert(p.treasuryCut == UnitInterval(61728394506172839L, 500000000000000000L))
+    }
+
+    test("cardano-cli reads a0 given as a JSON string exactly") {
+        // spec [DM-20a]
+        val tree = ujson.read(write(mainnet)(using ProtocolParams.cardanoCliParamsReadWriter))
+        tree("poolPledgeInfluence") = ujson.Str("0.30")
+        val p = ProtocolParams.fromCardanoCliJson(ujson.write(tree))
+        assert(p.poolPledgeInfluence.numerator == 3L)
+        assert(p.poolPledgeInfluence.denominator == 10L)
+    }
+
+    test("a term that does not fit a Long fails and names the field") {
+        // spec [DM-20a]
+        val thrown = intercept[IllegalArgumentException](
+          ProtocolParams.fromBlockfrostJson(blockfrostWith("rho", ujson.Str("1e-20")))
+        )
+        assert(thrown.getMessage.contains("rho"), thrown.getMessage)
+    }
+
+    test("a negative a0 fails and names the field") {
+        // spec [DM-20a]
+        val thrown = intercept[IllegalArgumentException](
+          ProtocolParams.fromBlockfrostJson(blockfrostWith("a0", ujson.Num(-0.3)))
+        )
+        assert(thrown.getMessage.contains("a0: -0.3: "), thrown.getMessage)
+    }
+
+    test("cardano-cli: a negative poolPledgeInfluence fails and names the field") {
+        // spec [DM-20a]
+        val tree = ujson.read(write(mainnet)(using ProtocolParams.cardanoCliParamsReadWriter))
+        tree("poolPledgeInfluence") = ujson.Num(-0.3)
+        val thrown = intercept[IllegalArgumentException](
+          ProtocolParams.fromCardanoCliJson(ujson.write(tree))
+        )
+        assert(thrown.getMessage.contains("poolPledgeInfluence: -0.3: "), thrown.getMessage)
+    }
+
+    test("a rho above 1 fails and names the field") {
+        val thrown = intercept[IllegalArgumentException](
+          ProtocolParams.fromBlockfrostJson(blockfrostWith("rho", ujson.Num(1.5)))
+        )
+        assert(thrown.getMessage.contains("rho"), thrown.getMessage)
+    }
+
     // Failure messages. Both codecs read fields straight off a `ujson.Value`, so anything short of
     // a complete parameter set fails deep inside upickle, whose own message is the JSON path.
 

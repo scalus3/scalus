@@ -1,10 +1,11 @@
 package scalus.cardano.node
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.{Network, StakeAddress}
+import scalus.cardano.address.{Address, Network, StakeAddress}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.AccountState
-import scalus.cardano.node.emulator.ChainConfig
+import scalus.cardano.ledger.epoch.{AccountState, PoolPerformance, RewardUpdate, SnapShots}
+import scalus.cardano.ledger.epoch.internal.EpochState
+import scalus.cardano.node.emulator.{BlockIssuer, ChainConfig}
 import scalus.cardano.txbuilder.{PubKeyWitness, TransactionBuilderStep, TransactionSigner, TxBuilder}
 import scalus.testing.kit.Party
 import scalus.testing.kit.Party.{Alice, Bob, Charles, Dave}
@@ -60,18 +61,45 @@ class EmulatorEpochTest extends AnyFunSuite {
         assert(stateOf(e).accountState.treasury == Coin(1000))
         donate(e, 5)
         for n <- 1 to 3 do
+            val expected = e.treasury + e.donation + rewardsToTreasury(e)
             e.setSlot(slotConfig.firstSlotOfEpoch(startEpoch + n))
             val state = stateOf(e)
             assert(state.context.env.treasury == state.accountState.treasury, s"boundary $n")
-        assert(e.treasury == Coin(1005))
+            assert(e.treasury == expected, s"boundary $n")
+            // spec [ES-8a], [RW-21]: the first boundary pays nothing, so it adds the donations only
+            if n == 1 then assert(e.treasury == Coin(1005))
+    }
+
+    /** What the next boundary moves into the treasury from the pending reward update: `deltaT` and
+      * the rewards of the credentials that are not registered now, spec [RW-11], [RW-12].
+      */
+    private def rewardsToTreasury(e: Emulator): Coin =
+        e.pendingRewards.fold(Coin.zero) { update =>
+            val accounts = e.certState.dstate.accounts
+            update.rewards.foldLeft(update.deltaT) { case (sum, (cred, reward)) =>
+                if accounts.contains(cred) then sum else sum + reward
+            }
+        }
+
+    /** Crosses the boundaries 1 to `n` of `e` one at a time, and checks that each adds the
+      * donations and [[rewardsToTreasury]] to the treasury; the treasury after the last.
+      */
+    private def treasuryStepwise(e: Emulator, n: Int): Coin = {
+        for k <- 1 to n do
+            val expected = e.treasury + e.donation + rewardsToTreasury(e)
+            boundary(e, k)
+            assert(e.treasury == expected, s"boundary $k")
+        e.treasury
     }
 
     test("a jump over three boundaries moves the donations once") {
         // spec [EB-1], [EB-1a], [EB-17]: the later boundaries see no donations
         val e = emulator()
         donate(e, 5)
+        val stepped = emulator()
+        donate(stepped, 5)
         e.setSlot(slotConfig.firstSlotOfEpoch(startEpoch + 3))
-        assert(stateOf(e).accountState.treasury == Coin(1005))
+        assert(stateOf(e).accountState.treasury == treasuryStepwise(stepped, 3))
         assert(e.donation == Coin.zero)
     }
 
@@ -92,7 +120,9 @@ class EmulatorEpochTest extends AnyFunSuite {
         val treasury = e.treasury
         val elapsedUs = (System.nanoTime() - started) / 1_000
         info(s"setSlot over 1000 epochs and the first read: $elapsedUs us")
-        assert(treasury == Coin(1005))
+        val stepped = emulator()
+        donate(stepped, 5)
+        assert(treasury == treasuryStepwise(stepped, 1000))
         assert(slotConfig.epochOf(stateOf(e).context.env.slot) == startEpoch + 1000)
         donate(e, 7)
         assert(e.donation == Coin(7))
@@ -249,7 +279,7 @@ class EmulatorEpochTest extends AnyFunSuite {
         retire(e, startEpoch + 4)
         boundary(e, 3)
         deregisterBob(e)
-        val treasury = e.treasury
+        val treasury = e.treasury + rewardsToTreasury(e)
         val deposited = stateOf(e).ledger.deposited
         assert(e.certState.pstate.retiring == Map(id -> (startEpoch + 4)))
 
@@ -274,7 +304,7 @@ class EmulatorEpochTest extends AnyFunSuite {
         retire(e, startEpoch + 2)
         boundary(e, 1)
         assert(e.certState.pstate.stakePools.contains(id))
-        val treasury = e.treasury
+        val treasury = e.treasury + rewardsToTreasury(e)
         boundary(e, 2)
         assert(e.treasury == treasury)
         assert(e.certState.dstate.accounts(bob).balance == deposit)
@@ -500,7 +530,7 @@ class EmulatorEpochTest extends AnyFunSuite {
         assert(!e.certState.dstate.accounts.contains(aliceAccount))
         for n <- 6 to 9 do boundary(e, n)
         assert(isPresent(e, id))
-        val treasury = e.treasury
+        val treasury = e.treasury + rewardsToTreasury(e)
         boundary(e, 10)
         assert(!isPresent(e, id))
         assert(e.treasury - treasury == deposit)
@@ -681,5 +711,378 @@ class EmulatorEpochTest extends AnyFunSuite {
             val e = emulator()
             boundary(e, n)
             assert(e.currentEpoch == startEpoch + n, s"n = $n")
+    }
+
+    // The stake snapshots and the blocks made, spec [EB-6], [EB-21], [ES-3] to [ES-5], [ES-8]
+
+    private def epochOf(e: Emulator): EpochState = stateOf(e).tipSnapshot.epoch
+
+    /** Charles's base address: Party addresses are enterprise addresses, which hold no stake. */
+    private val charlesBase: Address = Address(
+      Network.Mainnet,
+      Credential.KeyHash(Charles.addrKeyHash),
+      Charles.account.stakeAddress(Network.Mainnet).credential
+    )
+
+    test("the genesis seeds mark, set and go with the stake of the genesis ledger") {
+        // spec [ES-8], [ES-8a]: no fee and no blocks made
+        import alicePool.*
+        val charlesUtxo = Input(genesisHash, 7) -> Output(charlesBase, Value.ada(50))
+        val e = Emulator.withState(
+          EmulatorInitialState(
+            utxos = initialUtxos + charlesUtxo,
+            stakeRegistrations = Seq(EmulatorStakeRegistration(charles, Coin(3), Some(id))),
+            poolRegistrations = Seq(EmulatorPoolRegistration(registration))
+          ),
+          rules.Context.testMainnet(slotConfig.firstSlotOfEpoch(startEpoch) + 10),
+          ChainConfig.instant
+        )
+        val epoch = epochOf(e)
+        val mark = e.snapshots.mark
+        assert(mark.activeStake == Map(charles -> (Coin.ada(50) + Coin(3))))
+        assert(mark.pools.keySet == Set(id))
+        assert(e.snapshots == SnapShots(mark, mark, mark, Coin.zero))
+        assert(epoch.blocksMadePrev.isEmpty)
+        assert(epoch.blocksMadeCur.isEmpty)
+    }
+
+    test("a boundary of the Emulator takes a new mark and moves the old one to set") {
+        // spec [EB-6]: the stake of a delegation made in the epoch is in the mark of the next
+        // boundary, not in set or go
+        import alicePool.*
+        val e = poolEmulator()
+        val genesisMark = e.snapshots.mark
+        assert(genesisMark.activeStake.isEmpty)
+        submit(
+          e,
+          TxBuilder(testEnv).payTo(charlesBase, Value.ada(20)),
+          Alice.signer
+        )
+        val fees = stateOf(e).ledger.fees
+        boundary(e, 1)
+        val snapshots = e.snapshots
+        assert(snapshots.mark.activeStake == Map(charles -> Coin.ada(20)))
+        assert(snapshots.set == genesisMark)
+        assert(snapshots.go == genesisMark)
+        assert(snapshots.fee == fees)
+    }
+
+    private val issuerPool: PoolKeyHash = PoolKeyHash.fromHex("b7" * 28)
+
+    /** A `Manual` emulator at slot 10 of `startEpoch`, whose blocks the unregistered pool
+      * `issuerPool` makes.
+      */
+    private def issuedEmulator(): Emulator =
+        Emulator.withState(
+          EmulatorInitialState(initialUtxos),
+          rules.Context.testMainnet(slotConfig.firstSlotOfEpoch(startEpoch) + 10),
+          ChainConfig.manual.withBlockIssuer(BlockIssuer.pool(issuerPool))
+        )
+
+    test("an Unattributed block is not counted") {
+        // spec [ES-3], [ES-5]: the default issuer of both presets
+        assert(ChainConfig.instant.blockIssuer == BlockIssuer.Unattributed)
+        assert(ChainConfig.manual.blockIssuer == BlockIssuer.Unattributed)
+        val e = emulator()
+        donate(e, 5)
+        e.produceBlock()
+        assert(stateOf(e).selectedChain.size == 2)
+        assert(epochOf(e).blocksMadeCur.isEmpty)
+    }
+
+    test("every block of a Pool issuer counts, empty or not, for a pool that is not registered") {
+        // spec [ES-4], [ES-4a]: incrBlocks (alonzo Rules/Bbody.hs:250-257); spec [EB-21] at the boundary
+        val e = issuedEmulator()
+        e.produceBlock()
+        donate(e, 5)
+        e.produceBlock()
+        e.produceBlock()
+        assert(epochOf(e).blocksMadeCur == Map(issuerPool -> 3L))
+        boundary(e, 1)
+        assert(epochOf(e).blocksMadePrev == Map(issuerPool -> 3L))
+        assert(epochOf(e).blocksMadeCur.isEmpty)
+        e.produceBlock()
+        assert(epochOf(e).blocksMadeCur == Map(issuerPool -> 1L))
+        assert(epochOf(e).blocksMadePrev == Map(issuerPool -> 3L))
+    }
+
+    test("a rollback removes the count of the blocks it removes") {
+        // spec [ES-4a]: the count is in the block snapshot
+        val e = issuedEmulator()
+        (1 to 3).foreach(_ => e.produceBlock())
+        assert(e.rollback(1).isRight)
+        assert(epochOf(e).blocksMadeCur == Map(issuerPool -> 2L))
+    }
+
+    test("a block forged by produceBlock(on, txs) counts too") {
+        // spec [ES-4a]: branchBlock builds the block snapshot as the tip forge does
+        val e = issuedEmulator()
+        val first = e.produceBlock()
+        assert(e.produceBlock(first, Seq.empty).isRight)
+        assert(stateOf(e).selectedChain.size == 2)
+        assert(epochOf(e).blocksMadeCur == Map(issuerPool -> 2L))
+    }
+
+    // The reward calculation at each boundary, spec [EB-22], [ES-1], [ES-2]
+
+    test("the presets rate pools Ideal with f = 1/20, and f = 0 is rejected") {
+        // spec [ES-1], [ES-2a]
+        for config <- Seq(ChainConfig.instant, ChainConfig.manual) do
+            assert(config.poolPerformance == PoolPerformance.Ideal)
+            assert(config.activeSlotsCoeff == UnitInterval(1, 20))
+        val measured = ChainConfig.instant
+            .withPoolPerformance(PoolPerformance.Measured)
+            .withActiveSlotsCoeff(UnitInterval(1, 10))
+        assert(measured.poolPerformance == PoolPerformance.Measured)
+        assert(measured.activeSlotsCoeff == UnitInterval(1, 10))
+        val thrown = intercept[IllegalArgumentException](
+          ChainConfig.instant.withActiveSlotsCoeff(UnitInterval(0, 1))
+        )
+        assert(thrown.getMessage.contains("activeSlotsCoeff must be above 0, got 0/1"))
+    }
+
+    /** An emulator with `config`, Alice's pool at pledge 0 and its own cost and margin, and
+      * Charles's 10 M ADA delegated to it, seeded in mark, set and go, spec [ES-8a].
+      */
+    private def rewardEmulator(config: ChainConfig): Emulator = {
+        import alicePool.*
+        stakeEmulator(
+          Coin.ada(10_000_000),
+          registration.cost,
+          registration.margin,
+          seeded = true,
+          config
+        )
+    }
+
+    /** The pending rewards after one block and the first boundary. */
+    private def pendingAfterOneBlock(config: ChainConfig): RewardUpdate = {
+        val e = rewardEmulator(config)
+        assert(e.pendingRewards.isEmpty)
+        e.produceBlock()
+        boundary(e, 1)
+        e.pendingRewards.getOrElse(fail("no pending rewards after a boundary"))
+    }
+
+    test("the first boundary computes the reward update of the seeded stake under Ideal") {
+        // spec [EB-22], [ES-8a], [RW-4]: go is the genesis stake; with margin 0 and no owner
+        // stake the leader reward is the cost
+        import alicePool.*
+        val update = pendingAfterOneBlock(ChainConfig.manual)
+        assert(update.rewards.keySet == Set(charles, bob))
+        assert(update.rewards(bob) == registration.cost)
+        assert(update.rewards(charles) > Coin.ada(1000))
+        assert(update.deltaF == Coin.zero)
+    }
+
+    test("Measured with only Unattributed blocks gives a reward update with deltaT 0, no rewards") {
+        // spec [ES-1], [RW-3], [RW-14]: no counted block gives eta = 0, so deltaR1 = 0 and, with
+        // no fee, deltaT = 0; a pool with no block gets no reward. The test of acceptance 4
+        // below checks the paid balances
+        val measured = ChainConfig.manual
+            .withPoolPerformance(PoolPerformance.Measured)
+            .withActiveSlotsCoeff(UnitInterval(1, slotConfig.epochLength))
+        val update = pendingAfterOneBlock(measured)
+        assert(update.deltaT == Coin.zero)
+        assert(update.rewards.isEmpty)
+    }
+
+    // Paying the rewards, spec [EB-5], [RW-10] to [RW-12], section 13.5, [ES-7] table
+
+    private val charlesStake: StakeAddress = Charles.account.stakeAddress(Network.Mainnet)
+
+    private def balanceOf(e: Emulator, cred: Credential): Coin =
+        e.certState.dstate.accounts.get(cred).fold(Coin.zero)(_.balance)
+
+    /** Signs with Alice's payment key and Charles's stake key. */
+    private val aliceAndCharles =
+        new TransactionSigner(Set(Alice.account.paymentKeyPair, Charles.account.stakeKeyPair))
+
+    /** Withdraws all of Charles's reward balance, after the vote delegation a withdrawal needs at
+      * PV 11 (`ConwayWdrlNotDelegatedToDRep`, conway Rules/Ledger.hs:518).
+      */
+    private def withdrawAll(e: Emulator): Coin = {
+        val reward = balanceOf(e, alicePool.charles)
+        if e.certState.dstate.accounts(alicePool.charles).dRepDelegation.isEmpty then
+            alicePool.submit(
+              e,
+              TxBuilder(testEnv).delegateVoteToDRep(charlesStake, DRep.AlwaysAbstain),
+              aliceAndCharles
+            )
+        alicePool.submit(
+          e,
+          TxBuilder(testEnv).withdrawRewards(charlesStake, reward),
+          aliceAndCharles
+        )
+        reward
+    }
+
+    /** The leader reward and the member reward of a pool with `stake` from one member, no owner
+      * stake and pledge 0, under `Ideal`, in an epoch with `fee` and `reserves`: the ledger's
+      * formulas (shelley Rewards.hs:86-157 maxPool, memberRew, leaderRew) in BigInt, independent of
+      * EpochTransition. With pledge 0, `maxPool` is `R · sigma / (1 + a0)`.
+      */
+    private def onePoolRewards(
+        reserves: Coin,
+        fee: Coin,
+        stake: Coin,
+        cost: Coin,
+        margin: UnitInterval
+    ): (Coin, Coin) = {
+        val pp = testEnv.protocolParams
+        val rho = pp.monetaryExpansion
+        val tau = pp.treasuryCut
+        val a0 = pp.poolPledgeInfluence
+        val deltaR1 = BigInt(reserves.value) * rho.numerator / rho.denominator
+        val pot = deltaR1 + fee.value
+        val r = pot - pot * tau.numerator / tau.denominator
+        val total = BigInt(45_000_000_000_000_000L) - reserves.value
+        assert(BigInt(stake.value) * pp.stakePoolTargetNum < total, "sigma is above z0")
+        val maxP =
+            r * stake.value * a0.denominator / (total * (a0.denominator + a0.numerator))
+        if maxP <= cost.value then (Coin(maxP.toLong), Coin.zero)
+        else
+            val profit = maxP - cost.value
+            val member = profit * (margin.denominator - margin.numerator) / margin.denominator
+            val leader = cost.value + profit * margin.numerator / margin.denominator
+            (Coin(leader.toLong), Coin(member.toLong))
+    }
+
+    /** An emulator with `config` (`Instant` by default), Alice's pool at pledge 0, `cost` and
+      * `margin`, Bob's registered reward account, and `stake` at Charles's base address; Charles is
+      * registered and delegated when `seeded`.
+      */
+    private def stakeEmulator(
+        stake: Coin,
+        cost: Coin,
+        margin: UnitInterval,
+        seeded: Boolean,
+        config: ChainConfig = ChainConfig.instant
+    ): Emulator = {
+        import alicePool.*
+        val charlesUtxo = Input(genesisHash, 7) -> Output(charlesBase, Value(stake))
+        val charlesReg =
+            if seeded then Seq(EmulatorStakeRegistration(charles, delegatedTo = Some(id))) else Nil
+        Emulator.withState(
+          EmulatorInitialState(
+            utxos = initialUtxos + charlesUtxo,
+            stakeRegistrations = EmulatorStakeRegistration(bob) +: charlesReg,
+            poolRegistrations = Seq(
+              EmulatorPoolRegistration(
+                registration.copy(pledge = Coin.zero, cost = cost, margin = margin)
+              )
+            )
+          ),
+          rules.Context.testMainnet(slotConfig.firstSlotOfEpoch(startEpoch) + 10),
+          config
+        )
+    }
+
+    private val cost170 = Coin.ada(170)
+    private val margin1 = UnitInterval(1, 100)
+
+    test("seeded stake is paid at the second boundary, and the reward can be withdrawn") {
+        // spec [ES-8a], [RW-21], [RW-10], section 13.5 with [ES-8]
+        import alicePool.*
+        val e = stakeEmulator(Coin.ada(1_000_000), cost170, margin1, seeded = true)
+        boundary(e, 1)
+        assert(balanceOf(e, charles) == Coin.zero)
+        assert(balanceOf(e, bob) == Coin.zero)
+        val (leader, member) =
+            onePoolRewards(e.reserves, Coin.zero, Coin.ada(1_000_000), cost170, margin1)
+        boundary(e, 2)
+        assert(balanceOf(e, charles) == member)
+        assert(balanceOf(e, bob) == leader)
+        assert(withdrawAll(e) == member)
+        assert(balanceOf(e, charles) == Coin.zero)
+    }
+
+    test("a delegation in epoch e is in mark, set, go at e+1 to e+3 and is paid at e+4") {
+        // spec section 13.5, [EB-6], [EB-22], [EB-5]; acceptance 3 of phase 4
+        import alicePool.*
+        val stake = Coin.ada(1_000_000)
+        val e = stakeEmulator(stake, cost170, margin1, seeded = false)
+        submit(
+          e,
+          TxBuilder(testEnv)
+              .registerAndDelegateToPoolAndDRep(charlesStake, id, DRep.AlwaysAbstain),
+          aliceAndCharles
+        )
+        def snapshots = e.snapshots
+        boundary(e, 1)
+        assert(snapshots.mark.activeStake.get(charles) == Some(stake))
+        assert(!snapshots.set.activeStake.contains(charles))
+        boundary(e, 2)
+        assert(snapshots.set.activeStake.get(charles) == Some(stake))
+        assert(!snapshots.go.activeStake.contains(charles))
+        assert(balanceOf(e, charles) == Coin.zero)
+        boundary(e, 3)
+        assert(snapshots.go.activeStake.get(charles) == Some(stake))
+        assert(balanceOf(e, charles) == Coin.zero)
+        // the fee snapshot of e+3 holds the fees of epoch e+2: none
+        assert(snapshots.fee == Coin.zero)
+        val (leader, member) = onePoolRewards(e.reserves, Coin.zero, stake, cost170, margin1)
+        boundary(e, 4)
+        assert(balanceOf(e, charles) == member)
+        assert(balanceOf(e, bob) == leader)
+        assert(withdrawAll(e) == member)
+        assert(balanceOf(e, charles) == Coin.zero)
+    }
+
+    test("mainnet-like pool: 10 000 ADA earns its members nothing, 1 000 000 ADA about 114 ADA") {
+        // spec [ES-7] example table (cost 170 ADA, margin 1 %, Ideal, mainnet pparams and
+        // reserves); a pool reward at or below the cost all goes to the leader, [RW-4]
+        import alicePool.*
+        for (ada, memberLovelace) <- Seq(10_000L -> 0L, 1_000_000L -> 114_475_160L) do
+            val e = stakeEmulator(Coin.ada(ada), cost170, margin1, seeded = true)
+            val (leader, member) =
+                onePoolRewards(e.reserves, Coin.zero, Coin.ada(ada), cost170, margin1)
+            boundary(e, 2)
+            assert(balanceOf(e, charles) == member, s"$ada ADA")
+            assert(balanceOf(e, bob) == leader, s"$ada ADA")
+            assert(member.value / 1000 == memberLovelace / 1000, s"$ada ADA: $member")
+        // the pool reward of 10 000 ADA, all of it the leader's: 2.856 ADA
+        val small = stakeEmulator(Coin.ada(10_000), cost170, margin1, seeded = true)
+        boundary(small, 2)
+        assert(balanceOf(small, bob).value / 1000 == 2_856L)
+    }
+
+    test(
+      "Measured: a chain of Unattributed blocks pays nothing, a chain of Pool(P) blocks pays P"
+    ) {
+        // spec [ES-1], [ES-5], [RW-3], acceptance 4 of phase 4: with f = 1/432 000 one block is
+        // the expected count of an epoch
+        import alicePool.*
+        val measured = ChainConfig.manual
+            .withPoolPerformance(PoolPerformance.Measured)
+            .withActiveSlotsCoeff(UnitInterval(1, slotConfig.epochLength))
+        def paidAfterTwoBoundaries(config: ChainConfig): (Coin, Coin) = {
+            val e = rewardEmulator(config)
+            e.produceBlock()
+            boundary(e, 1)
+            boundary(e, 2)
+            (balanceOf(e, charles), balanceOf(e, bob))
+        }
+        assert(paidAfterTwoBoundaries(measured) == (Coin.zero, Coin.zero))
+        val (member, leader) =
+            paidAfterTwoBoundaries(measured.withBlockIssuer(BlockIssuer.pool(id)))
+        assert(member > Coin.zero)
+        assert(leader == registration.cost)
+        assert((member, leader) == paidAfterTwoBoundaries(ChainConfig.manual))
+    }
+
+    test("the stake reads give the snapshots and the pending rewards of the tip") {
+        // spec [ES-9], [ES-9a] (D82)
+        import alicePool.*
+        val e = stakeEmulator(Coin.ada(1_000_000), cost170, margin1, seeded = true)
+        assert(e.snapshots == epochOf(e).snapshots)
+        assert(e.snapshots.go.activeStake == Map(charles -> Coin.ada(1_000_000)))
+        assert(e.pendingRewards.isEmpty)
+        boundary(e, 1)
+        assert(e.snapshots == epochOf(e).snapshots)
+        assert(e.pendingRewards == epochOf(e).pendingRewards)
+        assert(e.pendingRewards.exists(_.rewards.contains(charles)))
+        assert(stateOf(e).snapshots == e.snapshots)
+        assert(stateOf(e).pendingRewards == e.pendingRewards)
     }
 }

@@ -113,13 +113,43 @@
   registered after a long `setSlot` jump gets an earlier expiry, as on a node), drops the
   committee state of credentials that are not committee members, and sets
   `State.deposited` to the sum of all deposits the ledger holds.
+- At each epoch boundary the Emulator now takes the stake snapshots as the ledger's SNAP does:
+  the new `mark` holds the stake of each registered credential that delegates to a pool (the
+  coin of its base-address outputs plus its reward balance) and a record of every registered
+  pool, and the old `mark` and `set` move to `set` and `go`. The genesis fills all three from
+  the initial state. The types `SnapShots`, `StakeSnapshot` and `PoolSnapshot` are in
+  `scalus.cardano.ledger.epoch`; the reward update reads `go`.
+- `ChainConfig.withBlockIssuer(BlockIssuer.pool(poolId))` makes every block the Emulator forges
+  count for that pool, as the ledger counts the blocks each pool makes in an epoch;
+  `BlockIssuer.Unattributed`, the default of both presets, counts none. JavaScript:
+  `Emulator.create` takes `blockIssuer`, a hex pool id.
+- At each epoch boundary the Emulator now computes the reward update of the new epoch from the
+  `go` snapshot, the fee snapshot, the blocks made and the reserves, with the ledger's formulas
+  in exact rational arithmetic and its rounding. `RewardUpdate` is in
+  `scalus.cardano.ledger.epoch`. The next boundary applies it, as the ledger's NEWEPOCH does:
+  the reward of a registered account goes to its balance, a reward to an unregistered account and
+  `deltaT` go to the treasury, and `deltaR` and `deltaF` change the reserves and the fees. A
+  credential that delegates in epoch e is paid at the boundary into epoch e + 4; stake seeded
+  through `EmulatorInitialState` is paid at the second boundary.
+  `ChainConfig.withPoolPerformance` picks `PoolPerformance.Ideal`, the default of both presets,
+  where every pool with stake earns as a perfect pool, or `PoolPerformance.Measured`, where
+  pools earn by the blocks they made, as on a real chain. `ChainConfig.withActiveSlotsCoeff`
+  sets `f` (default 1/20), which sets the expected blocks of an epoch. Java:
+  `PoolPerformance.ideal()` and `measured()`. JavaScript: `Emulator.create` takes
+  `poolPerformance` (`"ideal"` or `"measured"`) and `activeSlotsCoeff`, a `Fraction`.
+- The Emulator reads the stake snapshots and the pending reward update: `snapshots` and
+  `pendingRewards` on `Emulator`, `EmulatorState` and the testkit `ImmutableEmulator`. Java:
+  `getSnapshots` and `getPendingRewardsOrNull`. JavaScript: `getStakeSnapshots()` and
+  `getPendingRewards()`.
 - The Emulator epoch boundary is tested against the epoch scenarios of the Haskell ledger's Imp
   test suite (proposal expiry and deposit refunds, the dormant-epoch DRep expiry, crossing many
   boundaries), with the epochs and amounts of the Haskell tests.
 - The epoch transition is also tested against 533 NEWEPOCH transitions of the Haskell ledger at
   protocol version 11 (the Dugite conformance corpus, vendored as a 0.7 MB test resource). The
-  pool, proposal-expiry, dormant-epoch, committee-state, donation and deposit fields match in
-  every case that decodes; rewards, snapshots and enactment are not compared yet.
+  pool, proposal-expiry, dormant-epoch, committee-state, donation and deposit fields, the stake
+  snapshots, the blocks made, the reserves, the fees and the treasury after the reward update
+  match in every case that decodes, and so does the reward update computed from each input
+  state. These cases make no blocks, so they pay no pool rewards; enactment is not compared yet.
 
 ### Changed
 
@@ -131,8 +161,11 @@
 - **Migration hazard: every Emulator factory runs the epoch rules at each epoch boundary that a
   slot change crosses, and no option turns them off.** A test that crosses a boundary sees the
   effects of each rule as it lands: the move of the donations, the reaping of retired pools and
-  the expiry of proposals now, later rewards for delegated accounts and the enactment of
-  ratified proposals.
+  the expiry of proposals and the rewards for delegated accounts now, later the enactment of
+  ratified proposals. From the second boundary on, every boundary also moves `deltaT` of the
+  reward update from the reserves to the treasury, with no stake too (about 3.6 M ADA with the
+  default reserves), and takes the fees of the previous epoch out of `fees`. A test that crosses
+  two or more boundaries and asserts an absolute treasury, reserves or reward balance changes.
 - The Emulator rejects proposals and votes that the ledger rejects. For example, a proposal whose
   deposit return account is not registered, a ParameterChange or TreasuryWithdrawals whose
   guardrails script hash differs from the constitution's, a vote by an unregistered DRep or pool,
@@ -142,6 +175,13 @@
   `Array[io.bullet.borer.Dom.Element]`, so `State.govState` and `UTxOState.govState` change type.**
   Code that builds an array for them, or compares them with `sameElements`, no longer compiles;
   use `GovState.empty` and `==`.
+- **Migration hazard: `ProtocolParams.monetaryExpansion` (rho) and `treasuryCut` (tau) change
+  type from `Double` to `UnitInterval`, and `poolPledgeInfluence` (a0) from `Double` to
+  `NonNegativeInterval`, the ledger types; Java's `monetaryExpansion()`, `treasuryCut()` and
+  `poolPledgeInfluence()` return them.** Code that builds a `ProtocolParams` or reads the three
+  fields as numbers no longer compiles; call `.toDouble` on the value, or pass
+  `UnitInterval(3, 1000)`. The Blockfrost and cardano-cli JSON readers take the exact decimal, so
+  `"rho": 0.003` reads as `3/1000`; the JSON they write is unchanged.
 - **`scalus-plugin` is no longer published for Scala 3.3.7. A project on Scala 3.3.x must use
   3.3.8 or 3.3.9.** The `_3` library artifacts are built with Scala 3.3.9.
 - **`ProgramFlatCodec.decodeFlat`, `DeBruijnedProgram.fromFlatEncoded`, `fromCbor` and
@@ -181,6 +221,10 @@
 
 ### Deprecated
 
+- `RewardsCalculation` and `StakeDistribution`: they use `Double` and not the ledger's formulas.
+  The Emulator computes the stake snapshots and the reward update at each epoch boundary; read
+  them with `snapshots` and `pendingRewards` (types in `scalus.cardano.ledger.epoch`).
+  `Emulator.stakeDistribution` stays, and now sums the same instant stake as the snapshots.
 - The 4-argument `PoolsState` constructor and companion `apply`, which have no VRF map: use the
   5-argument form or `PoolsState.empty`. The 4-argument `PoolsState.copy` is gone, since a case
   class has one `copy`; a call by field name such as `copy(retiring = ...)` still compiles.

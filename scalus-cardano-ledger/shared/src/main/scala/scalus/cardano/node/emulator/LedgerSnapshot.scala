@@ -1,7 +1,7 @@
 package scalus.cardano.node.emulator
 
 import scalus.cardano.ledger.{DataHash, KeepRaw, SlotNo, Transaction}
-import scalus.cardano.ledger.epoch.internal.{EpochState, EpochTransition}
+import scalus.cardano.ledger.epoch.internal.{EpochEnv, EpochState, EpochTransition}
 import scalus.cardano.ledger.rules.{Context, State}
 import scalus.cardano.node.EmulatorBase
 import scalus.uplc.builtin.Data
@@ -36,14 +36,21 @@ private[node] case class LedgerSnapshot(
       * boundary from the one after `epoch.lastEpoch` to the epoch of `slot`, in order, ledger-rules
       * spec [EB-1], [EB-1a]; none when the move crosses no boundary, spec [EB-2], or goes
       * backwards. The env takes `slot` and the treasury of the account state, spec [DM-13]. The
-      * same snapshot when it is at `slot` already.
+      * same snapshot when it is at `slot` already. The transitions read the pparams of `context`
+      * and the reward settings of `config`, ledger-rules spec D84.
       */
-    private[node] def atSlot(slot: SlotNo): LedgerSnapshot =
+    private[node] def atSlot(slot: SlotNo, config: ChainConfig): LedgerSnapshot =
         if context.env.slot == slot then this
         else
             val boundaries = epoch.lastEpoch + 1 to context.slotConfig.epochOf(slot)
+            lazy val epochEnv = EpochEnv(
+              context.env.params,
+              context.slotConfig.epochLength,
+              config.poolPerformance,
+              config.activeSlotsCoeff
+            )
             val (newLedger, newEpoch) = boundaries.foldLeft((ledger, epoch)) {
-                case ((l, e), boundary) => EpochTransition.transition(l, e, boundary)
+                case ((l, e), boundary) => EpochTransition.transition(l, e, boundary, epochEnv)
             }
             val env = context.env.copy(slot = slot, treasury = newEpoch.accountState.treasury)
             LedgerSnapshot(newLedger, context.copy(env = env), binaryDatums, newEpoch)

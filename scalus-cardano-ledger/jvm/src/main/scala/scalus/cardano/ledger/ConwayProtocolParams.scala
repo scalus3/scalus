@@ -79,7 +79,9 @@ case class ConwayProtocolParams(
     minFeeRefScriptCostPerByte: NonNegativeInterval
 ):
     /** Convert to scalus's [[ProtocolParams]] type. All fields come from the decoded CBOR; no
-      * external baseline is consulted.
+      * external baseline is consulted. `a0`, `rho` and `tau` are put in lowest terms, as the ledger
+      * holds them (`%` in `boundRational`, cardano-ledger-core BaseTypes.hs:340) and as the JSON
+      * readers give them, spec [DM-20a], [DM-21a].
       */
     def toProtocolParams: ProtocolParams =
         ProtocolParams(
@@ -102,15 +104,15 @@ case class ConwayProtocolParams(
           maxValueSize = maxValSize,
           minFeeRefScriptCostPerByte = minFeeRefScriptCostPerByte.floor,
           minPoolCost = minPoolCost,
-          monetaryExpansion = rho.toDouble,
-          poolPledgeInfluence = a0.toDouble,
+          monetaryExpansion = rho.reduce,
+          poolPledgeInfluence = a0.reduce,
           poolRetireMaxEpoch = eMax,
           poolVotingThresholds = poolVotingThresholds,
           protocolVersion = protocolVersion,
           stakeAddressDeposit = keyDeposit,
           stakePoolDeposit = poolDeposit,
           stakePoolTargetNum = nOpt,
-          treasuryCut = tau.toDouble,
+          treasuryCut = tau.reduce,
           txFeeFixed = minFeeB,
           txFeePerByte = minFeeA,
           utxoCostPerByte = coinsPerUTxOByte

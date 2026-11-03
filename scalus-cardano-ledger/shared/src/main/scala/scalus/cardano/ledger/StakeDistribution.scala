@@ -6,7 +6,12 @@ import scalus.cardano.address.*
   *
   * Implements the SNAP rule from the Cardano ledger specification. Computes stake distribution from
   * the current ledger state.
+  *
+  * Deprecated, ledger-rules spec [DM-15]: the Emulator takes the stake snapshots of the ledger's
+  * SNAP at each epoch boundary; read them with `Emulator.snapshots`, a
+  * `scalus.cardano.ledger.epoch.SnapShots`, or the live stake with `Emulator.stakeDistribution`.
   */
+@deprecated("use scalus.cardano.ledger.epoch: Emulator.snapshots are the stake snapshots", "1.4.1")
 object StakeDistribution:
 
     /** Result of stake distribution computation */

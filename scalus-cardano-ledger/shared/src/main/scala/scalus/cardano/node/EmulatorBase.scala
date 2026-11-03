@@ -5,7 +5,7 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, STS, State}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.AccountState
+import scalus.cardano.ledger.epoch.{AccountState, RewardUpdate, SnapShots}
 import scalus.cardano.ledger.epoch.internal.EpochTransition
 import scalus.cardano.node.emulator.{AwaitTxPolicy, ChainConfig, ChainView, ChainViewError, ForgeError, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
@@ -82,7 +82,10 @@ trait EmulatorBase extends BlockchainProvider {
       */
     private[scalus] def binaryDatums: Map[DataHash, KeepRaw[Data]] = readState.binaryDatums
 
-    /** The fees collected by the applied transactions. */
+    /** The fee pot: the fees of the applied transactions since the last epoch boundary, plus those
+      * of the epoch before it, which the next boundary takes out (`deltaF`, ledger-rules spec
+      * [RW-12]).
+      */
     def fees: Coin = readState.ledger.fees
 
     /** The donations of this epoch. The next epoch boundary moves them into [[treasury]]. */
@@ -98,6 +101,17 @@ trait EmulatorBase extends BlockchainProvider {
       * mainnet reserves by default, spec [ES-7].
       */
     def reserves: Coin = readState.accountState.reserves
+
+    /** The stake snapshots `mark`, `set` and `go` and the fee snapshot, as of the last epoch
+      * boundary, ledger-rules spec [ES-9a]. The genesis fills all three from the initial state,
+      * spec [ES-8a].
+      */
+    def snapshots: SnapShots = readState.snapshots
+
+    /** The reward update the last epoch boundary computed from `go`, which the next boundary pays,
+      * ledger-rules spec [ES-9a], [RW-21]. `None` before the first boundary, spec [ES-8a].
+      */
+    def pendingRewards: Option[RewardUpdate] = readState.pendingRewards
 
     /** The epoch of the current slot, ledger-rules spec [ES-9]. */
     def currentEpoch: EpochNo = {
@@ -231,9 +245,12 @@ trait EmulatorBase extends BlockchainProvider {
       * it, plus its reward balance, and the pool it delegates to.
       *
       * This is the emulator's answer to "who controls how much stake", the query a governance or
-      * delegation test needs. It is not a reward calculation: nothing is paid out.
+      * delegation test needs. It is the stake now, not a stake snapshot: [[snapshots]] holds the
+      * stake of the last epoch boundaries, which the rewards read. A row here may be for a
+      * credential that is not registered or delegates to no pool; a snapshot has no such row.
       *
-      * Pointer addresses are ignored — they are deprecated and carry no stake here.
+      * The coin is the ledger's instant stake, the one SNAP reads: pointer, enterprise and Byron
+      * addresses carry none.
       *
       * Reads the state cell once, the way [[snapshot]] does. Two reads would let a submission land
       * between them on the JVM, producing a row whose `stake` came from the post-transaction UTxO
@@ -242,7 +259,8 @@ trait EmulatorBase extends BlockchainProvider {
     def stakeDistribution: Seq[StakeDistributionEntry] = {
         val state = readState
         val accounts = state.ledger.certState.dstate.accounts
-        val stakeByCredential = StakeDistribution.aggregateUtxoStake(state.ledger.utxos)
+        // ledger-rules spec [DM-15] (D80): the instant stake that SNAP reads
+        val stakeByCredential = EpochTransition.instantStake(state.ledger.utxos)
         val credentials = accounts.keySet ++ stakeByCredential.keySet
         credentials.toSeq.map { credential =>
             val account = accounts.get(credential)

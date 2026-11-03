@@ -5,6 +5,10 @@ import org.scalatest.matchers.should.Matchers
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 
+import scala.annotation.nowarn
+
+// tests of the deprecated StakeDistribution, kept while it ships (ledger-rules spec [DM-15], D80)
+@nowarn("msg=deprecated")
 class StakeDistributionTest extends AnyFunSuite with Matchers:
 
     test("validate stake aggregation with simple mock data") {

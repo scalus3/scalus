@@ -3,7 +3,7 @@ package scalus.cardano.node
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
-import scalus.cardano.node.emulator.{BlockForge, ChainConfig, ForgeError}
+import scalus.cardano.node.emulator.{BlockForge, BlockIssuer, ChainConfig, ForgeError}
 import scalus.cardano.node.stream.ChainPoint
 import scalus.cardano.txbuilder.{Datum, ScriptSource, ThreeArgumentPlutusScriptWitness, TxBuilder}
 import scalus.testing.kit.Party.{Alice, Bob}
@@ -52,7 +52,8 @@ class BlockRefScriptsSizeTest extends AnyFunSuite {
           )
         ).copy(isValid = isValid)
 
-    test("a later tx that references an output of an earlier valid tx counts it at PV 11, [BB-3]") {
+    test("a later tx that references an output of an earlier valid tx counts it at PV 11") {
+        // ledger-rules spec [BB-3]
         val start: Utxos = Map(input(0) -> withScript(1000))
         val first = tx(inputs = Set(input(1)), outputs = IndexedSeq(withScript(500)))
         val second = tx(referenceInputs = Set(Input(first.id, 0), input(0)))
@@ -62,7 +63,8 @@ class BlockRefScriptsSizeTest extends AnyFunSuite {
         assert(BlockForge.refScriptsSize(txs, start, pv10) == 1000L)
     }
 
-    test("an earlier tx with isValid = false adds only its collateral return, [BB-4]") {
+    test("an earlier tx with isValid = false adds only its collateral return") {
+        // ledger-rules spec [BB-4]
         val first = tx(
           inputs = Set(input(1)),
           outputs = IndexedSeq(withScript(500)),
@@ -78,7 +80,8 @@ class BlockRefScriptsSizeTest extends AnyFunSuite {
         assert(BlockForge.refScriptsSize(IndexedSeq(first, outputOnly), Map.empty, pv11) == 0L)
     }
 
-    test("an input spent by an earlier tx still counts for a later tx, [BB-3]") {
+    test("an input spent by an earlier tx still counts for a later tx") {
+        // ledger-rules spec [BB-3]
         val start: Utxos = Map(input(0) -> withScript(1000))
         val first = tx(inputs = Set(input(0)))
         val second = tx(referenceInputs = Set(input(0)))
@@ -97,7 +100,8 @@ class BlockRefScriptsSizeTest extends AnyFunSuite {
         (sizes.indices.map(i => tx(referenceInputs = Set(input(i)))), utxos)
     }
 
-    test("a block of exactly 1 MiB of reference scripts fits, one byte more does not, [BB-1]") {
+    test("a block of exactly 1 MiB of reference scripts fits, one byte more does not") {
+        // ledger-rules spec [BB-1]
         // totalRefScriptSize <= maxRefScriptSizePerBlock (C/Rules/Bbody.hs:347-348), with
         // ppMaxRefScriptSizePerBlockG = 1024 * 1024 (C/PParams.hs:981)
         val params = testEnv.protocolParams
@@ -142,7 +146,8 @@ class BlockRefScriptsSizeTest extends AnyFunSuite {
           ChainConfig.manual
         )
 
-    test("six txs of 200 KiB of reference scripts forge as two blocks, [BB-1]") {
+    test("six txs of 200 KiB of reference scripts forge as two blocks") {
+        // ledger-rules spec [BB-1]
         val txs = (0 until txCount).map(referencing)
         assert(BlockForge.refScriptsSize(txs, initialUtxos, pv11) == txCount.toLong * refScriptSize)
         val e = emulator()
@@ -156,9 +161,28 @@ class BlockRefScriptsSizeTest extends AnyFunSuite {
         assert(e.mempoolTxs.isEmpty)
     }
 
-    test(
-      "a tx with isValid = false over 200 KiB of reference scripts is refused at submit, [BB-1]"
-    ) {
+    test("a mempool forged as two blocks counts both for the issuer") {
+        // ledger-rules spec [ES-4a]
+        // In Instant each tx forges its own block; rollback(6) returns the six txs to the mempool,
+        // validated on genesis, and the forge makes two blocks of them without revalidating. The
+        // second block's entries still carry the epoch state from before the first block, so the
+        // count must come from the ticked base of each forge.
+        val pool = PoolKeyHash.fromHex("b7" * 28)
+        val e = Emulator.withState(
+          EmulatorInitialState(initialUtxos),
+          rules.Context.testMainnet(),
+          ChainConfig.instant.withBlockIssuer(BlockIssuer.pool(pool))
+        )
+        (0 until txCount).map(referencing).foreach(tx => assert(e.submitSync(tx) == Right(tx.id)))
+        assert(EmulatorBase.stateOf(e).tipSnapshot.epoch.blocksMadeCur == Map(pool -> 6L))
+        assert(e.rollback(txCount).isRight)
+        val state = EmulatorBase.stateOf(e)
+        assert(state.selectedChain.map(_.txs.size) == Vector(5, 1))
+        assert(state.tipSnapshot.epoch.blocksMadeCur == Map(pool -> 2L))
+    }
+
+    test("a tx with isValid = false over 200 KiB of reference scripts is refused at submit") {
+        // ledger-rules spec [BB-1]
         // LEDGER skips the per-tx limit when isValid is false (TxRefScriptsSizeValidator), but the
         // node's mempool measure applies it to every tx it admits (txMeasureRefScripts,
         // ouroboros-consensus Shelley/Ledger/Mempool.hs). Without it the forge, which always takes
@@ -202,7 +226,8 @@ class BlockRefScriptsSizeTest extends AnyFunSuite {
         assert(e.mempoolTxs.isEmpty)
     }
 
-    test("produceBlock(on, ...) rejects txs over 1 MiB of reference scripts, [BB-2]") {
+    test("produceBlock(on, ...) rejects txs over 1 MiB of reference scripts") {
+        // ledger-rules spec [BB-2]
         val txs = (0 until txCount).map(referencing)
         val e = emulator()
         val before = EmulatorBase.stateOf(e)

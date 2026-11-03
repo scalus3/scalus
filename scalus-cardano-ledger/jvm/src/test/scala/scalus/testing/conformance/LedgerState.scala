@@ -12,6 +12,13 @@ import scala.util.Using
 case class LedgerState(certs: LedgerState.CertState, utxos: UTxOState) derives Decoder
 object LedgerState {
 
+    /** A CBOR set, with or without tag 258. */
+    private[conformance] def readTaggedSet[A: Decoder](r: Reader): Set[A] =
+        if r.dataItem() == DataItem.Tag then
+            val tag = r.readTag()
+            if tag.code != 258 then r.validationFailure(s"Expected tag 258 for Set, got $tag")
+        r.read[Set[A]]()
+
     def fromCbor(cbor: Array[Byte]): LedgerState = {
         given OriginalCborByteArray = OriginalCborByteArray(cbor)
         Cbor.decode(cbor).to[LedgerState].value
@@ -189,12 +196,6 @@ object LedgerState {
             RewardAccount(
               scalus.cardano.address.StakeAddress(scalus.cardano.address.Network.Testnet, payload)
             )
-
-        private def readTaggedSet[A](r: Reader)(using decoder: Decoder[A]): Set[A] =
-            if r.dataItem() == DataItem.Tag then
-                val tag = r.readTag()
-                if tag.code != 258 then r.validationFailure(s"Expected tag 258 for Set, got $tag")
-            r.read[Set[A]]()
 
         given Decoder[PState] with
             def read(r: Reader): PState =

@@ -99,7 +99,7 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             val e = run(ops)
             val state = stateOf(e)
             state.mempool.foldLeft(state.tipSnapshot) { (base, entry) =>
-                val ticked = base.atSlot(e.currentSlotSync)
+                val ticked = base.atSlot(e.currentSlotSync, state.config)
                 val ledger = STS.Mutator
                     .transit(
                       e.validators,

@@ -1,7 +1,7 @@
 package scalus.cardano.node
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.Network
+import scalus.cardano.address.{Address, Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
@@ -225,11 +225,123 @@ class JEmulatorChainTest extends AnyFunSuite {
             assert(thrown.exception.isInstanceOf[js.TypeError], option)
     }
 
+    /** The `deltaT` of the reward update after one block in the first epoch and its boundary; with
+      * no fee it is above 0 exactly when eta is.
+      */
+    private def deltaTAfterOneBlock(chain: (String, js.Any)*): BigInt = {
+        val e = create(chain*)
+        e.produceBlock()
+        val slotConfig = testEnv.slotConfig
+        e.setSlot(slotConfig.firstSlotOfEpoch(slotConfig.epochOf(0L) + 1).toDouble)
+        val update = e.getPendingRewards().toOption.getOrElse(fail("nothing pending"))
+        BigInt(update.deltaT.toString)
+    }
+
+    private val measured: (String, js.Any) = "poolPerformance" -> "measured"
+
+    test("blockIssuer takes the hex id of a pool; another value is a TypeError") {
+        // ledger-rules spec [ES-10a], [ES-1], [RW-14]: under Measured a block counts only with
+        // a Pool issuer, and eta = 0 makes deltaT = 0
+        assert(deltaTAfterOneBlock(measured) == 0)
+        assert(deltaTAfterOneBlock(measured, "blockIssuer" -> "b7" * 28) > 0)
+        for bad <- Seq("b7" * 27, "zz" * 28) do
+            val thrown = intercept[js.JavaScriptException](create("blockIssuer" -> bad))
+            val error = thrown.exception.asInstanceOf[js.Error]
+            assert(error.isInstanceOf[js.TypeError], bad)
+            assert(error.message == s"blockIssuer must be the hex of 28 bytes, got: \"$bad\"")
+    }
+
+    test("poolPerformance and activeSlotsCoeff are taken; a bad value is a TypeError") {
+        // ledger-rules spec [ES-10a], [RW-14], [RW-15]: Ideal has eta = 1 with no counted block,
+        // Measured eta = 0; with one block, eta = 1 / floor(f · epochLength), so a larger f
+        // gives a smaller deltaT
+        assert(deltaTAfterOneBlock("poolPerformance" -> "ideal") > 0)
+        val issuer: (String, js.Any) = "blockIssuer" -> "b7" * 28
+        def coeff(d: Double): (String, js.Any) =
+            "activeSlotsCoeff" -> js.Dynamic.literal(numerator = 1.0, denominator = d)
+        val tenth = deltaTAfterOneBlock(measured, issuer, coeff(10.0))
+        val twentieth = deltaTAfterOneBlock(measured, issuer, coeff(20.0))
+        assert(tenth > 0)
+        assert(tenth < twentieth)
+        def typeError(option: (String, js.Any)): String = {
+            val thrown = intercept[js.JavaScriptException](create(option))
+            val error = thrown.exception.asInstanceOf[js.Error]
+            assert(error.isInstanceOf[js.TypeError], option)
+            error.message
+        }
+        assert(
+          typeError("poolPerformance" -> "perfect") ==
+              "poolPerformance must be \"ideal\" or \"measured\", got: \"perfect\""
+        )
+        for (n, d) <- Seq((0.0, 1.0), (2.0, 1.0), (1.0, 0.0), (0.5, 1.0)) do
+            val message =
+                typeError("activeSlotsCoeff" -> js.Dynamic.literal(numerator = n, denominator = d))
+            assert(
+              message.startsWith("activeSlotsCoeff must be a fraction in (0, 1], got: "),
+              message
+            )
+    }
+
     test("securityParam below 1 names the option in its TypeError") {
         // spec [SF-6]: checked here, not by the require of ChainConfig
         val thrown = intercept[js.JavaScriptException](create("securityParam" -> 0))
         val error = thrown.exception.asInstanceOf[js.Error]
         assert(error.isInstanceOf[js.TypeError])
         assert(error.message == "securityParam must be at least 1, got: 0")
+    }
+
+    test("getStakeSnapshots and getPendingRewards read the stake snapshots and the reward update") {
+        // ledger-rules spec [ES-9a] (D82)
+        val pool = "c3" * 28
+        val bobStake = Bob.account.stakeAddress(Network.Mainnet)
+        val stakeHash = bobStake.credential match
+            case Credential.KeyHash(hash) => hash.toHex
+            case other                    => fail(s"not a key credential: $other")
+        val bobBase =
+            Address(Network.Mainnet, Credential.KeyHash(Bob.addrKeyHash), bobStake.credential)
+        val bobUtxo = Input(genesisHash, 1) -> Output(bobBase, Value.ada(500))
+        val options = js.Dynamic.literal(
+          utxos = js.Array((initialUtxos + bobUtxo).toSeq.map((i, o) => JsUtxo.wrap(i, o))*),
+          slot = 0.0,
+          stakeRegistrations = js.Array(
+            js.Dynamic.literal(
+              credentialType = "key",
+              credentialHash = stakeHash,
+              rewards = js.BigInt(3),
+              delegatedTo = pool
+            )
+          ),
+          poolRegistrations = js.Array(js.Dynamic.literal(poolId = pool))
+        )
+        val emulator =
+            JEmulator.create(JsCardanoInfo.mainnet(), options.asInstanceOf[JsEmulatorOptions])
+        assert(emulator.getPendingRewards().toOption.isEmpty)
+        val snapshots = emulator.getStakeSnapshots()
+        assert(snapshots.fee.toString == "0")
+        for entries <- Seq(snapshots.mark, snapshots.set, snapshots.go) do
+            assert(entries.length == 1)
+            val entry = entries(0)
+            assert(entry.credential == stakeHash)
+            assert(entry.rewardAddress == bobStake.toBech32.get)
+            assert(entry.pool == pool)
+            assert(entry.stake.toString == (Coin.ada(500) + Coin(3)).value.toString)
+
+        val slotConfig = testEnv.slotConfig
+        emulator.setSlot(slotConfig.firstSlotOfEpoch(slotConfig.epochOf(0L) + 1).toDouble)
+        val update = emulator.getPendingRewards().toOption.getOrElse(fail("nothing pending"))
+        // the pool's 500 ADA earns less than its cost, so its operator, the reward account of a
+        // pool given by poolId, takes the whole pool reward; nothing pays fees
+        assert(update.rewards.length == 1)
+        val reward = update.rewards(0)
+        assert(reward.credential == pool)
+        val operatorStake =
+            StakeAddress(Network.Mainnet, StakePayload.Stake(StakeKeyHash.fromHex(pool)))
+        assert(reward.rewardAddress == operatorStake.toBech32.get)
+        assert(BigInt(reward.amount.toString) > 0)
+        assert(update.deltaF.toString == "0")
+        // spec [RW-9]: the four parts sum to 0
+        val parts = Seq(update.deltaT, update.deltaR, reward.amount, update.deltaF)
+        assert(parts.map(p => BigInt(p.toString)).sum == 0)
+        assert(BigInt(update.deltaT.toString) > 0)
     }
 }

@@ -1,5 +1,8 @@
 package scalus.cardano.node.emulator
 
+import scalus.cardano.ledger.{PoolKeyHash, UnitInterval}
+import scalus.cardano.ledger.epoch.PoolPerformance
+
 /** When the Emulator forges a block, spec section 5. */
 enum BlockProduction {
 
@@ -30,6 +33,28 @@ enum OrphanTxPolicy {
     case Drop
 }
 
+/** Which pool the Emulator's blocks count for, ledger-rules spec [ES-3]. */
+enum BlockIssuer {
+
+    /** No pool: a block counts for none, spec [ES-5]. */
+    case Unattributed
+
+    /** The pool `poolId`, registered or not: each block counts in its blocks made, spec [ES-4]. */
+    case Pool(poolId: PoolKeyHash)
+}
+
+object BlockIssuer {
+
+    // Java names a case of a Scala 3 enum only through the module class, so these forward as
+    // static methods, `BlockIssuer.pool(id)`, as ChainView does, ledger-rules spec [ES-1a].
+
+    /** [[Unattributed]], for Java. */
+    def unattributed: BlockIssuer = Unattributed
+
+    /** [[Pool]], for Java. */
+    def pool(poolId: PoolKeyHash): BlockIssuer = Pool(poolId)
+}
+
 /** How the Emulator behaves as a chain, spec section 5.
   *
   * The constructor is private, so Scala 3 makes `apply` and `copy` private too: Java and JS cannot
@@ -38,14 +63,28 @@ enum OrphanTxPolicy {
   *
   * @param securityParam
   *   k, the deepest rollback the Emulator allows. At least 1.
+  * @param poolPerformance
+  *   how the reward calculation rates the pools, ledger-rules spec [ES-1]
+  * @param activeSlotsCoeff
+  *   `f`, the share of slots with a block, which sets the expected blocks of an epoch under
+  *   `Measured`, ledger-rules spec [ES-2a], [RW-14]. Above 0.
+  * @param blockIssuer
+  *   the pool each forged block counts for, ledger-rules spec [ES-3]
   */
 final case class ChainConfig private (
     blockProduction: BlockProduction,
     awaitTx: AwaitTxPolicy,
     orphanTxs: OrphanTxPolicy,
-    securityParam: Long
+    securityParam: Long,
+    poolPerformance: PoolPerformance,
+    activeSlotsCoeff: UnitInterval,
+    blockIssuer: BlockIssuer
 ) {
     require(securityParam >= 1, s"securityParam must be at least 1, got $securityParam")
+    require(
+      activeSlotsCoeff.numerator > 0,
+      s"activeSlotsCoeff must be above 0, got ${activeSlotsCoeff.numerator}/${activeSlotsCoeff.denominator}"
+    )
 
     def withBlockProduction(blockProduction: BlockProduction): ChainConfig =
         copy(blockProduction = blockProduction)
@@ -55,16 +94,29 @@ final case class ChainConfig private (
     def withOrphanTxs(orphanTxs: OrphanTxPolicy): ChainConfig = copy(orphanTxs = orphanTxs)
 
     def withSecurityParam(securityParam: Long): ChainConfig = copy(securityParam = securityParam)
+
+    def withPoolPerformance(poolPerformance: PoolPerformance): ChainConfig =
+        copy(poolPerformance = poolPerformance)
+
+    def withActiveSlotsCoeff(activeSlotsCoeff: UnitInterval): ChainConfig =
+        copy(activeSlotsCoeff = activeSlotsCoeff)
+
+    def withBlockIssuer(blockIssuer: BlockIssuer): ChainConfig = copy(blockIssuer = blockIssuer)
 }
 
 object ChainConfig {
 
-    /** The default: every submit forges a block, spec [CF-2], [CF-4]. */
+    /** The default: every submit forges a block, spec [CF-2], [CF-4]. Every pool is rated `Ideal`,
+      * `f` is 1/20, and no block counts for a pool, ledger-rules spec [ES-1] to [ES-3].
+      */
     val instant: ChainConfig = new ChainConfig(
       BlockProduction.Instant,
       AwaitTxPolicy.ProduceBlock,
       OrphanTxPolicy.ReturnToMempool,
-      2160L
+      2160L,
+      PoolPerformance.Ideal,
+      UnitInterval(1, 20),
+      BlockIssuer.Unattributed
     )
 
     /** Only an explicit call forges a block, spec [CF-2]. */

@@ -322,7 +322,7 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             val state = stateOf(e)
             val folded =
                 state.selectedChain.flatMap(_.txs).foldLeft(genesis) { (snapshot, applied) =>
-                    val ticked = snapshot.atSlot(applied.slot)
+                    val ticked = snapshot.atSlot(applied.slot, state.config)
                     val ledger = STS.Mutator
                         .transit(
                           e.validators,
@@ -337,7 +337,7 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                       binaryDatums = ticked.binaryDatums ++ EmulatorBase.binaryDatumsOf(applied.tx)
                     )
                 }
-            assert(folded.atSlot(e.currentSlotSync) == state.tipSnapshot)
+            assert(folded.atSlot(e.currentSlotSync, state.config) == state.tipSnapshot)
             assert(state.context.fee == Coin.zero, "no transition writes Context.fee")
         }
     }

@@ -426,15 +426,28 @@ class EmulatorParityTest extends AnyFunSuite {
         assert(emulator.donation == Coin(5))
     }
 
-    test("tick across an epoch boundary moves the donations into the treasury") {
-        // spec [SC-7a], [SC-7f]: every slot advance, not only setSlot
-        val emulator = emulatorWithTreasury(Coin(1000))
-        val tx = donate(emulator, Coin(5), Coin(1000))
-        assert(emulator.submitSync(tx) == Right(tx.id))
+    test("tick across epoch boundaries moves the donations into the treasury once") {
+        // spec [SC-7a], [SC-7f]: every slot advance, not only setSlot. From the second boundary
+        // on, each moves only the deltaT of the reward update, ledger-rules spec [RW-12]
+        def donated(): Emulator = {
+            val emulator = emulatorWithTreasury(Coin(1000))
+            val tx = donate(emulator, Coin(5), Coin(1000))
+            assert(emulator.submitSync(tx) == Right(tx.id))
+            emulator
+        }
+        val epochLength = testEnv.slotConfig.epochLength
+        val stepped = donated()
+        stepped.tick(epochLength)
+        assert(stepped.treasury == Coin(1005))
+        for k <- 2 to 3 do
+            val expected = stepped.treasury + stepped.pendingRewards.fold(Coin.zero)(_.deltaT)
+            stepped.tick(epochLength)
+            assert(stepped.treasury == expected, s"boundary $k")
 
-        emulator.tick(testEnv.slotConfig.epochLength * 3)
-        assert(emulator.treasury == Coin(1005))
-        assert(emulator.donation == Coin.zero)
+        val jumped = donated()
+        jumped.tick(epochLength * 3)
+        assert(jumped.treasury == stepped.treasury)
+        assert(jumped.donation == Coin.zero)
     }
 
     test("a move to an earlier epoch leaves the treasury and the donations as they are") {
@@ -465,8 +478,11 @@ class EmulatorParityTest extends AnyFunSuite {
         assert(emulator.treasury == Coin(1005))
         assert(emulator.donation == Coin.zero)
 
+        // ledger-rules spec [RW-12]: no stake, so the boundary adds only the deltaT computed at
+        // `epoch + 1`, not the donation again
+        val deltaT = emulator.pendingRewards.fold(Coin.zero)(_.deltaT)
         emulator.setSlot(testEnv.slotConfig.firstSlotOfEpoch(epoch + 2))
-        assert(emulator.treasury == Coin(1005))
+        assert(emulator.treasury == Coin(1005) + deltaT)
     }
 
     test("a snapshot keeps the fees, the donations and the treasury") {

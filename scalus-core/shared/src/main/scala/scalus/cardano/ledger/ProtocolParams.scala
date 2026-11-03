@@ -6,6 +6,10 @@ import java.io.InputStream
 
 /** Protocol parameters for the Cardano blockchain of Babbage era Field names are taken from the
   * `cardano-cli query protocol-parameters` output
+  *
+  * `monetaryExpansion` (rho), `treasuryCut` (tau) and `poolPledgeInfluence` (a0) are exact
+  * rationals, as in the ledger (`UnitInterval` and `NonNegativeInterval`), because the reward
+  * calculation uses them exactly. spec [DM-16] to [DM-19]
   * @note
   *   These names are different from CIP-55, don't ask me why.
   */
@@ -29,15 +33,15 @@ case class ProtocolParams(
     maxValueSize: Long,
     minFeeRefScriptCostPerByte: Long,
     minPoolCost: Long,
-    monetaryExpansion: Double,
-    poolPledgeInfluence: Double,
+    monetaryExpansion: UnitInterval,
+    poolPledgeInfluence: NonNegativeInterval,
     poolRetireMaxEpoch: Long,
     poolVotingThresholds: PoolVotingThresholds,
     protocolVersion: ProtocolVersion,
     stakeAddressDeposit: Long,
     stakePoolDeposit: Long,
     stakePoolTargetNum: Long,
-    treasuryCut: Double,
+    treasuryCut: UnitInterval,
     txFeeFixed: Long,
     txFeePerByte: Long,
     utxoCostPerByte: Long
@@ -246,8 +250,9 @@ object ProtocolParams {
                   params.minFeeRefScriptCostPerByte.toDouble
                 ),
                 "min_pool_cost" -> params.minPoolCost.toString,
-                "rho" -> params.monetaryExpansion,
-                "a0" -> params.poolPledgeInfluence,
+                // spec [DM-21a]: JSON numbers, as Blockfrost renders them.
+                "rho" -> params.monetaryExpansion.toDouble,
+                "a0" -> params.poolPledgeInfluence.toDouble,
                 "e_max" -> ujson.Num(params.poolRetireMaxEpoch.toDouble),
                 "pvt_motion_no_confidence" -> params.poolVotingThresholds.motionNoConfidence.toDouble,
                 "pvt_committee_normal" -> params.poolVotingThresholds.committeeNormal.toDouble,
@@ -262,7 +267,7 @@ object ProtocolParams {
                 "key_deposit" -> params.stakeAddressDeposit.toString,
                 "pool_deposit" -> params.stakePoolDeposit.toString,
                 "n_opt" -> ujson.Num(params.stakePoolTargetNum.toDouble),
-                "tau" -> params.treasuryCut,
+                "tau" -> params.treasuryCut.toDouble,
                 "min_fee_b" -> ujson.Num(params.txFeeFixed.toDouble),
                 "min_fee_a" -> ujson.Num(params.txFeePerByte.toDouble),
                 "coins_per_utxo_size" -> params.utxoCostPerByte.toString
@@ -350,8 +355,8 @@ object ProtocolParams {
                 maxValueSize = json("max_val_size").asLong,
                 minFeeRefScriptCostPerByte = json("min_fee_ref_script_cost_per_byte").asLongOr(0L),
                 minPoolCost = json("min_pool_cost").asLong,
-                monetaryExpansion = json("rho").num,
-                poolPledgeInfluence = json("a0").num,
+                monetaryExpansion = unitIntervalField(json, "rho"),
+                poolPledgeInfluence = decimalFraction(json, "a0"),
                 poolRetireMaxEpoch = json("e_max").asLong,
                 poolVotingThresholds = PoolVotingThresholds(
                   motionNoConfidence = json("pvt_motion_no_confidence").numOpt
@@ -380,7 +385,7 @@ object ProtocolParams {
                 stakeAddressDeposit = json("key_deposit").asLong,
                 stakePoolDeposit = json("pool_deposit").asLong,
                 stakePoolTargetNum = json("n_opt").asLong,
-                treasuryCut = json("tau").num,
+                treasuryCut = unitIntervalField(json, "tau"),
                 txFeeFixed = json("min_fee_b").asLong,
                 txFeePerByte = json("min_fee_a").asLong,
                 utxoCostPerByte = json("coins_per_utxo_size").asLong
@@ -411,6 +416,57 @@ object ProtocolParams {
         // case-class equality, and both codecs build it via fromDouble, so it round-trips exactly
         // for the standard threshold values (which have few decimal places).
         given ReadWriter[ExUnitPrices] = macroRW
-        macroRW
+        val derived: ReadWriter[ProtocolParams] = macroRW
+        // spec [DM-20b]: `macroRW` reads the three reward fields through the `Double` codecs above,
+        // so overwrite them from the same JSON by the exact decimal rule of [DM-20a]. The writer
+        // stays `macroRW`'s, which emits `toDouble` numbers ([DM-21a]).
+        readwriter[ujson.Value].bimap[ProtocolParams](
+          params => writeJs(params)(using derived),
+          json => {
+              // Read the three first: the `Double` codecs fail on a negative `a0` or a `rho`
+              // above 1 too, but with a message that does not name the field.
+              val monetaryExpansion = unitIntervalField(json, "monetaryExpansion")
+              val poolPledgeInfluence = decimalFraction(json, "poolPledgeInfluence")
+              val treasuryCut = unitIntervalField(json, "treasuryCut")
+              read[ProtocolParams](json)(using derived).copy(
+                monetaryExpansion = monetaryExpansion,
+                poolPledgeInfluence = poolPledgeInfluence,
+                treasuryCut = treasuryCut
+              )
+          }
+        )
+    }
+
+    /** The exact fraction, in lowest terms, of the decimal in `json(field)`. spec [DM-20a]
+      *
+      * A JSON string is the decimal text. A JSON number has already become a `Double` inside
+      * upickle, so its text is gone; take the shortest decimal that reads back as that `Double`
+      * (`BigDecimal.decimal`), which equals the JSON text for every number of at most 15
+      * significant digits. Never `fromDouble`: `0.003` as a binary fraction is not `3/1000`.
+      */
+    private def decimalFraction(json: ujson.Value, field: String): NonNegativeInterval = {
+        val value = json(field)
+        val decimal = value.strOpt match
+            case Some(text) => BigDecimal(text)
+            case None       => BigDecimal.decimal(value.num)
+        val unscaled = BigInt(decimal.bigDecimal.unscaledValue)
+        val scale = decimal.scale
+        val (num, den) =
+            if scale >= 0 then (unscaled, BigInt(10).pow(scale))
+            else (unscaled * BigInt(10).pow(-scale), BigInt(1))
+        try NonNegativeInterval.reduceBigInt(num, den)
+        catch
+            case e: IllegalArgumentException =>
+                // no cause: rootCauseMessage reports the deepest message, which has no field
+                throw IllegalArgumentException(s"$field: $decimal: ${e.getMessage}")
+    }
+
+    private def unitIntervalField(json: ujson.Value, field: String): UnitInterval = {
+        val r = decimalFraction(json, field)
+        require(
+          r.numerator <= r.denominator,
+          s"$field: ${r.numerator}/${r.denominator} is not in the unit interval [0, 1]"
+        )
+        UnitInterval(r.numerator, r.denominator)
     }
 }

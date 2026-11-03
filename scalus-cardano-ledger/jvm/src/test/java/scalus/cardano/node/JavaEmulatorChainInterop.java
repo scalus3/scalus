@@ -2,8 +2,13 @@ package scalus.cardano.node;
 
 import scalus.cardano.address.Address;
 import scalus.cardano.ledger.Transaction;
+import scalus.cardano.ledger.UnitInterval;
 import scalus.cardano.ledger.Utxo;
 import scalus.cardano.ledger.Value;
+import scalus.cardano.ledger.epoch.PoolPerformance;
+import scalus.cardano.ledger.epoch.RewardUpdate;
+import scalus.cardano.ledger.epoch.SnapShots;
+import scalus.cardano.node.emulator.BlockIssuer;
 import scalus.cardano.node.emulator.ChainConfig;
 import scalus.cardano.node.emulator.ChainView;
 import scalus.cardano.node.emulator.ChainViewError;
@@ -35,6 +40,28 @@ public final class JavaEmulatorChainInterop {
     public static Emulator createManual(List<Address> addresses, Value value) {
         ChainConfig config = ChainConfig.manual().withSecurityParam(10L);
         return Emulator.withAddresses(addresses, value, config);
+    }
+
+    // BlockIssuer from Java: the static forwarders and the with-method, ledger-rules spec [ES-1a].
+    // A pool id is a ByteString to Java, since PoolKeyHash is an opaque type.
+    public static ChainConfig issuedBy(ByteString poolId) {
+        return ChainConfig.manual().withBlockIssuer(BlockIssuer.pool(poolId));
+    }
+
+    public static BlockIssuer unattributed() {
+        return BlockIssuer.unattributed();
+    }
+
+    // The reward settings from Java: the static forwarders of PoolPerformance and the
+    // with-methods, ledger-rules spec [ES-1], [ES-2a], [ES-1a].
+    public static ChainConfig measured(long fNumerator, long fDenominator) {
+        return ChainConfig.manual()
+                .withPoolPerformance(PoolPerformance.measured())
+                .withActiveSlotsCoeff(new UnitInterval(fNumerator, fDenominator));
+    }
+
+    public static PoolPerformance ideal() {
+        return PoolPerformance.ideal();
     }
 
     public static ChainPoint produceBlock(Emulator emulator) {
@@ -118,4 +145,16 @@ public final class JavaEmulatorChainInterop {
             Emulator emulator, Address address, int depth) {
         return emulator.findUtxosForAddress(address, ChainView.stable(depth));
     }
+
+    // The stake reads from Java, ledger-rules spec [ES-9a]
+
+    public static SnapShots snapshots(Emulator emulator) {
+        return emulator.getSnapshots();
+    }
+
+    /** The pending reward update, or null when nothing is pending. */
+    public static RewardUpdate pendingRewards(Emulator emulator) {
+        return emulator.getPendingRewardsOrNull();
+    }
 }
+

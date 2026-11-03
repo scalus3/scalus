@@ -4,7 +4,15 @@ package scalus.cardano.ledger
   *
   * Implements rewards computation according to the Cardano ledger specification. Based on the
   * POOLREAP and REWARD rules.
+  *
+  * Deprecated, ledger-rules spec [DM-15]: it uses `Double` and not the ledger's formula. The
+  * Emulator computes the reward update of each epoch boundary in exact arithmetic; read it with
+  * `Emulator.pendingRewards`, a `scalus.cardano.ledger.epoch.RewardUpdate`.
   */
+@deprecated(
+  "use scalus.cardano.ledger.epoch: Emulator.pendingRewards is the reward update",
+  "1.4.1"
+)
 object RewardsCalculation:
 
     /** Configuration parameters for rewards calculation */

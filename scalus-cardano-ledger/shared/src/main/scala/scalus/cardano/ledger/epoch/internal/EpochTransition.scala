@@ -1,6 +1,8 @@
 package scalus.cardano.ledger.epoch.internal
 
-import scalus.cardano.ledger.{CertState, Coin, Credential, EpochNo, GovState, PoolKeyHash, VrfKeyHash}
+import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart}
+import scalus.cardano.ledger.{AddrKeyHash, CertState, Coin, Credential, EpochNo, GovState, PoolKeyHash, Utxos, VrfKeyHash}
+import scalus.cardano.ledger.epoch.{PoolPerformance, PoolSnapshot, RewardUpdate, SnapShots, StakeSnapshot}
 import scalus.cardano.ledger.rules.State
 
 /** The epoch transition: what the ledger does to its state at one epoch boundary, ledger-rules spec
@@ -16,21 +18,151 @@ object EpochTransition {
       * [EB-4].
       *
       * The steps run in the order of the table of spec section 12.2. A step whose phase has not
-      * landed is identity, spec [EB-24]; in this version the steps are POOLREAP ([EB-7] to [EB-9]),
-      * the expiry of proposals ([EB-12], [EB-14]), the voting state ([EB-15], [EB-16]), the
-      * treasury ([EB-17]) and `deposited` ([EB-18]), as conway Rules/Epoch.hs:276-363 runs them.
-      * The last epoch becomes `boundary`, [EB-21] (conway Rules/NewEpoch.hs:186).
+      * landed is identity, spec [EB-24]. First [EB-5] applies `pendingRewards` (conway
+      * Rules/NewEpoch.hs:172-178), so SNAP sees the paid rewards and the reduced fees. Then, as
+      * conway Rules/Epoch.hs:276-363 runs them: SNAP ([EB-6]), POOLREAP ([EB-7] to [EB-9]), the
+      * expiry of proposals ([EB-12], [EB-14]), the voting state ([EB-15], [EB-16]), the treasury
+      * ([EB-17]) and `deposited` ([EB-18]). The blocks made move to the previous epoch and the last
+      * epoch becomes `boundary`, [EB-21] (conway Rules/NewEpoch.hs:182-192). Last, [EB-22] replaces
+      * `pendingRewards` with the reward update of the new epoch, [RW-21], read from the reserves
+      * after [EB-5].
       */
-    def transition(ledger: State, epoch: EpochState, boundary: EpochNo): (State, EpochState) = {
-        val (reaped, reapedEpoch) = poolReap(ledger, epoch, boundary)
+    def transition(
+        ledger: State,
+        epoch: EpochState,
+        boundary: EpochNo,
+        env: EpochEnv
+    ): (State, EpochState) = {
+        val (paid, paidEpoch) = applyRewards(ledger, epoch)
+        val (reaped, reapedEpoch) = poolReap(paid, snap(paid, paidEpoch), boundary)
         val (expired, unclaimed) = expireProposals(reaped, boundary)
         val voted = updatedVotingState(expired, boundary)
         val (moved, movedEpoch) = movedToTreasury(voted, reapedEpoch, unclaimed)
+        val rotated = movedEpoch.copy(
+          lastEpoch = boundary,
+          blocksMadePrev = movedEpoch.blocksMadeCur,
+          blocksMadeCur = Map.empty
+        )
+        // [EB-22], [RW-21]: RUPD of the new epoch, run at once (D3) on the state after [EB-21]
+        val rewards = rewardUpdate(
+          rotated.snapshots.go,
+          rotated.snapshots.fee,
+          rotated.blocksMadePrev,
+          rotated.accountState.reserves,
+          env
+        )
         (
           moved.copy(deposited = totalObligation(moved.certState, moved.govState)),
-          movedEpoch.copy(lastEpoch = boundary)
+          rotated.copy(pendingRewards = Some(rewards))
         )
     }
+
+    /** Spec [EB-5], [RW-10] to [RW-12], [RW-21]: the pending reward update applied, as
+      * `applyRUpdFiltered` at PV >= 7 does (shelley LedgerState/IncrementalStake.hs:95-128): the
+      * reward of each account registered now goes to its balance, the rewards of the others and
+      * `deltaT` to the treasury, `deltaR` to the reserves and `deltaF` to the fees. Identity when
+      * nothing is pending, which is the first boundary after the genesis ([ES-8a]). The update is
+      * cleared (`nesRu = SNothing`, conway Rules/NewEpoch.hs:190); [EB-22] sets the next one.
+      */
+    private def applyRewards(ledger: State, epoch: EpochState): (State, EpochState) =
+        epoch.pendingRewards match
+            case None => (ledger, epoch)
+            case Some(update) =>
+                val accounts0 = ledger.certState.dstate.accounts
+                val (registered, unregistered) =
+                    update.rewards.partition((cred, _) => accounts0.contains(cred))
+                val accounts = registered.foldLeft(accounts0) { case (accounts, (cred, reward)) =>
+                    accounts.updatedWith(cred)(_.map(a => a.copy(balance = a.balance + reward)))
+                }
+                val unclaimed = unregistered.values.foldLeft(Coin.zero)(_ + _)
+                val account = epoch.accountState
+                val certState =
+                    ledger.certState.copy(dstate =
+                        ledger.certState.dstate.copy(accounts = accounts)
+                    )
+                (
+                  ledger.copy(certState = certState, fees = ledger.fees + update.deltaF),
+                  epoch.copy(
+                    accountState = account.copy(
+                      treasury = account.treasury + update.deltaT + unclaimed,
+                      reserves = account.reserves + update.deltaR
+                    ),
+                    pendingRewards = None
+                  )
+                )
+
+    /** SNAP, spec [EB-6] (shelley Rules/Snap.hs:76-103): `go := set`, `set := mark`, `mark :=` the
+      * stake of `ledger`, `fee :=` its fees. Spec [SN-9]: EPOCH runs it on the ledger before
+      * POOLREAP (conway Rules/Epoch.hs:293-296), so a pool that retires at this boundary is in the
+      * new mark.
+      */
+    private def snap(ledger: State, epoch: EpochState): EpochState = {
+        val old = epoch.snapshots
+        epoch.copy(snapshots = SnapShots(stakeSnapshot(ledger), old.mark, old.set, ledger.fees))
+    }
+
+    /** The stake snapshot of `ledger`, `snapShotFromInstantStake` (cardano-ledger-core
+      * State/SnapShots.hs:418-430), spec [SN-1] to [SN-8], [SN-10].
+      *
+      *   - `activeStake`: each registered account that delegates to a pool, with the coin of the
+      *     base-address outputs of its credential plus its balance, when that is above 0
+      *     (`resolveActiveInstantStakeCredentials`, State/Stake.hs:220-246), [SN-2] to [SN-5]. As
+      *     in the ledger, the pool is not checked: DELEG accepts a delegation only to a registered
+      *     pool, and POOLREAP clears the delegations to a retired one.
+      *   - `pools`: every pool in `stakePools`, with its current params (`resetStakePoolsSnapShot`,
+      *     State/SnapShots.hs:409-416), [SN-7]; the delegators of each are found by a scan of the
+      *     accounts, [SN-10], since Scalus keeps no delegator set (D22, D51), and its fields are
+      *     those of `mkStakePoolSnapShot` (:187-216), [SN-8].
+      */
+    def stakeSnapshot(ledger: State): StakeSnapshot = {
+        val accounts = ledger.certState.dstate.accounts
+        val utxoStake = instantStake(ledger.utxos)
+        val delegated: Map[Credential, PoolKeyHash] =
+            accounts.flatMap((cred, account) => account.stakePoolDelegation.map(cred -> _))
+        val delegators: Map[PoolKeyHash, Set[Credential]] =
+            delegated.toSeq.groupMap(_._2)(_._1).view.mapValues(_.toSet).toMap
+        val active: Map[Credential, Coin] = accounts.flatMap { (cred, account) =>
+            val stake = utxoStake.getOrElse(cred, Coin.zero) + account.balance
+            Option.when(account.stakePoolDelegation.isDefined && stake > Coin.zero)(cred -> stake)
+        }
+        def stakeOf(creds: Iterable[Credential]): Coin =
+            creds.foldLeft(Coin.zero)((sum, cred) => sum + active.getOrElse(cred, Coin.zero))
+        val pools = ledger.certState.pstate.stakePools.map { (pool, params) =>
+            val members = delegators.getOrElse(pool, Set.empty)
+            val owners: Set[AddrKeyHash] =
+                params.poolOwners.filter(owner => members(Credential.KeyHash(owner)))
+            pool -> PoolSnapshot(
+              stake = stakeOf(members),
+              selfDelegatedOwners = owners,
+              selfDelegatedOwnersStake = stakeOf(owners.map(Credential.KeyHash(_))),
+              vrfKeyHash = params.vrfKeyHash,
+              pledge = params.pledge,
+              cost = params.cost,
+              margin = params.margin,
+              numDelegators = members.size,
+              rewardAccount = params.rewardAccount.address.credential
+            )
+        }
+        StakeSnapshot(active, delegated.filter((cred, _) => active.contains(cred)), pools)
+    }
+
+    /** The coin of the base-address outputs of `utxos`, per stake credential, the ledger's
+      * `InstantStake`: pointer, enterprise and Byron addresses add nothing (`StakeRefBase` only,
+      * conway State/Stake.hs:101-121), spec [SN-2], [SN-5]. `EmulatorBase.stakeDistribution` reads
+      * it too, spec [DM-15] (D80).
+      */
+    def instantStake(utxos: Utxos): Map[Credential, Coin] =
+        utxos.valuesIterator
+            .flatMap { output =>
+                output.address match
+                    case ShelleyAddress(_, _, ShelleyDelegationPart.Key(hash)) =>
+                        Some(Credential.KeyHash(AddrKeyHash(hash)) -> output.value.coin)
+                    case ShelleyAddress(_, _, ShelleyDelegationPart.Script(hash)) =>
+                        Some(Credential.ScriptHash(hash) -> output.value.coin)
+                    case _ => None
+            }
+            .toSeq
+            .groupMapReduce(_._1)(_._2)(_ + _)
 
     /** POOLREAP, spec [EB-7] to [EB-9] (shelley Rules/PoolReap.hs:132-229).
       *
@@ -184,6 +316,157 @@ object EpochTransition {
               epoch.copy(accountState = account.copy(treasury = account.treasury + moved))
             )
     }
+
+    /** The reward update of an epoch, `startStep` and `completeRupd` run in one go (shelley
+      * LedgerState/PulsingReward.hs:99-212, 242-280; Rewards.hs:86-157, 291-393), ledger-rules spec
+      * [RW-1], [RW-2], [RW-13] to [RW-20], with exact rationals floored where the ledger floors,
+      * [RW-19].
+      *
+      * At PV >= 7 only, [RW-20]: rewards summed per credential and no registration prefilter;
+      * [EB-5] checks registration when it pays. Under `Ideal`, `eta = 1` and every pool of `go`
+      * with stake earns with `appPerf = 1`, [RW-15], D70. The ledger's crashes become rules:
+      * `expectedBlocks = 0` [RW-14], `totalStake <= 0` [RW-16], `nOpt = 0` [RW-17] (D71, D83).
+      *
+      * @param go
+      *   the stake snapshot of two boundaries ago, `ssStakeGo`
+      * @param fee
+      *   the fee snapshot, `ssFee`
+      * @param blocksMadePrev
+      *   the blocks each pool made in the epoch before, `nesBprev`
+      * @param reserves
+      *   the reserves after the boundary
+      */
+    def rewardUpdate(
+        go: StakeSnapshot,
+        fee: Coin,
+        blocksMadePrev: Map[PoolKeyHash, Long],
+        reserves: Coin,
+        env: EpochEnv
+    ): RewardUpdate = {
+        val pp = env.params
+        val measured = env.poolPerformance == PoolPerformance.Measured
+        // [RW-14]: Conway fixes d = 0 (conway PParams.hs:855), so 1 - d = 1 (:127-129)
+        val expectedBlocks = (Rational.of(env.activeSlotsCoeff) * Rational(env.epochLength)).floor
+        // [RW-15]: blocksMadePrev is read under Measured only
+        lazy val blocksTotal = BigInt(blocksMadePrev.valuesIterator.sum)
+        val eta =
+            if measured then Rational.one.min(Rational(blocksTotal, expectedBlocks.max(1)))
+            else Rational.one
+        val rho = Rational.of(pp.monetaryExpansion)
+        val tau = Rational.of(pp.treasuryCut)
+        // :121-141
+        val deltaR1 = (eta * rho * Rational(reserves.value)).floor
+        val rPot = BigInt(fee.value) + deltaR1
+        val deltaT1 = (tau * Rational(rPot)).floor
+        val r = rPot - deltaT1
+        // circulation, :144, 304-306
+        val totalStake = maxLovelaceSupply - reserves.value
+        val totalActiveStake = BigInt(go.totalActiveStake.value)
+        val a0 = Rational.of(pp.poolPledgeInfluence)
+        // [RW-17]: maxPool takes nOpt = 0 as 1 (K/State/SnapShots.hs:148-151)
+        val z0 = Rational(1, BigInt(pp.stakePoolTargetNum.max(1L)))
+        // [RW-15]: the pools that earn, with the blocks each made under Measured
+        val earning: Map[PoolKeyHash, (PoolSnapshot, Rational)] =
+            go.pools.flatMap { (id, pool) =>
+                if measured then
+                    blocksMadePrev.get(id).map { n =>
+                        // mkApparentPerformance, S/Rewards.hs:86-97: 0 when sigmaA = 0
+                        val sigmaA = Rational(BigInt(pool.stake.value), totalActiveStake)
+                        val appPerf =
+                            if pool.stake == Coin.zero then Rational.zero
+                            else Rational(BigInt(n), blocksTotal.max(1)) / sigmaA
+                        id -> (pool, appPerf)
+                    }
+                else if pool.stake > Coin.zero then Some(id -> (pool, Rational.one))
+                else None
+            }
+        // mkPoolRewardInfo, S/Rewards.hs:349-393: per pool, its poolR and its leader reward
+        val poolRewards: Map[PoolKeyHash, PoolReward] =
+            earning.map { case (id, (pool, appPerf)) =>
+                val sigma = Rational.ratio(BigInt(pool.stake.value), totalStake)
+                val p = Rational.ratio(BigInt(pool.pledge.value), totalStake)
+                val s = Rational.ratio(BigInt(pool.selfDelegatedOwnersStake.value), totalStake)
+                val maxP =
+                    if pool.pledge <= pool.selfDelegatedOwnersStake then
+                        maxPool(r, a0, z0, sigma, p)
+                    else BigInt(0)
+                val poolR = (appPerf * Rational(maxP)).floor
+                // calcStakePoolOperatorReward, S/Rewards.hs:110-127. Here and in the member reward,
+                // `/ sigma` runs only when poolR > cost >= 0, so maxP > 0 and sigma > 0: SNAP keeps
+                // pledge <= selfDelegatedOwnersStake <= stake, so sigma = 0 gives p = 0 and maxP = 0
+                val cost = BigInt(pool.cost.value)
+                val m = Rational.of(pool.margin)
+                val leader =
+                    if poolR <= cost then poolR
+                    else
+                        cost + (Rational(poolR - cost) * (m + (Rational.one - m) * s / sigma)).floor
+                id -> PoolReward(pool, poolR, leader, m, sigma)
+            }
+        // [RW-18]: rewardOnePoolMember, S/Rewards.hs:291-321, for each credential of go
+        val members: Iterator[(Credential, BigInt)] = go.activeStake.iterator.flatMap {
+            (cred, stake) =>
+                go.delegations.get(cred).flatMap(poolRewards.get).flatMap { info =>
+                    val pool = info.pool
+                    val owner = cred match
+                        case Credential.KeyHash(hash) => pool.selfDelegatedOwners.contains(hash)
+                        case Credential.ScriptHash(_) => false
+                    val cost = BigInt(pool.cost.value)
+                    // calcStakePoolMemberReward, S/Rewards.hs:140-157; [RW-8]: no zero entry
+                    if owner || info.poolR <= cost then None
+                    else
+                        val t = Rational.ratio(BigInt(stake.value), totalStake)
+                        val reward =
+                            (Rational(info.poolR - cost) * (Rational.one - info.margin) * t
+                                / info.sigma).floor
+                        Option.when(reward != 0)(cred -> reward)
+                }
+        }
+        // [RW-8a]: a leader entry per earning pool, also of 0, at the go reward account (collectLRs,
+        // S/LedgerState/PulsingReward.hs:177-182); [RW-7]: summed per credential
+        val leaders =
+            poolRewards.valuesIterator.map(info => info.pool.rewardAccount -> info.leader)
+        val rewards: Map[Credential, BigInt] =
+            (members ++ leaders).toSeq.groupMapReduce(_._1)(_._2)(_ + _)
+        // completeRupd, :265-280: deltaR = deltaR2 - deltaR1, deltaR2 = R - Σ rewards
+        val deltaR2 = r - rewards.valuesIterator.sum
+        RewardUpdate(
+          deltaT = Coin.exact(deltaT1),
+          deltaR = Coin.exact(deltaR2 - deltaR1),
+          rewards = rewards.view.mapValues(Coin.exact).toMap,
+          deltaF = -fee
+        )
+    }
+
+    /** The reward of one earning pool, `PoolRewardInfo` (shelley Rewards.hs:242-253), with the
+      * pool's margin and `sigma` that the member rewards reuse.
+      */
+    private final case class PoolReward(
+        pool: PoolSnapshot,
+        poolR: BigInt,
+        leader: BigInt,
+        margin: Rational,
+        sigma: Rational
+    )
+
+    /** `maxPool'` (shelley Rewards.hs:330-344): the most a pool can earn, with `z0 = 1/nOpt`. */
+    private def maxPool(
+        r: BigInt,
+        a0: Rational,
+        z0: Rational,
+        sigma: Rational,
+        p: Rational
+    ): BigInt = {
+        val sigma1 = sigma.min(z0)
+        val p1 = p.min(z0)
+        val factor4 = (z0 - sigma1) / z0
+        val factor3 = (sigma1 - p1 * factor4) / z0
+        val factor2 = sigma1 + p1 * a0 * factor3
+        val factor1 = Rational(r) / (Rational.one + a0)
+        (factor1 * factor2).floor
+    }
+
+    /** The Shelley genesis `maxLovelaceSupply` of mainnet, preprod and preview, spec [RW-13]. */
+    private val maxLovelaceSupply: BigInt = BigInt(45_000_000_000_000_000L)
 
     /** Spec [EB-18]: the deposits the ledger owes, `totalObligation` (shelley
       * LedgerState/Types.hs:690-691): the deposits of the accounts, pools and DReps of `certState`

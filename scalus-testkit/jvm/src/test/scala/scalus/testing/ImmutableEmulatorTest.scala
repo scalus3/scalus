@@ -5,7 +5,7 @@ import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.epoch.AccountState
 import scalus.cardano.ledger.rules.{Context, State, UtxoEnv}
-import scalus.cardano.node.{Emulator, EmulatorBase, EmulatorInitialState, EmulatorState}
+import scalus.cardano.node.{Emulator, EmulatorBase, EmulatorInitialState, EmulatorPoolRegistration, EmulatorStakeRegistration, EmulatorState}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
@@ -428,5 +428,47 @@ class ImmutableEmulatorTest extends AnyFunSuite {
         )
         val seeded = Emulator.withState(EmulatorInitialState(reserves = Coin(77)))
         assert(ImmutableEmulator.fromEmulator(seeded).reserves == Coin(77))
+    }
+
+    test("snapshots and pendingRewards read the epoch state of the tip") {
+        // ledger-rules spec [ES-9a] (D82), [ES-8a], [EB-6]: Alice's 10 M ADA balance is delegated
+        // to her pool, whose reward account she is; the first boundary computes the update, the
+        // second pays it before SNAP, so only the new mark holds the reward
+        val alice = Alice.account.stakeAddress(Network.Mainnet)
+        val pool = PoolKeyHash.fromByteString(Alice.addrKeyHash)
+        val registration: Certificate.PoolRegistration = Certificate.PoolRegistration(
+          operator = Alice.addrKeyHash,
+          vrfKeyHash = VrfKeyHash.fromHex("a1" * 32),
+          pledge = Coin.zero,
+          cost = Coin(summon[CardanoInfo].protocolParams.minPoolCost),
+          margin = UnitInterval.zero,
+          rewardAccount = RewardAccount(alice),
+          poolOwners = Set.empty,
+          relays = IndexedSeq.empty,
+          poolMetadata = None
+        )
+        val stake = Coin.ada(10_000_000)
+        val emulator = Emulator.withState(
+          EmulatorInitialState(
+            stakeRegistrations =
+                Seq(EmulatorStakeRegistration(alice.credential, stake, Some(pool))),
+            poolRegistrations = Seq(EmulatorPoolRegistration(registration))
+          )
+        )
+        val genesis = ImmutableEmulator.fromEmulator(emulator)
+        val genesisMark = genesis.snapshots.mark
+        assert(genesisMark.activeStake == Map(alice.credential -> stake))
+        assert(genesis.snapshots.set == genesisMark)
+        assert(genesis.pendingRewards.isEmpty)
+        val slotConfig = genesis.slotConfig
+        def nextEpoch(e: ImmutableEmulator): ImmutableEmulator =
+            e.setSlot(slotConfig.firstSlotOfEpoch(slotConfig.epochOf(e.currentSlot) + 1))
+        val first = nextEpoch(genesis)
+        val reward = first.pendingRewards.flatMap(_.rewards.get(alice.credential))
+        assert(reward.exists(_ > Coin.zero), first.pendingRewards)
+        val second = nextEpoch(first)
+        assert(second.snapshots.mark.activeStake == Map(alice.credential -> (stake + reward.get)))
+        assert(second.snapshots.set == first.snapshots.mark)
+        assert(second.snapshots.go == genesisMark)
     }
 }

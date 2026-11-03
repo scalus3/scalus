@@ -2,6 +2,7 @@ package scalus.testing
 
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.epoch.{RewardUpdate, SnapShots}
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator, STS, State, UtxoEnv}
 import scalus.cardano.node.*
 import scalus.cardano.node.emulator.{ChainConfig, ForgeError, RollbackError, TxStatus}
@@ -44,6 +45,14 @@ final case class ImmutableEmulator private (
       * the epoch state, which only epoch boundaries change.
       */
     def reserves: Coin = emulatorState.accountState.reserves
+
+    /** The stake snapshots and the fee snapshot of the tip, ledger-rules spec [ES-9a]. */
+    def snapshots: SnapShots = emulatorState.snapshots
+
+    /** The reward update the next epoch boundary pays, or `None` before the first boundary,
+      * ledger-rules spec [ES-9a].
+      */
+    def pendingRewards: Option[RewardUpdate] = emulatorState.pendingRewards
 
     def slotConfig: SlotConfig = emulatorState.context.slotConfig
 

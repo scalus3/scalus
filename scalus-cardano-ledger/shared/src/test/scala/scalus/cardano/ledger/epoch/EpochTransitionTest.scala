@@ -1,18 +1,62 @@
 package scalus.cardano.ledger.epoch
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.{Network, StakeAddress, StakePayload}
+import scalus.cardano.address.{Address, Network, Pointer, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.internal.{EpochState, EpochTransition}
+import scalus.cardano.ledger.epoch.internal.{EpochEnv, EpochState, EpochTransition}
 import scalus.cardano.ledger.rules.State
 import scalus.uplc.builtin.ByteString
 
 class EpochTransitionTest extends AnyFunSuite {
 
-    private val epoch = EpochState(AccountState(Coin(1000), Coin(5000)), lastEpoch = 6L)
+    /** A snapshot with one credential of stake `i`, so that mark, set and go differ. */
+    private def oneStake(i: Int): StakeSnapshot =
+        StakeSnapshot(
+          Map(credential(90 + i) -> Coin(i)),
+          Map(credential(90 + i) -> poolId(90 + i)),
+          Map.empty
+        )
 
-    /** `epoch` after the transition into epoch 7, spec [EB-21]. */
-    private val ticked = epoch.copy(lastEpoch = 7L)
+    private val epoch = EpochState(
+      AccountState(Coin(1000), Coin(5000)),
+      lastEpoch = 6L,
+      snapshots = SnapShots(oneStake(1), oneStake(2), oneStake(3), Coin(77)),
+      blocksMadePrev = Map(poolId(95) -> 3L),
+      blocksMadeCur = Map(poolId(96) -> 4L),
+      pendingRewards = None
+    )
+
+    private val env = EpochEnv(
+      CardanoInfo.mainnet.protocolParams,
+      432_000L,
+      PoolPerformance.Ideal,
+      UnitInterval(1, 20)
+    )
+
+    /** `epoch` after the transition of `ledger` into epoch 7 with no other change: SNAP, spec
+      * [EB-6], and the blocks made and the last epoch, spec [EB-21].
+      */
+    private def ticked(ledger: State): EpochState =
+        epoch.copy(
+          lastEpoch = 7L,
+          snapshots = SnapShots(
+            EpochTransition.stakeSnapshot(ledger),
+            epoch.snapshots.mark,
+            epoch.snapshots.set,
+            ledger.fees
+          ),
+          blocksMadePrev = epoch.blocksMadeCur,
+          blocksMadeCur = Map.empty,
+          pendingRewards = Some(
+            EpochTransition.rewardUpdate(
+              epoch.snapshots.set,
+              ledger.fees,
+              epoch.blocksMadeCur,
+              epoch.accountState.reserves,
+              env
+            )
+          )
+        )
 
     /** `ledger` with the dormant counter one higher, as every boundary with no active proposal
       * leaves it, spec [EB-15].
@@ -29,7 +73,7 @@ class EpochTransitionTest extends AnyFunSuite {
     test("a boundary moves the donations into the treasury and clears them") {
         // spec [EB-17]: conway Rules/Epoch.hs:357, 362
         val ledger = State(fees = Coin(3), donation = Coin(12))
-        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, 7L)
+        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, 7L, env)
         assert(newEpoch.accountState == AccountState(Coin(1012), Coin(5000)))
         assert(newLedger == dormant(ledger.copy(donation = Coin.zero)))
     }
@@ -37,7 +81,9 @@ class EpochTransitionTest extends AnyFunSuite {
     test("a boundary with no donations and no proposals changes only the dormant counter") {
         // spec [EB-15], [EB-24]: the steps of phases 4 and 5 are identity
         val ledger = State(fees = Coin(3))
-        assert(EpochTransition.transition(ledger, epoch, 7L) == (dormant(ledger), ticked))
+        assert(
+          EpochTransition.transition(ledger, epoch, 7L, env) == (dormant(ledger), ticked(ledger))
+        )
     }
 
     test("the mainnet account state is that of epoch 665") {
@@ -105,23 +151,23 @@ class EpochTransitionTest extends AnyFunSuite {
     }
 
     private def reaped(ledger: State): (State, EpochState) =
-        EpochTransition.transition(ledger, epoch, boundary)
+        EpochTransition.transition(ledger, epoch, boundary, env)
 
     test("a boundary activates the future pool params and keeps the deposit") {
         // spec [EB-7]: PoolReap.hs:151-168; [EB-7a]: the VRF key does not change, so its entry
         // stays (:139-149)
         val current = params(1, vrfKey = 1, account = 1)
         val future = params(1, vrfKey = 1, account = 1, cost = 999)
-        val (ledger, newEpoch) = reaped(
-          ledgerWith(Seq(current), future = Seq(future), vrfKeyHashes = Map(vrf(1) -> 1L))
-        )
+        val before =
+            ledgerWith(Seq(current), future = Seq(future), vrfKeyHashes = Map(vrf(1) -> 1L))
+        val (ledger, newEpoch) = reaped(before)
         val pstate = ledger.certState.pstate
         assert(pstate.stakePools == Map(poolId(1) -> future))
         assert(pstate.futureStakePoolParams.isEmpty)
         assert(pstate.deposits == Map(poolId(1) -> deposit))
         assert(pstate.vrfKeyHashes == Map(vrf(1) -> 1L))
         assert(ledger.deposited == deposit)
-        assert(newEpoch == ticked)
+        assert(newEpoch == ticked(before))
     }
 
     test("an activation with a new VRF key removes the whole entry of the old key") {
@@ -145,7 +191,7 @@ class EpochTransitionTest extends AnyFunSuite {
         val (newLedger, newEpoch) = reaped(ledger)
         assert(newLedger.certState.pstate == PoolsState.empty)
         assert(newLedger.certState.dstate.accounts(credential(1)).balance == Coin(510))
-        assert(newEpoch == ticked)
+        assert(newEpoch == ticked(ledger))
         // spec [EB-18]: the refunded deposit leaves `deposited`
         assert(newLedger.deposited == ledger.deposited - deposit)
     }
@@ -184,7 +230,7 @@ class EpochTransitionTest extends AnyFunSuite {
         assert(accounts(credential(1)).balance == Coin(10))
         assert(accounts(credential(2)).balance == Coin(510))
         assert(newLedger.certState.pstate == PoolsState.empty)
-        assert(newEpoch == ticked)
+        assert(newEpoch == ticked(ledger))
     }
 
     test("a retired pool's VRF key count drops by one, and its entry goes at zero") {
@@ -237,7 +283,7 @@ class EpochTransitionTest extends AnyFunSuite {
           retiring = Map(poolId(1) -> (boundary + 1)),
           vrfKeyHashes = Map(vrf(1) -> 1L)
         )
-        assert(reaped(ledger) == (dormant(ledger), ticked))
+        assert(reaped(ledger) == (dormant(ledger), ticked(ledger)))
     }
 
     // Proposal expiry and the gov bookkeeping, spec [EB-12] (expiry), [EB-14] to [EB-18]
@@ -288,7 +334,7 @@ class EpochTransitionTest extends AnyFunSuite {
         val expired = proposal(1, expiresAfter = boundary - 2)
         val kept = proposal(2, expiresAfter = boundary - 1)
         val (newLedger, _) =
-            EpochTransition.transition(govLedger(Vector(expired, kept)), epoch, boundary)
+            EpochTransition.transition(govLedger(Vector(expired, kept)), epoch, boundary, env)
         assert(newLedger.govState.proposals == Vector(kept))
     }
 
@@ -298,9 +344,9 @@ class EpochTransitionTest extends AnyFunSuite {
           Vector(proposal(1, expiresAfter = boundary - 2)),
           accounts = Map(credential(1) -> account())
         )
-        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, boundary)
+        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, boundary, env)
         assert(newLedger.certState.dstate.accounts(credential(1)).balance == Coin(110))
-        assert(newEpoch == ticked)
+        assert(newEpoch == ticked(ledger))
         assert(newLedger.deposited == Coin(2))
     }
 
@@ -308,7 +354,7 @@ class EpochTransitionTest extends AnyFunSuite {
         // spec [EB-14], [EB-17]: the unclaimed deposits, Epoch.hs:196, 357
         val ledger = govLedger(Vector(proposal(1, expiresAfter = boundary - 2)))
             .copy(donation = Coin(5))
-        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, boundary)
+        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, boundary, env)
         assert(
           newEpoch.accountState.treasury == epoch.accountState.treasury + proposalDeposit + Coin(5)
         )
@@ -326,12 +372,12 @@ class EpochTransitionTest extends AnyFunSuite {
           Vector(parent, child),
           accounts = Map(credential(1) -> account(), credential(2) -> account())
         )
-        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, boundary)
+        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, boundary, env)
         assert(newLedger.govState.proposals.isEmpty)
         val accounts = newLedger.certState.dstate.accounts
         assert(accounts(credential(1)).balance == Coin(110))
         assert(accounts(credential(2)).balance == Coin(110))
-        assert(newEpoch == ticked)
+        assert(newEpoch == ticked(ledger))
         assert(newLedger.deposited == Coin(4))
         // spec [EB-15a]: the dormant counter reads the proposals after the removal, so the
         // removed active child does not stop it (updateNumDormantEpochs eNo newProposals,
@@ -343,7 +389,7 @@ class EpochTransitionTest extends AnyFunSuite {
         // spec [EB-15], [EB-15a]: updateNumDormantEpochs eNo newProposals, Epoch.hs:204-208, 348
         def counter(proposals: GovActionState*): EpochNo =
             EpochTransition
-                .transition(govLedger(proposals.toVector), epoch, boundary)
+                .transition(govLedger(proposals.toVector), epoch, boundary, env)
                 ._1
                 .certState
                 .vstate
@@ -365,7 +411,8 @@ class EpochTransitionTest extends AnyFunSuite {
                 .transition(
                   ledger.copy(govState = GovState.empty.copy(committee = committee)),
                   epoch,
-                  boundary
+                  boundary,
+                  env
                 )
                 ._1
                 .certState
@@ -389,7 +436,300 @@ class EpochTransitionTest extends AnyFunSuite {
           govState = GovState.empty.copy(proposals = Vector(proposal(1, expiresAfter = boundary))),
           deposited = Coin(1)
         )
-        val (newLedger, _) = EpochTransition.transition(withGov, epoch, boundary)
+        val (newLedger, _) = EpochTransition.transition(withGov, epoch, boundary, env)
         assert(newLedger.deposited == deposit + Coin(2) + Coin(7) + proposalDeposit)
+    }
+
+    // SNAP, spec [EB-6], [SN-1] to [SN-10] (shelley Rules/Snap.hs:76-103, K/State/SnapShots.hs,
+    // conway State/Stake.hs:101-121)
+
+    private val paymentKey = Credential.KeyHash(AddrKeyHash.fromHex("ee" * 28))
+
+    private def base(stake: Credential): Address = Address(Network.Mainnet, paymentKey, stake)
+
+    private def keyOf(i: Int): AddrKeyHash = credential(i) match
+        case Credential.KeyHash(hash) => hash
+        case other                    => fail(s"not a key credential: $other")
+
+    /** `ledger` with one UTxO of `lovelace` at each address, in order. */
+    private def withUtxos(ledger: State, outputs: (Address, Long)*): State = {
+        val hash = TransactionHash.fromByteString(ByteString.fromHex("cc" * 32))
+        val utxos: Utxos = outputs.zipWithIndex.map { case ((address, lovelace), i) =>
+            TransactionInput(hash, i) -> TransactionOutput(address, Value.lovelace(lovelace))
+        }.toMap
+        ledger.copy(utxos = utxos)
+    }
+
+    private def balance(lovelace: Long, pool: Option[PoolKeyHash]): ConwayAccountState =
+        ConwayAccountState(Coin(lovelace), Coin(2), pool, None)
+
+    test("the stake of a credential is its base-address coin plus its reward balance") {
+        // spec [SN-2], [SN-5]: only StakeRefBase adds instant stake (conway State/Stake.hs:101-121);
+        // the balance joins it in resolveActiveInstantStakeCredentials (K/State/Stake.hs:220-246)
+        val pointer = ShelleyAddress(
+          Network.Mainnet,
+          ShelleyPaymentPart.Key(keyOf(1)),
+          ShelleyDelegationPart.Pointer(Pointer(Slot(1), 0, 0))
+        )
+        val ledger = withUtxos(
+          ledgerWith(
+            Seq(params(1, vrfKey = 1, account = 1)),
+            accounts = Map(credential(1) -> balance(10, Some(poolId(1))))
+          ),
+          base(credential(1)) -> 100L,
+          base(credential(1)) -> 50L,
+          Address(Network.Mainnet, credential(1)) -> 1000L,
+          pointer -> 500L
+        )
+        val mark = EpochTransition.stakeSnapshot(ledger)
+        assert(mark.activeStake == Map(credential(1) -> Coin(160)))
+        assert(mark.delegations == Map(credential(1) -> poolId(1)))
+        assert(mark.pools(poolId(1)).stake == Coin(160))
+    }
+
+    test("only registered credentials that delegate to a pool have stake") {
+        // spec [SN-3]: Map.dropMissing drops an unregistered credential, and an account with no
+        // pool delegation gives Nothing (K/State/Stake.hs:228-243)
+        val ledger = withUtxos(
+          ledgerWith(
+            Seq(params(1, vrfKey = 1, account = 1)),
+            accounts = Map(credential(3) -> balance(10, None))
+          ),
+          base(credential(2)) -> 100L,
+          base(credential(3)) -> 100L
+        )
+        val mark = EpochTransition.stakeSnapshot(ledger)
+        assert(mark.activeStake.isEmpty)
+        assert(mark.delegations.isEmpty)
+    }
+
+    test("a delegator with zero stake has no stake but counts as a delegator and an owner") {
+        // spec [SN-4]: nonZero of the balance (K/State/Stake.hs:236-239); spec [SN-8]: spsDelegators
+        // and the owners among them count whatever their stake (K/State/SnapShots.hs:203-216)
+        val owned = params(1, vrfKey = 1, account = 1).copy(poolOwners = Set(keyOf(4), keyOf(5)))
+        val ledger = ledgerWith(
+          Seq(owned),
+          accounts = Map(credential(4) -> balance(0, Some(poolId(1))))
+        )
+        val mark = EpochTransition.stakeSnapshot(ledger)
+        assert(mark.activeStake.isEmpty)
+        assert(mark.delegations.isEmpty)
+        val pool = mark.pools(poolId(1))
+        assert(pool.numDelegators == 1)
+        assert(pool.selfDelegatedOwners == Set(keyOf(4)))
+        assert(pool.selfDelegatedOwnersStake == Coin.zero)
+        assert(pool.stake == Coin.zero)
+    }
+
+    test("the total active stake is the sum of the stake, or 1 when there is none") {
+        // spec [SN-6], [DM-10b]: sumAllActiveStake, K/State/Stake.hs:157-160
+        assert(StakeSnapshot.empty.totalActiveStake == Coin(1))
+        val two = StakeSnapshot(
+          Map(credential(1) -> Coin(3), credential(2) -> Coin(4)),
+          Map(credential(1) -> poolId(1), credential(2) -> poolId(1)),
+          Map.empty
+        )
+        assert(two.totalActiveStake == Coin(7))
+    }
+
+    test("the mark snapshot holds every registered pool, with its current params") {
+        // spec [SN-7], [SN-8]: resetStakePoolsSnapShot over all of psStakePools and
+        // mkStakePoolSnapShot (K/State/SnapShots.hs:187-216, 409-416); pool 2 has no delegator
+        // and future params, which SNAP does not read
+        val owned = params(1, vrfKey = 1, account = 7).copy(poolOwners = Set(keyOf(1), keyOf(9)))
+        val ledger = withUtxos(
+          ledgerWith(
+            Seq(owned, params(2, vrfKey = 2, account = 2)),
+            future = Seq(params(2, vrfKey = 2, account = 2, cost = 999)),
+            accounts = Map(
+              credential(1) -> balance(10, Some(poolId(1))),
+              credential(3) -> balance(5, Some(poolId(1))),
+              credential(9) -> balance(1, None)
+            )
+          ),
+          base(credential(1)) -> 100L,
+          base(credential(3)) -> 20L
+        )
+        val mark = EpochTransition.stakeSnapshot(ledger)
+        assert(
+          mark.pools == Map(
+            poolId(1) -> PoolSnapshot(
+              stake = Coin(135),
+              selfDelegatedOwners = Set(keyOf(1)),
+              selfDelegatedOwnersStake = Coin(110),
+              vrfKeyHash = vrf(1),
+              pledge = Coin(1),
+              cost = Coin(340),
+              margin = UnitInterval.one,
+              numDelegators = 2,
+              rewardAccount = credential(7)
+            ),
+            poolId(2) -> PoolSnapshot(
+              stake = Coin.zero,
+              selfDelegatedOwners = Set.empty,
+              selfDelegatedOwnersStake = Coin.zero,
+              vrfKeyHash = vrf(2),
+              pledge = Coin(1),
+              cost = Coin(340),
+              margin = UnitInterval.one,
+              numDelegators = 0,
+              rewardAccount = credential(2)
+            )
+          )
+        )
+    }
+
+    test("a boundary rotates the snapshots and takes the fees") {
+        // spec [EB-6]: go := set, set := mark, mark := the stake now, fee := the fees
+        // (shelley Rules/Snap.hs:95-103)
+        val ledger = withUtxos(
+          ledgerWith(
+            Seq(params(1, vrfKey = 1, account = 1)),
+            accounts = Map(credential(1) -> balance(10, Some(poolId(1))))
+          ),
+          base(credential(1)) -> 100L
+        ).copy(fees = Coin(33))
+        val snapshots = reaped(ledger)._2.snapshots
+        assert(snapshots.mark == EpochTransition.stakeSnapshot(ledger))
+        assert(snapshots.mark.activeStake == Map(credential(1) -> Coin(110)))
+        assert(snapshots.set == epoch.snapshots.mark)
+        assert(snapshots.go == epoch.snapshots.set)
+        assert(snapshots.fee == Coin(33))
+    }
+
+    test("a pool that retires at the boundary is in the new mark, and its delegators too") {
+        // spec [SN-9]: SNAP runs before POOLREAP (conway Rules/Epoch.hs:293-296)
+        val ledger = withUtxos(
+          ledgerWith(
+            Seq(params(1, vrfKey = 1, account = 1)),
+            retiring = Map(poolId(1) -> boundary),
+            accounts = Map(credential(1) -> balance(10, Some(poolId(1)))),
+            vrfKeyHashes = Map(vrf(1) -> 1L)
+          ),
+          base(credential(1)) -> 100L
+        )
+        val (newLedger, newEpoch) = reaped(ledger)
+        assert(newLedger.certState.pstate.stakePools.isEmpty)
+        val mark = newEpoch.snapshots.mark
+        assert(mark.pools.keySet == Set(poolId(1)))
+        assert(mark.activeStake == Map(credential(1) -> Coin(110)))
+        assert(mark.delegations == Map(credential(1) -> poolId(1)))
+    }
+
+    test("a boundary moves the blocks made of the epoch to the previous epoch") {
+        // spec [EB-21]: nesBprev = bcur, nesBcur = mempty (conway Rules/NewEpoch.hs:182-192)
+        val (_, newEpoch) = reaped(State())
+        assert(newEpoch.blocksMadePrev == Map(poolId(96) -> 4L))
+        assert(newEpoch.blocksMadeCur.isEmpty)
+        assert(newEpoch.lastEpoch == boundary)
+    }
+
+    test("a boundary replaces the pending rewards with those of go, the fees and the blocks made") {
+        // spec [EB-22], [RW-13], [RW-21]: after SNAP and [EB-21], go is the old set, fee the
+        // fees of the ledger and blocksMadePrev the old blocksMadeCur
+        val member = credential(97)
+        val stake = Coin(10_000_000_000_000L)
+        val earning = PoolSnapshot(
+          stake,
+          Set.empty,
+          Coin.zero,
+          vrf(96),
+          Coin.zero,
+          Coin(340),
+          UnitInterval(1, 100),
+          1,
+          credential(98)
+        )
+        val set =
+            StakeSnapshot(
+              Map(member -> stake),
+              Map(member -> poolId(96)),
+              Map(poolId(96) -> earning)
+            )
+        // [EB-5] runs first, so [EB-22] reads the reserves and the fees after `old` (RUPD starts
+        // in the new epoch, on the state NEWEPOCH made)
+        val old = RewardUpdate(Coin(1), Coin(-1), Map.empty, Coin(-5))
+        val reserves = Coin(35_000_000_000_000_000L)
+        val before = epoch.copy(
+          accountState = AccountState(Coin(1000), reserves),
+          snapshots = epoch.snapshots.copy(set = set),
+          pendingRewards = Some(old)
+        )
+        val measured = env.copy(poolPerformance = PoolPerformance.Measured)
+        val (_, newEpoch) = EpochTransition.transition(State(fees = Coin(60)), before, 7L, measured)
+        val expected = EpochTransition.rewardUpdate(
+          set,
+          Coin(55),
+          Map(poolId(96) -> 4L),
+          reserves - Coin(1),
+          measured
+        )
+        assert(newEpoch.pendingRewards == Some(expected))
+        assert(expected.rewards.keySet == Set(member, credential(98)))
+        assert(expected.deltaF == Coin(-55))
+    }
+
+    // Applying the reward update, spec [EB-5], [RW-10] to [RW-12], [RW-21]
+    // (applyRUpdFiltered, shelley LedgerState/IncrementalStake.hs:95-128)
+
+    /** `epoch` with `update` pending. */
+    private def pending(update: RewardUpdate): EpochState =
+        epoch.copy(pendingRewards = Some(update))
+
+    /** The lovelace in the treasury, the reserves, the fees and the account balances. */
+    private def pots(ledger: State, epoch: EpochState): Coin =
+        ledger.certState.dstate.accounts.values.foldLeft(
+          epoch.accountState.treasury + epoch.accountState.reserves + ledger.fees
+        )(_ + _.balance)
+
+    test(
+      "a boundary pays the pending rewards to registered accounts and the rest to the treasury"
+    ) {
+        // spec [RW-10], [RW-11], [RW-12]: deltaT and the unregistered rewards to the treasury,
+        // deltaR to the reserves, deltaF to the fees (IncrementalStake.hs:119-127)
+        val update = RewardUpdate(
+          deltaT = Coin(10),
+          deltaR = Coin(-2),
+          rewards = Map(credential(1) -> Coin(5), credential(2) -> Coin(7)),
+          deltaF = Coin(-20)
+        )
+        val ledger = ledgerWith(Seq.empty, accounts = Map(credential(1) -> balance(10, None)))
+            .copy(fees = Coin(30))
+        val (newLedger, newEpoch) = EpochTransition.transition(ledger, pending(update), 7L, env)
+        assert(newLedger.certState.dstate.accounts(credential(1)).balance == Coin(15))
+        assert(newLedger.certState.dstate.accounts.keySet == Set(credential(1)))
+        assert(newEpoch.accountState == AccountState(Coin(1000 + 10 + 7), Coin(5000 - 2)))
+        assert(newLedger.fees == Coin(10))
+        assert(newEpoch.snapshots.fee == Coin(10))
+        assert(pots(newLedger, newEpoch) == pots(ledger, epoch))
+    }
+
+    test("a reward is paid before SNAP, so it is in the new mark") {
+        // spec [SN-9], [EB-4]: NEWEPOCH applies the update to es0 and passes the result to EPOCH,
+        // whose SNAP reads it (conway Rules/NewEpoch.hs:172-179)
+        val update = RewardUpdate(Coin.zero, Coin(-5), Map(credential(1) -> Coin(5)), Coin.zero)
+        val ledger = withUtxos(
+          ledgerWith(
+            Seq(params(1, vrfKey = 1, account = 1)),
+            accounts = Map(credential(1) -> balance(10, Some(poolId(1))))
+          ),
+          base(credential(1)) -> 100L
+        )
+        val (_, newEpoch) = EpochTransition.transition(ledger, pending(update), 7L, env)
+        assert(newEpoch.snapshots.mark.activeStake == Map(credential(1) -> Coin(115)))
+    }
+
+    test("a reward and a pool deposit refund at the same boundary add up on one balance") {
+        // spec [EB-5], [EB-8]. POOLREAP deregisters no account, so the order of the two steps
+        // does not show here; only the sum on one balance does
+        val update = RewardUpdate(Coin.zero, Coin(-5), Map(credential(1) -> Coin(5)), Coin.zero)
+        val ledger = ledgerWith(
+          Seq(params(1, vrfKey = 1, account = 1)),
+          retiring = Map(poolId(1) -> boundary),
+          accounts = Map(credential(1) -> balance(10, None)),
+          vrfKeyHashes = Map(vrf(1) -> 1L)
+        )
+        val (newLedger, _) = EpochTransition.transition(ledger, pending(update), boundary, env)
+        assert(newLedger.certState.dstate.accounts(credential(1)).balance == Coin(10 + 5) + deposit)
     }
 }

@@ -204,8 +204,8 @@ object JsProtocolParams {
       maxValueSize = 0,
       minFeeRefScriptCostPerByte = 0,
       minPoolCost = 0,
-      monetaryExpansion = 0.0,
-      poolPledgeInfluence = 0.0,
+      monetaryExpansion = UnitInterval.zero,
+      poolPledgeInfluence = NonNegativeInterval.zero,
       poolRetireMaxEpoch = 0,
       poolVotingThresholds = PoolVotingThresholds(
         motionNoConfidence = UnitInterval.zero,
@@ -218,7 +218,7 @@ object JsProtocolParams {
       stakeAddressDeposit = 0,
       stakePoolDeposit = 0,
       stakePoolTargetNum = 0,
-      treasuryCut = 0.0,
+      treasuryCut = UnitInterval.zero,
       txFeeFixed = 0,
       txFeePerByte = 0,
       utxoCostPerByte = 0
