@@ -8,15 +8,19 @@ import scalus.cardano.address.{Address, ByronAddress}
 // Bootstrap (i.e. Byron) addresses have variable sized attributes in them.
 // It is important to limit their overall size.
 //
-// The attributes size is calculated as: derivationPathLength + unknownAttributesLength
-// where derivation path is key 1 and unknown attributes are any keys other than 1 (derivation path)
-// and 2 (network magic). Network magic is NOT counted in the size.
+// The attributes size is `ByronAddress.attributesSize`, the ledger's `bootstrapAddressAttrsSize`
+// (libs/cardano-ledger-core/src/Cardano/Ledger/Address.hs:334-340): the HD payload length of
+// attribute 1 plus the bytes of the unknown attributes (keys other than 1 and 2). The network
+// magic (attribute 2) is not counted.
 object OutputBootAddrAttrsSizeValidator extends STS.Validator {
     override final type Error = TransactionException.OutputBootAddrAttrsTooBigException
 
     override def validate(context: Context, state: State, event: Event): Result = {
         val transaction = event
-        val outputs = transaction.body.value.outputs
+        val body = transaction.body.value
+        // spec [TX-4]: `allSizedOutputsTxBodyF`, the outputs and the collateral return
+        // (B/Rules/Utxo.hs:406-414)
+        val outputs = body.outputs ++ body.collateralReturnOutput
 
         val outputsWithOversizedBootAttrs = findOutputsWithOversizedBootAttrs(outputs)
 

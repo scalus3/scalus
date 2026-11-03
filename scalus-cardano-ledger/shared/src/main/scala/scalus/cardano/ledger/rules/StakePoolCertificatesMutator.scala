@@ -7,7 +7,7 @@ package rules
   "1.3.0"
 )
 object StakePoolCertificatesMutator extends STS.Mutator {
-    override final type Error = TransactionException.StakePoolException
+    override final type Error = StakePoolCertificatesValidator.Error
 
     /** Applies the pool certificates only. A phase-2-failed tx applies no certificates, spec
       * [SC-3e].

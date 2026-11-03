@@ -6,6 +6,7 @@ import scalus.cardano.ledger.*
 import scalus.uplc.builtin.ByteString
 import scalus.utils.{Pretty, Style}
 
+import scala.collection.mutable
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
@@ -635,7 +636,15 @@ object ParsedByronAddress {
       * @return
       *   Parsed Byron address components
       */
-    private[address] def parse(addressBytes: ByteString): ParsedByronAddress = {
+    private[address] def parse(addressBytes: ByteString): ParsedByronAddress =
+        parseWithAttributesSize(addressBytes)._1
+
+    /** [[parse]], plus the size the ledger's `bootstrapAddressAttrsSize` computes (see
+      * [[ByronAddress.attributesSize]]).
+      */
+    private[address] def parseWithAttributesSize(
+        addressBytes: ByteString
+    ): (ParsedByronAddress, Int) = {
         val bytes = addressBytes.bytes
         try {
             var pos = 0
@@ -718,10 +727,10 @@ object ParsedByronAddress {
             val computedCrc32 = computeCrc32(payloadBytes)
 
             // Parse inner payload: [addrRoot, addrAttributes, addrType]
-            val (addrRoot, addrType, derivationPath, networkMagic) =
+            val (addrRoot, addrType, derivationPath, networkMagic, attributesSize) =
                 parseInnerPayload(payloadBytes)
 
-            ParsedByronAddress(
+            val parsed = ParsedByronAddress(
               addrRoot,
               addrType,
               derivationPath,
@@ -729,6 +738,7 @@ object ParsedByronAddress {
               crc32,
               computedCrc32
             )
+            (parsed, attributesSize)
         } catch {
             case e: IllegalArgumentException => throw e
             case e: ArrayIndexOutOfBoundsException =>
@@ -744,11 +754,11 @@ object ParsedByronAddress {
     /** Parse inner payload using direct byte manipulation.
       *
       * @return
-      *   Tuple of (addrRoot, addrType, derivationPath, networkMagic)
+      *   Tuple of (addrRoot, addrType, derivationPath, networkMagic, attributesSize)
       */
     private def parseInnerPayload(
         payload: Array[Byte]
-    ): (ByteString, Int, Option[ByteString], Option[Long]) = {
+    ): (ByteString, Int, Option[ByteString], Option[Long], Int) = {
         var pos = 0
 
         // Parse array header - must be array of 3
@@ -788,7 +798,7 @@ object ParsedByronAddress {
         pos += 28
 
         // Parse addrAttributes (map)
-        val (derivationPath, networkMagic, attrBytesConsumed) =
+        val (derivationPath, networkMagic, attributesSize, attrBytesConsumed) =
             parseAttributesDirect(payload, pos)
         pos += attrBytesConsumed
 
@@ -800,74 +810,105 @@ object ParsedByronAddress {
             )
         val addrType = typeHeader & 0x1f
 
-        (addrRoot, addrType, derivationPath, networkMagic)
+        (addrRoot, addrType, derivationPath, networkMagic, attributesSize)
     }
 
     /** Parse address attributes map directly from bytes.
       *
+      * The attributes are a CBOR map from a `Word8` key to a bytestring value
+      * (eras/byron/ledger/impl/src/Cardano/Chain/Common/Attributes.hs:213-235). The node knows key
+      * 1 (derivation path) and key 2 (network magic); the other keys are unparsed fields
+      * (AddrAttributes.hs:121-147). A repeated key keeps its last value, as the node's `Map` does.
+      *
       * @return
-      *   Tuple of (derivationPath, networkMagic, bytesConsumed)
+      *   Tuple of (derivationPath, networkMagic, attributesSize, bytesConsumed), where
+      *   attributesSize is what the ledger's `bootstrapAddressAttrsSize` computes
       */
     private def parseAttributesDirect(
         data: Array[Byte],
         startPos: Int
-    ): (Option[ByteString], Option[Long], Int) = {
+    ): (Option[ByteString], Option[Long], Int, Int) = {
         var pos = startPos
         var derivationPath: Option[ByteString] = None
         var networkMagic: Option[Long] = None
+        // key -> the size the key adds to bootstrapAddressAttrsSize
+        val sizes = mutable.Map.empty[Long, Int]
 
-        val mapHeader = data(pos) & 0xff
-        val majorType = mapHeader >> 5
-
-        if majorType != 5 then
+        val (mapMajor, mapLen, mapHeaderLen) = readHead(data, pos)
+        if mapMajor != 5 then
             throw new IllegalArgumentException(
-              s"addrAttributes: expected map, got major type $majorType"
+              s"addrAttributes: expected map, got major type $mapMajor"
             )
-
-        val mapLen = mapHeader & 0x1f
-        pos += 1
+        pos += mapHeaderLen
 
         // Parse map entries
-        var i = 0
+        var i = 0L
         while i < mapLen do {
             // Parse key (unsigned integer)
-            val keyHeader = data(pos) & 0xff
-            if (keyHeader >> 5) != 0 then
+            val (keyMajor, key, keyHeaderLen) = readHead(data, pos)
+            if keyMajor != 0 then
                 throw new IllegalArgumentException("Map key must be unsigned integer")
-            val key = keyHeader & 0x1f
-            pos += 1
+            pos += keyHeaderLen
 
             // Parse value (bytestring)
-            val valHeader = data(pos) & 0xff
-            if (valHeader >> 5) != 2 then
-                throw new IllegalArgumentException("Map value must be bytestring")
-            val valAdditional = valHeader & 0x1f
-            val (valLen, valHeaderLen) =
-                if valAdditional < 24 then (valAdditional, 1)
-                else if valAdditional == 24 then ((data(pos + 1) & 0xff), 2)
-                else if valAdditional == 25 then
-                    (((data(pos + 1) & 0xff) << 8) | (data(pos + 2) & 0xff), 3)
-                else
-                    throw new IllegalArgumentException(
-                      s"Unsupported value length encoding: $valAdditional"
-                    )
+            val (valMajor, valLen, valHeaderLen) = readHead(data, pos)
+            if valMajor != 2 then throw new IllegalArgumentException("Map value must be bytestring")
             pos += valHeaderLen
 
-            val valueBytes = data.slice(pos, pos + valLen)
-            pos += valLen
+            val valueBytes = data.slice(pos, pos + valLen.toInt)
+            pos += valLen.toInt
 
             key match {
-                case 1 => // Derivation path (HD address payload)
+                case 1L => // Derivation path (HD address payload)
                     derivationPath = Some(ByteString.unsafeFromArray(valueBytes))
-                case 2 => // Network magic (CBOR-encoded Word32)
+                    sizes(key) = hdPayloadLength(valueBytes)
+                case 2L => // Network magic (CBOR-encoded Word32): not counted
                     // The network magic is CBOR-encoded inside the bytestring
                     networkMagic = parseNetworkMagic(valueBytes)
-                case _ => // Unknown attribute, skip
+                case _ => // Unknown attribute: Attributes.hs:140-142 counts its bytes
+                    sizes(key) = valueBytes.length
             }
             i += 1
         }
 
-        (derivationPath, networkMagic, pos - startPos)
+        (derivationPath, networkMagic, sizes.values.sum, pos - startPos)
+    }
+
+    /** The length of the HD payload in attribute 1, whose value is the payload serialized as a CBOR
+      * bytestring (AddrAttributes.hs:109, decoded by `decodeBytesCanonical` at
+      * AddrAttributes.hs:178-179). A node cannot decode an address whose attribute 1 is not one
+      * whole bytestring; for such a value this counts all its bytes.
+      */
+    private def hdPayloadLength(value: Array[Byte]): Int =
+        try
+            val (major, len, headerLen) = readHead(value, 0)
+            if major == 2 && headerLen + len == value.length then len.toInt else value.length
+        catch case _: IllegalArgumentException | _: ArrayIndexOutOfBoundsException => value.length
+
+    /** Read a definite-length CBOR head at `pos`.
+      *
+      * @return
+      *   Tuple of (major type, argument, head length)
+      */
+    private def readHead(data: Array[Byte], pos: Int): (Int, Long, Int) = {
+        val header = data(pos) & 0xff
+        val additional = header & 0x1f
+        val argLen =
+            if additional < 24 then 0
+            else if additional <= 27 then 1 << (additional - 24)
+            else
+                throw new IllegalArgumentException(
+                  s"Unsupported CBOR length encoding: $additional"
+                )
+        var arg = if argLen == 0 then additional.toLong else 0L
+        var j = 1
+        while j <= argLen do {
+            arg = (arg << 8) | (data(pos + j) & 0xffL)
+            j += 1
+        }
+        if arg < 0 || arg > Int.MaxValue then
+            throw new IllegalArgumentException(s"CBOR argument too large: $arg")
+        (header >> 5, arg, 1 + argLen)
     }
 
     /** Parse network magic from CBOR-encoded bytes. */
@@ -925,7 +966,7 @@ case class ByronAddress(bytes: ByteString) extends Address {
     def toHex: String = bytes.toString
 
     /** Lazily parsed Byron address structure */
-    @transient lazy val parsed: ParsedByronAddress = ParsedByronAddress.parse(bytes)
+    @transient lazy val parsed: ParsedByronAddress = parsedWithAttributesSize._1
 
     /** Encode to Base58 string (Byron addresses use Base58, not Bech32) */
     def toBase58: String = Base58.encode(bytes.bytes)
@@ -956,7 +997,9 @@ case class ByronAddress(bytes: ByteString) extends Address {
     /** Get the address type (0 = VerKey, 2 = Redeem) */
     def byronAddrType: Int = parsed.addrType
 
-    /** Get the derivation path if present (HD wallet addresses) */
+    /** Get the raw attribute 1 value if present (HD wallet addresses): the HD payload serialized as
+      * a CBOR bytestring, head included.
+      */
     def derivationPath: Option[ByteString] = parsed.derivationPath
 
     /** Get the network magic if present */
@@ -974,27 +1017,21 @@ case class ByronAddress(bytes: ByteString) extends Address {
     def scriptHashOption: Option[ScriptHash] =
         None // Byron addresses don't have script hashes
 
-    /** Calculate the size of Byron address attributes.
+    /** Calculate the size of Byron address attributes, as the ledger's `bootstrapAddressAttrsSize`
+      * does (libs/cardano-ledger-core/src/Cardano/Ledger/Address.hs:334-340): the length of the HD
+      * payload in attribute 1, without its CBOR head, plus the bytes of the unknown attributes
+      * (keys other than 1 and 2). The network magic (attribute 2) does not count.
       *
-      * This matches Haskell's bootstrapAddressAttrsSize which calculates: derivationPathLength +
-      * unknownAttributesLength
-      *
-      * Known attributes are:
-      *   - Key 1: Derivation path (HD address payload)
-      *   - Key 2: Network magic
-      *
-      * Only derivation path (key 1) and unknown attributes (keys other than 1 and 2) are counted in
-      * the size. Network magic (key 2) is NOT counted.
+      * For example, a Daedalus address whose attribute 1 is the 34 bytes `58 20 <32 bytes>` has
+      * size 32. The UTXO rule rejects an output whose size is over 64. spec [TX-4]
       *
       * @return
       *   The total size of relevant attributes in bytes
       */
-    def attributesSize: Int = {
-        // Use the already-parsed derivation path from ParsedByronAddress
-        // The derivation path size is the primary component of attributesSize
-        // Network magic (key 2) is NOT counted per Haskell's bootstrapAddressAttrsSize
-        parsed.derivationPath.map(_.size).getOrElse(0)
-    }
+    def attributesSize: Int = parsedWithAttributesSize._2
+
+    @transient private lazy val parsedWithAttributesSize: (ParsedByronAddress, Int) =
+        ParsedByronAddress.parseWithAttributesSize(bytes)
 }
 
 object ByronAddress {

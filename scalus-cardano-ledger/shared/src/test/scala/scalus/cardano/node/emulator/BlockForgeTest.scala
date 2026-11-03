@@ -107,8 +107,18 @@ class BlockForgeTest extends AnyFunSuite {
         )
     )
 
+    private def limits(maxBodySize: Long, maxExUnits: ExUnits): ProtocolParams =
+        CardanoInfo.mainnet.protocolParams.copy(
+          maxBlockBodySize = maxBodySize,
+          maxBlockExecutionUnits = maxExUnits
+        )
+
     private def prefix(txs: IndexedSeq[Transaction], maxBodySize: Long): Int =
-        BlockForge.prefixThatFits(txs, maxBodySize, ExUnits(Long.MaxValue, Long.MaxValue))
+        BlockForge.prefixThatFits(
+          txs,
+          limits(maxBodySize, ExUnits(Long.MaxValue, Long.MaxValue)),
+          Map.empty
+        )
 
     test("the prefix stops at the first tx that does not fit: a prefix, not a best fit") {
         // spec [FG-4], section 8.1 example: tx 4 fits after tx 2 but stays behind tx 3
@@ -151,8 +161,8 @@ class BlockForgeTest extends AnyFunSuite {
         val limit = ExUnits(10, 10)
         def fit(units: (Long, Long)*): Int = BlockForge.prefixThatFits(
           units.toIndexedSeq.map((m, s) => withExUnits(first, m, s)),
-          Long.MaxValue,
-          limit
+          limits(Long.MaxValue, limit),
+          Map.empty
         )
         assert(fit((6, 1), (6, 1)) == 1, "memory")
         assert(fit((1, 6), (1, 6)) == 1, "steps")

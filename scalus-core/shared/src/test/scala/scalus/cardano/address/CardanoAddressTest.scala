@@ -1,5 +1,6 @@
 package scalus.cardano.address
 
+import io.bullet.borer.{Cbor, Encoder, Tag, Writer}
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.ByteString
@@ -772,5 +773,74 @@ class CardanoAddressTest extends AnyFunSuite {
             )
             assert(addr1.byronAddrType == addr2.byronAddrType, s"byronAddrType should match")
         }
+    }
+
+    /** A Byron address with the given attributes map, as the node encodes one: each value is the
+      * raw attribute bytes, wrapped in a CBOR bytestring by the map encoder.
+      */
+    private def byronWithAttributes(attributes: Map[Int, Array[Byte]]): ByronAddress = {
+        val payload = Cbor.encode((new Array[Byte](28), attributes, 0)).toByteArray
+        val outer = ByronOuter(payload, ParsedByronAddress.computeCrc32(payload))
+        ByronAddress(ByteString.fromArray(Cbor.encode(outer).toByteArray))
+    }
+
+    /** The outer Byron structure: `[tag 24 (bytes payload), crc32]`. */
+    private final case class ByronOuter(payload: Array[Byte], crc: Long)
+
+    private given Encoder[ByronOuter] with
+        def write(w: Writer, outer: ByronOuter): Writer =
+            w.writeArrayOpen(2)
+                .writeTag(Tag.EmbeddedCBOR)
+                .writeBytes(outer.payload)
+                .writeLong(outer.crc)
+                .writeArrayClose()
+
+    /** Attribute 1 as the node writes it: the HD payload serialized as a CBOR bytestring
+      * (eras/byron/ledger/impl/src/Cardano/Chain/Common/AddrAttributes.hs:109).
+      */
+    private def hdPayload(size: Int): Array[Byte] =
+        Cbor.encode(Array.fill[Byte](size)(7)).toByteArray
+
+    /** Attribute 2 as the node writes it: the network magic serialized as a CBOR Word32. */
+    private def magic(m: Long): Array[Byte] = Cbor.encode(m).toByteArray
+
+    test("Byron attributesSize matches the ledger's bootstrapAddressAttrsSize, spec [TX-4]") {
+        // libs/cardano-ledger-core/src/Cardano/Ledger/Address.hs:334-340: the decoded HD payload
+        // (attribute 1, without its CBOR head) plus the unknown attributes; the network magic
+        // (attribute 2) does not count
+        val real = List(
+          // Icarus, mainnet: no attributes
+          "Ae2tdPwUPEZDoUnyXuAgqzhkjNXNJeiZ5nqwprg9sArZmRNjySfJ5uz4FjB" -> 0,
+          // Daedalus, mainnet: attribute 1 is 34 bytes, a 32-byte HD payload
+          byronDaedalusAddresses.head -> 32,
+          // Redeem, mainnet: a 32-byte HD payload
+          byronRedeemAddresses.head -> 32,
+          // Daedalus, testnet magic 1097911063: a 28-byte HD payload and a 5-byte magic
+          "37btjrVyb4KDXBNC4haBVPCrro8AQPHwvCMp3RFhhSVWwfFmZ6wwzSK6JK1hY6wHNmtrpTf1kdbva8TCneM2YsiXT7mrzT21EacHnPpz5YyUdj64na" -> 28
+        )
+        for (base58, expected) <- real do
+            val addr = ByronAddress.fromBase58(base58).get
+            assert(addr.attributesSize == expected, s"attributesSize of $base58")
+        assert(
+          ByronAddress
+              .fromBase58(real.last._1)
+              .get
+              .networkMagic
+              .contains(1097911063L)
+        )
+
+        val synthetic = List(
+          "a 64-byte HD payload" -> Map(1 -> hdPayload(64)) -> 64,
+          "a 65-byte HD payload" -> Map(1 -> hdPayload(65)) -> 65,
+          "a network magic only" -> Map(2 -> magic(1097911063L)) -> 0,
+          "a 64-byte HD payload and a magic" -> Map(1 -> hdPayload(64), 2 -> magic(42)) -> 64,
+          "a 65-byte unknown attribute" -> Map(3 -> new Array[Byte](65)) -> 65,
+          "a 30-byte HD payload and a 34-byte unknown attribute" ->
+              Map(1 -> hdPayload(30), 5 -> new Array[Byte](34)) -> 64,
+          "two unknown attributes, one with a key over 23" ->
+              Map(0 -> new Array[Byte](10), 200 -> new Array[Byte](55)) -> 65
+        )
+        for ((name, attributes), expected) <- synthetic do
+            assert(byronWithAttributes(attributes).attributesSize == expected, name)
     }
 }

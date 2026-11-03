@@ -206,10 +206,17 @@ object PlutusScriptEvaluator {
         // 3. Get redeemers map
         val redeemersMap = tx.witnessSet.redeemers.map(_.value.toMap).getOrElse(Map.empty)
 
-        // 4. Pre-compute TxInfo for each Plutus version lazily (reused across redeemers)
+        // 4. Pre-compute TxInfo for each Plutus version the needed scripts use (reused across
+        // redeemers)
         lazy val txInfoV1 = getTxInfoV1(tx, utxos, slotConfig, protocolVersion)
         lazy val txInfoV2 = getTxInfoV2(tx, utxos, slotConfig, protocolVersion)
         lazy val txInfoV3 = getTxInfoV3(tx, utxos, slotConfig, protocolVersion)
+        plutusLanguages(scriptsMap, neededScripts.map(_._3)).foreach {
+            case PlutusV1 => txInfoV1
+            case PlutusV2 => txInfoV2
+            case PlutusV3 => txInfoV3
+            case PlutusV4 => ()
+        }
 
         // 5. Build contexts for each Plutus script redeemer
         neededScripts.flatMap { case (tag, index, hash, outputOpt) =>
@@ -236,6 +243,23 @@ object PlutusScriptEvaluator {
                 redeemer -> context
         }.toMap
     }
+
+    /** The Plutus versions of the scripts of `hashes` in `scripts`; a native script has none.
+      *
+      * The `TxInfo` of each of them is built before any script runs, as cardano-ledger builds every
+      * script context first (`collectPlutusScriptsWithContext`,
+      * eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Plutus/Evaluate.hs:157-214). So a `TxInfo` that
+      * cannot be built, spec [TX-1], fails the tx whichever script would fail first, and no
+      * collateral is taken.
+      */
+    private def plutusLanguages(
+        scripts: Map[ScriptHash, Script],
+        hashes: Iterable[ScriptHash]
+    ): Set[Language] =
+        hashes.view
+            .flatMap(scripts.get)
+            .collect { case script: PlutusScript => script.language }
+            .toSet
 
     /** A no-op evaluator that returns empty sequences.
       *
@@ -566,8 +590,8 @@ object PlutusScriptEvaluator {
             // Resolve all scripts from transaction and UTxOs
             val scriptsMap = allResolvedScripts(tx, utxos)
 
-            // Pre-compute TxInfo for each Plutus version to reuse across redeemers
-            // This is lazily initialized only if needed
+            // Pre-compute TxInfo for each Plutus version the needed scripts use, to reuse across
+            // redeemers
             lazy val txInfoV1 = getTxInfoV1(tx, utxos, slotConfig, protocolMajorVersion)
             lazy val txInfoV2 = getTxInfoV2(tx, utxos, slotConfig, protocolMajorVersion)
             lazy val txInfoV3 = getTxInfoV3(tx, utxos, slotConfig, protocolMajorVersion)
@@ -583,6 +607,13 @@ object PlutusScriptEvaluator {
                             (tag, index, hash, datum)
                         }
                     case Left(error) => throw error
+
+            plutusLanguages(scriptsMap, neededScriptsData.map(_._3)).foreach {
+                case PlutusV1 => txInfoV1
+                case PlutusV2 => txInfoV2
+                case PlutusV3 => txInfoV3
+                case PlutusV4 => ()
+            }
 
             val evaluatedRedeemers =
                 for

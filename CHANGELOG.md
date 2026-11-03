@@ -121,6 +121,35 @@
 - Instant: moving the current slot backward with `setSlot` before an epoch boundary no block has
   crossed now restores the donations that boundary moved into the treasury, as on a node. Before,
   the move could not be undone.
+- The Emulator rejects a pool registration whose metadata hash is longer than 32 bytes, as the
+  ledger's POOL rule does (`PoolMedataHashTooBig`), with the new
+  `TransactionException.PoolMetadataHashTooBigException`.
+- The Emulator checks the bootstrap address attributes of the collateral return output too, as
+  the ledger's UTXO rule does (`validateOutputBootAddrAttrsTooBig`, which a Conway node reports
+  as `OutputTooBigUTxO`). Before, it checked only the regular outputs.
+- `ByronAddress.attributesSize` computes what the ledger's `bootstrapAddressAttrsSize` computes:
+  the length of the HD payload in attribute 1, without its CBOR head, plus the bytes of the
+  unknown attributes. Before, it counted the CBOR head of the payload and skipped the unknown
+  attributes. So the Emulator rejected an output whose Byron address has a 63- or 64-byte HD
+  payload, which a node accepts, and accepted one whose unknown attributes are over 64 bytes,
+  which a node rejects.
+- A PlutusV3 transaction that spends a UTxO and also references it was accepted by the Emulator
+  and built by `TxBuilder` at protocol version 11. The ledger rejects it: the PlutusV3 script
+  context fails with `ReferenceInputsNotDisjointFromInputs`, whatever `isValid` says, so no
+  collateral is taken. `LedgerToPlutusTranslation.getTxInfoV3` now fails the same way and names the
+  common inputs, so the Emulator rejects such a transaction and `TxBuilder.complete` fails with a
+  `BalancingException` that names them. A transaction that runs only PlutusV1, PlutusV2 or native
+  scripts may still spend and reference one UTxO from version 11. **Migration hazard: a test that
+  spends and references one UTxO with a PlutusV3 script now fails; drop the reference or the
+  spend.**
+- The Emulator's forge keeps the total reference-script size of a block within 1 MiB, as the
+  ledger's BBODY rule does (`BodyRefScriptsSizeTooBig`). A `Manual` or `Instant` forge leaves the
+  txs past the limit in the mempool for the next block, and `produceBlock(on, txs)` returns
+  `ForgeError.BlockTooBig`. From protocol version 11 a tx's total also counts the outputs of the
+  earlier txs of the block, as on a node. `submit` refuses a transaction over the 200 KiB
+  per-transaction reference-script limit whatever `isValid` says, as the node's mempool does; the
+  ledger rule skips the check for a phase-2-invalid transaction, so such a transaction was accepted
+  and forged into a block over 1 MiB.
 
 ## 1.4.1 (2026-10-26)
 

@@ -310,6 +310,24 @@ object TransactionException {
              |invalid retirement epochs (pool -> (epoch, current, maxAllowed)): $invalidRetirementEpochs.""".stripMargin
         )
 
+    /** It's `PoolMedataHashTooBig` of the POOL rule in cardano-ledger
+      * (eras/shelley/impl/src/Cardano/Ledger/Shelley/Rules/Pool.hs:249-254), spec [TX-2]: a pool
+      * registration whose metadata hash is longer than a Blake2b-256 hash.
+      *
+      * @param hashSizes
+      *   the size in bytes of each metadata hash that is too long, by pool
+      * @param maxHashSize
+      *   the longest metadata hash allowed, in bytes
+      */
+    final case class PoolMetadataHashTooBigException(
+        transactionId: TransactionHash,
+        hashSizes: Map[PoolKeyHash, Int],
+        maxHashSize: Int
+    ) extends TransactionException(
+          s"Pool metadata hash too big for transactionId $transactionId: " +
+              s"hash sizes (pool -> bytes): $hashSizes, max allowed size: $maxHashSize"
+        )
+
     // It's Conway GOVCERT failures (ConwayGovCertPredFailure) in cardano-ledger
     final case class DRepException(
         transactionId: TransactionHash,
@@ -547,6 +565,7 @@ object TransactionException {
         case _: FeesOkException                            => "FeesOk"
         case _: StakeCertificatesException                 => "StakeCertificates"
         case _: StakePoolException                         => "StakePool"
+        case _: PoolMetadataHashTooBigException            => "PoolMetadataHashTooBig"
         case _: DRepException                              => "DRep"
         case _: WithdrawalsNotInRewardsException           => "WithdrawalsNotInRewards"
         case _: TreasuryValueMismatchException             => "TreasuryValueMismatch"

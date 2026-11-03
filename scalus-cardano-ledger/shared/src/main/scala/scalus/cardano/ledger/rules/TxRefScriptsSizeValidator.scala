@@ -17,22 +17,33 @@ object TxRefScriptsSizeValidator extends STS.Validator {
       * inputs adds the size of its reference script, so a script carried by two UTxOs counts twice.
       * An input missing from the UTxO adds nothing.
       */
-    override def validate(context: Context, state: State, event: Event): Result = {
-        if !event.isValid then return success
-        val size = utils.AllProvidedReferenceScripts
-            .nonDistinctReferenceScripts(event, state.utxos)
-            .map(scriptSize)
-            .sum
+    override def validate(context: Context, state: State, event: Event): Result =
+        if event.isValid then check(event, state.utxos) else success
+
+    /** The check of [[validate]] for any tx, `isValid` or not. The node's mempool measure applies
+      * it to every tx it admits (`txMeasureRefScripts` in ouroboros-consensus,
+      * Shelley/Ledger/Mempool.hs), so a tx with `isValid = false` over the limit, which LEDGER lets
+      * through, never reaches a block. The Emulator's `submit` does the same, spec [BB-1].
+      */
+    private[cardano] def check(tx: Transaction, utxos: Utxos): Result = {
+        val size = txNonDistinctRefScriptsSize(tx, utxos)
         if size <= maxRefScriptSizePerTx then success
         else
             failure(
               TransactionException.TxRefScriptsSizeTooBigException(
-                event.id,
+                tx.id,
                 supplied = size,
                 expected = maxRefScriptSizePerTx
               )
             )
     }
+
+    /** `txNonDistinctRefScriptsSize` in cardano-ledger (C/UTxO.hs:171-175): the sizes of the
+      * reference scripts of the union of the inputs and the reference inputs of `tx`, a script
+      * carried by two UTxOs counted twice. An input missing from `utxos` adds nothing.
+      */
+    private[cardano] def txNonDistinctRefScriptsSize(tx: Transaction, utxos: Utxos): Int =
+        utils.AllProvidedReferenceScripts.nonDistinctReferenceScripts(tx, utxos).map(scriptSize).sum
 
     /** `originalBytesSize` of a script in cardano-ledger: the original CBOR of a timelock, or the
       * bytes of a Plutus script.

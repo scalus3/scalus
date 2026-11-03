@@ -701,6 +701,8 @@ object LedgerToPlutusTranslation {
         slotConfig: SlotConfig,
         protocolVersion: MajorProtocolVersion
     ): v3.TxInfo = {
+        guardReferenceInputsDisjointForPlutusV3(tx, protocolVersion)
+
         val body = tx.body.value
         val datums = tx.witnessSet.plutusData.value.toSortedMap.view.mapValues(_.value)
         val redeemers =
@@ -1115,6 +1117,30 @@ object LedgerToPlutusTranslation {
                 )
             case None =>
     }
+
+    /** Fails when a PlutusV3 context would see a UTxO in both the inputs and the reference inputs
+      * at protocol version 11 or later, spec [TX-1].
+      *
+      * It's `ReferenceInputsNotDisjointFromInputs` in cardano-ledger
+      * (eras/conway/impl/src/Cardano/Ledger/Conway/TxInfo.hs:488-493). The ledger raises it as a
+      * `CollectErrors` failure of UTXOS, whatever `isValid` says, so the tx is rejected and no
+      * collateral is taken. The message names every common input, spec [TX-1a]. From PV 11 the UTXO
+      * rule accepts the overlap, so a PlutusV2 or native script tx with it is valid; at PV 9 and 10
+      * the UTXO rule rejects it (`BabbageNonDisjointRefInputs`).
+      */
+    private def guardReferenceInputsDisjointForPlutusV3(
+        tx: Transaction,
+        protocolVersion: MajorProtocolVersion
+    ): Unit =
+        if protocolVersion >= MajorProtocolVersion.vanRossemPV then
+            val body = tx.body.value
+            val common = body.inputs.toSet.intersect(body.referenceInputs.toSet)
+            if common.nonEmpty then
+                throw new IllegalArgumentException(
+                  "ReferenceInputsNotDisjointFromInputs: a PlutusV3 script context at protocol " +
+                      s"version ${protocolVersion.version} cannot see a UTxO in both the inputs " +
+                      s"and the reference inputs: ${common.toSeq.sorted.mkString(", ")}"
+                )
 
     /** Validate that no inline datums or Byron addresses are used in Plutus V1 contexts.
       *

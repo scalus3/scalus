@@ -180,7 +180,7 @@ Checks enforced here:
 
 *Implementation status (M1):* `[MP-5]` is enforced by the ledger rules, with no membership check of its own. By `[MP-1]` a tx is validated on the mempool tail or the tip, where the inputs of a pending or confirmed duplicate are spent, so the ledger rejects it with `UtxoNotAvailable`. A tx whose inputs a direct edit put back is accepted again, as today (`EmulatorParityTest`, "re-applying a transaction").
 
-*Implementation status (M2):* `[MP-4]` measures the mempool as one block of the mempool txs and the new tx, by the measure of `[FG-5]`: the encoded body size, and the declared execution units. The check runs after the ledger rules, so an invalid tx still gets the error of `[MP-3]`.
+*Implementation status (M2):* `[MP-4]` measures the mempool as one block of the mempool txs and the new tx, by the measure of `[FG-5]`: the encoded body size, and the declared execution units. The check runs after the ledger rules, so an invalid tx still gets the error of `[MP-3]`. Since phase 0 of the ledger rules spec, `submit` also holds every tx, `isValid` or not, to the per-tx reference-script limit, as the node's mempool measure does; the capacity has no reference-script dimension yet.
 
 *Example, illustrative,* for `[MP-4]`. Block limit 90 112 bytes, so the mempool capacity is 180 224 bytes. Each tx is 16 000 bytes:
 

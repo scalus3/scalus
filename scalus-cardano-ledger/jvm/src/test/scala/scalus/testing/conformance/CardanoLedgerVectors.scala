@@ -116,35 +116,87 @@ object CardanoLedgerVectors {
         if vectorsTarGz == null then {
             null
         } else {
-            extractOnce(Paths.get(vectorsTarGz.toURI)).resolve("eras/conway/impl/dump")
+            val archive = Paths.get(vectorsTarGz.toURI)
+            extractOnce(archive, cacheDirectory(archive)).resolve("eras/conway/impl/dump")
         }
     }
 
-    /** Extracts `archive` into `<tmpdir>/cardano-ledger-vectors-<hash of archive>` and reuses that
-      * directory in later runs. A fresh temp directory per run leaked ~10 MB per test JVM.
-      *
-      * The extraction goes to a staging directory first, then an atomic rename publishes it. So a
-      * run never sees a half-extracted directory, and two JVMs that extract at the same time do not
-      * corrupt each other.
+    /** `<tmpdir>/cardano-ledger-vectors-<hash of archive>`, shared by every test JVM on the machine
+      * that runs the same archive.
       */
-    private def extractOnce(archive: Path): Path = {
+    private def cacheDirectory(archive: Path): Path = {
         val digest = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(archive))
-        val target = Paths.get(
+        Paths.get(
           System.getProperty("java.io.tmpdir"),
           s"cardano-ledger-vectors-${Hex.bytesToHex(digest.take(8))}"
         )
-        if !Files.isDirectory(target) then {
+    }
+
+    /** Extracts `archive` into `target` and reuses that directory in later runs. A fresh temp
+      * directory per run leaked ~10 MB per test JVM.
+      *
+      * The extraction goes to a staging directory first, then an atomic rename publishes it. So a
+      * run never sees a half-extracted directory, and two JVMs that extract at the same time do not
+      * corrupt each other: the rename fails on a directory the other JVM published first, which is
+      * then used, and a published directory is never deleted.
+      *
+      * A published directory is reused only if it still holds every file it was extracted with:
+      * macOS deletes old files under the temp directory and keeps the directories, which left the
+      * vectors empty and every conformance test passing without a case. Such a stale directory is
+      * renamed aside and deleted before the extraction starts, so a directory that another JVM
+      * publishes during the extraction is kept. Only a JVM that publishes between the completeness
+      * check and that rename, a few milliseconds, loses its directory.
+      */
+    private[conformance] def extractOnce(archive: Path, target: Path): Path = {
+        if !isComplete(target) then {
+            retireStale(target)
             val staging = Files.createTempDirectory("cardano-ledger-vectors-staging")
             try {
                 extractTarGz(archive, staging)
-                Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE)
-            } catch {
-                // Another JVM published the same archive first
-                case _: FileSystemException if Files.isDirectory(target) => ()
+                Files.writeString(staging.resolve(stampFile), regularFileCount(staging).toString)
+                publish(staging, target)
             } finally deleteRecursively(staging)
         }
         target
     }
+
+    /** Publishes `staging` as `target` with one atomic rename, and deletes nothing: a rename onto a
+      * non-empty directory fails, so a complete `target` that another JVM published first is kept,
+      * and that JVM may be reading it.
+      */
+    private[conformance] def publish(staging: Path, target: Path): Unit =
+        try Files.move(staging, target, StandardCopyOption.ATOMIC_MOVE)
+        catch {
+            // Another JVM published the same archive first
+            case _: FileSystemException if isComplete(target) => ()
+        }
+
+    /** Renames a stale `target` aside and deletes the copy. Does nothing when `target` does not
+      * exist, or when another JVM renamed it first.
+      */
+    private def retireStale(target: Path): Unit = {
+        val aside = target.resolveSibling(s"${target.getFileName}-stale-${System.nanoTime}")
+        if Try(Files.move(target, aside, StandardCopyOption.ATOMIC_MOVE)).isSuccess then
+            deleteRecursively(aside)
+    }
+
+    /** Holds the number of extracted files, written last into the staging directory. */
+    private[conformance] val stampFile = ".extracted-file-count"
+
+    /** Whether `dir` holds its stamp and the number of files the stamp records. */
+    private[conformance] def isComplete(dir: Path): Boolean = {
+        val stamp = dir.resolve(stampFile)
+        Files.isRegularFile(stamp) &&
+        Try(Files.readString(stamp).trim.toLong).toOption.contains(regularFileCount(dir))
+    }
+
+    /** The number of regular files under `dir`, without the stamp. */
+    private def regularFileCount(dir: Path): Long =
+        Using.resource(Files.walk(dir)) { paths =>
+            paths
+                .filter(p => Files.isRegularFile(p) && p.getFileName.toString != stampFile)
+                .count()
+        }
 
     private def extractTarGz(archive: Path, dir: Path): Unit = {
         Using.resource(new FileInputStream(archive.toFile)) { fis =>

@@ -1,7 +1,7 @@
 package scalus.cardano.node
 
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.{Context, State}
+import scalus.cardano.ledger.rules.{Context, State, TxRefScriptsSizeValidator}
 import scalus.cardano.node.emulator.{BlockForge, BlockProduction, ChainConfig, ChainView, ChainViewError, DropReason, ForgeError, LedgerSnapshot, OrphanTxPolicy, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.{AppliedBlock, AppliedTransaction, ChainEvent}
@@ -112,10 +112,11 @@ case class EmulatorState private (
       *
       * The tx is validated on the snapshot of the last mempool entry, or the tip snapshot if the
       * mempool is empty, at the current slot, spec [MP-1], [MP-2]. A duplicate fails there, because
-      * its inputs are spent, spec [MP-5]. A valid tx that does not fit the mempool capacity is
-      * rejected with `MempoolFull`, spec [MP-4]. On success the tx and its snapshot join the
-      * mempool, spec [MP-6], and in the `Instant` preset the mempool is forged at once, spec
-      * [MP-8]. One transition, so one atomic swap, spec [MP-9].
+      * its inputs are spent, spec [MP-5]. A tx over the per-tx reference-script limit is rejected
+      * whatever `isValid` says, as the node's mempool measure does. A valid tx that does not fit
+      * the mempool capacity is rejected with `MempoolFull`, spec [MP-4]. On success the tx and its
+      * snapshot join the mempool, spec [MP-6], and in the `Instant` preset the mempool is forged at
+      * once, spec [MP-8]. One transition, so one atomic swap, spec [MP-9].
       *
       * @param validationContext
       *   derives the context the tx is validated under, for a per-submit concern such as debug
@@ -127,7 +128,15 @@ case class EmulatorState private (
         validate: EmulatorState.Validate
     ): (EmulatorState, Either[SubmitError, TransactionHash]) = {
         val base = validationBase
-        validate(validationContext(base.context), base.ledger, tx) match
+        val validated = for
+            newLedger <- validate(validationContext(base.context), base.ledger, tx)
+            // LEDGER skips the per-tx reference-script limit when isValid is false; the node's
+            // mempool measure applies it to every tx (txMeasureRefScripts), so such a tx never
+            // reaches a block. Without it the forge would take it first, over the block limit of
+            // spec [BB-1].
+            _ <- TxRefScriptsSizeValidator.check(tx, base.ledger.utxos)
+        yield newLedger
+        validated match
             case Left(error) => (this, Left(SubmitError.fromException(error)))
             case Right(_) if !fitsMempool(tx, base.context.env.params) =>
                 (this, Left(NetworkSubmitError.MempoolFull(s"the mempool is full: ${tx.id.toHex}")))
@@ -195,14 +204,14 @@ case class EmulatorState private (
     }
 
     /** The state with a block at `slot` on the tip, of the longest mempool prefix that fits the
-      * block limits, spec [FG-4], [FG-5]; the prefix leaves the mempool, spec [FG-7].
+      * block limits, spec [FG-4], [FG-5], [BB-1]; the prefix leaves the mempool, spec [FG-7]. The
+      * reference scripts resolve on the UTxO set of the tip, the block start, spec [BB-3].
       */
     private def forgePrefix(slot: SlotNo): EmulatorState = {
-        val params = context.env.params
         val size = BlockForge.prefixThatFits(
           mempool.map(_.applied.tx),
-          params.maxBlockBodySize,
-          params.maxBlockExecutionUnits
+          context.env.params,
+          storedTip.ledger.utxos
         )
         val (prefix, rest) = mempool.splitAt(size)
         forge(prefix, slot).copy(mempool = rest)
@@ -269,13 +278,8 @@ case class EmulatorState private (
                 parent.fold(genesisSnapshot)(_.snapshot) match
                     case Some(snapshot) if depth <= config.securityParam =>
                         val base = snapshot.atSlot(slot)
-                        val params = base.context.env.params
-                        if !BlockForge.fits(
-                              txs,
-                              params.maxBlockBodySize,
-                              params.maxBlockExecutionUnits
-                            )
-                        then Left(ForgeError.BlockTooBig) // spec [FG-18]
+                        if !BlockForge.fitsBlock(txs, base.context.env.params, base.ledger.utxos)
+                        then Left(ForgeError.BlockTooBig) // spec [FG-18], [BB-2]
                         else
                             applied(base, txs, slot, validate)
                                 .map(BlockNode.of(parent, slot, _, base))

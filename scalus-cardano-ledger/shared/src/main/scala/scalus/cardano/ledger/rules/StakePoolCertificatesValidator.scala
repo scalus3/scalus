@@ -5,7 +5,8 @@ import scalus.cardano.address.Network
 
 // It's the Shelley/Conway POOL rule predicate checks in cardano-ledger
 object StakePoolCertificatesValidator extends STS.Validator {
-    override final type Error = TransactionException.StakePoolException
+    override final type Error = TransactionException.StakePoolException |
+        TransactionException.PoolMetadataHashTooBigException
 
     private case class ValidationState(
         network: Network,
@@ -16,7 +17,8 @@ object StakePoolCertificatesValidator extends STS.Validator {
         notRegistered: Set[PoolKeyHash] = Set.empty,
         rewardAccountMismatches: Set[(PoolKeyHash, Network, Network)] = Set.empty,
         costTooLow: Map[PoolKeyHash, (Coin, Coin)] = Map.empty,
-        invalidRetirementEpochs: Map[PoolKeyHash, (Long, Long, Long)] = Map.empty
+        invalidRetirementEpochs: Map[PoolKeyHash, (Long, Long, Long)] = Map.empty,
+        metadataHashesTooBig: Map[PoolKeyHash, Int] = Map.empty
     ) {
         def hasErrors: Boolean =
             notRegistered.nonEmpty ||
@@ -27,7 +29,8 @@ object StakePoolCertificatesValidator extends STS.Validator {
         def handlePoolRegistration(
             operator: AddrKeyHash,
             cost: Coin,
-            rewardAccount: RewardAccount
+            rewardAccount: RewardAccount,
+            metadata: Option[PoolMetadata]
         ): ValidationState = {
             val poolId = PoolKeyHash.fromByteString(operator)
             // A new pool is registered at once, so a later certificate of the tx can retire it,
@@ -41,11 +44,21 @@ object StakePoolCertificatesValidator extends STS.Validator {
                     )
                 else registered
 
+            // spec [TX-2]: PoolMedataHashTooBig, S/Rules/Pool.hs:249-254. The ledger compares the
+            // byte size of the hash with `hashSize HASH`, 32 for Blake2b-256. The check is gated on
+            // `restrictPoolMetadataHash pv = pv > 4.0` (S/SoftForks.hs:17-20), always true in Conway.
+            val withMetadataCheck = metadata match
+                case Some(md) if md.metadataHash.size > maxMetadataHashSize =>
+                    withNetworkCheck.copy(metadataHashesTooBig =
+                        withNetworkCheck.metadataHashesTooBig.updated(poolId, md.metadataHash.size)
+                    )
+                case _ => withNetworkCheck
+
             if cost < minPoolCost then
-                withNetworkCheck.copy(costTooLow =
-                    withNetworkCheck.costTooLow.updated(poolId, minPoolCost -> cost)
+                withMetadataCheck.copy(costTooLow =
+                    withMetadataCheck.costTooLow.updated(poolId, minPoolCost -> cost)
                 )
-            else withNetworkCheck
+            else withMetadataCheck
         }
 
         def handlePoolRetirement(poolId: PoolKeyHash, epochNo: Long): ValidationState =
@@ -76,13 +89,16 @@ object StakePoolCertificatesValidator extends STS.Validator {
                   rewardAccount,
                   _,
                   _,
-                  _
+                  metadata
                 ) =>
-                handlePoolRegistration(operator, cost, rewardAccount)
+                handlePoolRegistration(operator, cost, rewardAccount, metadata)
             case Certificate.PoolRetirement(poolId, epochNo) =>
                 handlePoolRetirement(poolId, epochNo)
             case _ => this
     }
+
+    /** `hashSize HASH` in cardano-ledger: a Blake2b-256 hash is 32 bytes. */
+    private val maxMetadataHashSize = 32
 
     /** A phase-2-invalid tx skips this check: Conway LEDGER runs CERTS only when `isValid` is true,
       * spec [SC-3f].
@@ -105,6 +121,8 @@ object StakePoolCertificatesValidator extends STS.Validator {
 
             val finalState = certificates.foldLeft(initialState)(_ processCertificate _)
 
+            // The ledger reports every failure; Scalus reports one exception, the bundled pool
+            // failures first.
             if finalState.hasErrors then
                 failure(
                   TransactionException.StakePoolException(
@@ -113,6 +131,14 @@ object StakePoolCertificatesValidator extends STS.Validator {
                     finalState.rewardAccountMismatches,
                     finalState.costTooLow,
                     finalState.invalidRetirementEpochs
+                  )
+                )
+            else if finalState.metadataHashesTooBig.nonEmpty then
+                failure(
+                  TransactionException.PoolMetadataHashTooBigException(
+                    event.id,
+                    finalState.metadataHashesTooBig,
+                    maxMetadataHashSize
                   )
                 )
             else success

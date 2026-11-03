@@ -5,7 +5,7 @@ import org.scalacheck.Arbitrary.arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.compiler.compile
 import scalus.uplc.builtin.Data
-import scalus.uplc.{PlutusV1, PlutusV2, PlutusV3}
+import scalus.uplc.{PlutusV1, PlutusV2, PlutusV3, Term}
 import scalus.cardano.address.*
 import scalus.cardano.address.Network.Testnet
 
@@ -1232,9 +1232,150 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         assert(result.isLeft, "PlutusV1 should reject transaction with Byron address in output")
     }
 
+    /** A tx that spends `input`, locked by `script`, and also has it in its reference inputs. */
+    private def spendAndReference(
+        script: PlutusScript,
+        isValid: Boolean
+    ): (Transaction, State, TransactionInput, TransactionInput) = {
+        val input = arbitrary[TransactionInput].sample.get
+        val collateralInput = arbitrary[TransactionInput].sample.get
+        val datum = arbitrary[Data].sample.get
+        val tx = Transaction(
+          body = KeepRaw(
+            TransactionBody(
+              inputs = TaggedSortedSet(input),
+              referenceInputs = TaggedSortedSet(input),
+              collateralInputs = TaggedSortedSet(collateralInput),
+              outputs = IndexedSeq.empty,
+              fee = Coin(0)
+            )
+          ),
+          witnessSetRaw = KeepRaw(
+            TransactionWitnessSet(
+              scripts = Seq(script),
+              redeemers = Some(
+                Redeemers.Array(
+                  IndexedSeq(
+                    Redeemer(
+                      tag = RedeemerTag.Spend,
+                      index = 0,
+                      data = Data.unit,
+                      exUnits = ExUnits(100000000, 100000000)
+                    )
+                  )
+                )
+              ),
+              vkeyWitnesses = Set.empty,
+              plutusData = Seq(datum)
+            )
+          ),
+          isValid = isValid,
+          auxiliaryData = None
+        )
+        val state = State(
+          utxos = Map(
+            input -> Output(
+              address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+              value = Value.zero,
+              datumHash = DataHash.fromByteString(datum.dataHash)
+            ),
+            collateralInput -> Output(
+              address = arbitrary[Address].sample.get,
+              value = Value.lovelace(100000)
+            )
+          )
+        )
+        (tx, state, input, collateralInput)
+    }
+
+    private def assertRejectedForOverlap(
+        result: PlutusScriptsTransactionMutator.Result,
+        input: TransactionInput
+    ) =
+        result match
+            case Left(e: TransactionException.IllegalArgumentException) =>
+                assert(e.getMessage.contains("ReferenceInputsNotDisjointFromInputs"), e)
+                assert(e.getMessage.contains(input.toString), e)
+            case other => fail(s"expected a rejection for the overlap, got $other")
+
+    test(
+      "a PlutusV3 spend of a UTxO that is also a reference input is rejected at PV 11, spec [TX-1]"
+    ) {
+        // CollectErrors (ReferenceInputsNotDisjointFromInputs), C/TxInfo.hs:488-493
+        assert(Context().env.params.protocolVersion.major == 11)
+        val (tx, state, input, _) = spendAndReference(validPlutusV3Script, isValid = true)
+        assertRejectedForOverlap(
+          PlutusScriptsTransactionMutator.transit(Context(), state, tx),
+          input
+        )
+    }
+
+    test(
+      "the PV 11 overlap of a PlutusV3 tx with isValid = false is rejected, not collected, spec [TX-1]"
+    ) {
+        // The script fails, but the context cannot be built, so UTXOS fails in phase 1 and no
+        // collateral is taken, whatever isValid says.
+        val (tx, state, input, _) = spendAndReference(invalidPlutusV3Script, isValid = false)
+        assertRejectedForOverlap(
+          PlutusScriptsTransactionMutator.transit(Context(), state, tx),
+          input
+        )
+    }
+
+    test("a PlutusV2 spend of a UTxO that is also a reference input passes at PV 11, spec [TX-1]") {
+        val (tx, state, input, _) = spendAndReference(validPlutusV2Script, isValid = true)
+        val result = PlutusScriptsTransactionMutator.transit(Context(), state, tx)
+        assert(result.map(_.utxos.contains(input)) == Right(false), result)
+    }
+
+    test(
+      "the PV 11 overlap is rejected before an earlier PlutusV2 script of a tx with isValid = false fails, spec [TX-1]"
+    ) {
+        // collectPlutusScriptsWithContext builds every script context before any script runs
+        // (eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Plutus/Evaluate.hs:157-214), so the PlutusV3
+        // collect error wins over the PlutusV2 failure that would collect the collateral. Spend
+        // redeemers run before Mint ones, so the PlutusV2 spend would fail first.
+        val (spend, state, input, _) = spendAndReference(invalidPlutusV2Script, isValid = false)
+        val mint = validPlutusV3Script
+        import TransactionWitnessSet.given
+        val tx = spend
+            .withBody(
+              _.copy(mint =
+                  Some(
+                    Mint(MultiAsset(SortedMap(mint.scriptHash -> SortedMap(AssetName.empty -> 1))))
+                  )
+              )
+            )
+            .withWitness(ws =>
+                ws.copy(
+                  plutusV3Scripts =
+                      TaggedSortedStrictMap.from[ScriptHash, Script.PlutusV3](Seq(mint)),
+                  redeemers = ws.redeemers.map(redeemers =>
+                      KeepRaw[Redeemers](
+                        Redeemers.Array(
+                          redeemers.value.toIndexedSeq :+ Redeemer(
+                            RedeemerTag.Mint,
+                            0,
+                            Data.unit,
+                            ExUnits(100000000, 100000000)
+                          )
+                        )
+                      )
+                  )
+                )
+            )
+        assertRejectedForOverlap(
+          PlutusScriptsTransactionMutator.transit(Context(), state, tx),
+          input
+        )
+    }
+
     private def validPlutusV1Script = PlutusV1.alwaysOk.withErrorTraces.script
 
     private def validPlutusV2Script = PlutusV2.alwaysOk.withErrorTraces.script
+
+    /** A PlutusV2 script that fails on any argument. */
+    private def invalidPlutusV2Script = Script.PlutusV2(Term.Error().plutusV2.cborByteString)
 
     private def validPlutusV3Script = PlutusV3.alwaysOk.withErrorTraces.script
 

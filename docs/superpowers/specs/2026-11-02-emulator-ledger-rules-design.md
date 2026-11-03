@@ -153,7 +153,7 @@ Not raised at PV11: `PPViewHashesDontMatch` (replaced by `ScriptIntegrityHashMis
 | `ValueNotConservedUTxO` | `S/Rules/Utxo.hs:518-523` | `R/ValueNotConservedUTxOValidator.scala:18` | I | – |
 | `BabbageOutputTooSmallUTxO` | `B/Rules/Utxo.hs:326-346` | `R/OutputsHaveNotEnoughCoinsValidator.scala:10` | I | – |
 | `OutputTooBigUTxO` (value size) | `A/Rules/Utxo.hs:428-447` | `R/OutputsHaveTooBigValueStorageSizeValidator.scala:10` | P: size not PV-dependent (TODO `:40`) | 6 |
-| `OutputTooBigUTxO` (boot attrs) | `B/Rules/Utxo.hs:413-414`, over all sized outputs | `R/OutputBootAddrAttrsSizeValidator.scala:17` | P: skips the collateral return (`:19`) | 0 (`[TX-4]`) |
+| `OutputTooBigUTxO` (boot attrs) | `B/Rules/Utxo.hs:413-414`, over all sized outputs | `R/OutputBootAddrAttrsSizeValidator.scala:17` | I: the collateral return is checked (`[TX-4]`), and `ByronAddress.attributesSize` counts what `bootstrapAddressAttrsSize` counts: the decoded HD payload plus the unknown attributes (`libs/cardano-ledger-core/src/Cardano/Ledger/Address.hs:334-340`). Before phase 0 it counted the raw attribute-1 value, CBOR head included, and skipped unknown attributes | 0 (`[TX-4]`) |
 | `WrongNetwork`, `WrongNetworkWithdrawal`, `WrongNetworkInTxBody` | `S/Rules/Utxo.hs:484-506`, `A/Rules/Utxo.hs:457-462` | `R/WrongNetwork*Validator.scala` | I | – |
 | `MaxTxSizeUTxO` | `S/Rules/Utxo.hs:572-581` | `R/TransactionSizeValidator.scala:8` | I | – |
 | `ExUnitsTooBigUTxO` | `A/Rules/Utxo.hs:475-481` | `R/ExUnitsTooBigValidator.scala:9` | I | – |
@@ -370,6 +370,10 @@ These fields are read or written by tx rules, so they live in the ledger state t
 
 **Why** `[TX-1]`: commit `123babebd` allowed the overlap outside PV 9 and 10, which matches the UTXO rule. The PlutusV3 context check (`C/TxInfo.hs:488-493`) was not ported. The TxBuilder now builds such txs (`SpendAndReferenceSameUtxoTest`), so a dApp test passes locally and fails on mainnet.
 
+*Implementation status (phase 0):* `[TX-1]` `getTxInfoV3` throws an `IllegalArgumentException` that names the common inputs, sorted; the Plutus mutator turns it into a phase-1 rejection whatever `isValid` says, so no collateral is taken. The evaluator builds the `TxInfo` of every Plutus version the needed scripts use before it runs any script, as `collectPlutusScriptsWithContext` does (`eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Plutus/Evaluate.hs:157-214`), so an earlier failing PlutusV1 or PlutusV2 script of a tx with `isValid = false` cannot turn the collect error into a collateral collection. The TxBuilder keeps allowing the overlap in its steps, since a PlutusV2 or native-script tx is valid with it at PV 11. For a PlutusV3 tx, `complete` evaluates the scripts and fails with a `BalancingException` that names the input. `[TX-2]` is a new `PoolMetadataHashTooBigException`, not a field of `StakePoolException`, to keep MiMa compatibility; the bundled `StakePoolException` is reported first when both apply.
+
+*Implementation status (phase 0):* `[TX-4]` `ByronAddress.attributesSize` computes `bootstrapAddressAttrsSize`: the length of the HD payload that attribute 1 serializes as a CBOR bytestring, without its head (`eras/byron/ledger/impl/src/Cardano/Chain/Common/AddrAttributes.hs:109`, `:178-179`), plus the content bytes of every attribute whose key is not 1 or 2 (`Attributes.hs:140-142`); a repeated key keeps its last value (D13). The network magic does not count. An address that a node cannot decode has no node size; for it Scalus counts all bytes of a malformed attribute 1 and ignores a malformed attribute 2 (D14). `ByronAddress.derivationPath` still returns the raw attribute-1 value (D15).
+
 ### 9.1 Block body
 
 - The forge MUST stop a block before the total reference-script size of its txs exceeds 1 MiB. `[BB-1]`
@@ -379,11 +383,15 @@ These fields are read or written by tx rules, so they live in the ledger state t
 
 **Why** `[BB-3]`, `[BB-4]`: `C/Rules/Bbody.hs:369-382`. Spent inputs are not removed from the lookup. The per-tx size function is `C/UTxO.hs:171-175`.
 
+*Implementation status (phase 0):* `BlockForge.refScriptsSize` ports `totalRefScriptSizeInBlock`, PV switch included: up to PV 10 every tx resolves on the UTxO at the block start. The forge limit and `[FG-18]` of `produceBlock(on, …)` check it with the body size and the execution units. `submit` holds every tx, `isValid` or not, to the per-tx reference-script limit of 200 KiB, as the node's mempool measure does (`txMeasureRefScripts`, ouroboros-consensus `Shelley/Ledger/Mempool.hs`): LEDGER skips that check when `isValid` is false, and the forge always takes the first mempool tx, so such a tx over 1 MiB would otherwise be forged into a block that breaks `[BB-1]`. The mempool capacity (chain spec `[MP-4]`) still measures only the body size and the execution units; the node's block capacity also has a reference-script dimension. The acceptance test of phase 0 item 3 uses six txs of 200 KiB, not three of 400 KiB: `ConwayTxRefScriptsSizeTooBig` caps a valid tx at 200 KiB, so three valid txs total at most 600 KiB. Five fit a block (1 024 000 bytes), the sixth forges in the next block.
+
 ### 9.2 Conformance harness
 
 - `CardanoLedgerConformanceTest` MUST run the DELEG (24), CERTS (2) and GOVCERT (10) vector dirs. `[CV-1]`
 - `CardanoLedgerConformanceTest` MUST run the GOV (56), EPOCH (13), RATIFY (46), ENACT (16) and LEDGER (1) vector dirs once phase 2 lands. `[CV-2]`
 - Each phase MUST remove the `LedgerStateComparison` exclusions it makes true (`scalus-cardano-ledger/jvm/src/test/scala/scalus/testing/conformance/LedgerStateComparison.scala:39-50`). `[CV-3]`
+
+*Implementation status (phase 0):* `[CV-1]` 33 of the 36 dirs pass. Four cases of three GOVCERT dirs need committee state (`ConwayCommitteeHasPreviouslyResigned`, `ConwayCommitteeIsUnknown`, section 5.7): "fails for.registering a resigned CC member hotkey" cases 3 and 6, "fails for.resigning a nonexistent CC member hotkey" case 1, "succeeds for.resigning a non-CC key" case 0. The test lists them as expected failures and fails when one of them starts to match, so phase 2 must remove them. The harness also failed open: the vectors are cached in the temp directory, and macOS had deleted the cached files, so every vector loaded no case and passed. The cache now records its file count, and a vector with no case fails.
 
 **Why** `[CV-2]`: every vector is one LEDGER transition: the tx, the old ledger state and the new ledger state. Consecutive vectors chain with no gap (checked: `new(0) == old(1)` in "EPOCH.Proposals.Expired proposal deposit refunded"). So the EPOCH, RATIFY and ENACT dirs test the tx rules and the stored proposals of those scenarios. They do not test the boundary. Boundary acceptance comes from ported Imp scenarios (section 16).
 
@@ -807,6 +815,9 @@ Ordered by testing impact. Each phase lands as its own branch and keeps CI green
 | D10 | Epoch rules always on (owner, Q4) | an opt-in flag for one release |
 | D11 | No default committee (owner, Q7) | a test committee at genesis |
 | D12 | Reject a hard fork to PV12 (owner, Q8) | enact it under Conway rules |
+| D13 | A repeated Byron attribute key keeps its last value, as the node's `Map` does (agent, phase 0) | sum every occurrence |
+| D14 | A Byron address a node cannot decode (attribute 1 not one whole bytestring, attribute 2 not a Word32) gets a size: all bytes of attribute 1, none of attribute 2 (agent, phase 0) | throw from `attributesSize`. A node rejects such a tx at decoding, so no choice has node parity; the residual gap is that the Emulator accepts such an output when its size is 64 or less |
+| D15 | `ByronAddress.derivationPath` keeps returning the raw attribute-1 value (agent, phase 0) | return the decoded HD payload, which changes a public accessor for no rule |
 
 **Why** D5: an incremental instant stake touches every tx mutator. The boundary computation is O(UTxO) once per epoch, which is cheap for an Emulator.
 

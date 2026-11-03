@@ -1177,9 +1177,10 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     }
 
     /** Returns Left if `input` is already in `existing`: the inputs for a spend, the reference
-      * inputs for a reference. A spent input may also be referenced: the ledger accepts that at
+      * inputs for a reference. A spent input may also be referenced: the UTXO rule accepts that at
       * every protocol version but 9 and 10, where `InputsAndReferenceInputsDisjointValidator`
-      * rejects it.
+      * rejects it. From version 11 a PlutusV3 script context rejects it (spec [TX-1]); the
+      * evaluation in balancing reports that, so this step does not check it.
       */
     private def assertInputDoesNotAlreadyExist(
         input: TransactionInput,

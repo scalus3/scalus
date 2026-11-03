@@ -5,6 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
+import scalus.uplc.builtin.ByteString
 
 class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with EitherValues {
 
@@ -63,6 +64,16 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
       )
     )
 
+    extension (error: StakePoolCertificatesValidator.Error)
+        private def poolError: TransactionException.StakePoolException = error match
+            case e: TransactionException.StakePoolException => e
+            case other => fail(s"not a StakePoolException: $other")
+
+    private def withMetadataHash(size: Int): Certificate.PoolRegistration =
+        mkRegistration().copy(poolMetadata =
+            Some(PoolMetadata("https://pool.example", ByteString.fromArray(new Array[Byte](size))))
+        )
+
     test("pool registration succeeds for new pool") {
         val result = runValidator(Seq(mkRegistration()))
         result.isRight shouldBe true
@@ -87,18 +98,18 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
           )
         )
 
-        val error = runValidator(Seq(mismatched)).left.value
+        val error = runValidator(Seq(mismatched)).left.value.poolError
         error.rewardAccountNetworkMismatch.exists(_._1 == poolId) shouldBe true
     }
 
     test("registration fails when cost below minimum") {
         val lowCost = mkRegistration(cost = minPoolCost - Coin.ada(1))
-        val error = runValidator(Seq(lowCost)).left.value
+        val error = runValidator(Seq(lowCost)).left.value.poolError
         error.costBelowMinimum should contain key poolId
     }
 
     test("retirement fails when pool not registered") {
-        val error = runValidator(Seq(Certificate.PoolRetirement(poolId, 10))).left.value
+        val error = runValidator(Seq(Certificate.PoolRetirement(poolId, 10))).left.value.poolError
         error.notRegistered should contain(poolId)
     }
 
@@ -131,7 +142,7 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
           ), // epochNo == currentEpoch is invalid
           certState,
           epoch = currentEpoch
-        ).left.value
+        ).left.value.poolError
         error.invalidRetirementEpochs should contain key poolId
     }
 
@@ -148,7 +159,21 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
           Seq(Certificate.PoolRetirement(poolId, tooFarEpoch)),
           certState,
           epoch = currentEpoch
-        ).left.value
+        ).left.value.poolError
         error.invalidRetirementEpochs should contain key poolId
+    }
+
+    test("registration fails when the metadata hash is longer than 32 bytes, spec [TX-2]") {
+        // PoolMedataHashTooBig, S/Rules/Pool.hs:249-254
+        runValidator(Seq(withMetadataHash(33))).left.value match
+            case e: TransactionException.PoolMetadataHashTooBigException =>
+                e.hashSizes shouldBe Map(poolId -> 33)
+                e.maxHashSize shouldBe 32
+            case other => fail(s"not a PoolMetadataHashTooBigException: $other")
+    }
+
+    test("registration succeeds with a 32-byte or shorter metadata hash, spec [TX-2]") {
+        runValidator(Seq(withMetadataHash(32))).isRight shouldBe true
+        runValidator(Seq(withMetadataHash(0))).isRight shouldBe true
     }
 }

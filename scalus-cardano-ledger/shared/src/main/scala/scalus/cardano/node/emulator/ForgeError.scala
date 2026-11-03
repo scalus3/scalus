@@ -21,7 +21,9 @@ enum ForgeError {
     /** The tx at `index` fails the ledger rules, spec [FG-16]. */
     case InvalidTx(index: Int, error: SubmitError)
 
-    /** The txs exceed the block limits, spec [FG-18]. */
+    /** The txs exceed the block limits, spec [FG-18]: the body size, the execution units or the
+      * total reference-script size, spec [BB-2].
+      */
     case BlockTooBig
 
     /** What went wrong, in prose, for a person to read. Match on the case in code. */
@@ -33,7 +35,8 @@ enum ForgeError {
         case TooDeep(depth, securityParam) =>
             s"the fork point is at depth $depth, deeper than securityParam $securityParam"
         case InvalidTx(index, error) => s"the tx at index $index is invalid: ${error.message}"
-        case BlockTooBig => "the txs exceed the block body size or execution unit limits"
+        case BlockTooBig =>
+            "the txs exceed the block body size, execution unit or reference script size limits"
 }
 
 /** Why `rollback(n)` removed no block, spec section 11.3. */

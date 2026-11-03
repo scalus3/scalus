@@ -1,6 +1,8 @@
 package scalus.cardano.ledger
 package rules
 
+import scalus.cardano.ledger.utils.ProducedUtxos
+
 import scala.util.boundary
 import scala.util.boundary.break
 import scala.util.control.NonFatal
@@ -30,15 +32,10 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
             ).evalPlutusScripts(event, utxo, context.debugScripts)
 
             if event.isValid then
-                val addedUtxos: Utxos = event.body.value.outputs.view.zipWithIndex.map {
-                    case (SizedValue(output), index) =>
-                        Input(event.id, index) -> output
-                }.toMap
-
                 // TODO full transition
                 success(
                   state.copy(
-                    utxos = state.utxos -- event.body.value.inputs.toSet ++ addedUtxos,
+                    utxos = state.utxos -- event.body.value.inputs.toSet ++ ProducedUtxos.of(event),
                     fees = state.fees + event.body.value.fee,
                     donation = state.donation + event.body.value.donation.getOrElse(Coin.zero)
                   )
@@ -63,17 +60,6 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                       )
                     )
                 else
-                    val addedUtxos = event.body.value.collateralReturnOutput
-                        .map(v =>
-                            /** In the impossible event that there are more transaction outputs in
-                              * the transaction than will fit into a Word16, we give the collateral
-                              * return output an index of maxBound.
-                              */
-                            val index = event.body.value.outputs.size.min(65535)
-                            Input(event.id, index) -> v.value
-                        )
-                        .toMap
-
                     val collateralReturnCoins = event.body.value.collateralReturnOutput
                         .map(v => v.value.value.coin)
                         .getOrElse(Coin.zero)
@@ -102,8 +88,8 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                     // TODO full transition
                     success(
                       state.copy(
-                        utxos =
-                            state.utxos -- event.body.value.collateralInputs.toSet ++ addedUtxos,
+                        utxos = state.utxos -- event.body.value.collateralInputs.toSet ++
+                            ProducedUtxos.of(event),
                         fees = state.fees + collectedCollateral
                       )
                     )
