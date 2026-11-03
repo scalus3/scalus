@@ -1254,17 +1254,33 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
 
     test("Data nodes cut a type that contains itself, which by fields has no end") {
         // The root by fields, an integer for its constructor, and the subtrees of a Node as Data.
-        val leafOrNode = forAll[BlasterTree](t =>
+        // The test decodes the left one and matches on it, which fails on a Data that is no
+        // constructor of a tree: the premise of its encoding leaves those out.
+        val leftIsATree = forAll[BlasterTree](t =>
             t match
-                case BlasterTree.Leaf       => true
-                case BlasterTree.Node(_, _) => true
+                case BlasterTree.Leaf => true
+                case BlasterTree.Node(left, _) =>
+                    left match
+                        case BlasterTree.Leaf       => true
+                        case BlasterTree.Node(_, _) => true
         )
         checkedAsData(
-          verifier.statement(leafOrNode),
+          verifier.statement(leftIsATree),
           Budget.LeanSteps(300),
           "t.Node.left",
           "t.Node.right"
         )
+    }
+
+    test("a check under a fixed plan keeps no result, and the tactic keeps its name") {
+        // No Lean here. A statement keeps one result, which its check under the tactic's own plan
+        // would have.
+        val goal = lowered(forAll[BlasterOwned](o => o.amount == o.amount), FunctionTable.empty)
+        val own = UplcBlaster(Budget.LeanSteps(100), lean)
+        val fixed = own.withFixedPlan(MappingPlan.Fixed.asData("o.owner"))
+        assert(own.fingerprint(goal).isDefined)
+        assert(fixed.fingerprint(goal).isEmpty)
+        assert(fixed.name == own.name)
     }
 
     test("states that an expression fails, whatever its type") {

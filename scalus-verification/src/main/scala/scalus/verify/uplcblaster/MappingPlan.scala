@@ -111,23 +111,23 @@ object MappingPlan {
       * It is asked about each decided node of a `forAll` or an `exists` variable, from the root
       * down, before the node is expanded: a node it maps as `Data` is not expanded, and nothing
       * below it is asked about. A variable over `Data` encodings is mapped before it is expanded,
-      * and is not asked about. The mapping it fixes is the node's in the check's text, and so in
-      * its fingerprint.
+      * and is not asked about.
       *
-      * @param name
-      *   what the plan is, in the tactic's name ([[UplcBlaster.name]]): the results kept for one
-      *   statement under two plans are two, and each stays where the other is checked
+      * A check under a fixed plan keeps no result ([[UplcBlaster.withFixedPlan]]): it is a test of
+      * the tactic or a measurement, and the file of kept results keeps one result for a statement's
+      * name, which it would take from the check of the statement under the tactic's own plan.
+      *
       * @param paths
       *   the nodes it names, each written as the statement writes it: lowering fails where one is
-      *   no decided node of the statement's variables, so that a check that misses it does not run
-      *   as if it had not
+      *   not a node the statement's variables have and the plan was asked about, so that a check
+      *   that misses it does not run as if it had not. A plan that decides by another thing than
+      *   paths, as by size, names none.
       * @param decide
       *   the mapping of the node at a path written as the statement writes it,
       *   `out.address.stakingCredential`, of a type, a case class or an enum, in the variable of a
       *   place ([[Node.variable]]); none for the tactic's own
       */
     private[verify] final class Fixed(
-        val name: String,
         val paths: Set[String],
         decide: (Int, String, SIRType) => Option[Mapping]
     ) {
@@ -142,17 +142,14 @@ object MappingPlan {
     private[verify] object Fixed {
 
         /** No mapping fixed: every node is the tactic's to decide. */
-        val none: Fixed = new Fixed("", Set.empty, (_, _, _) => None)
+        val none: Fixed = new Fixed(Set.empty, (_, _, _) => None)
 
         /** The nodes at `paths`, in any variable, as `Data`, and the others as the tactic decides.
           */
         def asData(paths: String*): Fixed = {
+            require(paths.nonEmpty, "a plan of nodes as Data names at least one")
             val fixed = paths.toSet
-            new Fixed(
-              s"${fixed.toList.sorted.mkString(", ")} as Data",
-              fixed,
-              (_, path, _) => Option.when(fixed.contains(path))(Mapping.AsData)
-            )
+            new Fixed(fixed, (_, path, _) => Option.when(fixed.contains(path))(Mapping.AsData))
         }
     }
 

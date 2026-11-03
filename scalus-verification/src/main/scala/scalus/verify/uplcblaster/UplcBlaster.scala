@@ -190,6 +190,7 @@ final class UplcBlaster private (
 
     /** The same tactic, mapping the variables' nodes that `plan` fixes as it says, in place of its
       * own decisions ([[MappingPlan.Fixed]]): for the tactic's tests, and for measuring its rules.
+      * It keeps no results ([[fingerprint]]).
       */
     private[verify] def withFixedPlan(plan: MappingPlan.Fixed): UplcBlaster =
         new UplcBlaster(
@@ -203,11 +204,7 @@ final class UplcBlaster private (
           plan
         )
 
-    /** `uplc-blaster`, with the plan it was given, where it was given one ([[withFixedPlan]]): the
-      * results kept for a statement are kept by its tactic's name.
-      */
-    override val name: String =
-        if fixedPlan.name.isEmpty then "uplc-blaster" else s"uplc-blaster, ${fixedPlan.name}"
+    override val name: String = "uplc-blaster"
 
     override def prepare(goal: Goal): Either[CompatibilityReport, Prepared] =
         UplcBlaster
@@ -273,12 +270,17 @@ final class UplcBlaster private (
 
     /** What a result rests on: the statement as Lean is given it, the programs, and Lean's side,
       * which is read from the workspace of the tactic's servers. A tactic whose provider does not
-      * say which workspace that is, or names a directory that is none, keeps no results.
+      * say which workspace that is, or names a directory that is none, keeps no results, nor does
+      * one with a fixed plan ([[withFixedPlan]]).
       */
     override def fingerprint(prepared: Prepared): Option[Fingerprint] =
-        servers.workspace
-            .filter(workspace => Files.isRegularFile(workspace.resolve("lean-toolchain")))
-            .map(UplcBlaster.fingerprint(prepared, _))
+        // A check under a fixed plan is a test or a measurement. A statement keeps one result,
+        // which the check under the tactic's own plan would have.
+        if fixedPlan ne MappingPlan.Fixed.none then None
+        else
+            servers.workspace
+                .filter(workspace => Files.isRegularFile(workspace.resolve("lean-toolchain")))
+                .map(UplcBlaster.fingerprint(prepared, _))
 
     override def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] =
         UplcBlaster.kept(prepared, result)
@@ -608,6 +610,13 @@ object UplcBlaster {
                         )
                     case DataEncoding.Unknown(reason) =>
                         Left(s"a forAllData binder of ${valueType.show} is not supported: $reason")
+                    // As of a node mapped as Data: such a value is the decoding of no Data.
+                    case _ if DataLayout.withoutDataForm(valueType).isDefined =>
+                        Left(
+                          s"a forAllData binder of ${valueType.show} is not supported: its part " +
+                              s"of type ${DataLayout.withoutDataForm(valueType).get.show} has no " +
+                              "Data form"
+                        )
                     // `d.to[A]` compiles to the compiler's own reading, whatever FromData is
                     // given. A decoder that is not would read other Data than the premise admits.
                     case _ if !decodesByRepresentation(decoded, ident.name) =>
@@ -788,8 +797,10 @@ object UplcBlaster {
                 if missed.isEmpty then Right(formula)
                 else
                     Left(
-                      s"the fixed plan names ${missed.toList.sorted.mkString(", ")}, which is no " +
-                          "case class or enum of the statement's variables that a check would map"
+                      s"the fixed plan names ${missed.toList.sorted.mkString(", ")}, which it was " +
+                          "not asked about: no case class or enum of the statement's variables is " +
+                          "there, or it is inside a node that is one Data variable, which the plan " +
+                          "maps as Data or the statement quantifies over its encodings"
                     )
             }
 
@@ -952,8 +963,10 @@ object UplcBlaster {
     private enum Variable(val leanType: String) {
 
         /** Whether the variable has values its type does not have: the items of a list or a map are
-          * any `Data`. A statement about all its values holds of the type's, and one that claims
-          * some value can be shown by a value the type does not have.
+          * any `Data`, and so is a variable over the encodings of a type, of [[Props.forAllData]]
+          * or a node mapped as `Data`, but for its premise. A statement about all its values holds
+          * of the type's, and one that claims some value can be shown by a value the type does not
+          * have.
           */
         def isLarger: Boolean = this match
             case DataList | PairList | DataMap | EncodedData => true
@@ -973,7 +986,9 @@ object UplcBlaster {
         /** The entries of one `Data.Map`. */
         case DataMap extends Variable("List (Data × Data)")
 
-        /** The `Data` encoding of a value of its type ([[Props.forAllData]]). */
+        /** The `Data` encoding of a value of its type: of a [[Props.forAllData]] variable, or of a
+          * node mapped as `Data` ([[asData]]).
+          */
         case EncodedData extends Variable("Data")
 
         /** The term that passes the value of the Lean variable `name`. The text is part of every
@@ -1125,7 +1140,7 @@ object UplcBlaster {
       * ([[DataEncoding.encodedVariable]]) with its decoder, and the quantifier restricts it with
       * the premise of its type's encoding. The decoder is `UniversalDataConversion.fromData`, the
       * compiler's own reading of the type's `Data` representation, which the premise is derived
-      * from, and which the compiler gives `d.to[A]`; the value is the decoder opened on the
+      * from, and which the compiler gives `d.to[A]`; the value is that decoder applied to the
       * variable. Nothing below the node is expanded, so the type may contain itself.
       *
       * A type with a part that has no `Data` form, as a function, has values that are the decoding
@@ -1147,21 +1162,15 @@ object UplcBlaster {
             case (None, DataEncoding.Unknown(reason)) =>
                 refused(s"its encoding is not told: $reason")
             case _ =>
+                // The decoder the variable's type is marked with, and the value: one reading.
+                def decoded(data: AnnotatedSIR): AnnotatedSIR =
+                    SIR.Apply(fromDataOf(tp), data, tp, AnnotationsDecl.empty)
                 val parameter = SIR.Var("data", SIRType.Data(), AnnotationsDecl.empty)
-                val decoder = SIR.LamAbs(
-                  parameter,
-                  SIR.Apply(fromDataOf(tp), parameter, tp, AnnotationsDecl.empty),
-                  Nil,
-                  AnnotationsDecl.empty
-                )
+                val decoder = SIR.LamAbs(parameter, decoded(parameter), Nil, AnnotationsDecl.empty)
                 val variable =
                     DataEncoding.encodedVariable(new PropExpr.Ident[Any](path, 0L, tp), decoder)
-                Props.openVariables(decoder, List(path)) match
-                    case value: AnnotatedSIR => Right(List(variable) -> Some(value))
-                    case other =>
-                        Left(
-                          s"the decoder of ${PropIdentity.written(path)} is no expression: $other"
-                        )
+                val value = decoded(SIR.Var(path, SIRType.Data(), AnnotationsDecl.empty))
+                Right(List(variable) -> Some(value))
     }
 
     /** The compiler's name of `UniversalDataConversion.fromData`, which its lowering reads by the
@@ -2794,10 +2803,10 @@ object UplcBlaster {
     }
 
     /** Why `value`, Lean's value for a variable of type `tp`, is no value of the type, or `None`
-      * where it is one. Only a list, a map or a [[Props.forAllData]] variable has values its type
-      * does not have ([[Variable.isLarger]]): its items, or itself, are any `Data`, unless the
-      * quantifier's predicate is exact. A value that cannot be checked here counts as none of the
-      * type's, so that a refutation never rests on it.
+      * where it is one. Only a list, a map, a [[Props.forAllData]] variable or a node mapped as
+      * `Data` has values its type does not have ([[Variable.isLarger]]): its items, or itself, are
+      * any `Data`, unless the quantifier's predicate is exact. A value that cannot be checked here
+      * counts as none of the type's, so that a refutation never rests on it.
       */
     private[uplcblaster] def outsideType(value: Constant, tp: SIRType): Option[String] =
         outsideEncoding(value, tp).orElse(outsideLimits(value, tp))

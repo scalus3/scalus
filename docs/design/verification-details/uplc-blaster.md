@@ -342,20 +342,22 @@ counterexample are named by their nodes' paths, as now
    Built. `Expansion.decide` maps a node as `Data` where a fixed plan says so
    (`MappingPlan.Fixed`, given to `lower` or with `UplcBlaster.withFixedPlan`), as no rule does
    yet. It is internal, for the tactic's tests and for step 4: a statement still has no way to
-   choose. A fixed plan has a name, which is in the tactic's name, so that the results kept for a
-   statement under two plans are two; and the paths it names, each of which must be a decided node
-   of the statement, or lowering fails. A node is decided before it is expanded, so a plan can map
+   choose. A check under a fixed plan keeps no result: it is a test or a measurement, and a
+   statement keeps one result, which its check under the tactic's own plan has. A plan names its
+   paths, each of which must be a node the plan was asked about, or lowering fails. A node is decided before it is expanded, so a plan can map
    a type that contains itself as `Data` where it repeats, which rule 1 will do. The node is one
    Lean `Data` variable named by its path, of the type a `forAllData` variable has, so its
    premise, its default value and the check of a counterexample's value are those of the node's
    type. The test reads it with `UniversalDataConversion.fromData`, written as the linker writes
-   it. A node with a part that has no `Data` form is refused: a function, `Unit`, a value of a
-   Miller loop, or a type that holds one, in a field or a type argument. The compiler says which
+   it. A node with a part that has no `Data` form is refused, as is a `forAllData` variable: a
+   function, `Unit`, a value of a Miller loop, or a case class or an enum that holds one, in a
+   field or a type argument. Of a case class or an enum the compiler says which
    (`canBeConvertedToData`, false where it gives the type a representation without `Data`), and
-   `DataLayout` asks it of every part before it reads the part's representation. So is a node
-   whose encoding is not told. `MappingPlanTest` pins the 10 variables of `out` above, and
-   `UplcBlasterTest` proves and refutes through a `Data` node in Lean: `o.owner` of a
-   `BlasterOwned`, whose key a test reads, and the subtrees of a `BlasterTree`, in seconds. For
+   `DataLayout` asks it before it asks for the representation. So is a node whose encoding is not
+   told. `MappingPlanTest` pins the 10 variables of `out` above, and
+   `UplcBlasterTest` checks `Data` nodes in Lean, in seconds: it proves and refutes through
+   `o.owner` of a `BlasterOwned`, whose key a test reads, and proves through the subtrees of a
+   `BlasterTree`, one of which a test decodes and matches on. For
    step 4: with `out` mapped as above, a check of a test that reads only which constructor
    `out.address.stakingCredential` has, `None` or `Some`, did not finish within 3 minutes at 100
    steps, as Z3 works through the exact premise of the `Option[StakingCredential]`; a match down

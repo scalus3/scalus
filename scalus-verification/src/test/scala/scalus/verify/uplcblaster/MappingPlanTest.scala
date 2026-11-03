@@ -271,6 +271,12 @@ class MappingPlanTest extends AnyFunSuite {
             case Left(reason) =>
                 assert(reason.startsWith("the fixed plan names o.amount, o.ownr, which"), reason)
             case Right(lowered) => fail(s"expected a refusal, got ${lowered.plan.show}")
+        // So is one inside a node it maps as Data, which it is not asked about.
+        asData(forAll[BlasterOwned](o => true), "o", "o.owner") match
+            case Left(reason) =>
+                assert(reason.startsWith("the fixed plan names o.owner, which"), reason)
+                assert(reason.contains("inside a node that is one Data variable"), reason)
+            case Right(lowered) => fail(s"expected a refusal, got ${lowered.plan.show}")
     }
 
     test(
@@ -344,7 +350,6 @@ class MappingPlanTest extends AnyFunSuite {
         val both = Prop.And(byFields, byFields)
         // The second variable's owner, the first's by fields.
         val second = new MappingPlan.Fixed(
-          "the second x.owner as Data",
           Set("x.owner"),
           (variable, path, _) => Option.when(variable == 1 && path == "x.owner")(Mapping.AsData)
         )
