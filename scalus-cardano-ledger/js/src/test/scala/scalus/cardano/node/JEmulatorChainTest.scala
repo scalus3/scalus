@@ -235,7 +235,8 @@ class JEmulatorChainTest extends AnyFunSuite {
               "blockProduction" -> ("hourly": js.Any),
               "awaitTx" -> ("never": js.Any),
               "orphanTxs" -> ("keep": js.Any),
-              "securityParam" -> (0: js.Any)
+              "securityParam" -> (0: js.Any),
+              "slot" -> (1.5: js.Any)
             )
         do
             val thrown = intercept[js.JavaScriptException](create(option))

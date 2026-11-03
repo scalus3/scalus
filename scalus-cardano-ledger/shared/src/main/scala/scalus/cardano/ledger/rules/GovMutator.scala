@@ -64,6 +64,9 @@ object GovMutator extends STS.Mutator {
         val major = params.protocolVersion.major
         val epoch = context.slotConfig.epochOf(context.env.slot)
         val before = state.govState
+        // the voters of the outer map, as Gov.hs:609-613 and 664-677 read them: a voter with an
+        // empty inner map is a voter too
+        val voters: List[Voter] = body.votingProcedures.toList.flatMap(_.procedures.keys)
         val votes: List[(Voter, GovActionId, Vote)] =
             body.votingProcedures.toList.flatMap(_.procedures.toList).flatMap { (voter, byId) =>
                 byId.toList.map((id, procedure) => (voter, id, procedure.vote))
@@ -71,7 +74,7 @@ object GovMutator extends STS.Mutator {
         val unregisteredDReps: Set[Credential] = body.certificates.toSeq.collect {
             case Certificate.UnregDRepCert(credential, _) => credential
         }.toSet
-        val unelected = unelectedCommitteeVoters(before, state.certState, votes)
+        val unelected = unelectedCommitteeVoters(before, state.certState, voters)
         // Gov.hs:489-492: hardforkConwayDisallowUnelectedCommitteeFromVoting, PV >= 11
         val unelectedFailure =
             check(major < 11 || unelected.isEmpty, UnelectedCommitteeVoters(unelected))
@@ -83,7 +86,7 @@ object GovMutator extends STS.Mutator {
                     (failures ++ more, added)
             }
         val failures = unelectedFailure ++ proposalFailures ++
-            checkVotes(state.certState, withProposals, epoch, votes)
+            checkVotes(state.certState, withProposals, epoch, voters, votes)
         val after = votes
             .foldLeft(withProposals)((gov, vote) => gov.withVote(vote._1, vote._2, vote._3))
             .withoutDRepVotes(unregisteredDReps)
@@ -244,10 +247,11 @@ object GovMutator extends STS.Mutator {
         certState: CertState,
         proposals: GovState,
         epoch: Long,
+        voters: List[Voter],
         votes: List[(Voter, GovActionId, Vote)]
     ): List[GovFailure] = {
         val hotKeys = authorizedHotKeys(certState.vstate.committeeState)
-        val unknownVoters = votes.map(_._1).distinct.filterNot(isKnown(certState, hotKeys, _))
+        val unknownVoters = voters.filterNot(isKnown(certState, hotKeys, _))
         val known = votes.filterNot(v => unknownVoters.contains(v._1))
         val unknownActions = known.map(_._2).distinct.filter(proposals.proposal(_).isEmpty)
         val withAction =
@@ -290,23 +294,21 @@ object GovMutator extends STS.Mutator {
         }.toSet
 
     /** `unelectedCommitteeVoters` of Gov.hs:664-677, spec [GV-12], [GV-13]: the committee hot
-      * credentials of `votes` that no member of the committee before the tx authorized. The term of
-      * a member is not checked.
+      * credentials of `voters` that no member of the committee before the tx authorized. The term
+      * of a member is not checked.
       */
     private def unelectedCommitteeVoters(
         before: GovState,
         certState: CertState,
-        votes: List[(Voter, GovActionId, Vote)]
+        voters: List[Voter]
     ): Set[Credential] = {
         val members = before.committee.map(_.members.keySet).getOrElse(Set.empty)
         val elected =
             authorizedHotKeys(certState.vstate.committeeState.filter((cold, _) => members(cold)))
-        votes.flatMap {
-            case (Voter.ConstitutionalCommitteeHotKey(hash), _, _) =>
-                Some(Credential.KeyHash(hash))
-            case (Voter.ConstitutionalCommitteeHotScript(hash), _, _) =>
-                Some(Credential.ScriptHash(hash))
-            case _ => None
+        voters.flatMap {
+            case Voter.ConstitutionalCommitteeHotKey(hash)    => Some(Credential.KeyHash(hash))
+            case Voter.ConstitutionalCommitteeHotScript(hash) => Some(Credential.ScriptHash(hash))
+            case _                                            => None
         }.toSet -- elected
     }
 

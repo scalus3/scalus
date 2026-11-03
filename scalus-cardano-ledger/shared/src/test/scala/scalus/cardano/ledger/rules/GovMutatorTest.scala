@@ -627,6 +627,17 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
         ) shouldBe GovFailure.VotersDoNotExist(List(unknownDRepVoter))
     }
 
+    test("spec [GV-10]: an unknown voter with no votes still gets VotersDoNotExist") {
+        // Gov.hs:609-613 reads the voters from the outer map, so a voter whose inner map is
+        // empty is checked too
+        val empty = tx().withBody(
+          _.copy(votingProcedures =
+              Some(VotingProcedures(SortedMap(unknownDRepVoter -> SortedMap.empty)))
+          )
+        )
+        failureOf(run(empty)) shouldBe GovFailure.VotersDoNotExist(List(unknownDRepVoter))
+    }
+
     test("spec [GV-10a]: a pool and a script DRep must be registered to vote") {
         val unknownPool = Voter.StakingPoolKey(AddrKeyHash.fromHex("2" * 56))
         failureOf(run(tx(votes = Seq((unknownPool, infoId, Vote.Yes))))) shouldBe
@@ -801,6 +812,26 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
         )
         // transit keeps the first one
         failureOf(run(transaction)) shouldBe failures.head
+    }
+
+    test("spec [GV-3a]: transit reports a bad deposit first, transitAll in the ledger order") {
+        // ProposalDepositValidator is a validator, and transit runs every validator before any
+        // mutator (D30); transitAll sorts by the ledger order, where MalformedProposal comes
+        // before ProposalDepositIncorrect
+        val malformed = proposal(ppChange(ProtocolParamUpdate(), None, None))
+            .copy(deposit = deposit + Coin(1))
+        val transaction = tx(proposals = Seq(malformed))
+        val ctx = context(baseState, 11, 10)
+        val validators = Seq(ProposalDepositValidator)
+        val mutators = Seq(GovMutator)
+        val first = STS.Mutator.transit(validators, mutators, ctx, baseState, transaction)
+        first.left.value shouldBe a[TransactionException.ProposalDepositIncorrectException]
+        val all = STS.Mutator.transitAll(validators, mutators, ctx, baseState, transaction)
+        all.left.value.flatMap(TransactionException.ledgerNames) shouldBe Seq(
+          "MalformedProposal",
+          "ProposalDepositIncorrect",
+          "InvalidGuardrailsScriptHash"
+        )
     }
 
     test("spec [FL-1]: a proposal that fails a check is still added for the votes and parents") {

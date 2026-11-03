@@ -236,10 +236,11 @@ export class Emulator {
   constructor(initialUtxosCbor: Uint8Array, slotConfig: SlotConfig, initialStakeRewards?: { [key: string]: string });
   /**
    * Network, slot configuration and protocol parameters this emulator validates transactions
-   * against, as one coherent triple. For an emulator built with `Emulator.create`, this is
-   * exactly the `CardanoInfo` it was created from; for the deprecated constructors, protocol
-   * parameters come from `slotConfig` alone (mainnet parameters for `SlotConfig.mainnet`,
-   * `UtxoEnv.default`'s parameters otherwise), which is the mismatch `Emulator.create` fixes.
+   * against, as one coherent triple. For an emulator built with `Emulator.create`, this is the
+   * `CardanoInfo` it was created from, with the pparams that later epoch boundaries enacted
+   * (ledger-rules spec [ES-15]); for the deprecated constructors, protocol parameters come from
+   * `slotConfig` alone (mainnet parameters for `SlotConfig.mainnet`, `UtxoEnv.default`'s
+   * parameters otherwise), which is the mismatch `Emulator.create` fixes.
    */
   getCardanoInfo(): CardanoInfo;
   /**
@@ -336,14 +337,16 @@ export class Emulator {
   getStakeReward(rewardAddressBech32: string): bigint | undefined;
   /**
    * Moves the clock to an absolute slot, forwards or backwards. Validity intervals and
-   * time-aware scripts see the difference; no blocks are produced in between and no rewards are
-   * paid out. Crossing an epoch boundary forwards adds the donations of the epoch to the
-   * treasury. A fractional value is truncated.
+   * time-aware scripts see the difference; no blocks are produced in between. Crossing an epoch
+   * boundary forwards runs the epoch rules: pool retirement, proposal expiry and refunds,
+   * rewards and enactment. Each boundary crossed costs one epoch transition, so a move across
+   * millions of epochs is slow. A fractional value is truncated.
    */
   setSlot(slot: number): void;
   /**
    * The treasury in lovelace at the start of the current epoch: the value a transaction must
-   * state as its `currentTreasuryValue`. An epoch boundary adds the donations of the epoch.
+   * state as its `currentTreasuryValue`. An epoch boundary changes it as the epoch rules do:
+   * donations, the treasury cut of the rewards and enacted withdrawals.
    */
   getTreasury(): bigint;
   /** The reserves in lovelace. They start as the `reserves` option. */
@@ -356,7 +359,7 @@ export class Emulator {
   getGovState(): GovState;
   /**
    * The current slot number of the emulator. With clock `"wall"`, reading it does not move the
-   * clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
+   * clock: only `submitTx`, `evaluateTx`, `ledgerFailures`, `produceBlock` and `awaitTx` do.
    */
   getSlot(): number;
   /** The epoch of the current slot. */
@@ -366,7 +369,8 @@ export class Emulator {
   /**
    * POSIX time in milliseconds at which the emulator's current slot starts. Equivalent to
    * `getCardanoInfo().slotConfig.slotToTime(getSlot())`. With clock `"wall"`, reading it does
-   * not move the clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
+   * not move the clock: only `submitTx`, `evaluateTx`, `ledgerFailures`, `produceBlock` and
+   * `awaitTx` do.
    */
   getTime(): number;
   /**
@@ -601,8 +605,8 @@ export interface EmulatorOptions {
   /**
    * The treasury in lovelace at the start of the current epoch. Defaults to the mainnet treasury
    * at epoch 665, 1 392 896 975 262 771 lovelace. A transaction that states a
-   * `currentTreasuryValue` must state this value until the next epoch boundary, which adds the
-   * donations of the epoch to it. A negative value throws a `TypeError`.
+   * `currentTreasuryValue` must state this value until the next epoch boundary, which changes it
+   * as the epoch rules do. A negative value throws a `TypeError`.
    */
   readonly treasury?: bigint;
   /**
@@ -620,7 +624,8 @@ export interface EmulatorOptions {
    * `"manual"`, the default: the slot moves only when you move it. `"wall"`: before it validates
    * or evaluates a transaction, the emulator moves to the slot that contains `Date.now()`, never
    * backwards, so a validity interval built from the wall clock holds. `getSlot` and `getTime`
-   * do not move the clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
+   * do not move the clock: only `submitTx`, `evaluateTx`, `ledgerFailures`, `produceBlock` and
+   * `awaitTx` do.
    */
   readonly clock?: "manual" | "wall";
   /**

@@ -23,7 +23,8 @@ class DugiteLedgerConformanceTest extends AnyFunSuite {
         // spec section 20 Q9, D44: `Coin(value: Long)` cannot hold a withdrawal of a
         // TreasuryWithdrawals above Long.MaxValue. The Imp scenario is "Withdrawals exceeding
         // maxBound Word64 submitted in a single proposal" (conway Imp/EnactSpec.hs:129-137): the
-        // tx of test_5222 proposes it, and the state of the next three holds it.
+        // tx of test_5222 proposes it, and the state of the next three holds it. The sample holds
+        // the next three only; test_5222 is in the full corpus.
         val bigWithdrawal = "a treasury withdrawal above Long.MaxValue (Q9, D44)"
         val overLong = "Expected Long but got OverLong"
         // D116: the tx proposes a hard fork to 13.0. Scalus decodes the major with the bound 12 of
@@ -181,6 +182,7 @@ class DugiteLedgerConformanceTest extends AnyFunSuite {
         assert(summary.cases == 7446)
         assert(summary.rejected == 93)
         assert(summary.distinct == 6918)
+        assert(expectedFailures.keySet.subsetOf(summary.names))
         check(summary)
     }
 }

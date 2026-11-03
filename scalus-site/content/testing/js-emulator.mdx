@@ -223,8 +223,9 @@ SlotConfig.preprod;
 const custom = new SlotConfig(zeroTime, zeroSlot, slotLength);
 ```
 
-No blocks are produced between two slots and no rewards are paid out: only validity intervals and
-time-aware scripts see the difference.
+No blocks are produced between two slots: validity intervals and time-aware scripts see the
+difference. Crossing an epoch boundary runs the epoch rules: pool retirement, proposal expiry and
+refunds, rewards and enactment.
 
 ## Blocks, mempool and forks
 

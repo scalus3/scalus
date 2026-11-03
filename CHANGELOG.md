@@ -57,8 +57,9 @@
   cardano-ledger collects them and in the ledger's order, without submitting it;
   `TransactionException.ledgerNames` gives the cardano-ledger constructor names of each failure,
   such as `MissingRedeemers` or `ConwayWdrlNotDelegatedToDRep`, as a Haskell ledger test asserts
-  them. `STS.Mutator.transitAll` and `CardanoMutator.transitAll` give the same list for any rule
-  set. For the list, the Plutus scripts run only when no earlier rule failed, as in the ledger.
+  them at protocol version 11. `STS.Mutator.transitAll` and `CardanoMutator.transitAll` give the
+  same list for any rule set. For the list, the Plutus scripts run only when no earlier rule
+  failed, as in the ledger.
   `submit` still reports one failure. Java: `getLedgerFailureNames(tx)`; JavaScript:
   `Emulator.ledgerFailures(txCborBytes)`; both return the names.
 - The Emulator keeps `State.deposited` (the deposits of a valid transaction, proposal deposits
@@ -271,13 +272,16 @@
   `Emulator.stakeDistribution` stays, and now sums the same instant stake as the snapshots.
 - The 4-argument `PoolsState` constructor and companion `apply`, which have no VRF map: use the
   5-argument form or `PoolsState.empty`. The 4-argument `PoolsState.copy` is gone, since a case
-  class has one `copy`; a call by field name such as `copy(retiring = ...)` still compiles.
+  class has one `copy`; a call by field name such as `copy(retiring = ...)` still compiles. A
+  positional pattern match such as `case PoolsState(a, b, c, d)` no longer compiles.
 - The 5-argument `EmulatorInitialState` constructor and companion `apply`, which have no gov
-  fields: use the 8-argument form, named arguments or the `Builder`. The 5-argument `copy` is
-  gone; a call by field name still compiles.
+  fields: use the 9-argument form, named arguments or the `Builder`. The 5-argument `copy` is
+  gone; a call by field name still compiles. A positional pattern match such as
+  `case EmulatorInitialState(a, b, c, d, e)` no longer compiles.
 - The 1-argument `VotingState` constructor and companion `apply`, which have no dormant count
   and no committee state: use the 3-argument form or `VotingState.empty`. The 1-argument
-  `VotingState.copy` is gone; a call by field name such as `copy(dreps = ...)` still compiles.
+  `VotingState.copy` is gone; a call by field name such as `copy(dreps = ...)` still compiles. A
+  positional pattern match such as `case VotingState(m)` no longer compiles.
 - `clearAppliedTxs`: the selected chain is the applied-tx log now; start a new Emulator for an
   empty log.
 - `StreamingEmulator.syntheticBlockHash`: the stream delivers the Emulator's real blocks, named by

@@ -44,9 +44,9 @@ object GoldenTranslationVectors {
       * (`Test.Cardano.Ledger.Alonzo.Translation.TranslatableGen`).
       *
       * `slotToPOSIXTime` returns milliseconds, so `zeroTime` is the system start in ms and a
-      * one-second slot is 1000 ms. NOTE: this is NOT `CardanoLedgerVectors.impSlotConfig` (which
-      * has `zeroTime = 0`) - that one belongs to the STS Imp vectors in this same package. Using
-      * the wrong one silently shifts every validity range.
+      * one-second slot is 1000 ms. NOTE: this is NOT `CardanoLedgerVectors.impSlotConfig` (Imp's
+      * genesis, 4 320-slot epochs) - that one belongs to the STS Imp vectors in this same package.
+      * Using the wrong one silently shifts every validity range.
       */
     val goldenSlotConfig: SlotConfig =
         SlotConfig(

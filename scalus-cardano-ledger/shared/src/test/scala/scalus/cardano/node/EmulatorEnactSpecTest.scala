@@ -256,11 +256,17 @@ class EmulatorEnactSpecTest extends AnyFunSuite {
         yesCCs(id)
         yesPool(1, id)
         yesPool(2, id)
+        // spec [BK-7a]: a PV 10 genesis has no VRF map
+        assert(e.certState.pstate.vrfKeyHashes.isEmpty)
         passEpoch()
         assert(e.pendingRatify.enactState.params.protocolVersion == nextProtVer)
         assert(e.currentParams.protocolVersion == ProtocolVersion(10, 0))
         passEpoch()
         assert(e.currentParams.protocolVersion == nextProtVer)
+        // spec [EB-19a]: HARDFORK into 11 counts the VRF key of each of the three pools once
+        val pools = e.certState.pstate.stakePools
+        assert(pools.size == 3)
+        assert(e.certState.pstate.vrfKeyHashes == pools.values.map(_.vrfKeyHash -> 1L).toMap)
     }
 
     private def withdrawals(amounts: (Party, Long)*): GovAction =

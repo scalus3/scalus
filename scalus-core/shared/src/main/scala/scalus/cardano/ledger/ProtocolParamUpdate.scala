@@ -59,7 +59,9 @@ case class ProtocolParamUpdate(
       * libs/cardano-ledger-core/src/Cardano/Ledger/Plutus/CostModels.hs:401-411). Key 33 is an
       * interval in the ledger and a `Long` in `ProtocolParams`, so it takes the floor, as
       * `ConwayProtocolParams.toProtocolParams` does. Rho, tau and a0 are reduced, as the ledger's
-      * decoder and `toProtocolParams` reduce them.
+      * decoder and `toProtocolParams` reduce them. The voting thresholds and `executionUnitPrices`
+      * are kept as given, so an enacted threshold can differ from the same one read from JSON
+      * (D89).
       */
     def applyTo(params: ProtocolParams): ProtocolParams =
         params.copy(

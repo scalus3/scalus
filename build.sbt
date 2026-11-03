@@ -1190,9 +1190,10 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.node.EmulatorState._6"
         ),
-        // EmulatorInitialState gains committee, committeeHotKeys and constitution, ledger-rules
-        // spec [ES-6], D33. The 5-argument constructor and apply stay as deprecated overloads; a
-        // case class copy cannot, since two copy overloads with defaults do not compile.
+        // EmulatorInitialState gains committee, committeeHotKeys, constitution and reserves,
+        // ledger-rules spec [ES-6], [ES-7], D33. The 5-argument constructor and apply stay as
+        // deprecated overloads; a case class copy cannot, since two copy overloads with defaults
+        // do not compile.
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.cardano.node.EmulatorInitialState.copy(scala.collection.immutable.Map,scala.collection.immutable.Seq,scala.collection.immutable.Seq,scala.collection.immutable.Seq,scala.collection.immutable.Map)scalus.cardano.node.EmulatorInitialState"
         ),

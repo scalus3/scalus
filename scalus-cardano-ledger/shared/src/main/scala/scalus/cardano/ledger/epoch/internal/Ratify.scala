@@ -61,8 +61,7 @@ object Ratify {
       *
       * The ledger recurses and inserts the expired ids after the rest of the run; the expiry of an
       * action reads nothing the run changes, so one fold gives the same sets. `delayed` is set to
-      * whether the enacted action delays (`rsDelayedL .~`, :348); once it is true nothing more is
-      * enacted, so `||` gives the same value.
+      * whether the enacted action delays (`rsDelayedL .~`, :348).
       *
       * @param treasury
       *   the treasury after the boundary, `ensTreasury` of the run (conway Governance.hs:511); the
@@ -93,7 +92,7 @@ object Ratify {
                       enacted,
                       state.enacted :+ p.id,
                       state.expired,
-                      state.delayed || isDelaying(action)
+                      isDelaying(action)
                     )
                     (next, newLeft)
                 else if p.expiresAfter < env.currentEpoch then

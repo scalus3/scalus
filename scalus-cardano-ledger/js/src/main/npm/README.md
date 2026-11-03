@@ -207,8 +207,8 @@ emulator.setTime(Date.now());
 ```
 
 Use this to test validity-interval logic, time-locked scripts, and epoch transitions. No blocks
-are produced in between and no rewards are paid out. Crossing an epoch boundary adds the
-donations of the epoch to the treasury.
+are produced in between. Crossing an epoch boundary runs the epoch rules: pool retirement,
+proposal expiry and refunds, rewards and enactment.
 
 With `clock: "wall"` in the options of `Emulator.create`, the emulator moves to the slot that
 contains `Date.now()` before it validates or evaluates a transaction, so a validity interval built

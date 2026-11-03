@@ -22,11 +22,12 @@ object EpochTransition {
       * Rules/NewEpoch.hs:172-178), so SNAP sees the paid rewards and the reduced fees. Then, as
       * conway Rules/Epoch.hs:276-378 runs them: SNAP ([EB-6]), POOLREAP ([EB-7] to [EB-9]), the
       * pparams of the enact state ([EB-13]), the enactment of the pending ratify result ([EB-10] to
-      * [EB-14]), the voting state ([EB-15], [EB-16]), the treasury ([EB-17]), `deposited`
-      * ([EB-18]), HARDFORK ([EB-19]) and RATIFY ([EB-20]). The blocks made move to the previous
-      * epoch and the last epoch becomes `boundary`, [EB-21] (conway Rules/NewEpoch.hs:182-192).
-      * Last, [EB-22] replaces `pendingRewards` with the reward update of the new epoch, [RW-21],
-      * read from the reserves after [EB-5] and from `prevParams` after [EB-13], [EB-22a].
+      * [EB-14]), the voting state ([EB-15], [EB-16]), the treasury ([EB-17]), HARDFORK ([EB-19])
+      * and RATIFY ([EB-20]), then `deposited` ([EB-18]) on the result: neither HARDFORK nor RATIFY
+      * changes a deposit. The blocks made move to the previous epoch and the last epoch becomes
+      * `boundary`, [EB-21] (conway Rules/NewEpoch.hs:182-192). Last, [EB-22] replaces
+      * `pendingRewards` with the reward update of the new epoch, [RW-21], read from the reserves
+      * after [EB-5] and from `prevParams` after [EB-13], [EB-22a].
       */
     def transition(
         ledger: State,
@@ -80,7 +81,7 @@ object EpochTransition {
         current: ProtocolParams
     ): ProtocolParams = {
         val ids = ratified.enacted.toSet
-        val changesParams = ids.nonEmpty && govState.proposals.exists { p =>
+        val changesParams = govState.proposals.exists { p =>
             ids(p.id) && (p.action match
                 case _: GovAction.ParameterChange | _: GovAction.HardForkInitiation => true
                 case _                                                              => false)
@@ -115,17 +116,17 @@ object EpochTransition {
 
     /** HARDFORK, spec [EB-19a], [EN-3] (conway Rules/HardFork.hs:68-125), run when the protocol
       * version changed at this boundary, major or minor (conway Rules/Epoch.hs:375-378). Into major
-      * 11 it adds one count per pool to the VRF key of its params and of its future params, to the
-      * counts there are (`populateVRFKeyHashes`, :107-125), D92; POOLREAP emptied the future params
-      * before. Into major 10 it is identity: `updateDRepDelegations` drops dangling DRep
-      * delegations, and no state Scalus reaches has one, D93.
+      * 11 it adds one count per pool to the VRF key of its params, to the counts there are
+      * (`populateVRFKeyHashes`, :107-125), D92. The ledger also counts the future params; POOLREAP
+      * emptied them before this step, so only the params add counts. Into major 10 it is identity:
+      * `updateDRepDelegations` drops dangling DRep delegations, and no state Scalus reaches has
+      * one, D93.
       */
     private def hardFork(ledger: State, from: ProtocolVersion, to: ProtocolVersion): State =
         if from == to || to.major != 11 then ledger
         else
             val pstate = ledger.certState.pstate
-            val vrfKeys = pstate.stakePools.valuesIterator.map(_.vrfKeyHash) ++
-                pstate.futureStakePoolParams.valuesIterator.map(_.vrfKeyHash)
+            val vrfKeys = pstate.stakePools.valuesIterator.map(_.vrfKeyHash)
             val counts = vrfKeys.foldLeft(pstate.vrfKeyHashes) { (counts, vrf) =>
                 counts.updated(vrf, counts.getOrElse(vrf, 0L) + 1L)
             }

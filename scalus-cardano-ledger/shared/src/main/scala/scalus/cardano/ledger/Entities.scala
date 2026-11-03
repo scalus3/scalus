@@ -608,7 +608,9 @@ object TransactionException {
     final case class IllegalArgumentException(message: String) extends TransactionException(message)
 
     /** Short, stable name for the rule that raised `ex` — the exception's own name without the
-      * `Exception` suffix, e.g. `"ValueNotConservedUTxO"`.
+      * `Exception` suffix, e.g. `"ValueNotConservedUTxO"`, unless the name is the ledger
+      * constructor's, e.g. `"VRFKeyHashAlreadyRegistered"`; a `GovException` gives the name of its
+      * `GovFailure` case.
       *
       * Written out as literals rather than derived from `getClass.getSimpleName`, which Scala.js
       * minification turns into a meaningless short name, or from `productPrefix`, which
@@ -680,6 +682,10 @@ object TransactionException {
       * Unlike [[ruleName]], which names the Scalus rule and stays stable for
       * [[scalus.cardano.node.SubmitError.rule]], these are the names a Haskell ledger test asserts
       * on, for example `FeeTooSmallUTxO` or `CollectErrors`.
+      *
+      * The names are those of protocol version 11. Below it the ledger raises
+      * `IncorrectDepositDELEG` for `DepositIncorrectDELEG` and `RefundIncorrectDELEG`, and
+      * `PPViewHashesDontMatch` for `ScriptIntegrityHashMismatch`.
       */
     def ledgerNames(ex: TransactionException): Seq[String] = {
         def when(pairs: (Boolean, String)*): Seq[String] = pairs.collect { case (true, n) => n }

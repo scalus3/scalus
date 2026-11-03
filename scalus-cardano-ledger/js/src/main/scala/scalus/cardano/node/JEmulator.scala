@@ -92,10 +92,11 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         }
 
     /** Network, slot configuration and protocol parameters this emulator validates transactions
-      * against, as one coherent triple. For an emulator built with `Emulator.create`, this is
-      * exactly the `CardanoInfo` it was created from; for the deprecated constructors, protocol
-      * parameters come from `slotConfig` alone (mainnet parameters for `SlotConfig.mainnet`,
-      * `UtxoEnv.default`'s parameters otherwise), which is the mismatch `Emulator.create` fixes.
+      * against, as one coherent triple. For an emulator built with `Emulator.create`, this is the
+      * `CardanoInfo` it was created from, with the pparams that later epoch boundaries enacted
+      * (ledger-rules spec [ES-15]); for the deprecated constructors, protocol parameters come from
+      * `slotConfig` alone (mainnet parameters for `SlotConfig.mainnet`, `UtxoEnv.default`'s
+      * parameters otherwise), which is the mismatch `Emulator.create` fixes.
       */
     def getCardanoInfo(): JsCardanoInfo = JsCardanoInfo.wrap(emulator.cardanoInfo)
 
@@ -429,16 +430,18 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     }
 
     /** Moves the clock to an absolute slot, forwards or backwards. Validity intervals and
-      * time-aware scripts see the difference; no blocks are produced in between and no rewards are
-      * paid out. Crossing an epoch boundary forwards adds the donations of the epoch to the
-      * treasury. A fractional value is truncated.
+      * time-aware scripts see the difference; no blocks are produced in between. Crossing an epoch
+      * boundary forwards runs the epoch rules: pool retirement, proposal expiry and refunds,
+      * rewards and enactment. Each boundary crossed costs one epoch transition, so a move across
+      * millions of epochs is slow. A fractional value is truncated.
       */
     def setSlot(slot: Double): Unit = {
         emulator.setSlot(slot.toLong)
     }
 
     /** The treasury in lovelace at the start of the current epoch: the value a transaction must
-      * state as its `currentTreasuryValue`. An epoch boundary adds the donations of the epoch.
+      * state as its `currentTreasuryValue`. An epoch boundary changes it as the epoch rules do:
+      * donations, the treasury cut of the rewards and enacted withdrawals.
       */
     def getTreasury(): js.BigInt = emulator.treasury.value.toJsBigInt
 
@@ -452,7 +455,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     def getGovState(): JGovState = JEmulator.govStateOf(emulator.govState)
 
     /** The current slot number of the emulator. With clock `"wall"`, reading it does not move the
-      * clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
+      * clock: only `submitTx`, `evaluateTx`, `ledgerFailures`, `produceBlock` and `awaitTx` do.
       */
     def getSlot(): Double = emulator.currentContext.env.slot.toDouble
 
@@ -464,7 +467,8 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
 
     /** POSIX time in milliseconds at which the emulator's current slot starts. Equivalent to
       * `getCardanoInfo().slotConfig.slotToTime(getSlot())`. With clock `"wall"`, reading it does
-      * not move the clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
+      * not move the clock: only `submitTx`, `evaluateTx`, `ledgerFailures`, `produceBlock` and
+      * `awaitTx` do.
       */
     def getTime(): Double =
         emulator.currentContext.slotConfig.slotToTime(emulator.currentContext.env.slot).toDouble
@@ -1321,8 +1325,8 @@ trait JsEmulatorOptions extends js.Object {
 
     /** The treasury in lovelace at the start of the current epoch. Defaults to the mainnet treasury
       * at epoch 665, 1 392 896 975 262 771 lovelace. A transaction that states a
-      * `currentTreasuryValue` must state this value until the next epoch boundary, which adds the
-      * donations of the epoch to it. A negative value throws a `TypeError`.
+      * `currentTreasuryValue` must state this value until the next epoch boundary, which changes it
+      * as the epoch rules do. A negative value throws a `TypeError`.
       */
     val treasury: js.UndefOr[js.BigInt] = js.undefined
 
@@ -1341,7 +1345,8 @@ trait JsEmulatorOptions extends js.Object {
     /** `"manual"`, the default: the slot moves only when you move it. `"wall"`: before it validates
       * or evaluates a transaction, the emulator moves to the slot that contains `Date.now()`, never
       * backwards, so a validity interval built from the wall clock holds. `getSlot` and `getTime`
-      * do not move the clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
+      * do not move the clock: only `submitTx`, `evaluateTx`, `ledgerFailures`, `produceBlock` and
+      * `awaitTx` do.
       */
     @TsType("\"manual\" | \"wall\"")
     val clock: js.UndefOr[String] = js.undefined
@@ -1942,7 +1947,7 @@ object JEmulator {
             JsUtxo.input(u) -> JsUtxo.output(u)
         }.toMap
         val slot: SlotNo = options.slot.toOption
-            .map(_.toLong)
+            .map(longOf(_, "slot"))
             .getOrElse(cardanoInfo.slotConfig.timeToSlot(now().toLong))
         // ledger-rules spec [ES-7a]: the mainnet treasury when not given
         val treasury = options.treasury.toOption

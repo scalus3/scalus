@@ -22,22 +22,18 @@ object LedgerStateComparison {
       *   the field name, as in [[FieldMismatch.field]]
       * @param removedBy
       *   the step that removes the entry, spec [SC-14c]: a section of the spec, such as `13.1
-      *   [SC-3e]`, or [[NoStep]] when no step of the spec models the field yet
+      *   [SC-3e]`, or `never, D<n>` when a decision keeps it out for good
       * @param vectorNameContains
       *   the entry applies only to vectors whose name contains this text; empty means every vector
       */
     final case class Exclusion(field: String, removedBy: String, vectorNameContains: String)
 
-    /** Marks an entry that no step of the spec removes yet. */
-    val NoStep: String = "no step in the spec yet"
-
-    /** The one exclusion list, spec [SC-14b]. Steps refer to
-      * `docs/superpowers/specs/2026-10-07-scalus-emulator-provider-design.md`. Shrink it as the
-      * steps land.
+    /** The one exclusion list, spec [SC-14b], [CV-12], [CV-18]. `instantStake` stays out for good
+      * (`docs/superpowers/specs/2026-11-02-emulator-ledger-rules-design.md` D5, D81): Scalus keeps
+      * no instant stake, and [CV-15] checks the stake through `snapshots.mark`.
       */
     val exclusions: List[Exclusion] = List(
-      // Not modeled: no mutator updates the instant stake.
-      Exclusion("instantStake", NoStep, "")
+      Exclusion("instantStake", "never, D5 and D81", "")
     )
 
     def withoutExcluded(

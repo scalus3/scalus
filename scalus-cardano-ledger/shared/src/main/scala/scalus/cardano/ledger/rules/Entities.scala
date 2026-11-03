@@ -248,7 +248,7 @@ object STS {
                     val result: Either[Seq[TransactionException], State] = mutator match
                         case GovMutator => GovMutator.transitAll(context, current, event, event.id)
                         case PlutusScriptsTransactionMutator =>
-                            val failureFree = reported(failures).isEmpty
+                            val failureFree = failures.isEmpty
                             PlutusScriptsTransactionMutator
                                 .transit(context, current, event, failureFree)
                                 .left

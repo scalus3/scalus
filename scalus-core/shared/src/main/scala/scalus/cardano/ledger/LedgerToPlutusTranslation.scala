@@ -161,7 +161,12 @@ object LedgerToPlutusTranslation {
         utxos: Map[TransactionInput, TransactionOutput]
     ): v1.TxInInfo = {
         val output =
-            utxos.getOrElse(input, throw new IllegalStateException(s"Input UTxO not found: $input"))
+            utxos.getOrElse(
+              input,
+              throw new IllegalStateException(
+                s"TranslationLogicMissingInput: input UTxO not found: $input"
+              )
+            )
 
         val txOutRef = v1.TxOutRef(v1.TxId(input.transactionId), input.index)
 
@@ -196,7 +201,12 @@ object LedgerToPlutusTranslation {
         utxos: Map[TransactionInput, TransactionOutput]
     ): v2.TxInInfo = {
         val output =
-            utxos.getOrElse(input, throw new IllegalStateException(s"Input UTxO not found: $input"))
+            utxos.getOrElse(
+              input,
+              throw new IllegalStateException(
+                s"TranslationLogicMissingInput: input UTxO not found: $input"
+              )
+            )
 
         val txOutRef = getTxOutRefV2(input)
 

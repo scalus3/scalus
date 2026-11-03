@@ -25,13 +25,13 @@ object CardanoLedgerVectors {
     /** Slot/epoch environment replicating cardano-ledger's Imp test framework, which generated the
       * test vectors. The dump format carries no slot/epoch, but the Imp environment is
       * deterministic:
-      *   - `testGlobals` uses `fixedEpochInfo (EpochSize 100) (mkSlotLength 1)` — 100 slots per
-      *     epoch, 1-second slots (Test.Cardano.Ledger.Core.Utils).
+      *   - Imp builds its globals from the Shelley genesis, `fixedEpochInfo (sgEpochLength
+      *     shelleyGenesis)` (shelley testlib Test/Cardano/Ledger/Shelley/ImpTest.hs:664-668): the
+      *     genesis of the Dugite runner, `DugiteLedgerVectors.impGenesisSlotConfig`.
       *   - Conway tests start at `pred impEraStartEpochNo = majProtVer * 100 - 1 = 899`
       *     (Test.Cardano.Ledger.Shelley.ImpTest).
       */
-    val impSlotConfig: SlotConfig =
-        SlotConfig(zeroTime = 0, zeroSlot = 0, slotLength = 1000, epochLength = 100, zeroEpoch = 0)
+    val impSlotConfig: SlotConfig = DugiteLedgerVectors.impGenesisSlotConfig
     val impEpoch: Long = 899
 
     /** Validate a test vector by name

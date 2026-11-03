@@ -5,7 +5,7 @@ import scalus.cardano.ledger.{ProtocolParams, UnitInterval}
 import scalus.cardano.ledger.epoch.{PoolPerformance, RatifyState, StakeSnapshot}
 import scalus.cardano.ledger.epoch.internal.{EpochEnv, EpochState, EpochTransition, Ratify}
 import scalus.testing.conformance.LedgerState.*
-import scalus.testing.conformance.LedgerStateComparison.{compareMap, compareValue, Exclusion, FieldMismatch}
+import scalus.testing.conformance.LedgerStateComparison.{compareMap, compareValue, FieldMismatch}
 import scalus.testing.conformance.NewEpochVectors.Case
 
 import scala.util.{Failure, Try}
@@ -19,14 +19,6 @@ class NewEpochConformanceTest extends AnyFunSuite {
         NewEpochVectors.caseNames().map(name => name -> Try(NewEpochVectors.load(name)))
 
     private lazy val cases: List[Case] = loaded.flatMap(_._2.toOption)
-
-    /** Spec [CV-12], [CV-18]: the fields the runner does not compare. `instantStake` stays out for
-      * good (D5, D81): Scalus keeps no instant stake, and [CV-15] checks the stake through
-      * `snapshots.mark`.
-      */
-    private val exclusions: List[Exclusion] = List(
-      Exclusion("instantStake", "never, D5 and D81", "")
-    )
 
     /** The cases the runner cannot decode, by case name, each with its cause (D37). */
     private val undecodable: Map[String, String] = Map(
@@ -55,12 +47,17 @@ class NewEpochConformanceTest extends AnyFunSuite {
     /** The settings of the transition: none of them changes a compared field, since the reward
       * update the transition computes ([EB-22]) has no expected value in `st_out` (D81).
       *
-      * The dumps hold no genesis, so the epoch length and `f` are the mainnet values, not those of
-      * the Imp-test genesis. [CV-16] can use them only while [CV-14] pins `blocks = 0`: with no
-      * blocks `eta = 0`, whatever `expectedBlocks` is. A corpus with blocks needs the genesis.
+      * The epoch length and `f` are those of the Imp genesis, `sgEpochLength = 4320` and
+      * `sgActiveSlotsCoeff = 20 %! 100` (shelley testlib Test/Cardano/Ledger/Shelley/ImpTest.hs:
+      * 806-814). Only `blocks = 0`, which [CV-14] pins, makes `eta = 0` today.
       */
     private def env(params: ProtocolParams): EpochEnv =
-        EpochEnv(params, 432_000L, PoolPerformance.Measured, UnitInterval(1, 20))
+        EpochEnv(
+          params,
+          DugiteLedgerVectors.impGenesisSlotConfig.epochLength,
+          PoolPerformance.Measured,
+          UnitInterval(1, 5)
+        )
 
     /** The mismatches of one case, spec [CV-12], [CV-15], [CV-17] to [CV-19]. */
     private def run(c: Case): List[FieldMismatch] = {
@@ -85,7 +82,7 @@ class NewEpochConformanceTest extends AnyFunSuite {
         LedgerStateComparison.withoutExcluded(
           c.name,
           LedgerStateComparison.compare(after.ledger, ledger),
-          exclusions
+          LedgerStateComparison.exclusions
         ) ++ List.concat(
           // spec [EB-21]: nesEL, D66
           compareValue("lastEpoch", after.lastEpoch, epoch.lastEpoch),
@@ -250,6 +247,16 @@ class NewEpochConformanceTest extends AnyFunSuite {
         assert(differing.isEmpty, differing.map(_.name).mkString(", "))
     }
 
+    /** The fields of the pending ratify result that a HardForkInitiation to 12.0 changes when
+      * Scalus does not accept it, spec [CV-20], [EN-4a].
+      */
+    private val hardForkRatifyFields = Set(
+      "pendingRatify.enacted",
+      "pendingRatify.delayed",
+      "pendingRatify.params",
+      "pendingRatify.roots"
+    )
+
     test("the epoch transition gives the output state of every case") {
         // spec [CV-12], [CV-15], [CV-17] to [CV-20]
         assert(expectedFailures.keySet.subsetOf(cases.map(_.name).toSet))
@@ -259,7 +266,7 @@ class NewEpochConformanceTest extends AnyFunSuite {
         val unexpected = failing.flatMap { (name, fields) =>
             val left =
                 if expectedFailures.contains(name) then
-                    fields.filterNot(_.field.startsWith("pendingRatify."))
+                    fields.filterNot(m => hardForkRatifyFields(m.field))
                 else fields
             if left.isEmpty then None else Some(name -> left)
         }

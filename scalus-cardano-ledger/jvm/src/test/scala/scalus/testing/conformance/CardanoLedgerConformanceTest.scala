@@ -11,9 +11,7 @@ import scala.util.{Failure, Success, Try}
   * Runs conformance tests from cardano-ledger test vectors to validate Scalus ledger implementation
   * against reference implementation.
   *
-  * This version uses EvaluateNoScripts mode to skip budget checking, making it suitable for fast
-  * build tests. For full conformance testing with budget validation, use the integration tests in
-  * scalus-cardano-ledger-it module.
+  * It runs the scripts with `EvaluatorMode.EvaluateAndComputeCost`, the default of `runVector`.
   */
 class CardanoLedgerConformanceTest extends AnyFunSuite {
 
@@ -82,7 +80,6 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
 
     for vector <- vectorNames()
             .filter(v => ruleDirs.exists(v.contains))
-            .filterNot(_.contains("Bootstrap Witness"))
     do {
         test("Conformance test vector: " + vector):
             val runs = runVector(vector)

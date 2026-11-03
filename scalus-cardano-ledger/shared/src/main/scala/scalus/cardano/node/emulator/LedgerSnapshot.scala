@@ -16,7 +16,8 @@ import scalus.uplc.builtin.Data
   * the tip.
   *
   * @param ledger
-  *   the ledger state: the UTxO set, the certificate state, the fees and the donations
+  *   the ledger state: the UTxO set, the certificate state, the gov state, the deposits owed, the
+  *   fees and the donations
   * @param context
   *   the validation context, carrying the slot, the protocol parameters and the treasury
   * @param binaryDatums
@@ -43,6 +44,8 @@ private[node] case class LedgerSnapshot(
     private[node] def atSlot(slot: SlotNo, config: ChainConfig): LedgerSnapshot =
         if context.env.slot == slot then this
         else
+            // ceiling: the cost is linear in the boundaries crossed, one full transition each; add
+            // a cap or a lazy tick if a caller jumps millions of epochs
             val boundaries = epoch.lastEpoch + 1 to context.slotConfig.epochOf(slot)
             val (newLedger, newEpoch, params) =
                 boundaries.foldLeft((ledger, epoch, context.env.params)) {

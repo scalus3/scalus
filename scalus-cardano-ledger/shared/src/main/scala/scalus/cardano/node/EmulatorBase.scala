@@ -170,7 +170,8 @@ trait EmulatorBase extends BlockchainProvider {
     def ledgerFailures(transaction: Transaction): Seq[TransactionException] =
         readState.ledgerFailures(transaction, validators, mutators)
 
-    /** Move the current slot to `slot`, then revalidate the mempool, spec section 10.
+    /** Move the current slot to `slot`, then revalidate the mempool, spec section 10. Each epoch
+      * boundary crossed costs one epoch transition, so a move across millions of epochs is slow.
       *
       * @throws IllegalArgumentException
       *   in the `Manual` preset, for a slot below the slot of the tip block, spec [RV-8]
@@ -602,7 +603,10 @@ case class EmulatorInitialState(
 ) {
 
     /** The 1.4 constructor, without the gov fields, spec [ES-6], D33. */
-    @deprecated("use the constructor with committee, committeeHotKeys and constitution", "1.4.1")
+    @deprecated(
+      "use the constructor with committee, committeeHotKeys, constitution and reserves",
+      "1.4.1"
+    )
     def this(
         utxos: Utxos,
         stakeRegistrations: Seq[EmulatorStakeRegistration],
@@ -625,7 +629,10 @@ case class EmulatorInitialState(
 object EmulatorInitialState {
 
     /** The 1.4 `apply`, without the gov fields, spec [ES-6], D33. */
-    @deprecated("use the apply with committee, committeeHotKeys and constitution", "1.4.1")
+    @deprecated(
+      "use the apply with committee, committeeHotKeys, constitution and reserves",
+      "1.4.1"
+    )
     def apply(
         utxos: Utxos,
         stakeRegistrations: Seq[EmulatorStakeRegistration],

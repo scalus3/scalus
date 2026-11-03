@@ -3,7 +3,7 @@
 `newepoch-vectors.tar.gz` holds 533 NEWEPOCH transitions of the Cardano ledger, one epoch
 boundary each. `NewEpochConformanceTest` runs them (ledger-rules spec
 `docs/superpowers/specs/2026-11-02-emulator-ledger-rules-design.md`, rules `[CV-9]` to
-`[CV-13]`).
+`[CV-20]`).
 
 ## Source
 

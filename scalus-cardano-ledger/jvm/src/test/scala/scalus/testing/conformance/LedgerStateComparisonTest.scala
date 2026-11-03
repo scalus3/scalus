@@ -174,8 +174,8 @@ class LedgerStateComparisonTest extends AnyFunSuite {
     test("each exclusion names the step that removes it") {
         for e <- LedgerStateComparison.exclusions do
             assert(
-              e.removedBy == LedgerStateComparison.NoStep ||
-                  e.removedBy.matches("""13\.\d+[a-z]? \[SC-[0-9a-z]+\]"""),
+              e.removedBy.matches("""13\.\d+[a-z]? \[SC-[0-9a-z]+\]""") ||
+                  e.removedBy.matches("""never, D\d+( and D\d+)*"""),
               e.toString
             )
     }
