@@ -1,6 +1,10 @@
 package scalus.cardano.node;
 
 import scalus.cardano.address.Address;
+import scalus.cardano.ledger.Committee;
+import scalus.cardano.ledger.Constitution;
+import scalus.cardano.ledger.Credential;
+import scalus.cardano.ledger.GovState;
 import scalus.cardano.ledger.Transaction;
 import scalus.cardano.ledger.TransactionInput;
 import scalus.cardano.ledger.TransactionOutput;
@@ -23,6 +27,17 @@ public final class JavaEmulatorInterop {
                 .putUtxo(input, output)
                 .build();
         return Emulator.withState(state);
+    }
+
+    // The gov fields of the initial state, spec [ES-6], and the gov read, spec [ES-9].
+    public static GovState govStateWithCommittee(
+            Committee committee, Credential cold, Credential hot, Constitution constitution) {
+        EmulatorInitialState state = EmulatorInitialState.builder()
+                .committee(committee)
+                .addCommitteeHotKey(cold, hot)
+                .constitution(constitution)
+                .build();
+        return Emulator.withState(state).getGovState();
     }
 
     // SubmitResult instead of Either — expected failures need no try/catch.

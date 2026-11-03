@@ -5,7 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
-import scalus.cardano.node.emulator.{BlockForge, ChainConfig, DropReason, ForgeError, LedgerSnapshot, OrphanTxPolicy, RollbackError, TxStatus}
+import scalus.cardano.node.emulator.{BlockForge, ChainConfig, DropReason, ForgeError, OrphanTxPolicy, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
@@ -57,14 +57,6 @@ class EmulatorForkTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     /** The UTxO set after the mempool txs, which is what a chained tx spends from. */
     private def mempoolUtxos(emulator: Emulator): Utxos =
         stateOf(emulator).mempool.lastOption.fold(emulator.utxos)(_.snapshot.ledger.utxos)
-
-    /** `==` on two snapshots, except the gov state: an `Array`, so `==` compares its identity. */
-    private def assertSameSnapshot(a: LedgerSnapshot, b: LedgerSnapshot): Unit = {
-        assert(a.ledger.govState.sameElements(b.ledger.govState))
-        val gov = GovState.empty
-        def normal(s: LedgerSnapshot) = s.copy(ledger = s.ledger.copy(govState = gov))
-        assert(normal(a) == normal(b))
-    }
 
     test("a block on the tip is forged at on.slot + 1 and extends the selected chain") {
         // spec [FG-11], [FG-15], [FG-19], [CS-1], [TS-6]
@@ -514,7 +506,7 @@ class EmulatorForkTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                 ok(e.produceBlock(e.tip.point, node.block.slot, node.txs.map(_.tx)))
             val after = stateOf(e)
             assert(after.chain == before.chain)
-            assertSameSnapshot(after.tipSnapshot, before.tipSnapshot)
+            assert(after.tipSnapshot == before.tipSnapshot)
             assert(after.mempool.isEmpty)
             assert(after.appliedTxLog == before.appliedTxLog)
             for applied <- before.appliedTxLog do

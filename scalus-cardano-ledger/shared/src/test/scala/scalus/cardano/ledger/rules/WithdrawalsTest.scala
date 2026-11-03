@@ -113,9 +113,13 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         error shouldBe a[TransactionException.WithdrawalsNotInRewardsException]
     }
 
-    test("the default mutators apply withdrawals, then certificates, then scripts and UTxO") {
-        // spec [SC-3a]: ledger order, by an explicit list rather than by name
-        DefaultMutators.all.toList shouldBe List(CertsMutator, PlutusScriptsTransactionMutator)
+    test(
+      "the default mutators apply withdrawals and certificates, then GOV, then scripts and UTxO"
+    ) {
+        // spec [SC-3a]: ledger order, by an explicit list rather than by name; GOV after CERTS,
+        // ledger-rules spec [GV-2a], D30
+        DefaultMutators.all.toList shouldBe
+            List(CertsMutator, GovMutator, PlutusScriptsTransactionMutator)
     }
 
     // spec [SC-3c] row 5. The whole pipeline needs a failing script; the "Not validating CERT

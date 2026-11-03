@@ -109,15 +109,18 @@ object CertsMutator extends STS.Mutator {
                 certState <- certificates.foldLeft[Either[Error, CertState]](
                   Right(state.certState)
                 ) { (acc, cert) =>
-                    acc.flatMap(applyCertificate(context, event.id, _, cert))
+                    acc.flatMap(applyCertificate(context, event.id, state.govState, _, cert))
                 }
             yield state.copy(certState = certState)
     }
 
-    /** The CERT step for one certificate. Each kind changes only its part of the state. */
+    /** The CERT step for one certificate. Each kind changes only its part of the state. `govState`
+      * is the gov state before the tx: CERTS runs before GOV, spec [GC-2a].
+      */
     private def applyCertificate(
         context: Context,
         txId: TransactionHash,
+        govState: GovState,
         certState: CertState,
         cert: Certificate
     ): Either[TransactionException, CertState] = {
@@ -132,8 +135,9 @@ object CertsMutator extends STS.Mutator {
               (delegated.vstate.dreps, delegated.dstate.accounts),
               cert
             )
+            committeeState <- committeeCert(txId, govState)(delegated.vstate.committeeState, cert)
         yield CertState(
-          vstate = delegated.vstate.copy(dreps = votes._1),
+          vstate = delegated.vstate.copy(dreps = votes._1, committeeState = committeeState),
           pstate = pstate,
           dstate = DelegationState(votes._2)
         )
@@ -304,8 +308,8 @@ object CertsMutator extends STS.Mutator {
             case _ => Right(pstate)
 
     /** The GOVCERT step for DRep certificates: checks one against the DReps and changes the DReps
-      * and, for a deregistration, the accounts. Committee certificates are accepted but not
-      * tracked: the emulator does not model committee state yet.
+      * and, for a deregistration, the accounts. [[committeeCert]] is the step for committee
+      * certificates.
       */
     private[rules] def govCert(context: Context, txId: TransactionHash, numDormantEpochs: Long)(
         state: (Map[Credential, DRepState], Map[Credential, ConwayAccountState]),
@@ -370,6 +374,39 @@ object CertsMutator extends STS.Mutator {
                           ) -> accounts
                         )
             case _ => Right(state)
+    }
+
+    /** The GOVCERT step for committee certificates, `checkAndOverwriteCommitteeMemberState`
+      * (eras/conway/impl/src/Cardano/Ledger/Conway/Rules/GovCert.hs:193-211, 276-279): a cold
+      * credential that resigned is rejected first, spec [GC-1], [GC-4]; then one that is neither a
+      * member of the committee nor added by a pending `UpdateCommittee`, spec [GC-2]; else its
+      * state becomes the new authorization, spec [GC-3].
+      *
+      * `govState` is the state before the tx, so an `UpdateCommittee` of the same tx does not
+      * count, spec [GC-2a] (`committeeProposals`, C/Rules/Ledger.hs:397-400).
+      */
+    private[rules] def committeeCert(txId: TransactionHash, govState: GovState)(
+        committeeState: Map[Credential, CommitteeAuthorization],
+        cert: Certificate
+    ): Either[TransactionException, Map[Credential, CommitteeAuthorization]] = {
+        def overwrite(cold: Credential, authorization: CommitteeAuthorization) = {
+            def isCurrentMember = govState.committee.exists(_.members.contains(cold))
+            def isPotentialFutureMember = govState.proposals.exists(_.action match
+                case GovAction.UpdateCommittee(_, _, added, _) => added.contains(cold)
+                case _                                         => false)
+            committeeState.get(cold) match
+                case Some(CommitteeAuthorization.Resigned(_)) =>
+                    Left(TransactionException.CommitteeHasPreviouslyResignedException(txId, cold))
+                case _ if !isCurrentMember && !isPotentialFutureMember =>
+                    Left(TransactionException.CommitteeIsUnknownException(txId, cold))
+                case _ => Right(committeeState.updated(cold, authorization))
+        }
+        cert match
+            case Certificate.AuthCommitteeHotCert(cold, hot) =>
+                overwrite(cold, CommitteeAuthorization.HotCredential(hot))
+            case Certificate.ResignCommitteeColdCert(cold, anchor) =>
+                overwrite(cold, CommitteeAuthorization.Resigned(anchor))
+            case _ => Right(committeeState)
     }
 
     /** `accounts` with no vote delegation to the DRep `credential`, spec [SC-21].

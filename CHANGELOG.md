@@ -60,9 +60,47 @@
   transaction with a proposal adds the dormant epochs to every active DRep and resets the count.
   `VotingState` gains `numDormantEpochs`, and a seeded DRep now expires `dRepActivity` epochs
   after genesis instead of at epoch 0.
+- The ledger state models governance: `GovState` holds the active proposals in the order they
+  were made (each a `GovActionState` with its committee, DRep and pool votes, `proposedIn` and
+  `expiresAfter`), the last enacted action of each purpose (`GovRoots`), the `Committee` and the
+  `Constitution`; `govState.proposal(id)` finds one proposal. `VotingState` gains
+  `committeeState`, the `CommitteeAuthorization` (`HotCredential` or `Resigned`) of each committee
+  member.
+- The Emulator runs the Conway GOV rule: a valid transaction's proposals and votes are stored in
+  `State.govState`, a new vote replaces the voter's earlier vote on the same action, and
+  unregistering a DRep removes its votes. A rejection is the new
+  `TransactionException.GovException`, whose `failure` is a `GovFailure` case named as the
+  ledger's `ConwayGovPredFailure` constructor (`MalformedProposal`, `InvalidPrevGovActionId`,
+  `ProposalCantFollow`, `VotersDoNotExist`, `GovActionsDoNotExist`, `DisallowedVoters`,
+  `UnelectedCommitteeVoters` and the others); `TransactionException.ruleName` returns that name.
+  `GovState` gains `addProposal`, `withVote` and `withoutDRepVotes`, and `GovActionPurpose.of`
+  gives the purpose of an action.
+- The Emulator keeps the committee state: `AuthCommitteeHotCert` stores the member's hot key
+  and `ResignCommitteeColdCert` marks the member resigned. A certificate for a member that
+  resigned fails with the new `TransactionException.CommitteeHasPreviouslyResignedException`,
+  and one for a cold credential that is neither a committee member nor added by a pending
+  `UpdateCommittee` proposal fails with `CommitteeIsUnknownException`. `ruleName` returns the
+  ledger names `ConwayCommitteeHasPreviouslyResigned` and `ConwayCommitteeIsUnknown`.
+- `EmulatorInitialState` gains `committee`, `committeeHotKeys` (cold credential to hot
+  credential) and `constitution`, and its Java `Builder` gains `committee`, `addCommitteeHotKey`
+  and `constitution`. With none given, the gov state has no committee and a constitution with no
+  guardrails script. A hot key for a cold credential that is not a seeded member throws
+  `IllegalArgumentException`. `EmulatorBase.govState` and the Java `getGovState` read the gov
+  state. JavaScript: `Emulator.create` takes `committee`, `committeeHotKeys` and `constitution`,
+  and `getGovState()` returns the proposals with their votes, the committee and the
+  constitution.
 
 ### Changed
 
+- The Emulator rejects proposals and votes that the ledger rejects. For example, a proposal whose
+  deposit return account is not registered, a ParameterChange or TreasuryWithdrawals whose
+  guardrails script hash differs from the constitution's, a vote by an unregistered DRep or pool,
+  or a vote on an action that does not exist now fail. At protocol version 11, a committee vote
+  by a hot key that no member of the current committee authorized fails.
+- **Migration hazard: `GovState` is a case class instead of an alias of
+  `Array[io.bullet.borer.Dom.Element]`, so `State.govState` and `UTxOState.govState` change type.**
+  Code that builds an array for them, or compares them with `sameElements`, no longer compiles;
+  use `GovState.empty` and `==`.
 - **`scalus-plugin` is no longer published for Scala 3.3.7. A project on Scala 3.3.x must use
   3.3.8 or 3.3.9.** The `_3` library artifacts are built with Scala 3.3.9.
 - **`ProgramFlatCodec.decodeFlat`, `DeBruijnedProgram.fromFlatEncoded`, `fromCbor` and
@@ -105,9 +143,12 @@
 - The 4-argument `PoolsState` constructor and companion `apply`, which have no VRF map: use the
   5-argument form or `PoolsState.empty`. The 4-argument `PoolsState.copy` is gone, since a case
   class has one `copy`; a call by field name such as `copy(retiring = ...)` still compiles.
-- The 1-argument `VotingState` constructor and companion `apply`, which have no dormant count:
-  use the 2-argument form or `VotingState.empty`. The 1-argument `VotingState.copy` is gone; a
-  call by field name such as `copy(dreps = ...)` still compiles.
+- The 5-argument `EmulatorInitialState` constructor and companion `apply`, which have no gov
+  fields: use the 8-argument form, named arguments or the `Builder`. The 5-argument `copy` is
+  gone; a call by field name still compiles.
+- The 1-argument `VotingState` constructor and companion `apply`, which have no dormant count
+  and no committee state: use the 3-argument form or `VotingState.empty`. The 1-argument
+  `VotingState.copy` is gone; a call by field name such as `copy(dreps = ...)` still compiles.
 - `clearAppliedTxs`: the selected chain is the applied-tx log now; start a new Emulator for an
   empty log.
 - `StreamingEmulator.syntheticBlockHash`: the stream delivers the Emulator's real blocks, named by

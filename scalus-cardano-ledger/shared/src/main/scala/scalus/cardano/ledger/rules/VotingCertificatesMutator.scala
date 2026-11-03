@@ -2,8 +2,8 @@ package scalus.cardano.ledger
 package rules
 
 // It's the Conway GOVCERT state transition in cardano-ledger (DRep certificates).
-// Committee certificates are accepted but not tracked: the emulator does not
-// model committee state yet.
+// Committee certificates are not tracked here; CertsMutator checks and applies them
+// (CertsMutator.committeeCert, spec [GC-1] to [GC-4]).
 @deprecated(
   "CertsMutator applies every certificate in tx order; do not use both, spec [SC-22]",
   "1.3.0"

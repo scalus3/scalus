@@ -123,6 +123,44 @@ export interface ChainTip {
   readonly blockHash: string;
 }
 
+/** A constitutional committee: its members and the fraction of them that must vote yes. */
+export interface Committee {
+  readonly members: CommitteeMember[];
+  readonly threshold: Fraction;
+}
+
+/** A hot key a committee member authorized, for `EmulatorOptions.committeeHotKeys`. */
+export interface CommitteeHotKey {
+  /** Credential type of the member's cold credential: "key" or "script". */
+  readonly coldCredentialType: "key" | "script";
+  /** Hex-encoded 28-byte hash of the member's cold credential. */
+  readonly coldCredentialHash: string;
+  /** Credential type of the hot credential: "key" or "script". */
+  readonly hotCredentialType: "key" | "script";
+  /** Hex-encoded 28-byte hash of the hot credential. */
+  readonly hotCredentialHash: string;
+}
+
+/** One member of a constitutional committee. */
+export interface CommitteeMember {
+  /** Credential type of the member's cold credential: "key" or "script". */
+  readonly credentialType: "key" | "script";
+  /** Hex-encoded 28-byte hash of the member's cold credential. */
+  readonly credentialHash: string;
+  /** The last epoch of the member's term. */
+  readonly expiresAfter: number;
+}
+
+/** The constitution: its anchor and, if any, the hash of its guardrails script. */
+export interface Constitution {
+  /** The URL of the constitution text. */
+  readonly anchorUrl: string;
+  /** Hex-encoded 32-byte hash of the document at `anchorUrl`. */
+  readonly anchorDataHash: string;
+  /** Hex-encoded 28-byte hash of the guardrails script, or `undefined` for none. */
+  readonly guardrailsScriptHash?: string;
+}
+
 /**
  * The three Plutus cost models, by language rather than by position - so a caller reads
  * `costModels.PlutusV3`, never `Object.values(costModels)[2]` and a comment explaining why.
@@ -298,6 +336,12 @@ export class Emulator {
    * state as its `currentTreasuryValue`. An epoch boundary adds the donations of the epoch.
    */
   getTreasury(): bigint;
+  /**
+   * The gov state: the proposals in the order they were submitted, with their votes, the
+   * committee and the constitution. A committee member's hot key is not here: a tx authorizes it
+   * with a certificate, and the vote it casts shows in `votes`.
+   */
+  getGovState(): GovState;
   /**
    * The current slot number of the emulator. With clock `"wall"`, reading it does not move the
    * clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
@@ -507,6 +551,21 @@ export interface EmulatorOptions {
    */
   readonly datums?: readonly DatumEntry[];
   /**
+   * The constitutional committee at the start. Leave it out for none: then only `NoConfidence`
+   * and `UpdateCommittee` actions can be ratified.
+   */
+  readonly committee?: Committee;
+  /**
+   * The hot key each committee member has authorized at the start. Every cold credential must be
+   * a member of `committee`, else `create` throws a `TypeError`.
+   */
+  readonly committeeHotKeys?: readonly CommitteeHotKey[];
+  /**
+   * The constitution at the start. Leave it out for one with an empty anchor and no guardrails
+   * script.
+   */
+  readonly constitution?: Constitution;
+  /**
    * The treasury in lovelace at the start of the current epoch. Defaults to 0. A transaction
    * that states a `currentTreasuryValue` must state this value until the next epoch boundary,
    * which adds the donations of the epoch to it. A negative value throws a `TypeError`.
@@ -648,6 +707,51 @@ export class ExUnits {
 export interface ExUnitsLike {
   readonly memory: number | bigint;
   readonly steps: number | bigint;
+}
+
+/** A fraction: `numerator / denominator`. */
+export interface Fraction {
+  readonly numerator: number;
+  readonly denominator: number;
+}
+
+/** One proposal in `GovState.proposals`. */
+export interface GovActionState {
+  /** Hex-encoded 32-byte hash of the transaction that proposed the action. */
+  readonly txHash: string;
+  /** The index of the proposal among the proposals of that transaction. */
+  readonly index: number;
+  /** The kind of gov action. */
+  readonly actionType: "ParameterChange" | "HardForkInitiation" | "TreasuryWithdrawals" | "NoConfidence" | "UpdateCommittee" | "NewConstitution" | "InfoAction";
+  /** The epoch the action was proposed in. */
+  readonly proposedIn: number;
+  /** The last epoch in which the action can be ratified. */
+  readonly expiresAfter: number;
+  /** The votes cast on the action, the last vote of each voter only. */
+  readonly votes: GovVote[];
+}
+
+/** The gov state, returned by `Emulator.getGovState`. */
+export interface GovState {
+  /** The proposals, in the order they were submitted. */
+  readonly proposals: GovActionState[];
+  /** The committee, or `undefined` when there is none. */
+  readonly committee?: Committee;
+  readonly constitution: Constitution;
+}
+
+/** One vote on a proposal, in `GovActionState.votes`. */
+export interface GovVote {
+  /** Who votes: a committee hot credential, a DRep, or a stake pool. */
+  readonly voterRole: "committee" | "drep" | "pool";
+  /** Credential type of the voter: "key" or "script". A pool is always "key". */
+  readonly credentialType: "key" | "script";
+  /**
+   * Hex-encoded 28-byte hash of the voter: the hot credential, the DRep credential, or the pool
+   * key hash.
+   */
+  readonly credentialHash: string;
+  readonly vote: "Yes" | "No" | "Abstain";
 }
 
 /** Identifies one transaction output: the pair a `TransactionInput` is made of. */

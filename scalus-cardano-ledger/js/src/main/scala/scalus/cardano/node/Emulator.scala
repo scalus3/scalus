@@ -151,18 +151,14 @@ object Emulator {
         initState: EmulatorInitialState,
         context: Context,
         chainConfig: ChainConfig
-    ): Emulator = {
-        val (certState, datums) = EmulatorBase.buildInitialState(initState, context)
-        new Emulator(
-          initState.utxos,
+    ): Emulator =
+        EmulatorBase.fromInitialState(
+          initState,
           context,
+          chainConfig,
           defaultValidators,
-          defaultMutators,
-          certState,
-          datums,
-          chainConfig
+          defaultMutators
         )
-    }
 
     /** Creates an Emulator with pre-registered stake credentials and specified reward balances.
       *

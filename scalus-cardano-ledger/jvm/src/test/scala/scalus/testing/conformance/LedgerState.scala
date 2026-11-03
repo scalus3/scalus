@@ -6,8 +6,10 @@ import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import scalus.cardano.ledger.*
 
 import java.nio.file.{Files, Path}
+import scala.util.Using
 
-case class LedgerState(certs: LedgerState.CertState, utxos: UTxOState) derives Codec
+// Decoders only: nothing encodes a vector state, and the gov state has no encoder (spec D36)
+case class LedgerState(certs: LedgerState.CertState, utxos: UTxOState) derives Decoder
 object LedgerState {
 
     def fromCbor(cbor: Array[Byte]): LedgerState = {
@@ -76,13 +78,6 @@ object LedgerState {
                 val pstate = r.read[PState]()
                 val dstate = r.read[DState]()
                 CertState(vstate, pstate, dstate)
-
-        given Encoder[CertState] with
-            def write(w: Writer, value: CertState): Writer =
-                w.writeArrayHeader(3)
-                w.write(value.vstate)
-                w.write(value.pstate)
-                w.write(value.dstate)
     }
 
     extension (certState: CertState)
@@ -275,43 +270,6 @@ object LedgerState {
         private def reread[A](element: Element)(read: Reader => A): A =
             given Decoder[A] = r => read(r)
             Cbor.decode(Cbor.encode(element).toByteArray).to[A].value
-
-        given Encoder[PState] with
-            def write(w: Writer, value: PState): Writer =
-                w.writeArrayHeader(4)
-                // psStakePoolParams
-                w.writeMapHeader(value.stakePools.size)
-                for (poolId, params) <- value.stakePools do
-                    w.write(poolId)
-                    writePoolParams(w, params)
-                // psFutureStakePoolParams
-                w.writeMapHeader(value.futureStakePoolParams.size)
-                for (poolId, params) <- value.futureStakePoolParams do
-                    w.write(poolId)
-                    writePoolParams(w, params)
-                // psRetiring
-                w.writeMapHeader(value.retiring.size)
-                for (poolId, epoch) <- value.retiring do
-                    w.write(poolId)
-                    w.writeLong(epoch)
-                // psDeposits
-                w.writeMapHeader(value.deposits.size)
-                for (poolId, coin) <- value.deposits do
-                    w.write(poolId)
-                    w.write(coin)
-                w
-
-        private def writePoolParams(w: Writer, p: Certificate.PoolRegistration): Unit =
-            w.writeArrayHeader(9)
-            w.write(p.operator)
-            w.write(p.vrfKeyHash)
-            w.write(p.pledge)
-            w.write(p.cost)
-            w.write(p.margin)
-            w.write(p.rewardAccount)
-            w.write(p.poolOwners)
-            w.write(p.relays)
-            w.write(p.poolMetadata)
     }
 
     /** Conway VState from cardano-ledger.
@@ -323,26 +281,21 @@ object LedgerState {
       */
     case class VState(
         dreps: Map[Credential, ConwayDRepState],
+        committeeState: Map[Credential, CommitteeAuthorization],
         numDormantEpochs: Long
     )
 
     object VState {
-        val empty: VState = VState(Map.empty, 0)
+        val empty: VState = VState(Map.empty, Map.empty, 0)
 
         given Decoder[VState] with
             def read(r: Reader): VState =
                 r.readArrayHeader(3)
                 val dreps = r.read[Map[Credential, ConwayDRepState]]()
-                r.read[Element]() // Skip committeeState (a map)
+                // spec [CV-6]: CommitteeState is a newtype over the map
+                val committeeState = r.read[Map[Credential, CommitteeAuthorization]]()
                 val numDormantEpochs = r.readLong()
-                VState(dreps, numDormantEpochs)
-
-        given Encoder[VState] with
-            def write(w: Writer, value: VState): Writer =
-                w.writeArrayHeader(3)
-                w.write(value.dreps)
-                w.writeMapHeader(0) // Empty committeeState
-                w.writeLong(value.numDormantEpochs)
+                VState(dreps, committeeState, numDormantEpochs)
     }
 
     extension (vstate: VState)
@@ -357,7 +310,9 @@ object LedgerState {
                   )
               },
               // spec [CV-4]
-              numDormantEpochs = vstate.numDormantEpochs
+              numDormantEpochs = vstate.numDormantEpochs,
+              // spec [CV-6]
+              committeeState = vstate.committeeState
             )
 
     /** Conway DRepState from cardano-ledger.
@@ -385,14 +340,6 @@ object LedgerState {
                         r.validationFailure(s"Expected tag 258 for Set, got $tag")
                 val delegates = r.read[Set[Credential]]()
                 ConwayDRepState(expiry, anchor, deposit, delegates)
-
-        given Encoder[ConwayDRepState] with
-            def write(w: Writer, value: ConwayDRepState): Writer =
-                w.writeArrayHeader(4)
-                w.writeLong(value.expiry)
-                w.write(value.anchor)
-                w.write(value.deposit)
-                w.write(value.delegates)
     }
 
     /** Conway DState from cardano-ledger.
@@ -506,32 +453,6 @@ object LedgerState {
             val dRepArrayLen = r.readArrayHeader()
             val dRepDelegation = if dRepArrayLen == 0 then None else Some(r.read[DRep]())
             ConwayAccountState(balance, deposit, stakePoolDelegation, dRepDelegation)
-
-        given Encoder[DState] with
-            def write(w: Writer, value: DState): Writer =
-                w.writeArrayHeader(4)
-                // Write accounts in UMap format
-                w.writeArrayHeader(2)
-                w.writeMapHeader(value.accounts.size)
-                value.accounts.foreach { case (cred, acc) =>
-                    w.write(cred)
-                    // Write UMElem
-                    w.writeArrayHeader(4)
-                    w.writeArrayHeader(2)
-                    w.write(acc.balance)
-                    w.write(acc.deposit)
-                    acc.stakePoolDelegation match
-                        case None    => w.writeNull()
-                        case Some(v) => w.write(v)
-                    acc.dRepDelegation match
-                        case None    => w.writeNull()
-                        case Some(v) => w.write(v)
-                    w.writeArrayHeader(0) // empty ptrs set
-                }
-                w.writeMapHeader(0) // empty umPtrs
-                w.write(value.futureGenDelegs)
-                w.write(value.genDelegs)
-                w.write(value.iRewards)
     }
 
     extension (dstate: DState)
@@ -547,7 +468,72 @@ object LedgerState {
             if r.hasByteArray then MempackParser.parseOutput(r.readByteArray())
             else r.read[TransactionOutput]()
 
-    given Codec[UTxOState] = Codec.derived
+    /** A `StrictMaybe` in the ledger state: `[]` or `[x]` (spec [CV-6]). */
+    private def readStrictMaybe[A: Decoder](r: Reader): Option[A] =
+        r.readArrayHeader() match
+            case 0 => None
+            case 1 => Some(r.read[A]())
+            case n => r.validationFailure(s"Expected a StrictMaybe of 0 or 1 elements, got $n")
+
+    /** `[0, credential]` or `[1, [] | [anchor]]`, K/State/CertState.hs:315-325. */
+    given Decoder[CommitteeAuthorization] with
+        def read(r: Reader): CommitteeAuthorization =
+            r.readArrayHeader(2)
+            r.readInt() match
+                case 0 => CommitteeAuthorization.HotCredential(r.read[Credential]())
+                case 1 => CommitteeAuthorization.Resigned(readStrictMaybe[Anchor](r))
+                case t => r.validationFailure(s"Unknown CommitteeAuthorization tag $t")
+
+    /** `[members, threshold]`, C/Governance/Procedures.hs:575-580. */
+    given Decoder[Committee] with
+        def read(r: Reader): Committee =
+            r.readArrayHeader(2)
+            Committee(r.read[Map[Credential, EpochNo]](), r.read[UnitInterval]())
+
+    /** The seven fields in order, C/Governance/Procedures.hs:317-327. */
+    given Decoder[GovActionState] with
+        def read(r: Reader): GovActionState =
+            r.readArrayHeader(7)
+            GovActionState(
+              id = r.read[GovActionId](),
+              committeeVotes = r.read[Map[Credential, Vote]](),
+              drepVotes = r.read[Map[Credential, Vote]](),
+              spoVotes = r.read[Map[PoolKeyHash, Vote]](),
+              procedure = r.read[ProposalProcedure](),
+              proposedIn = r.readLong(),
+              expiresAfter = r.readLong()
+            )
+
+    /** `GovRelation StrictMaybe`, four `[] | [id]`, C/Governance/Procedures.hs:721-729. */
+    given Decoder[GovRoots] with
+        def read(r: Reader): GovRoots =
+            r.readArrayHeader(4)
+            GovRoots(
+              pparamUpdate = readStrictMaybe[GovActionId](r),
+              hardFork = readStrictMaybe[GovActionId](r),
+              committee = readStrictMaybe[GovActionId](r),
+              constitution = readStrictMaybe[GovActionId](r)
+            )
+
+    /** The `ConwayGovState` record (C/Governance.hs:361-371), spec [CV-6]: the proposals as
+      * `[roots, [GovActionState…]]` (C/Governance/Proposals.hs:385-388), the committee and the
+      * constitution. The pparams, future pparams and DRep pulser that follow are skipped; the
+      * header length is read, not assumed, so a dump with another tail still decodes.
+      */
+    given Decoder[GovState] with
+        def read(r: Reader): GovState =
+            val size = r.readArrayHeader()
+            r.readArrayHeader(2)
+            val roots = r.read[GovRoots]()
+            val proposals = r.read[Vector[GovActionState]]()
+            val committee = readStrictMaybe[Committee](r)
+            val constitution = r.read[Constitution]()
+            // read[Element], not skipElement: on the vectors skipElement stopped after the header
+            // of the tag-258 set in the DRep pulser and left its content unread
+            for _ <- 3L until size do r.read[Element]()
+            GovState(proposals, roots, committee, constitution)
+
+    given Decoder[UTxOState] = Decoder.derived
 
 }
 
@@ -581,13 +567,15 @@ object ConwayProtocolParamsFixtures:
         import scala.jdk.CollectionConverters.*
         if !Files.exists(pparamsDir) then return None
 
-        val matchingHashes = Files
-            .list(pparamsDir)
-            .iterator()
-            .asScala
-            .map(_.getFileName.toString)
-            .filter(hash => oldLedgerStateHex.contains(hash))
-            .toList
+        // closed: a leaked stream per case ran the sbt server out of file descriptors
+        val matchingHashes = Using.resource(Files.list(pparamsDir)) { paths =>
+            paths
+                .iterator()
+                .asScala
+                .map(_.getFileName.toString)
+                .filter(hash => oldLedgerStateHex.contains(hash))
+                .toList
+        }
 
         if matchingHashes.isEmpty then return None
         if matchingHashes.size == 1 then return Some(matchingHashes.head)

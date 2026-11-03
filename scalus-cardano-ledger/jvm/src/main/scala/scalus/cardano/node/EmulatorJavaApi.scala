@@ -57,6 +57,11 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
     /** The protocol parameters the emulator validates against. */
     final def getProtocolParams: ProtocolParams = completedNow(fetchLatestParams)
 
+    /** The gov state: proposals in submission order with their votes, the committee and the
+      * constitution, spec [ES-9]. One proposal is `getGovState.proposal(id)`, D35.
+      */
+    final def getGovState: GovState = govState
+
     // ─── Submission ─────────────────────────────────────────────────────────
 
     /** Submits a transaction and reports the outcome as a [[SubmitResult]] (never throws for a

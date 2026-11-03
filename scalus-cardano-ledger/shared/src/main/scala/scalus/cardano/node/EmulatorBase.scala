@@ -5,7 +5,7 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, STS, State, UtxoEnv}
 import scalus.cardano.ledger.*
-import scalus.cardano.node.emulator.{AwaitTxPolicy, ChainView, ChainViewError, ForgeError, RollbackError, TxStatus}
+import scalus.cardano.node.emulator.{AwaitTxPolicy, ChainConfig, ChainView, ChainViewError, ForgeError, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.ChainEvent
 
@@ -64,6 +64,12 @@ trait EmulatorBase extends BlockchainProvider {
 
     def utxos: Utxos = readState.ledger.utxos
     def certState: CertState = readState.ledger.certState
+
+    /** The gov state: the proposals in the order they were submitted, with their votes, the enacted
+      * roots, the committee and the constitution, spec [ES-9]. One proposal is
+      * `govState.proposal(id)`; one DRep state is `certState.vstate.dreps(credential)`, D35.
+      */
+    def govState: GovState = readState.ledger.govState
     protected def currentContext: Context = readState.context
 
     /** Every datum this emulator has seen, by hash, decoded. [[binaryDatums]] keeps the bytes. */
@@ -513,15 +519,70 @@ object EmulatorDRepRegistration {
         EmulatorDRepRegistration(credential, deposit, Some(anchor))
 }
 
+/** What an emulator starts with, beyond its chain parameters.
+  *
+  * @param committee
+  *   the constitutional committee at genesis; `None`, the default, is a gov state with no
+  *   committee, spec [ES-13]
+  * @param committeeHotKeys
+  *   the hot key each committee member has authorized at genesis, cold credential to hot
+  *   credential. Every cold credential must be a member of `committee`, spec [ES-6a].
+  * @param constitution
+  *   the constitution at genesis; `None`, the default, is one with an empty anchor and no
+  *   guardrails script, spec [ES-14]
+  */
 case class EmulatorInitialState(
     utxos: Utxos = Map.empty,
     stakeRegistrations: Seq[EmulatorStakeRegistration] = Seq.empty,
     poolRegistrations: Seq[EmulatorPoolRegistration] = Seq.empty,
     drepRegistrations: Seq[EmulatorDRepRegistration] = Seq.empty,
-    datums: Map[DataHash, Data] = Map.empty
-)
+    datums: Map[DataHash, Data] = Map.empty,
+    committee: Option[Committee] = None,
+    committeeHotKeys: Map[Credential, Credential] = Map.empty,
+    constitution: Option[Constitution] = None
+) {
+
+    /** The 1.4 constructor, without the gov fields, spec [ES-6], D33. */
+    @deprecated("use the constructor with committee, committeeHotKeys and constitution", "1.4.1")
+    def this(
+        utxos: Utxos,
+        stakeRegistrations: Seq[EmulatorStakeRegistration],
+        poolRegistrations: Seq[EmulatorPoolRegistration],
+        drepRegistrations: Seq[EmulatorDRepRegistration],
+        datums: Map[DataHash, Data]
+    ) = this(
+      utxos,
+      stakeRegistrations,
+      poolRegistrations,
+      drepRegistrations,
+      datums,
+      None,
+      Map.empty,
+      None
+    )
+}
 
 object EmulatorInitialState {
+
+    /** The 1.4 `apply`, without the gov fields, spec [ES-6], D33. */
+    @deprecated("use the apply with committee, committeeHotKeys and constitution", "1.4.1")
+    def apply(
+        utxos: Utxos,
+        stakeRegistrations: Seq[EmulatorStakeRegistration],
+        poolRegistrations: Seq[EmulatorPoolRegistration],
+        drepRegistrations: Seq[EmulatorDRepRegistration],
+        datums: Map[DataHash, Data]
+    ): EmulatorInitialState =
+        new EmulatorInitialState(
+          utxos,
+          stakeRegistrations,
+          poolRegistrations,
+          drepRegistrations,
+          datums,
+          None,
+          Map.empty,
+          None
+        )
 
     /** Java-friendly builder — the case class keeps its Scala default arguments, which Java cannot
       * use.
@@ -534,6 +595,9 @@ object EmulatorInitialState {
         private var _poolRegistrations = Vector.empty[EmulatorPoolRegistration]
         private var _drepRegistrations = Vector.empty[EmulatorDRepRegistration]
         private var _datums: Map[DataHash, Data] = Map.empty
+        private var _committee: Option[Committee] = None
+        private var _committeeHotKeys: Map[Credential, Credential] = Map.empty
+        private var _constitution: Option[Constitution] = None
 
         def utxos(utxos: java.util.Map[TransactionInput, TransactionOutput]): Builder = {
             import scala.jdk.CollectionConverters.*
@@ -567,12 +631,34 @@ object EmulatorInitialState {
             this
         }
 
-        def build(): EmulatorInitialState = EmulatorInitialState(
-          utxos = _utxos,
-          stakeRegistrations = _stakeRegistrations,
-          poolRegistrations = _poolRegistrations,
-          drepRegistrations = _drepRegistrations,
-          datums = _datums
+        /** The constitutional committee at genesis, spec [ES-6]. */
+        def committee(committee: Committee): Builder = {
+            _committee = Some(committee)
+            this
+        }
+
+        /** The hot key `cold`, a member of the committee, has authorized at genesis, spec [ES-6a].
+          */
+        def addCommitteeHotKey(cold: Credential, hot: Credential): Builder = {
+            _committeeHotKeys = _committeeHotKeys + (cold -> hot)
+            this
+        }
+
+        /** The constitution at genesis, spec [ES-6]. */
+        def constitution(constitution: Constitution): Builder = {
+            _constitution = Some(constitution)
+            this
+        }
+
+        def build(): EmulatorInitialState = new EmulatorInitialState(
+          _utxos,
+          _stakeRegistrations,
+          _poolRegistrations,
+          _drepRegistrations,
+          _datums,
+          _committee,
+          _committeeHotKeys,
+          _constitution
         )
     }
 }
@@ -789,11 +875,64 @@ object EmulatorBase {
                 delegates = Set.empty
               )
           }.toMap,
-          numDormantEpochs = 0L // spec [DR-6], C/State/VState.hs:75-76
+          numDormantEpochs = 0L, // spec [DR-6], C/State/VState.hs:75-76
+          committeeState = committeeStateOf(initState)
         )
 
         val certState = CertState(dstate = dstate, pstate = pstate, vstate = vstate)
         (certState, initState.datums)
+    }
+
+    /** The committee state of the seeded hot keys, one `HotCredential` per key, spec [ES-6a].
+      *
+      * @throws IllegalArgumentException
+      *   if a cold credential is not a member of the seeded committee: GOVCERT rejects the same
+      *   authorization with `ConwayCommitteeIsUnknown` (conway Rules/GovCert.hs:193-211), spec
+      *   [GC-2]
+      */
+    private def committeeStateOf(
+        initState: EmulatorInitialState
+    ): Map[Credential, CommitteeAuthorization] = {
+        initState.committeeHotKeys.map { (cold, hot) =>
+            require(
+              initState.committee.exists(_.members.contains(cold)),
+              s"committee hot key for $cold: the cold credential is not a member of the seeded " +
+                  "committee"
+            )
+            cold -> CommitteeAuthorization.HotCredential(hot)
+        }
+    }
+
+    /** The genesis ledger state of `initState`: the cert state of [[buildInitialState]], the
+      * deposits it holds, and the gov state with the seeded committee and constitution, spec
+      * [ES-6], [ES-13], [ES-14], D34. With none seeded, the gov state is `GovState.empty`.
+      */
+    private[node] def genesisLedger(initState: EmulatorInitialState, context: Context): State = {
+        val (certState, _) = buildInitialState(initState, context)
+        val govState = GovState.empty.copy(
+          committee = initState.committee,
+          constitution = initState.constitution.getOrElse(GovState.empty.constitution)
+        )
+        State(
+          initState.utxos,
+          certState = certState,
+          govState = govState,
+          deposited = EmulatorState.depositsOf(certState)
+        )
+    }
+
+    /** The emulator `Emulator.withState` builds, on every platform, spec [ES-6], D34. */
+    private[node] def fromInitialState(
+        initState: EmulatorInitialState,
+        context: Context,
+        config: ChainConfig,
+        validators: Iterable[STS.Validator],
+        mutators: Iterable[STS.Mutator]
+    ): Emulator = {
+        val datums = initState.datums.view.mapValues(KeepRaw(_)).toMap
+        val state =
+            EmulatorState.initial(genesisLedger(initState, context), context, datums, config)
+        fromState(state, validators, mutators)
     }
 
     /** Builds a [[scalus.cardano.ledger.CertState]] with the given stake credentials

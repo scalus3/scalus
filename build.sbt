@@ -1072,6 +1072,25 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.cardano.ledger.VotingState.copy(scala.collection.immutable.Map)scalus.cardano.ledger.VotingState"
         ),
+        // GovState is a case class now instead of an alias of Array[Element] (ledger-rules spec
+        // [DM-5], [DM-5a], D27). The alias's companion object goes, and State.govState and
+        // UTxOState.govState change type: their constructor, apply, copy, accessor, product
+        // accessor and default-argument methods. A deprecated Array[Element] form would have no
+        // meaning, so none is kept; the CHANGELOG lists the break as a migration hazard.
+        ProblemFilters.exclude[MissingClassProblem]("scalus.cardano.ledger.Entities$package$GovState$"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.UTxOState.this(scala.collection.immutable.Map,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)Unit"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.UTxOState.govState()Array[io.bullet.borer.Dom#Element]"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.UTxOState.copy(scala.collection.immutable.Map,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.UTxOState"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.UTxOState.copy$default$4()Array[io.bullet.borer.Dom#Element]"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.UTxOState._4()Array[io.bullet.borer.Dom#Element]"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.UTxOState.apply(scala.collection.immutable.Map,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.UTxOState"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.rules.State.this(scala.collection.immutable.Map,scalus.cardano.ledger.CertState,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)Unit"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.rules.State.govState()Array[io.bullet.borer.Dom#Element]"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.rules.State.copy(scala.collection.immutable.Map,scalus.cardano.ledger.CertState,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.rules.State"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.rules.State.copy$default$5()Array[io.bullet.borer.Dom#Element]"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.rules.State._5()Array[io.bullet.borer.Dom#Element]"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.rules.State.apply(scala.collection.immutable.Map,scalus.cardano.ledger.CertState,scalus.cardano.ledger.Coin,scalus.cardano.ledger.Coin,Array[io.bullet.borer.Dom#Element],scala.collection.immutable.Map,scalus.cardano.ledger.Coin)scalus.cardano.ledger.rules.State"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.ledger.rules.State.<init>$default$5()Array[io.bullet.borer.Dom#Element]"),
         // EmulatorState holds a block tree and a mempool now (emulator-chain spec [CP-2]), so its
         // case-class product accessors return the new fields. Its constructor is private, so
         // only a pattern match on its product elements can see the change.
@@ -1099,6 +1118,12 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.node.EmulatorState._6"
         ),
+        // EmulatorInitialState gains committee, committeeHotKeys and constitution, ledger-rules
+        // spec [ES-6], D33. The 5-argument constructor and apply stay as deprecated overloads; a
+        // case class copy cannot, since two copy overloads with defaults do not compile.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.node.EmulatorInitialState.copy(scala.collection.immutable.Map,scala.collection.immutable.Seq,scala.collection.immutable.Seq,scala.collection.immutable.Seq,scala.collection.immutable.Map)scalus.cardano.node.EmulatorInitialState"
+        ),
         // JsEmulatorOptions (Scala.js only) gains the chain options of emulator-chain spec [SF-6]. It
         // is a JS-object facade that callers build as a JS literal, never a Scala subclass, so a new
         // optional field cannot break a caller.
@@ -1125,6 +1150,26 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ),
         ProblemFilters.exclude[ReversedMissingMethodProblem](
           "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$securityParam_="
+        ),
+        // JsEmulatorOptions gains committee, committeeHotKeys and constitution, ledger-rules spec
+        // [ES-6], D33; a JS-object facade as above.
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.committee"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$committee_="
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.committeeHotKeys"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$committeeHotKeys_="
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.constitution"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$constitution_="
         )
       ),
       crossScalaVersions := supportedScalaVersions,

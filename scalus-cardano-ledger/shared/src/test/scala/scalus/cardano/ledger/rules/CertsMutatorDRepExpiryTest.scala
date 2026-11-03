@@ -95,7 +95,8 @@ class CertsMutatorDRepExpiryTest extends AnyFunSuite with Matchers with EitherVa
             CertState(
               vstate = VotingState(
                 dreps.map((c, e) => c -> DRepState(e, None, drepDeposit, Set.empty)).toMap,
-                dormant
+                dormant,
+                Map.empty
               ),
               pstate = PoolsState.empty,
               dstate = DelegationState(Map.empty)

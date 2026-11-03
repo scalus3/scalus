@@ -768,7 +768,7 @@ object EmulatorState {
       * registrations starts with this `deposited`, so a refund of a seeded deposit keeps it
       * consistent, spec [BK-1].
       */
-    private def depositsOf(certState: CertState): Coin =
+    private[node] def depositsOf(certState: CertState): Coin =
         Coin(
           certState.dstate.accounts.valuesIterator.map(_.deposit.value).sum
               + certState.pstate.deposits.valuesIterator.map(_.value).sum

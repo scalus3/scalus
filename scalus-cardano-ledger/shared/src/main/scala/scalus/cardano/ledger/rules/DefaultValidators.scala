@@ -47,11 +47,13 @@ object DefaultValidators {
 object DefaultMutators {
 
     /** All built-in mutators for Cardano ledger rules, in the order of the Conway LEDGER rule:
-      * withdrawals and certificates, then scripts and UTxO. A `ListSet` iterates in this order,
-      * spec [SC-3a]. [[CertsMutator]] applies the certificates in one ordered pass, spec [SC-22].
+      * withdrawals and certificates, then proposals and votes, then scripts and UTxO. A `ListSet`
+      * iterates in this order, spec [SC-3a]. [[CertsMutator]] applies the certificates in one
+      * ordered pass, spec [SC-22]; [[GovMutator]] sees the state after it, spec [GV-2a], D30.
       */
     val all: Set[STS.Mutator] = ListSet[STS.Mutator](
       CertsMutator,
+      GovMutator,
       PlutusScriptsTransactionMutator
     )
 }

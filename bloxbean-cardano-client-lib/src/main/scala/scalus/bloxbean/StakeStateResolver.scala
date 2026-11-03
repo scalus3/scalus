@@ -54,7 +54,7 @@ final class StakeStateResolver(
             .flatMap(drep => drepAt(drep, time).map(drep -> _))
             .toMap
         CertState(
-          VotingState(dreps, 0L),
+          VotingState.empty.copy(dreps = dreps),
           PoolsState.empty.copy(
             stakePools = pools.view.mapValues(_._1).toMap,
             retiring = pools.collect { case (pool, (_, Some(epoch))) => pool -> epoch }

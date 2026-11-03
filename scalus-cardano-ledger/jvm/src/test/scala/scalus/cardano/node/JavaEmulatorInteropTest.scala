@@ -67,4 +67,16 @@ class JavaEmulatorInteropTest extends AnyFunSuite {
         assert(JavaEmulatorInterop.advanceTo(emulator, 100L) == 105L)
         assert(JavaEmulatorInterop.snapshotUtxoCount(emulator) == 1)
     }
+
+    test("Java seeds a committee, a hot key and a constitution, spec [ES-6], [ES-9]") {
+        val cold = Credential.KeyHash(Alice.addrKeyHash)
+        val hot = Credential.KeyHash(Bob.addrKeyHash)
+        val committee = Committee(Map(cold -> 500L), UnitInterval(2, 3))
+        val constitution =
+            Constitution(Anchor("https://example.com", DataHash.fromHex("1" * 64)), None)
+        val gov = JavaEmulatorInterop.govStateWithCommittee(committee, cold, hot, constitution)
+        assert(gov.committee.contains(committee))
+        assert(gov.constitution == constitution)
+        assert(gov.proposals.isEmpty)
+    }
 }

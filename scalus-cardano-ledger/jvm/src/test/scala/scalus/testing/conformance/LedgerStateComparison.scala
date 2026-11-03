@@ -1,16 +1,15 @@
 package scalus.testing.conformance
 
-import io.bullet.borer.Cbor
 import scalus.cardano.ledger.*
 import scalus.testing.conformance.LedgerState.*
 
 /** Compares the state Scalus computes for a conformance vector with the vector's `newLedgerState`,
   * field by field (spec 13.0a).
   *
-  * Field names follow the Haskell ledger state: `utxo`, `deposited`, `fees`, `govState`,
+  * Field names follow the Haskell ledger state: `utxo`, `deposited`, `fees`, `govState.*`,
   * `instantStake` and `donation` of `UTxOState`; `accounts.*` of `DState`; `pools.*` of `PState`;
-  * `dreps.*` of `VState`. A map field without a suffix (`accounts`, `dreps`) means the key sets
-  * differ.
+  * `dreps.*` and `committeeState` of `VState`. A map field without a suffix (`accounts`, `dreps`)
+  * means the key sets differ.
   */
 object LedgerStateComparison {
 
@@ -37,26 +36,9 @@ object LedgerStateComparison {
       * steps land.
       */
     val exclusions: List[Exclusion] = List(
-      // Not modeled: no rule reads or writes the governance state (spec 13.0a).
-      Exclusion("govState", NoStep, ""),
       // Not modeled: no mutator updates the instant stake.
-      Exclusion("instantStake", NoStep, ""),
-      // Not modeled by the harness: these two vectors cast DRep votes after the Imp test passed
-      // epochs. The dump has no epoch, so every case runs at `impEpoch` (899) and the
-      // voting-DRep expiry of ledger-rules spec [DR-4] comes out 2 to 6 epochs short.
-      Exclusion(
-        "dreps.expiry",
-        NoStep,
-        s"${costModels} and setting the govPolicy afterwards succeeds"
-      ),
-      Exclusion(
-        "dreps.expiry",
-        NoStep,
-        s"${costModels} with alwaysFails govPolicy does not validate"
-      )
+      Exclusion("instantStake", NoStep, "")
     )
-
-    private def costModels = "UTXOS.PlutusV3 Initialization.Updating CostModels"
 
     def withoutExcluded(
         vectorName: String,
@@ -78,7 +60,15 @@ object LedgerStateComparison {
           compareMap("utxo", exp.utxo, actual.utxos, Nil),
           compareValue("deposited", exp.deposited, actual.deposited),
           compareValue("fees", exp.fees, actual.fees),
-          compareValue("govState", encodeGovState(exp.govState), encodeGovState(actual.govState)),
+          // spec [CV-7]; the DRep pulser and the future pparams are not decoded ([CV-6])
+          compareProposals(exp.govState.proposals, actual.govState.proposals),
+          compareValue("govState.roots", exp.govState.roots, actual.govState.roots),
+          compareValue("govState.committee", exp.govState.committee, actual.govState.committee),
+          compareValue(
+            "govState.constitution",
+            exp.govState.constitution,
+            actual.govState.constitution
+          ),
           compareMap("instantStake", exp.stakeDistribution, actual.stakeDistribution, Nil),
           compareValue("donation", exp.donation, actual.donation),
           compareMap(
@@ -124,6 +114,13 @@ object LedgerStateComparison {
               "delegates" -> (_.delegates)
             )
           ),
+          // spec [GC-3]
+          compareMap(
+            "committeeState",
+            expCerts.vstate.committeeState,
+            actCerts.vstate.committeeState,
+            Nil
+          ),
           // spec [CV-4]: the reset of [DR-3] shows only here
           compareValue(
             "dreps.numDormantEpochs",
@@ -133,8 +130,26 @@ object LedgerStateComparison {
         )
     }
 
-    private def encodeGovState(govState: GovState): String =
-        govState.map(e => scalus.utils.Hex.bytesToHex(Cbor.encode(e).toByteArray)).mkString(",")
+    /** The proposals in order, each with its id, votes, procedure and epochs, spec [CV-7]. */
+    private def compareProposals(
+        expected: Vector[GovActionState],
+        actual: Vector[GovActionState]
+    ): List[FieldMismatch] =
+        if expected == actual then Nil
+        else
+            val (expectedIds, actualIds) = (expected.map(_.id), actual.map(_.id))
+            val detail =
+                if expectedIds != actualIds then
+                    s"expected ids ${show(expectedIds)}, got ${show(actualIds)}"
+                else
+                    expected
+                        .zip(actual)
+                        .collect {
+                            case (e, a) if e != a =>
+                                s"\n    ${show(e.id)}: expected ${show(e)}, got ${show(a)}"
+                        }
+                        .mkString
+            List(FieldMismatch("govState.proposals", detail))
 
     private def compareValue[A](field: String, expected: A, actual: A): List[FieldMismatch] =
         if expected == actual then Nil

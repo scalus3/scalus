@@ -424,6 +424,12 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       */
     def getTreasury(): js.BigInt = emulator.treasury.value.toJsBigInt
 
+    /** The gov state: the proposals in the order they were submitted, with their votes, the
+      * committee and the constitution. A committee member's hot key is not here: a tx authorizes it
+      * with a certificate, and the vote it casts shows in `votes`.
+      */
+    def getGovState(): JGovState = JEmulator.govStateOf(emulator.govState)
+
     /** The current slot number of the emulator. With clock `"wall"`, reading it does not move the
       * clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
       */
@@ -941,6 +947,128 @@ trait JDatumEntry extends js.Object {
     val datum: String
 }
 
+/** A fraction: `numerator / denominator`. */
+@TsName("Fraction")
+trait JFraction extends js.Object {
+    val numerator: Double
+    val denominator: Double
+}
+
+/** One member of a constitutional committee. */
+@TsName("CommitteeMember")
+trait JCommitteeMember extends js.Object {
+
+    /** Credential type of the member's cold credential: "key" or "script". */
+    @TsType("\"key\" | \"script\"")
+    val credentialType: String
+
+    /** Hex-encoded 28-byte hash of the member's cold credential. */
+    val credentialHash: String
+
+    /** The last epoch of the member's term. */
+    val expiresAfter: Double
+}
+
+/** A constitutional committee: its members and the fraction of them that must vote yes. */
+@TsName("Committee")
+trait JCommittee extends js.Object {
+    val members: js.Array[JCommitteeMember]
+    val threshold: JFraction
+}
+
+/** A hot key a committee member authorized, for `EmulatorOptions.committeeHotKeys`. */
+@TsName("CommitteeHotKey")
+trait JCommitteeHotKey extends js.Object {
+
+    /** Credential type of the member's cold credential: "key" or "script". */
+    @TsType("\"key\" | \"script\"")
+    val coldCredentialType: String
+
+    /** Hex-encoded 28-byte hash of the member's cold credential. */
+    val coldCredentialHash: String
+
+    /** Credential type of the hot credential: "key" or "script". */
+    @TsType("\"key\" | \"script\"")
+    val hotCredentialType: String
+
+    /** Hex-encoded 28-byte hash of the hot credential. */
+    val hotCredentialHash: String
+}
+
+/** The constitution: its anchor and, if any, the hash of its guardrails script. */
+@TsName("Constitution")
+trait JConstitution extends js.Object {
+
+    /** The URL of the constitution text. */
+    val anchorUrl: String
+
+    /** Hex-encoded 32-byte hash of the document at `anchorUrl`. */
+    val anchorDataHash: String
+
+    /** Hex-encoded 28-byte hash of the guardrails script, or `undefined` for none. */
+    val guardrailsScriptHash: js.UndefOr[String] = js.undefined
+}
+
+/** One vote on a proposal, in `GovActionState.votes`. */
+@TsName("GovVote")
+trait JGovVote extends js.Object {
+
+    /** Who votes: a committee hot credential, a DRep, or a stake pool. */
+    @TsType("\"committee\" | \"drep\" | \"pool\"")
+    val voterRole: String
+
+    /** Credential type of the voter: "key" or "script". A pool is always "key". */
+    @TsType("\"key\" | \"script\"")
+    val credentialType: String
+
+    /** Hex-encoded 28-byte hash of the voter: the hot credential, the DRep credential, or the pool
+      * key hash.
+      */
+    val credentialHash: String
+
+    @TsType("\"Yes\" | \"No\" | \"Abstain\"")
+    val vote: String
+}
+
+/** One proposal in `GovState.proposals`. */
+@TsName("GovActionState")
+trait JGovActionState extends js.Object {
+
+    /** Hex-encoded 32-byte hash of the transaction that proposed the action. */
+    val txHash: String
+
+    /** The index of the proposal among the proposals of that transaction. */
+    val index: Double
+
+    /** The kind of gov action. */
+    @TsType(
+      "\"ParameterChange\" | \"HardForkInitiation\" | \"TreasuryWithdrawals\" | \"NoConfidence\" | \"UpdateCommittee\" | \"NewConstitution\" | \"InfoAction\""
+    )
+    val actionType: String
+
+    /** The epoch the action was proposed in. */
+    val proposedIn: Double
+
+    /** The last epoch in which the action can be ratified. */
+    val expiresAfter: Double
+
+    /** The votes cast on the action, the last vote of each voter only. */
+    val votes: js.Array[JGovVote]
+}
+
+/** The gov state, returned by `Emulator.getGovState`. */
+@TsName("GovState")
+trait JGovState extends js.Object {
+
+    /** The proposals, in the order they were submitted. */
+    val proposals: js.Array[JGovActionState]
+
+    /** The committee, or `undefined` when there is none. */
+    val committee: js.UndefOr[JCommittee]
+
+    val constitution: JConstitution
+}
+
 /** Everything an emulator may start with beyond its chain parameters, passed to `Emulator.create`.
   * Every field is optional.
   */
@@ -975,6 +1103,21 @@ trait JsEmulatorOptions extends js.Object {
       * be the blake2b-256 hash of its `datum` bytes.
       */
     val datums: js.UndefOr[js.Array[JDatumEntry]] = js.undefined
+
+    /** The constitutional committee at the start. Leave it out for none: then only `NoConfidence`
+      * and `UpdateCommittee` actions can be ratified.
+      */
+    val committee: js.UndefOr[JCommittee] = js.undefined
+
+    /** The hot key each committee member has authorized at the start. Every cold credential must be
+      * a member of `committee`, else `create` throws a `TypeError`.
+      */
+    val committeeHotKeys: js.UndefOr[js.Array[JCommitteeHotKey]] = js.undefined
+
+    /** The constitution at the start. Leave it out for one with an empty anchor and no guardrails
+      * script.
+      */
+    val constitution: js.UndefOr[JConstitution] = js.undefined
 
     /** The treasury in lovelace at the start of the current epoch. Defaults to 0. A transaction
       * that states a `currentTreasuryValue` must state this value until the next epoch boundary,
@@ -1143,6 +1286,106 @@ object JEmulator {
         case DRep.ScriptHash(hash)   => js.Dynamic.literal(`type` = "script", hash = hash.toHex)
         case DRep.AlwaysAbstain      => "AlwaysAbstain"
         case DRep.AlwaysNoConfidence => "AlwaysNoConfidence"
+
+    private def committeeOf(c: JCommittee): Committee = {
+        val name = "committee.threshold"
+        val n = longOf(c.threshold.numerator, s"$name.numerator")
+        val d = longOf(c.threshold.denominator, s"$name.denominator")
+        if d <= 0 || n < 0 || n > d then typeError(s"$name must be a fraction in [0, 1]")
+        Committee(
+          c.members.toSeq.map { m =>
+              parseCredential(m.credentialType, m.credentialHash) ->
+                  longOf(m.expiresAfter, "committee.members.expiresAfter")
+          }.toMap,
+          UnitInterval(n, d)
+        )
+    }
+
+    private def constitutionOf(c: JConstitution): Constitution =
+        Constitution(
+          Anchor(c.anchorUrl, DataHash.fromHex(c.anchorDataHash)),
+          c.guardrailsScriptHash.toOption.map(ScriptHash.fromHex)
+        )
+
+    /** `(credentialType, credentialHash)` of `credential`, as the options take it. */
+    private def credentialFields(credential: Credential): (String, String) = credential match
+        case Credential.KeyHash(hash)    => ("key", hash.toHex)
+        case Credential.ScriptHash(hash) => ("script", hash.toHex)
+
+    private def govStateOf(gov: GovState): JGovState = {
+        def vote(role: String, credential: Credential, v: Vote): JGovVote = {
+            val (credentialType, credentialHash) = credentialFields(credential)
+            js.Dynamic
+                .literal(
+                  voterRole = role,
+                  credentialType = credentialType,
+                  credentialHash = credentialHash,
+                  vote = v.toString
+                )
+                .asInstanceOf[JGovVote]
+        }
+        val proposals = gov.proposals.map { p =>
+            val votes = p.committeeVotes.map((c, v) => vote("committee", c, v)) ++
+                p.drepVotes.map((c, v) => vote("drep", c, v)) ++
+                p.spoVotes.map((pool, v) =>
+                    vote("pool", Credential.KeyHash(AddrKeyHash.fromByteString(pool)), v)
+                )
+            js.Dynamic
+                .literal(
+                  txHash = p.id.transactionId.toHex,
+                  index = p.id.govActionIndex.toDouble,
+                  actionType = actionTypeOf(p.action),
+                  proposedIn = p.proposedIn.toDouble,
+                  expiresAfter = p.expiresAfter.toDouble,
+                  votes = votes.toJSArray
+                )
+                .asInstanceOf[JGovActionState]
+        }
+        val committee = gov.committee.map { c =>
+            val members = c.members.map { (credential, expiresAfter) =>
+                val (credentialType, credentialHash) = credentialFields(credential)
+                js.Dynamic
+                    .literal(
+                      credentialType = credentialType,
+                      credentialHash = credentialHash,
+                      expiresAfter = expiresAfter.toDouble
+                    )
+                    .asInstanceOf[JCommitteeMember]
+            }
+            js.Dynamic
+                .literal(
+                  members = members.toJSArray,
+                  threshold = js.Dynamic.literal(
+                    numerator = c.threshold.numerator.toDouble,
+                    denominator = c.threshold.denominator.toDouble
+                  )
+                )
+                .asInstanceOf[JCommittee]
+        }
+        val constitution = js.Dynamic
+            .literal(
+              anchorUrl = gov.constitution.anchor.url,
+              anchorDataHash = gov.constitution.anchor.dataHash.toHex,
+              guardrailsScriptHash = gov.constitution.scriptHash.map(_.toHex).orUndefined
+            )
+            .asInstanceOf[JConstitution]
+        js.Dynamic
+            .literal(
+              proposals = proposals.toJSArray,
+              committee = committee.orUndefined,
+              constitution = constitution
+            )
+            .asInstanceOf[JGovState]
+    }
+
+    private def actionTypeOf(action: GovAction): String = action match
+        case _: GovAction.ParameterChange     => "ParameterChange"
+        case _: GovAction.HardForkInitiation  => "HardForkInitiation"
+        case _: GovAction.TreasuryWithdrawals => "TreasuryWithdrawals"
+        case _: GovAction.NoConfidence        => "NoConfidence"
+        case _: GovAction.UpdateCommittee     => "UpdateCommittee"
+        case _: GovAction.NewConstitution     => "NewConstitution"
+        case GovAction.InfoAction             => "InfoAction"
 
     private def replaceEmulator(wrapper: JEmulator, e: Emulator): Unit =
         wrapper.emulator = e
@@ -1460,7 +1703,13 @@ object JEmulator {
           stakeRegistrations = parseStakeRegistrations(options.stakeRegistrations),
           poolRegistrations = parsePoolRegistrations(options.poolRegistrations, env),
           drepRegistrations = parseDrepRegistrations(options.drepRegistrations),
-          datums = Map.empty
+          datums = Map.empty,
+          committee = options.committee.toOption.map(committeeOf),
+          committeeHotKeys = options.committeeHotKeys.toOption.toSeq.flatten.map { k =>
+              parseCredential(k.coldCredentialType, k.coldCredentialHash) ->
+                  parseCredential(k.hotCredentialType, k.hotCredentialHash)
+          }.toMap,
+          constitution = options.constitution.toOption.map(constitutionOf)
         )
         val context = Context(env = env, slotConfig = cardanoInfo.slotConfig)
         val scalaEmulator = Emulator.withState(initState, context, chainConfigOf(options))

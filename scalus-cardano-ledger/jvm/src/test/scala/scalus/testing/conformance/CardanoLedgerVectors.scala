@@ -13,7 +13,7 @@ import java.nio.file.{FileSystemException, Files, Path, Paths, StandardCopyOptio
 import java.security.MessageDigest
 import java.util.Comparator
 import scala.jdk.CollectionConverters.*
-import scala.util.{Try, Using}
+import scala.util.{Failure, Success, Try, Using}
 
 /** Importer for Cardano Ledger conformance test vectors
   *
@@ -33,7 +33,6 @@ object CardanoLedgerVectors {
     val impSlotConfig: SlotConfig =
         SlotConfig(zeroTime = 0, zeroSlot = 0, slotLength = 1000, epochLength = 100, zeroEpoch = 0)
     val impEpoch: Long = 899
-    val impSlot: Long = impSlotConfig.firstSlotOfEpoch(impEpoch)
 
     /** Validate a test vector by name
       *
@@ -53,62 +52,120 @@ object CardanoLedgerVectors {
     ): List[(String, Boolean, Try[CardanoMutator.Result])] =
         runVector(vectorName, evaluatorMode, useParams).map(r => (r.file, r.success, r.result))
 
-    /** One test case of a vector: the expected outcome, the Scalus result, and the expected new
-      * ledger state (present when `success` is true).
+    /** One test case of a vector: the expected outcome, the Scalus result, the expected new ledger
+      * state (present when `success` is true), and the epoch the case ran at.
       */
     case class VectorRun(
         file: String,
         success: Boolean,
         result: Try[CardanoMutator.Result],
-        newLedgerState: Option[LedgerState]
+        newLedgerState: Option[LedgerState],
+        epoch: Long
     )
+
+    /** The harness could not decode a ledger state of a case, so the case has no verdict. The
+      * conformance test reports it as a failure, never as the ledger's "fail" verdict.
+      */
+    final class UndecodableState(cause: Throwable)
+        extends Exception(s"cannot decode the ledger state: ${cause.getMessage}", cause)
 
     def runVector(
         vectorName: String,
         evaluatorMode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost,
         useParams: Boolean = true
-    ): List[VectorRun] =
+    ): List[VectorRun] = {
+        // spec [CV-8]: the epoch of a case is at least the epoch of every earlier case, D43
+        var floor = impEpoch
         for case (path, vector) <- loadVector(vectorName) yield
-            val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
-            // Extract protocol parameters from test vector
-            // First try the explicit pparamsHash field (new format), then fall back to searching in ledger state
-            val params =
-                if useParams then
-                    vector.pparamsHash
-                        .flatMap(hash =>
-                            ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash)
-                        )
-                        .orElse(
-                          ConwayProtocolParamsFixtures
-                              .extractPparamsHash(vector.oldLedgerState, pparamsDir)
-                              .flatMap(hash =>
-                                  ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash)
-                              )
-                        )
-                        .map(_.toProtocolParams)
-                else None
-            val context = Context(
-              env = rules.UtxoEnv(
-                impSlot,
-                params.getOrElse(UtxoEnv.default.params),
-                state.certState,
-                scalus.cardano.address.Network.Testnet,
-                // the vectors carry no ChainAccountState, so the treasury is unknown
-                scalus.cardano.ledger.Coin.zero
-              ),
-              slotConfig = impSlotConfig,
-              evaluatorMode = evaluatorMode
-            )
+            val file = path.getFileName.toFile.getName
+            val transaction = Try(Transaction.fromCbor(Hex.hexToBytes(vector.cbor)))
+            val states = Try {
+                val old = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState))
+                val next =
+                    vector.newLedgerState.map(hex => LedgerState.fromCbor(Hex.hexToBytes(hex)))
+                (old, next)
+            }
+            states match
+                case Failure(e) =>
+                    VectorRun(
+                      file,
+                      vector.success,
+                      Failure(UndecodableState(e)),
+                      None,
+                      floor
+                    )
+                case Success((oldState, newState)) =>
+                    val state = oldState.ruleState
+                    val params = (if useParams then vectorParams(vector) else None)
+                        .getOrElse(UtxoEnv.default.params)
+                    val epoch =
+                        (floor :: oldState.utxos.govState.proposals.map(_.proposedIn).toList ++
+                            transaction.toOption.flatMap(tx =>
+                                newState.flatMap(caseEpoch(tx, oldState, _, params.dRepActivity))
+                            )).max
+                    floor = epoch
+                    val context = Context(
+                      env = rules.UtxoEnv(
+                        impSlotConfig.firstSlotOfEpoch(epoch),
+                        params,
+                        state.certState,
+                        scalus.cardano.address.Network.Testnet,
+                        // the vectors carry no ChainAccountState, so the treasury is unknown
+                        scalus.cardano.ledger.Coin.zero
+                      ),
+                      slotConfig = impSlotConfig,
+                      evaluatorMode = evaluatorMode
+                    )
+                    VectorRun(
+                      file,
+                      vector.success,
+                      transaction.flatMap(tx => Try(CardanoMutator.transit(context, state, tx))),
+                      newState,
+                      epoch
+                    )
+    }
 
-            VectorRun(
-              path.getFileName.toFile.getName,
-              vector.success,
-              for
-                  transaction <- Try(Transaction.fromCbor(Hex.hexToBytes(vector.cbor)))
-                  result <- Try(CardanoMutator.transit(context, state, transaction))
-              yield result,
-              vector.newLedgerState.map(hex => LedgerState.fromCbor(Hex.hexToBytes(hex)))
+    /** The epoch that a case's `newLedgerState` records, spec [CV-8]: the `proposedIn` of a
+      * proposal of the case tx ([GV-5]); else the epoch that the new expiry of a DRep the tx
+      * registers, updates or votes with inverts ([DR-1], [DR-4]: `epoch + dRepActivity -
+      * numDormantEpochs`, with the counter of `oldState`); else `None`.
+      */
+    private def caseEpoch(
+        tx: Transaction,
+        oldState: LedgerState,
+        newState: LedgerState,
+        dRepActivity: Long
+    ): Option[Long] = {
+        val proposed = newState.utxos.govState.proposals
+            .find(_.id.transactionId == tx.id)
+            .map(_.proposedIn)
+        def touchedDReps: Seq[Credential] =
+            tx.body.value.certificates.toSeq.collect {
+                case Certificate.RegDRepCert(credential, _, _) => credential
+                case Certificate.UpdateDRepCert(credential, _) => credential
+            } ++ tx.body.value.votingProcedures.toSeq.flatMap(_.procedures.keys).collect {
+                case Voter.DRepKey(hash)    => Credential.KeyHash(hash)
+                case Voter.DRepScript(hash) => Credential.ScriptHash(hash)
+            }
+        def fromDRep = touchedDReps.iterator
+            .flatMap(newState.certs.vstate.dreps.get)
+            .map(_.expiry - dRepActivity + oldState.certs.vstate.numDormantEpochs)
+            .nextOption()
+        proposed.orElse(fromDRep)
+    }
+
+    /** The protocol parameters of a vector: the `pparamsHash` field (new format), else the hash in
+      * the old ledger state.
+      */
+    private def vectorParams(vector: RawTestVector): Option[ProtocolParams] =
+        vector.pparamsHash
+            .flatMap(hash => ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash))
+            .orElse(
+              ConwayProtocolParamsFixtures
+                  .extractPparamsHash(vector.oldLedgerState, pparamsDir)
+                  .flatMap(hash => ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash))
             )
+            .map(_.toProtocolParams)
 
     // Extract vectors.tar.gz to a temporary directory, shared by all test runs
     lazy val conformanceVectorsPath: Path = {
@@ -277,16 +334,19 @@ object CardanoLedgerVectors {
         readFromString[RawTestVector](json)
     }
 
+    // Each directory stream is closed: the tests run in the sbt server JVM, which ran out of file
+    // descriptors on the leaked ones.
     def vectorNames(): List[String] =
-        Files
-            .list(conformanceVectorsPath)
-            .map(_.getFileName.toFile.getName)
-            .iterator()
-            .asScala
-            .filterNot(_.startsWith("._"))
-            .filterNot(_ == "pparams-by-hash")
-            .toList
-            .sorted
+        Using.resource(Files.list(conformanceVectorsPath)) { paths =>
+            paths
+                .map(_.getFileName.toFile.getName)
+                .iterator()
+                .asScala
+                .filterNot(_.startsWith("._"))
+                .filterNot(_ == "pparams-by-hash")
+                .toList
+                .sorted
+        }
 
     def loadVector(name: String): List[(Path, RawTestVector)] = {
         val rootPath = conformanceVectorsPath.resolve(name)
@@ -295,23 +355,22 @@ object CardanoLedgerVectors {
             return List.empty
         }
 
-        Files
-            .walk(rootPath)
-            .iterator()
-            .asScala
+        val files = Using.resource(Files.walk(rootPath))(_.iterator().asScala.toList)
+        files
             .filter(p => Files.isRegularFile(p) && !p.getFileName.toString.startsWith("."))
             .filter(p => !p.toString.contains("pparams-by-hash")) // Skip protocol params files
             .filter(p => !p.getFileName.toString.endsWith(".md")) // Skip markdown files
             .filter(p => !p.getFileName.toString.endsWith(".tar.gz")) // Skip tar.gz files
             .flatMap { path =>
                 loadRawVector(path) match {
-                    case scala.util.Success(vector) => Some((path.getFileName, vector))
-                    case scala.util.Failure(e)      =>
+                    case Success(vector) => Some((path.getFileName, vector))
+                    case Failure(e)      =>
                         // Skip files that aren't valid JSON vectors
                         None
                 }
             }
             .toList
-            .sortBy(_._1)
+            // numeric order, the order the Imp test made the cases in
+            .sortBy((path, _) => (path.toString.toIntOption, path.toString))
     }
 }

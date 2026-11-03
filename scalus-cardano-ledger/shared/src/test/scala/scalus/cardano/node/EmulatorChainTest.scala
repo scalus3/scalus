@@ -6,7 +6,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.STS
-import scalus.cardano.node.emulator.{ChainConfig, LedgerSnapshot, TxStatus}
+import scalus.cardano.node.emulator.{ChainConfig, TxStatus}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.builtin.{ByteString, Data}
@@ -314,14 +314,6 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         e
     }
 
-    /** `==` on two snapshots, except the gov state: an `Array`, so `==` compares its identity. */
-    private def assertSameSnapshot(a: LedgerSnapshot, b: LedgerSnapshot): Unit = {
-        assert(a.ledger.govState.sameElements(b.ledger.govState))
-        val gov = GovState.empty
-        def normal(s: LedgerSnapshot) = s.copy(ledger = s.ledger.copy(govState = gov))
-        assert(normal(a) == normal(b))
-    }
-
     test("the tip snapshot is the fold of the selected chain's blocks from genesis") {
         // spec [TE-1], [NL-1], [NL-3]: the fold ticks to the slot each tx was validated at
         val genesis = stateOf(emulator(ChainConfig.instant)).tipSnapshot
@@ -345,7 +337,7 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                       binaryDatums = ticked.binaryDatums ++ EmulatorBase.binaryDatumsOf(applied.tx)
                     )
                 }
-            assertSameSnapshot(folded.atSlot(e.currentSlotSync), state.tipSnapshot)
+            assert(folded.atSlot(e.currentSlotSync) == state.tipSnapshot)
             assert(state.context.fee == Coin.zero, "no transition writes Context.fee")
         }
     }

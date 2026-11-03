@@ -1,6 +1,7 @@
 package scalus.testing
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, State, UtxoEnv}
 import scalus.cardano.node.{Emulator, EmulatorBase, EmulatorState}
@@ -305,14 +306,43 @@ class ImmutableEmulatorTest extends AnyFunSuite {
     test("fromEmulator and toEmulator keep every field of the ledger state") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val stakeCred = Credential.ScriptHash(PlutusV3.alwaysOk.script.scriptHash)
+        // spec [DM-1], [DM-5]: a committee member with a hot key, and one proposal with a vote
+        val coldCred = Credential.KeyHash(AddrKeyHash.fromHex("c" * 56))
+        val hotCred = Credential.KeyHash(AddrKeyHash.fromHex("d" * 56))
+        val proposal = GovActionState(
+          id = GovActionId(genesisHash, 0),
+          committeeVotes = Map(hotCred -> Vote.Yes),
+          drepVotes = Map.empty,
+          spoVotes = Map.empty,
+          procedure = ProposalProcedure(
+            deposit = Coin(19),
+            rewardAccount = RewardAccount(
+              StakeAddress(
+                Network.Mainnet,
+                StakePayload.Script(PlutusV3.alwaysOk.script.scriptHash)
+              )
+            ),
+            govAction = GovAction.InfoAction,
+            anchor = Anchor("https://example.com", DataHash.fromHex("0" * 64))
+          ),
+          proposedIn = 3,
+          expiresAfter = 9
+        )
         val ledger = State(
           utxos = Map(Input(genesisHash, 0) -> Output(Alice.address, Value.ada(100))),
-          certState = CertState.empty.copy(dstate =
-              DelegationState(Map(stakeCred -> ConwayAccountState(Coin(1), Coin(2), None, None)))
+          certState = CertState.empty.copy(
+            vstate = VotingState.empty.copy(committeeState =
+                Map(coldCred -> CommitteeAuthorization.HotCredential(hotCred))
+            ),
+            dstate =
+                DelegationState(Map(stakeCred -> ConwayAccountState(Coin(1), Coin(2), None, None)))
           ),
           deposited = Coin(7),
           fees = Coin(11),
-          govState = Array(io.bullet.borer.Dom.IntElem(3)),
+          govState = GovState.empty.copy(
+            proposals = Vector(proposal),
+            committee = Some(Committee(Map(coldCred -> 20L), UnitInterval(1, 1)))
+          ),
           stakeDistribution = Map(stakeCred -> Coin(13)),
           donation = Coin(17)
         )
@@ -334,7 +364,7 @@ class ImmutableEmulatorTest extends AnyFunSuite {
                 assert(state.certState == ledger.certState)
                 assert(state.deposited == ledger.deposited)
                 assert(state.fees == ledger.fees)
-                assert(state.govState.sameElements(ledger.govState))
+                assert(state.govState == ledger.govState)
                 assert(state.stakeDistribution == ledger.stakeDistribution)
                 assert(state.donation == ledger.donation)
             }

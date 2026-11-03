@@ -1,6 +1,5 @@
 package scalus.cardano.ledger
 
-import io.bullet.borer.Dom.Element
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.utils.CollateralSufficient
 
@@ -361,6 +360,29 @@ object TransactionException {
              |invalid refunds (expected -> provided): $invalidRefunds.""".stripMargin
         )
 
+    /** It's `ConwayCommitteeHasPreviouslyResigned` of the GOVCERT rule in cardano-ledger
+      * (eras/conway/impl/src/Cardano/Ledger/Conway/Rules/GovCert.hs:193-199), spec [GC-1], [GC-4]:
+      * a committee certificate for a cold credential that resigned.
+      */
+    final case class CommitteeHasPreviouslyResignedException(
+        transactionId: TransactionHash,
+        coldCredential: Credential
+    ) extends TransactionException(
+          s"Committee member $coldCredential has previously resigned, transactionId $transactionId"
+        )
+
+    /** It's `ConwayCommitteeIsUnknown` of the GOVCERT rule in cardano-ledger
+      * (eras/conway/impl/src/Cardano/Ledger/Conway/Rules/GovCert.hs:200-208), spec [GC-2], [GC-4]:
+      * a committee certificate for a cold credential that is not a member of the committee and not
+      * added by a pending `UpdateCommittee` proposal.
+      */
+    final case class CommitteeIsUnknownException(
+        transactionId: TransactionHash,
+        coldCredential: Credential
+    ) extends TransactionException(
+          s"Committee member $coldCredential is unknown, transactionId $transactionId"
+        )
+
     // It's Conway.WithdrawalsNotInRewards in cardano-ledger
     final case class WithdrawalsNotInRewardsException(
         transactionId: TransactionHash,
@@ -396,6 +418,16 @@ object TransactionException {
         expected: Coin
     ) extends TransactionException(
           s"Proposal deposit incorrect for transactionId $transactionId: supplied $supplied, expected $expected"
+        )
+
+    /** A failure of the Conway GOV rule in cardano-ledger
+      * (eras/conway/impl/src/Cardano/Ledger/Conway/Rules/Gov.hs:456-643), other than
+      * `ProposalDepositIncorrect`, spec [GV-19], D31. [[ruleName]] returns the ledger name of
+      * `failure`.
+      */
+    final case class GovException(transactionId: TransactionHash, failure: GovFailure)
+        extends TransactionException(
+          s"GOV rule failed for transactionId $transactionId: $failure"
         )
 
     // It's Conway.ConwayTxRefScriptsSizeTooBig in cardano-ledger
@@ -586,10 +618,13 @@ object TransactionException {
         case _: PoolMetadataHashTooBigException            => "PoolMetadataHashTooBig"
         case _: VrfKeyHashAlreadyRegisteredException       => "VRFKeyHashAlreadyRegistered"
         case _: DRepException                              => "DRep"
+        case _: CommitteeHasPreviouslyResignedException    => "ConwayCommitteeHasPreviouslyResigned"
+        case _: CommitteeIsUnknownException                => "ConwayCommitteeIsUnknown"
         case _: WithdrawalsNotInRewardsException           => "WithdrawalsNotInRewards"
         case _: TreasuryValueMismatchException             => "TreasuryValueMismatch"
         case _: TxRefScriptsSizeTooBigException            => "TxRefScriptsSizeTooBig"
         case _: ProposalDepositIncorrectException          => "ProposalDepositIncorrect"
+        case e: GovException                               => e.failure.productPrefix
         case _: WithdrawalsNotDelegatedToDRepException     => "WithdrawalsNotDelegatedToDRep"
         case _: ExUnitsExceedMaxException                  => "ExUnitsExceedMax"
         case _: TooManyCollateralInputsException           => "TooManyCollateralInputs"
@@ -611,9 +646,6 @@ object TransactionException {
         case _: IllegalArgumentException           => "IllegalArgument"
 }
 
-type GovState = Array[Element]
-object GovState:
-    def empty: GovState = Array.empty
 type StakeMap = Map[Credential, Coin]
 object StakeMap:
     def empty: StakeMap = Map.empty
@@ -663,32 +695,43 @@ data VState era = VState
   -- an opportunity to vote on anything.
   }*/
 
-/** The voting state, the Haskell `VState` without the committee state (phase 2, D24).
+/** The voting state, the Haskell `VState`.
   *
   * @param numDormantEpochs
   *   the number of epochs in a row with no active proposal, `vsNumDormantEpochs` of the ledger,
   *   spec [DM-3]. A tx with a proposal adds it to the DRep expiries and resets it
   *   (eras/conway/impl/src/Cardano/Ledger/Conway/Rules/Certs.hs:313-333), spec [DR-3].
+  * @param committeeState
+  *   the authorization of each committee cold credential that has one, `vsCommitteeState` of the
+  *   ledger, spec [DM-1]. It is the third field, not the second as in Haskell, so that the product
+  *   accessors of the earlier fields keep their types (D29).
   */
 case class VotingState(
     dreps: Map[Credential, DRepState],
-    //    vsCommitteeState: CommitteeState,
-    numDormantEpochs: EpochNo
+    numDormantEpochs: EpochNo,
+    committeeState: Map[Credential, CommitteeAuthorization]
 ) {
 
-    /** The 1.4 constructor, with no dormant counter, spec D17. */
-    @deprecated("use the constructor with numDormantEpochs, or VotingState.empty", "1.4.1")
-    def this(dreps: Map[Credential, DRepState] = Map.empty) = this(dreps, 0L)
+    /** The 1.4 constructor, with no dormant counter and no committee state, spec D17. */
+    @deprecated(
+      "use the constructor with numDormantEpochs and committeeState, or VotingState.empty",
+      "1.4.1"
+    )
+    def this(dreps: Map[Credential, DRepState] = Map.empty) = this(dreps, 0L, Map.empty)
 }
 
 object VotingState {
 
-    /** No DReps and no dormant epochs. */
-    val empty: VotingState = VotingState(Map.empty, 0L)
+    /** No DReps, no dormant epochs and no committee authorization. */
+    val empty: VotingState = VotingState(Map.empty, 0L, Map.empty)
 
-    /** The 1.4 factory, with no dormant counter, spec D17. */
-    @deprecated("use the factory with numDormantEpochs, or VotingState.empty", "1.4.1")
-    def apply(dreps: Map[Credential, DRepState] = Map.empty): VotingState = VotingState(dreps, 0L)
+    /** The 1.4 factory, with no dormant counter and no committee state, spec D17. */
+    @deprecated(
+      "use the factory with numDormantEpochs and committeeState, or VotingState.empty",
+      "1.4.1"
+    )
+    def apply(dreps: Map[Credential, DRepState] = Map.empty): VotingState =
+        VotingState(dreps, 0L, Map.empty)
 }
 
 /*

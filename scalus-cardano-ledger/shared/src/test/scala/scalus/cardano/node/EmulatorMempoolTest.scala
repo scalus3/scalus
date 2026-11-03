@@ -6,7 +6,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.STS
-import scalus.cardano.node.emulator.{AwaitTxPolicy, BlockForge, ChainConfig, ChainView, ChainViewError, DropReason, LedgerSnapshot, TxStatus}
+import scalus.cardano.node.emulator.{AwaitTxPolicy, BlockForge, ChainConfig, ChainView, ChainViewError, DropReason, TxStatus}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.builtin.{ByteString, Data}
@@ -56,14 +56,6 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     /** The UTxO set after the mempool txs, which is what a chained tx spends from. */
     private def mempoolUtxos(emulator: Emulator): Utxos =
         stateOf(emulator).mempool.lastOption.fold(emulator.utxos)(_.snapshot.ledger.utxos)
-
-    /** `==` on two snapshots, except the gov state: an `Array`, so `==` compares its identity. */
-    private def assertSameSnapshot(a: LedgerSnapshot, b: LedgerSnapshot): Unit = {
-        assert(a.ledger.govState.sameElements(b.ledger.govState))
-        val gov = GovState.empty
-        def normal(s: LedgerSnapshot) = s.copy(ledger = s.ledger.copy(govState = gov))
-        assert(normal(a) == normal(b))
-    }
 
     private enum Op {
         case Submit(lovelace: Long)
@@ -118,7 +110,7 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                     )
                     .fold(err => fail(s"a mempool tx fails on the tip: $err"), identity)
                 val expected = ticked.after(ledger, entry.applied.tx)
-                assertSameSnapshot(entry.snapshot, expected)
+                assert(entry.snapshot == expected)
                 assert(entry.applied.slot == e.currentSlotSync, "spec [TS-6]")
                 expected
             }
