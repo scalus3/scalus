@@ -4,23 +4,21 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{CardanoInfo, Coin, ExUnits}
 import scalus.examples.cape.{CapeHarness, CapeTestSuite}
 import scalus.testing.kit.ScalusTest
-import scalus.uplc.{Constant, Program, Term}
+import scalus.uplc.{Constant, Term}
+import scalus.uplc.internal.TermTraversal.foldLeft
 import scalus.uplc.Term.asTerm
-import scalus.uplc.transform.CaseConstrApply
 import scalus.uplc.eval.Result
 
 /** CAPE test harness for the Factorial benchmarks.
   *
   * Loads the v3.0.0 `cape-tests.json` fixtures via the shared `CapeTestSuite` loader and runs all
-  * cases against both base (naive recursion compiled from Scala) and open (hand-crafted UPLC)
-  * implementations.
+  * cases against both base (naive recursion compiled from Scala) and open (unrolled recursion
+  * compiled from Scala) implementations.
   *
-  * The open program (`FactorialOpen.term`) is correct for every integer input, not just the
-  * fixture's `-5..12` range: `0!..12!` is a memoized base case (PV11 case-on-builtin-integer,
-  * `FactorialOpen.termB`), and `x >= 13` falls back to genuine self-application recursion (`x *
-  * factorial(x - 1)`) bottoming out on that table. The "correctness beyond the fixture" tests below
-  * assert this directly, against a `BigInt` factorial computed in Scala (never a hand-typed
-  * literal).
+  * The open program (`FactorialOpen.factorial`) computes every result at run time with the
+  * recursion unrolled four times, so it is correct for every integer input, not just the fixture's
+  * `-5..12` range. The "correctness beyond the fixture" tests below assert this directly, against a
+  * `BigInt` factorial computed in Scala (never a hand-typed literal).
   */
 class FactorialCapeTest extends AnyFunSuite with ScalusTest {
     private given CardanoInfo = CardanoInfo.mainnet
@@ -35,7 +33,17 @@ class FactorialCapeTest extends AnyFunSuite with ScalusTest {
     }
 
     test(s"Open script size: ${openProgram.cborByteString.length} bytes") {
-        assert(openProgram.cborByteString.length == 91)
+        assert(openProgram.cborByteString.length == 74)
+    }
+
+    // The scenario requires results "computed dynamically, not hardcoded". A computed factorial
+    // needs no integer constant above its unroll width; a table of answers would hold 12! here.
+    test("open program precomputes no factorial values") {
+        val found = openProgram.term.foldLeft(List.empty[BigInt]) {
+            case (acc, Term.Const(Constant.Integer(v), _)) => v :: acc
+            case (acc, _)                                  => acc
+        }
+        assert(found.forall(_.abs <= 4), s"unexpected constants: $found")
     }
 
     for c <- baseSuite.cases do
@@ -92,39 +100,37 @@ class FactorialCapeTest extends AnyFunSuite with ScalusTest {
       "factorial_negative" -> Coin(120)
     )
 
-    // FactorialOpen.term (adopted `termB`, PV11 case-on-builtin-integer): 0!..12! is an O(1)
-    // memoized base case, so every non-negative fixture case costs the same; `x < 0` is even
-    // cheaper (matches the old direct-constant path, no table case at all).
+    // FactorialOpen.factorial: one recursive call per four factors, so the cost grows in steps of four.
     private val expectedOpenBudgets: Map[String, ExUnits] = Map(
-      "factorial_0" -> ExUnits(memory = 2502, steps = 471774),
-      "factorial_1" -> ExUnits(memory = 2502, steps = 471774),
-      "factorial_2" -> ExUnits(memory = 2502, steps = 471774),
-      "factorial_3" -> ExUnits(memory = 2502, steps = 471774),
-      "factorial_4" -> ExUnits(memory = 2502, steps = 471774),
-      "factorial_5" -> ExUnits(memory = 2502, steps = 471774),
-      "factorial_8" -> ExUnits(memory = 2502, steps = 471774),
-      "factorial_10" -> ExUnits(memory = 2502, steps = 471774),
-      "factorial_12" -> ExUnits(memory = 2502, steps = 471774),
-      "factorial_negative" -> ExUnits(memory = 1701, steps = 299937)
+      "factorial_0" -> ExUnits(memory = 2302, steps = 439774),
+      "factorial_1" -> ExUnits(memory = 2302, steps = 439774),
+      "factorial_2" -> ExUnits(memory = 3106, steps = 759935),
+      "factorial_3" -> ExUnits(memory = 3106, steps = 759935),
+      "factorial_4" -> ExUnits(memory = 6419, steps = 1_908255),
+      "factorial_5" -> ExUnits(memory = 6419, steps = 1_908255),
+      "factorial_8" -> ExUnits(memory = 10536, steps = 3_376736),
+      "factorial_10" -> ExUnits(memory = 11340, steps = 3_696897),
+      "factorial_12" -> ExUnits(memory = 14653, steps = 4_845217),
+      "factorial_negative" -> ExUnits(memory = 2302, steps = 439774)
     )
 
     private val expectedOpenFees: Map[String, Coin] = Map(
-      "factorial_0" -> Coin(179),
-      "factorial_1" -> Coin(179),
-      "factorial_2" -> Coin(179),
-      "factorial_3" -> Coin(179),
-      "factorial_4" -> Coin(179),
-      "factorial_5" -> Coin(179),
-      "factorial_8" -> Coin(179),
-      "factorial_10" -> Coin(179),
-      "factorial_12" -> Coin(179),
-      "factorial_negative" -> Coin(120)
+      "factorial_0" -> Coin(165),
+      "factorial_1" -> Coin(165),
+      "factorial_2" -> Coin(235),
+      "factorial_3" -> Coin(235),
+      "factorial_4" -> Coin(508),
+      "factorial_5" -> Coin(508),
+      "factorial_8" -> Coin(852),
+      "factorial_10" -> Coin(921),
+      "factorial_12" -> Coin(1195),
+      "factorial_negative" -> Coin(165)
     )
 
     // ---- Correctness gate: the open program must compute correctly for EVERY integer input, not
     // just the 10 fixture cases (-5..12). `scalaFactorial` is a genuine Scala BigInt computation
-    // (never a hand-typed literal), so these tests catch a wrong/stale table or a broken recursive
-    // fallback the same way a hardcoded-expected-value test could not.
+    // (never a hand-typed literal), so these tests catch a wrong base case or a broken unrolled
+    // step the same way a hardcoded-expected-value test could not.
 
     private def scalaFactorial(n: BigInt): BigInt = {
         @scala.annotation.tailrec
@@ -160,36 +166,10 @@ class FactorialCapeTest extends AnyFunSuite with ScalusTest {
             )
         }
 
-    // `termA` is the reference PV9 variant: not on any shipped path, so nothing else exercises it,
-    // and its byte table is derived from `factorials` with nothing hand-syncing the two encodings.
-    // Evaluating it across the table range and past it catches a wrong entry, width, endianness, or
-    // range guard -- which would otherwise silently invalidate its documented measurements.
-    private lazy val openProgramA: Program = CaseConstrApply(FactorialOpen.termA).plutusV3
-
-    private def evalOpenA(x: BigInt): BigInt =
-        (openProgramA $ x.asTerm).term.evaluateDebug match {
-            case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) => v
-            case Result.Success(term, _, _, _) =>
-                fail(s"termA factorial($x): expected an integer result, got $term")
-            case Result.Failure(err, _, _, logs) =>
-                fail(
-                  s"termA factorial($x): expected success, got $err; logs: ${logs.mkString(", ")}"
-                )
-        }
-
-    test("reference variant termA computes factorial across and beyond its table") {
-        for x <- (-5 to 12) ++ Seq(13, 20, 25) do
-            assert(
-              evalOpenA(x) == scalaFactorial(x),
-              s"termA factorial($x) must equal Scala's BigInt factorial"
-            )
-    }
-
-    // One Scala definition, three execution paths: `FactorialBase.factorial` runs on the JVM (where
-    // it generates the open submission's memoized table), compiles to UPLC as the
-    // factorial_naive_recursion submission, and its values back the open submission's table. All
-    // three must agree with each other and with an independent BigInt computation -- so a
-    // divergence between what Scalus runs off-chain and what it compiles on-chain fails here.
+    // One Scala definition, two execution paths: `FactorialBase.factorial` runs on the JVM and
+    // compiles to UPLC as the factorial_naive_recursion submission. Both, and the open submission,
+    // must agree with each other and with an independent BigInt computation -- so a divergence
+    // between what Scalus runs off-chain and what it compiles on-chain fails here.
 
     private def evalBase(x: BigInt): BigInt =
         (baseProgram $ x.asTerm).term.evaluateDebug match {
@@ -202,7 +182,7 @@ class FactorialCapeTest extends AnyFunSuite with ScalusTest {
                 )
         }
 
-    test("JVM, compiled naive UPLC, and the memoized open submission all agree") {
+    test("JVM, compiled naive UPLC, and the open submission all agree") {
         for x <- -3 to 15 do
             val jvm = FactorialBase.factorial(x)
             assert(

@@ -34,16 +34,13 @@ object CapeScenarios {
       CapeScenario(
         "factorial",
         () => FactorialContract.openProgram,
-        "Hand-crafted UPLC: memoized base case + computed fallback, correct for every integer " +
-            "input. x < 0 -> 1; 0 <= x <= 12 -> O(1) lookup via PV11 case-on-builtin-integer " +
-            "(0!..12! baked in as direct case branches, no bytestring decode step); x >= 13 -> " +
-            "genuine self-application recursion (x * factorial(x - 1)) bottoming out on the " +
-            "table. A PV9-compatible sliceByteString/byteStringToInteger encoding of the table " +
-            "was also measured and lost decisively (109 vs 91 bytes; 18.4M vs 4.5M summed steps " +
-            "across the 10 fixture cases) -- see FactorialOpen.scala.",
-        "Hand-written UPLC term: memoized 0!..12! base case (PV11 case-on-builtin-integer) plus " +
-            "self-application recursion for x >= 13, so it's correct for any integer input, not " +
-            "just the benchmark's fixture range. Optimized by the Scalus UPLC pipeline.",
+        "Compiled from Scala 3 (@Compile, Options.releaseUntagged). Computes every result at " +
+            "run time, with the recursion unrolled " +
+            "four times: factorial(n) = n(n-1)(n-2)(n-3) * factorial(n - 4) for n >= 4, n(n-1) " +
+            "for n = 2 and 3, and 1 for every n <= 1, negatives included. No values are " +
+            "precomputed. factorial(12) takes three recursive calls instead of eleven.",
+        "Scala 3 @Compile function: the factorial recursion unrolled four times, computing " +
+            "every result at run time, correct for any integer input.",
         "factorial"
       ),
       CapeScenario(

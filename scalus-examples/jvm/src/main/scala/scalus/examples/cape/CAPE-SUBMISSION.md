@@ -40,7 +40,7 @@ scalus-examples/jvm/src/main/scala/scalus/examples/cape/
   CompareWithLeaderboard.scala  # @main: ranks every submission per scenario by total fee
   factorial/
     FactorialBase.scala       # @Compile naive recursion (fixed mode)
-    FactorialOpen.scala       # Hand-crafted UPLC (open mode)
+    FactorialOpen.scala       # @Compile unrolled recursion (open mode)
     FactorialContract.scala   # Compiles both into Program values
   fibonacci/
     FibonacciBase.scala       # @Compile naive recursion (fixed mode)
