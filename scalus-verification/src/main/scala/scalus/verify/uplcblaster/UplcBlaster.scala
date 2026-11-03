@@ -328,8 +328,9 @@ object UplcBlaster {
           * is read in the statement's favour, and a proof is one within the budget.
           */
         private[uplcblaster] val within: Option[Int] = None,
-        /** How each variable of a case class or an enum reaches Lean: each decided node by fields
-          * or as `Data` ([[MappingPlan]]).
+        /** How the variables reach Lean ([[MappingPlan]]): each case class and enum of a variable
+          * by fields, and the root of a variable over `Data` encodings, whatever its type, as
+          * `Data`.
           */
         plan: MappingPlan = MappingPlan.empty
     ) {
@@ -507,11 +508,11 @@ object UplcBlaster {
                 quantifiedSoFar += 1
                 DataEncoding.encoded(ident.tp) match
                     case Some((valueType, decoder)) =>
+                        val limits = DataEncoding.limits(ident.tp)
                         val reason =
-                            if DataEncoding.limits(ident.tp).all.nonEmpty then
-                                MappingPlan.Reason.Limited
+                            if limits.all.nonEmpty then MappingPlan.Reason.Limited
                             else MappingPlan.Reason.OverEncodings(quantifier)
-                        quantifiedData(ident, valueType, decoder).map { mapped =>
+                        quantifiedData(ident, valueType, decoder, limits).map { mapped =>
                             planned += MappingPlan.Node(
                               variable,
                               ident.name,
@@ -533,10 +534,10 @@ object UplcBlaster {
             def quantifiedData(
                 ident: PropExpr.Ident[?],
                 valueType: SIRType,
-                decoder: SIR
+                decoder: SIR,
+                limits: Limits
             ): Either[String, (List[Int], List[Binding])] =
                 val decoded = Props.openVariables(decoder, List(ident.name))
-                val limits = DataEncoding.limits(ident.tp)
                 val unfit = Option.when(limits.all.nonEmpty)(limits.unfit(valueType)).flatten
                 lazy val guard = LimitGuards.guard(DataLayout.of(valueType), limits)
                 DataEncoding.of(valueType) match
@@ -608,8 +609,13 @@ object UplcBlaster {
             // A variable hides an outer one of its name in the tests in its scope, as a lambda's
             // parameter does: a test's program takes both as parameters of that name, and reads the
             // innermost, so the value built or decoded for the outer one is not bound there either.
+            // Nor is it where the variable's name is that of one of the outer one's fields, as only a
+            // name built by hand can be: its parameter would hide the field the value is built from,
+            // so a test that reads the outer one there fails to compile, with the variable free.
             def hiddenBy(ident: PropExpr.Ident[?], built: List[Binding]): List[Binding] =
-                built.filterNot(_.name == ident.name)
+                built.filterNot(binding =>
+                    binding.name == ident.name || ident.name.startsWith(s"${binding.name}.")
+                )
 
             def loop(
                 current: Prop,
@@ -979,7 +985,7 @@ object UplcBlaster {
                           inner,
                           count
                         )
-                    case MappingPlan.Mapping.AsData => asDataBelowRoot(name)
+                    case MappingPlan.Mapping.AsData => asDataNotSupported(name)
             }
         case sum @ SIRType.SumCaseClass(declaration, _) if declaration.constructors.isEmpty =>
             Left(s"a ${sum.show} binder is not supported: the type has no constructors")
@@ -988,7 +994,7 @@ object UplcBlaster {
                 count.decide(name, sum) match
                     case MappingPlan.Mapping.ByFields =>
                         expandSum(name, sum, declaration, typeArguments, inner, count)
-                    case MappingPlan.Mapping.AsData => asDataBelowRoot(name)
+                    case MappingPlan.Mapping.AsData => asDataNotSupported(name)
             }
         case one @ SIRType.CaseClass(_, _, Some(parent)) =>
             Left(
@@ -1036,13 +1042,15 @@ object UplcBlaster {
         }
     }
 
-    /** Why a part of a variable below its root, at `path`, is not mapped as `Data`: it is not built
-      * yet (docs/design/verification-details/uplc-blaster.md, "Mapping a variable", step 2).
+    /** Why the node at `path`, which [[Expansion.decide]] maps as `Data`, is not expanded: a node
+      * that the expansion meets as `Data` is not built yet, at the root or below it
+      * (docs/design/verification-details/uplc-blaster.md, "Mapping a variable", step 2). A variable
+      * over `Data` encodings is mapped so before it is expanded ([[lower]]).
       */
-    private def asDataBelowRoot(
+    private def asDataNotSupported(
         path: String
     ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] =
-        Left(s"${PropIdentity.written(path)}: a part of a variable as Data is not supported yet")
+        Left(s"${PropIdentity.written(path)}: a node mapped as Data is not supported here yet")
 
     /** How many parts one statement variable may have: many more than a type of the ledger has, and
       * an end to a type that contains itself under other arguments each time, which [[nested]] does
@@ -1201,6 +1209,9 @@ object UplcBlaster {
       * definitions of registered functions are still where [[unlinkModuleDefinitions]] removes
       * them, in the witness as in the expression. The witness's own `let`s stay in the value that
       * is bound: only its module definitions, which have qualified names, are around the binding.
+      *
+      * A variable of `ident`'s name that the body quantifies over, or a call's result of that name,
+      * hides `ident` in its scope, as in the tests ([[lower]]): the witness is not bound there.
       */
     private def instantiate[A](
         prop: Prop,
@@ -1232,15 +1243,19 @@ object UplcBlaster {
                 )
             case current => current
 
+        // the body in the scope of a variable `bound`, where one of `ident`'s name hides it
+        def under(bound: PropExpr.Ident[?], body: Prop): Prop =
+            if bound.name == ident.name then body else loop(body)
+
         def loop(current: Prop): Prop = current match
             case Prop.Bool(expr)         => Prop.Bool(expression(expr))
             case Prop.Denotes(expr)      => Prop.Denotes(expression(expr))
             case Prop.Equal(left, right) => Prop.Equal(expression(left), expression(right))
             case Prop.Call(fn, arg, result, total, body) =>
-                Prop.Call(fn, expression(arg), result, total, loop(body))
-            case Prop.Forall(bound, body) => Prop.Forall(bound, loop(body))
+                Prop.Call(fn, expression(arg), result, total, under(result, body))
+            case Prop.Forall(bound, body) => Prop.Forall(bound, under(bound, body))
             case Prop.Exists(bound, supplied, body) =>
-                Prop.Exists(bound, supplied.map(expression), loop(body))
+                Prop.Exists(bound, supplied.map(expression), under(bound, body))
             case Prop.And(left, right)     => Prop.And(loop(left), loop(right))
             case Prop.Or(left, right)      => Prop.Or(loop(left), loop(right))
             case Prop.Implies(left, right) => Prop.Implies(loop(left), loop(right))

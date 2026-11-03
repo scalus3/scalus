@@ -356,11 +356,14 @@ Every program takes the binders in scope at its leaf, in declaration order, whet
 all of them or not. This matters when a connective has a quantified proposition on only one side.
 
 Lean's variables are named by their places (`x0`, `x1`, …), and a program takes the binders as
-parameters of their own names. Where two binders in scope have one name, which only a statement
-built by hand, or two files with a lambda of one parameter name at one place, can make, a test reads
-the innermost, as a lambda's parameter hides an outer one. The value a test builds for an outer
-case-class variable, or decodes for an outer variable over `Data` encodings, is hidden with it
-(`VariableScopeTest`).
+parameters of their own names. The macros name a variable after its lambda's parameter and the place
+of the lambda in its file, so two variables in scope have one name where one inline helper is nested
+in itself, where two files have a lambda of one parameter name at one place, or in a statement built
+by hand. A test then reads the innermost, as a lambda's parameter hides an outer one: the value a
+test builds for an outer case-class variable, or decodes for an outer variable over `Data`
+encodings, and the witness of an outer `existsLet`, are hidden with it (`VariableScopeTest`). Through
+a helper, a test cannot read the outer one: its caller's lambda's parameter is no variable of the
+statement, and lowering fails with the variable free.
 
 A partial call, `whenReturns(f, a)(r => k)`, is rewritten to `denotes(f(a)) ==> call(f, a)(r => k)`
 before it is lowered: if the function returns, the continuation holds of its result. The

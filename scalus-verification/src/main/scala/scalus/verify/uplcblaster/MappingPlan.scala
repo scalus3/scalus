@@ -25,8 +25,30 @@ import scalus.verify.PropIdentity
   */
 final case class MappingPlan(nodes: List[MappingPlan.Node]) {
 
-    /** The plan, a node on a line, with the variables named as the statement writes them. */
-    def show: String = nodes.map(_.show).mkString("\n")
+    /** The plan, a node on a line, with the variables named as the statement writes them: a name
+      * that two variables have is marked with `#` and the variable's place, counted from 1.
+      */
+    def show: String = {
+        // A variable's first node is its root, whose path is its name.
+        val names = nodes
+            .distinctBy(_.variable)
+            .map(node => node.variable -> PropIdentity.written(node.path))
+            .toMap
+        val repeated =
+            names.values
+                .groupBy(identity)
+                .collect { case (name, all) if all.size > 1 => name }
+                .toSet
+        nodes
+            .map { node =>
+                val name = names(node.variable)
+                val path = PropIdentity.written(node.path)
+                if repeated(name) then
+                    node.show(s"$name#${node.variable + 1}${path.drop(name.length)}")
+                else node.show(path)
+            }
+            .mkString("\n")
+    }
 }
 
 object MappingPlan {
@@ -83,9 +105,14 @@ object MappingPlan {
         case Quantifier.ForAll => "forAll"
         case Quantifier.Exists => "exists"
 
-    /** A decided node: the statement variable it is part of, by its place among the variables the
-      * statement quantifies over (two variables can have one name); its path; its type; its
-      * mapping; and why it is mapped so.
+    /** A decided node: the statement variable it is part of; its path; its type; its mapping; and
+      * why it is mapped so.
+      *
+      * @param variable
+      *   the variable's place among those that [[UplcBlaster.lower]] quantifies over, counted from
+      *   0 in the order it meets them, since two variables can have one name. The variable of an
+      *   `existsLet`, which is replaced by its witness, and a call's result, which a test binds,
+      *   are none of them.
       */
     final case class Node(
         variable: Int,
@@ -96,8 +123,11 @@ object MappingPlan {
     ) {
 
         /** The node on a line, with its variable named as the statement writes it. */
-        def show: String =
-            s"${PropIdentity.written(path)}: ${tp.show}, $mapping, ${reason.describe}"
+        def show: String = show(PropIdentity.written(path))
+
+        /** The node on a line, with its path shown as `shown`. */
+        private[uplcblaster] def show(shown: String): String =
+            s"$shown: ${tp.show}, $mapping, ${reason.describe}"
     }
 
     /** The plan of a statement without variables of case classes or enums. */

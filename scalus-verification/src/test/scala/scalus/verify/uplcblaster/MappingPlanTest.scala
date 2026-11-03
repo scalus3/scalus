@@ -100,8 +100,13 @@ class MappingPlanTest extends AnyFunSuite {
                   ),
                   both.plan.show
                 )
-                // The nodes of each tell the two apart.
+                // The nodes of each tell the two apart, and so does the plan as it is shown.
                 assert(both.plan.nodes.map(_.variable) == List(0, 0, 1), both.plan.show)
+                assert(
+                  both.plan.show.linesIterator.map(_.takeWhile(_ != ':')).toList ==
+                      List("x#1", "x#1.owner", "x#2"),
+                  both.plan.show
+                )
                 assert(both.binders.size == 3, both.binders)
             case other => fail(s"no quantifier: $other")
     }
