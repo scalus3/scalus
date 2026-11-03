@@ -1061,6 +1061,17 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // a break there is actually needed, it gets its own filter naming the symbol, so the thing
         // being broken is visible in review rather than pre-authorised in bulk.
         ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*"),
+        // PoolsState gained the VRF map (ledger-rules spec [DM-4], D17). A deprecated
+        // constructor and companion apply keep the 1.4 shape; the 4-argument copy cannot stay,
+        // as a case class has one copy.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.PoolsState.copy(scala.collection.immutable.Map,scala.collection.immutable.Map,scala.collection.immutable.Map,scala.collection.immutable.Map)scalus.cardano.ledger.PoolsState"
+        ),
+        // VotingState gained numDormantEpochs (ledger-rules spec [DM-3], D17), with the same
+        // deprecated constructor and apply; its 1-argument copy cannot stay.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.VotingState.copy(scala.collection.immutable.Map)scalus.cardano.ledger.VotingState"
+        ),
         // EmulatorState holds a block tree and a mempool now (emulator-chain spec [CP-2]), so its
         // case-class product accessors return the new fields. Its constructor is private, so
         // only a pattern match on its product elements can see the change.

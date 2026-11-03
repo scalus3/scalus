@@ -54,8 +54,8 @@ final class StakeStateResolver(
             .flatMap(drep => drepAt(drep, time).map(drep -> _))
             .toMap
         CertState(
-          VotingState(dreps),
-          PoolsState(
+          VotingState(dreps, 0L),
+          PoolsState.empty.copy(
             stakePools = pools.view.mapValues(_._1).toMap,
             retiring = pools.collect { case (pool, (_, Some(epoch))) => pool -> epoch }
           ),
@@ -372,7 +372,7 @@ final class StakeStateResolver(
                 cred -> ConwayAccountState(Coin(rewards), Coin(deposit.getOrElse(0L)), None, None)
             }.toMap
 
-            CertState(VotingState(Map.empty), PoolsState(), DelegationState(accounts))
+            CertState(VotingState.empty, PoolsState.empty, DelegationState(accounts))
         }
     }
 

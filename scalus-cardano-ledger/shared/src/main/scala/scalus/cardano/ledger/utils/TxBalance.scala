@@ -108,6 +108,20 @@ object TxBalance {
         getProducedValue
     }
 
+    /** The change of `UTxOState.deposited` a valid `tx` makes: its deposits, proposal deposits
+      * included, minus its refunds, both against `certState`, the cert state before CERTS, as
+      * eras/shelley/impl/src/Cardano/Ledger/Shelley/Rules/Utxo.hs:607-608 does. The same sums as
+      * [[consumedExact]] and [[producedExact]], spec [BK-1], [BK-2].
+      */
+    private[cardano] def depositChange(
+        tx: Transaction,
+        certState: CertState,
+        protocolParams: ProtocolParams
+    ): BigInt =
+        conwayTotalDepositsTxCerts(tx, certState.pstate.stakePools.contains, protocolParams)
+            + producedProposalDeposits(tx)
+            - conwayTotalRefundsTxCerts(tx, certState, protocolParams)
+
     private def consumedInputs(
         tx: Transaction,
         utxo: Utxos

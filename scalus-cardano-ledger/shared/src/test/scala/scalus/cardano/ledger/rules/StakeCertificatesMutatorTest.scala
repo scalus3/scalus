@@ -32,13 +32,13 @@ class StakeCertificatesMutatorTest extends AnyFunSuite with Matchers with Either
 
     /** The delegation targets: the pool and the DRep are registered, spec [SC-4], [SC-5]. */
     private val targets = CertState.empty.copy(
-      vstate = VotingState(
-        Map(
-          Credential.KeyHash(AddrKeyHash.fromHex("3" * 56)) ->
-              DRepState(100, None, Coin(protocolParams.dRepDeposit), Set.empty)
-        )
+      vstate = VotingState.empty.copy(dreps =
+          Map(
+            Credential.KeyHash(AddrKeyHash.fromHex("3" * 56)) ->
+                DRepState(100, None, Coin(protocolParams.dRepDeposit), Set.empty)
+          )
       ),
-      pstate = PoolsState(stakePools = Map(poolId -> poolRegistration))
+      pstate = PoolsState.empty.copy(stakePools = Map(poolId -> poolRegistration))
     )
 
     private val emptyInputs = TaggedSortedSet.empty[TransactionInput]

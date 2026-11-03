@@ -23,7 +23,13 @@ object VotingCertificatesMutator extends STS.Mutator {
                 Right((state.certState.vstate.dreps, state.certState.dstate.accounts))
             certificates
                 .foldLeft(initial) { (acc, cert) =>
-                    acc.flatMap(CertsMutator.govCert(context, event.id)(_, cert))
+                    acc.flatMap(
+                      CertsMutator.govCert(
+                        context,
+                        event.id,
+                        state.certState.vstate.numDormantEpochs
+                      )(_, cert)
+                    )
                 }
                 .map { (dreps, accounts) =>
                     val certState = state.certState

@@ -41,13 +41,22 @@ object LedgerStateComparison {
       Exclusion("govState", NoStep, ""),
       // Not modeled: no mutator updates the instant stake.
       Exclusion("instantStake", NoStep, ""),
-      // Not modeled: no mutator updates utxosDeposited.
-      Exclusion("deposited", NoStep, ""),
-      // Not modeled: no mutator updates the delegators of a DRep.
-      Exclusion("dreps.delegates", NoStep, ""),
-      // Not modeled: no mutator bumps DRep expiry on governance activity.
-      Exclusion("dreps.expiry", NoStep, "")
+      // Not modeled by the harness: these two vectors cast DRep votes after the Imp test passed
+      // epochs. The dump has no epoch, so every case runs at `impEpoch` (899) and the
+      // voting-DRep expiry of ledger-rules spec [DR-4] comes out 2 to 6 epochs short.
+      Exclusion(
+        "dreps.expiry",
+        NoStep,
+        s"${costModels} and setting the govPolicy afterwards succeeds"
+      ),
+      Exclusion(
+        "dreps.expiry",
+        NoStep,
+        s"${costModels} with alwaysFails govPolicy does not validate"
+      )
     )
+
+    private def costModels = "UTXOS.PlutusV3 Initialization.Updating CostModels"
 
     def withoutExcluded(
         vectorName: String,
@@ -97,6 +106,13 @@ object LedgerStateComparison {
           ),
           compareMap("pools.retiring", expCerts.pstate.retiring, actCerts.pstate.retiring, Nil),
           compareMap("pools.deposits", expCerts.pstate.deposits, actCerts.pstate.deposits, Nil),
+          // spec [CV-5]
+          compareMap(
+            "pools.vrfKeyHashes",
+            expCerts.pstate.vrfKeyHashes,
+            actCerts.pstate.vrfKeyHashes,
+            Nil
+          ),
           compareMap(
             "dreps",
             expCerts.vstate.toVotingState.dreps,
@@ -107,6 +123,12 @@ object LedgerStateComparison {
               "deposit" -> (_.deposit),
               "delegates" -> (_.delegates)
             )
+          ),
+          // spec [CV-4]: the reset of [DR-3] shows only here
+          compareValue(
+            "dreps.numDormantEpochs",
+            expCerts.vstate.numDormantEpochs,
+            actCerts.vstate.numDormantEpochs
           )
         )
     }

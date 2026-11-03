@@ -41,23 +41,23 @@ class StakeCertificatesValidatorTest extends AnyFunSuite with Matchers with Eith
 
     /** Only the pool is registered. */
     private val poolOnly =
-        CertState.empty.copy(pstate = PoolsState(stakePools = Map(poolId -> pool)))
+        CertState.empty.copy(pstate = PoolsState.empty.copy(stakePools = Map(poolId -> pool)))
 
     /** The account, the pool and both DReps are registered. */
     private val registered = CertState(
-      vstate = VotingState(
-        Map(
-          drepCredential -> DRepState(100, None, drepDeposit, Set.empty),
-          Credential.ScriptHash(scriptDRepHash) -> DRepState(100, None, drepDeposit, Set.empty)
-        )
+      vstate = VotingState.empty.copy(dreps =
+          Map(
+            drepCredential -> DRepState(100, None, drepDeposit, Set.empty),
+            Credential.ScriptHash(scriptDRepHash) -> DRepState(100, None, drepDeposit, Set.empty)
+          )
       ),
-      pstate = PoolsState(stakePools = Map(poolId -> pool)),
+      pstate = PoolsState.empty.copy(stakePools = Map(poolId -> pool)),
       dstate =
           DelegationState(Map(credential -> ConwayAccountState(Coin.zero, keyDeposit, None, None)))
     )
     private val accountOnly =
-        registered.copy(vstate = VotingState(), pstate = PoolsState())
-    private val poolAndAccount = registered.copy(vstate = VotingState())
+        registered.copy(vstate = VotingState.empty, pstate = PoolsState.empty)
+    private val poolAndAccount = registered.copy(vstate = VotingState.empty)
     private val newCredential = Credential.KeyHash(AddrKeyHash.fromHex("e" * 56))
 
     /** Every certificate that delegates stake, from a registered account or with registration. */

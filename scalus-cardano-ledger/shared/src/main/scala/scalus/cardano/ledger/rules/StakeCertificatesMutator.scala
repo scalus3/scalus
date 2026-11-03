@@ -20,10 +20,9 @@ object StakeCertificatesMutator extends STS.Mutator {
                 case Left(err) => failure(err)
                 case Right(_) =>
                     val defaultDeposit = Coin(context.env.params.stakeAddressDeposit)
-                    val updatedDState = certificates.foldLeft(state.certState.dstate)(
+                    val updatedCertState = certificates.foldLeft(state.certState)(
                       CertsMutator.deleg(defaultDeposit)
                     )
-                    val updatedCertState = state.certState.copy(dstate = updatedDState)
                     success(state.copy(certState = updatedCertState))
     }
 }

@@ -173,7 +173,7 @@ Not raised at PV11: `PPViewHashesDontMatch` (replaced by `ScriptIntegrityHashMis
 
 ### 5.5 DELEG (`C/Rules/Deleg.hs:106-114`)
 
-All 7 constructors raised at PV11 are implemented, bundled into one exception (`R/StakeCertificatesValidator.scala:152`). `IncorrectDepositDELEG` is not raised at PV11 (`C/Era.hs:184-185`). Gap: the vectors are not run (`[CV-1]`). State gap: `DRepState.delegates` and the pool delegator set are never written (`R/CertsMutator.scala:210-214`), phase 1.
+All 7 constructors raised at PV11 are implemented, bundled into one exception (`R/StakeCertificatesValidator.scala:152`). `IncorrectDepositDELEG` is not raised at PV11 (`C/Era.hs:184-185`). Gap: the vectors are not run (`[CV-1]`). State gap: `DRepState.delegates` is never written (`R/CertsMutator.scala:210-214`), phase 1. The pool delegator set (`spsDelegators`, `K/State/CertState.hs:281-298`) has no Scalus field and no phase: no rule reads it, the vector decoder discards it, and D5 computes the stake from the accounts (D22).
 
 ### 5.6 POOL (`S/Rules/Pool.hs:93-115`)
 
@@ -403,17 +403,37 @@ These fields are read or written by tx rules, so they live in the ledger state t
 | `govState` | 2 |
 | `instantStake` | 4, or never (decision D5) |
 
+- The vector decoder MUST pass the decoded `numDormantEpochs` into `VotingState` (`LedgerState.scala:342-351` drops it today), and the decoded VRF map into `PoolsState` (the old 4-map layout has none and decodes to empty). `[CV-4]`
+- The comparison MUST compare `pools.vrfKeyHashes`. `[CV-5]`
+
+**Why** `[CV-4]`: without the counter the dormant bump of `[DR-2]` never fires in a vector, and the `dreps.expiry` exclusion cannot come off. **Why** `[CV-5]`: the vectors are PV10, where neither side writes the map (`[BK-4]`), so the comparison checks the PV gate for free (D23).
+
+*Implementation status (phase 1, review round 1):* the comparison also covers `dreps.numDormantEpochs`. The decoder passes the counter in (`[CV-4]`), and the bump of `[DR-2]` shows in `dreps.expiry`, but the reset of `[DR-3]` shows only in the output counter: seven success vectors fire it (a valid tx with a proposal and a counter of 1 or 2), and 41 more carry a non-zero counter through unchanged. All run dirs pass with the compare.
+
 ## 10. Bookkeeping rules (phase 1)
 
-- The UTXO mutator MUST add the tx deposits to `State.deposited` and subtract the tx refunds, for `isValid = true`. `[BK-1]`
-- The deposits and refunds of `[BK-1]` MUST be the values that `TxBalance` uses (`L/utils/TxBalance.scala:33-109`). `[BK-2]`
+- The tx rules MUST add the tx deposits to `State.deposited` and subtract the tx refunds, for `isValid = true`, computed against the cert state before CERTS. `[BK-1]`
+- The deposits and refunds of `[BK-1]` MUST be the values that `TxBalance` uses (`L/utils/TxBalance.scala:33-109`), proposal deposits included. `[BK-2]`
 - DELEG MUST keep `DRepState.delegates` equal to the set of accounts delegated to that DRep. `[BK-3]`
-- POOL MUST keep `vrfKeyHashes` as `S/Rules/Pool.hs:276-310` does. `[BK-4]`
+- POOL MUST keep `vrfKeyHashes` as `S/Rules/Pool.hs:276-310` does, and MUST NOT write it at PV < 11. `[BK-4]`
 - POOL MUST reject a new pool whose VRF key is in `vrfKeyHashes` at PV ≥ 11. `[BK-5]`
 - POOL MUST reject a re-registration whose VRF key differs from its own and is in `vrfKeyHashes` at PV ≥ 11. `[BK-6]`
 - The Emulator MUST fill `vrfKeyHashes` from the seeded pools at genesis. `[BK-7]`
+- `[BK-5]` and `[BK-6]` MUST run per certificate, in tx order, against the state the earlier certificates of the same tx produced. `[BK-8]`
 
 **Why** `[BK-7]`: the ledger fills the map only on the hard fork into PV11 (`C/Rules/HardFork.hs:107-125`). An Emulator that starts at PV11 never sees that hard fork.
+
+**Why** `[BK-8]`: the ledger runs one POOL step per certificate (`C/Rules/Certs.hs:249-251`). A tx that registers two new pools with one VRF key fails on the second.
+
+*Implementation status (phase 1):* `[BK-1]` said "the UTXO mutator". That cannot work in Scalus: the ledger computes the deposit change against the cert state before CERTS (`S/Rules/Utxo.hs:607-608`; the refund of an unregistered account or DRep, and the pool deposit by `psStakePools` membership, `C/State/CertState.hs:121-123`; LEDGER passes that state to UTXOW on purpose, `C/Rules/Ledger.hs:457-466`). Scalus runs `CertsMutator` before `PlutusScriptsTransactionMutator` (`R/DefaultValidators.scala:53-55`), and `UtxoEnv.certState` is set when the `Context` is built, never refreshed per tx, and read by no rule, so it is stale in the Emulator. So `CertsMutator` writes `deposited`: it is the one mutator that holds the pre-CERTS state (D16). Details: a tx with proposals and no certificate changes `deposited` (`conwayTotalDepositsTxBody` adds `conwayProposalsDeposits`, `C/TxBody.hs:373-391`), so the update runs before the empty-certificates early return of `applyCertificates`; the change can be negative, and `Coin(Long)` has no sign check, so `deposited + deposits − refunds` in that order is exact; a tx with `isValid = false` leaves `deposited` as it is (the Babbage invalid path writes only the UTxO and the fees, `B/Rules/Utxo.hs:497-510`), which the `!event.isValid` early return of `CertsMutator` already gives.
+
+*Implementation status (phase 1):* `[BK-4]` semantics as read from `S/Rules/Pool.hs:266-310`: a new pool does `Map.insert vrf 1`, an overwrite, not a count; every re-registration runs the update, whatever its VRF key: no future params → insert the new VRF key with 1; future params with a different VRF key → insert the new one and delete the future one, even when that is the VRF key of the current params; the same VRF key → no change; otherwise the VRF key of the current params stays in the map until POOLREAP (`S/Rules/PoolReap.hs:225-228`, phase 3). Only the hard-fork fill counts occurrences (`insertWith (+1)`, `C/Rules/HardFork.hs:107-125`), and `[BK-7]` copies that: two seeded pools with one VRF key give the count 2. At PV < 11 POOL does not touch the map (`updateVRFKeyHash = id`), so the PV10 vectors keep the map of their old state. The VRF key type is `VrfKeyHash` (`SC/Hashes.scala:126`), the type of `Certificate.PoolRegistration.vrfKeyHash`; the count is a `Long` (D18). The failure is a new `VrfKeyHashAlreadyRegisteredException`, not a field of `StakePoolException`, as the phase 0 `PoolMetadataHashTooBigException` (D19). The check runs in the POOL step of `CertsMutator`, which gains an error channel for it (`private[rules]`, no MiMa effect), gated on `context.env.params.protocolVersion.major >= 11` as `R/InputsAndReferenceInputsDisjointValidator.scala:14-15` does.
+
+*Implementation status (phase 1, code):* `[BK-4]` to `[BK-8]` live in `CertsMutator.pool` (`R/CertsMutator.scala`); the deprecated `StakePoolCertificatesMutator` uses the same step, so its `Error` gains `VrfKeyHashAlreadyRegisteredException`. `[BK-6]` compares with the VRF key of the current params, not of the future ones (`S/Rules/Pool.hs:284-286`), so a second re-registration in one epoch with the same fresh VRF key fails: the first one put that key in the map. Tests pin this, and the delete of a future VRF key equal to the current one, in `CertsMutatorVrfKeyHashesTest`. `[BK-7]` fills the map at genesis whatever the protocol version (`EmulatorBase.buildInitialState`), counting the seeded pools only, since a genesis has no future params; at PV < 11 POOL neither reads nor writes the map, so the fill has no effect there, and a gate would be one more branch for no observable change. `ruleName` names the failure `VRFKeyHashAlreadyRegistered`, the ledger's spelling.
+
+*Implementation status (phase 1):* `[BK-3]` writes `delegates` in the DELEG step as `C/Rules/Deleg.hs:324-373` and `C/State/VState.hs:120-143` do: a new vote delegation to a credential DRep adds the account; a changed one removes it from the old DRep and adds it to the new; `UnregCert` removes it; `AlwaysAbstain` and `AlwaysNoConfidence` have no set. The PV9 reverse-delegation bug (`processDelegationInternal (pvMajor pv < 10)`, ledger issue 4772) is not emulated (D20). `UnregDRepCert` keeps clearing the accounts by their `dRepDelegation` (`R/CertsMutator.scala:215-227`, spec `[SC-21]`), not by the `delegates` set (D21). The pool delegator set (`spsDelegators`) has no Scalus field and no phase (D22).
+
+*Implementation status (phase 1, code):* `[BK-1]` and `[BK-2]` are `TxBalance.depositChange` (deposits from `conwayTotalDepositsTxCerts` and `producedProposalDeposits`, refunds from `conwayTotalRefundsTxCerts`, the functions of `consumedExact` and `producedExact`), added in `CertsMutator.transit` against the cert state before the withdrawal drain. The Emulator genesis starts `deposited` at the deposits of its seeded registrations (D26). `[BK-3]` is `CertsMutator.deleg`, which now works on the whole `CertState`; `applyCertificate` passes the DReps it writes on to GOVCERT, so a vote delegation and the DRep's unregistration in one tx clear both. The deprecated `StakeCertificatesMutator` writes `delegates` too, but not `deposited`. Tests: `CertsMutatorBookkeepingTest`, `EmulatorGenesisDepositedTest`; the conformance vectors cover both fields (with either update removed, 22 or more vectors fail).
 
 ### 10.1 DRep expiry
 
@@ -423,6 +443,16 @@ These fields are read or written by tx rules, so they live in the ledger state t
 - LEDGER MUST set, after `[DR-2]` and before CERTS, the expiry of each registered DRep that votes in the tx by `[DR-1]`. `[DR-4]`
 - `CertsMutator` MUST run `[DR-2]` and `[DR-4]` after the withdrawal drain and before the cert loop (`R/CertsMutator.scala:20-34`). `[DR-4a]`
 - The Emulator MUST give a seeded DRep the expiry `genesisEpoch + dRepActivity`. `[DR-5]`
+- At PV 9 a DRep registration MUST get the expiry `currentEpoch + dRepActivity`, without the dormant subtraction; an update subtracts at every PV. `[DR-1a]`
+- The Emulator MUST seed `numDormantEpochs` with 0. `[DR-6]`
+
+**Why** `[DR-1a]`: `computeDRepExpiryVersioned` (`C/Rules/GovCert.hs:281-309`) skips the subtraction in the bootstrap phase for `ConwayRegDRep` only; `ConwayUpdateDRep` and the vote bump call `computeDRepExpiry` directly. The PV10 vectors and the PV11 Emulator always subtract.
+
+**Why** `[DR-6]`: the ledger genesis `VState` has `EpochNo 0` (`C/State/VState.hs:75-76`). Nothing increments the counter before the EPOCH rule of phase 3, so in the Emulator the dormant bump of `[DR-2]` is a no-op until then; the vectors and the unit tests of the example below exercise it.
+
+*Implementation status (phase 1):* `[DR-5]` is `context.slotConfig.epochOf(context.env.slot) + context.env.params.dRepActivity` in `buildInitialState` (`N/EmulatorBase.scala:754-789`), no new API. `[DR-4]` changes only DReps that are in `dreps` (`Map.adjust`); an unregistered voter is a GOV failure of phase 2. The order of `[DR-2]`, `[DR-4]` and the drain does not matter: they write disjoint fields (`C/Rules/Ledger.hs:419-421` runs bump, vote, drain). The `numDormantEpochs` that `[DR-4]` reads is the value after `[DR-2]`, so a tx with proposals and votes uses 0.
+
+*Implementation status (phase 1, code):* `[DM-3]` is `VotingState.numDormantEpochs`, with a deprecated 1-argument constructor and `apply`, `VotingState.empty` and one MiMa filter for the 1-argument `copy` (D17). `[DR-1]`, `[DR-1a]` are in `CertsMutator.govCert`, which takes the counter of the state it runs on; `[DR-1a]` gates on `protocolVersion.major == 9`, as `hardforkConwayBootstrapPhase` does. `[DR-2]` to `[DR-4a]` are `CertsMutator.dormantDRepExpiries` and `votingDRepExpiries`, run in `transit` before the cert loop for every valid tx; the ledger runs them in the empty-certificates base case of CERTS at PV ≤ 10 (`C/Rules/Certs.hs:228-245`), which is also before any certificate, so one code path serves both. A counter of 0 leaves the state as it is, as `updateDormantDRepExpiry` does. The expiry subtraction is not clamped at 0 (the ledger's `binOpEpochNo (-)` on `Word64`); it needs `numDormantEpochs > currentEpoch + dRepActivity`, which no state reaches. `[DR-5]`, `[DR-6]` are in `EmulatorBase.buildInitialState`. `[CV-3]`: the `dreps.expiry` exclusion is gone except for two `UTXOS.PlutusV3 Initialization.Updating CostModels` vectors, named in full (`and setting the govPolicy afterwards succeeds`, `with alwaysFails govPolicy does not validate`), whose DRep votes come after the Imp test passed epochs; the third CostModels vector (`but no PlutusV3 CostModels fails`) votes before its `passNEpochs` (`UtxosSpec.hs:516-534`) and passes with no exclusion; the dump has no epoch, the harness runs every case at epoch 899 (`CardanoLedgerVectors.impEpoch`), and the `[DR-4]` expiry is 2 to 6 epochs short. That is a harness limit, not a phase 3 gap: the exclusion is scoped by vector name and goes when the harness knows each case's epoch. Tests: `CertsMutatorDRepExpiryTest` (the example table, the PV 9 rule, the bump boundary, a vote together with a proposal, a registration after the bump), `EmulatorGenesisDRepExpiryTest`.
 
 *Example, illustrative,* `dRepActivity = 20`:
 
@@ -718,12 +748,12 @@ Ordered by testing impact. Each phase lands as its own branch and keeps CI green
 
 ### Phase 1 – ledger bookkeeping
 
-- Scope: `[DM-3]`, `[DM-4]`, `[BK-1]` to `[BK-7]`, `[DR-1]` to `[DR-5]`, `[DR-4a]`.
+- Scope: `[DM-3]`, `[DM-4]`, `[BK-1]` to `[BK-8]`, `[DR-1]` to `[DR-6]`, `[DR-1a]`, `[DR-4a]`, `[CV-4]`, `[CV-5]`.
 - Acceptance:
   1. `[CV-3]`: remove the `deposited`, `dreps.delegates` and `dreps.expiry` exclusions; all run dirs pass.
   2. Unit tests of the example in section 10.1.
-  3. A PV11 test of a duplicate VRF key on a new pool and on a re-registration.
-- Risks: `VotingState` and `PoolsState` are public case classes. New fields break `copy` and `apply` for MiMa. Precedent: `UtxoEnv` gained `treasury` with a deprecated old constructor, and `copy` broke (`2026-10-07-scalus-emulator-provider-design.md:345`).
+  3. A PV11 test of a duplicate VRF key on a new pool and on a re-registration, and of two new pools with one VRF key in one tx (`[BK-8]`).
+- Risks: `VotingState` and `PoolsState` are public case classes. New fields break `copy` and `apply` for MiMa. Precedent: `UtxoEnv` gained `treasury` with a deprecated old constructor, and `copy` broke (`2026-10-07-scalus-emulator-provider-design.md:345`). Decided in D17: the new primary constructors take no defaults; a deprecated constructor and a deprecated companion `apply` keep the 1.4 arity and defaults; `VotingState.empty` and `PoolsState.empty` replace the zero-argument calls; per-symbol MiMa filters with a comment for `copy` and for the synthetic default-argument methods that vanish, taken from `mimaReportBinaryIssues` output (baseline `scalusStableVersion = 1.4.0`). `committeeState` stays in phase 2 and costs a second forwarder round (D24).
 
 ### Phase 2 – governance tx rules
 
@@ -818,6 +848,17 @@ Ordered by testing impact. Each phase lands as its own branch and keeps CI green
 | D13 | A repeated Byron attribute key keeps its last value, as the node's `Map` does (agent, phase 0) | sum every occurrence |
 | D14 | A Byron address a node cannot decode (attribute 1 not one whole bytestring, attribute 2 not a Word32) gets a size: all bytes of attribute 1, none of attribute 2 (agent, phase 0) | throw from `attributesSize`. A node rejects such a tx at decoding, so no choice has node parity; the residual gap is that the Emulator accepts such an output when its size is 64 or less |
 | D15 | `ByronAddress.derivationPath` keeps returning the raw attribute-1 value (agent, phase 0) | return the decoded HD payload, which changes a public accessor for no rule |
+| D16 | `CertsMutator` writes `State.deposited`, since it is the one mutator that holds the pre-CERTS cert state (`[BK-1]`) (agent, phase1) | the UTXO mutator, which runs after CERTS and would miss the refunds of unregistered accounts and DReps; reordering `DefaultMutators.all`, against provider spec `[SC-3a]`; threading the pre-CERTS state through `Context` |
+| D17 | `VotingState` and `PoolsState` gain fields with no defaults; a deprecated constructor and companion `apply` keep the 1.4 arity and defaults; `.empty` vals; per-symbol MiMa filters for `copy` and the vanished default-argument methods (agent, phase1) | a wildcard filter, which AGENTS.md forbids for `scalus.cardano.ledger`; defaults on the new primary constructor, against the interop rule |
+| D18 | The VRF map is `Map[VrfKeyHash, Long]` with the existing `VrfKeyHash` of `SC/Hashes.scala:126` (agent, phase1) | a `NonZero Word64` wrapper type as in Haskell; the saturation at `maxBound` is unreachable |
+| D19 | `VRFKeyHashAlreadyRegistered` is a new `VrfKeyHashAlreadyRegisteredException` (agent, phase1) | a new field of `StakePoolException`, which breaks its `apply`, `copy` and constructor |
+| D20 | The PV9 reverse-delegation bug (ledger issue 4772, `processDelegationInternal (pvMajor pv < 10)`) is not emulated (agent, phase1) | port the `preserveIncorrectDelegation` branch; the Emulator runs PV11 and the vectors PV10 |
+| D21 | `UnregDRepCert` keeps clearing accounts by their `dRepDelegation` scan, `[SC-21]` (agent, phase1) | clear by the `delegates` set as `C/Rules/GovCert.hs:237-257` does; equal only when the set is consistent, and `EmulatorTest.scala:867` hand-builds a state with an empty set |
+| D22 | No pool delegator set (`spsDelegators`) in any phase (agent, phase1) | a `delegators` field on `PoolsState`; nothing reads it and D5 computes the stake from the accounts |
+| D23 | The vector decoder passes `numDormantEpochs` and the VRF map through, and the comparison adds `pools.vrfKeyHashes` (`[CV-4]`, `[CV-5]`) (agent, phase1) | leave the map out of the comparison; the PV10 vectors then check nothing about the `[BK-4]` gate |
+| D24 | `committeeState` stays in phase 2, at the cost of a second forwarder round on `VotingState` (agent, phase1) | add the field now, unexercised, against provider spec `[SC-19b]` |
+| D25 | The duplicate-VRF check runs in the sequential POOL step of `CertsMutator`, which gains an `Either` result (`[BK-8]`) (agent, phase1) | a per-tx check in `StakePoolCertificatesValidator`, which misses two new pools with one VRF key in one tx |
+| D26 | The Emulator genesis sets `deposited` to the sum of the deposits of the seeded accounts, pools and DReps, in the `CertState` overload of `EmulatorState.initial` (`[BK-1]`) (agent, phase1) | start at 0, which makes `deposited` negative after a refund of a seeded deposit; the `State` overload, whose caller owns `deposited` |
 
 **Why** D5: an incremental instant stake touches every tx mutator. The boundary computation is O(UTxO) once per epoch, which is cheap for an Emulator.
 

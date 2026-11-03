@@ -328,6 +328,24 @@ object TransactionException {
               s"hash sizes (pool -> bytes): $hashSizes, max allowed size: $maxHashSize"
         )
 
+    /** It's `VRFKeyHashAlreadyRegistered` of the POOL rule in cardano-ledger
+      * (eras/shelley/impl/src/Cardano/Ledger/Shelley/Rules/Pool.hs:269-271, 283-286), spec [BK-5],
+      * [BK-6]: at PV >= 11, a pool registration whose VRF key another pool has, spec D19.
+      *
+      * @param poolId
+      *   the pool of the failed registration
+      * @param vrfKeyHash
+      *   its VRF key
+      */
+    final case class VrfKeyHashAlreadyRegisteredException(
+        transactionId: TransactionHash,
+        poolId: PoolKeyHash,
+        vrfKeyHash: VrfKeyHash
+    ) extends TransactionException(
+          s"VRF key hash already registered for transactionId $transactionId: " +
+              s"pool $poolId, VRF key hash $vrfKeyHash"
+        )
+
     // It's Conway GOVCERT failures (ConwayGovCertPredFailure) in cardano-ledger
     final case class DRepException(
         transactionId: TransactionHash,
@@ -566,6 +584,7 @@ object TransactionException {
         case _: StakeCertificatesException                 => "StakeCertificates"
         case _: StakePoolException                         => "StakePool"
         case _: PoolMetadataHashTooBigException            => "PoolMetadataHashTooBig"
+        case _: VrfKeyHashAlreadyRegisteredException       => "VRFKeyHashAlreadyRegistered"
         case _: DRepException                              => "DRep"
         case _: WithdrawalsNotInRewardsException           => "WithdrawalsNotInRewards"
         case _: TreasuryValueMismatchException             => "TreasuryValueMismatch"
@@ -600,7 +619,7 @@ object StakeMap:
     def empty: StakeMap = Map.empty
 case class UTxOState(
     utxo: Utxos, // UtxO entries
-    deposited: Coin, // Lazy field used only for assertions
+    deposited: Coin, // The deposits the ledger holds, `utxosDeposited`, spec [BK-1]
     fees: Coin, // Accumulated transaction fees
     govState: GovState, // Governance state
     stakeDistribution: StakeMap, // Stake distribution
@@ -616,14 +635,14 @@ data ConwayCertState era = ConwayCertState
  */
 
 case class CertState(
-    vstate: VotingState = VotingState(),
-    pstate: PoolsState = PoolsState(),
+    vstate: VotingState = VotingState.empty,
+    pstate: PoolsState = PoolsState.empty,
     dstate: DelegationState = DelegationState()
 )
 object CertState {
     def empty: CertState = CertState(
-      VotingState(),
-      PoolsState(),
+      VotingState.empty,
+      PoolsState.empty,
       DelegationState()
     )
 }
@@ -644,11 +663,33 @@ data VState era = VState
   -- an opportunity to vote on anything.
   }*/
 
+/** The voting state, the Haskell `VState` without the committee state (phase 2, D24).
+  *
+  * @param numDormantEpochs
+  *   the number of epochs in a row with no active proposal, `vsNumDormantEpochs` of the ledger,
+  *   spec [DM-3]. A tx with a proposal adds it to the DRep expiries and resets it
+  *   (eras/conway/impl/src/Cardano/Ledger/Conway/Rules/Certs.hs:313-333), spec [DR-3].
+  */
 case class VotingState(
-    dreps: Map[Credential, DRepState] = Map.empty,
+    dreps: Map[Credential, DRepState],
     //    vsCommitteeState: CommitteeState,
-    //    vsNumDormantEpochs: EpochNo
-)
+    numDormantEpochs: EpochNo
+) {
+
+    /** The 1.4 constructor, with no dormant counter, spec D17. */
+    @deprecated("use the constructor with numDormantEpochs, or VotingState.empty", "1.4.1")
+    def this(dreps: Map[Credential, DRepState] = Map.empty) = this(dreps, 0L)
+}
+
+object VotingState {
+
+    /** No DReps and no dormant epochs. */
+    val empty: VotingState = VotingState(Map.empty, 0L)
+
+    /** The 1.4 factory, with no dormant counter, spec D17. */
+    @deprecated("use the factory with numDormantEpochs, or VotingState.empty", "1.4.1")
+    def apply(dreps: Map[Credential, DRepState] = Map.empty): VotingState = VotingState(dreps, 0L)
+}
 
 /*
  * data DRepState = DRepState
@@ -683,12 +724,44 @@ data PState era = PState
   }
  */
 
+/** The pool state of the POOL rule, the Haskell `PState`.
+  *
+  * @param vrfKeyHashes
+  *   the number of pools per VRF key, `psVRFKeyHashes` of the ledger, spec [DM-4]. POOL keeps it at
+  *   PV >= 11 only (eras/shelley/impl/src/Cardano/Ledger/Shelley/Rules/Pool.hs:266-310).
+  */
 case class PoolsState(
-    stakePools: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
-    futureStakePoolParams: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
-    retiring: Map[PoolKeyHash, EpochNo] = Map.empty,
-    deposits: Map[PoolKeyHash, Coin] = Map.empty
-)
+    stakePools: Map[PoolKeyHash, Certificate.PoolRegistration],
+    futureStakePoolParams: Map[PoolKeyHash, Certificate.PoolRegistration],
+    retiring: Map[PoolKeyHash, EpochNo],
+    deposits: Map[PoolKeyHash, Coin],
+    vrfKeyHashes: Map[VrfKeyHash, Long]
+) {
+
+    /** The 1.4 constructor, with no VRF map, spec D17. */
+    @deprecated("use the constructor with vrfKeyHashes, or PoolsState.empty", "1.4.1")
+    def this(
+        stakePools: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
+        futureStakePoolParams: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
+        retiring: Map[PoolKeyHash, EpochNo] = Map.empty,
+        deposits: Map[PoolKeyHash, Coin] = Map.empty
+    ) = this(stakePools, futureStakePoolParams, retiring, deposits, Map.empty)
+}
+
+object PoolsState {
+
+    /** No pools. */
+    val empty: PoolsState = PoolsState(Map.empty, Map.empty, Map.empty, Map.empty, Map.empty)
+
+    /** The 1.4 factory, with no VRF map, spec D17. */
+    @deprecated("use the factory with vrfKeyHashes, or PoolsState.empty", "1.4.1")
+    def apply(
+        stakePools: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
+        futureStakePoolParams: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
+        retiring: Map[PoolKeyHash, EpochNo] = Map.empty,
+        deposits: Map[PoolKeyHash, Coin] = Map.empty
+    ): PoolsState = PoolsState(stakePools, futureStakePoolParams, retiring, deposits, Map.empty)
+}
 
 /*-- | The state used by the DELEG rule, which roughly tracks stake
 -- delegation and some governance features.

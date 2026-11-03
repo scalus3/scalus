@@ -1786,7 +1786,7 @@ case class TxBuilder(
         val pools = steps.collect { case TransactionBuilderStep.UpdatePool(cert) =>
             PoolKeyHash.fromByteString(cert.operator) -> cert
         }
-        CertState(pstate = PoolsState(stakePools = pools.toMap))
+        CertState(pstate = PoolsState.empty.copy(stakePools = pools.toMap))
     }
 
     /** Handle balancing errors by selecting more UTXOs and retrying. */

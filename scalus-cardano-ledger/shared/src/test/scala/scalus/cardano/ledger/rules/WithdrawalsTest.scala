@@ -39,10 +39,10 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
     /** The account holds `balance`, a pool and a DRep are registered. */
     private def stateWith(balance: Coin): State = State(certState =
         CertState(
-          vstate = VotingState(
-            Map(drepCredential -> DRepState(100, None, Coin(params.dRepDeposit), Set.empty))
+          vstate = VotingState.empty.copy(dreps =
+              Map(drepCredential -> DRepState(100, None, Coin(params.dRepDeposit), Set.empty))
           ),
-          pstate = PoolsState(stakePools = Map(poolId -> pool)),
+          pstate = PoolsState.empty.copy(stakePools = Map(poolId -> pool)),
           dstate = DelegationState(
             Map(credential -> ConwayAccountState(balance, keyDeposit, None, None))
           )
@@ -244,7 +244,8 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
         val base = stateWith(Coin.zero)
         val state = base.copy(certState =
             base.certState.copy(
-              vstate = VotingState(Map(scriptDRep -> DRepState(100, None, drepDeposit, Set.empty))),
+              vstate = VotingState.empty
+                  .copy(dreps = Map(scriptDRep -> DRepState(100, None, drepDeposit, Set.empty))),
               dstate = DelegationState(
                 Map(
                   credential -> ConwayAccountState(

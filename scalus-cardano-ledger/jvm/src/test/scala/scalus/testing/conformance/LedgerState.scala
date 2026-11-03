@@ -93,7 +93,8 @@ object LedgerState {
                 stakePools = certState.pstate.stakePools,
                 futureStakePoolParams = certState.pstate.futureStakePoolParams,
                 retiring = certState.pstate.retiring,
-                deposits = certState.pstate.deposits
+                deposits = certState.pstate.deposits,
+                vrfKeyHashes = certState.pstate.vrfKeyHashes
               ),
               dstate = certState.dstate.toDelegationState
             )
@@ -118,11 +119,12 @@ object LedgerState {
         stakePools: Map[PoolKeyHash, Certificate.PoolRegistration],
         futureStakePoolParams: Map[PoolKeyHash, Certificate.PoolRegistration],
         retiring: Map[PoolKeyHash, EpochNo],
-        deposits: Map[PoolKeyHash, Coin]
+        deposits: Map[PoolKeyHash, Coin],
+        vrfKeyHashes: Map[VrfKeyHash, Long]
     )
 
     object PState {
-        val empty: PState = PState(Map.empty, Map.empty, Map.empty, Map.empty)
+        val empty: PState = PState(Map.empty, Map.empty, Map.empty, Map.empty, Map.empty)
 
         /** Decode a 9-element PoolParams or StakePoolParams; skip trailing fields of later
           * versions.
@@ -218,7 +220,10 @@ object LedgerState {
                       ),
                       retiring =
                           decodeMap(maps(3))(r => r.read[PoolKeyHash](), (r, _) => r.readLong()),
-                      deposits = stakePools.view.mapValues(_._2).toMap
+                      deposits = stakePools.view.mapValues(_._2).toMap,
+                      // spec [CV-4]
+                      vrfKeyHashes =
+                          decodeMap(maps(0))(r => r.read[VrfKeyHash](), (r, _) => r.readLong())
                     )
                 else
                     PState(
@@ -233,7 +238,9 @@ object LedgerState {
                       retiring =
                           decodeMap(maps(2))(r => r.read[PoolKeyHash](), (r, _) => r.readLong()),
                       deposits =
-                          decodeMap(maps(3))(r => r.read[PoolKeyHash](), (r, _) => r.read[Coin]())
+                          decodeMap(maps(3))(r => r.read[PoolKeyHash](), (r, _) => r.read[Coin]()),
+                      // the old layout has no VRF map, spec [CV-4]
+                      vrfKeyHashes = Map.empty
                     )
 
         /** Tell the layouts apart by the first non-empty map among the first three: its values are
@@ -348,7 +355,9 @@ object LedgerState {
                     deposit = drepState.deposit,
                     delegates = drepState.delegates
                   )
-              }
+              },
+              // spec [CV-4]
+              numDormantEpochs = vstate.numDormantEpochs
             )
 
     /** Conway DRepState from cardano-ledger.

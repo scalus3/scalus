@@ -764,24 +764,32 @@ object EmulatorBase {
           }.toMap
         )
 
+        val stakePools = initState.poolRegistrations.map { p =>
+            PoolKeyHash.fromByteString(p.params.operator) -> p.params
+        }.toMap
         val pstate = PoolsState(
-          stakePools = initState.poolRegistrations.map { p =>
-              PoolKeyHash.fromByteString(p.params.operator) -> p.params
-          }.toMap,
-          deposits = initState.poolRegistrations.map { p =>
-              PoolKeyHash.fromByteString(p.params.operator) -> poolDeposit
-          }.toMap
+          stakePools = stakePools,
+          futureStakePoolParams = Map.empty,
+          retiring = Map.empty,
+          deposits = stakePools.view.mapValues(_ => poolDeposit).toMap,
+          // The ledger counts the pools per VRF key on the hard fork into PV 11
+          // (conway Rules/HardFork.hs:107-125); a genesis sees no hard fork, spec [BK-7]
+          vrfKeyHashes = stakePools.values.groupMapReduce(_.vrfKeyHash)(_ => 1L)(_ + _)
         )
 
+        // spec [DR-5]: a seeded DRep is registered at the genesis epoch
+        val drepExpiry =
+            context.slotConfig.epochOf(context.env.slot) + context.env.params.dRepActivity
         val vstate = VotingState(
           dreps = initState.drepRegistrations.map { d =>
               d.credential -> DRepState(
-                expiry = 0L,
+                expiry = drepExpiry,
                 anchor = d.anchor,
                 deposit = d.deposit,
                 delegates = Set.empty
               )
-          }.toMap
+          }.toMap,
+          numDormantEpochs = 0L // spec [DR-6], C/State/VState.hs:75-76
         )
 
         val certState = CertState(dstate = dstate, pstate = pstate, vstate = vstate)

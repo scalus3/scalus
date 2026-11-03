@@ -864,7 +864,9 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
           mutators = Emulator.defaultMutators,
           initialCertState = CertState(
             dstate = DelegationState(accounts),
-            vstate = VotingState(Map(drepCred -> DRepState(0L, None, deposit, Set.empty)))
+            vstate = VotingState.empty.copy(dreps =
+                Map(drepCred -> DRepState(0L, None, deposit, Set.empty))
+            )
           )
         )
 

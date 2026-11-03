@@ -277,7 +277,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         // The node validates conservation against real ledger state, where the DRep is
         // registered with `refund` as its deposit.
         val certState = CertState(vstate =
-            VotingState(dreps =
+            VotingState.empty.copy(dreps =
                 Map(drepCred -> DRepState(expiry = 0, anchor = None, refund, delegates = Set.empty))
             )
         )

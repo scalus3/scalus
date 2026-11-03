@@ -757,11 +757,22 @@ object EmulatorState {
         config: ChainConfig
     ): EmulatorState =
         initial(
-          State(utxos, certState = certState),
+          State(utxos, certState = certState, deposited = depositsOf(certState)),
           context,
           datums.view.mapValues(KeepRaw(_)).toMap,
           appliedTxLog,
           config
+        )
+
+    /** The deposits `certState` holds: accounts, pools and DReps. A genesis with seeded
+      * registrations starts with this `deposited`, so a refund of a seeded deposit keeps it
+      * consistent, spec [BK-1].
+      */
+    private def depositsOf(certState: CertState): Coin =
+        Coin(
+          certState.dstate.accounts.valuesIterator.map(_.deposit.value).sum
+              + certState.pstate.deposits.valuesIterator.map(_.value).sum
+              + certState.vstate.dreps.valuesIterator.map(_.deposit.value).sum
         )
 
     /** The state an emulator starts from, with the whole ledger state given: its fees and donations

@@ -47,6 +47,19 @@
   The result, failures and budget per category are those of the CEK machine on
   `[term (con ctx)]`; the CEK fallback evaluates the applied term. `applyTo` is a new abstract
   method of `UplcEvaluator`: an implementation outside Scalus must add it.
+- At protocol version 11 the Emulator rejects a pool registration whose VRF key another pool
+  has, as the ledger does, with the new `TransactionException.VrfKeyHashAlreadyRegisteredException`.
+  It checks each certificate against the earlier ones of the same transaction, so two new pools
+  with one VRF key in one transaction fail. `PoolsState` gains `vrfKeyHashes`, the number of pools
+  per VRF key, which the Emulator fills from its seeded pools at genesis.
+- The Emulator keeps `State.deposited` (the deposits of a valid transaction, proposal deposits
+  included, minus its refunds; at genesis, the deposits of the seeded registrations) and
+  `DRepState.delegates` (the accounts that delegate their vote to the DRep) as the ledger does.
+- DRep expiry follows the ledger: a registration or update expires `dRepActivity` epochs after
+  the current one, less the dormant epochs; a DRep vote renews its DRep's expiry the same way; a
+  transaction with a proposal adds the dormant epochs to every active DRep and resets the count.
+  `VotingState` gains `numDormantEpochs`, and a seeded DRep now expires `dRepActivity` epochs
+  after genesis instead of at epoch 0.
 
 ### Changed
 
@@ -89,6 +102,12 @@
 
 ### Deprecated
 
+- The 4-argument `PoolsState` constructor and companion `apply`, which have no VRF map: use the
+  5-argument form or `PoolsState.empty`. The 4-argument `PoolsState.copy` is gone, since a case
+  class has one `copy`; a call by field name such as `copy(retiring = ...)` still compiles.
+- The 1-argument `VotingState` constructor and companion `apply`, which have no dormant count:
+  use the 2-argument form or `VotingState.empty`. The 1-argument `VotingState.copy` is gone; a
+  call by field name such as `copy(dreps = ...)` still compiles.
 - `clearAppliedTxs`: the selected chain is the applied-tx log now; start a new Emulator for an
   empty log.
 - `StreamingEmulator.syntheticBlockHash`: the stream delivers the Emulator's real blocks, named by

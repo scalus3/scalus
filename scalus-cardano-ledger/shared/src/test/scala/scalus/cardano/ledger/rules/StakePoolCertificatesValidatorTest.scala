@@ -83,7 +83,7 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
         // Despite what you might think, re-registration is ok.
         val existing = mkRegistration()
         val certState = CertState.empty.copy(
-          pstate = PoolsState(stakePools = Map(poolId -> existing))
+          pstate = PoolsState.empty.copy(stakePools = Map(poolId -> existing))
         )
 
         val updated = mkRegistration(cost = minPoolCost + Coin.ada(10))
@@ -116,7 +116,7 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
     test("retirement succeeds when pool is registered and epoch is valid") {
         val existing = mkRegistration()
         val certState = CertState.empty.copy(
-          pstate = PoolsState(stakePools = Map(poolId -> existing))
+          pstate = PoolsState.empty.copy(stakePools = Map(poolId -> existing))
         )
         val currentEpoch = 100L
         val validRetirementEpoch = currentEpoch + 1 // Must be > currentEpoch
@@ -132,7 +132,7 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
     test("retirement fails when epoch equals current epoch") {
         val existing = mkRegistration()
         val certState = CertState.empty.copy(
-          pstate = PoolsState(stakePools = Map(poolId -> existing))
+          pstate = PoolsState.empty.copy(stakePools = Map(poolId -> existing))
         )
         val currentEpoch = 100L
 
@@ -149,7 +149,7 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
     test("retirement fails when epoch exceeds maximum allowed") {
         val existing = mkRegistration()
         val certState = CertState.empty.copy(
-          pstate = PoolsState(stakePools = Map(poolId -> existing))
+          pstate = PoolsState.empty.copy(stakePools = Map(poolId -> existing))
         )
         val currentEpoch = 100L
         val maxRetirementEpoch = currentEpoch + protocolParams.poolRetireMaxEpoch

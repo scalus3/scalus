@@ -1291,7 +1291,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           poolMetadata = None
         )
         val registered: CertState = CertState(pstate =
-            PoolsState(stakePools =
+            PoolsState.empty.copy(stakePools =
                 Map(PoolKeyHash.fromByteString(Alice.addrKeyHash) -> registration)
             )
         )

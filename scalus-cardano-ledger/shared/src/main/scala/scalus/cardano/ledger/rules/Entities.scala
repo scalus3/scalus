@@ -28,7 +28,7 @@ object Context {
 case class State(
     utxos: Utxos = Utxos.empty,
     certState: CertState = CertState.empty,
-    deposited: Coin = Coin.zero, // Lazy field used only for assertions
+    deposited: Coin = Coin.zero, // The deposits the ledger holds, `utxosDeposited`, spec [BK-1]
     fees: Coin = Coin.zero, // Accumulated transaction fees
     govState: GovState = GovState.empty, // Governance state
     stakeDistribution: StakeMap = StakeMap.empty, // Stake distribution

@@ -780,7 +780,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val (state, tx) = poolTx(0, poolRegistration)
         val registered = state.copy(certState =
             CertState.empty.copy(pstate =
-                PoolsState(stakePools =
+                PoolsState.empty.copy(stakePools =
                     Map(PoolKeyHash.fromByteString(poolOperator) -> poolRegistration)
                 )
             )
