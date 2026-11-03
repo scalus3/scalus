@@ -695,6 +695,16 @@ private[verify] object PropMacro {
             '{ PropExpr.SIRExpr[A](scalus.compiler.compile($closed)) }
         else
             val names = variables.map(variableName)
+            // The test reads its variables by their names: two of one name, as two expansions of
+            // one inline helper could give it, would be one to it.
+            val repeated = names.diff(names.distinct).distinct
+            if repeated.nonEmpty then
+                report.errorAndAbort(
+                  s"the test uses two variables of one name (${repeated.mkString(", ")}), as two " +
+                      "expansions of one inline helper give, and could not tell them apart: " +
+                      "name the variables of the helper's statement by its caller's lambdas",
+                  e.asTerm.pos
+                )
             val methodType = MethodType(variables.map(_.name))(
               _ => variables.map(symbol => codeType(symbol.termRef.widen)),
               _ => TypeRepr.of[A]
