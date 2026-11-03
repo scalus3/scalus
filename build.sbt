@@ -1061,6 +1061,10 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // a break there is actually needed, it gets its own filter naming the symbol, so the thing
         // being broken is visible in review rather than pre-authorised in bulk.
         ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*"),
+        // The epoch state and the epoch transition grow with each phase of the ledger-rules spec
+        // (phases 3 to 5: snapshots, rewards, ratify). Wholly internal, as `stream.internal` is;
+        // the value types a caller reads live in `scalus.cardano.ledger.epoch`, outside it (D47).
+        ProblemFilters.exclude[Problem]("scalus.cardano.ledger.epoch.internal.*"),
         // PoolsState gained the VRF map (ledger-rules spec [DM-4], D17). A deprecated
         // constructor and companion apply keep the 1.4 shape; the 4-argument copy cannot stay,
         // as a case class has one copy.
@@ -1170,6 +1174,14 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ),
         ProblemFilters.exclude[ReversedMissingMethodProblem](
           "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$constitution_="
+        ),
+        // JsEmulatorOptions gains reserves, ledger-rules spec [ES-7], D54; a JS-object facade as
+        // above.
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.reserves"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$reserves_="
         )
       ),
       crossScalaVersions := supportedScalaVersions,

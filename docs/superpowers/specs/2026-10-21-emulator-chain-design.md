@@ -75,6 +75,8 @@ The public API maps to the local mini-protocols of a node:
 
 *Implementation status (M3, replaces the M1 note):* `[NL-2]` the current slot is a field of `EmulatorState`. `setSlot` and `tick` move only that field. Every stored snapshot, of a block, of genesis or of a mempool tx, stays at the slot its ledger state was produced at. The tip view is the stored tip snapshot ticked to the current slot, as the node's ticked ledger state, and it is computed, not stored. The readers (`ledger`, `context`, `binaryDatums`, `treasury`, `donation`, `ChainView.Tip`), submit and revalidation all see it, so `treasury` and `donation` change at once on a boundary, as before. A direct edit (`[DE-1]`) changes the stored tip snapshot, and it commutes with the tick, which changes only the treasury and the donations. Two consequences: a block forged on an older block, or again after a rollback, sees the treasury and the donations of its own slot (`[FG-15]`). In `Instant`, a `setSlot` back before an epoch boundary that no block has crossed undoes the move of the donations, as for a node. Before, the move could not be undone. `ChainView.Stable(1)` reads the stored tip block snapshot, without the tick.
 
+*Implementation status (ledger rules, phase 3):* `tick` runs the epoch transitions of `2026-11-02-emulator-ledger-rules-design.md` `[EB-1]`, one for each boundary the slot change crosses, in order, not only the move of the donations (`[CS-1]` there). The tip view stays computed and is memoized per `EmulatorState` (`[EB-3a]`). A direct edit lands on the stored tip snapshot, before any boundary the current slot has crossed, and the tip view ticks the edited snapshot (`[EB-3b]`). This supersedes the M3 note's sentence that an edit commutes with the tick because the tick changes only the treasury and the donations.
+
 **Why:** `[NL-2]`: `tick` is where the epoch transition plugs in later (section 18). `[NL-3]`: a snapshot shares its `Context` with later snapshots, so one write would leak into every snapshot. Today no rule writes `fee`.
 
 ## 4. Block identity
@@ -536,8 +538,8 @@ Files that M1 to M5 touch:
 
 Each item gets its own spec. None of them has code in this spec.
 
-1. **Epoch transition.** NEWEPOCH in `tick`: POOLREAP, promotion of `futureStakePoolParams`, deposit refunds, SNAP, rewards, reserves and treasury. Test target: the 13 EPOCH and 24 DELEG vector dirs that `vectors.tar.gz` already ships but no test runs.
-2. **Governance.** The 14 missing GOV checks, proposals, RATIFY, ENACT, protocol parameter updates, committee state. Test target: the GOV (56), RATIFY (46) and ENACT (16) vector dirs.
+1. **Epoch transition.** Superseded by `2026-11-02-emulator-ledger-rules-design.md`, phases 3 and 4. NEWEPOCH in `tick`: POOLREAP, promotion of `futureStakePoolParams`, deposit refunds, SNAP, rewards, reserves and treasury. Test target: the 13 EPOCH and 24 DELEG vector dirs that `vectors.tar.gz` already ships but no test runs.
+2. **Governance.** Superseded by `2026-11-02-emulator-ledger-rules-design.md`, phases 2 and 5. The 14 missing GOV checks, proposals, RATIFY, ENACT, protocol parameter updates, committee state. Test target: the GOV (56), RATIFY (46) and ENACT (16) vector dirs.
 3. **PV11 tx rules.** Dijkstra failures, sub-transactions, Plutus V4 evaluation.
 4. **Network realism.** A seeded random block schedule (f = 0.05), forging on the wall clock for JS dev servers, a tx that never reaches the forging node.
 5. **N2C server.** LocalTxSubmission, LocalStateQuery, LocalTxMonitor and ChainSync over a socket, so cardano-cli, Ogmios and Kupo can connect.

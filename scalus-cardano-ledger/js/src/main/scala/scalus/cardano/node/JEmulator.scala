@@ -8,6 +8,7 @@ import scalus.utils.scalajs.internal.*
 import scalus.cardano.address.{Address, StakeAddress, StakePayload}
 import scalus.cardano.ledger.rules.{Context, UtxoEnv}
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.epoch.AccountState
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.emulator.{AwaitTxPolicy, BlockProduction, ChainConfig, ChainView, ChainViewError, DropReason, ForgeError, OrphanTxPolicy, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
@@ -424,6 +425,9 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       */
     def getTreasury(): js.BigInt = emulator.treasury.value.toJsBigInt
 
+    /** The reserves in lovelace. They start as the `reserves` option. */
+    def getReserves(): js.BigInt = emulator.reserves.value.toJsBigInt
+
     /** The gov state: the proposals in the order they were submitted, with their votes, the
       * committee and the constitution. A committee member's hot key is not here: a tx authorizes it
       * with a certificate, and the vote it casts shows in `votes`.
@@ -434,6 +438,9 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       * clock: only `submitTx`, `evaluateTx`, `produceBlock` and `awaitTx` do.
       */
     def getSlot(): Double = emulator.currentContext.env.slot.toDouble
+
+    /** The epoch of the current slot. */
+    def getEpoch(): Double = emulator.currentEpoch.toDouble
 
     /** Advance the current slot by `n` slots. */
     def tick(n: Double): Unit = emulator.tick(n.toLong)
@@ -1119,11 +1126,17 @@ trait JsEmulatorOptions extends js.Object {
       */
     val constitution: js.UndefOr[JConstitution] = js.undefined
 
-    /** The treasury in lovelace at the start of the current epoch. Defaults to 0. A transaction
-      * that states a `currentTreasuryValue` must state this value until the next epoch boundary,
-      * which adds the donations of the epoch to it. A negative value throws a `TypeError`.
+    /** The treasury in lovelace at the start of the current epoch. Defaults to the mainnet treasury
+      * at epoch 665, 1 392 896 975 262 771 lovelace. A transaction that states a
+      * `currentTreasuryValue` must state this value until the next epoch boundary, which adds the
+      * donations of the epoch to it. A negative value throws a `TypeError`.
       */
     val treasury: js.UndefOr[js.BigInt] = js.undefined
+
+    /** The reserves in lovelace at the start. Defaults to the mainnet reserves at epoch 665, 6 029
+      * 414 056 167 760 lovelace. No UTxO holds them. A negative value throws a `TypeError`.
+      */
+    val reserves: js.UndefOr[js.BigInt] = js.undefined
 
     /** Protocol parameters that replace those of the `CardanoInfo`. Only the fields given change,
       * and in `costModels` only the languages given: every other value stays as the `CardanoInfo`
@@ -1689,8 +1702,13 @@ object JEmulator {
         val slot: SlotNo = options.slot.toOption
             .map(_.toLong)
             .getOrElse(cardanoInfo.slotConfig.timeToSlot(now().toLong))
-        val treasury = Coin(options.treasury.toOption.fold(0L)(longOf(_, "treasury")))
+        // ledger-rules spec [ES-7a]: the mainnet treasury when not given
+        val treasury = options.treasury.toOption
+            .fold(AccountState.mainnet.treasury)(t => Coin(longOf(t, "treasury")))
         if treasury.value < 0 then typeError("treasury must not be negative")
+        val reserves = options.reserves.toOption
+            .fold(AccountState.mainnet.reserves)(r => Coin(longOf(r, "reserves")))
+        if reserves.value < 0 then typeError("reserves must not be negative")
         val env = UtxoEnv(
           slot,
           cardanoInfo.protocolParams,
@@ -1709,7 +1727,8 @@ object JEmulator {
               parseCredential(k.coldCredentialType, k.coldCredentialHash) ->
                   parseCredential(k.hotCredentialType, k.hotCredentialHash)
           }.toMap,
-          constitution = options.constitution.toOption.map(constitutionOf)
+          constitution = options.constitution.toOption.map(constitutionOf),
+          reserves = reserves
         )
         val context = Context(env = env, slotConfig = cardanoInfo.slotConfig)
         val scalaEmulator = Emulator.withState(initState, context, chainConfigOf(options))

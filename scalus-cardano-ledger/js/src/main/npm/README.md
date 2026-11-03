@@ -286,7 +286,8 @@ const emulator = Emulator.create(CardanoInfo.preview(), {
     { credentialType: "key", credentialHash: "ef01…", deposit: 500_000_000n },
   ],
   datums: [{ hash: datumHashHex, datum: datumCborHex }],
-  treasury: 1_000_000_000n,                  // defaults to 0
+  treasury: 1_000_000_000n,                  // defaults to the mainnet treasury
+  reserves: 6_000_000_000_000_000n,          // defaults to the mainnet reserves
   protocolParams: { maxTxSize: 32_768 },     // replaces only the fields given
 });
 ```

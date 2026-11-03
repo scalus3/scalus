@@ -440,6 +440,8 @@ They ship in Scalus 1.4, before the Lucid build starts (decision 7). Section 16 
 
 *Revised 2026-10-07:* `[SC-6]` first put `treasury` in `rules.State`. It now sits in the env, as in Haskell.
 
+*Implementation status (ledger rules, phase 3):* `[SC-6]` holds with a new source (`2026-11-02-emulator-ledger-rules-design.md` `[CS-3]`): the treasury lives in `AccountState.treasury` (`scalus.cardano.ledger.epoch`), in the epoch state of each ledger snapshot, and `env.treasury` is a copy of it, invariant `[DM-13]` of that spec; the tick writes the copy after the last epoch transition. `[SC-7a]` and `[SC-7f]`: the move of the donations is step `[EB-17]` of that spec, run at every boundary the slot change crosses (`[CS-2]`); with several boundaries the later ones see no donations, so the result is the one above. The default treasury of `Context.testMainnet()` and of the JS `treasury` option is the mainnet treasury at epoch 665, not 0 (`[ES-7a]`, D53).
+
 *Example, illustrative.* The treasury is 1000 at the start of epoch e:
 
 | Event | `currentTreasuryValue` | Result | Treasury after |

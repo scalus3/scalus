@@ -1,6 +1,8 @@
 package scalus.cardano.node
 
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.epoch.AccountState
+import scalus.cardano.ledger.epoch.internal.{EpochState, EpochTransition}
 import scalus.cardano.ledger.rules.{Context, State, TxRefScriptsSizeValidator}
 import scalus.cardano.node.emulator.{BlockForge, BlockProduction, ChainConfig, ChainView, ChainViewError, DropReason, ForgeError, LedgerSnapshot, OrphanTxPolicy, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
@@ -91,9 +93,14 @@ case class EmulatorState private (
 
     /** The snapshot of the tip ticked to the current slot, spec [NL-2]: the ledger every reader,
       * every submit and every revalidation sees. Computed, not stored, so no stored snapshot ever
-      * carries a later slot than its own.
+      * carries a later slot than its own, ledger-rules spec [EB-3].
+      *
+      * Computed at most once per state, ledger-rules spec [EB-3a]: the tick runs one epoch
+      * transition per boundary crossed, so a `setSlot` over many epochs would otherwise rerun them
+      * on every read. The state is immutable and every transition is a `copy`, which drops the
+      * memo, so the memo can never be stale (D48).
       */
-    private[node] def tipSnapshot: LedgerSnapshot = storedTip.atSlot(currentSlot)
+    private[node] lazy val tipSnapshot: LedgerSnapshot = storedTip.atSlot(currentSlot)
 
     /** The ledger state of the tip snapshot, spec [ST-8]. */
     def ledger: State = tipSnapshot.ledger
@@ -103,6 +110,11 @@ case class EmulatorState private (
 
     /** The datum store of the tip snapshot, spec [ST-8], spec [SC-13k]. */
     def binaryDatums: Map[DataHash, KeepRaw[Data]] = tipSnapshot.binaryDatums
+
+    /** The treasury and the reserves of the tip snapshot, ledger-rules spec [ES-9]. The treasury is
+      * `context.env.treasury`, spec [DM-13].
+      */
+    def accountState: AccountState = tipSnapshot.epoch.accountState
 
     /** Every datum this state has seen, decoded. */
     @deprecated("use binaryDatums, which keeps the datum bytes", "1.3.0")
@@ -222,7 +234,9 @@ case class EmulatorState private (
       * [FG-6]. With no entries, it is the tip snapshot.
       */
     private def forge(entries: Vector[MempoolEntry], slot: SlotNo): EmulatorState = {
-        val node = BlockNode.of(chain.lastOption.map(blocks), slot, entries, storedTip.atSlot(slot))
+        // ledger-rules spec [EB-3a]: at the current slot the ticked tip is computed already
+        val before = if slot == currentSlot then tipSnapshot else storedTip.atSlot(slot)
+        val node = BlockNode.of(chain.lastOption.map(blocks), slot, entries, before)
         val txs = node.txs
         copy(
           blocks = blocks.updated(node.id, node),
@@ -523,8 +537,9 @@ case class EmulatorState private (
     }
 
     /** The state with `f` applied to the stored tip snapshot in place, for the direct edits, spec
-      * [DE-1]. No block is forged, spec [DE-2]. An edit and the tick of [[tipSnapshot]] commute:
-      * the tick changes only the treasury and the donations, which no direct edit touches.
+      * [DE-1]. No block is forged, spec [DE-2]. The edit lands before any epoch boundary the
+      * current slot has crossed since the tip, and [[tipSnapshot]] ticks the edited snapshot,
+      * ledger-rules spec [EB-3b].
       */
     private def withTipSnapshot(f: LedgerSnapshot => LedgerSnapshot): EmulatorState = {
         val snapshot = f(storedTip)
@@ -588,9 +603,12 @@ case class EmulatorState private (
     def withClearedAppliedTxs: EmulatorState = EmulatorState.withLog(this, Vector.empty, chain.size)
 
     /** The state at a different slot, spec [NL-2]: only the current slot moves. The tip snapshot
-      * readers see is the stored one ticked to it, so crossing an epoch boundary forwards moves the
-      * donations into the treasury, see [[EmulatorBase.atSlot]], and moving back before that
-      * boundary undoes the move, as for a node whose ledger is ticked from the tip block.
+      * readers see is the stored one ticked to it, so crossing epoch boundaries forwards runs their
+      * epoch transitions, ledger-rules spec [EB-1]. Moving back before a boundary undoes it only
+      * when the tip block is before that boundary too: the tick never runs a boundary the stored
+      * tip ran already, ledger-rules spec D66. A tx submitted there is validated at the epoch of
+      * the current slot, which can be below the boundaries the tip ran, ledger-rules spec D67: for
+      * example a pool retirement for such a boundary is accepted and never reaped.
       *
       * @throws IllegalArgumentException
       *   in the `Manual` preset, for a slot below the slot of the tip block, spec [RV-8]
@@ -757,22 +775,17 @@ object EmulatorState {
         config: ChainConfig
     ): EmulatorState =
         initial(
-          State(utxos, certState = certState, deposited = depositsOf(certState)),
+          // spec [BK-1], [EB-18], D52: a genesis with seeded registrations starts with the
+          // deposits it holds, so a refund of a seeded deposit keeps `deposited` consistent
+          State(
+            utxos,
+            certState = certState,
+            deposited = EpochTransition.totalObligation(certState, GovState.empty)
+          ),
           context,
           datums.view.mapValues(KeepRaw(_)).toMap,
           appliedTxLog,
           config
-        )
-
-    /** The deposits `certState` holds: accounts, pools and DReps. A genesis with seeded
-      * registrations starts with this `deposited`, so a refund of a seeded deposit keeps it
-      * consistent, spec [BK-1].
-      */
-    private[node] def depositsOf(certState: CertState): Coin =
-        Coin(
-          certState.dstate.accounts.valuesIterator.map(_.deposit.value).sum
-              + certState.pstate.deposits.valuesIterator.map(_.value).sum
-              + certState.vstate.dreps.valuesIterator.map(_.deposit.value).sum
         )
 
     /** The state an emulator starts from, with the whole ledger state given: its fees and donations
@@ -798,18 +811,37 @@ object EmulatorState {
         config: ChainConfig
     ): EmulatorState = initial(ledger, context, datums, Vector.empty, config)
 
-    /** [[initial]] with an imported log and a `config`, for the 1.4 `Emulator` constructor. */
+    /** [[initial]] with an imported log and a `config`, for the 1.4 `Emulator` constructor. The
+      * reserves are those of mainnet, ledger-rules spec [ES-7].
+      */
     private[node] def initial(
         ledger: State,
         context: Context,
         datums: Map[DataHash, KeepRaw[Data]],
         appliedTxLog: Vector[AppliedTx],
         config: ChainConfig
+    ): EmulatorState =
+        initial(ledger, context, datums, appliedTxLog, config, AccountState.mainnet.reserves)
+
+    /** [[initial]] with `reserves`, ledger-rules spec [ES-7]. The treasury of the account state is
+      * `context.env.treasury`, spec [DM-13].
+      */
+    private[node] def initial(
+        ledger: State,
+        context: Context,
+        datums: Map[DataHash, KeepRaw[Data]],
+        appliedTxLog: Vector[AppliedTx],
+        config: ChainConfig,
+        reserves: Coin
     ): EmulatorState = {
         val binaryDatums = appliedTxLog.foldLeft(
           datums ++ ledger.utxos.valuesIterator.flatMap(EmulatorBase.inlineBinaryDatumOf)
         )((acc, a) => acc ++ EmulatorBase.binaryDatumsOf(a.tx))
-        val genesis = LedgerSnapshot(ledger, context, binaryDatums)
+        val epoch = EpochState(
+          AccountState(context.env.treasury, reserves),
+          context.slotConfig.epochOf(context.env.slot)
+        )
+        val genesis = LedgerSnapshot(ledger, context, binaryDatums, epoch)
         val empty = new EmulatorState(
           config = config,
           blocks = Map.empty,

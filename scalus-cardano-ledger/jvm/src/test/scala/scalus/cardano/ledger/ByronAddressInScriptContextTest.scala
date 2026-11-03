@@ -102,7 +102,7 @@ class ByronAddressInScriptContextTest extends AnyFunSuite {
             ),
             fee = Coin.ada(5),
             donation = Some(Coin.zero),
-            currentTreasuryValue = Some(Coin.zero),
+            currentTreasuryValue = Some(emulator.treasury),
             scriptDataHash = scriptDataHash
           ),
           witnessSet = witnessSet

@@ -79,4 +79,12 @@ class JavaEmulatorInteropTest extends AnyFunSuite {
         assert(gov.constitution == constitution)
         assert(gov.proposals.isEmpty)
     }
+
+    test("Java seeds the reserves and reads them and the current epoch") {
+        // spec [ES-7], [ES-9]
+        assert(JavaEmulatorInterop.reservesFromBuilder(Coin(77)) == Coin(77))
+        val emulator = Emulator.withAddresses(Seq(Alice.address))
+        val epoch = testEnv.slotConfig.epochOf(emulator.getCurrentSlot)
+        assert(JavaEmulatorInterop.currentEpoch(emulator) == epoch)
+    }
 }

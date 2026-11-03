@@ -245,8 +245,8 @@ object CertsMutator extends STS.Mutator {
       *
       * At PV >= 11 a registration fails on a VRF key of another pool and keeps `vrfKeyHashes` as
       * eras/shelley/impl/src/Cardano/Ledger/Shelley/Rules/Pool.hs:266-310 does, spec [BK-4] to
-      * [BK-6]. POOLREAP removes the VRF keys of retired pools (S/Rules/PoolReap.hs:225-228); the
-      * Emulator has no POOLREAP before ledger-rules phase 3.
+      * [BK-6]. POOLREAP removes the VRF keys of retired pools (S/Rules/PoolReap.hs:225-228), at the
+      * epoch boundary, `EpochTransition`, ledger-rules spec [EB-9a].
       */
     private[rules] def pool(poolDeposit: Coin, protocolMajor: Int, txId: TransactionHash)(
         pstate: PoolsState,
@@ -302,8 +302,8 @@ object CertsMutator extends STS.Mutator {
                               )
                             )
             case Certificate.PoolRetirement(poolId, epochNo) =>
-                // Schedule the pool for retirement. The actual removal and deposit refund
-                // happen at the epoch boundary (POOLREAP), which the emulator does not process.
+                // Schedule the pool for retirement. The removal and the deposit refund happen
+                // at the epoch boundary, POOLREAP in `EpochTransition`, ledger-rules spec [EB-8].
                 Right(pstate.copy(retiring = pstate.retiring.updated(poolId, epochNo)))
             case _ => Right(pstate)
 

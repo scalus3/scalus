@@ -142,6 +142,29 @@ case class GovState(
                         )
         })
 
+    /** This state without the proposals `ids` and their descendants, and the removed proposals in
+      * the order they were made, spec [EB-12b] (`proposalsRemoveWithDescendants`,
+      * eras/conway/impl/src/Cardano/Ledger/Conway/Governance/Proposals.hs:465-484).
+      *
+      * A descendant names a removed proposal as its parent, transitively. A parent is always made
+      * before its children, so one forward pass finds them all (D28). A root is never among the
+      * proposals, so it is never removed.
+      */
+    private[ledger] def removeWithDescendants(
+        ids: Set[GovActionId]
+    ): (GovState, Vector[GovActionState]) =
+        if ids.isEmpty then (this, Vector.empty)
+        else
+            val (removedIds, removed) =
+                proposals.foldLeft((Set.empty[GovActionId], Vector.empty[GovActionState])) {
+                    case ((removedIds, removed), p) =>
+                        val parent = GovActionPurpose.parent(p.action)
+                        if ids(p.id) || parent.exists(removedIds) then
+                            (removedIds + p.id, removed :+ p)
+                        else (removedIds, removed)
+                }
+            (copy(proposals = proposals.filterNot(p => removedIds(p.id))), removed)
+
     /** This state without the votes of `dreps` on any proposal, spec [GV-15]
       * (eras/conway/impl/src/Cardano/Ledger/Conway/Rules/Gov.hs:622-639).
       */

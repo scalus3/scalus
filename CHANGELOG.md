@@ -89,9 +89,50 @@
   state. JavaScript: `Emulator.create` takes `committee`, `committeeHotKeys` and `constitution`,
   and `getGovState()` returns the proposals with their votes, the committee and the
   constitution.
+- The Emulator runs one epoch transition for each epoch boundary that a slot change crosses, in
+  order, also when `setSlot` jumps over many epochs; the move of the donations into the treasury
+  is one step of it. The ticked ledger is computed once per state, so reads after a long `setSlot`
+  do not run the transitions again. A slot moved back below the tip does not run again the
+  boundaries the ledger already ran, so a donation made there moves into the treasury at the next
+  boundary after the tip's epoch. The treasury and the reserves are an `AccountState` in the
+  new package `scalus.cardano.ledger.epoch`, and `UtxoEnv.treasury` follows its treasury.
+- `EmulatorInitialState` gains `reserves`, by default the mainnet reserves at epoch 665
+  (`AccountState.mainnet.reserves`, 6 029 414 056 167 760 lovelace); no UTxO holds them. The Java
+  `Builder` gains `reserves`. `EmulatorBase.reserves` and `currentEpoch`, the Java `getReserves`
+  and `getCurrentEpoch`, and the testkit `ImmutableEmulator.reserves` read them. JavaScript:
+  `Emulator.create` takes `reserves`, and the emulator gains `getReserves()` and `getEpoch()`.
+- At each epoch boundary the Emulator now reaps pools as the ledger's POOLREAP does: a pool
+  re-registration takes effect, and a pool whose retirement epoch has come is removed, its
+  delegators lose the delegation, and its deposit goes to its reward account, or to the treasury
+  when that account is not registered.
+- At each epoch boundary the Emulator now expires proposals as the ledger's EPOCH rule does: a
+  proposal that was not ratified goes two boundaries after its last epoch (`expiresAfter`), with
+  the proposals that name it as their parent, and its deposit goes to its return account, or to
+  the treasury when that account is not registered. The boundary also counts the dormant epochs
+  (`VotingState.numDormantEpochs` grows at each boundary with no active proposal, so a DRep
+  registered after a long `setSlot` jump gets an earlier expiry, as on a node), drops the
+  committee state of credentials that are not committee members, and sets
+  `State.deposited` to the sum of all deposits the ledger holds.
+- The Emulator epoch boundary is tested against the epoch scenarios of the Haskell ledger's Imp
+  test suite (proposal expiry and deposit refunds, the dormant-epoch DRep expiry, crossing many
+  boundaries), with the epochs and amounts of the Haskell tests.
+- The epoch transition is also tested against 533 NEWEPOCH transitions of the Haskell ledger at
+  protocol version 11 (the Dugite conformance corpus, vendored as a 0.7 MB test resource). The
+  pool, proposal-expiry, dormant-epoch, committee-state, donation and deposit fields match in
+  every case that decodes; rewards, snapshots and enactment are not compared yet.
 
 ### Changed
 
+- **Migration hazard: `Context.testMainnet()`, `UtxoEnv.testMainnet()` and the JS `Emulator.create`
+  without a `treasury` option now carry the mainnet treasury at epoch 665
+  (`AccountState.mainnet.treasury`, 1 392 896 975 262 771 lovelace) instead of 0.** A transaction
+  that states `currentTreasuryValue = 0` against them fails with `TreasuryValueMismatch`; state
+  `emulator.treasury` (JS: `getTreasury()`) instead. `UtxoEnv.default` keeps a treasury of 0.
+- **Migration hazard: every Emulator factory runs the epoch rules at each epoch boundary that a
+  slot change crosses, and no option turns them off.** A test that crosses a boundary sees the
+  effects of each rule as it lands: the move of the donations, the reaping of retired pools and
+  the expiry of proposals now, later rewards for delegated accounts and the enactment of
+  ratified proposals.
 - The Emulator rejects proposals and votes that the ledger rejects. For example, a proposal whose
   deposit return account is not registered, a ParameterChange or TreasuryWithdrawals whose
   guardrails script hash differs from the constitution's, a vote by an unregistered DRep or pool,

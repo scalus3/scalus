@@ -611,7 +611,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
             outputs = IndexedSeq(Sized(output)),
             fee = Coin(100_000),
             donation = Some(Coin.zero),
-            currentTreasuryValue = Some(Coin.zero)
+            currentTreasuryValue = Some(defaultContext.env.treasury)
           ),
           witnessSet = TransactionWitnessSet.empty
         )

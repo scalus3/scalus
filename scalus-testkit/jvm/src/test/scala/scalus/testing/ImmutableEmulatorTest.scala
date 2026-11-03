@@ -3,8 +3,9 @@ package scalus.testing
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.epoch.AccountState
 import scalus.cardano.ledger.rules.{Context, State, UtxoEnv}
-import scalus.cardano.node.{Emulator, EmulatorBase, EmulatorState}
+import scalus.cardano.node.{Emulator, EmulatorBase, EmulatorInitialState, EmulatorState}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
@@ -415,5 +416,17 @@ class ImmutableEmulatorTest extends AnyFunSuite {
         val next = ImmutableEmulator.empty.withDatum(data)
 
         assert(next.binaryDatums.get(canonical.dataHash) == Some(canonical))
+    }
+
+    test("reserves: the mainnet reserves by default, the seeded ones through fromEmulator") {
+        // ledger-rules spec [ES-7], [ES-9]
+        assert(
+          ImmutableEmulator(
+            State(),
+            UtxoEnv.testMainnet()
+          ).reserves == AccountState.mainnet.reserves
+        )
+        val seeded = Emulator.withState(EmulatorInitialState(reserves = Coin(77)))
+        assert(ImmutableEmulator.fromEmulator(seeded).reserves == Coin(77))
     }
 }

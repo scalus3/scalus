@@ -448,18 +448,24 @@ class EmulatorParityTest extends AnyFunSuite {
         assert(emulator.donation == Coin(5))
     }
 
-    test("a donation made after a move back moves into the treasury once, going forward again") {
-        // spec [SC-7a], [SC-7f]: each boundary crossed forwards moves the donations, then resets them
+    test("a donation made after a move back moves into the treasury once, at the next boundary") {
+        // spec [SC-7a], [SC-7f]: each boundary crossed forwards moves the donations, then resets
+        // them. The genesis ran the boundary of `epoch` already, so going forward to `epoch` runs
+        // none, and the donation moves at `epoch + 1`, ledger-rules spec D66
         val emulator = emulatorWithTreasury(Coin(1000))
         emulator.setSlot(testEnv.slotConfig.firstSlotOfEpoch(epoch - 1))
         val tx = donate(emulator, Coin(5), Coin(1000))
         assert(emulator.submitSync(tx) == Right(tx.id))
 
         emulator.setSlot(testEnv.slotConfig.firstSlotOfEpoch(epoch))
+        assert(emulator.treasury == Coin(1000))
+        assert(emulator.donation == Coin(5))
+
+        emulator.setSlot(testEnv.slotConfig.firstSlotOfEpoch(epoch + 1))
         assert(emulator.treasury == Coin(1005))
         assert(emulator.donation == Coin.zero)
 
-        emulator.setSlot(testEnv.slotConfig.firstSlotOfEpoch(epoch + 1))
+        emulator.setSlot(testEnv.slotConfig.firstSlotOfEpoch(epoch + 2))
         assert(emulator.treasury == Coin(1005))
     }
 

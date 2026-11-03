@@ -3,8 +3,10 @@ package scalus.cardano.node
 import scalus.uplc.DebugScript
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.rules.{Context, STS, State, UtxoEnv}
+import scalus.cardano.ledger.rules.{Context, STS, State}
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.epoch.AccountState
+import scalus.cardano.ledger.epoch.internal.EpochTransition
 import scalus.cardano.node.emulator.{AwaitTxPolicy, ChainConfig, ChainView, ChainViewError, ForgeError, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.ChainEvent
@@ -91,6 +93,17 @@ trait EmulatorBase extends BlockchainProvider {
       * `initialContext.env.treasury`.
       */
     def treasury: Coin = readState.context.env.treasury
+
+    /** The reserves, ledger-rules spec [ES-9]. They start as `EmulatorInitialState.reserves`, the
+      * mainnet reserves by default, spec [ES-7].
+      */
+    def reserves: Coin = readState.accountState.reserves
+
+    /** The epoch of the current slot, ledger-rules spec [ES-9]. */
+    def currentEpoch: EpochNo = {
+        val context = readState.context
+        context.slotConfig.epochOf(context.env.slot)
+    }
 
     /** Index of applied transactions by hash, for O(1) lookup. */
     def appliedTxIndex: Map[TransactionHash, AppliedTx] = readState.appliedTxIndex
@@ -530,6 +543,9 @@ object EmulatorDRepRegistration {
   * @param constitution
   *   the constitution at genesis; `None`, the default, is one with an empty anchor and no
   *   guardrails script, spec [ES-14]
+  * @param reserves
+  *   the reserves at genesis; the default is the mainnet reserves at epoch 665, spec [ES-7]. No
+  *   UTxO holds them, spec [ES-7b].
   */
 case class EmulatorInitialState(
     utxos: Utxos = Map.empty,
@@ -539,7 +555,8 @@ case class EmulatorInitialState(
     datums: Map[DataHash, Data] = Map.empty,
     committee: Option[Committee] = None,
     committeeHotKeys: Map[Credential, Credential] = Map.empty,
-    constitution: Option[Constitution] = None
+    constitution: Option[Constitution] = None,
+    reserves: Coin = AccountState.mainnet.reserves
 ) {
 
     /** The 1.4 constructor, without the gov fields, spec [ES-6], D33. */
@@ -558,7 +575,8 @@ case class EmulatorInitialState(
       datums,
       None,
       Map.empty,
-      None
+      None,
+      AccountState.mainnet.reserves
     )
 }
 
@@ -581,7 +599,8 @@ object EmulatorInitialState {
           datums,
           None,
           Map.empty,
-          None
+          None,
+          AccountState.mainnet.reserves
         )
 
     /** Java-friendly builder — the case class keeps its Scala default arguments, which Java cannot
@@ -598,6 +617,7 @@ object EmulatorInitialState {
         private var _committee: Option[Committee] = None
         private var _committeeHotKeys: Map[Credential, Credential] = Map.empty
         private var _constitution: Option[Constitution] = None
+        private var _reserves: Coin = AccountState.mainnet.reserves
 
         def utxos(utxos: java.util.Map[TransactionInput, TransactionOutput]): Builder = {
             import scala.jdk.CollectionConverters.*
@@ -650,6 +670,12 @@ object EmulatorInitialState {
             this
         }
 
+        /** The reserves at genesis, spec [ES-7]; the mainnet reserves when not given. */
+        def reserves(reserves: Coin): Builder = {
+            _reserves = reserves
+            this
+        }
+
         def build(): EmulatorInitialState = new EmulatorInitialState(
           _utxos,
           _stakeRegistrations,
@@ -658,7 +684,8 @@ object EmulatorInitialState {
           _datums,
           _committee,
           _committeeHotKeys,
-          _constitution
+          _constitution,
+          _reserves
         )
     }
 }
@@ -682,28 +709,6 @@ object EmulatorBase {
         val emulator = new Emulator(validators = validators, mutators = mutators)
         emulator.updateState(_ => state)
         emulator
-    }
-
-    /** The ledger state and the env at `slot`.
-      *
-      * Crossing one or more epoch boundaries forwards moves the donations into the treasury and
-      * resets them to zero, as the Conway EPOCH rule does at each boundary, spec [SC-7a], [SC-7f].
-      * Several boundaries at once move them once: the later boundaries see no donations. Moving
-      * backwards moves nothing.
-      */
-    private[scalus] def atSlot(
-        ledger: State,
-        env: UtxoEnv,
-        slotConfig: SlotConfig,
-        slot: SlotNo
-    ): (State, UtxoEnv) = {
-        val crossesBoundary = slotConfig.epochOf(slot) > slotConfig.epochOf(env.slot)
-        if crossesBoundary then
-            (
-              ledger.copy(donation = Coin.zero),
-              env.copy(slot = slot, treasury = env.treasury + ledger.donation)
-            )
-        else (ledger, env.copy(slot = slot))
     }
 
     /** Evaluate a UTxO query against a UTxO set.
@@ -917,7 +922,7 @@ object EmulatorBase {
           initState.utxos,
           certState = certState,
           govState = govState,
-          deposited = EmulatorState.depositsOf(certState)
+          deposited = EpochTransition.totalObligation(certState, govState) // D52
         )
     }
 
@@ -930,8 +935,9 @@ object EmulatorBase {
         mutators: Iterable[STS.Mutator]
     ): Emulator = {
         val datums = initState.datums.view.mapValues(KeepRaw(_)).toMap
+        val ledger = genesisLedger(initState, context)
         val state =
-            EmulatorState.initial(genesisLedger(initState, context), context, datums, config)
+            EmulatorState.initial(ledger, context, datums, Vector.empty, config, initState.reserves)
         fromState(state, validators, mutators)
     }
 

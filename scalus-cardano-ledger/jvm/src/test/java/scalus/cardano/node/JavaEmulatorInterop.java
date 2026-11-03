@@ -1,6 +1,7 @@
 package scalus.cardano.node;
 
 import scalus.cardano.address.Address;
+import scalus.cardano.ledger.Coin;
 import scalus.cardano.ledger.Committee;
 import scalus.cardano.ledger.Constitution;
 import scalus.cardano.ledger.Credential;
@@ -38,6 +39,18 @@ public final class JavaEmulatorInterop {
                 .constitution(constitution)
                 .build();
         return Emulator.withState(state).getGovState();
+    }
+
+    // The reserves of the initial state, spec [ES-7], and the account-state reads, spec [ES-9].
+    public static Coin reservesFromBuilder(Coin reserves) {
+        EmulatorInitialState state = EmulatorInitialState.builder()
+                .reserves(reserves)
+                .build();
+        return Emulator.withState(state).getReserves();
+    }
+
+    public static long currentEpoch(Emulator emulator) {
+        return emulator.getCurrentEpoch();
     }
 
     // SubmitResult instead of Either — expected failures need no try/catch.

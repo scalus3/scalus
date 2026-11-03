@@ -5,6 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.{Builtins, ByteString, Data}
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.epoch.AccountState
 import scalus.cardano.txbuilder.{ScriptSource, TwoArgumentPlutusScriptWitness, TxBuilder}
 import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob}
@@ -230,6 +231,33 @@ class EmulatorJsTest extends AnyFunSuite {
         assertCreateTypeError(js.Dynamic.literal(treasury = js.BigInt("-1")))
     }
 
+    test("Emulator.create takes the reserves, and getReserves reports them") {
+        // ledger-rules spec [ES-7], [ES-9]
+        val options =
+            js.Dynamic.literal(reserves = js.BigInt("77")).asInstanceOf[JsEmulatorOptions]
+        assert(JEmulator.create(JsCardanoInfo.mainnet(), options).getReserves().toString == "77")
+    }
+
+    test("getReserves is the mainnet reserves when the options give none") {
+        // ledger-rules spec [ES-7]
+        val reserves = JEmulator.create(JsCardanoInfo.mainnet()).getReserves().toString
+        assert(reserves == AccountState.mainnet.reserves.value.toString)
+    }
+
+    test("Emulator.create rejects negative reserves with a TypeError") {
+        assertCreateTypeError(js.Dynamic.literal(reserves = js.BigInt("-1")))
+    }
+
+    test("getEpoch is the epoch of the current slot") {
+        // ledger-rules spec [ES-9]
+        val emulator = JEmulator.create(JsCardanoInfo.mainnet())
+        val slotConfig = CardanoInfo.mainnet.slotConfig
+        val epoch = slotConfig.epochOf(emulator.getSlot().toLong)
+        assert(emulator.getEpoch() == epoch.toDouble)
+        emulator.setSlot(slotConfig.firstSlotOfEpoch(epoch + 3).toDouble)
+        assert(emulator.getEpoch() == (epoch + 3).toDouble)
+    }
+
     test("Emulator.create rejects a datum whose hash is not the hash of its bytes") {
         // spec [SC-13k]: getDatum(h) must return bytes whose hash is h
         val datumHex = "d879811a0000000a"
@@ -278,8 +306,10 @@ class EmulatorJsTest extends AnyFunSuite {
         )
     }
 
-    test("getTreasury is 0 when the options give no treasury") {
-        assert(JEmulator.create(JsCardanoInfo.mainnet()).getTreasury().toString == "0")
+    test("getTreasury is the mainnet treasury when the options give no treasury") {
+        // ledger-rules spec [ES-7a]
+        val treasury = JEmulator.create(JsCardanoInfo.mainnet()).getTreasury().toString
+        assert(treasury == AccountState.mainnet.treasury.value.toString)
     }
 
     test("submitTx answers with a result, not an exception, for bytes that are not a transaction") {

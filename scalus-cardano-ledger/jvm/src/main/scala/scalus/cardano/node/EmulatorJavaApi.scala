@@ -62,6 +62,12 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
       */
     final def getGovState: GovState = govState
 
+    /** The reserves, ledger-rules spec [ES-9]. */
+    final def getReserves: Coin = reserves
+
+    /** The epoch of the current slot, ledger-rules spec [ES-9]. */
+    final def getCurrentEpoch: Long = currentEpoch
+
     // ─── Submission ─────────────────────────────────────────────────────────
 
     /** Submits a transaction and reports the outcome as a [[SubmitResult]] (never throws for a

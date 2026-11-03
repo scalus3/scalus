@@ -177,8 +177,15 @@ describe("Emulator treasury", () => {
         expect(emulator.snapshot().getTreasury()).toBe(1000n);
     });
 
-    it("defaults the treasury to 0", () => {
-        expect(Emulator.create(CardanoInfo.preview()).getTreasury()).toBe(0n);
+    // ledger-rules spec [ES-7a]: the mainnet treasury at epoch 665
+    it("defaults the treasury to the mainnet treasury", () => {
+        expect(Emulator.create(CardanoInfo.preview()).getTreasury()).toBe(1_392_896_975_262_771n);
+    });
+
+    // ledger-rules spec [ES-7]: the mainnet reserves at epoch 665
+    it("defaults the reserves to the mainnet reserves, and takes the reserves option", () => {
+        expect(Emulator.create(CardanoInfo.preview()).getReserves()).toBe(6_029_414_056_167_760n);
+        expect(Emulator.create(CardanoInfo.preview(), {reserves: 77n}).getReserves()).toBe(77n);
     });
 });
 

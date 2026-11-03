@@ -181,7 +181,7 @@ object CardanoLedgerVectors {
     /** `<tmpdir>/cardano-ledger-vectors-<hash of archive>`, shared by every test JVM on the machine
       * that runs the same archive.
       */
-    private def cacheDirectory(archive: Path): Path = {
+    private[conformance] def cacheDirectory(archive: Path): Path = {
         val digest = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(archive))
         Paths.get(
           System.getProperty("java.io.tmpdir"),

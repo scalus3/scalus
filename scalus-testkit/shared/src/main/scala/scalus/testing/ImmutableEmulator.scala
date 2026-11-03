@@ -40,6 +40,11 @@ final case class ImmutableEmulator private (
     /** The environment of the tip, at the current slot. */
     def env: UtxoEnv = emulatorState.context.env
 
+    /** The reserves of the tip, ledger-rules spec [ES-9]. `state` does not hold them: they are in
+      * the epoch state, which only epoch boundaries change.
+      */
+    def reserves: Coin = emulatorState.accountState.reserves
+
     def slotConfig: SlotConfig = emulatorState.context.slotConfig
 
     def evaluatorMode: EvaluatorMode = emulatorState.context.evaluatorMode
@@ -167,8 +172,9 @@ final case class ImmutableEmulator private (
     /** Advance the slot by the given number of slots. See [[setSlot]] for an epoch boundary. */
     def advanceSlot(n: Long): ImmutableEmulator = setSlot(env.slot + n)
 
-    /** Set the slot to a specific value, then revalidate the mempool, spec [DE-3]. Crossing an
-      * epoch boundary forwards moves the donations into the treasury, as the mutable emulator does.
+    /** Set the slot to a specific value, then revalidate the mempool, spec [DE-3]. Crossing epoch
+      * boundaries forwards runs their epoch transitions (ledger-rules spec [EB-1]), as the mutable
+      * emulator does; see `EmulatorState.withSlot` for a move back.
       *
       * @throws IllegalArgumentException
       *   in the `Manual` preset, for a slot below the slot of the tip block, spec [RV-8]
