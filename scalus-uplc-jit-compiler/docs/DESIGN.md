@@ -21,7 +21,13 @@ val evaluator = compiled.withFallback()                    // CEK on the call-de
 var spender: RestrictingBudgetSpender = null
 val result: Term = evaluator.evaluate({ spender = RestrictingBudgetSpender(budget); spender }, Log())
 evaluator.evaluateScript(RestrictingBudgetSpender(budget), Log())  // also checks the unit result
+// a validator, compiled once and unapplied, with the script context of each transaction
+evaluator.applyTo(Constant.Data(scriptContext)).evaluateScript(RestrictingBudgetSpender(budget), Log())
 ```
+
+`applyTo` evaluates `[[term (con a1)] .. (con an)]` with the code of `term`: no new compile. It
+spends the CEK machine's budget per category, but the Apply steps of the arguments before the
+startup cost; only a budget below `startup + n · applyCost` sees the difference (spec [EV-20]).
 
 Every evaluator runs on the calling thread and returns or throws what
 `vm.evaluateDeBruijnedTerm` does, with the CEK machine's exception classes. Its spender and logger
@@ -46,7 +52,7 @@ fails for a V3 script.
 | `CekBridge.scala` | every other builtin, run by the CEK machine's own runtime |
 | `ConstantPool.scala` | the constants of a script, passed to the compiled code once, never bytecode |
 | `StagingCompilerThread.scala` | runs the staging compiles one at a time on a dedicated thread |
-| `UplcCompiler.scala` | `UplcEvaluator`, `UplcCompiler.compile`, `Compiled` and its CEK fallback decorator |
+| `UplcCompiler.scala` | `UplcEvaluator`, `UplcCompiler.compile`, `Compiled`, its applied evaluator and its CEK fallback decorator |
 
 Generators follow the owner rule: a generator takes the `Quotes` of the splice its result goes in
 and is called inside it, so staging never re-owns a finished tree.
@@ -56,8 +62,8 @@ and is called inside it, so staging never re-owns a finished tree.
 - `JitConformanceTest`: the Plutus conformance suite on the JIT; every case passes.
 - `JitShapeTest`: term shapes the generators treat specially, also on failure, against the CEK
   machine: result, exception class and budget per category.
-- `UplcCompilerTest`: `evaluate`, `evaluateScript` and `withFallback`, the depth limit (also for a
-  loop through `case` alone), and one compiled term evaluated from 8 threads at once.
+- `UplcCompilerTest`: `evaluate`, `evaluateScript`, `withFallback` and `applyTo`, the depth limit
+  (also for a loop through `case` alone), and one compiled term evaluated from 8 threads at once.
 - `BuiltinImplsTest`, `CekBridgeTest`: the names of the hand-written builtins, the bridge cache.
 - `JitVsCekCheck`: the JIT against the CEK machine on the corpus (89 `plutus_use_cases` scripts and
   17 Scalus validators, `JitCorpus`).

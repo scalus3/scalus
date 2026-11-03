@@ -276,6 +276,62 @@ steps and throws `StackThresholdException`. The `withFallback` evaluator evaluat
 again and runs the CEK machine with the new spender. The caller keeps the last spender; its budget
 is the CEK machine's alone.
 
+### 3.3 Arguments
+
+A validator is compiled once, unapplied, and evaluated with the arguments of each transaction.
+
+```scala
+trait UplcEvaluator {
+    def applyTo(args: Constant*): UplcEvaluator   // evaluates [[term (con a1)] .. (con an)]
+}
+```
+
+*Example, illustrative.*
+`UplcCompiler.compile(validator).withFallback().applyTo(Constant.Data(ctx)).evaluateScript(spender, log)`,
+with one compile for every `ctx`.
+
+- Every `UplcEvaluator` MUST have `applyTo(args: Constant*)`. It MUST return an evaluator of the
+  term applied to `args` in order, `[[term (con a1)] .. (con an)]`, without a new compile. `[EV-18]`
+- The `evaluate` and `run` of an applied evaluator MUST return or throw what `[EV-6]` and
+  `[EV-14]` to `[EV-16]` require for the applied term, with the same budget per category, with one
+  exception, `[EV-20]`. `[EV-19]`
+- An applied evaluator MUST spend the `n` Apply steps of its `n` arguments before the compiled
+  code runs. It MUST spend one Const step before it applies each argument. `[EV-20]`
+- `e.applyTo(a).applyTo(b)` MUST evaluate as `e.applyTo(a, b)`. `[EV-21]`
+- An applied evaluator MUST make the checks of `[EV-1]`, `[EV-2]` and `[EV-13]` before it spends
+  anything. `[EV-22]`
+- The evaluator of `withFallback`, applied, MUST apply `[EV-4]` and `[EV-5]` to the applied term.
+  `[EV-23]`
+- The calls that apply the arguments MUST NOT count toward `maxDepth`. `[EV-24]`
+
+**Why `[EV-20]`:** the CEK machine spends Startup first, then the Apply steps, then the steps of
+`term`; the compiled code spends Startup itself, first. An applied evaluator can spend its Apply
+steps only before or after the compiled code. Before is the only place that keeps the budget per
+category equal to the CEK machine's in every case but one: a budget that runs out within the
+first `n + 1` spends. There the CEK machine fails on an Apply step and the applied evaluator on the
+Startup step. Both spend the same total; the step that a `TallyingBudgetSpender` records last
+differs. No transaction has such a budget: it is below `startup + n · applyCost`, 200 memory and
+16 100 CPU for one argument. A spender decorator or a thread-local would close the gap, at the
+cost of a call on every spend or hidden state.
+
+*Example, illustrative.* One argument, a budget limit of 150 memory and 1 000 000 CPU.
+
+| Machine | Spends, in order | Fails on | Tallied before the failure |
+|---|---|---|---|
+| CEK machine on `[term (con a)]` | Startup (100, 100), Apply (100, 16 000) | Apply | Startup |
+| Applied evaluator | Apply (100, 16 000), Startup (100, 100) | Startup | Apply |
+
+**Why `[EV-24]`:** the call-depth counter belongs to one run of the compiled code, and the
+arguments are applied outside it. An applied evaluator therefore throws `StackThresholdException`
+up to `n` calls deeper than the same applied term compiled whole. The limit protects the JVM
+stack, and `n` calls more fit in its margin. The `withFallback` result does not depend on where
+the limit is reached.
+
+**Why `applyTo`:** a compile takes seconds, and a validator runs with a new script context for
+every transaction. The compiled code of a function is a function value: `applyTo` applies it, so
+one compile serves every context. A compile per argument shape (placeholder constants in the
+constant pool) would also be exact, but it changes the code generator; this rule set needs none.
+
 ## 4. Measurement
 
 ### 4.1 Corpus

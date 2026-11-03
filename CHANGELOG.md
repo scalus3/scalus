@@ -41,6 +41,12 @@
   `orphanTxs` and `securityParam`, and gains `produceBlock`, `produceBlockOn`, `rollback`,
   `getMempool`, `getTip`, `getTxStatus` and `awaitTx`; `getTransactionStatus` now also returns
   `"Pending"`, `"Dropped"` and `"RolledBack"`.
+- JIT: `UplcEvaluator.applyTo(args*)` evaluates a compiled script applied to constant arguments,
+  so a validator compiles once and runs with the script context of each transaction:
+  `UplcCompiler.compile(term).withFallback().applyTo(Constant.Data(ctx)).evaluateScript(...)`.
+  The result, failures and budget per category are those of the CEK machine on
+  `[term (con ctx)]`; the CEK fallback evaluates the applied term. `applyTo` is a new abstract
+  method of `UplcEvaluator`: an implementation outside Scalus must add it.
 
 ### Changed
 

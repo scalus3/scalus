@@ -5,7 +5,7 @@ import scalus.*
 import scalus.cardano.ledger.{ExUnits, Language, MajorProtocolVersion}
 import scalus.compiler.compile
 import scalus.uplc.Term.asTerm
-import scalus.uplc.builtin.{platform, Builtins}
+import scalus.uplc.builtin.{platform, Builtins, Data}
 import scalus.uplc.eval.*
 import scalus.uplc.{BuiltinSemanticsVariant, Constant, DeBruijn, Term}
 
@@ -324,5 +324,171 @@ class UplcCompilerTest extends AnyFunSuite {
     test("compiles only for protocol versions 11 and 12 [SC-2, EV-12]") {
         for pv <- List(MajorProtocolVersion.changPV, MajorProtocolVersion(13)) do
             assertThrows[IllegalArgumentException](UplcCompiler.compile(dataCase, MaxDepth, pv))
+    }
+
+    // applyTo: one compile, evaluated with new arguments ([EV-18] to [EV-24])
+
+    private def parse(uplc: String): Term = Term.parseUplc(uplc).toOption.get
+
+    /** `[[term (con a1)] .. (con an)]`: the applied term, for the CEK machine. */
+    private def applied(term: Term, args: Constant*): Term =
+        args.foldLeft(term)((f, a) => Term.Apply(f, Term.Const(a)))
+
+    /** `a + b - c`: the result tells if the arguments were applied in order. Its body makes no
+      * counted call: a saturated builtin is a static call.
+      */
+    private val threeArgs = parse(
+      "(lam a (lam b (lam c [[(builtin subtractInteger) [[(builtin addInteger) a] b]] c])))"
+    )
+    private val tenFiveThree = List(10, 5, 3).map(n => Constant.Integer(n))
+
+    test("applyTo: one compile, a new argument per run, each as the CEK machine [EV-18, EV-19]") {
+        val compiled = UplcCompiler.compile(sumTo, MaxDepth)
+        for n <- List(0, 1, 100) do
+            val arg = Constant.Integer(n)
+            val run = track(budget)((s, l) => compiled.applyTo(arg).evaluate(s, l))
+            assertSame(run, cek(applied(sumTo, arg)))
+            assert(run.spenders.size == 1)
+            // not vacuous: the result depends on the argument
+            assert(run.result.toOption.contains(Term.Const(Constant.Integer(n * (n + 1) / 2))))
+    }
+
+    test("applyTo three arguments: the term applied to them in order [EV-18, EV-19]") {
+        val compiled = UplcCompiler.compile(threeArgs, MaxDepth)
+        val run = track(budget)((s, l) => compiled.applyTo(tenFiveThree*).evaluate(s, l))
+        assertSame(run, cek(applied(threeArgs, tenFiveThree*)))
+        assert(run.result.toOption.contains(Term.Const(Constant.Integer(12))))
+    }
+
+    test("applyTo on code compiled for PV12: the result and budget of the PV12 CEK [EV-19, SC-3]") {
+        // case on Data: the PV12 machine selects the branch of tag 1, the PV11 machine fails
+        val caseOnArg = parse("(lam d (case d (con integer 0) (lam fs fs)))")
+        val Term.Const(arg, _) = parse("(con data (Constr 1 [I 7]))"): @unchecked
+        val compiled = UplcCompiler.compile(caseOnArg, MaxDepth, MajorProtocolVersion.dijkstraPV)
+        val expected = track(budget)((s, l) =>
+            dijkstra.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(applied(caseOnArg, arg)), s, l)
+        )
+        assert(expected.result.isSuccess, expected) // not vacuous: the PV12 CEK cases on Data
+        for evaluator <- List(compiled, compiled.withFallback()) do
+            val run = track(budget)((s, l) => evaluator.applyTo(arg).evaluate(s, l)(using dijkstra))
+            assertSame(run, expected)
+    }
+
+    test("applyTo(a).applyTo(b, c) evaluates as applyTo(a, b, c) [EV-21]") {
+        val compiled = UplcCompiler.compile(threeArgs, MaxDepth)
+        val List(a, b, c) = tenFiveThree: @unchecked
+        val expected = cek(applied(threeArgs, a, b, c))
+        for evaluator <- List(compiled, compiled.withFallback()) do
+            val run = track(budget)((s, l) => evaluator.applyTo(a).applyTo(b, c).evaluate(s, l))
+            assertSame(run, expected)
+    }
+
+    test("applyTo a validator: evaluateScript passes or fails per context [EV-18, EV-19]") {
+        // passes for the context I 42 only
+        val validator = parse(
+          "(lam ctx (case [[(builtin equalsInteger) [(builtin unIData) ctx]] (con integer 42)]" +
+              " (error) (con unit ())))"
+        )
+        val compiled = UplcCompiler.compile(validator, MaxDepth).withFallback()
+        for n <- List(42, 7) do
+            val ctx = Constant.Data(Data.I(BigInt(n)))
+            val run = track(budget) { (s, l) =>
+                compiled.applyTo(ctx).evaluateScript(s, l)
+                Term.Const(Constant.Unit)
+            }
+            assertSame(run, cek(applied(validator, ctx)))
+            assert(run.result.isSuccess == (n == 42))
+    }
+
+    test("applyTo a term that is not a function: the CEK failure and budget [EV-19]") {
+        for term <- List("(con integer 1)", "(delay (con integer 1))", "(constr 0)").map(parse) do
+            val arg = Constant.Integer(2)
+            val run = track(budget) { (s, l) =>
+                UplcCompiler.compile(term, MaxDepth).applyTo(arg).evaluate(s, l)
+            }
+            val expected = cek(applied(term, arg))
+            assert(expected.result.isFailure, expected) // not vacuous: the CEK machine fails
+            assertSame(run, expected)
+    }
+
+    test("applyTo a builtin: the CEK result and budget, saturated or not [EV-19]") {
+        val compiled = UplcCompiler.compile(parse("(builtin addInteger)"), MaxDepth)
+        val (two, three) = (Constant.Integer(2), Constant.Integer(3))
+        val add = parse("(builtin addInteger)")
+        val run = track(budget)((s, l) => compiled.applyTo(two, three).evaluate(s, l))
+        assertSame(run, cek(applied(add, two, three)))
+        assert(run.result.toOption.contains(Term.Const(Constant.Integer(5))))
+        // one argument: a function result, which run accepts as the CEK machine does
+        assertSameCost(runOnly(compiled.applyTo(two)), cek(applied(add, two)))
+    }
+
+    test("applyTo, out of budget in the body: the CEK exception at the same point [EV-19]") {
+        val small = ExUnits(memory = 20_000, steps = 5_000_000)
+        val arg = Constant.Integer(100)
+        val compiled = UplcCompiler.compile(sumTo, MaxDepth)
+        val run = track(small)((s, l) => compiled.applyTo(arg).evaluate(s, l))
+        assert(run.result.isFailure)
+        assertSame(run, cek(applied(sumTo, arg), small))
+    }
+
+    test(
+      "applyTo, out of budget in the first n + 1 spends: same total, Apply spent first [EV-20]"
+    ) {
+        // 150 memory: the CEK machine spends Startup (100) and fails on Apply (100); the applied
+        // evaluator spends Apply and fails on Startup. Both spend 200 memory and 16 100 CPU.
+        val tight = ExUnits(memory = 150, steps = 1_000_000)
+        val arg = Constant.Integer(1)
+        val compiled = UplcCompiler.compile(sumTo, MaxDepth)
+        val run = track(tight)((s, l) => compiled.applyTo(arg).evaluate(s, l))
+        val expected = cek(applied(sumTo, arg), tight)
+        for r <- List(run, expected) do
+            assert(r.result.failed.toOption.exists(_.isInstanceOf[OutOfExBudgetError]), r)
+        assert(run.spender.getSpentBudget == expected.spender.getSpentBudget)
+        assert(expected.spender.costs.keySet == Set(ExBudgetCategory.Startup))
+        assert(run.spender.costs.keySet == Set(ExBudgetCategory.Step(StepKind.Apply)))
+    }
+
+    test("withFallback, applied, past the call-depth limit: the CEK run of [term arg] [EV-23]") {
+        val arg = Constant.Integer(MaxDepth + 100)
+        val compiled = UplcCompiler.compile(sumTo, MaxDepth)
+        assertThrows[nativestack.StackThresholdException](
+          compiled.applyTo(arg).evaluate(NoBudgetSpender, NoLogger)
+        )
+        val evaluator = compiled.withFallback().applyTo(arg)
+        val expected = cek(applied(sumTo, arg))
+        val run = track(budget)((s, l) => evaluator.evaluate(s, l))
+        assertSame(run, expected)
+        assert(run.spenders.size == 2 && run.logs.size == 2)
+        val runOnlyRun = runOnly(evaluator)
+        assertSameCost(runOnlyRun, expected)
+        assert(runOnlyRun.spenders.size == 2)
+    }
+
+    test("applyTo rejects a vm of another language or protocol version, before it spends [EV-22]") {
+        val compiled = UplcCompiler.compile(sumTo, MaxDepth)
+        for
+            evaluator <- List(compiled, compiled.withFallback())
+            other <- List(dijkstraVM, PlutusVM.makePlutusV2VM())
+        do
+            val appliedOne = evaluator.applyTo(Constant.Integer(1))
+            val run = track(budget)((s, l) => appliedOne.evaluate(s, l)(using other))
+            val runOnlyRun = runOnly(appliedOne)(using other)
+            for r <- List(run, runOnlyRun) do
+                assert(r.result.failed.toOption.exists(_.isInstanceOf[IllegalArgumentException]))
+                assert(r.spenders.isEmpty && r.logs.isEmpty)
+    }
+
+    test("applyTo: the calls that apply the arguments are not depth-counted [EV-24]") {
+        // maxDepth 1: the first counted call throws
+        assertThrows[nativestack.StackThresholdException](
+          UplcCompiler
+              .compile(applied(threeArgs, tenFiveThree*), 1)
+              .evaluate(NoBudgetSpender, NoLogger)
+        )
+        val result = UplcCompiler
+            .compile(threeArgs, 1)
+            .applyTo(tenFiveThree*)
+            .evaluate(NoBudgetSpender, NoLogger)
+        assert(result == Term.Const(Constant.Integer(12)))
     }
 }

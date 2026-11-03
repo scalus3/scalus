@@ -25,6 +25,22 @@ trait UplcEvaluator {
       */
     def run(budgetSpender: => BudgetSpender, logger: => Logger)(using vm: PlutusVM): Unit
 
+    /** This evaluator, applied to `args`: an evaluator of `[[term (con a1)] .. (con an)]` that
+      * reuses the compiled code ([EV-18] to [EV-24]). A validator compiles once, unapplied, and
+      * runs with the script context of each transaction:
+      * {{{
+      * val validator = UplcCompiler.compile(program.term).withFallback()
+      * validator.applyTo(Constant.Data(scriptContext)).evaluateScript(spender, logger)
+      * }}}
+      *
+      * It returns and throws what the CEK machine does on the applied term, with the same budget
+      * per category. One difference ([EV-20]): it spends the Apply steps of the arguments before
+      * the startup cost, not after. A budget below `startup + n · applyCost` therefore fails on
+      * another step than on the CEK machine, with the same spent budget. The calls that apply the
+      * arguments do not count toward `maxDepth` ([EV-24]).
+      */
+    def applyTo(args: Constant*): UplcEvaluator
+
     /** [[evaluate]], then the check of `PlutusVM.evaluateScript`: a PlutusV3 or V4 script must
       * return unit, or it fails with `InvalidReturnValue` (spec [EV-9]).
       *
@@ -121,18 +137,13 @@ object UplcCompiler {
           */
         def evaluate(budgetSpender: => BudgetSpender, logger: => Logger)(using
             vm: PlutusVM
-        ): Term = {
-            checkScope(vm, protocolVersion)
-            val value = code(logger, budgetSpender, vm.machineParams)
-            toTerm(value).getOrElse(throw new FunctionResultError(JitRuntime.describe(value)))
-        }
+        ): Term = resultTerm(value(Nil, budgetSpender, logger))
 
         def run(budgetSpender: => BudgetSpender, logger: => Logger)(using
             vm: PlutusVM
-        ): Unit = {
-            checkScope(vm, protocolVersion)
-            code(logger, budgetSpender, vm.machineParams): Unit
-        }
+        ): Unit = value(Nil, budgetSpender, logger): Unit
+
+        def applyTo(args: Constant*): UplcEvaluator = Applied(this, args.toList)
 
         /** This evaluator, with a fallback: a script that reaches the call-depth limit is evaluated
           * again, from the start, with the CEK machine of the `vm` of the evaluation, and with
@@ -140,36 +151,93 @@ object UplcCompiler {
           * and written logs cannot be undone, so the CEK run needs new ones: the spender and the
           * logger of the last run hold the budget and the logs of the result.
           */
-        def withFallback(): UplcEvaluator = CekFallback(this, term)
+        def withFallback(): UplcEvaluator = CekFallback(this, Nil)
+
+        /** The term for the CEK machine, made on the first fallback. One per compile: the fallbacks
+          * of all the applied evaluators share it.
+          */
+        private[UplcCompiler] lazy val deBruijned: Term = DeBruijn.deBruijnTerm(term)
+
+        /** The value of the compiled term applied to `args`, with the CEK machine's budget per
+          * category. `budgetSpender` and `logger` are evaluated once, after the check of `vm`
+          * ([EV-1], [EV-2], [EV-22]).
+          *
+          * The CEK machine spends on `[[term a1] a2]`: Startup, Apply, Apply, the steps of `term`,
+          * Const, the steps of the call with `a1`, Const, the steps of the call with `a2`. The
+          * compiled code spends Startup and the steps of `term` itself, so the Apply steps can only
+          * go before it ([EV-20]). The calls happen outside the code and its call-depth counter
+          * ([EV-24]).
+          */
+        private[UplcCompiler] def value(
+            args: List[Constant],
+            budgetSpender: => BudgetSpender,
+            logger: => Logger
+        )(using vm: PlutusVM): UplcValue = {
+            checkScope(vm, protocolVersion)
+            val spender = budgetSpender
+            val params = vm.machineParams
+            args.foreach(_ => JitBudget.spendApply(spender, params))
+            args.foldLeft(code(logger, spender, params)) { (fun, arg) =>
+                JitBudget.spendConst(spender, params)
+                fun match
+                    case l: LamValue => l.apply(arg)
+                    case other       => JitRuntime.cannotApply(other)
+            }
+        }
     }
 
-    /** [[Compiled]] with the CEK machine as fallback on the call-depth limit (see
-      * [[Compiled.withFallback]]).
-      */
-    private final class CekFallback(compiled: Compiled, term: Term) extends UplcEvaluator {
+    /** [[Compiled]] applied to `args`, in order (see [[UplcEvaluator.applyTo]]). */
+    private final class Applied(compiled: Compiled, args: List[Constant]) extends UplcEvaluator {
 
-        /** The term for the CEK machine, made on the first fallback. */
-        private lazy val deBruijned: Term = DeBruijn.deBruijnTerm(term)
+        def evaluate(budgetSpender: => BudgetSpender, logger: => Logger)(using
+            vm: PlutusVM
+        ): Term = resultTerm(compiled.value(args, budgetSpender, logger))
+
+        def run(budgetSpender: => BudgetSpender, logger: => Logger)(using vm: PlutusVM): Unit =
+            compiled.value(args, budgetSpender, logger): Unit
+
+        // [EV-21]: applyTo(a).applyTo(b) is applyTo(a, b)
+        def applyTo(more: Constant*): UplcEvaluator = Applied(compiled, args ++ more)
+    }
+
+    /** [[Compiled]], applied to `args`, with the CEK machine as fallback on the call-depth limit
+      * (see [[Compiled.withFallback]]); `args` is empty until [[applyTo]].
+      */
+    private final class CekFallback(compiled: Compiled, args: List[Constant])
+        extends UplcEvaluator {
 
         def evaluate(budgetSpender: => BudgetSpender, logger: => Logger)(using
             vm: PlutusVM
         ): Term =
-            // compiled.evaluate checks `vm` first ([EV-1], [EV-2]): a vm of another protocol
+            // compiled.value checks `vm` first ([EV-1], [EV-2]): a vm of another protocol
             // version fails there, with IllegalArgumentException, and never reaches the CEK
             // machine below. That is deliberate ([EV-13]): the fallback stands in for the compiled
             // code, so it accepts exactly the machines the compiled code accepts.
-            try compiled.evaluate(budgetSpender, logger)
+            try resultTerm(compiled.value(args, budgetSpender, logger))
             catch
                 case _: StackThresholdException =>
-                    vm.evaluateDeBruijnedTerm(deBruijned, budgetSpender, logger)
+                    vm.evaluateDeBruijnedTerm(cekTerm, budgetSpender, logger)
 
         def run(budgetSpender: => BudgetSpender, logger: => Logger)(using vm: PlutusVM): Unit =
-            // as evaluate above: compiled.run checks `vm` first ([EV-14])
-            try compiled.run(budgetSpender, logger)
+            // as evaluate above: compiled.value checks `vm` first ([EV-14])
+            try compiled.value(args, budgetSpender, logger): Unit
             catch
                 case _: StackThresholdException =>
-                    vm.runDeBruijnedTerm(deBruijned, budgetSpender, logger)
+                    vm.runDeBruijnedTerm(cekTerm, budgetSpender, logger)
+
+        // [EV-21], [EV-23]: the applied evaluator falls back to the CEK machine on all the args
+        def applyTo(more: Constant*): UplcEvaluator = CekFallback(compiled, args ++ more)
+
+        /** `[[term (con a1)] .. (con an)]`, for the CEK machine. A constant has no variables, so
+          * the De Bruijn indices of `term` stay valid.
+          */
+        private def cekTerm: Term =
+            args.foldLeft(compiled.deBruijned)((fun, arg) => Term.Apply(fun, Term.Const(arg)))
     }
+
+    /** The result term of `value`, or [[FunctionResultError]] for a value with no term ([EV-8]). */
+    private def resultTerm(value: UplcValue): Term =
+        toTerm(value).getOrElse(throw new FunctionResultError(JitRuntime.describe(value)))
 
     /** Rejects a machine other than the one the code was compiled for ([EV-1], [EV-2]): PlutusV3 or
       * V4, builtin semantics variant E, and the protocol version `compiledFor` of the compile. Code
