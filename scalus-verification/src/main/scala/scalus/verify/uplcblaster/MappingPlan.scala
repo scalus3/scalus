@@ -29,10 +29,9 @@ final case class MappingPlan(nodes: List[MappingPlan.Node]) {
       * that two variables have is marked with `#` and the variable's place, counted from 1.
       */
     def show: String = {
-        // A variable's first node is its root, whose path is its name.
+        // A variable's name, as written, is what its nodes' paths start with.
         val names = nodes
-            .distinctBy(_.variable)
-            .map(node => node.variable -> PropIdentity.written(node.path))
+            .map(node => node.variable -> PropIdentity.written(node.path).takeWhile(_ != '.'))
             .toMap
         val repeated =
             names.values

@@ -599,23 +599,20 @@ object UplcBlaster {
 
             // A test's program over the values in its quantifier scope, with each case-class
             // variable it uses built from those values.
-            def compile(sir: SIR, scope: List[Int], built: List[Binding]): Term =
+            def compile(sir: SIR, scope: List[Int], built: List[Binding]): Either[String, Term] =
                 compileSirFunction(
                   scope.map(index => binders(index)),
                   withBuilt(built, sir),
                   functions
                 )
 
-            // A variable hides an outer one of its name in the tests in its scope, as a lambda's
-            // parameter does: a test's program takes both as parameters of that name, and reads the
-            // innermost, so the value built or decoded for the outer one is not bound there either.
-            // Nor is it where the variable's name is that of one of the outer one's fields, as only a
-            // name built by hand can be: its parameter would hide the field the value is built from,
-            // so a test that reads the outer one there fails to compile, with the variable free.
-            def hiddenBy(ident: PropExpr.Ident[?], built: List[Binding]): List[Binding] =
-                built.filterNot(binding =>
-                    binding.name == ident.name || ident.name.startsWith(s"${binding.name}.")
-                )
+            // A test, compiled, as the leaf of the formula that `formula` makes of its index.
+            def test(
+                sir: SIR,
+                scope: List[Int],
+                built: List[Binding]
+            )(formula: Int => LeafFormula): Either[String, LeafFormula] =
+                compile(sir, scope, built).map(term => formula(leaf(term, scope)))
 
             def loop(
                 current: Prop,
@@ -636,16 +633,12 @@ object UplcBlaster {
                     yield formula
                 case _: Prop.Bool | _: Prop.Call[?, ?] =>
                     predicateSir(current, functions)
-                        .map(test => LeafFormula.Test(leaf(compile(test, scope, built), scope)))
+                        .flatMap(sir => test(sir, scope, built)(LeafFormula.Test(_)))
                 case Prop.Equal(left, right) =>
                     equality(expressionSir(left), expressionSir(right))
-                        .map(test => LeafFormula.Test(leaf(compile(test, scope, built), scope)))
+                        .flatMap(sir => test(sir, scope, built)(LeafFormula.Test(_)))
                 case Prop.Denotes(expr) =>
-                    Right(
-                      LeafFormula.Denotes(
-                        leaf(compile(expressionSir(expr), scope, built), scope)
-                      )
-                    )
+                    test(expressionSir(expr), scope, built)(LeafFormula.Denotes(_))
                 case Prop.And(left, right) =>
                     for
                         l <- loop(left, scope, built)
@@ -672,19 +665,18 @@ object UplcBlaster {
                 // its own, is the premise of the rest.
                 case Prop.Forall(ident, body) =>
                     quantified(ident, Quantifier.ForAll).flatMap { (introduced, bindings) =>
-                        loop(body, scope ++ introduced, hiddenBy(ident, built) ++ bindings).map {
-                            inner =>
-                                val premises = introduced.flatMap(binder =>
-                                    guards
-                                        .get(binder)
-                                        .map(guard =>
-                                            LeafFormula.Test(unguardedLeaf(guard, List(binder)))
-                                        )
-                                )
-                                LeafFormula.Forall(
-                                  introduced,
-                                  premises.foldRight(inner)(LeafFormula.Implies(_, _))
-                                )
+                        loop(body, scope ++ introduced, built ++ bindings).map { inner =>
+                            val premises = introduced.flatMap(binder =>
+                                guards
+                                    .get(binder)
+                                    .map(guard =>
+                                        LeafFormula.Test(unguardedLeaf(guard, List(binder)))
+                                    )
+                            )
+                            LeafFormula.Forall(
+                              introduced,
+                              premises.foldRight(inner)(LeafFormula.Implies(_, _))
+                            )
                         }
                     }
                 // The limits of a binder are the premise of a universal statement, and a
@@ -696,7 +688,7 @@ object UplcBlaster {
                     )
                 case Prop.Exists(ident, None, body) =>
                     quantified(ident, Quantifier.Exists).flatMap { (introduced, bindings) =>
-                        loop(body, scope ++ introduced, hiddenBy(ident, built) ++ bindings)
+                        loop(body, scope ++ introduced, built ++ bindings)
                             .map(LeafFormula.Exists(introduced, _))
                     }
                 case Prop.Exists(ident, Some(witness), body) =>
@@ -729,29 +721,31 @@ object UplcBlaster {
                     )
             }
 
-            loop(prop, Nil, Nil).flatMap(standsForEvery).flatMap { formula =>
-                val utf8 =
-                    leaves.flatMap(_.term.collectBuiltins).filter(utf8Builtins).distinct.sorted
-                if binders.nonEmpty && utf8.nonEmpty then
-                    Left(
-                      s"the programs apply ${utf8.map(builtinName).mkString(" and ")} to values " +
-                          "of the statement's variables. These builtins see which characters a " +
-                          "string has, and the solver's strings have other characters than " +
-                          "Plutus's (input-output-hk/Lean-blaster#389), so a proof would not hold. " +
-                          "A closed statement, which Lean evaluates, may apply them"
-                    )
-                else
-                    Right(
-                      Lowered(
-                        binders.toList,
-                        formula,
-                        leaves.toVector,
-                        leafBinders.toVector,
-                        predicates.toVector,
-                        plan = MappingPlan(planned.toList)
-                      )
-                    )
-            }
+            loop(withDistinctNames(prop), Nil, Nil)
+                .flatMap(standsForEvery)
+                .flatMap { formula =>
+                    val utf8 =
+                        leaves.flatMap(_.term.collectBuiltins).filter(utf8Builtins).distinct.sorted
+                    if binders.nonEmpty && utf8.nonEmpty then
+                        Left(
+                          s"the programs apply ${utf8.map(builtinName).mkString(" and ")} to values " +
+                              "of the statement's variables. These builtins see which characters a " +
+                              "string has, and the solver's strings have other characters than " +
+                              "Plutus's (input-output-hk/Lean-blaster#389), so a proof would not hold. " +
+                              "A closed statement, which Lean evaluates, may apply them"
+                        )
+                    else
+                        Right(
+                          Lowered(
+                            binders.toList,
+                            formula,
+                            leaves.toVector,
+                            leafBinders.toVector,
+                            predicates.toVector,
+                            plan = MappingPlan(planned.toList)
+                          )
+                        )
+                }
         }
 
     /** The builtins that see the characters of a string: Blaster cannot translate them today, and
@@ -1050,7 +1044,11 @@ object UplcBlaster {
     private def asDataNotSupported(
         path: String
     ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] =
-        Left(s"${PropIdentity.written(path)}: a node mapped as Data is not supported here yet")
+        Left(
+          s"${PropIdentity.written(path)}: a case class or an enum inside a variable cannot be " +
+              "mapped as Data yet: quantify over the Data encodings of the whole variable, " +
+              "with forAllData"
+        )
 
     /** How many parts one statement variable may have: many more than a type of the ledger has, and
       * an end to a type that contains itself under other arguments each time, which [[nested]] does
@@ -1210,8 +1208,8 @@ object UplcBlaster {
       * them, in the witness as in the expression. The witness's own `let`s stay in the value that
       * is bound: only its module definitions, which have qualified names, are around the binding.
       *
-      * A variable of `ident`'s name that the body quantifies over, or a call's result of that name,
-      * hides `ident` in its scope, as in the tests ([[lower]]): the witness is not bound there.
+      * The statement's variables have distinct names in every scope ([[withDistinctNames]]), so the
+      * witness is bound for `ident` only, and what it reads is the variables of its own scope.
       */
     private def instantiate[A](
         prop: Prop,
@@ -1243,19 +1241,15 @@ object UplcBlaster {
                 )
             case current => current
 
-        // the body in the scope of a variable `bound`, where one of `ident`'s name hides it
-        def under(bound: PropExpr.Ident[?], body: Prop): Prop =
-            if bound.name == ident.name then body else loop(body)
-
         def loop(current: Prop): Prop = current match
             case Prop.Bool(expr)         => Prop.Bool(expression(expr))
             case Prop.Denotes(expr)      => Prop.Denotes(expression(expr))
             case Prop.Equal(left, right) => Prop.Equal(expression(left), expression(right))
             case Prop.Call(fn, arg, result, total, body) =>
-                Prop.Call(fn, expression(arg), result, total, under(result, body))
-            case Prop.Forall(bound, body) => Prop.Forall(bound, under(bound, body))
+                Prop.Call(fn, expression(arg), result, total, loop(body))
+            case Prop.Forall(bound, body) => Prop.Forall(bound, loop(body))
             case Prop.Exists(bound, supplied, body) =>
-                Prop.Exists(bound, supplied.map(expression), under(bound, body))
+                Prop.Exists(bound, supplied.map(expression), loop(body))
             case Prop.And(left, right)     => Prop.And(loop(left), loop(right))
             case Prop.Or(left, right)      => Prop.Or(loop(left), loop(right))
             case Prop.Implies(left, right) => Prop.Implies(loop(left), loop(right))
@@ -1264,6 +1258,97 @@ object UplcBlaster {
 
         loop(prop)
     }
+
+    /** `prop` with the variables of every scope named apart, as a lambda's parameter is from an
+      * outer one, so that what a test, a witness or an argument reads is the innermost variable of
+      * its name.
+      *
+      * A test's program takes the variables in its scope as parameters of their names, and builds,
+      * decodes or binds the values of some of them under their names. The macros name a variable
+      * after its lambda's parameter and the place of the lambda in its file, so one inline helper
+      * nested in itself gives two variables one name, as do two files with a lambda of one
+      * parameter name at one place, and a statement built by hand. So where a variable's name is
+      * that of one in its scope, or one of the two names is that of a field of the other variable
+      * (`x` and `x.amount`), the variable is renamed, and so are the uses of its name in its scope.
+      * Its new name is written as its old one ([[PropIdentity.written]]): `_` and a number beyond
+      * any place in a file. A statement without such a variable is as it was.
+      */
+    private def withDistinctNames(prop: Prop): Prop = {
+        var renamed = 0L
+        def clashes(name: String, inScope: Set[String]): Boolean =
+            inScope.exists(outer =>
+                outer == name || name.startsWith(s"$outer.") || outer.startsWith(s"$name.")
+            )
+        def expression[T](expr: PropExpr[T], renames: Map[String, String]): PropExpr[T] = {
+            if renames.isEmpty then expr
+            else
+                expr match
+                    case ident: PropExpr.Ident[T] =>
+                        renames
+                            .get(ident.name)
+                            .fold(ident)(name => new PropExpr.Ident[T](name, ident.id, ident.tp))
+                    case PropExpr.SIRExpr(sir) => PropExpr.SIRExpr(SIR.renameFreeVars(sir, renames))
+        }
+        // `ident`, renamed where its name clashes with one in scope, the names in scope with its
+        // own, and the renames in its scope
+        def bound[T](
+            ident: PropExpr.Ident[T],
+            inScope: Set[String],
+            renames: Map[String, String]
+        ): (PropExpr.Ident[T], Set[String], Map[String, String]) = {
+            if clashes(ident.name, inScope) then
+                renamed += 1
+                val written = PropIdentity.written(ident.name).replace('.', '_')
+                val fresh =
+                    new PropExpr.Ident[T](
+                      s"${written}_${freshNameNumbers + renamed}",
+                      ident.id,
+                      ident.tp
+                    )
+                (fresh, inScope + fresh.name, renames + (ident.name -> fresh.name))
+            else (ident, inScope + ident.name, renames)
+        }
+        def loop(current: Prop, inScope: Set[String], renames: Map[String, String]): Prop = {
+            current match
+                case Prop.Bool(expr)    => Prop.Bool(expression(expr, renames))
+                case Prop.Denotes(expr) => Prop.Denotes(expression(expr, renames))
+                case Prop.Equal(left, right) =>
+                    Prop.Equal(expression(left, renames), expression(right, renames))
+                case Prop.Call(fn, arg, result, total, body) =>
+                    val (variable, scope, inner) = bound(result, inScope, renames)
+                    Prop.Call(
+                      fn,
+                      expression(arg, renames),
+                      variable,
+                      total,
+                      loop(body, scope, inner)
+                    )
+                case Prop.Forall(ident, body) =>
+                    val (variable, scope, inner) = bound(ident, inScope, renames)
+                    Prop.Forall(variable, loop(body, scope, inner))
+                case Prop.Exists(ident, witness, body) =>
+                    // the witness is of the enclosing scope
+                    val supplied = witness.map(expression(_, renames))
+                    val (variable, scope, inner) = bound(ident, inScope, renames)
+                    Prop.Exists(variable, supplied, loop(body, scope, inner))
+                case Prop.And(left, right) =>
+                    Prop.And(loop(left, inScope, renames), loop(right, inScope, renames))
+                case Prop.Or(left, right) =>
+                    Prop.Or(loop(left, inScope, renames), loop(right, inScope, renames))
+                case Prop.Implies(premise, conclusion) =>
+                    Prop.Implies(
+                      loop(premise, inScope, renames),
+                      loop(conclusion, inScope, renames)
+                    )
+                case Prop.Iff(left, right) =>
+                    Prop.Iff(loop(left, inScope, renames), loop(right, inScope, renames))
+                case Prop.Not(inner) => Prop.Not(loop(inner, inScope, renames))
+        }
+        loop(prop, Set.empty, Map.empty)
+    }
+
+    /** The numbers of the names [[withDistinctNames]] gives: beyond any place in a source file. */
+    private val freshNameNumbers = 1_000_000_000_000L
 
     /** The data declarations of the constructors a built value applies. */
     private def constructorDeclarations(sir: SIR): List[DataDecl] = sir match
@@ -1472,37 +1557,45 @@ object UplcBlaster {
         case (_, SIR.Decl(data, term)) => SIR.Decl(data, withExpressions(left, term)(combine))
         case (l: AnnotatedSIR, r: AnnotatedSIR) => combine(l, r)
 
+    /** A test's program over `binders`, the variables in its scope, or why there is none: the test
+      * uses a variable that is none of them, as the parameter of a lambda passed to an inline
+      * helper, which the statement does not quantify over.
+      */
     private def compileSirFunction(
         binders: List[PropExpr.Ident[?]],
         body: SIR,
         functions: FunctionTable
-    ): Term = {
+    ): Either[String, Term] = {
         val (unlinkedBody, free) = unlinkModuleDefinitions(body, functions)
         val external = externalVariables(unlinkedBody).distinctBy(_._1)
         val linked = external.filter((name, _) => functions.contains(name))
         // Other external references, such as the compiler's own support functions behind
         // `d.to[A]`, are resolved by the lowering, which reports one it does not know.
         val unbound = free -- binders.map(_.name) -- external.map(_._1)
-        require(
-          unbound.isEmpty,
-          s"UPLC proposition body has free variables: ${unbound.toList.sorted.mkString(", ")}"
-        )
-        // A variable over the `Data` encodings of its values takes the `Data`.
-        val parameters = linked ++ binders.map(ident =>
-            ident.name -> DataEncoding.encoded(ident.tp).fold(ident.tp)(_ => SIRType.Data())
-        )
-        val function = parameters.foldRight(unlinkedBody) { case ((name, tp), result) =>
-            SIR.LamAbs(
-              SIR.Var(name, tp, AnnotationsDecl.empty),
-              result,
-              Nil,
-              AnnotationsDecl.empty
+        if unbound.nonEmpty then
+            Left(
+              s"a test uses ${unbound.toList.sorted.map(PropIdentity.written).mkString(", ")}, " +
+                  "which is no variable of the statement in its scope: a test reads the " +
+                  "statement's variables only, and the parameter of a lambda that is passed to an " +
+                  "inline helper is none"
             )
-        }
-        linked.foldLeft(function.toUplc(using options)()) { case (term, (name, _)) =>
-            val definition = functions(FunctionRef[Any, Any](name))
-            Term.Apply(term, definition(Representation.Uplc).term)
-        }
+        else
+            // A variable over the `Data` encodings of its values takes the `Data`.
+            val parameters = linked ++ binders.map(ident =>
+                ident.name -> DataEncoding.encoded(ident.tp).fold(ident.tp)(_ => SIRType.Data())
+            )
+            val function = parameters.foldRight(unlinkedBody) { case ((name, tp), result) =>
+                SIR.LamAbs(
+                  SIR.Var(name, tp, AnnotationsDecl.empty),
+                  result,
+                  Nil,
+                  AnnotationsDecl.empty
+                )
+            }
+            Right(linked.foldLeft(function.toUplc(using options)()) { case (term, (name, _)) =>
+                val definition = functions(FunctionRef[Any, Any](name))
+                Term.Apply(term, definition(Representation.Uplc).term)
+            })
     }
 
     /** Checks that the tests call each function the statement uses the way its program takes its

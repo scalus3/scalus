@@ -356,14 +356,21 @@ Every program takes the binders in scope at its leaf, in declaration order, whet
 all of them or not. This matters when a connective has a quantified proposition on only one side.
 
 Lean's variables are named by their places (`x0`, `x1`, …), and a program takes the binders as
-parameters of their own names. The macros name a variable after its lambda's parameter and the place
-of the lambda in its file, so two variables in scope have one name where one inline helper is nested
-in itself, where two files have a lambda of one parameter name at one place, or in a statement built
-by hand. A test then reads the innermost, as a lambda's parameter hides an outer one: the value a
-test builds for an outer case-class variable, or decodes for an outer variable over `Data`
-encodings, and the witness of an outer `existsLet`, are hidden with it (`VariableScopeTest`). Through
-a helper, a test cannot read the outer one: its caller's lambda's parameter is no variable of the
-statement, and lowering fails with the variable free.
+parameters of their own names, and builds, decodes or binds the values of some of them under those
+names. The macros name a variable after its lambda's parameter and the place of the lambda in its
+file, so two variables in scope have one name where one inline helper is nested in itself, where two
+files have a lambda of one parameter name at one place, or in a statement built by hand. Before it
+lowers a statement, `lower` names the variables of every scope apart (`withDistinctNames`): a
+variable whose name is that of one in its scope, or where one name is that of a field of the other
+variable (`x` and `x.amount`), is renamed, with the uses of its name in its scope. So a test, an
+`existsLet`'s witness and a call's argument read the innermost variable of a name, as a Scala
+lambda's parameter hides an outer one, and a witness of the outer scope is not captured by an inner
+variable (`VariableScopeTest`). The new name is written as the old one, and a statement without
+such a variable is unchanged.
+
+Through an inline helper, a test cannot read the variable of an outer expansion: the parameter of
+its caller's lambda is no variable of the statement, and lowering refuses the test. A test whose
+own variables have one name, which an expansion of a helper could give, is a compile error.
 
 A partial call, `whenReturns(f, a)(r => k)`, is rewritten to `denotes(f(a)) ==> call(f, a)(r => k)`
 before it is lowered: if the function returns, the continuation holds of its result. The
