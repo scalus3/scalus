@@ -67,6 +67,27 @@ class BlockForgeTest extends AnyFunSuite {
         assert(onGenesis.header.prevHash.isEmpty)
     }
 
+    test("a forged header stays within the mainnet maxBlockHeaderSize at its largest fields") {
+        // spec [D102]: HeaderSizeTooLargeCHAIN (eras/shelley/impl/src/Cardano/Ledger/Chain.hs:70-72)
+        // is consensus-only, since every forged header is below the limit. The height and the
+        // slot take their largest CBOR heads here; a full body adds the margin below to its head.
+        val header = BlockForge
+            .forge(
+              Some(parent),
+              Long.MaxValue,
+              Long.MaxValue,
+              IndexedSeq(first),
+              ProtocolVersion(11, 0)
+            )
+            .header
+        // a full body makes the CBOR head of the body size larger by this margin
+        val params = CardanoInfo.mainnet.protocolParams
+        val margin = Cbor.encode(params.maxBlockBodySize).length -
+            Cbor.encode(header.headerBody.blockBodySize).length
+        val size = Cbor.encode(header).length + margin
+        assert(size <= params.maxBlockHeaderSize, s"header size $size")
+    }
+
     test("the forged block decodes back to itself") {
         // spec [BH-8]: the consensus fields have the sizes a Conway block decoder expects
         val block = forge(IndexedSeq(first, withAux))

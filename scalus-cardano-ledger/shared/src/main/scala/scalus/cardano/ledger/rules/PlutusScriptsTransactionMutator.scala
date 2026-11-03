@@ -11,15 +11,44 @@ import scala.util.control.NonFatal
 object PlutusScriptsTransactionMutator extends STS.Mutator {
     override final type Error = TransactionException.BadCollateralInputsUTxOException |
         TransactionException.IllegalArgumentException |
-        TransactionException.PlutusScriptValidationException
+        TransactionException.PlutusScriptValidationException |
+        TransactionException.PassedUnexpectedlyException |
+        TransactionException.CollectErrorsException
 
-    override def transit(context: Context, state: State, event: Event): Result = boundary {
-        val body = event.body.value
+    override def transit(context: Context, state: State, event: Event): Result =
+        transit(context, state, event, failureFree = true)
+
+    /** The UTXOS rule with the failures of the earlier rules known, spec [FL-5]: the collect errors
+      * are reported in every case, and the scripts are evaluated only when `failureFree`, as
+      * `whenFailureFree` does (B/Rules/Utxos.hs:184, 255). Without an evaluation it returns
+      * `state`.
+      */
+    private[ledger] def transit(
+        context: Context,
+        state: State,
+        event: Event,
+        failureFree: Boolean
+    ): Result = {
+        val params = context.env.params
+        val errors = PlutusScriptEvaluator.collectErrors(
+          event,
+          state.utxos,
+          context.slotConfig,
+          params.protocolVersion.toMajor,
+          params.costModels
+        )
+        // A collect error is a phase-1 failure whatever isValid says, spec [FL-10], [TX-1]
+        if errors.nonEmpty then
+            failure(TransactionException.CollectErrorsException(event.id, errors))
+        else if failureFree then evaluate(context, state, event)
+        else success(state)
+    }
+
+    private def evaluate(context: Context, state: State, event: Event): Result = boundary {
         val slotConfig = context.slotConfig
         val protocolParameters = context.env.params
         val maxTxExecutionUnits = protocolParameters.maxTxExecutionUnits
         val protocolVersion = protocolParameters.protocolVersion
-        val costModels = protocolParameters.costModels
         val utxo = state.utxos
 
         try {
@@ -40,13 +69,9 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                     donation = state.donation + event.body.value.donation.getOrElse(Coin.zero)
                   )
                 )
-            else
-                // TODO: refine exception handling
-                failure(
-                  TransactionException.IllegalArgumentException(
-                    s"Transaction with invalid flag passed script validation, transactionId: ${event.id}, flag: ${event.isValid}"
-                  )
-                )
+            // ValidationTagMismatch (IsValid False) PassedUnexpectedly (B/Rules/Utxos.hs:255-260),
+            // spec [FL-9]
+            else failure(TransactionException.PassedUnexpectedlyException(event.id))
         } catch {
             case e: PlutusScriptEvaluationException =>
                 if event.isValid then

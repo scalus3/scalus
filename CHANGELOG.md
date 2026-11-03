@@ -53,6 +53,14 @@
   with one VRF key in one transaction fail. `PoolsState` gains `vrfKeyHashes`, the number of pools
   per VRF key, which the Emulator fills from its seeded pools at a genesis at protocol version
   11 or more, and which a hard fork into protocol version 11 fills at an epoch boundary.
+- `Emulator.ledgerFailures(tx)` lists every ledger-rule failure of a transaction, as the
+  cardano-ledger collects them and in the ledger's order, without submitting it;
+  `TransactionException.ledgerNames` gives the cardano-ledger constructor names of each failure,
+  such as `MissingRedeemers` or `ConwayWdrlNotDelegatedToDRep`, as a Haskell ledger test asserts
+  them. `STS.Mutator.transitAll` and `CardanoMutator.transitAll` give the same list for any rule
+  set. For the list, the Plutus scripts run only when no earlier rule failed, as in the ledger.
+  `submit` still reports one failure. Java: `getLedgerFailureNames(tx)`; JavaScript:
+  `Emulator.ledgerFailures(txCborBytes)`; both return the names.
 - The Emulator keeps `State.deposited` (the deposits of a valid transaction, proposal deposits
   included, minus its refunds; at genesis, the deposits of the seeded registrations) and
   `DRepState.delegates` (the accounts that delegate their vote to the DRep) as the ledger does.
@@ -240,6 +248,18 @@
   and `_1` .. `_6` return the new fields. A pattern match on its elements, such as
   `case EmulatorState(ledger, context, ...)`, no longer compiles; use the `ledger`, `context`,
   `binaryDatums` and `appliedTxLog` accessors.
+- Two kinds of Plutus rejection get their own `TransactionException` case instead of
+  `IllegalArgumentException`, so `SubmitError.rule` changes for them. A transaction marked
+  `isValid = false` whose scripts all pass fails with `PassedUnexpectedlyException`, rule
+  `PassedUnexpectedly`. A Plutus script that has no redeemer, no cost model or no script context
+  (for example a PlutusV3 spend of a UTxO that is also a reference input, at protocol version 11)
+  fails with `CollectErrorsException`, rule `CollectErrors`, which lists each `CollectError`
+  (`NoRedeemer`, `NoCostModel`, `BadTranslation`) as the ledger does. Both rules were
+  `IllegalArgument`.
+- The message of a script context that cannot be built now starts with the ledger
+  `ContextError` constructor, for example `CertificateNotSupported: ...` or
+  `InlineDatumsNotSupported: ...`. A PlutusV1 context with both an inline datum and a Byron
+  address reports the first one in ledger order instead of one message for both.
 - `scalus.js` grows by about 83 KB for the chain feature, since the linker now reaches block
   forging, chain selection, rollback and poll code; the bundle-size cap CI checks is 2.4 MiB.
 
@@ -295,7 +315,12 @@
   `TransactionException.PoolMetadataHashTooBigException`.
 - The Emulator checks the bootstrap address attributes of the collateral return output too, as
   the ledger's UTXO rule does (`validateOutputBootAddrAttrsTooBig`, which a Conway node reports
-  as `OutputTooBigUTxO`). Before, it checked only the regular outputs.
+  as `OutputBootAddrAttrsTooBig`). Before, it checked only the regular outputs.
+- The Emulator measures the value of an output for `maxValueSize` as the ledger serializes it
+  (`OutputTooBigUTxO`). The ledger writes a map of more than 23 entries with an indefinite length,
+  so a policy of 256 or more assets, or 256 or more policies, is one byte smaller there than in
+  Scalus CBOR. Before, the Emulator rejected such an output at exactly `maxValueSize`, and
+  `OutputsHaveTooBigValueStorageSizeException` reported a size one byte too large.
 - `ByronAddress.attributesSize` computes what the ledger's `bootstrapAddressAttrsSize` computes:
   the length of the HD payload in attribute 1, without its CBOR head, plus the bytes of the
   unknown attributes. Before, it counted the CBOR head of the payload and skipped the unknown

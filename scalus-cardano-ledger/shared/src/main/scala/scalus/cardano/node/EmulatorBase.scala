@@ -156,6 +156,20 @@ trait EmulatorBase extends BlockchainProvider {
     def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] =
         submitWith(transaction, identity)
 
+    /** Every failure of `transaction` under the ledger rules of this emulator, as the ledger
+      * collects them, in the order of the ledger's interpreter, ledger-rules spec [FL-1], [FL-8].
+      * Empty when the rules accept it. A dry run on the state that [[submitSync]] validates
+      * against: the state does not change.
+      *
+      * [[submitSync]] reports one failure, which need not be the first of this list.
+      * `TransactionException.ledgerNames` names each failure with its cardano-ledger constructors.
+      *
+      * It runs [[validators]] and [[mutators]], not [[processTransaction]]: a subclass that
+      * overrides [[processTransaction]] to check other rules does not change this list.
+      */
+    def ledgerFailures(transaction: Transaction): Seq[TransactionException] =
+        readState.ledgerFailures(transaction, validators, mutators)
+
     /** Move the current slot to `slot`, then revalidate the mempool, spec section 10.
       *
       * @throws IllegalArgumentException

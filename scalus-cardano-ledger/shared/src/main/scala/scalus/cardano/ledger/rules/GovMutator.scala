@@ -13,9 +13,9 @@ import scalus.cardano.ledger.epoch.internal.Ratify
   * from the gov state before the tx, which no earlier mutator writes, spec [GV-20]. The deposit
   * check of GOV is [[ProposalDepositValidator]], D30.
   *
-  * The ledger collects every failure of the rule; this mutator reports the first in the ledger's
-  * order, spec [GV-3a], [GV-10b]. The PV 9 bootstrap failures are not emulated (spec section 5.8),
-  * but the PV 9 exemptions of the other checks are.
+  * The ledger collects every failure of the rule. [[transit]] reports the first in the ledger's
+  * order, spec [GV-3a], [GV-10b], and [[transitAll]] all of them, spec [FL-1]. The PV 9 bootstrap
+  * failures are not emulated (spec section 5.8), but the PV 9 exemptions of the other checks are.
   */
 object GovMutator extends STS.Mutator {
     override final type Error = TransactionException
@@ -35,18 +35,30 @@ object GovMutator extends STS.Mutator {
         event: Event,
         txId: TransactionHash
     ): Result =
-        if !event.isValid then success(state)
+        transitAll(context, state, event, txId).left.map(_.head)
+
+    /** [[transit]] with every failure of the rule, in the ledger's order, spec [FL-1], [FL-7]. */
+    private[rules] def transitAll(
+        context: Context,
+        state: State,
+        event: Event,
+        txId: TransactionHash
+    ): Either[Seq[TransactionException.GovException], State] =
+        if !event.isValid then Right(state)
         else
             gov(context, state, event, txId) match
-                case Left(err)       => failure(TransactionException.GovException(txId, err))
-                case Right(govState) => success(state.copy(govState = govState))
+                case (Nil, govState) => Right(state.copy(govState = govState))
+                case (failures, _) => Left(failures.map(TransactionException.GovException(txId, _)))
 
+    /** The failures of GOV and the gov state after the tx. Every check runs, and a proposal that
+      * fails a check is still added when its parent allows it, as Gov.hs:489-620 does.
+      */
     private def gov(
         context: Context,
         state: State,
         event: Event,
         txId: TransactionHash
-    ): Either[GovFailure, GovState] = {
+    ): (List[GovFailure], GovState) = {
         val body = event.body.value
         val params = context.env.params
         val major = params.protocolVersion.major
@@ -60,20 +72,22 @@ object GovMutator extends STS.Mutator {
             case Certificate.UnregDRepCert(credential, _) => credential
         }.toSet
         val unelected = unelectedCommitteeVoters(before, state.certState, votes)
-        for
-            // Gov.hs:489-492: hardforkConwayDisallowUnelectedCommitteeFromVoting, PV >= 11
-            _ <- check(major < 11 || unelected.isEmpty, UnelectedCommitteeVoters(unelected))
-            withProposals <- body.proposalProcedures.toSeq.zipWithIndex.foldLeft[
-              Either[GovFailure, GovState]
-            ](Right(before)) { case (acc, (procedure, index)) =>
-                acc.flatMap(proposals =>
-                    addProposal(context, state, epoch, txId, index, procedure, proposals)
-                )
+        // Gov.hs:489-492: hardforkConwayDisallowUnelectedCommitteeFromVoting, PV >= 11
+        val unelectedFailure =
+            check(major < 11 || unelected.isEmpty, UnelectedCommitteeVoters(unelected))
+        val (proposalFailures, withProposals) =
+            body.proposalProcedures.toSeq.zipWithIndex.foldLeft((List.empty[GovFailure], before)) {
+                case ((failures, proposals), (procedure, index)) =>
+                    val (more, added) =
+                        addProposal(context, state, epoch, txId, index, procedure, proposals)
+                    (failures ++ more, added)
             }
-            _ <- checkVotes(state.certState, withProposals, epoch, votes)
-        yield votes
+        val failures = unelectedFailure ++ proposalFailures ++
+            checkVotes(state.certState, withProposals, epoch, votes)
+        val after = votes
             .foldLeft(withProposals)((gov, vote) => gov.withVote(vote._1, vote._2, vote._3))
             .withoutDRepVotes(unregisteredDReps)
+        (failures, after)
     }
 
     /** `processProposal` of Gov.hs:494-578: the checks of one proposal, in the order of spec
@@ -87,7 +101,7 @@ object GovMutator extends STS.Mutator {
         index: Int,
         procedure: ProposalProcedure,
         proposals: GovState
-    ): Either[GovFailure, GovState] = {
+    ): (List[GovFailure], GovState) = {
         val params = context.env.params
         val pv = params.protocolVersion
         val bootstrap = pv.major == 9 // hardforkConwayBootstrapPhase
@@ -96,69 +110,66 @@ object GovMutator extends STS.Mutator {
         val guardrails = state.govState.constitution.scriptHash
         def registered(account: RewardAccount) = accounts.contains(account.address.credential)
         val action = procedure.govAction
-        for
-            _ <- proposalCantFollow(pv, state.govState, action).toLeft(())
-            _ <- check(isWellFormed(pv.major, action), MalformedProposal(action))
-            _ <- check(
-              bootstrap || registered(procedure.rewardAccount),
-              ProposalReturnAccountDoesNotExist(procedure.rewardAccount)
-            )
-            _ <- action match
-                case GovAction.TreasuryWithdrawals(withdrawals, _) if !bootstrap =>
-                    val unregistered = withdrawals.keys.filterNot(registered).toList
-                    check(
-                      unregistered.isEmpty,
-                      TreasuryWithdrawalReturnAccountsDoNotExist(unregistered)
-                    )
-                case _ => Right(())
-            _ <- check(
-              procedure.rewardAccount.address.network == network,
-              ProposalProcedureNetworkIdMismatch(procedure.rewardAccount, network)
-            )
-            _ <- action match
-                case GovAction.TreasuryWithdrawals(withdrawals, policy) =>
-                    val mismatched = withdrawals.keySet.filter(_.address.network != network)
-                    for
-                        _ <- check(
+        val failures =
+            proposalCantFollow(pv, state.govState, action).toList ++
+                check(isWellFormed(pv.major, action), MalformedProposal(action)) ++
+                check(
+                  bootstrap || registered(procedure.rewardAccount),
+                  ProposalReturnAccountDoesNotExist(procedure.rewardAccount)
+                ) ++
+                (action match
+                    case GovAction.TreasuryWithdrawals(withdrawals, _) if !bootstrap =>
+                        val unregistered = withdrawals.keys.filterNot(registered).toList
+                        check(
+                          unregistered.isEmpty,
+                          TreasuryWithdrawalReturnAccountsDoNotExist(unregistered)
+                        )
+                    case _ => Nil) ++
+                check(
+                  procedure.rewardAccount.address.network == network,
+                  ProposalProcedureNetworkIdMismatch(procedure.rewardAccount, network)
+                ) ++
+                (action match
+                    case GovAction.TreasuryWithdrawals(withdrawals, policy) =>
+                        val mismatched = withdrawals.keySet.filter(_.address.network != network)
+                        check(
                           mismatched.isEmpty,
                           TreasuryWithdrawalsNetworkIdMismatch(mismatched, network)
-                        )
-                        _ <- checkGuardrails(guardrails, policy)
-                        _ <- check(
-                          bootstrap || withdrawals.values.exists(_.value != 0),
-                          ZeroTreasuryWithdrawals(action)
-                        )
-                    yield ()
-                case GovAction.UpdateCommittee(_, removed, added, _) =>
-                    val conflicting = added.keySet.intersect(removed)
-                    val ending = added.filter((_, term) => term <= epoch)
-                    for
-                        _ <- check(conflicting.isEmpty, ConflictingCommitteeUpdate(conflicting))
-                        _ <- check(ending.isEmpty, ExpirationEpochTooSmall(ending))
-                    yield ()
-                case GovAction.ParameterChange(_, _, policy) => checkGuardrails(guardrails, policy)
-                case _                                       => Right(())
-            added <- proposals
-                .addProposal(
-                  GovActionState(
-                    GovActionId(txId, index),
-                    Map.empty,
-                    Map.empty,
-                    Map.empty,
-                    procedure,
-                    epoch,
-                    epoch + params.govActionLifetime
-                  )
-                )
-                .toRight(InvalidPrevGovActionId(procedure))
-        yield added
+                        ) ++
+                            checkGuardrails(guardrails, policy) ++
+                            check(
+                              bootstrap || withdrawals.values.exists(_.value != 0),
+                              ZeroTreasuryWithdrawals(action)
+                            )
+                    case GovAction.UpdateCommittee(_, removed, added, _) =>
+                        val conflicting = added.keySet.intersect(removed)
+                        val ending = added.filter((_, term) => term <= epoch)
+                        check(conflicting.isEmpty, ConflictingCommitteeUpdate(conflicting)) ++
+                            check(ending.isEmpty, ExpirationEpochTooSmall(ending))
+                    case GovAction.ParameterChange(_, _, policy) =>
+                        checkGuardrails(guardrails, policy)
+                    case _ => Nil)
+        val added = proposals.addProposal(
+          GovActionState(
+            GovActionId(txId, index),
+            Map.empty,
+            Map.empty,
+            Map.empty,
+            procedure,
+            epoch,
+            epoch + params.govActionLifetime
+          )
+        )
+        added match
+            case Some(updated) => (failures, updated)
+            case None          => (failures :+ InvalidPrevGovActionId(procedure), proposals)
     }
 
     /** `checkGuardrailsScriptHash` of Gov.hs:431-437, spec [GV-8]. */
     private def checkGuardrails(
         expected: Option[ScriptHash],
         supplied: Option[ScriptHash]
-    ): Either[GovFailure, Unit] =
+    ): List[GovFailure] =
         check(supplied == expected, InvalidGuardrailsScriptHash(supplied, expected))
 
     /** `preceedingHardFork` of Gov.hs:685-707 with `pvCanFollow`
@@ -234,7 +245,7 @@ object GovMutator extends STS.Mutator {
         proposals: GovState,
         epoch: Long,
         votes: List[(Voter, GovActionId, Vote)]
-    ): Either[GovFailure, Unit] = {
+    ): List[GovFailure] = {
         val hotKeys = authorizedHotKeys(certState.vstate.committeeState)
         val unknownVoters = votes.map(_._1).distinct.filterNot(isKnown(certState, hotKeys, _))
         val known = votes.filterNot(v => unknownVoters.contains(v._1))
@@ -247,12 +258,10 @@ object GovMutator extends STS.Mutator {
         val disallowed = withAction.collect {
             case (voter, p) if !mayVote(voter, p.action) => voter -> p.id
         }
-        for
-            _ <- check(unknownVoters.isEmpty, VotersDoNotExist(unknownVoters))
-            _ <- check(unknownActions.isEmpty, GovActionsDoNotExist(unknownActions))
-            _ <- check(expired.isEmpty, VotingOnExpiredGovAction(expired))
-            _ <- check(disallowed.isEmpty, DisallowedVoters(disallowed))
-        yield ()
+        check(unknownVoters.isEmpty, VotersDoNotExist(unknownVoters)) ++
+            check(unknownActions.isEmpty, GovActionsDoNotExist(unknownActions)) ++
+            check(expired.isEmpty, VotingOnExpiredGovAction(expired)) ++
+            check(disallowed.isEmpty, DisallowedVoters(disallowed))
     }
 
     /** spec [GV-10a]: a committee voter is known when any cold credential authorized its hot
@@ -301,7 +310,7 @@ object GovMutator extends STS.Mutator {
         }.toSet -- elected
     }
 
-    /** `Right(())` when `ok` holds, else `failure`. */
-    private def check(ok: Boolean, failure: => GovFailure): Either[GovFailure, Unit] =
-        if ok then Right(()) else Left(failure)
+    /** No failure when `ok` holds, else `failure`. */
+    private def check(ok: Boolean, failure: => GovFailure): List[GovFailure] =
+        if ok then Nil else List(failure)
 }

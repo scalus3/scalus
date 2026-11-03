@@ -63,6 +63,11 @@ public final class JavaEmulatorInterop {
         return emulator.submitAsync(tx).join();
     }
 
+    // Every ledger failure of a tx, by its cardano-ledger names, ledger-rules spec [FL-8].
+    public static List<String> ledgerFailureNames(Emulator emulator, Transaction tx) {
+        return emulator.getLedgerFailureNames(tx);
+    }
+
     public static int utxoCount(Emulator emulator) {
         return emulator.getUtxos().size();
     }

@@ -115,9 +115,10 @@ object LedgerToPlutusTranslation {
 
                 v1.Address(paymentCred, stakingCred)
 
+            // ByronTxOutInContext (eras/babbage/impl/src/Cardano/Ledger/Babbage/TxInfo.hs:122, 151)
             case _: ByronAddress =>
                 throw new IllegalArgumentException(
-                  "Byron addresses not supported in script contexts"
+                  "ByronTxOutInContext: Byron addresses not supported in script contexts"
                 )
 
             case _: StakeAddress =>
@@ -451,47 +452,15 @@ object LedgerToPlutusTranslation {
                   BigInt(epochNo)
                 )
 
-            // Conway-era governance certificates are not supported in Plutus V1/V2
-            // According to Cardano Ledger specification, these should cause translation errors
-            case _: Certificate.VoteDelegCert =>
+            // Conway-era governance certificates are not supported in Plutus V1/V2:
+            // CertificateNotSupported (eras/conway/impl/src/Cardano/Ledger/Conway/TxInfo.hs:390-397)
+            case cert @ (_: Certificate.VoteDelegCert | _: Certificate.StakeVoteDelegCert |
+                _: Certificate.StakeRegDelegCert | _: Certificate.VoteRegDelegCert |
+                _: Certificate.StakeVoteRegDelegCert | _: Certificate.AuthCommitteeHotCert |
+                _: Certificate.ResignCommitteeColdCert | _: Certificate.RegDRepCert |
+                _: Certificate.UnregDRepCert | _: Certificate.UpdateDRepCert) =>
                 throw new IllegalArgumentException(
-                  s"VoteDelegCert not supported in Plutus V1/V2 contexts. Use Plutus V3."
-                )
-            case _: Certificate.StakeVoteDelegCert =>
-                throw new IllegalArgumentException(
-                  s"StakeVoteDelegCert not supported in Plutus V1/V2 contexts. Use Plutus V3."
-                )
-            case _: Certificate.StakeRegDelegCert =>
-                throw new IllegalArgumentException(
-                  s"StakeRegDelegCert not supported in Plutus V1/V2 contexts. Use Plutus V3."
-                )
-            case _: Certificate.VoteRegDelegCert =>
-                throw new IllegalArgumentException(
-                  s"VoteRegDelegCert not supported in Plutus V1/V2 contexts. Use Plutus V3."
-                )
-            case _: Certificate.StakeVoteRegDelegCert =>
-                throw new IllegalArgumentException(
-                  s"StakeVoteRegDelegCert not supported in Plutus V1/V2 contexts. Use Plutus V3."
-                )
-            case _: Certificate.AuthCommitteeHotCert =>
-                throw new IllegalArgumentException(
-                  s"AuthCommitteeHotCert not supported in Plutus V1/V2 contexts. Use Plutus V3."
-                )
-            case _: Certificate.ResignCommitteeColdCert =>
-                throw new IllegalArgumentException(
-                  s"ResignCommitteeColdCert not supported in Plutus V1/V2 contexts. Use Plutus V3."
-                )
-            case _: Certificate.RegDRepCert =>
-                throw new IllegalArgumentException(
-                  s"RegDRepCert not supported in Plutus V1/V2 contexts. Use Plutus V3."
-                )
-            case _: Certificate.UnregDRepCert =>
-                throw new IllegalArgumentException(
-                  s"UnregDRepCert not supported in Plutus V1/V2 contexts. Use Plutus V3."
-                )
-            case _: Certificate.UpdateDRepCert =>
-                throw new IllegalArgumentException(
-                  s"UpdateDRepCert not supported in Plutus V1/V2 contexts. Use Plutus V3."
+                  s"CertificateNotSupported: ${cert.productPrefix} not supported in Plutus V1/V2 contexts. Use Plutus V3."
                 )
     }
 
@@ -701,18 +670,22 @@ object LedgerToPlutusTranslation {
         slotConfig: SlotConfig,
         protocolVersion: MajorProtocolVersion
     ): v3.TxInfo = {
+        val body = tx.body.value
+        // the validity interval, the inputs and the reference inputs first, then the overlap
+        // check, as the Conway PlutusV3 TxInfo does (C/TxInfo.hs:480-493), spec [TX-1]
+        val validRange = getInterval(body.validityStartSlot, body.ttl, slotConfig, protocolVersion)
+        val inputs = prelude.List.from(body.inputs.toSet.view.map(getTxInInfoV3(_, utxos)))
+        val referenceInputs =
+            prelude.List.from(body.referenceInputs.toSet.view.map(getTxInInfoV3(_, utxos)))
         guardReferenceInputsDisjointForPlutusV3(tx, protocolVersion)
 
-        val body = tx.body.value
         val datums = tx.witnessSet.plutusData.value.toSortedMap.view.mapValues(_.value)
         val redeemers =
             tx.witnessSet.redeemers.map(_.value.toIndexedSeq).getOrElse(IndexedSeq.empty)
 
         v3.TxInfo(
-          inputs = prelude.List
-              .from(body.inputs.toSet.view.map(getTxInInfoV3(_, utxos))),
-          referenceInputs = prelude.List
-              .from(body.referenceInputs.toSet.view.map(getTxInInfoV3(_, utxos))),
+          inputs = inputs,
+          referenceInputs = referenceInputs,
           outputs = prelude.List.from(body.outputs.view.map(getTxOutV2)),
           fee = body.fee.value,
           mint = getMintValueV3(body.mint),
@@ -725,7 +698,7 @@ object LedgerToPlutusTranslation {
               ledgerOrderedWithdrawals(body.withdrawals)
             )
           ),
-          validRange = getInterval(body.validityStartSlot, body.ttl, slotConfig, protocolVersion),
+          validRange = validRange,
           signatories = prelude.List.from(
             body.requiredSigners.toSet.view
                 .map(hash => v1.PubKeyHash(hash))
@@ -756,6 +729,11 @@ object LedgerToPlutusTranslation {
     }
 
     /** Get script purpose for Plutus V1/V2 contexts from redeemer.
+      *
+      * A redeemer that points to nothing fails with `RedeemerPointerPointsToNothing`
+      * (eras/babbage/impl/src/Cardano/Ledger/Babbage/TxInfo.hs:201), and a Voting or Proposing
+      * redeemer with `PlutusPurposeNotSupported` (eras/conway/impl/src/Cardano/Ledger/Conway/
+      * TxInfo.hs:734); each message starts with that constructor, spec [FL-10].
       */
     def getScriptPurposeV1(tx: Transaction, redeemer: Redeemer): v1.ScriptPurpose = {
         val body = tx.body.value
@@ -772,7 +750,7 @@ object LedgerToPlutusTranslation {
                         input.index
                       )
                     )
-                else throw new IllegalStateException(s"Input not found: $index")
+                else throw pointsToNothing("Input", index)
 
             case RedeemerTag.Mint =>
                 val policyIds =
@@ -780,12 +758,12 @@ object LedgerToPlutusTranslation {
                         .map(_.assets.keys.toArray)
                         .getOrElse(Array.empty[ByteString])
                 if policyIds.isDefinedAt(index) then v1.ScriptPurpose.Minting(policyIds(index))
-                else throw new IllegalStateException(s"Policy ID not found: $index")
+                else throw pointsToNothing("Policy ID", index)
 
             case RedeemerTag.Cert =>
                 val certs = body.certificates.toSeq
                 if certs.isDefinedAt(index) then v1.ScriptPurpose.Certifying(getDCert(certs(index)))
-                else throw new IllegalStateException(s"Certificate not found: $index")
+                else throw pointsToNothing("Certificate", index)
 
             case RedeemerTag.Reward =>
                 // Index source: `Map.elemAt` on `Map AccountAddress Coin`, i.e. LEDGER order,
@@ -795,13 +773,17 @@ object LedgerToPlutusTranslation {
                     v1.ScriptPurpose.Rewarding(
                       v1.StakingCredential.StakingHash(withdrawals(index)._1)
                     )
-                else throw new IllegalStateException(s"Withdrawal not found: $index")
+                else throw pointsToNothing("Withdrawal", index)
 
             case _ =>
                 throw new IllegalStateException(
-                  s"Unsupported redeemer tag: ${redeemer.tag} in PlutusV1/V2"
+                  s"PlutusPurposeNotSupported: unsupported redeemer tag ${redeemer.tag} in PlutusV1/V2"
                 )
     }
+
+    /** `RedeemerPointerPointsToNothing`: the redeemer of `index` names no `what` of the tx. */
+    private def pointsToNothing(what: String, index: Int): IllegalStateException =
+        new IllegalStateException(s"RedeemerPointerPointsToNothing: $what not found: $index")
 
     def getScriptPurposeV2(tx: Transaction, redeemer: Redeemer): v1.ScriptPurpose = {
         getScriptPurposeV1(tx, redeemer)
@@ -822,7 +804,7 @@ object LedgerToPlutusTranslation {
                 if inputs.isDefinedAt(index) then
                     val input = inputs(index)
                     v3.ScriptPurpose.Spending(getTxOutRefV3(input))
-                else throw new IllegalStateException(s"Input not found: $index")
+                else throw pointsToNothing("Input", index)
 
             case RedeemerTag.Mint =>
                 val policyIds =
@@ -830,26 +812,26 @@ object LedgerToPlutusTranslation {
                         .map(_.assets.keys.toArray[ByteString])
                         .getOrElse(Array.empty[ByteString])
                 if policyIds.isDefinedAt(index) then v3.ScriptPurpose.Minting(policyIds(index))
-                else throw new IllegalStateException(s"Policy ID not found: $index")
+                else throw pointsToNothing("Policy ID", index)
 
             case RedeemerTag.Cert =>
                 val certs = body.certificates.toSeq
                 if certs.isDefinedAt(index) then
                     v3.ScriptPurpose.Certifying(index, getTxCertV3(certs(index)))
-                else throw new IllegalStateException(s"Certificate not found: $index")
+                else throw pointsToNothing("Certificate", index)
 
             case RedeemerTag.Reward =>
                 // Index source: `Map.elemAt` on `Map AccountAddress Coin` (Conway/TxBody.hs:672).
                 val withdrawals = ledgerOrderedWithdrawals(body.withdrawals)
                 if withdrawals.isDefinedAt(index) then
                     v3.ScriptPurpose.Rewarding(withdrawals(index)._1)
-                else throw new IllegalStateException(s"Withdrawal not found: $index")
+                else throw pointsToNothing("Withdrawal", index)
 
             case RedeemerTag.Proposing =>
                 val proposals = body.proposalProcedures.toSeq
                 if proposals.isDefinedAt(index) then
                     v3.ScriptPurpose.Proposing(index, getProposalProcedureV3(proposals(index)))
-                else throw new IllegalStateException(s"Proposal not found: $index")
+                else throw pointsToNothing("Proposal", index)
 
             case RedeemerTag.Voting =>
                 // Index source: the ledger resolves a Voting index with `fromIndex` into
@@ -860,7 +842,7 @@ object LedgerToPlutusTranslation {
                 val voting = body.votingProcedures.map(_.procedures.toSeq).getOrElse(Seq.empty)
                 if voting.isDefinedAt(index) then
                     v3.ScriptPurpose.Voting(getVoterV3(voting(index)._1))
-                else throw new IllegalStateException(s"Voter not found: $index")
+                else throw pointsToNothing("Voter", index)
     }
 
     /** Get script info for Plutus V3 contexts.
@@ -1087,33 +1069,35 @@ object LedgerToPlutusTranslation {
       *
       * This function checks for the presence of Conway-era governance features in transactions
       * intended for Plutus V1/V2 script contexts. If any such features are found, an exception is
-      * thrown to prevent incorrect context construction.
+      * thrown to prevent incorrect context construction. Each message starts with the ledger
+      * `ConwayContextError` constructor, in the order of `guardConwayFeaturesForPlutusV1V2`
+      * (eras/conway/impl/src/Cardano/Ledger/Conway/TxInfo.hs:360-381), spec [FL-10].
       */
     private def guardConwayFeaturesForPlutusV1V2(tx: Transaction): Unit = {
         val body = tx.body.value
         body.votingProcedures match
             case Some(vp) if vp.procedures.nonEmpty =>
                 throw new IllegalArgumentException(
-                  s"VotingProcedures field not supported in Plutus V1/V2: ${vp.procedures}"
+                  s"VotingProceduresFieldNotSupported: VotingProcedures field not supported in Plutus V1/V2: ${vp.procedures}"
                 )
             case _ =>
 
         if body.proposalProcedures.toSeq.nonEmpty then
             throw new IllegalArgumentException(
-              s"ProposalProcedures field not supported in Plutus V1/V2: ${body.proposalProcedures}"
+              s"ProposalProceduresFieldNotSupported: ProposalProcedures field not supported in Plutus V1/V2: ${body.proposalProcedures}"
             )
 
         body.donation match
             case Some(coin) if coin.value != 0 =>
                 throw new IllegalArgumentException(
-                  s"Donation field not supported in Plutus V1/V2: $coin"
+                  s"TreasuryDonationFieldNotSupported: Donation field not supported in Plutus V1/V2: $coin"
                 )
             case _ =>
 
         body.currentTreasuryValue match
             case Some(treasury) =>
                 throw new IllegalArgumentException(
-                  s"CurrentTreasuryValue field not supported in Plutus V1/V2: $treasury"
+                  s"CurrentTreasuryFieldNotSupported: CurrentTreasuryValue field not supported in Plutus V1/V2: $treasury"
                 )
             case None =>
     }
@@ -1144,9 +1128,12 @@ object LedgerToPlutusTranslation {
 
     /** Validate that no inline datums or Byron addresses are used in Plutus V1 contexts.
       *
-      * Plutus V1 does not support inline datums or Byron addresses. This function checks all
-      * inputs, reference inputs, and outputs of the transaction to ensure compliance with this
-      * rule, throwing an exception if any violations are found.
+      * Plutus V1 does not support inline datums or Byron addresses. As the Conway `PlutusV1` TxInfo
+      * does (eras/conway/impl/src/Cardano/Ledger/Conway/TxInfo.hs:405-412), it checks the inputs,
+      * then the reference inputs, then the outputs, and fails on the first output that
+      * `transTxOutV1` rejects (:315-321): `InlineDatumsNotSupported` before `ByronTxOutInContext`.
+      * The message starts with that constructor, spec [FL-10]. Conway raises neither
+      * `ReferenceInputsNotSupported` nor `ReferenceScriptsNotSupported`, the Babbage checks.
       */
     private def validatePlutusV1OnInlineDatumsAndByronAddresses(
         tx: Transaction,
@@ -1154,45 +1141,30 @@ object LedgerToPlutusTranslation {
     ): Unit = {
         val body = tx.body.value
 
-        val inputs =
-            for
-                input <- body.inputs.toSet.view
-                output <- utxos.get(input) match
-                    case someOutput @ Some(_) => someOutput
-                    // This check allows to be an order independent in the sequence of validation rules
-                    case None =>
-                        throw new IllegalStateException(
-                          s"Input UTxO not found for TxInfo V1 construction: $input"
-                        )
-            yield output
+        def resolved(input: TransactionInput, kind: String): (String, TransactionOutput) =
+            utxos.get(input) match
+                case Some(output) => (s"$kind $input", output)
+                // This check allows to be an order independent in the sequence of validation rules
+                case None =>
+                    throw new IllegalStateException(
+                      s"$kind UTxO not found for TxInfo V1 construction: $input"
+                    )
 
-        val referenceInputs =
-            for
-                referenceInput <- body.referenceInputs.toSet.view
-                output <- utxos.get(referenceInput) match
-                    case someOutput @ Some(_) => someOutput
-                    // This check allows to be an order independent in the sequence of validation rules
-                    case None =>
-                        throw new IllegalStateException(
-                          s"Reference Input UTxO not found for TxInfo V1 construction: $referenceInput"
-                        )
-            yield output
+        val sources =
+            body.inputs.toSeq.view.map(resolved(_, "Input")) ++
+                body.referenceInputs.toSeq.view.map(resolved(_, "Reference Input")) ++
+                body.outputs.view.zipWithIndex.map((output, index) =>
+                    (s"Output $index", output.value)
+                )
 
-        val outputs = body.outputs.view.map(_.value)
-
-        val allOutputs = (inputs ++ referenceInputs ++ outputs).toSeq
-
-        val outputsWithInlineDatum =
-            allOutputs.filter(_.datumOption.exists(_.isInstanceOf[DatumOption.Inline]))
-
-        val outputsWithByronAddress =
-            allOutputs.filter(_.address.isInstanceOf[ByronAddress])
-
-        if outputsWithInlineDatum.nonEmpty || outputsWithByronAddress.nonEmpty then
-            throw new IllegalStateException(
-              s"Plutus V1 does not support inline datums or Byron addresses for input Utxos, reference input Utxos and outputs. " +
-                  s"Utxos/Outputs with inline datums: $outputsWithInlineDatum, " +
-                  s"Utxos/Outputs with Byron addresses: $outputsWithByronAddress"
-            )
+        for (source, output) <- sources do
+            if output.datumOption.exists(_.isInstanceOf[DatumOption.Inline]) then
+                throw new IllegalStateException(
+                  s"InlineDatumsNotSupported: Plutus V1 does not support inline datums: $source"
+                )
+            if output.address.isInstanceOf[ByronAddress] then
+                throw new IllegalStateException(
+                  s"ByronTxOutInContext: Plutus V1 does not support Byron addresses: $source"
+                )
     }
 }

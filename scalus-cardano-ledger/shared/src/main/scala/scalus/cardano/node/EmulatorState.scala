@@ -3,7 +3,7 @@ package scalus.cardano.node
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.epoch.{AccountState, RatifyState, RewardUpdate, SnapShots}
 import scalus.cardano.ledger.epoch.internal.{EpochState, EpochTransition, Ratify}
-import scalus.cardano.ledger.rules.{Context, State, TxRefScriptsSizeValidator}
+import scalus.cardano.ledger.rules.{Context, STS, State, TxRefScriptsSizeValidator}
 import scalus.cardano.node.emulator.{BlockForge, BlockIssuer, BlockProduction, ChainConfig, ChainView, ChainViewError, DropReason, ForgeError, LedgerSnapshot, OrphanTxPolicy, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.{AppliedBlock, AppliedTransaction, ChainEvent}
@@ -169,6 +169,22 @@ case class EmulatorState private (
                 (this, Left(NetworkSubmitError.MempoolFull(s"the mempool is full: ${tx.id.toHex}")))
             case Right(newLedger) =>
                 (accepted(MempoolEntry.of(base, newLedger, tx, currentSlot)), Right(tx.id))
+    }
+
+    /** Every failure of `tx` under `validators` and `mutators`, on the snapshot and at the slot
+      * that [[submit]] validates it, ledger-rules spec [FL-8]; empty when the ledger rules accept
+      * it. The state does not change.
+      */
+    private[scalus] def ledgerFailures(
+        tx: Transaction,
+        validators: Iterable[STS.Validator],
+        mutators: Iterable[STS.Mutator]
+    ): Seq[TransactionException] = {
+        val base = validationBase
+        STS.Mutator
+            .transitAll(validators, mutators, base.context, base.ledger, tx)
+            .left
+            .getOrElse(Seq.empty)
     }
 
     /** Whether the mempool with `tx` stays within the mempool capacity, two times the block limits

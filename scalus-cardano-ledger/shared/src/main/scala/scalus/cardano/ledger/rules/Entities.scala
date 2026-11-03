@@ -201,10 +201,7 @@ object STS {
             state: Mutator#State,
             event: Mutator#Event
         ): (Mutator { type Error = ErrorT })#Result = {
-            val effective =
-                if mutators.exists(_ == CertsMutator) then mutators.filterNot(perKindCertMutators)
-                else mutators
-            effective.foldLeft(success(state): (Mutator { type Error = ErrorT })#Result) {
+            effective(mutators).foldLeft(success(state): (Mutator { type Error = ErrorT })#Result) {
                 (acc, mutator) =>
                     acc.flatMap(currentState => mutator.transit(context, currentState, event))
             }
@@ -222,6 +219,71 @@ object STS {
             }
         }
 
+        /** Every failure of `event`, as the ledger collects them, spec [FL-1]: the failures of all
+          * `validators`, then of all `mutators`, in the order of the ledger's interpreter, spec
+          * [FL-7a]. `Right` holds the state after the mutators when nothing fails.
+          *
+          * Every validator and every mutator runs, whatever an earlier one returned; a mutator that
+          * fails passes its input state to the next one, spec [FL-2]. [[GovMutator]] reports each
+          * of its failures, and [[PlutusScriptsTransactionMutator]] reports its collect errors in
+          * every case and evaluates the scripts only when nothing failed before it, as
+          * `whenFailureFree` does, spec [FL-5]. The `Bad*InputsUTxOException`s that repeat a part
+          * of `BadAllInputsUTxOException` are dropped, spec [FL-4]. The list is sorted stably by
+          * the first ledger name of each failure, [[TransactionException.ledgerNames]].
+          *
+          * [[transit]] does not change: it stops at the first failure, in the iteration order of
+          * the sets, spec [FL-3].
+          */
+        def transitAll(
+            validators: Iterable[Validator],
+            mutators: Iterable[Mutator],
+            context: Mutator#Context,
+            state: Mutator#State,
+            event: Mutator#Event
+        ): Either[Seq[TransactionException], Mutator#State] = {
+            val validated: Seq[TransactionException] =
+                validators.toSeq.flatMap(_.validate(context, state, event).left.toOption)
+            val (failures, after) = effective(mutators).foldLeft((validated, state)) {
+                case ((failures, current), mutator) =>
+                    val result: Either[Seq[TransactionException], State] = mutator match
+                        case GovMutator => GovMutator.transitAll(context, current, event, event.id)
+                        case PlutusScriptsTransactionMutator =>
+                            val failureFree = reported(failures).isEmpty
+                            PlutusScriptsTransactionMutator
+                                .transit(context, current, event, failureFree)
+                                .left
+                                .map(Seq(_))
+                        case other => other.transit(context, current, event).left.map(Seq(_))
+                    result match
+                        case Right(next)  => (failures, next)
+                        case Left(errors) => (failures ++ errors, current)
+            }
+            // CertsMutator repeats the check of CertsValidator, so the same failure comes twice
+            val all = reported(failures).distinct
+            if all.isEmpty then Right(after)
+            else
+                Left(
+                  all.sortBy(e =>
+                      TransactionException.ledgerOrder(TransactionException.ledgerNames(e).head)
+                  )
+                )
+        }
+
+        /** `failures` without the failures that repeat a part of `BadAllInputsUTxOException`, spec
+          * [FL-4]; all of them when nothing else is left, so a failing tx keeps a failure, spec
+          * [FL-4a].
+          */
+        private def reported(failures: Seq[TransactionException]): Seq[TransactionException] = {
+            val kept = failures.filter {
+                case _: TransactionException.BadInputsUTxOException |
+                    _: TransactionException.BadCollateralInputsUTxOException |
+                    _: TransactionException.BadReferenceInputsUTxOException =>
+                    false
+                case _ => true
+            }
+            if kept.isEmpty then failures else kept
+        }
+
         def success(state: STS#State): (Mutator { type Error = Nothing })#Result = Right(state)
 
         private val defaultName: String = "AnonymousMutator"
@@ -230,5 +292,12 @@ object STS {
         @nowarn("cat=deprecation")
         private val perKindCertMutators: Set[Mutator] =
             Set(StakeCertificatesMutator, StakePoolCertificatesMutator, VotingCertificatesMutator)
+
+        /** `mutators` without the per-kind certificate mutators when [[CertsMutator]] is among
+          * them, spec [SC-22]; [[transit]] and [[transitAll]] run the same set, spec [FL-3].
+          */
+        private def effective[M <: Mutator](mutators: Iterable[M]): Iterable[M] =
+            if mutators.exists(_ == CertsMutator) then mutators.filterNot(perKindCertMutators)
+            else mutators
     }
 }

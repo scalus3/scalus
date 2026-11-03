@@ -7,11 +7,13 @@ import scalus.uplc.builtin.ByteString
 
 import scala.util.Try
 
-/** The protocol version of a `HardForkInitiation` must decode as the node decodes it.
+/** The protocol version of a `HardForkInitiation` must decode as the next node decodes it.
   *
-  * The ledger reads it with `decodeProtVer @ConwayEra` (Conway/Governance/Procedures.hs), which
-  * fails when the major exceeds `succ (ProtVerHigh ConwayEra)` = 12 (BaseTypes.hs, Era.hs). The
-  * minor is not checked. `conway.cddl` states the same bound: `major_protocol_version = 0 .. 12`.
+  * The ledger master reads it with `decodeProtVer @ConwayEra` (Conway/Governance/Procedures.hs),
+  * which fails when the major exceeds `succ (ProtVerHigh ConwayEra)` = 12 (BaseTypes.hs, Era.hs).
+  * The minor is not checked. `conway.cddl` states the same bound: `major_protocol_version = 0 ..
+  * 12`. The production pin, conway 1.22.1.0, still decodes majors up to `MaxVersion = 13` and lets
+  * GOV reject 13 with ProposalCantFollow; both reject the tx (ledger-rules spec D116).
   */
 class HardForkInitiationDecodingTest extends AnyFunSuite {
     private def hash(byte: String, size: Int) = ByteString.fromHex(byte * size)

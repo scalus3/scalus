@@ -74,6 +74,23 @@ class JEmulatorChainTest extends AnyFunSuite {
         assert(e.getTransactionStatus("11" * 32) == "NotFound")
     }
 
+    test("ledgerFailures lists every ledger failure by its ledger names, spec [FL-8]") {
+        val e = create()
+        val tx = TxBuilder(testEnv)
+            .payTo(bob, Value.lovelace(2_000_000))
+            .validTo(Instant.ofEpochMilli(testEnv.slotConfig.slotToTime(100)))
+            .complete(initialUtxos, alice)
+            .sign(Alice.signer)
+            .transaction
+        assert(e.ledgerFailures(bytes(tx)).isEmpty)
+        assert(e.submitTx(bytes(tx)).isSuccess)
+        e.setSlot(200)
+        // the spent input and the expired interval, BadInputsUTxO first, spec [FL-7]
+        assert(
+          e.ledgerFailures(bytes(tx)).toSeq == Seq("BadInputsUTxO", "OutsideValidityIntervalUTxO")
+        )
+    }
+
     test("the default stays instant: submit is visible at once") {
         // spec [CF-4]
         val e = create()

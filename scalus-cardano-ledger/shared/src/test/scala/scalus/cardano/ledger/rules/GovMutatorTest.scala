@@ -779,6 +779,51 @@ class GovMutatorTest extends AnyFunSuite with Matchers with EitherValues with Op
             GovFailure.MalformedProposal(malformed.govAction)
     }
 
+    test("spec [FL-1], [FL-7]: the collecting entry reports every GOV failure in source order") {
+        // Gov.hs:489-620 checks every predicate and adds a failing proposal all the same
+        val stranger = Voter.ConstitutionalCommitteeHotKey(AddrKeyHash.fromHex("c3" * 28))
+        val malformed = proposal(ppChange(ProtocolParamUpdate(), None, None), unregisteredAccount)
+        val transaction =
+            tx(proposals = Seq(malformed), votes = Seq((stranger, infoId, Vote.Yes)))
+        val failures = GovMutator
+            .transitAll(context(baseState, 11, 10), baseState, transaction, transaction.id)
+            .left
+            .value
+            .map(e => failureOf(Left(e)))
+        failures shouldBe Seq(
+          GovFailure.UnelectedCommitteeVoters(
+            Set(Credential.KeyHash(AddrKeyHash.fromHex("c3" * 28)))
+          ),
+          GovFailure.MalformedProposal(malformed.govAction),
+          GovFailure.ProposalReturnAccountDoesNotExist(unregisteredAccount),
+          GovFailure.InvalidGuardrailsScriptHash(None, Some(guardrails)),
+          GovFailure.VotersDoNotExist(List(stranger))
+        )
+        // transit keeps the first one
+        failureOf(run(transaction)) shouldBe failures.head
+    }
+
+    test("spec [FL-1]: a proposal that fails a check is still added for the votes and parents") {
+        // Gov.hs:574-578 adds a failing proposal; curGovActionIds comes from the proposals after
+        // the fold (Gov.hs:582-604), so a vote on it and a child of it name a known action
+        val malformed = proposal(ppChange(ProtocolParamUpdate(), None, None), unregisteredAccount)
+        val child = proposal(ppChange(validUpdate, Some(GovActionId(fakeTxId, 0))))
+        val transaction = tx(
+          proposals = Seq(malformed, child),
+          votes = Seq((drepVoterA, GovActionId(fakeTxId, 0), Vote.Yes))
+        )
+        val failures = GovMutator
+            .transitAll(context(baseState, 11, 10), baseState, transaction, fakeTxId)
+            .left
+            .value
+            .map(e => failureOf(Left(e)))
+        failures shouldBe Seq(
+          GovFailure.MalformedProposal(malformed.govAction),
+          GovFailure.ProposalReturnAccountDoesNotExist(unregisteredAccount),
+          GovFailure.InvalidGuardrailsScriptHash(None, Some(guardrails))
+        )
+    }
+
     test("spec [GV-10b]: VotersDoNotExist, GovActionsDoNotExist, expiry, then permission") {
         val noConfidence = actionId(8)
         val state = withGov(g =>

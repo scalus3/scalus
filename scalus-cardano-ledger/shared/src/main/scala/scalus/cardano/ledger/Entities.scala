@@ -580,6 +580,31 @@ object TransactionException {
           s"Plutus script validation failed for transactionId $transactionId: $message"
         )
 
+    /** It's `ValidationTagMismatch (IsValid False) PassedUnexpectedly` of the UTXOS rule in
+      * cardano-ledger (eras/babbage/impl/src/Cardano/Ledger/Babbage/Rules/Utxos.hs:255-260), spec
+      * [FL-9]: a tx with `isValid = false` whose scripts all pass.
+      */
+    final case class PassedUnexpectedlyException(transactionId: TransactionHash)
+        extends TransactionException(
+          s"Transaction $transactionId is marked invalid, but its scripts pass"
+        )
+
+    /** It's `CollectErrors` of the UTXOS rule in cardano-ledger
+      * (eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Plutus/Evaluate.hs:157-214), spec [FL-10]: the
+      * Plutus scripts of the tx cannot be collected with their redeemers, cost models and contexts.
+      * A phase-1 failure, whatever `isValid` says.
+      *
+      * @param errors
+      *   in the order of `collectPlutusScriptsWithContext`: the first error last, and after it only
+      *   the `NoRedeemer` errors of the later scripts
+      */
+    final case class CollectErrorsException(
+        transactionId: TransactionHash,
+        errors: Seq[CollectError]
+    ) extends TransactionException(
+          s"Cannot collect the Plutus scripts of transactionId $transactionId: ${errors.mkString(", ")}"
+        )
+
     final case class IllegalArgumentException(message: String) extends TransactionException(message)
 
     /** Short, stable name for the rule that raised `ex` — the exception's own name without the
@@ -643,7 +668,263 @@ object TransactionException {
         case _: DatumsException                    => "Datums"
         case _: OutputBootAddrAttrsTooBigException => "OutputBootAddrAttrsTooBig"
         case _: PlutusScriptValidationException    => "PlutusScriptValidation"
+        case _: PassedUnexpectedlyException        => "PassedUnexpectedly"
+        case _: CollectErrorsException             => "CollectErrors"
         case _: IllegalArgumentException           => "IllegalArgument"
+
+    /** The cardano-ledger predicate-failure constructors that `ex` stands for, at the level that
+      * the Imp tests' `injectFailure` takes, spec [FL-6]: one name per constructor that the fields
+      * of `ex` show, sorted by [[ledgerOrder]]. An exception with no ledger counterpart gives its
+      * [[ruleName]].
+      *
+      * Unlike [[ruleName]], which names the Scalus rule and stays stable for
+      * [[scalus.cardano.node.SubmitError.rule]], these are the names a Haskell ledger test asserts
+      * on, for example `FeeTooSmallUTxO` or `CollectErrors`.
+      */
+    def ledgerNames(ex: TransactionException): Seq[String] = {
+        def when(pairs: (Boolean, String)*): Seq[String] = pairs.collect { case (true, n) => n }
+        val names = ex match
+            case _: EmptyInputsException => Seq("InputSetEmptyUTxO")
+            case _: NonDisjointInputsAndReferenceInputsException =>
+                Seq("BabbageNonDisjointRefInputs")
+            // The ledger has one BadInputsUTxO for all inputs (B/Rules/Utxo.hs:397)
+            case _: BadAllInputsUTxOException | _: BadInputsUTxOException |
+                _: BadCollateralInputsUTxOException | _: BadReferenceInputsUTxOException =>
+                Seq("BadInputsUTxO")
+            case _: InvalidSignaturesInWitnessesException => Seq("InvalidWitnessesUTXOW")
+            case _: MissingKeyHashesException             => Seq("MissingVKeyWitnessesUTXOW")
+            case e: MissingOrExtraScriptHashesException =>
+                val missing = Seq(
+                  e.missingInputsScriptHashes,
+                  e.missingMintScriptHashes,
+                  e.missingVotingProceduresScriptHashes,
+                  e.missingWithdrawalsScriptHashes,
+                  e.missingProposalProceduresScriptHashes,
+                  e.missingCertificatesScriptHashes
+                ).exists(_.nonEmpty)
+                when(
+                  e.extraScriptHashes.nonEmpty -> "ExtraneousScriptWitnessesUTXOW",
+                  missing -> "MissingScriptWitnessesUTXOW"
+                )
+            case _: NativeScriptsException             => Seq("ScriptWitnessNotValidatingUTXOW")
+            case _: InvalidTransactionSizeException    => Seq("MaxTxSizeUTxO")
+            case _: OutputsHaveNotEnoughCoinsException => Seq("BabbageOutputTooSmallUTxO")
+            case _: OutputsHaveTooBigValueStorageSizeException => Seq("OutputTooBigUTxO")
+            case _: OutsideValidityIntervalException           => Seq("OutsideValidityIntervalUTxO")
+            case _: ValueNotConservedUTxOException             => Seq("ValueNotConservedUTxO")
+            case e: FeesOkException =>
+                when(
+                  e.isTransactionFeeLessThanMinRequiredFee -> "FeeTooSmallUTxO",
+                  e.hasCollateralsConsistNotVKeyAddress -> "ScriptsNotPaidUTxO",
+                  e.hasCollateralsContainNotOnlyADA -> "CollateralContainsNonADA",
+                  e.isCollateralInsufficient -> "InsufficientCollateral",
+                  e.isCollateralNotEqualToExpected -> "IncorrectTotalCollateralField",
+                  e.areCollateralInputsMissing -> "NoCollateralInputs"
+                )
+            case e: StakeCertificatesException =>
+                when(
+                  e.invalidDeposits.nonEmpty -> "DepositIncorrectDELEG",
+                  e.alreadyRegistered.nonEmpty -> "StakeKeyRegisteredDELEG",
+                  e.invalidRefunds.nonEmpty -> "RefundIncorrectDELEG",
+                  e.nonZeroRewardAccounts.nonEmpty -> "StakeKeyHasNonZeroAccountBalanceDELEG",
+                  e.delegateeStakePoolsNotRegistered.nonEmpty -> "DelegateeStakePoolNotRegisteredDELEG",
+                  e.delegateeDRepsNotRegistered.nonEmpty -> "DelegateeDRepNotRegisteredDELEG",
+                  e.missingRegistrations.nonEmpty -> "StakeKeyNotRegisteredDELEG"
+                )
+            case e: StakePoolException =>
+                when(
+                  e.rewardAccountNetworkMismatch.nonEmpty -> "WrongNetworkPOOL",
+                  e.costBelowMinimum.nonEmpty -> "StakePoolCostTooLowPOOL",
+                  e.notRegistered.nonEmpty -> "StakePoolNotRegisteredOnKeyPOOL",
+                  e.invalidRetirementEpochs.nonEmpty -> "StakePoolRetirementWrongEpochPOOL"
+                )
+            // the ledger's spelling (S/Rules/Pool.hs:249-254)
+            case _: PoolMetadataHashTooBigException      => Seq("PoolMedataHashTooBig")
+            case _: VrfKeyHashAlreadyRegisteredException => Seq("VRFKeyHashAlreadyRegistered")
+            case e: DRepException =>
+                when(
+                  e.alreadyRegistered.nonEmpty -> "ConwayDRepAlreadyRegistered",
+                  e.invalidDeposits.nonEmpty -> "ConwayDRepIncorrectDeposit",
+                  e.notRegistered.nonEmpty -> "ConwayDRepNotRegistered",
+                  e.invalidRefunds.nonEmpty -> "ConwayDRepIncorrectRefund"
+                )
+            case _: CommitteeHasPreviouslyResignedException =>
+                Seq("ConwayCommitteeHasPreviouslyResigned")
+            case _: CommitteeIsUnknownException => Seq("ConwayCommitteeIsUnknown")
+            case e: WithdrawalsNotInRewardsException =>
+                when(
+                  e.missingRewardAccounts.nonEmpty -> "ConwayWithdrawalsMissingAccounts",
+                  e.nonDrainingWithdrawals.nonEmpty -> "ConwayIncompleteWithdrawals"
+                )
+            case _: TreasuryValueMismatchException         => Seq("ConwayTreasuryValueMismatch")
+            case _: TxRefScriptsSizeTooBigException        => Seq("ConwayTxRefScriptsSizeTooBig")
+            case _: ProposalDepositIncorrectException      => Seq("ProposalDepositIncorrect")
+            case e: GovException                           => Seq(e.failure.productPrefix)
+            case _: WithdrawalsNotDelegatedToDRepException => Seq("ConwayWdrlNotDelegatedToDRep")
+            case _: ExUnitsExceedMaxException              => Seq("ExUnitsTooBigUTxO")
+            case _: TooManyCollateralInputsException       => Seq("TooManyCollateralInputs")
+            // PPViewHashesDontMatch before PV 11 (A/Rules/Utxow.hs:300-302)
+            case _: InvalidScriptDataHashException => Seq("ScriptIntegrityHashMismatch")
+            case e: IllFormedScriptsException =>
+                when(
+                  e.invalidWitnessesScripts.nonEmpty -> "MalformedScriptWitnesses",
+                  e.InvalidScriptsFromAllOutputs.nonEmpty -> "MalformedReferenceScripts"
+                )
+            case _: WrongNetworkAddress                             => Seq("WrongNetwork")
+            case _: WrongNetworkWithdrawal                          => Seq("WrongNetworkWithdrawal")
+            case _: WrongNetworkInTxBody                            => Seq("WrongNetworkInTxBody")
+            case _: MetadataException.MissingAuxiliaryDataException => Seq("MissingTxMetadata")
+            case _: MetadataException.MissingAuxiliaryDataHashException =>
+                Seq("MissingTxBodyMetadataHash")
+            case _: MetadataException.InvalidAuxiliaryDataHashException =>
+                Seq("ConflictingMetadataHash")
+            case _: MetadataException.InvalidAuxiliaryDataException => Seq("InvalidMetadata")
+            case _: MetadataException                               => Seq.empty
+            case e: ExactSetOfRedeemersException =>
+                when(
+                  e.extraRedeemers.nonEmpty -> "ExtraRedeemers",
+                  e.missingRedeemers.nonEmpty -> "MissingRedeemers"
+                )
+            case e: DatumsException =>
+                when(
+                  e.inputsWithMissingDatumHashes.nonEmpty -> "UnspendableUTxONoDatumHash",
+                  e.unmatchedDatumHashes.nonEmpty -> "MissingRequiredDatums",
+                  e.notAllowedSupplementalDatumHashes.nonEmpty -> "NotAllowedSupplementalDatums"
+                )
+            // Conway keeps the Shelley constructor (C/Rules/Utxo.hs:122, 432)
+            case _: OutputBootAddrAttrsTooBigException => Seq("OutputBootAddrAttrsTooBig")
+            case _: PlutusScriptValidationException | _: PassedUnexpectedlyException =>
+                Seq("ValidationTagMismatch")
+            case _: CollectErrorsException   => Seq("CollectErrors")
+            case _: IllegalArgumentException => Seq.empty
+        if names.isEmpty then Seq(ruleName(ex)) else names.sortBy(ledgerOrder)
+    }
+
+    /** The position of the ledger constructor `name` in [[failureOrder]]; a name with no ledger
+      * counterpart comes after all of them, spec [FL-7a].
+      */
+    private[ledger] def ledgerOrder(name: String): Int =
+        failureIndex.getOrElse(name, failureOrder.size)
+
+    /** The order of the failures of a Conway tx with at most one certificate in the list of the
+      * ledger's interpreter, spec [FL-7], [FL-7a], D104. A rule's list is the reverse of the order
+      * in which its own predicates and its sub-rules fail, and each sub-rule adds its own list,
+      * reversed again (libs/small-steps/src/Control/State/Transition/Extended.hs:708, 721).
+      */
+    private[ledger] val failureOrder: IndexedSeq[String] = IndexedSeq(
+      // (1) UTXOW, in source order (eras/babbage/impl/src/Cardano/Ledger/Babbage/Rules/
+      // Utxow.hs:346-388); babbageMissingScripts checks the extraneous scripts first (:219-222)
+      "ScriptWitnessNotValidatingUTXOW",
+      "ExtraneousScriptWitnessesUTXOW",
+      "MissingScriptWitnessesUTXOW",
+      "UnspendableUTxONoDatumHash",
+      "MissingRequiredDatums",
+      "NotAllowedSupplementalDatums",
+      "ExtraRedeemers",
+      "MissingRedeemers",
+      "InvalidWitnessesUTXOW",
+      "MissingVKeyWitnessesUTXOW",
+      "MissingTxMetadata",
+      "MissingTxBodyMetadataHash",
+      "ConflictingMetadataHash",
+      "InvalidMetadata",
+      "MalformedScriptWitnesses",
+      "MalformedReferenceScripts",
+      "ScriptIntegrityHashMismatch",
+      // (2) UTXOS (B/Rules/Utxos.hs:184-195, 255-266)
+      "ValidationTagMismatch",
+      "CollectErrors",
+      // (3) UTXO, in reverse source order (B/Rules/Utxo.hs:378-434), feesOK (:213-261) included
+      "TooManyCollateralInputs",
+      "ExUnitsTooBigUTxO",
+      "MaxTxSizeUTxO",
+      "WrongNetworkInTxBody",
+      "WrongNetworkWithdrawal",
+      "WrongNetwork",
+      "OutputBootAddrAttrsTooBig",
+      "OutputTooBigUTxO",
+      "BabbageOutputTooSmallUTxO",
+      "ValueNotConservedUTxO",
+      "BadInputsUTxO",
+      "NoCollateralInputs",
+      "IncorrectTotalCollateralField",
+      "InsufficientCollateral",
+      "CollateralContainsNonADA",
+      "ScriptsNotPaidUTxO",
+      "FeeTooSmallUTxO",
+      "InputSetEmptyUTxO",
+      "OutsideForecast",
+      "OutsideValidityIntervalUTxO",
+      "BabbageNonDisjointRefInputs",
+      // (4) GOV, in source order (eras/conway/impl/src/Cardano/Ledger/Conway/Rules/Gov.hs:489-620)
+      "UnelectedCommitteeVoters",
+      "ProposalCantFollow",
+      "MalformedProposal",
+      "ProposalReturnAccountDoesNotExist",
+      "TreasuryWithdrawalReturnAccountsDoNotExist",
+      "ProposalDepositIncorrect",
+      "ProposalProcedureNetworkIdMismatch",
+      "TreasuryWithdrawalsNetworkIdMismatch",
+      "InvalidGuardrailsScriptHash",
+      "ZeroTreasuryWithdrawals",
+      "ConflictingCommitteeUpdate",
+      "ExpirationEpochTooSmall",
+      "InvalidPrevGovActionId",
+      "VotersDoNotExist",
+      "GovActionsDoNotExist",
+      "VotingOnExpiredGovAction",
+      "DisallowedVoters",
+      // (5) the certificate, in source order: DELEG (C/Rules/Deleg.hs:195-290; one order that each
+      // certificate kind keeps), POOL (eras/shelley/impl/src/Cardano/Ledger/Shelley/Rules/
+      // Pool.hs:235-326), GOVCERT (C/Rules/GovCert.hs:193-275)
+      "DepositIncorrectDELEG",
+      "StakeKeyRegisteredDELEG",
+      "RefundIncorrectDELEG",
+      "StakeKeyHasNonZeroAccountBalanceDELEG",
+      "DelegateeStakePoolNotRegisteredDELEG",
+      "DelegateeDRepNotRegisteredDELEG",
+      "StakeKeyNotRegisteredDELEG",
+      "WrongNetworkPOOL",
+      "PoolMedataHashTooBig",
+      "StakePoolCostTooLowPOOL",
+      "VRFKeyHashAlreadyRegistered",
+      "StakePoolNotRegisteredOnKeyPOOL",
+      "StakePoolRetirementWrongEpochPOOL",
+      "ConwayCommitteeHasPreviouslyResigned",
+      "ConwayCommitteeIsUnknown",
+      "ConwayDRepAlreadyRegistered",
+      "ConwayDRepIncorrectDeposit",
+      "ConwayDRepNotRegistered",
+      "ConwayDRepIncorrectRefund",
+      // (6) LEDGER, in reverse source order (C/Rules/Ledger.hs:394-416,
+      // eras/shelley/impl/src/Cardano/Ledger/Shelley/Rules/Ledger.hs:361-369)
+      "ConwayIncompleteWithdrawals",
+      "ConwayWithdrawalsMissingAccounts",
+      "ConwayWdrlNotDelegatedToDRep",
+      "ConwayTxRefScriptsSizeTooBig",
+      "ConwayTreasuryValueMismatch"
+    )
+
+    private val failureIndex: Map[String, Int] = failureOrder.zipWithIndex.toMap
+}
+
+/** A collect error of `collectPlutusScriptsWithContext` in cardano-ledger
+  * (eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Plutus/Evaluate.hs:185-188), spec [FL-10]. Conway
+  * never raises `NoWitness`: a needed script that the tx does not provide is dropped (`mapMaybe`,
+  * :178-179).
+  */
+enum CollectError {
+
+    /** No redeemer for the script of the purpose `tag` at `index`. */
+    case NoRedeemer(tag: RedeemerTag, index: Int)
+
+    /** The pparams have no cost model for `language`. */
+    case NoCostModel(language: Language)
+
+    /** The script context cannot be built, for example `ReferenceInputsNotDisjointFromInputs` of
+      * spec [TX-1]; `message` says why.
+      */
+    case BadTranslation(message: String)
 }
 
 type StakeMap = Map[Credential, Coin]

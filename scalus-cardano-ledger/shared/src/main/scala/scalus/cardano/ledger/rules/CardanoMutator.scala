@@ -10,6 +10,16 @@ object CardanoMutator extends STS.Mutator {
             .transit[Error](DefaultValidators.all, DefaultMutators.all, context, state, event)
     }
 
+    /** Every failure of `event` under the default rules, spec [FL-1]; see
+      * [[STS.Mutator.transitAll]].
+      */
+    def transitAll(
+        context: Context,
+        state: State,
+        event: Event
+    ): Either[Seq[TransactionException], State] =
+        STS.Mutator.transitAll(DefaultValidators.all, DefaultMutators.all, context, state, event)
+
     val defaultSTSs: Map[String, STS] =
         (DefaultValidators.all.toSeq ++ DefaultMutators.all.toSeq).map(v => v.name -> v).toMap
 }

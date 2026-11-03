@@ -14,6 +14,8 @@ import scalus.uplc.{DeBruijn, DeBruijnedProgram, DebugScript, Term}
 import scalus.utils.ScalusSourcePos
 import scalus.cardano.ledger.internal.Logger
 
+import scala.collection.mutable
+import scala.util.Try
 import scala.util.control.NonFatal
 
 enum EvaluatorMode extends Enum[EvaluatorMode] {
@@ -260,6 +262,86 @@ object PlutusScriptEvaluator {
             .flatMap(scripts.get)
             .collect { case script: PlutusScript => script.language }
             .toSet
+
+    /** The collect errors of `tx`, the collect step of `collectPlutusScriptsWithContext` apart from
+      * the evaluation (eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Plutus/Evaluate.hs:157-214), spec
+      * [FL-5], [FL-10]. Empty when every needed Plutus script of the tx has its redeemer, its cost
+      * model and its context.
+      *
+      * Each needed script that the tx provides fails with `NoRedeemer`, `NoCostModel` or
+      * `BadTranslation`, checked in that order. The errors follow `merge`: after the first error
+      * only the `NoRedeemer` errors of the later scripts are added, each in front. A needed script
+      * that the tx does not provide is dropped (`mapMaybe`, :178-179). A tx with an input the UTxO
+      * does not hold has no collect errors here: the ledger computes them on the inputs it finds, a
+      * known difference, spec [FL-11] (a).
+      */
+    private[ledger] def collectErrors(
+        tx: Transaction,
+        utxos: Utxos,
+        slotConfig: SlotConfig,
+        protocolVersion: MajorProtocolVersion,
+        costModels: CostModels
+    ): List[CollectError] = {
+        val collected = for
+            scripts <- AllResolvedScripts.allResolvedScriptsMap(tx, utxos)
+            needed <- AllNeededScriptHashes.allNeededScriptData(tx, utxos)
+        yield {
+            val redeemers = tx.witnessSet.redeemers.map(_.value.toMap).getOrElse(Map.empty)
+            // the TxInfo of each language, built once, as `txInfoResult` (Evaluate.hs:175)
+            val txInfos = mutable.Map.empty[Language, Option[String]]
+            def txInfoError(language: Language): Option[String] =
+                txInfos.getOrElseUpdate(
+                  language,
+                  translationError(language match
+                      case PlutusV1 => getTxInfoV1(tx, utxos, slotConfig, protocolVersion)
+                      case PlutusV2 => getTxInfoV2(tx, utxos, slotConfig, protocolVersion)
+                      case _        => getTxInfoV3(tx, utxos, slotConfig, protocolVersion))
+                )
+            // `apply` of Evaluate.hs:189-199: the cost model, then the context
+            def apply(script: PlutusScript, redeemer: Redeemer, out: Option[TransactionOutput]) =
+                if !costModels.models.contains(script.language.ordinal) then
+                    Some(CollectError.NoCostModel(script.language))
+                else
+                    txInfoError(script.language)
+                        .orElse(translationError(script match
+                            case _: Script.PlutusV1 => getScriptPurposeV1(tx, redeemer)
+                            case _: Script.PlutusV2 => getScriptPurposeV2(tx, redeemer)
+                            case _ =>
+                                getScriptInfoV3(tx, redeemer, out.flatMap(_.resolveDatum(tx)))))
+                        .map(CollectError.BadTranslation(_))
+            // the ledger order of the needed scripts: Spend, Reward, Cert, Mint, Voting, Proposing
+            // (eras/conway/impl/src/Cardano/Ledger/Conway/UTxO.hs:64-70), in index order inside
+            // each tag; `needed` is a Set, a HashSet beyond 4 elements, so sort by the index too
+            val ledgerOrder =
+                needed.toList.sortBy((tag, index, _, _) => (collectRank(tag), index))
+            ledgerOrder.foldLeft(List.empty[CollectError]) {
+                case (errors, (tag, index, hash, out)) =>
+                    scripts.get(hash) match
+                        // Plutus V4 is not collected: its evaluation is not implemented
+                        case Some(script: PlutusScript) if script.language != PlutusV4 =>
+                            redeemers.get((tag, index)) match
+                                case None => CollectError.NoRedeemer(tag, index) :: errors
+                                case Some((data, exUnits)) if errors.isEmpty =>
+                                    apply(script, Redeemer(tag, index, data, exUnits), out).toList
+                                case Some(_) => errors
+                        case _ => errors
+            }
+        }
+        collected.getOrElse(Nil)
+    }
+
+    /** The rank of `tag` in the ledger order of the needed scripts, see [[collectErrors]]. */
+    private def collectRank(tag: RedeemerTag): Int = tag match
+        case RedeemerTag.Spend     => 0
+        case RedeemerTag.Reward    => 1
+        case RedeemerTag.Cert      => 2
+        case RedeemerTag.Mint      => 3
+        case RedeemerTag.Voting    => 4
+        case RedeemerTag.Proposing => 5
+
+    /** The message of the exception that `translate` throws, if it throws. */
+    private def translationError(translate: => Any): Option[String] =
+        Try(translate).failed.toOption.map(e => String.valueOf(e.getMessage))
 
     /** A no-op evaluator that returns empty sequences.
       *

@@ -86,6 +86,14 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
 
     // ─── Submission ─────────────────────────────────────────────────────────
 
+    /** The cardano-ledger names of every ledger failure of `transaction`, in the ledger's order,
+      * for example `["BadInputsUTxO", "OutsideValidityIntervalUTxO"]`; empty when the ledger rules
+      * accept it. A dry run: the state does not change. Ledger-rules spec [FL-8]; see
+      * `ledgerFailures`.
+      */
+    final def getLedgerFailureNames(transaction: Transaction): java.util.List[String] =
+        ledgerFailures(transaction).flatMap(TransactionException.ledgerNames).asJava
+
     /** Submits a transaction and reports the outcome as a [[SubmitResult]] (never throws for a
       * rejected transaction).
       */

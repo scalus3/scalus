@@ -55,6 +55,35 @@ class ReferenceInputsDisjointTxInfoTest extends AnyFunSuite {
         )
     }
 
+    test("PlutusV3 TxInfo translates the inputs before the overlap check, spec [TX-1], [FL-10]") {
+        // C/TxInfo.hs:480-493: the validity interval, the inputs and the reference inputs come
+        // first, so a Byron input fails as ByronTxOutInContext even when it overlaps
+        val byron = ByronAddress
+            .fromBase58("Ae2tdPwUPEZDoUnyXuAgqzhkjNXNJeiZ5nqwprg9sArZmRNjySfJ5uz4FjB")
+            .get
+        def failure(
+            byronAt: TransactionInput,
+            inputs: Set[TransactionInput],
+            referenceInputs: Set[TransactionInput]
+        ) =
+            intercept[IllegalArgumentException] {
+                LedgerToPlutusTranslation.getTxInfoV3(
+                  tx(inputs, referenceInputs),
+                  utxos.updated(byronAt, TransactionOutput(byron, Value.ada(10))),
+                  SlotConfig.mainnet,
+                  MajorProtocolVersion.vanRossemPV
+                )
+            }.getMessage
+        // the Byron output is an input only, the sets overlap at a: the inputs are translated
+        // before the check (C/TxInfo.hs:487)
+        val atInput = failure(c, Set(a, c), Set(a))
+        assert(atInput.startsWith("ByronTxOutInContext"), atInput)
+        // the Byron output is a reference input that does not overlap: the reference inputs are
+        // translated before the check too (C/TxInfo.hs:488)
+        val atReference = failure(b, Set(a), Set(a, b))
+        assert(atReference.startsWith("ByronTxOutInContext"), atReference)
+    }
+
     test("PlutusV3 TxInfo fails at PV 12 too, spec [TX-1]") {
         intercept[IllegalArgumentException] {
             txInfoV3(tx(Set(a), Set(a)), MajorProtocolVersion.dijkstraPV)

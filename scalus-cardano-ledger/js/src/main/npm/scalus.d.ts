@@ -269,6 +269,16 @@ export class Emulator {
    */
   evaluateTx(txCborBytes: Uint8Array, additionalUtxos: readonly (string | Uint8Array | Utxo)[]): RedeemerBudget[];
   /**
+   * The cardano-ledger names of every ledger failure of a transaction, in the ledger's order,
+   * for example `["BadInputsUTxO", "OutsideValidityIntervalUTxO"]`; empty when the ledger rules
+   * accept it. A dry run: the ledger state does not change. Ledger-rules spec [FL-8].
+   *
+   * `submitTx` reports one failure; this lists them all, as a Haskell ledger test asserts them.
+   *
+   * @throws Error if `txCborBytes` does not decode as a transaction
+   */
+  ledgerFailures(txCborBytes: Uint8Array): string[];
+  /**
    * Validates a transaction and, if it passes, applies it to the ledger state.
    *
    * Never throws: bytes that are not a transaction at all come back as a failure result with

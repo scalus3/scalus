@@ -7,6 +7,8 @@ import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.utils.await
 
+import java.time.Instant
+
 /** Drives [[JavaEmulatorInterop]] — the compile-time proof that the Emulator is usable from real
   * Java — and checks the results at runtime.
   */
@@ -42,6 +44,26 @@ class JavaEmulatorInteropTest extends AnyFunSuite {
         assert(rejected.getTxHashOrNull == null)
         assert(rejected.getErrorOrNull != null)
         assert(rejected.getErrorMessageOrNull != null)
+    }
+
+    test("Java lists every ledger failure of a tx by its ledger names, spec [FL-8]") {
+        val emulator =
+            JavaEmulatorInterop.createWithAddresses(java.util.List.of(Alice.address, Bob.address))
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10))
+            .validTo(Instant.ofEpochMilli(testEnv.slotConfig.slotToTime(100)))
+            .complete(emulator, Alice.address)
+            .await()
+            .sign(Alice.signer)
+            .transaction
+        assert(JavaEmulatorInterop.ledgerFailureNames(emulator, tx).isEmpty)
+        assert(JavaEmulatorInterop.submit(emulator, tx).isSuccess)
+        emulator.setSlot(200)
+        // the spent input and the expired interval, BadInputsUTxO first, spec [FL-7]
+        assert(
+          JavaEmulatorInterop.ledgerFailureNames(emulator, tx) ==
+              java.util.List.of("BadInputsUTxO", "OutsideValidityIntervalUTxO")
+        )
     }
 
     test("Java submits via CompletableFuture") {
