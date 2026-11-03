@@ -50,6 +50,8 @@ result match
 
 However, measuring script execution alone can be misleading. The actual transaction fee includes a size component (44 lovelace per byte of transaction), so a script that saves CPU but grows in size may cost more overall. If you have a working smart contract, the most accurate way to measure is to build a complete transaction via the Emulator and check the final fee.
 
+To measure one script thousands of times, for example over the inputs of a property test, the experimental [JIT](/docs/smart-contracts/jit-evaluation) gives the same budget per cost category, faster. Check the final numbers with the CEK machine.
+
 ## Measuring via the Emulator
 
 Build a real transaction with `TxBuilder` and the `Emulator`, then inspect the fee and execution units:

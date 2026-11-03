@@ -46,7 +46,7 @@ Scalus is not just a Scala-to-UPLC compiler. It is an integrated Cardano develop
 | Blueprints and deployment | CIP-57 blueprint generation, JAR embedding, reference-script deployment tasks | Package verifiable contract artifacts and deploy reference scripts from sbt. | [`scalus-sbt-plugin`](scalus-sbt-plugin), [SBT Plugin](https://scalus.org/docs/dapp-development/sbt-plugin) |
 | Example catalogue | Auctions, lottery, HTLC, AMM, escrow, vesting, NFTs, vaults, identity, payment splitter, factory, proxy | Study complete contracts and transaction flows by domain. | [`scalus-examples`](scalus-examples), [Blueprint catalogue](#blueprint-catalogue) |
 | Multiplatform targets | JVM, JavaScript/TypeScript, Native | Run compiler, evaluator, emulator, and transaction tooling in backend, browser/Node, and native contexts. | [`scalus-cardano-ledger/js`](scalus-cardano-ledger/js), [Multiplatform](https://scalus.org/docs/multiplatform) |
-| Performance tooling | UPLC optimizer, low-level UPLC Term DSL, CEK/JIT evaluation, JMH benchmarks | Reduce script size/cost and measure evaluator/compiler performance. | [`scalus-uplc-jit-compiler`](scalus-uplc-jit-compiler), [`bench`](bench) |
+| Performance tooling | UPLC optimizer, low-level UPLC Term DSL, CEK/JIT evaluation, JMH benchmarks | Reduce script size/cost and measure evaluator/compiler performance. | [`scalus-uplc-jit-compiler`](scalus-uplc-jit-compiler), [`bench`](bench), [JIT Evaluation](https://scalus.org/docs/smart-contracts/jit-evaluation) |
 | Application runtime *(in development)* | Chain follower, typed UTxO indexing, durable reactive workers, scheduler, persistence | Operate full Cardano applications, not just compile scripts. | [`scalus-utxo-cell`](scalus-utxo-cell), [`docs`](docs) |
 
 --- 
@@ -210,7 +210,7 @@ val plutusScript = compiled.program.doubleCborHex
 | [`scalus-design-patterns`](scalus-design-patterns) | Reusable Cardano contract patterns such as Transaction-Level Minting, Merkelized Validator, UTxO Indexer, Linked List, and Validity Range. |
 | [`scalus-utxo-cell`](scalus-utxo-cell) | Experimental UTxO cell and flow framework for stateful, multi-transaction application logic. |
 | [`scalus-sbt-plugin`](scalus-sbt-plugin) | sbt plugin for CIP-57 blueprint generation and reference-script deployment tasks. |
-| [`scalus-uplc-jit-compiler`](scalus-uplc-jit-compiler) | JVM-side JIT compiler support for UPLC evaluation and benchmarking. |
+| [`scalus-uplc-jit-compiler`](scalus-uplc-jit-compiler) | Experimental: a staged JIT that compiles UPLC to JVM bytecode, designed to give the result and budget of the CEK machine ([JIT Evaluation](https://scalus.org/docs/smart-contracts/jit-evaluation)). |
 | [`bloxbean-cardano-client-lib`](bloxbean-cardano-client-lib) | Integration layer for Bloxbean Cardano Client Lib users, published as `scalus-bloxbean-cardano-client-lib`. |
 | [`bench`](bench) | JMH benchmarks for evaluator, compiler, and transaction tooling performance. |
 | [`docs`](docs) | Internal design notes, historical docs, Catalyst reports, and development plans. |

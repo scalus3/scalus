@@ -14,6 +14,8 @@ compile(BigInt(2) + 2).toUplc().evaluateDebug.toString
 
 You get a `Result` object that contains the result of the evaluation, the execution budget, the execution costs, and the logs.
 
+To run one script many times, for example in an emulator or a property test, see [JIT Evaluation](/docs/smart-contracts/jit-evaluation): an experimental module that compiles the script to JVM bytecode, designed to give the same result and budget as the CEK machine.
+
 
 
 You can also use the low-level API to evaluate scripts.
