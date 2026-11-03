@@ -65,6 +65,14 @@ case class GovRoots(
         case GovActionPurpose.HardFork     => hardFork
         case GovActionPurpose.Committee    => committee
         case GovActionPurpose.Constitution => constitution
+
+    /** These roots with `id` as the root of `purpose`. */
+    private[ledger] def updated(purpose: GovActionPurpose, id: GovActionId): GovRoots =
+        purpose match
+            case GovActionPurpose.PParamUpdate => copy(pparamUpdate = Some(id))
+            case GovActionPurpose.HardFork     => copy(hardFork = Some(id))
+            case GovActionPurpose.Committee    => copy(committee = Some(id))
+            case GovActionPurpose.Constitution => copy(constitution = Some(id))
 }
 
 object GovRoots {
@@ -164,6 +172,39 @@ case class GovState(
                         else (removedIds, removed)
                 }
             (copy(proposals = proposals.filterNot(p => removedIds(p.id))), removed)
+
+    /** This state after the enactment of the proposal `id`, and the proposals it removed, the
+      * enacted one included, spec [EB-12c] (the `enact` step of `proposalsApplyEnactment`,
+      * eras/conway/impl/src/Cardano/Ledger/Conway/Governance/Proposals.hs:492-556).
+      *
+      * For an action with a purpose, its siblings, the proposals of the same purpose whose parent
+      * is the root of that purpose, go with their descendants (`enactFromRoot`); the action becomes
+      * the root, and its children stay. An action without a purpose is only removed
+      * (`enactWithoutRoot`). An id that is not a proposal is identity, D98.
+      */
+    private[ledger] def enact(id: GovActionId): (GovState, Vector[GovActionState]) =
+        proposal(id) match
+            case None => (this, Vector.empty)
+            case Some(enacted) =>
+                GovActionPurpose.of(enacted.action) match
+                    case None =>
+                        (copy(proposals = proposals.filterNot(_.id == id)), Vector(enacted))
+                    case Some(purpose) =>
+                        val root = roots.root(purpose)
+                        val siblings = proposals.iterator.collect {
+                            case p
+                                if p.id != id && GovActionPurpose.of(p.action).contains(purpose)
+                                    && GovActionPurpose.parent(p.action) == root =>
+                                p.id
+                        }.toSet
+                        val (pruned, removed) = removeWithDescendants(siblings)
+                        (
+                          pruned.copy(
+                            proposals = pruned.proposals.filterNot(_.id == id),
+                            roots = roots.updated(purpose, id)
+                          ),
+                          removed :+ enacted
+                        )
 
     /** This state without the votes of `dreps` on any proposal, spec [GV-15]
       * (eras/conway/impl/src/Cardano/Ledger/Conway/Rules/Gov.hs:622-639).

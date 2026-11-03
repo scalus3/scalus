@@ -236,4 +236,26 @@ class JEmulatorGovTest extends AnyFunSuite {
           )
         )
     }
+
+    test("spec [ES-9b]: getPendingRatify marks an InfoAction expired after its last epoch") {
+        // spec [RT-10]: the boundary after expiresAfter marks it; the next one removes it
+        val e = create()
+        val genesis = e.getPendingRatify()
+        assert(genesis.enacted.length == 0 && genesis.expired.length == 0 && !genesis.delayed)
+        val proposalTx = TxBuilder(testEnv)
+            .addSteps(SubmitProposal(proposal(GovAction.InfoAction)))
+            .complete(utxo(0), alice)
+            .sign(Alice.signer)
+            .transaction
+        assert(e.submitTx(bytes(proposalTx)).isSuccess)
+        val expiresAfter = e.getGovState().proposals(0).expiresAfter.toLong
+        e.setSlot(testEnv.slotConfig.firstSlotOfEpoch(expiresAfter + 1).toDouble)
+        val ratified = e.getPendingRatify()
+        assert(ratified.enacted.length == 0)
+        assert(
+          ratified.expired.toSeq.map(r => (r.txHash, r.index)) == Seq((proposalTx.id.toHex, 0.0))
+        )
+        assert(!ratified.delayed)
+        assert(e.getGovState().proposals.length == 1)
+    }
 }

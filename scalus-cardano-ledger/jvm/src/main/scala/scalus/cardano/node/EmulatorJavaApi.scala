@@ -5,7 +5,7 @@ import scalus.uplc.DebugScript
 import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.{RewardUpdate, SnapShots}
+import scalus.cardano.ledger.epoch.{RatifyState, RewardUpdate, SnapShots}
 import scalus.cardano.node.emulator.{ChainView, ChainViewError, EmulatorResult, ForgeError, RollbackError}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.ChainEvent
@@ -78,6 +78,11 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
       * ledger-rules spec [ES-9a].
       */
     final def getPendingRewardsOrNull: RewardUpdate = pendingRewards.orNull
+
+    /** The ratify result the last epoch boundary computed, which the next boundary enacts,
+      * ledger-rules spec [ES-9b].
+      */
+    final def getPendingRatify: RatifyState = pendingRatify
 
     // ─── Submission ─────────────────────────────────────────────────────────
 

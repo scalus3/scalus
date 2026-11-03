@@ -48,7 +48,57 @@ case class ProtocolParamUpdate(
 
     // Reference scripts
     minFeeRefScriptCoinsPerByte: Option[NonNegativeInterval] = None
-)
+) {
+
+    /** `params` with each field this update holds set to its value, and every other field kept,
+      * `protocolVersion` included: the enactment of a `ParameterChange` (`conwayApplyPPUpdates`,
+      * eras/conway/impl/src/Cardano/Ledger/Conway/PParams.hs:1182-1229), ledger-rules spec [EN-2a],
+      * D89.
+      *
+      * Cost models merge per language and the update wins (`updateCostModels`,
+      * libs/cardano-ledger-core/src/Cardano/Ledger/Plutus/CostModels.hs:401-411). Key 33 is an
+      * interval in the ledger and a `Long` in `ProtocolParams`, so it takes the floor, as
+      * `ConwayProtocolParams.toProtocolParams` does. Rho, tau and a0 are reduced, as the ledger's
+      * decoder and `toProtocolParams` reduce them.
+      */
+    def applyTo(params: ProtocolParams): ProtocolParams =
+        params.copy(
+          txFeePerByte = minFeeA.fold(params.txFeePerByte)(_.value),
+          txFeeFixed = minFeeB.fold(params.txFeeFixed)(_.value),
+          maxBlockBodySize = maxBlockBodySize.fold(params.maxBlockBodySize)(_.toLong),
+          maxTxSize = maxTxSize.fold(params.maxTxSize)(_.toLong),
+          maxBlockHeaderSize = maxBlockHeaderSize.fold(params.maxBlockHeaderSize)(_.toLong),
+          stakeAddressDeposit = keyDeposit.fold(params.stakeAddressDeposit)(_.value),
+          stakePoolDeposit = poolDeposit.fold(params.stakePoolDeposit)(_.value),
+          poolRetireMaxEpoch = maxEpoch.fold(params.poolRetireMaxEpoch)(_.toLong),
+          stakePoolTargetNum = nOpt.fold(params.stakePoolTargetNum)(_.toLong),
+          poolPledgeInfluence = poolPledgeInfluence.fold(params.poolPledgeInfluence)(_.reduce),
+          monetaryExpansion = expansionRate.fold(params.monetaryExpansion)(_.reduce),
+          treasuryCut = treasuryGrowthRate.fold(params.treasuryCut)(_.reduce),
+          minPoolCost = minPoolCost.fold(params.minPoolCost)(_.value),
+          utxoCostPerByte = adaPerUtxoByte.fold(params.utxoCostPerByte)(_.value),
+          costModels = costModels.fold(params.costModels)(update =>
+              CostModels(params.costModels.models ++ update.models)
+          ),
+          executionUnitPrices = executionCosts.getOrElse(params.executionUnitPrices),
+          maxTxExecutionUnits = maxTxExUnits.getOrElse(params.maxTxExecutionUnits),
+          maxBlockExecutionUnits = maxBlockExUnits.getOrElse(params.maxBlockExecutionUnits),
+          maxValueSize = maxValueSize.fold(params.maxValueSize)(_.toLong),
+          collateralPercentage = collateralPercentage.fold(params.collateralPercentage)(_.toLong),
+          maxCollateralInputs = maxCollateralInputs.fold(params.maxCollateralInputs)(_.toLong),
+          poolVotingThresholds = poolVotingThresholds.getOrElse(params.poolVotingThresholds),
+          dRepVotingThresholds = drepVotingThresholds.getOrElse(params.dRepVotingThresholds),
+          committeeMinSize = minCommitteeSize.fold(params.committeeMinSize)(_.toLong),
+          committeeMaxTermLength = committeeTermLimit.fold(params.committeeMaxTermLength)(_.toLong),
+          govActionLifetime =
+              governanceActionValidityPeriod.fold(params.govActionLifetime)(_.toLong),
+          govActionDeposit = governanceActionDeposit.fold(params.govActionDeposit)(_.value),
+          dRepDeposit = drepDeposit.fold(params.dRepDeposit)(_.value),
+          dRepActivity = drepInactivityPeriod.fold(params.dRepActivity)(_.toLong),
+          minFeeRefScriptCostPerByte =
+              minFeeRefScriptCoinsPerByte.fold(params.minFeeRefScriptCostPerByte)(_.floor)
+        )
+}
 
 object ProtocolParamUpdate {
 

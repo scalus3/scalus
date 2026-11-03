@@ -2,7 +2,7 @@ package scalus.testing
 
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.{RewardUpdate, SnapShots}
+import scalus.cardano.ledger.epoch.{RatifyState, RewardUpdate, SnapShots}
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator, STS, State, UtxoEnv}
 import scalus.cardano.node.*
 import scalus.cardano.node.emulator.{ChainConfig, ForgeError, RollbackError, TxStatus}
@@ -53,6 +53,9 @@ final case class ImmutableEmulator private (
       * ledger-rules spec [ES-9a].
       */
     def pendingRewards: Option[RewardUpdate] = emulatorState.pendingRewards
+
+    /** The ratify result the next epoch boundary enacts, ledger-rules spec [ES-9b]. */
+    def pendingRatify: RatifyState = emulatorState.pendingRatify
 
     def slotConfig: SlotConfig = emulatorState.context.slotConfig
 

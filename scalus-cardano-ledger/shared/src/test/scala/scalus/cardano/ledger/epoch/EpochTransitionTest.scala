@@ -1,9 +1,10 @@
 package scalus.cardano.ledger.epoch
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.{Address, Network, Pointer, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload}
+import scalus.cardano.address.{Address, Network, Pointer, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.internal.{EpochEnv, EpochState, EpochTransition}
+import scalus.cardano.ledger.epoch.GovFixtures.*
+import scalus.cardano.ledger.epoch.internal.{EpochEnv, EpochState, EpochTransition, Ratify}
 import scalus.cardano.ledger.rules.State
 import scalus.uplc.builtin.ByteString
 
@@ -23,8 +24,19 @@ class EpochTransitionTest extends AnyFunSuite {
       snapshots = SnapShots(oneStake(1), oneStake(2), oneStake(3), Coin(77)),
       blocksMadePrev = Map(poolId(95) -> 3L),
       blocksMadeCur = Map(poolId(96) -> 4L),
-      pendingRewards = None
+      pendingRewards = None,
+      prevParams = CardanoInfo.mainnet.protocolParams,
+      pendingRatify = nothingRatified(GovState.empty)
     )
+
+    private def nothingRatified(govState: GovState): RatifyState =
+        Ratify.nothingRatified(govState, CardanoInfo.mainnet.protocolParams)
+
+    /** `epoch` with the genesis ratify result of the gov state of `ledger`, spec [DM-9c], so that
+      * [EB-13a] keeps its committee and constitution.
+      */
+    private def epochFor(ledger: State): EpochState =
+        epoch.copy(pendingRatify = nothingRatified(ledger.govState))
 
     private val env = EpochEnv(
       CardanoInfo.mainnet.protocolParams,
@@ -73,7 +85,7 @@ class EpochTransitionTest extends AnyFunSuite {
     test("a boundary moves the donations into the treasury and clears them") {
         // spec [EB-17]: conway Rules/Epoch.hs:357, 362
         val ledger = State(fees = Coin(3), donation = Coin(12))
-        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, 7L, env)
+        val (newLedger, newEpoch, _) = EpochTransition.transition(ledger, epoch, 7L, env)
         assert(newEpoch.accountState == AccountState(Coin(1012), Coin(5000)))
         assert(newLedger == dormant(ledger.copy(donation = Coin.zero)))
     }
@@ -82,7 +94,8 @@ class EpochTransitionTest extends AnyFunSuite {
         // spec [EB-15], [EB-24]: the steps of phases 4 and 5 are identity
         val ledger = State(fees = Coin(3))
         assert(
-          EpochTransition.transition(ledger, epoch, 7L, env) == (dormant(ledger), ticked(ledger))
+          EpochTransition.transition(ledger, epoch, 7L, env) ==
+              (dormant(ledger), ticked(ledger), env.params)
         )
     }
 
@@ -99,11 +112,6 @@ class EpochTransitionTest extends AnyFunSuite {
 
     private def poolId(i: Int): PoolKeyHash = PoolKeyHash.fromHex(f"$i%02x" * 28)
     private def vrf(i: Int): VrfKeyHash = VrfKeyHash.fromHex(f"$i%02x" * 32)
-    private def rewardAccount(i: Int): RewardAccount =
-        RewardAccount(
-          StakeAddress(Network.Mainnet, StakePayload.Stake(StakeKeyHash.fromHex(f"$i%02x" * 28)))
-        )
-    private def credential(i: Int): Credential = rewardAccount(i).address.credential
 
     private def params(
         pool: Int,
@@ -150,8 +158,10 @@ class EpochTransitionTest extends AnyFunSuite {
         )
     }
 
-    private def reaped(ledger: State): (State, EpochState) =
-        EpochTransition.transition(ledger, epoch, boundary, env)
+    private def reaped(ledger: State): (State, EpochState) = {
+        val (newLedger, newEpoch, _) = EpochTransition.transition(ledger, epoch, boundary, env)
+        (newLedger, newEpoch)
+    }
 
     test("a boundary activates the future pool params and keeps the deposit") {
         // spec [EB-7]: PoolReap.hs:151-168; [EB-7a]: the VRF key does not change, so its entry
@@ -291,9 +301,6 @@ class EpochTransitionTest extends AnyFunSuite {
 
     private val proposalDeposit = Coin(100)
 
-    private def actionId(i: Int): GovActionId =
-        GovActionId(TransactionHash.fromByteString(ByteString.fromHex(f"$i%02x" * 32)), 0)
-
     private def proposal(
         i: Int,
         expiresAfter: EpochNo,
@@ -329,13 +336,41 @@ class EpochTransitionTest extends AnyFunSuite {
           deposited = Coin(proposalDeposit.value * proposals.size + 2L * accounts.size)
         )
 
-    test("a proposal expires at boundary n when its expiresAfter is below n - 1") {
-        // spec [EB-12], [EB-12a] (D50); RATIFY marks it at boundary n - 1, Ratify.hs:353-359
-        val expired = proposal(1, expiresAfter = boundary - 2)
-        val kept = proposal(2, expiresAfter = boundary - 1)
-        val (newLedger, _) =
-            EpochTransition.transition(govLedger(Vector(expired, kept)), epoch, boundary, env)
+    /** `ledger`'s genesis ratify result (`epochFor`) that expired `ids`, spec [EB-12c]. */
+    private def expiring(ledger: State, ids: Int*): EpochState = {
+        val epoch = epochFor(ledger)
+        epoch.copy(pendingRatify = epoch.pendingRatify.copy(expired = ids.map(actionId).toSet))
+    }
+
+    test("a boundary removes the proposals that the pending ratify result expired") {
+        // spec [EB-10a], [EB-12c], [EB-12d]: rsExpired, not expiresAfter, decides (Epoch.hs:321-322).
+        // Proposal 2 would go by the formula of the withdrawn [EB-12a]; the ratify result did not
+        // expire it, as after a withState genesis ([DM-9c])
+        val expired = proposal(1, expiresAfter = boundary + 3)
+        val kept = proposal(2, expiresAfter = boundary - 2)
+        val ledger = govLedger(Vector(expired, kept))
+        val (newLedger, _, _) =
+            EpochTransition.transition(ledger, expiring(ledger, 1), boundary, env)
         assert(newLedger.govState.proposals == Vector(kept))
+    }
+
+    test("an unvoted proposal goes at the boundary after the one whose RATIFY expired it") {
+        // spec [EB-12c], [RT-10], Why [EB-12a]: for an action that is never enacted, two boundaries
+        // remove the same proposals as the withdrawn formula expiresAfter < n - 1 did (D50)
+        val proposals = Vector(
+          proposal(1, expiresAfter = boundary - 2),
+          proposal(2, expiresAfter = boundary - 1)
+        )
+        val ledger = govLedger(proposals)
+        val first = epoch.copy(lastEpoch = boundary - 2)
+        val (ledger1, epoch1, params1) =
+            EpochTransition.transition(ledger, first, boundary - 1, env)
+        // RATIFY at boundary - 1 marks the proposals with expiresAfter < boundary - 1
+        assert(ledger1.govState.proposals == proposals)
+        assert(epoch1.pendingRatify.expired == Set(actionId(1)))
+        val (ledger2, _, _) =
+            EpochTransition.transition(ledger1, epoch1, boundary, env.copy(params = params1))
+        assert(ledger2.govState.proposals == Vector(proposals(1)))
     }
 
     test("an expired proposal's deposit returns to its registered return account") {
@@ -344,7 +379,8 @@ class EpochTransitionTest extends AnyFunSuite {
           Vector(proposal(1, expiresAfter = boundary - 2)),
           accounts = Map(credential(1) -> account())
         )
-        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, boundary, env)
+        val (newLedger, newEpoch, _) =
+            EpochTransition.transition(ledger, expiring(ledger, 1), boundary, env)
         assert(newLedger.certState.dstate.accounts(credential(1)).balance == Coin(110))
         assert(newEpoch == ticked(ledger))
         assert(newLedger.deposited == Coin(2))
@@ -354,7 +390,8 @@ class EpochTransitionTest extends AnyFunSuite {
         // spec [EB-14], [EB-17]: the unclaimed deposits, Epoch.hs:196, 357
         val ledger = govLedger(Vector(proposal(1, expiresAfter = boundary - 2)))
             .copy(donation = Coin(5))
-        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, boundary, env)
+        val (newLedger, newEpoch, _) =
+            EpochTransition.transition(ledger, expiring(ledger, 1), boundary, env)
         assert(
           newEpoch.accountState.treasury == epoch.accountState.treasury + proposalDeposit + Coin(5)
         )
@@ -372,7 +409,8 @@ class EpochTransitionTest extends AnyFunSuite {
           Vector(parent, child),
           accounts = Map(credential(1) -> account(), credential(2) -> account())
         )
-        val (newLedger, newEpoch) = EpochTransition.transition(ledger, epoch, boundary, env)
+        val (newLedger, newEpoch, _) =
+            EpochTransition.transition(ledger, expiring(ledger, 1), boundary, env)
         assert(newLedger.govState.proposals.isEmpty)
         val accounts = newLedger.certState.dstate.accounts
         assert(accounts(credential(1)).balance == Coin(110))
@@ -395,7 +433,7 @@ class EpochTransitionTest extends AnyFunSuite {
                 .vstate
                 .numDormantEpochs
         assert(counter() == 1L)
-        // kept, by [EB-12a], but not active any more
+        // kept, since nothing expired it, but not active any more
         assert(counter(proposal(1, expiresAfter = boundary - 1)) == 1L)
         assert(counter(proposal(1, expiresAfter = boundary)) == 0L)
     }
@@ -406,18 +444,15 @@ class EpochTransitionTest extends AnyFunSuite {
         val committeeState = Map(credential(1) -> hot, credential(2) -> hot)
         val ledger =
             State(certState = CertState(vstate = VotingState(Map.empty, 0L, committeeState)))
-        def after(committee: Option[Committee]): Map[Credential, CommitteeAuthorization] =
+        def after(committee: Option[Committee]): Map[Credential, CommitteeAuthorization] = {
+            val withCommittee = ledger.copy(govState = GovState.empty.copy(committee = committee))
             EpochTransition
-                .transition(
-                  ledger.copy(govState = GovState.empty.copy(committee = committee)),
-                  epoch,
-                  boundary,
-                  env
-                )
+                .transition(withCommittee, epochFor(withCommittee), boundary, env)
                 ._1
                 .certState
                 .vstate
                 .committeeState
+        }
         val committee = Committee(Map(credential(1) -> 100L), UnitInterval.one)
         assert(after(Some(committee)) == Map(credential(1) -> hot))
         assert(after(None) == Map.empty)
@@ -436,7 +471,7 @@ class EpochTransitionTest extends AnyFunSuite {
           govState = GovState.empty.copy(proposals = Vector(proposal(1, expiresAfter = boundary))),
           deposited = Coin(1)
         )
-        val (newLedger, _) = EpochTransition.transition(withGov, epoch, boundary, env)
+        val (newLedger, _, _) = EpochTransition.transition(withGov, epoch, boundary, env)
         assert(newLedger.deposited == deposit + Coin(2) + Coin(7) + proposalDeposit)
     }
 
@@ -656,7 +691,8 @@ class EpochTransitionTest extends AnyFunSuite {
           pendingRewards = Some(old)
         )
         val measured = env.copy(poolPerformance = PoolPerformance.Measured)
-        val (_, newEpoch) = EpochTransition.transition(State(fees = Coin(60)), before, 7L, measured)
+        val (_, newEpoch, _) =
+            EpochTransition.transition(State(fees = Coin(60)), before, 7L, measured)
         val expected = EpochTransition.rewardUpdate(
           set,
           Coin(55),
@@ -695,7 +731,7 @@ class EpochTransitionTest extends AnyFunSuite {
         )
         val ledger = ledgerWith(Seq.empty, accounts = Map(credential(1) -> balance(10, None)))
             .copy(fees = Coin(30))
-        val (newLedger, newEpoch) = EpochTransition.transition(ledger, pending(update), 7L, env)
+        val (newLedger, newEpoch, _) = EpochTransition.transition(ledger, pending(update), 7L, env)
         assert(newLedger.certState.dstate.accounts(credential(1)).balance == Coin(15))
         assert(newLedger.certState.dstate.accounts.keySet == Set(credential(1)))
         assert(newEpoch.accountState == AccountState(Coin(1000 + 10 + 7), Coin(5000 - 2)))
@@ -715,7 +751,7 @@ class EpochTransitionTest extends AnyFunSuite {
           ),
           base(credential(1)) -> 100L
         )
-        val (_, newEpoch) = EpochTransition.transition(ledger, pending(update), 7L, env)
+        val (_, newEpoch, _) = EpochTransition.transition(ledger, pending(update), 7L, env)
         assert(newEpoch.snapshots.mark.activeStake == Map(credential(1) -> Coin(115)))
     }
 
@@ -729,7 +765,374 @@ class EpochTransitionTest extends AnyFunSuite {
           accounts = Map(credential(1) -> balance(10, None)),
           vrfKeyHashes = Map(vrf(1) -> 1L)
         )
-        val (newLedger, _) = EpochTransition.transition(ledger, pending(update), boundary, env)
+        val (newLedger, _, _) = EpochTransition.transition(ledger, pending(update), boundary, env)
         assert(newLedger.certState.dstate.accounts(credential(1)).balance == Coin(10 + 5) + deposit)
+    }
+
+    // The pparams of the enact state, spec [EB-13a], [EB-19a], [EB-22a], [EB-25] (conway
+    // Rules/Epoch.hs:325-332, 374-378; Governance.hs:301-325)
+
+    /** A proposal of `action` with id `i`, active after the boundary. */
+    private def proposalOf(i: Int, action: GovAction): GovActionState = {
+        val p = proposal(i, expiresAfter = boundary + 5)
+        p.copy(procedure = p.procedure.copy(govAction = action))
+    }
+
+    /** `epoch` with a ratify result that enacted `ids` into an enact state with `params`. */
+    private def enacted(params: ProtocolParams, ids: GovActionId*): EpochState = {
+        val genesis = nothingRatified(GovState.empty)
+        epoch.copy(pendingRatify =
+            genesis.copy(
+              enactState = genesis.enactState.copy(params = params),
+              enacted = ids.toVector
+            )
+        )
+    }
+
+    private val rhoChange = ProtocolParamUpdate(expansionRate = Some(UnitInterval(2, 10)))
+    private val changed = rhoChange.applyTo(env.params)
+
+    test("an enacted ParameterChange gives the pparams of the enact state") {
+        // spec [EB-13a]: cgsCurPParams := nextEpochPParams, cgsPrevPParams := curPParams
+        val action = GovAction.ParameterChange(None, rhoChange, None)
+        val ledger = govLedger(Vector(proposalOf(1, action)))
+        val (_, newEpoch, params) =
+            EpochTransition.transition(ledger, enacted(changed, actionId(1)), boundary, env)
+        assert(params == changed)
+        assert(newEpoch.prevParams == env.params)
+        // the ledger reduces every rational (boundRational, BaseTypes.hs:340): 2/10 is 1/5
+        assert(params.monetaryExpansion == UnitInterval(1, 5))
+    }
+
+    test("the reward update reads the pparams from before the enactment") {
+        // spec [EB-22a], D68: [EB-13] runs first, so RUPD reads prevParams, the old rho
+        val action = GovAction.ParameterChange(None, rhoChange, None)
+        val ledger = govLedger(Vector(proposalOf(1, action)))
+        // the input prevParams have a third rho, so a reward update that reads them fails
+        val stale =
+            ProtocolParamUpdate(expansionRate = Some(UnitInterval(5, 10))).applyTo(env.params)
+        val input = enacted(changed, actionId(1)).copy(prevParams = stale)
+        val (_, newEpoch, _) = EpochTransition.transition(ledger, input, boundary, env)
+        def rewards(params: ProtocolParams) = EpochTransition.rewardUpdate(
+          epoch.snapshots.set,
+          ledger.fees,
+          epoch.blocksMadeCur,
+          epoch.accountState.reserves,
+          env.copy(params = params)
+        )
+        assert(rewards(env.params) != rewards(changed))
+        assert(rewards(env.params) != rewards(stale))
+        assert(newEpoch.pendingRewards == Some(rewards(env.params)))
+    }
+
+    test("with no pparam action enacted the current pparams stay") {
+        // spec [EB-13a], D87: predictFuturePParams guards on hasChangesToPParams
+        // (Governance.hs:318), so the pparams of the enact state are not taken
+        val ledger = govLedger(Vector(proposal(1, expiresAfter = boundary + 5)))
+        val (_, newEpoch, params) =
+            EpochTransition.transition(ledger, enacted(changed, actionId(1)), boundary, env)
+        assert(params == env.params)
+        assert(newEpoch.prevParams == env.params)
+    }
+
+    test("an enacted id that is not a proposal changes no pparam") {
+        // D98: identity
+        val (_, _, params) =
+            EpochTransition.transition(
+              govLedger(Vector.empty),
+              enacted(changed, actionId(1)),
+              boundary,
+              env
+            )
+        assert(params == env.params)
+    }
+
+    /** The VRF counts after a boundary that enacts a hard fork from `from` to `to`. */
+    private def vrfCountsAfterFork(
+        from: ProtocolVersion,
+        to: ProtocolVersion,
+        counts: Map[VrfKeyHash, Long]
+    ): (Map[VrfKeyHash, Long], ProtocolParams) = {
+        val pools = Seq(params(1, vrfKey = 1, account = 1), params(2, vrfKey = 2, account = 2))
+        val ledger = ledgerWith(pools, vrfKeyHashes = counts).copy(govState =
+            GovState.empty.copy(proposals =
+                Vector(proposalOf(1, GovAction.HardForkInitiation(None, to)))
+            )
+        )
+        val current = env.params.copy(protocolVersion = from)
+        val (newLedger, _, newParams) = EpochTransition.transition(
+          ledger,
+          enacted(current.copy(protocolVersion = to), actionId(1)),
+          boundary,
+          env.copy(params = current)
+        )
+        (newLedger.certState.pstate.vrfKeyHashes, newParams)
+    }
+
+    test("a hard fork into PV 11 counts the VRF key of every pool") {
+        // spec [EB-19a], [EN-3]: populateVRFKeyHashes, HardFork.hs:77-78, 107-125
+        val (counts, newParams) =
+            vrfCountsAfterFork(ProtocolVersion(10, 0), ProtocolVersion(11, 0), Map.empty)
+        assert(counts == Map(vrf(1) -> 1L, vrf(2) -> 1L))
+        assert(newParams.protocolVersion == ProtocolVersion(11, 0))
+    }
+
+    test("a minor hard fork within PV 11 adds the counts again") {
+        // spec [EB-19a], D92: HARDFORK runs on any version change (Epoch.hs:375-378), and the
+        // ledger adds to the existing counts (%~)
+        val (counts, _) = vrfCountsAfterFork(
+          ProtocolVersion(11, 0),
+          ProtocolVersion(11, 1),
+          Map(vrf(1) -> 1L, vrf(2) -> 1L)
+        )
+        assert(counts == Map(vrf(1) -> 2L, vrf(2) -> 2L))
+    }
+
+    test("a hard fork into PV 10 changes no VRF count") {
+        // spec [EB-19a], D93: updateDRepDelegations is identity on the states Scalus reaches
+        val (counts, newParams) =
+            vrfCountsAfterFork(ProtocolVersion(9, 0), ProtocolVersion(10, 0), Map.empty)
+        assert(counts.isEmpty)
+        assert(newParams.protocolVersion == ProtocolVersion(10, 0))
+    }
+
+    test("a ParameterChange at PV 11 runs no hard fork") {
+        // spec [EB-19a]: the protocol version does not change
+        val current = env.params.copy(protocolVersion = ProtocolVersion(11, 0))
+        val pools = Seq(params(1, vrfKey = 1, account = 1))
+        val ledger = ledgerWith(pools, vrfKeyHashes = Map(vrf(1) -> 1L)).copy(govState =
+            GovState.empty.copy(proposals =
+                Vector(proposalOf(1, GovAction.ParameterChange(None, rhoChange, None)))
+            )
+        )
+        val (newLedger, _, _) = EpochTransition.transition(
+          ledger,
+          enacted(rhoChange.applyTo(current), actionId(1)),
+          boundary,
+          env.copy(params = current)
+        )
+        assert(newLedger.certState.pstate.vrfKeyHashes == Map(vrf(1) -> 1L))
+    }
+
+    // RATIFY at the boundary, spec [EB-20], [EB-20a], [RT-2], [RT-4a] (setFreshDRepPulsingState,
+    // conway Governance.hs:460-516; Rules/Epoch.hs:379)
+
+    /** The pparams under which every body accepts every action but an InfoAction. */
+    private val openEnv = env.copy(params =
+        env.params.copy(
+          protocolVersion = ProtocolVersion(11, 0),
+          poolVotingThresholds = zeroPools,
+          dRepVotingThresholds = zeroDReps,
+          committeeMinSize = 0
+        )
+    )
+
+    /** A committee with no member and threshold 0: its threshold is met with no vote. */
+    private val emptyCommittee = Some(Committee(Map.empty, UnitInterval.zero))
+
+    test("a boundary ratifies the proposals and keeps the result for the next boundary") {
+        // spec [EB-10a], [EB-20], [RT-10]: reCurrentEpoch is the boundary, so an InfoAction with
+        // expiresAfter = n - 1 expires; the NoConfidence is enacted and delays
+        val noConfidence = proposalOf(1, GovAction.NoConfidence(None))
+        val info = proposal(2, expiresAfter = boundary - 1).copy(procedure =
+            proposal(2, expiresAfter = boundary - 1).procedure
+                .copy(govAction = GovAction.InfoAction)
+        )
+        val ledger = govLedger(Vector(noConfidence, info))
+        val withCommittee = ledger.copy(govState = ledger.govState.copy(committee = emptyCommittee))
+        val (_, newEpoch, params) =
+            EpochTransition.transition(withCommittee, epochFor(withCommittee), boundary, openEnv)
+        // [EN-1]: NoConfidence removes the committee and becomes the committee root
+        // (conway Rules/Enact.hs:104)
+        val expected = EnactState(
+          committee = None,
+          constitution = withCommittee.govState.constitution,
+          params = openEnv.params,
+          withdrawals = Map.empty,
+          roots = withCommittee.govState.roots.copy(committee = Some(actionId(1)))
+        )
+        assert(params == openEnv.params)
+        assert(
+          newEpoch.pendingRatify ==
+              RatifyState(expected, Vector(actionId(1)), Set(actionId(2)), true)
+        )
+    }
+
+    test("a boundary ratifies with the treasury after the donations moved in") {
+        // spec [EB-20a], [RT-5d]: ensTreasury is the treasury after [EB-17] (Governance.hs:511);
+        // the withdrawal is 1000 + 12, so it passes only with the donation
+        def withdrawing(amount: Long): State = {
+            val p = proposalOf(
+              1,
+              GovAction.TreasuryWithdrawals(Map(rewardAccount(5) -> Coin(amount)), None)
+            )
+            val ledger = govLedger(Vector(p)).copy(donation = Coin(12))
+            ledger.copy(govState = ledger.govState.copy(committee = emptyCommittee))
+        }
+        def enacted(ledger: State) =
+            EpochTransition
+                .transition(ledger, epochFor(ledger), boundary, openEnv)
+                ._2
+                .pendingRatify
+                .enacted
+        assert(enacted(withdrawing(1_012)) == Vector(actionId(1)))
+        assert(enacted(withdrawing(1_013)).isEmpty)
+    }
+
+    test("a delegator of a pool that retires at the boundary adds no deposit to its stake") {
+        // spec [RT-4a]: the pool keeps its mark stake (SNAP runs before POOLREAP), but the
+        // accounts are read after POOLREAP, which cleared the delegation. Pool 1 (stake 10, its
+        // delegator returns the 100 deposit) votes Yes, pool 2 (stake 15) No, threshold 1/2:
+        // 10 / 25 fails; with the deposit counted it would be 110 / 125
+        val fork = poolVotesOn(
+          proposalOf(1, GovAction.HardForkInitiation(None, ProtocolVersion(11, 1))),
+          poolId(1) -> Vote.Yes,
+          poolId(2) -> Vote.No
+        )
+        def ledgerRetiring(retiring: Map[PoolKeyHash, EpochNo]): State = {
+            val pools = ledgerWith(
+              Seq(params(1, vrfKey = 1, account = 7), params(2, vrfKey = 2, account = 8)),
+              retiring = retiring,
+              accounts = Map(
+                credential(1) -> balance(0, Some(poolId(1))),
+                credential(2) -> balance(0, Some(poolId(2)))
+              )
+            )
+            val staked = withUtxos(pools, base(credential(1)) -> 10L, base(credential(2)) -> 15L)
+            staked.copy(govState =
+                GovState.empty.copy(proposals = Vector(fork), committee = emptyCommittee)
+            )
+        }
+        val half = UnitInterval.half
+        val forkEnv = openEnv.copy(params =
+            openEnv.params.copy(poolVotingThresholds = zeroPools.copy(hardForkInitiation = half))
+        )
+        def enacted(ledger: State) =
+            EpochTransition
+                .transition(ledger, epochFor(ledger), boundary, forkEnv)
+                ._2
+                .pendingRatify
+                .enacted
+        assert(enacted(ledgerRetiring(Map.empty)) == Vector(actionId(1)))
+        assert(enacted(ledgerRetiring(Map(poolId(1) -> boundary))).isEmpty)
+    }
+
+    test("with no proposal the ratify result enacts nothing") {
+        // spec [EB-20], D95: the enact state of the boundary with nothing enacted or expired
+        val ledger = govLedger(Vector.empty)
+        val (newLedger, newEpoch, params) =
+            EpochTransition.transition(ledger, enacted(changed, actionId(1)), boundary, env)
+        assert(
+          newEpoch.pendingRatify ==
+              RatifyState(
+                Ratify.enactStateOf(newLedger.govState, params),
+                Vector.empty,
+                Set.empty,
+                false
+              )
+        )
+    }
+
+    private def poolVotesOn(p: GovActionState, votes: (PoolKeyHash, Vote)*): GovActionState =
+        p.copy(spoVotes = votes.toMap)
+
+    // The enactment of the pending ratify result, spec [EB-10] to [EB-14], [EB-11a], [EB-12c],
+    // [EB-13a], [EB-14a] (conway Rules/Epoch.hs:216-249, 301-336; Governance/Proposals.hs:492-556)
+
+    /** `epochFor(ledger)` whose ratify result enacted `ids`, with `withdrawals` in its enact state.
+      */
+    private def enacting(
+        ledger: State,
+        ids: Seq[Int],
+        withdrawals: Map[Credential, Coin] = Map.empty
+    ): EpochState = {
+        val epoch = epochFor(ledger)
+        val ratified = epoch.pendingRatify
+        epoch.copy(pendingRatify =
+            ratified.copy(
+              enactState = ratified.enactState.copy(withdrawals = withdrawals),
+              enacted = ids.map(actionId).toVector
+            )
+        )
+    }
+
+    test("an enacted withdrawal is paid to a registered account and stays in the treasury else") {
+        // spec [EB-11a]: applyEnactedWithdrawals subtracts only the paid sum (Epoch.hs:216-249)
+        val ledger = govLedger(Vector.empty, accounts = Map(credential(1) -> account()))
+        val withdrawals = Map(credential(1) -> Coin(30), credential(2) -> Coin(40))
+        val (newLedger, newEpoch, _) =
+            EpochTransition.transition(ledger, enacting(ledger, Nil, withdrawals), boundary, env)
+        assert(newLedger.certState.dstate.accounts(credential(1)).balance == Coin(40))
+        assert(!newLedger.certState.dstate.accounts.contains(credential(2)))
+        assert(newEpoch.accountState.treasury == epoch.accountState.treasury - Coin(30))
+    }
+
+    test("an enacted TreasuryWithdrawals is removed, and its payment and refund add up") {
+        // spec [EB-11a], [EB-12c], [EB-14a]: the refund goes on the balance after the payment
+        // (returnProposalDeposits ... dState2, Epoch.hs:333-336)
+        val withdrawal = proposalOf(
+          1,
+          GovAction.TreasuryWithdrawals(Map(rewardAccount(1) -> Coin(30)), None)
+        )
+        val ledger = govLedger(Vector(withdrawal), accounts = Map(credential(1) -> account()))
+        val (newLedger, newEpoch, _) = EpochTransition.transition(
+          ledger,
+          enacting(ledger, Seq(1), Map(credential(1) -> Coin(30))),
+          boundary,
+          env
+        )
+        assert(newLedger.govState.proposals.isEmpty)
+        assert(newLedger.govState.roots == GovRoots.empty)
+        assert(
+          newLedger.certState.dstate.accounts(credential(1)).balance ==
+              Coin(10) + Coin(30) + proposalDeposit
+        )
+        assert(newEpoch.accountState.treasury == epoch.accountState.treasury - Coin(30))
+        assert(newLedger.deposited == Coin(2))
+    }
+
+    test("an enactment removes the siblings with their children and keeps its own children") {
+        // spec [EB-12c], [EB-14a]: proposalsApplyEnactment (Proposals.hs:492-556); every removed
+        // proposal is refunded, the enacted one too; the unclaimed refund goes to the treasury
+        val enacted = proposal(1, expiresAfter = boundary + 5)
+        val sibling = proposal(2, expiresAfter = boundary + 5, returnTo = 2)
+        val siblingChild = proposal(3, expiresAfter = boundary + 5, returnTo = 3, parent = Some(2))
+        val child = proposal(4, expiresAfter = boundary + 5, parent = Some(1))
+        val ledger = govLedger(
+          Vector(enacted, sibling, siblingChild, child),
+          accounts = Map(credential(1) -> account(), credential(2) -> account())
+        )
+        val (newLedger, newEpoch, _) =
+            EpochTransition.transition(ledger, enacting(ledger, Seq(1)), boundary, env)
+        assert(newLedger.govState.proposals == Vector(child))
+        assert(newLedger.govState.roots == GovRoots.empty.copy(constitution = Some(actionId(1))))
+        val accounts = newLedger.certState.dstate.accounts
+        assert(accounts(credential(1)).balance == Coin(10) + proposalDeposit)
+        assert(accounts(credential(2)).balance == Coin(10) + proposalDeposit)
+        assert(newEpoch.accountState.treasury == epoch.accountState.treasury + proposalDeposit)
+        assert(newLedger.deposited == Coin(4) + proposalDeposit)
+    }
+
+    test("a boundary sets the committee and the constitution of the pending enact state") {
+        // spec [EB-13a]: cgsCommitteeL .~ ensCommittee, cgsConstitutionL .~ ensConstitution
+        // (Epoch.hs:328-329), also with no action enacted; [EB-16] then reads the new committee
+        val committee = Committee(Map(credential(1) -> 100L), UnitInterval.half)
+        val constitution =
+            Constitution(Anchor("https://example.com/c", DataHash.fromHex("3" * 64)), None)
+        val hot = CommitteeAuthorization.HotCredential(credential(9))
+        val ledger = State(certState =
+            CertState(vstate = VotingState(Map.empty, 0L, Map(credential(1) -> hot)))
+        )
+        val genesis = epochFor(ledger)
+        val pending = genesis.copy(pendingRatify =
+            genesis.pendingRatify.copy(enactState =
+                genesis.pendingRatify.enactState
+                    .copy(committee = Some(committee), constitution = constitution)
+            )
+        )
+        val (newLedger, _, _) = EpochTransition.transition(ledger, pending, boundary, env)
+        assert(newLedger.govState.committee == Some(committee))
+        assert(newLedger.govState.constitution == constitution)
+        assert(newLedger.certState.vstate.committeeState == Map(credential(1) -> hot))
     }
 }

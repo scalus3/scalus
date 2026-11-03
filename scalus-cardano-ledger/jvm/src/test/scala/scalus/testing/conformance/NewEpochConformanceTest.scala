@@ -1,9 +1,9 @@
 package scalus.testing.conformance
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{GovAction, GovActionId, GovActionState, ProtocolParams, UnitInterval}
-import scalus.cardano.ledger.epoch.{PoolPerformance, StakeSnapshot}
-import scalus.cardano.ledger.epoch.internal.{EpochEnv, EpochState, EpochTransition}
+import scalus.cardano.ledger.{ProtocolParams, UnitInterval}
+import scalus.cardano.ledger.epoch.{PoolPerformance, RatifyState, StakeSnapshot}
+import scalus.cardano.ledger.epoch.internal.{EpochEnv, EpochState, EpochTransition, Ratify}
 import scalus.testing.conformance.LedgerState.*
 import scalus.testing.conformance.LedgerStateComparison.{compareMap, compareValue, Exclusion, FieldMismatch}
 import scalus.testing.conformance.NewEpochVectors.Case
@@ -11,7 +11,7 @@ import scalus.testing.conformance.NewEpochVectors.Case
 import scala.util.{Failure, Try}
 
 /** Runs the epoch transition on the Dugite NEWEPOCH dumps and compares the result with the dump's
-  * own output state, spec [CV-9] to [CV-16].
+  * own output state, spec [CV-9] to [CV-20].
   */
 class NewEpochConformanceTest extends AnyFunSuite {
 
@@ -20,37 +20,13 @@ class NewEpochConformanceTest extends AnyFunSuite {
 
     private lazy val cases: List[Case] = loaded.flatMap(_._2.toOption)
 
-    /** Spec [CV-12], [CV-13]: the fields of a case whose pulser enacts nothing that the runner does
-      * not compare. `instantStake` stays out for good (D5, D81): Scalus keeps no instant stake, and
-      * [CV-15] checks the stake through `snapshots.mark`.
+    /** Spec [CV-12], [CV-18]: the fields the runner does not compare. `instantStake` stays out for
+      * good (D5, D81): Scalus keeps no instant stake, and [CV-15] checks the stake through
+      * `snapshots.mark`.
       */
-    private val phase3Exclusions: List[Exclusion] = List(
+    private val exclusions: List[Exclusion] = List(
       Exclusion("instantStake", "never, D5 and D81", "")
     )
-
-    /** Spec [CV-12], [CV-13]: in a case whose pulser enacts an action, every field but `pools.*`
-      * and `donation` depends on the enactment of phase 5.
-      */
-    private val enactmentExclusions: List[Exclusion] = phase3Exclusions ++ List(
-      "utxo",
-      "deposited",
-      "govState.proposals",
-      "govState.roots",
-      "govState.committee",
-      "govState.constitution",
-      "accounts",
-      "accounts.balance",
-      "accounts.deposit",
-      "accounts.stakePoolDelegation",
-      "accounts.dRepDelegation",
-      "dreps",
-      "dreps.expiry",
-      "dreps.anchor",
-      "dreps.deposit",
-      "dreps.delegates",
-      "committeeState",
-      "dreps.numDormantEpochs"
-    ).map(Exclusion(_, "phase 5 [CV-13]", ""))
 
     /** The cases the runner cannot decode, by case name, each with its cause (D37). */
     private val undecodable: Map[String, String] = Map(
@@ -62,10 +38,19 @@ class NewEpochConformanceTest extends AnyFunSuite {
       "test_5227" -> "a withdrawal above Long.MaxValue"
     )
 
-    /** The cases that still differ, by case name, each with its cause (D37). Each listed case must
-      * still fail, so a fix must remove it from this list.
+    /** Spec [CV-20]: the output pulser of these cases enacts a HardForkInitiation to 12.0, which
+      * Scalus does not accept (owner, Q8; [EN-4a], D91). They may differ in `pendingRatify.*` only.
+      * Each listed case must still fail, so a fix must remove it from this list.
       */
-    private val expectedFailures: Map[String, String] = Map.empty
+    private val expectedFailures: Map[String, String] = List(
+      "test_5339",
+      "test_5440",
+      "test_5461",
+      "test_6937",
+      "test_7002",
+      "test_7480",
+      "test_7507"
+    ).map(_ -> "[EN-4]: a HardForkInitiation to 12.0 is not accepted").toMap
 
     /** The settings of the transition: none of them changes a compared field, since the reward
       * update the transition computes ([EB-22]) has no expected value in `st_out` (D81).
@@ -77,56 +62,77 @@ class NewEpochConformanceTest extends AnyFunSuite {
     private def env(params: ProtocolParams): EpochEnv =
         EpochEnv(params, 432_000L, PoolPerformance.Measured, UnitInterval(1, 20))
 
-    /** The mismatches of one case, spec [CV-12], [CV-15]. */
+    /** The mismatches of one case, spec [CV-12], [CV-15], [CV-17] to [CV-19]. */
     private def run(c: Case): List[FieldMismatch] = {
-        val (ledger, epoch) = EpochTransition.transition(
-          c.before.ledger.ruleState,
+        val before = c.before
+        val (ledger, epoch, params) = EpochTransition.transition(
+          before.ledger.ruleState,
           EpochState(
-            c.before.accountState,
-            c.before.lastEpoch,
-            c.before.snapshots,
-            c.before.blocksPrev,
-            c.before.blocksCur,
-            Some(c.rewardUpdate)
+            before.accountState,
+            before.lastEpoch,
+            before.snapshots,
+            before.blocksPrev,
+            before.blocksCur,
+            Some(c.rewardUpdate),
+            c.govBefore.prevParams,
+            c.govBefore.ratify
           ),
           c.boundary,
-          env(c.params)
+          env(c.govBefore.params)
         )
-        val enactsNothing = c.enacted.isEmpty
-        val exclusions = if enactsNothing then phase3Exclusions else enactmentExclusions
         val after = c.after
-        val fields = LedgerStateComparison.withoutExcluded(
+        val gov = c.govAfter
+        LedgerStateComparison.withoutExcluded(
           c.name,
           LedgerStateComparison.compare(after.ledger, ledger),
           exclusions
         ) ++ List.concat(
           // spec [EB-21]: nesEL, D66
           compareValue("lastEpoch", after.lastEpoch, epoch.lastEpoch),
-          // spec [CV-15]: in both branches, since SNAP runs before RATIFY and ENACT
+          compareValue("treasury", after.accountState.treasury, epoch.accountState.treasury),
           compareValue("reserves", after.accountState.reserves, epoch.accountState.reserves),
           compareSnapshot("snapshots.mark", after.snapshots.mark, epoch.snapshots.mark),
           compareSnapshot("snapshots.set", after.snapshots.set, epoch.snapshots.set),
           compareSnapshot("snapshots.go", after.snapshots.go, epoch.snapshots.go),
           compareValue("snapshots.fee", after.snapshots.fee, epoch.snapshots.fee),
           compareMap("blocksMadePrev", after.blocksPrev, epoch.blocksMadePrev, Nil),
-          compareMap("blocksMadeCur", after.blocksCur, epoch.blocksMadeCur, Nil)
+          compareMap("blocksMadeCur", after.blocksCur, epoch.blocksMadeCur, Nil),
+          // spec [CV-18]
+          compareValue("params", gov.params, params),
+          compareValue("prevParams", gov.prevParams, epoch.prevParams),
+          compareRatify(gov.ratify, epoch.pendingRatify),
+          // spec [CV-19]: on the state after the transition, as the pulser of st_out reads it
+          compareMap(
+            "dRepDistribution",
+            gov.dRepDistribution,
+            Ratify.dRepDistribution(ledger),
+            Nil
+          ),
+          compareMap(
+            "poolDistribution",
+            gov.poolDistribution,
+            Ratify.poolDistribution(ledger, epoch.snapshots.mark).stake,
+            Nil
+          )
         )
-        if !enactsNothing then fields
-        else
-            // spec [CV-15]: [EB-5] moves deltaT into the treasury, so no adjustment
-            val treasury =
-                compareValue("treasury", after.accountState.treasury, epoch.accountState.treasury)
-            // spec [EB-12a], [EB-12b]: the transition removed the pulser's expired set and the
-            // descendants of it, which the ledger removes too but leaves out of rsExpired
-            // (conway Governance/Proposals.hs:465-484)
-            val before = c.before.ledger.utxos.govState.proposals
-            val removed: Set[GovActionId] =
-                before.map(_.id).toSet -- ledger.govState.proposals.map(_.id)
-            val expected = withDescendants(c.expired, before)
-            val expired =
-                if removed == expected then Nil
-                else List(FieldMismatch("expired", s"expected $expected, got $removed"))
-            fields ++ treasury ++ expired
+    }
+
+    /** Spec [CV-18]: the pending ratify result field by field, without the enact state's treasury
+      * and previous pparams, which Scalus does not keep ([DM-12a]).
+      */
+    private def compareRatify(expected: RatifyState, actual: RatifyState): List[FieldMismatch] = {
+        val e = expected.enactState
+        val a = actual.enactState
+        List.concat(
+          compareValue("pendingRatify.enacted", expected.enacted, actual.enacted),
+          compareValue("pendingRatify.expired", expected.expired, actual.expired),
+          compareValue("pendingRatify.delayed", expected.delayed, actual.delayed),
+          compareValue("pendingRatify.committee", e.committee, a.committee),
+          compareValue("pendingRatify.constitution", e.constitution, a.constitution),
+          compareValue("pendingRatify.params", e.params, a.params),
+          compareMap("pendingRatify.withdrawals", e.withdrawals, a.withdrawals, Nil),
+          compareValue("pendingRatify.roots", e.roots, a.roots)
+        )
     }
 
     /** Spec [CV-15]: one snapshot, each of its three maps under its own field. The stake ratio of
@@ -141,23 +147,6 @@ class NewEpochConformanceTest extends AnyFunSuite {
       compareMap(s"$field.delegations", expected.delegations, actual.delegations, Nil),
       compareMap(s"$field.pools", expected.pools, actual.pools, Nil)
     )
-
-    /** `ids` and the proposals that descend from them; a child comes after its parent. */
-    private def withDescendants(
-        ids: Set[GovActionId],
-        proposals: Vector[GovActionState]
-    ): Set[GovActionId] =
-        proposals.foldLeft(ids) { (acc, p) =>
-            if parent(p.procedure.govAction).exists(acc) then acc + p.id else acc
-        }
-
-    private def parent(action: GovAction): Option[GovActionId] = action match
-        case a: GovAction.ParameterChange    => a.prevActionId
-        case a: GovAction.HardForkInitiation => a.prevActionId
-        case a: GovAction.NoConfidence       => a.prevActionId
-        case a: GovAction.UpdateCommittee    => a.prevActionId
-        case a: GovAction.NewConstitution    => a.prevActionId
-        case _                               => None
 
     test("the corpus holds the 533 NEWEPOCH cases") {
         // spec [CV-9]
@@ -176,9 +165,9 @@ class NewEpochConformanceTest extends AnyFunSuite {
 
     test("the pulser of 106 cases enacts an action, 427 enact nothing") {
         // spec [CV-11]
-        assert(cases.count(_.enacted.nonEmpty) == 106)
+        assert(cases.count(_.govBefore.ratify.enacted.nonEmpty) == 106)
         // the two undecodable cases enact nothing either
-        assert(cases.count(_.enacted.isEmpty) == 427 - undecodable.size)
+        assert(cases.count(_.govBefore.ratify.enacted.isEmpty) == 427 - undecodable.size)
     }
 
     test("the cases cover the snapshots and the fees, not blocks or rewards") {
@@ -210,6 +199,41 @@ class NewEpochConformanceTest extends AnyFunSuite {
         )
     }
 
+    test("the output pulsers cover the ratify result, the distributions and the pparams") {
+        // spec [CV-17] to [CV-19]. Pins what the output side of the corpus covers, so that a
+        // decoder that reads an empty pulser or the input pparams fails
+        def counts(f: Case => Boolean) = cases.count(f)
+        val covered = List(
+          "enacted" -> counts(_.govAfter.ratify.enacted.nonEmpty),
+          "expired" -> counts(_.govAfter.ratify.expired.nonEmpty),
+          "delayed" -> counts(_.govAfter.ratify.delayed),
+          "withdrawals" -> counts(_.govAfter.ratify.enactState.withdrawals.nonEmpty),
+          "pparams changed" -> counts(c => c.govAfter.params != c.govBefore.params),
+          "DRep stake" -> counts(_.govAfter.dRepDistribution.nonEmpty),
+          "DRep stake of 0" -> counts(_.govAfter.dRepDistribution.values.exists(_.value == 0)),
+          "pool stake" -> counts(_.govAfter.poolDistribution.nonEmpty),
+          // [RT-4a]: a proposal deposit of a delegator added to its pool's mark stake
+          "pool deposits" -> counts(c =>
+              c.govAfter.poolDistribution.exists((pool, stake) =>
+                  c.after.snapshots.mark.pools.get(pool).exists(_.stake != stake)
+              )
+          )
+        )
+        assert(
+          covered == List(
+            "enacted" -> 106,
+            "expired" -> 22,
+            "delayed" -> 85,
+            "withdrawals" -> 6,
+            "pparams changed" -> 21,
+            "DRep stake" -> 326,
+            "DRep stake of 0" -> 9,
+            "pool stake" -> 336,
+            "pool deposits" -> 49
+          )
+        )
+    }
+
     test("the reward calculation on st gives the reward update of st") {
         // spec [CV-16]
         val differing = cases.filter { c =>
@@ -219,7 +243,7 @@ class NewEpochConformanceTest extends AnyFunSuite {
               before.snapshots.fee,
               before.blocksPrev,
               before.accountState.reserves,
-              env(c.prevParams)
+              env(c.govBefore.prevParams)
             )
             computed != c.rewardUpdate
         }
@@ -227,11 +251,18 @@ class NewEpochConformanceTest extends AnyFunSuite {
     }
 
     test("the epoch transition gives the output state of every case") {
-        // spec [CV-12]
+        // spec [CV-12], [CV-15], [CV-17] to [CV-20]
         assert(expectedFailures.keySet.subsetOf(cases.map(_.name).toSet))
         val results = cases.map(c => c.name -> run(c))
         val failing = results.filter(_._2.nonEmpty)
-        val unexpected = failing.filterNot((name, _) => expectedFailures.contains(name))
+        // spec [CV-20]: a listed case may differ in the pending ratify result only
+        val unexpected = failing.flatMap { (name, fields) =>
+            val left =
+                if expectedFailures.contains(name) then
+                    fields.filterNot(_.field.startsWith("pendingRatify."))
+                else fields
+            if left.isEmpty then None else Some(name -> left)
+        }
         val fixed = expectedFailures.keySet -- failing.map(_._1)
         val report = unexpected
             .map((name, fields) =>

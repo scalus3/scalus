@@ -35,24 +35,31 @@ private[node] case class LedgerSnapshot(
     /** The snapshot ticked to `slot`, the tick of spec [NL-2]: one epoch transition for each
       * boundary from the one after `epoch.lastEpoch` to the epoch of `slot`, in order, ledger-rules
       * spec [EB-1], [EB-1a]; none when the move crosses no boundary, spec [EB-2], or goes
-      * backwards. The env takes `slot` and the treasury of the account state, spec [DM-13]. The
-      * same snapshot when it is at `slot` already. The transitions read the pparams of `context`
-      * and the reward settings of `config`, ledger-rules spec D84.
+      * backwards. The env takes `slot`, the treasury of the account state, spec [DM-13], and the
+      * current pparams of the last transition: each transition takes the pparams the one before it
+      * left, spec [EB-25], D88. The same snapshot when it is at `slot` already. The transitions
+      * read the reward settings of `config`, ledger-rules spec D84.
       */
     private[node] def atSlot(slot: SlotNo, config: ChainConfig): LedgerSnapshot =
         if context.env.slot == slot then this
         else
             val boundaries = epoch.lastEpoch + 1 to context.slotConfig.epochOf(slot)
-            lazy val epochEnv = EpochEnv(
-              context.env.params,
-              context.slotConfig.epochLength,
-              config.poolPerformance,
-              config.activeSlotsCoeff
+            val (newLedger, newEpoch, params) =
+                boundaries.foldLeft((ledger, epoch, context.env.params)) {
+                    case ((l, e, params), boundary) =>
+                        val env = EpochEnv(
+                          params,
+                          context.slotConfig.epochLength,
+                          config.poolPerformance,
+                          config.activeSlotsCoeff
+                        )
+                        EpochTransition.transition(l, e, boundary, env)
+                }
+            val env = context.env.copy(
+              slot = slot,
+              params = params,
+              treasury = newEpoch.accountState.treasury
             )
-            val (newLedger, newEpoch) = boundaries.foldLeft((ledger, epoch)) {
-                case ((l, e), boundary) => EpochTransition.transition(l, e, boundary, epochEnv)
-            }
-            val env = context.env.copy(slot = slot, treasury = newEpoch.accountState.treasury)
             LedgerSnapshot(newLedger, context.copy(env = env), binaryDatums, newEpoch)
 
     /** The snapshot after `tx` moved the ledger to `newLedger`: the tx's datums join the store. */

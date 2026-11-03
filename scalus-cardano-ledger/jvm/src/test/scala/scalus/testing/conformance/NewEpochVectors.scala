@@ -3,7 +3,7 @@ package scalus.testing.conformance
 import io.bullet.borer.*
 import io.bullet.borer.Dom.{ArrayElem, Element, MapElem, TaggedElem}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.{AccountState, PoolSnapshot, RewardUpdate, SnapShots, StakeSnapshot}
+import scalus.cardano.ledger.epoch.{AccountState, EnactState, PoolSnapshot, RatifyState, RewardUpdate, SnapShots, StakeSnapshot}
 import scalus.testing.conformance.CardanoLedgerVectors.{cacheDirectory, extractOnce}
 import scalus.testing.conformance.LedgerState.given
 
@@ -33,30 +33,44 @@ object NewEpochVectors {
         snapshots: SnapShots
     )
 
+    /** The fields of the gov state record after the constitution, spec [CV-17], [CV-19].
+      *
+      * @param params
+      *   the current pparams, gov state field 3
+      * @param prevParams
+      *   the previous pparams, gov state field 4
+      * @param ratify
+      *   the `RatifyState` of the DRep pulser, field 6
+      * @param dRepDistribution
+      *   `psDRepDistr` of the pulser snapshot
+      * @param poolDistribution
+      *   `psPoolDistr` of the pulser snapshot: the stake of each pool, with no total
+      */
+    final case class GovStateTail(
+        params: ProtocolParams,
+        prevParams: ProtocolParams,
+        ratify: RatifyState,
+        dRepDistribution: Map[DRep, Coin],
+        poolDistribution: Map[PoolKeyHash, Coin]
+    )
+
     /** One case of the corpus.
       *
-      * @param enacted
-      *   the ids of the actions the DRep pulser of `before` enacts at the boundary, spec [CV-11]
-      * @param expired
-      *   the ids of the actions the DRep pulser of `before` expires at the boundary, spec [CV-11]
       * @param rewardUpdate
       *   the reward update of `before`, spec [CV-11], [CV-14]
-      * @param params
-      *   the current pparams of `before`, gov state field 3, with only the fields the reward
-      *   calculation reads taken from the dump, spec [CV-14]
-      * @param prevParams
-      *   the previous pparams of `before`, gov state field 4, likewise, spec [CV-14], [CV-16]
+      * @param govBefore
+      *   the gov state tail of `before`, spec [CV-17]
+      * @param govAfter
+      *   the gov state tail of `after`, spec [CV-18], [CV-19]
       */
     final case class Case(
         name: String,
         boundary: EpochNo,
         before: NewEpochState,
         after: NewEpochState,
-        enacted: Vector[GovActionId],
-        expired: Set[GovActionId],
         rewardUpdate: RewardUpdate,
-        params: ProtocolParams,
-        prevParams: ProtocolParams
+        govBefore: GovStateTail,
+        govAfter: GovStateTail
     )
 
     /** The extracted `newepoch/NEWEPOCH` directory. Fails when the archive is not on the class
@@ -85,18 +99,16 @@ object NewEpochVectors {
     def load(name: String): Case = {
         val dir = casesPath.resolve(name)
         def bytes(file: String) = Files.readAllBytes(dir.resolve(s"conformance_dump_$file.cbor"))
-        val st = bytes("st")
-        val read = readGovStateAndRewardUpdate(st)
+        val st = Cbor.decode(bytes("st")).to[Element].value
+        val stOut = Cbor.decode(bytes("st_out")).to[Element].value
         Case(
           name = name,
           boundary = Cbor.decode(bytes("sig")).to[Long].value,
-          before = readNewEpochState(st),
+          before = readNewEpochState(bytes("st")),
           after = readNewEpochState(bytes("st_out")),
-          enacted = read.enacted,
-          expired = read.expired,
-          rewardUpdate = read.rewardUpdate,
-          params = read.params,
-          prevParams = read.prevParams
+          rewardUpdate = readRewardUpdate(st),
+          govBefore = readGovStateTail(st),
+          govAfter = readGovStateTail(stOut)
         )
     }
 
@@ -125,36 +137,66 @@ object NewEpochVectors {
         Cbor.decode(cbor).to[NewEpochState].value
     }
 
-    /** What the runner reads from the gov state and the reward update of `st`. */
-    private final case class GovStateAndRewardUpdate(
-        enacted: Vector[GovActionId],
-        expired: Set[GovActionId],
-        rewardUpdate: RewardUpdate,
-        params: ProtocolParams,
-        prevParams: ProtocolParams
-    )
+    /** The gov state tail, spec [CV-17], [CV-19]. The gov state is `[proposals, committee,
+      * constitution, curPParams, prevPParams, futurePParams, pulser]` (conway
+      * Governance.hs:361-371), the pparams the 31-element Conway array. The pulser is
+      * `[snapshot, ratifyState]`; the dump always encodes it finished (`DRComplete`, conway
+      * Governance/DRepPulser.hs:463-467). The snapshot is
+      * `[proposals, dRepDistr, dRepState, poolDistr]` (DRepPulser.hs:149-156), with `poolDistr` the
+      * stake of each pool (`individualTotalPoolStake`, :399). `ratifyState = [enactState, enacted,
+      * expired, delayed]` (conway Governance/Internal.hs:672-680).
+      */
+    private def readGovStateTail(nes: Element): GovStateTail = {
+        val govState = elems(elems(elems(elems(elems(nes)(3))(1))(1))(3))
+        val pulser = elems(govState(6))
+        val snapshot = elems(pulser(0))
+        val ratifyState = elems(pulser(1))
+        val expired = untagged(ratifyState(2)) match
+            case a: ArrayElem => a.elems.map(as[GovActionId]).toSet
+            case other        => sys.error(s"expected the expired set, got $other")
+        GovStateTail(
+          params = pparams(govState(3)),
+          prevParams = pparams(govState(4)),
+          ratify = RatifyState(
+            enactState = enactState(ratifyState(0)),
+            enacted = elems(ratifyState(1)).map(e => as[GovActionState](e).id),
+            expired = expired,
+            delayed = as[Boolean](ratifyState(3))
+          ),
+          dRepDistribution = as[Map[DRep, Coin]](snapshot(1)),
+          poolDistribution = as[Map[PoolKeyHash, Coin]](snapshot(3))
+        )
+    }
 
-    /** The `RatifyState` of the DRep pulser, the current and previous pparams and the reward
-      * update, spec [CV-11], [CV-14].
-      *
-      * The gov state is `[proposals, committee, constitution, curPParams, prevPParams,
-      * futurePParams, pulser]` (conway Governance.hs:361-371). The pulser is `[snapshot,
-      * ratifyState]` with `ratifyState = [enactState, enacted, expired, delayed]` (conway
-      * Governance/Internal.hs:672-680); the dump always encodes it finished (`DRComplete`, conway
-      * Governance/DRepPulser.hs:463-467). The reward update is `[[1, [deltaT, -deltaR, rs, -deltaF,
+    /** `[committee, constitution, curPParams, prevPParams, treasury, withdrawals, roots]` (conway
+      * Governance/Internal.hs:231-241). The treasury and the previous pparams are not kept,
+      * [DM-12a], D86.
+      */
+    private def enactState(e: Element): EnactState = {
+        val fields = elems(e)
+        val committee = elems(fields(0)) match
+            case Vector()          => None
+            case Vector(committee) => Some(as[Committee](committee))
+            case other             => sys.error(s"expected a StrictMaybe committee, got $other")
+        EnactState(
+          committee = committee,
+          constitution = as[Constitution](fields(1)),
+          params = pparams(fields(2)),
+          withdrawals = as[Map[Credential, Coin]](fields(5)),
+          roots = as[GovRoots](fields(6))
+        )
+    }
+
+    private def pparams(e: Element): ProtocolParams =
+        as[ConwayProtocolParams](e).toProtocolParams
+
+    /** The reward update of `st`, spec [CV-11], [CV-14]: `[[1, [deltaT, -deltaR, rs, -deltaF,
       * nonMyopic]]]`, a `Complete` update in a `StrictMaybe`: the ledger encodes `invert deltaR`
       * and `invert deltaF` (shelley RewardUpdate.hs:125-131, re-inverted at :140-142, 348), and
       * `rs` maps a credential to a set of `[type, pool, amount]` (core Rewards.hs:89-91).
       */
-    private def readGovStateAndRewardUpdate(st: Array[Byte]): GovStateAndRewardUpdate = {
-        val nes = elems(Cbor.decode(st).to[Element].value)
-        val govState = elems(elems(elems(elems(nes(3))(1))(1))(3))
-        val ratifyState = elems(elems(govState(6))(1))
-        val enacted = elems(ratifyState(1)).map(e => as[GovActionState](e).id)
-        val expired = untagged(ratifyState(2)) match
-            case a: ArrayElem => a.elems.map(as[GovActionId]).toSet
-            case other        => sys.error(s"expected the expired set, got $other")
-        val rewardUpdate = elems(nes(4))
+    private def readRewardUpdate(nes: Element): RewardUpdate = {
+        val rewardUpdate = elems(elems(nes)(4))
         require(rewardUpdate.size == 1, s"expected a reward update, got $rewardUpdate")
         val complete = elems(rewardUpdate(0))
         require(as[Int](complete(0)) == 1, s"expected a Complete reward update, got $complete")
@@ -166,30 +208,11 @@ object NewEpochVectors {
                     as[Credential](cred) -> Coin(amounts.sum)
                 }
             case other => sys.error(s"expected the reward map, got $other")
-        GovStateAndRewardUpdate(
-          enacted = enacted,
-          expired = expired,
-          rewardUpdate = RewardUpdate(
-            deltaT = Coin(as[Long](update(0))),
-            deltaR = Coin(-as[Long](update(1))),
-            rewards = rewards,
-            deltaF = Coin(-as[Long](update(3)))
-          ),
-          params = rewardParams(govState(3)),
-          prevParams = rewardParams(govState(4))
-        )
-    }
-
-    /** The mainnet pparams with the fields the reward calculation reads taken from a Conway pparams
-      * array: `nOpt`, `a0`, `rho`, `tau` are elements 8 to 11 (conway PParams.hs:860-873).
-      */
-    private def rewardParams(pparams: Element): ProtocolParams = {
-        val pp = elems(pparams)
-        CardanoInfo.mainnet.protocolParams.copy(
-          stakePoolTargetNum = as[Long](pp(8)),
-          poolPledgeInfluence = as[NonNegativeInterval](pp(9)),
-          monetaryExpansion = as[UnitInterval](pp(10)),
-          treasuryCut = as[UnitInterval](pp(11))
+        RewardUpdate(
+          deltaT = Coin(as[Long](update(0))),
+          deltaR = Coin(-as[Long](update(1))),
+          rewards = rewards,
+          deltaF = Coin(-as[Long](update(3)))
         )
     }
 

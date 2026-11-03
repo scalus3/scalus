@@ -480,6 +480,13 @@ export class Emulator {
    */
   getPendingRewards(): RewardUpdate | undefined;
   /**
+   * The ratify result the last epoch boundary computed, which the next boundary enacts: the ids
+   * of the actions it enacts, in order, the ids of the actions that expired, and whether an
+   * enacted action delayed the rest. At the start it enacts nothing. What a boundary enacted
+   * shows after it in `getGovState`, `getProtocolParameters` and the balances.
+   */
+  getPendingRatify(): PendingRatify;
+  /**
    * Looks a datum up by its hash, across the datums seeded into this emulator and the ones
    * witnessed by accepted transactions.
    *
@@ -753,6 +760,17 @@ export interface Fraction {
   readonly denominator: number;
 }
 
+/**
+ * The id of a gov action: the proposing transaction and the index of the proposal in it, as in
+ * `GovActionState`.
+ */
+export interface GovActionRef {
+  /** Hex-encoded 32-byte hash of the transaction that proposed the action. */
+  readonly txHash: string;
+  /** The index of the proposal among the proposals of that transaction. */
+  readonly index: number;
+}
+
 /** One proposal in `GovState.proposals`. */
 export interface GovActionState {
   /** Hex-encoded 32-byte hash of the transaction that proposed the action. */
@@ -796,6 +814,19 @@ export interface GovVote {
 export interface OutRef {
   readonly txHash: string;
   readonly outputIndex: number;
+}
+
+/** The result of `Emulator.getPendingRatify`. */
+export interface PendingRatify {
+  /** The actions the next boundary enacts, in the order they were ratified. */
+  readonly enacted: GovActionRef[];
+  /**
+   * The actions that expired unenacted; the next boundary removes them and refunds their
+   * deposits.
+   */
+  readonly expired: GovActionRef[];
+  /** Whether an enacted action delayed every other action to a later boundary. */
+  readonly delayed: boolean;
 }
 
 /** The structural form of {@link Asset}. */

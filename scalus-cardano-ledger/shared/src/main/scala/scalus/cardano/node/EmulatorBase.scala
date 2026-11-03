@@ -5,7 +5,7 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, STS, State}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.{AccountState, RewardUpdate, SnapShots}
+import scalus.cardano.ledger.epoch.{AccountState, RatifyState, RewardUpdate, SnapShots}
 import scalus.cardano.ledger.epoch.internal.EpochTransition
 import scalus.cardano.node.emulator.{AwaitTxPolicy, ChainConfig, ChainView, ChainViewError, ForgeError, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
@@ -112,6 +112,16 @@ trait EmulatorBase extends BlockchainProvider {
       * ledger-rules spec [ES-9a], [RW-21]. `None` before the first boundary, spec [ES-8a].
       */
     def pendingRewards: Option[RewardUpdate] = readState.pendingRewards
+
+    /** The ratify result the last epoch boundary computed, which the next boundary enacts,
+      * ledger-rules spec [ES-9b], [EB-10a], D94: the enacted ids in order, the expired ids, and the
+      * enact state after the run. At genesis it enacts nothing, spec [DM-9c]. What a boundary
+      * enacted shows after it in [[govState]], the pparams and the balances.
+      *
+      * RATIFY never accepts a HardForkInitiation to protocol version 12 or more, spec [EN-4a], D91:
+      * such an action delays nothing, and it expires with its deposit refunded.
+      */
+    def pendingRatify: RatifyState = readState.pendingRatify
 
     /** The epoch of the current slot, ledger-rules spec [ES-9]. */
     def currentEpoch: EpochNo = {
@@ -882,8 +892,12 @@ object EmulatorBase {
           retiring = Map.empty,
           deposits = stakePools.view.mapValues(_ => poolDeposit).toMap,
           // The ledger counts the pools per VRF key on the hard fork into PV 11
-          // (conway Rules/HardFork.hs:107-125); a genesis sees no hard fork, spec [BK-7]
-          vrfKeyHashes = stakePools.values.groupMapReduce(_.vrfKeyHash)(_ => 1L)(_ + _)
+          // (conway Rules/HardFork.hs:107-125); a genesis sees no hard fork, spec [BK-7]. Below
+          // PV 11 the map stays empty, as in the ledger, so that hard fork gives its counts once,
+          // spec [BK-7a], [EB-19a]
+          vrfKeyHashes =
+              if context.env.params.protocolVersion.major < 11 then Map.empty
+              else stakePools.values.groupMapReduce(_.vrfKeyHash)(_ => 1L)(_ + _)
         )
 
         // spec [DR-5]: a seeded DRep is registered at the genesis epoch

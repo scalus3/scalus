@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 package rules
 
 import scalus.cardano.ledger.GovFailure.*
+import scalus.cardano.ledger.epoch.internal.Ratify
 
 /** The Conway GOV rule of cardano-ledger (eras/conway/impl/src/Cardano/Ledger/Conway/Rules/
   * Gov.hs:456-643), spec [GV-1] to [GV-20]: checks the proposals and votes of a tx and stores them
@@ -209,16 +210,6 @@ object GovMutator extends STS.Mutator {
         (major < 11 || nonZero(u.nOpt))
     }
 
-    /** A ParameterChange changes a parameter of the security group, the `SecurityGroup` fields of
-      * `ConwayPParams` (C/PParams.hs:643-708), spec [GV-11a], D32.
-      */
-    private def changesSecurityGroup(u: ProtocolParamUpdate): Boolean =
-        u.minFeeA.isDefined || u.minFeeB.isDefined || u.maxBlockBodySize.isDefined ||
-            u.maxTxSize.isDefined || u.maxBlockHeaderSize.isDefined ||
-            u.adaPerUtxoByte.isDefined || u.maxBlockExUnits.isDefined ||
-            u.maxValueSize.isDefined || u.governanceActionDeposit.isDefined ||
-            u.minFeeRefScriptCoinsPerByte.isDefined
-
     /** The voter permission table of spec section 15 (`isCommitteeVotingAllowed`,
       * `isDRepVotingAllowed`, `isStakePoolVotingAllowed`, C/Governance/Internal.hs:358-540), spec
       * [GV-11]. A DRep can vote on every action.
@@ -232,7 +223,7 @@ object GovMutator extends STS.Mutator {
         case _: Voter.StakingPoolKey =>
             action match
                 case _: GovAction.NewConstitution | _: GovAction.TreasuryWithdrawals => false
-                case GovAction.ParameterChange(_, update, _) => changesSecurityGroup(update)
+                case GovAction.ParameterChange(_, update, _) => Ratify.changesSecurityGroup(update)
                 case _                                       => true
 
     /** The vote checks of Gov.hs:580-620 after the proposals, in the order of spec [GV-10b]. The

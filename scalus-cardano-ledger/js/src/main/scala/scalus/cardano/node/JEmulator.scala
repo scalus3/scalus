@@ -756,6 +756,29 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
                 .asInstanceOf[JsRewardUpdate]
         }.orUndefined
 
+    /** The ratify result the last epoch boundary computed, which the next boundary enacts: the ids
+      * of the actions it enacts, in order, the ids of the actions that expired, and whether an
+      * enacted action delayed the rest. At the start it enacts nothing. What a boundary enacted
+      * shows after it in `getGovState`, `getProtocolParameters` and the balances.
+      */
+    // ledger-rules spec [ES-9b], D94
+    def getPendingRatify(): JsPendingRatify = {
+        val ratified = emulator.pendingRatify
+        def ref(id: GovActionId): JsGovActionRef =
+            js.Dynamic
+                .literal(txHash = id.transactionId.toHex, index = id.govActionIndex.toDouble)
+                .asInstanceOf[JsGovActionRef]
+        val expired =
+            ratified.expired.toSeq.sortBy(id => (id.transactionId.toHex, id.govActionIndex))
+        js.Dynamic
+            .literal(
+              enacted = ratified.enacted.map(ref).toJSArray,
+              expired = expired.map(ref).toJSArray,
+              delayed = ratified.delayed
+            )
+            .asInstanceOf[JsPendingRatify]
+    }
+
     private def credentialHex(credential: Credential): String = credential match
         case Credential.KeyHash(hash)    => hash.toHex
         case Credential.ScriptHash(hash) => hash.toHex
@@ -970,6 +993,35 @@ trait JsRewardUpdate extends js.Object {
       * is registered then, and to the treasury if not.
       */
     val rewards: js.Array[JsRewardEntry]
+}
+
+/** The result of `Emulator.getPendingRatify`. */
+@TsName("PendingRatify")
+trait JsPendingRatify extends js.Object {
+
+    /** The actions the next boundary enacts, in the order they were ratified. */
+    val enacted: js.Array[JsGovActionRef]
+
+    /** The actions that expired unenacted; the next boundary removes them and refunds their
+      * deposits.
+      */
+    val expired: js.Array[JsGovActionRef]
+
+    /** Whether an enacted action delayed every other action to a later boundary. */
+    val delayed: Boolean
+}
+
+/** The id of a gov action: the proposing transaction and the index of the proposal in it, as in
+  * `GovActionState`.
+  */
+@TsName("GovActionRef")
+trait JsGovActionRef extends js.Object {
+
+    /** Hex-encoded 32-byte hash of the transaction that proposed the action. */
+    val txHash: String
+
+    /** The index of the proposal among the proposals of that transaction. */
+    val index: Double
 }
 
 /** One reward of `RewardUpdate.rewards`. */

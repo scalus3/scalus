@@ -477,7 +477,7 @@ class EmulatorEpochTest extends AnyFunSuite {
 
     test("an expired proposal's deposit is refunded to its return account") {
         // phase 3 acceptance 1, Imp "Expired proposal deposit refunded" (EpochSpec.hs:84);
-        // spec [EB-12a], [EB-14]
+        // spec [RT-10], [EB-12c], [EB-14]
         import govSetup.*
         val deposit = Coin(999)
         val e = govEmulator(lifetime = 1, deposit)
@@ -496,7 +496,7 @@ class EmulatorEpochTest extends AnyFunSuite {
 
     test("a proposal is present after two boundaries and removed at the third") {
         // phase 3 acceptance 2, Imp "Proposals are expired and removed as expected"
-        // (EpochSpec.hs:107), on the stored proposals; spec [EB-12a]
+        // (EpochSpec.hs:107), on the stored proposals; spec [RT-10], [EB-12c]
         import govSetup.*
         val deposit = Coin.ada(1)
         val e = govEmulator(lifetime = 1, deposit)
@@ -552,7 +552,7 @@ class EmulatorEpochTest extends AnyFunSuite {
             boundary(e, n)
             assert(dormant == counter, s"boundary $n")
             assert(drepExpiry == expiry, s"boundary $n")
-            // the proposal expires at boundary 3 and is removed at 4, spec [EB-12a]
+            // the proposal expires at boundary 3 and is removed at 4, spec [RT-10], [EB-12c]
             assert(isPresent(e, id) == (n < 4), s"boundary $n")
         propose(e, deposit)
         assert(dormant == 0L)
@@ -564,8 +564,8 @@ class EmulatorEpochTest extends AnyFunSuite {
 
     test("proposals survive multiple epochs without any activity") {
         // Imp "Proposals survive multiple epochs without any activity" (EpochSpec.hs:62-83);
-        // spec [EB-12a]: a tree of ParameterChange proposals with lifetime 4 stays 5 boundaries
-        // and goes, with all its descendants, at the 6th
+        // spec [RT-10], [EB-12c]: a tree of ParameterChange proposals with lifetime 4 stays 5
+        // boundaries and goes, with all its descendants, at the 6th
         import govSetup.*
         val deposit = Coin.ada(1)
         val e = govEmulator(lifetime = 4, deposit)

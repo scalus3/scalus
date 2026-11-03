@@ -198,6 +198,9 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
     def subscribeProtocolParams[C[_]: ScalusAsyncStreamAdapter](): C[ProtocolParams] = {
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ProtocolParams](() => hub.unregisterParams(id))
+        // spec [ES-15], [SY-5]: sync first, so the seed is the emulator's pparams even after an
+        // enactment made on the wrapped emulator, as `fetchLatestParams` reads them
+        driven(())
         hub.registerParams(id, mailbox)
         summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
     }
@@ -261,6 +264,9 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
                     undelivered.dequeue() match
                         case ChainEvent.RollForward(block) => hub.applyBlock(block)
                         case ChainEvent.RollBackward(to)   => hub.rollbackTo(to)
+                // spec [ES-15], [EB-25]: a boundary may enact new pparams, and a rollback of the
+                // blocks that ratified them restores the old; the hub emits only a changed value
+                hub.updateParams(synced.context.env.params)
                 // the hub marks the txs of a rolled-back block NotFound; those back in the
                 // mempool are Pending, spec [SY-8], [OR-3]; those that left it without a block
                 // are NotFound, as `EmulatorBase.checkTransaction` reports them

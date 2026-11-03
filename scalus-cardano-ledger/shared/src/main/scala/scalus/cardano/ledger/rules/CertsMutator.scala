@@ -226,7 +226,8 @@ object CertsMutator extends STS.Mutator {
         else adjust(adjust(dreps, oldDRep)(_ - credential), newDRep)(_ + credential)
     }
 
-    private def drepCredential(drep: DRep): Option[Credential] = drep match
+    /** The credential of a DRep, `None` for AlwaysAbstain and AlwaysNoConfidence. */
+    private[ledger] def drepCredential(drep: DRep): Option[Credential] = drep match
         case DRep.KeyHash(hash)    => Some(Credential.KeyHash(hash))
         case DRep.ScriptHash(hash) => Some(Credential.ScriptHash(hash))
         case _                     => None

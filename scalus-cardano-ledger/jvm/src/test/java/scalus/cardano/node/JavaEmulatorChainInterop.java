@@ -6,6 +6,7 @@ import scalus.cardano.ledger.UnitInterval;
 import scalus.cardano.ledger.Utxo;
 import scalus.cardano.ledger.Value;
 import scalus.cardano.ledger.epoch.PoolPerformance;
+import scalus.cardano.ledger.epoch.RatifyState;
 import scalus.cardano.ledger.epoch.RewardUpdate;
 import scalus.cardano.ledger.epoch.SnapShots;
 import scalus.cardano.node.emulator.BlockIssuer;
@@ -155,6 +156,11 @@ public final class JavaEmulatorChainInterop {
     /** The pending reward update, or null when nothing is pending. */
     public static RewardUpdate pendingRewards(Emulator emulator) {
         return emulator.getPendingRewardsOrNull();
+    }
+
+    /** The pending ratify result, ledger-rules spec [ES-9b]. */
+    public static RatifyState pendingRatify(Emulator emulator) {
+        return emulator.getPendingRatify();
     }
 }
 

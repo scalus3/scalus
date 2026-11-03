@@ -272,8 +272,9 @@ final class SubscriptionHub(
       * like on its own source — an epoch boundary observed over chain-sync, a fresh
       * `/epochs/latest/parameters`, a re-read of local state. The hub cannot detect one, so a
       * provider that never calls this has a `subscribeProtocolParams` stream that emits the value
-      * it was constructed with and nothing further. For an emulator that is exactly right: its
-      * parameters are fixed at construction and only its slot advances.
+      * it was constructed with and nothing further. The emulator's pparams change at an epoch
+      * boundary that enacts a ParameterChange or a HardForkInitiation, so `StreamingEmulator` calls
+      * this each time it syncs with the emulator.
       */
     def updateParams(next: ProtocolParams): Unit = {
         val touched = synchronized {

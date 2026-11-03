@@ -6,7 +6,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.epoch.AccountState
 import scalus.cardano.ledger.rules.{Context, State, UtxoEnv}
 import scalus.cardano.node.{Emulator, EmulatorBase, EmulatorInitialState, EmulatorPoolRegistration, EmulatorStakeRegistration, EmulatorState}
-import scalus.cardano.txbuilder.TxBuilder
+import scalus.cardano.txbuilder.{TransactionBuilderStep, TxBuilder}
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
 import scalus.uplc.builtin.{Builtins, ByteString, Data}
@@ -212,7 +212,8 @@ class ImmutableEmulatorTest extends AnyFunSuite {
 
     // spec 13.3: the treasury, as of the last epoch boundary, sits in the env
     private val slotConfig = CardanoInfo.mainnet.slotConfig
-    private val epochStart = slotConfig.firstSlotOfEpoch(500)
+    private val startEpoch = 500L
+    private val epochStart = slotConfig.firstSlotOfEpoch(startEpoch)
 
     /** An emulator with a treasury of 1000 lovelace and one accepted 5-lovelace donation. */
     private def emulatorWithDonation: (Emulator, Transaction) = {
@@ -470,5 +471,47 @@ class ImmutableEmulatorTest extends AnyFunSuite {
         assert(second.snapshots.mark.activeStake == Map(alice.credential -> (stake + reward.get)))
         assert(second.snapshots.set == first.snapshots.mark)
         assert(second.snapshots.go == genesisMark)
+    }
+
+    test("pendingRatify reads the ratify result of the tip") {
+        // ledger-rules spec [ES-9b] (D94), [DM-9c]: the genesis result enacts nothing
+        val emulator = Emulator.withState(EmulatorInitialState())
+        val genesis = ImmutableEmulator.fromEmulator(emulator)
+        assert(genesis.pendingRatify == emulator.pendingRatify)
+        assert(genesis.pendingRatify.enacted.isEmpty)
+        assert(genesis.pendingRatify.expired.isEmpty)
+    }
+
+    test("pendingRatify after a boundary holds the InfoAction that expired at it") {
+        // ledger-rules spec [ES-9b], [RT-10]: the tip, not the genesis snapshot, is read
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        val aliceStake = Alice.account.stakeAddress(Network.Mainnet)
+        val emulator = Emulator.withState(
+          EmulatorInitialState(
+            utxos = Map(Input(genesisHash, 0) -> Output(Alice.address, Value.ada(200_000))),
+            stakeRegistrations = Seq(EmulatorStakeRegistration(aliceStake.credential))
+          ),
+          Context.testMainnet(epochStart + 10)
+        )
+        val params = summon[CardanoInfo].protocolParams
+        val proposal = ProposalProcedure(
+          Coin(params.govActionDeposit),
+          RewardAccount(aliceStake),
+          GovAction.InfoAction,
+          Anchor("https://example.com", DataHash.fromHex("0" * 64))
+        )
+        val tx = TxBuilder(summon[CardanoInfo])
+            .addSteps(TransactionBuilderStep.SubmitProposal(proposal))
+            .complete(emulator.utxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+        val proposed = ImmutableEmulator.fromEmulator(emulator).submit(tx) match
+            case Right((_, next)) => next
+            case Left(error)      => fail(s"submit failed: $error")
+        // expiresAfter is startEpoch + lifetime; the boundary after it marks the action expired
+        val crossed =
+            proposed.setSlot(slotConfig.firstSlotOfEpoch(startEpoch + params.govActionLifetime + 1))
+        assert(crossed.pendingRatify.expired == Set(GovActionId(tx.id, 0)))
+        assert(crossed.pendingRatify.enacted.isEmpty)
     }
 }

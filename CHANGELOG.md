@@ -51,7 +51,8 @@
   has, as the ledger does, with the new `TransactionException.VrfKeyHashAlreadyRegisteredException`.
   It checks each certificate against the earlier ones of the same transaction, so two new pools
   with one VRF key in one transaction fail. `PoolsState` gains `vrfKeyHashes`, the number of pools
-  per VRF key, which the Emulator fills from its seeded pools at genesis.
+  per VRF key, which the Emulator fills from its seeded pools at a genesis at protocol version
+  11 or more, and which a hard fork into protocol version 11 fills at an epoch boundary.
 - The Emulator keeps `State.deposited` (the deposits of a valid transaction, proposal deposits
   included, minus its refunds; at genesis, the deposits of the seeded registrations) and
   `DRepState.delegates` (the accounts that delegate their vote to the DRep) as the ledger does.
@@ -149,7 +150,30 @@
   pool, proposal-expiry, dormant-epoch, committee-state, donation and deposit fields, the stake
   snapshots, the blocks made, the reserves, the fees and the treasury after the reward update
   match in every case that decodes, and so does the reward update computed from each input
-  state. These cases make no blocks, so they pay no pool rewards; enactment is not compared yet.
+  state. The governance fields are compared too: the proposals, roots, committee, constitution,
+  current and previous pparams, enacted treasury withdrawals, the pending ratify result and the
+  DRep and pool stake it reads. Every case matches, also the 106 that enact an action, except 7
+  whose ledger ratifies a hard fork to protocol version 12, which the Emulator does not accept.
+  These cases make no blocks, so they pay no pool rewards.
+- `ProtocolParamUpdate.applyTo(params)` gives the pparams after the update, as the ledger enacts a
+  `ParameterChange`: each field the update holds replaces the pparam, cost models merge per
+  language with the update winning, and `minFeeRefScriptCoinsPerByte` takes the floor of its
+  interval. After an enacted non-integer `minFeeRefScriptCoinsPerByte`, for example 25/2, the
+  Emulator computes the reference-script fee with 12 where the ledger uses 12.5, so it can accept
+  a tx whose fee the ledger rejects.
+- At each epoch boundary the Emulator ratifies the active proposals as the ledger's RATIFY rule
+  does: by priority and in the order they were made, with delaying actions, the committee, SPO
+  and DRep thresholds of the pparams, the default vote of a pool that did not vote, expired DReps
+  and committee members left out, proposal deposits counted as voting stake, and the PV 9
+  bootstrap rules. The boundary after the one that ratified an action enacts it: the pparams of
+  an Emulator change when a ParameterChange or a HardForkInitiation is enacted, the committee and
+  the constitution take their enacted values, enacted treasury withdrawals are paid to registered
+  accounts, and the enacted action becomes the root of its purpose while its competing proposals
+  are removed and their deposits refunded. `pendingRatify` (Java `getPendingRatify`, JS
+  `getPendingRatify()`) reads the ratify result that the next boundary enacts. RATIFY never
+  accepts a HardForkInitiation to protocol version 12 or more: the action delays nothing, and it
+  expires with its deposit refunded. The `subscribeProtocolParams` stream of `StreamingEmulator`
+  emits the enacted pparams.
 
 ### Changed
 
@@ -161,8 +185,8 @@
 - **Migration hazard: every Emulator factory runs the epoch rules at each epoch boundary that a
   slot change crosses, and no option turns them off.** A test that crosses a boundary sees the
   effects of each rule as it lands: the move of the donations, the reaping of retired pools and
-  the expiry of proposals and the rewards for delegated accounts now, later the enactment of
-  ratified proposals. From the second boundary on, every boundary also moves `deltaT` of the
+  the expiry of proposals, the rewards for delegated accounts and the enactment of ratified
+  proposals. From the second boundary on, every boundary also moves `deltaT` of the
   reward update from the reserves to the treasury, with no stake too (about 3.6 M ADA with the
   default reserves), and takes the fees of the previous epoch out of `fees`. A test that crosses
   two or more boundaries and asserts an absolute treasury, reserves or reward balance changes.

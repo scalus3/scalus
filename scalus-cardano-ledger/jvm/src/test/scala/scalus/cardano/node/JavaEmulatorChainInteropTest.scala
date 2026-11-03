@@ -4,11 +4,13 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.epoch.PoolPerformance
+import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.emulator.{BlockIssuer, ChainConfig, ChainViewError, ForgeError, OrphanTxPolicy, RollbackError}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.ChainEvent
-import scalus.cardano.txbuilder.TxBuilder
+import scalus.cardano.txbuilder.{TransactionBuilderStep, TxBuilder}
 import scalus.testing.kit.Party.{Alice, Bob}
+import scalus.uplc.builtin.ByteString
 
 import java.time.Instant
 import scala.jdk.CollectionConverters.*
@@ -142,5 +144,46 @@ class JavaEmulatorChainInteropTest extends AnyFunSuite {
         val update = JavaEmulatorChainInterop.pendingRewards(e)
         assert(update != null)
         assert(e.pendingRewards.contains(update))
+    }
+
+    test("Java reads the pending ratify result") {
+        // ledger-rules spec [ES-9b] (D94): the genesis result enacts nothing, spec [DM-9c]
+        val e = Emulator.withAddresses(Seq(alice), Value.ada(1000), ChainConfig.instant)
+        val ratified = JavaEmulatorChainInterop.pendingRatify(e)
+        assert(ratified == e.pendingRatify)
+        assert(ratified.enacted.isEmpty && ratified.expired.isEmpty && !ratified.delayed)
+    }
+
+    test("Java reads the pending ratify result of the tip after a boundary") {
+        // ledger-rules spec [ES-9b], [RT-10]: the getter reads the tip, not the genesis snapshot
+        val slotConfig = testEnv.slotConfig
+        val startEpoch = 500L
+        val aliceStake = Alice.account.stakeAddress(Network.Mainnet)
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        val e = Emulator.withState(
+          EmulatorInitialState(
+            utxos = Map(Input(genesisHash, 0) -> Output(alice, Value.ada(200_000))),
+            stakeRegistrations = Seq(EmulatorStakeRegistration(aliceStake.credential))
+          ),
+          Context.testMainnet(slotConfig.firstSlotOfEpoch(startEpoch) + 10)
+        )
+        val params = testEnv.protocolParams
+        val proposal = ProposalProcedure(
+          Coin(params.govActionDeposit),
+          RewardAccount(aliceStake),
+          GovAction.InfoAction,
+          Anchor("https://example.com", DataHash.fromHex("0" * 64))
+        )
+        val tx = TxBuilder(testEnv)
+            .addSteps(TransactionBuilderStep.SubmitProposal(proposal))
+            .complete(e.utxos, alice)
+            .sign(Alice.signer)
+            .transaction
+        assert(e.submitSync(tx) == Right(tx.id))
+        // expiresAfter is startEpoch + lifetime; the boundary after it marks the action expired
+        e.setSlot(slotConfig.firstSlotOfEpoch(startEpoch + params.govActionLifetime + 1))
+        val ratified = JavaEmulatorChainInterop.pendingRatify(e)
+        assert(ratified.expired == Set(GovActionId(tx.id, 0)))
+        assert(ratified.enacted.isEmpty)
     }
 }

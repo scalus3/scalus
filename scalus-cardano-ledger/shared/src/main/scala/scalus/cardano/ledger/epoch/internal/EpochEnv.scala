@@ -7,8 +7,8 @@ import scalus.cardano.ledger.epoch.PoolPerformance
   * spec D84. The Emulator builds it from its `Context` and `ChainConfig`.
   *
   * @param params
-  *   the pparams the reward calculation reads, spec [RW-13], D68: the current ones until phase 5
-  *   stores the previous ones
+  *   the current pparams before the boundary, spec [EB-25], D88; the reward calculation reads them
+  *   as the previous pparams of the boundary, spec [RW-13], [EB-22a]
   * @param epochLength
   *   the slots per epoch, `slotConfig.epochLength`
   * @param poolPerformance

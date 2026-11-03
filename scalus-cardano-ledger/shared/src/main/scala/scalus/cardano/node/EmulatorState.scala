@@ -1,8 +1,8 @@
 package scalus.cardano.node
 
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.{AccountState, RewardUpdate, SnapShots}
-import scalus.cardano.ledger.epoch.internal.{EpochState, EpochTransition}
+import scalus.cardano.ledger.epoch.{AccountState, RatifyState, RewardUpdate, SnapShots}
+import scalus.cardano.ledger.epoch.internal.{EpochState, EpochTransition, Ratify}
 import scalus.cardano.ledger.rules.{Context, State, TxRefScriptsSizeValidator}
 import scalus.cardano.node.emulator.{BlockForge, BlockIssuer, BlockProduction, ChainConfig, ChainView, ChainViewError, DropReason, ForgeError, LedgerSnapshot, OrphanTxPolicy, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
@@ -125,6 +125,11 @@ case class EmulatorState private (
       * `None` before the first boundary, ledger-rules spec [ES-9a], [RW-21].
       */
     def pendingRewards: Option[RewardUpdate] = tipSnapshot.epoch.pendingRewards
+
+    /** The ratify result the last boundary of the tip snapshot computed and the next one enacts,
+      * ledger-rules spec [ES-9b], [EB-20]. At genesis it enacts nothing, spec [DM-9c].
+      */
+    def pendingRatify: RatifyState = tipSnapshot.epoch.pendingRatify
 
     /** Every datum this state has seen, decoded. */
     @deprecated("use binaryDatums, which keeps the datum bytes", "1.3.0")
@@ -850,15 +855,20 @@ object EmulatorState {
         )((acc, a) => acc ++ EmulatorBase.binaryDatumsOf(a.tx))
         // ledger-rules spec [ES-8], [ES-8a]: mark, set and go are the stake of the genesis ledger,
         // so seeded stake earns from the second boundary on; no fee, no blocks made and no
-        // pending rewards
+        // pending rewards. [DM-9c]: the previous pparams are the genesis pparams, and the ratify
+        // result enacts and expires nothing on the enact state of the genesis, as the ledger
+        // enters Conway (conway Translation.hs:69-83), D85
         val stake = EpochTransition.stakeSnapshot(ledger)
+        val params = context.env.params
         val epoch = EpochState(
           AccountState(context.env.treasury, reserves),
           context.slotConfig.epochOf(context.env.slot),
           SnapShots(stake, stake, stake, Coin.zero),
           Map.empty,
           Map.empty,
-          None
+          None,
+          params,
+          Ratify.nothingRatified(ledger.govState, params)
         )
         val genesis = LedgerSnapshot(ledger, context, binaryDatums, epoch)
         val empty = new EmulatorState(

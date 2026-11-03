@@ -1,8 +1,8 @@
 package scalus.cardano.ledger.epoch.internal
 
 import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart}
-import scalus.cardano.ledger.{AddrKeyHash, CertState, Coin, Credential, EpochNo, GovState, PoolKeyHash, Utxos, VrfKeyHash}
-import scalus.cardano.ledger.epoch.{PoolPerformance, PoolSnapshot, RewardUpdate, SnapShots, StakeSnapshot}
+import scalus.cardano.ledger.{AddrKeyHash, CertState, Coin, ConwayAccountState, Credential, EpochNo, GovAction, GovState, PoolKeyHash, ProtocolParams, ProtocolVersion, Utxos, VrfKeyHash}
+import scalus.cardano.ledger.epoch.{PoolPerformance, PoolSnapshot, RatifyState, RewardUpdate, SnapShots, StakeSnapshot}
 import scalus.cardano.ledger.rules.State
 
 /** The epoch transition: what the ledger does to its state at one epoch boundary, ledger-rules spec
@@ -14,36 +14,44 @@ import scalus.cardano.ledger.rules.State
   */
 object EpochTransition {
 
-    /** The ledger state and the epoch state after the epoch transition into epoch `boundary`, spec
-      * [EB-4].
+    /** The ledger state, the epoch state and the current pparams after the epoch transition into
+      * epoch `boundary`, spec [EB-4], [EB-25], D88. `env.params` are the current pparams before it.
       *
       * The steps run in the order of the table of spec section 12.2. A step whose phase has not
       * landed is identity, spec [EB-24]. First [EB-5] applies `pendingRewards` (conway
       * Rules/NewEpoch.hs:172-178), so SNAP sees the paid rewards and the reduced fees. Then, as
-      * conway Rules/Epoch.hs:276-363 runs them: SNAP ([EB-6]), POOLREAP ([EB-7] to [EB-9]), the
-      * expiry of proposals ([EB-12], [EB-14]), the voting state ([EB-15], [EB-16]), the treasury
-      * ([EB-17]) and `deposited` ([EB-18]). The blocks made move to the previous epoch and the last
-      * epoch becomes `boundary`, [EB-21] (conway Rules/NewEpoch.hs:182-192). Last, [EB-22] replaces
-      * `pendingRewards` with the reward update of the new epoch, [RW-21], read from the reserves
-      * after [EB-5].
+      * conway Rules/Epoch.hs:276-378 runs them: SNAP ([EB-6]), POOLREAP ([EB-7] to [EB-9]), the
+      * pparams of the enact state ([EB-13]), the enactment of the pending ratify result ([EB-10] to
+      * [EB-14]), the voting state ([EB-15], [EB-16]), the treasury ([EB-17]), `deposited`
+      * ([EB-18]), HARDFORK ([EB-19]) and RATIFY ([EB-20]). The blocks made move to the previous
+      * epoch and the last epoch becomes `boundary`, [EB-21] (conway Rules/NewEpoch.hs:182-192).
+      * Last, [EB-22] replaces `pendingRewards` with the reward update of the new epoch, [RW-21],
+      * read from the reserves after [EB-5] and from `prevParams` after [EB-13], [EB-22a].
       */
     def transition(
         ledger: State,
         epoch: EpochState,
         boundary: EpochNo,
         env: EpochEnv
-    ): (State, EpochState) = {
+    ): (State, EpochState, ProtocolParams) = {
         val (paid, paidEpoch) = applyRewards(ledger, epoch)
         val (reaped, reapedEpoch) = poolReap(paid, snap(paid, paidEpoch), boundary)
-        val (expired, unclaimed) = expireProposals(reaped, boundary)
-        val voted = updatedVotingState(expired, boundary)
-        val (moved, movedEpoch) = movedToTreasury(voted, reapedEpoch, unclaimed)
+        // [EB-13a]: read before [EB-12] removes the enacted proposals
+        val params = enactedParams(reaped.govState, epoch.pendingRatify, env.params)
+        val (enacted, enactedEpoch, unclaimed) = enact(reaped, reapedEpoch)
+        val voted = updatedVotingState(enacted, boundary)
+        val (moved, movedEpoch) = movedToTreasury(voted, enactedEpoch, unclaimed)
+        val forked = hardFork(moved, env.params.protocolVersion, params.protocolVersion)
+        val ratified = ratify(forked, movedEpoch, boundary, params)
         val rotated = movedEpoch.copy(
           lastEpoch = boundary,
           blocksMadePrev = movedEpoch.blocksMadeCur,
-          blocksMadeCur = Map.empty
+          blocksMadeCur = Map.empty,
+          prevParams = env.params,
+          pendingRatify = ratified
         )
-        // [EB-22], [RW-21]: RUPD of the new epoch, run at once (D3) on the state after [EB-21]
+        // [EB-22], [RW-21]: RUPD of the new epoch, run at once (D3) on the state after [EB-21].
+        // [EB-22a]: env.params are the pparams of before [EB-13], which become prevParams
         val rewards = rewardUpdate(
           rotated.snapshots.go,
           rotated.snapshots.fee,
@@ -52,10 +60,78 @@ object EpochTransition {
           env
         )
         (
-          moved.copy(deposited = totalObligation(moved.certState, moved.govState)),
-          rotated.copy(pendingRewards = Some(rewards))
+          forked.copy(deposited = totalObligation(forked.certState, forked.govState)),
+          rotated.copy(pendingRewards = Some(rewards)),
+          params
         )
     }
+
+    /** Spec [EB-13a], D87: the pparams after the boundary. They are the pparams of the enact state
+      * of `ratified` when it enacted a ParameterChange or a HardForkInitiation
+      * (`predictFuturePParams`, conway Governance.hs:301-325; `nextEpochPParams`,
+      * cardano-ledger-core State/Governance.hs:121-133), else `current`, also when `current`
+      * changed since the RATIFY run. The ledger's `rsEnacted` holds the actions; Scalus keeps the
+      * ids (D86), so the actions are read from `govState` as the boundary finds it, before [EB-12]
+      * removes them. An id that is not a proposal is no pparam action (D98).
+      */
+    private def enactedParams(
+        govState: GovState,
+        ratified: RatifyState,
+        current: ProtocolParams
+    ): ProtocolParams = {
+        val ids = ratified.enacted.toSet
+        val changesParams = ids.nonEmpty && govState.proposals.exists { p =>
+            ids(p.id) && (p.action match
+                case _: GovAction.ParameterChange | _: GovAction.HardForkInitiation => true
+                case _                                                              => false)
+        }
+        if changesParams then ratified.enactState.params else current
+    }
+
+    /** Spec [EB-20], [EB-20a], [RT-2]: RATIFY of the proposals of `ledger`, the state after
+      * [EB-19], run at once (D3) as the pulser that `setFreshDRepPulsingState` starts (conway
+      * Governance.hs:460-516; Rules/Epoch.hs:379) computes it. The run starts from the enact state
+      * of the gov state with the pparams after [EB-13] (`mkEnactState`) and the treasury of `epoch`
+      * after [EB-17] (`ensTreasuryL`, :511), at `reCurrentEpoch = boundary`; the SPO distribution
+      * starts from the mark of [EB-6] (`ssStakeMarkPoolDistr`, Rules/Epoch.hs:300). With no
+      * proposal, neither distribution is computed (D95).
+      */
+    private def ratify(
+        ledger: State,
+        epoch: EpochState,
+        boundary: EpochNo,
+        params: ProtocolParams
+    ): RatifyState = {
+        val proposals = ledger.govState.proposals
+        if proposals.isEmpty then Ratify.nothingRatified(ledger.govState, params)
+        else
+            Ratify.ratify(
+              Ratify.envOf(ledger, epoch.snapshots.mark, boundary),
+              Ratify.enactStateOf(ledger.govState, params),
+              epoch.accountState.treasury,
+              proposals
+            )
+    }
+
+    /** HARDFORK, spec [EB-19a], [EN-3] (conway Rules/HardFork.hs:68-125), run when the protocol
+      * version changed at this boundary, major or minor (conway Rules/Epoch.hs:375-378). Into major
+      * 11 it adds one count per pool to the VRF key of its params and of its future params, to the
+      * counts there are (`populateVRFKeyHashes`, :107-125), D92; POOLREAP emptied the future params
+      * before. Into major 10 it is identity: `updateDRepDelegations` drops dangling DRep
+      * delegations, and no state Scalus reaches has one, D93.
+      */
+    private def hardFork(ledger: State, from: ProtocolVersion, to: ProtocolVersion): State =
+        if from == to || to.major != 11 then ledger
+        else
+            val pstate = ledger.certState.pstate
+            val vrfKeys = pstate.stakePools.valuesIterator.map(_.vrfKeyHash) ++
+                pstate.futureStakePoolParams.valuesIterator.map(_.vrfKeyHash)
+            val counts = vrfKeys.foldLeft(pstate.vrfKeyHashes) { (counts, vrf) =>
+                counts.updated(vrf, counts.getOrElse(vrf, 0L) + 1L)
+            }
+            ledger.copy(certState =
+                ledger.certState.copy(pstate = pstate.copy(vrfKeyHashes = counts))
+            )
 
     /** Spec [EB-5], [RW-10] to [RW-12], [RW-21]: the pending reward update applied, as
       * `applyRUpdFiltered` at PV >= 7 does (shelley LedgerState/IncrementalStake.hs:95-128): the
@@ -68,13 +144,7 @@ object EpochTransition {
         epoch.pendingRewards match
             case None => (ledger, epoch)
             case Some(update) =>
-                val accounts0 = ledger.certState.dstate.accounts
-                val (registered, unregistered) =
-                    update.rewards.partition((cred, _) => accounts0.contains(cred))
-                val accounts = registered.foldLeft(accounts0) { case (accounts, (cred, reward)) =>
-                    accounts.updatedWith(cred)(_.map(a => a.copy(balance = a.balance + reward)))
-                }
-                val unclaimed = unregistered.values.foldLeft(Coin.zero)(_ + _)
+                val (accounts, unclaimed) = credit(ledger.certState.dstate.accounts, update.rewards)
                 val account = epoch.accountState
                 val certState =
                     ledger.certState.copy(dstate =
@@ -244,47 +314,73 @@ object EpochTransition {
             (ledger.copy(certState = certState), newEpoch)
     }
 
-    /** Spec [EB-12] (expiry only), [EB-12a], [EB-12b], [EB-14]: the ledger without the proposals
-      * that expire at `boundary` and their descendants, with each removed deposit on the balance of
-      * its return account when that account is registered, and the sum of the other deposits.
-      *
-      * Until phase 5, the expired proposals are those with `expiresAfter < boundary - 1`, D50: the
-      * set RATIFY marked at boundary `boundary - 1` (conway Rules/Ratify.hs:353-359) for every
-      * proposal that is not enacted. The removal is `proposalsApplyEnactment` with nothing enacted
-      * (conway Governance/Proposals.hs:492-507, Rules/Epoch.hs:321-322). The refunds are
-      * `returnProposalDeposits` (conway Rules/Epoch.hs:186-200, 334-336); [EB-23]: registration is
-      * read from the accounts after POOLREAP.
+    /** Each amount of `credits` added to the balance of its account when that account is
+      * registered, spec [EB-5], [EB-11a], [EB-14a], [EB-23]. Returns the accounts and the sum of
+      * the credits whose account is not registered.
       */
-    private def expireProposals(ledger: State, boundary: EpochNo): (State, Coin) = {
-        val expiredIds =
-            ledger.govState.proposals.iterator.filter(_.expiresAfter < boundary - 1).map(_.id).toSet
-        if expiredIds.isEmpty then (ledger, Coin.zero)
-        else
-            val (govState, removed) = ledger.govState.removeWithDescendants(expiredIds)
-            val (accounts, unclaimed) =
-                removed.foldLeft((ledger.certState.dstate.accounts, Coin.zero)) {
-                    case ((accounts, unclaimed), p) =>
-                        val credential = p.procedure.rewardAccount.address.credential
-                        accounts.get(credential) match
-                            case Some(account) =>
-                                val refunded = account.balance + p.procedure.deposit
-                                (
-                                  accounts.updated(credential, account.copy(balance = refunded)),
-                                  unclaimed
-                                )
-                            case None => (accounts, unclaimed + p.procedure.deposit)
-                }
-            val certState =
-                ledger.certState.copy(dstate = ledger.certState.dstate.copy(accounts = accounts))
-            (ledger.copy(certState = certState, govState = govState), unclaimed)
+    private def credit(
+        accounts: Map[Credential, ConwayAccountState],
+        credits: Iterable[(Credential, Coin)]
+    ): (Map[Credential, ConwayAccountState], Coin) =
+        credits.foldLeft((accounts, Coin.zero)) { case ((accounts, unclaimed), (cred, amount)) =>
+            accounts.get(cred) match
+                case Some(a) =>
+                    (accounts.updated(cred, a.copy(balance = a.balance + amount)), unclaimed)
+                case None => (accounts, unclaimed + amount)
+        }
+
+    /** Spec [EB-10] to [EB-14]: the ratify result that boundary `n - 1` computed, `pendingRatify`
+      * ([EB-10a], conway Rules/Epoch.hs:301-304), applied to `ledger`, the state after POOLREAP.
+      * Returns the ledger, the epoch state with the treasury after the withdrawals, and the sum of
+      * the proposal deposits whose return account is not registered, which [EB-17] moves into the
+      * treasury.
+      *
+      *   - [EB-11a]: each withdrawal of the enact state goes to the balance of a registered
+      *     account; only the paid sum leaves the treasury (`applyEnactedWithdrawals`, :216-249).
+      *   - [EB-12c]: the expired proposals go with their descendants, then each enacted id in order
+      *     becomes the root of its purpose and takes its siblings with it
+      *     (`proposalsApplyEnactment`, conway Governance/Proposals.hs:492-556).
+      *   - [EB-13a]: the committee and the constitution of the enact state, in every case
+      *     (:328-329). Its pparams were taken before, by `enactedParams`.
+      *   - [EB-14a], [EB-23]: every removed proposal refunds its deposit to the balance of its
+      *     return account when that account is registered after the withdrawals
+      *     (`returnProposalDeposits`, :186-200, 333-336).
+      */
+    private def enact(ledger: State, epoch: EpochState): (State, EpochState, Coin) = {
+        val ratified = epoch.pendingRatify
+        val enactState = ratified.enactState
+        val (withdrawn, unpaid) = credit(ledger.certState.dstate.accounts, enactState.withdrawals)
+        val (unexpired, expired) = ledger.govState.removeWithDescendants(ratified.expired)
+        val (govState, removed) = ratified.enacted.foldLeft((unexpired, expired)) {
+            case ((govState, removed), id) =>
+                val (next, gone) = govState.enact(id)
+                (next, removed ++ gone)
+        }
+        val (accounts, unclaimed) = credit(
+          withdrawn,
+          removed.map(p => p.procedure.rewardAccount.address.credential -> p.procedure.deposit)
+        )
+        val certState =
+            ledger.certState.copy(dstate = ledger.certState.dstate.copy(accounts = accounts))
+        val newGovState = govState.copy(
+          committee = enactState.committee,
+          constitution = enactState.constitution
+        )
+        val paidSum = enactState.withdrawals.values.foldLeft(Coin.zero)(_ + _) - unpaid
+        val account = epoch.accountState
+        (
+          ledger.copy(certState = certState, govState = newGovState),
+          epoch.copy(accountState = account.copy(treasury = account.treasury - paidSum)),
+          unclaimed
+        )
     }
 
     /** Spec [EB-15], [EB-15a], [EB-16]: the dormant counter grows by one when no proposal left
       * after [EB-12] is active at `boundary` (`updateNumDormantEpochs`, conway
       * Rules/Epoch.hs:204-208, 348), also when there is no proposal at all; and the committee state
       * keeps only the cold credentials of the members of the committee (`updateCommitteeState`,
-      * conway Rules/Epoch.hs:350, 426-430), none when there is no committee. Until phase 5 the
-      * committee is the one of the ledger, since nothing is enacted.
+      * conway Rules/Epoch.hs:350, 426-430), none when there is no committee. The committee is the
+      * one [EB-13a] set.
       */
     private def updatedVotingState(ledger: State, boundary: EpochNo): State = {
         val vstate = ledger.certState.vstate
