@@ -21,7 +21,7 @@ val scalusCompatibleVersion = scalusStableVersion
 
 // Bloxbean Cardano Client Library versions
 val cardanoClientLibVersion = "0.7.3"
-val yaciVersion = "0.4.6"
+val yaciVersion = "0.4.7"
 val yaciCardanoTestVersion = "0.1.0"
 val scalatestVersion = "3.2.20"
 val scalatestPlusScalacheckVersion = "3.2.20.0"
@@ -30,7 +30,7 @@ val slf4jVersion = "2.0.20"
 val magnoliaVersion = "1.3.24"
 val pprintVersion = "0.9.6"
 val monocleVersion = "3.3.0"
-val jsoniterScalaVersion = "2.41.2"
+val jsoniterScalaVersion = "2.41.6"
 
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
 //ThisBuild / scalaVersion := "3.3.7-RC1-bin-SNAPSHOT"
@@ -966,7 +966,7 @@ lazy val bench = project
       run / fork := true,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.22.3",
+      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.22.4",
       libraryDependencies += "io.bullet" %%% "borer-core" % borerVersion,
       libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion
     )

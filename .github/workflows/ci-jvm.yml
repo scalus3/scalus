@@ -30,11 +30,11 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: coursier/cache-action@v7
-      - uses: nixbuild/nix-quick-install-action@v34
+      - uses: nixbuild/nix-quick-install-action@v35
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false

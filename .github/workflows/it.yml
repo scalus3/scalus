@@ -16,7 +16,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: coursier/cache-action@v7
@@ -33,7 +33,7 @@ jobs:
       # The full Dugite LEDGER corpus (ledger-rules spec [CV-21]): a third-party release asset,
       # pinned by tag and by sha256
       - name: Cache Dugite ledger corpus
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: dugite/ledger-rules.tar.gz
           key: dugite-ledger-rules-018c480caad1abf311b7203998d0e905b743d17ee26213edc4575d027faab996
@@ -45,7 +45,7 @@ jobs:
           [ -f "$f" ] || gh release download conformance-corpus-v20261101-084724 \
             -R michaeljfazio/dugite -p ledger-rules.tar.gz -D dugite
           echo "018c480caad1abf311b7203998d0e905b743d17ee26213edc4575d027faab996  $f" | sha256sum -c
-      - uses: nixbuild/nix-quick-install-action@v34
+      - uses: nixbuild/nix-quick-install-action@v35
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
@@ -74,11 +74,11 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: coursier/cache-action@v7
-      - uses: nixbuild/nix-quick-install-action@v34
+      - uses: nixbuild/nix-quick-install-action@v35
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
