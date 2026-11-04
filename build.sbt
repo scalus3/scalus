@@ -1663,6 +1663,22 @@ commandSequence(
   "scalusCardanoLedgerIt/Test/compile",
   "scalusCardanoLedgerIt/test"
 )
+// The two halves of `it`, which the two jobs of .github/workflows/it.yml run apart, so a flaky
+// devnet does not hide a ledger divergence. it-conformance needs no network: the ledger vectors,
+// the it-data mainnet blocks (SCALUS_IT_DATA_PATH) and the full Dugite corpus
+// (SCALUS_DUGITE_LEDGER_RULES; without it that test is canceled). it-network needs Docker for Yaci
+// DevKit, and BLOCKFROST_API_KEY for the Blockfrost suite (canceled without it).
+commandSequence(
+  "it-conformance",
+  "scalusCardanoLedgerIt/Test/compile",
+  "scalusCardanoLedgerIt/testOnly scalus.testing.conformance.* scalus.testing.mainnet.*",
+  "scalusCardanoLedgerJVM/testOnly scalus.testing.conformance.DugiteLedgerConformanceTest"
+)
+commandSequence(
+  "it-network",
+  "scalusCardanoLedgerIt/Test/compile",
+  "scalusCardanoLedgerIt/testOnly scalus.testing.integration.*"
+)
 
 // =============================================================================
 // WELCOME LOGO AND USEFUL TASKS

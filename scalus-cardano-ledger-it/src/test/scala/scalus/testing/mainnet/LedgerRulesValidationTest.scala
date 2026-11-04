@@ -1,9 +1,9 @@
-package scalus.testing.integration
+package scalus.testing.mainnet
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
-import scalus.testing.integration.BlocksTestUtils.*
+import scalus.testing.mainnet.BlocksTestUtils.*
 import scalus.bloxbean.StakeStateResolver
 
 import java.nio.file.Files

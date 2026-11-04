@@ -1,13 +1,14 @@
 name: Integration tests
 on:
   workflow_dispatch:
-  #  inputs:
-  #    parameter:
-  #      description: My Parameter
   schedule:
     - cron: '00 07 * * *'
+# Two jobs, so a flaky devnet does not hide a ledger divergence (sbt aliases it-conformance and
+# it-network in build.sbt).
 jobs:
-  test:
+  conformance:
+    # Offline and deterministic: the cardano-ledger vectors, the it-data mainnet blocks and the
+    # full Dugite LEDGER corpus. A failure here means Scalus no longer matches the ledger.
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -19,61 +20,70 @@ jobs:
         with:
           fetch-depth: 0
       - uses: coursier/cache-action@v7
-      - name: Download data
+      - name: Download it-data
         uses: robinraju/release-downloader@v1
         with:
-          # A flag to set the download target as latest release
-          # The default value is 'false'
           latest: true
-
-          # A flag to download from prerelease. It should be combined with latest flag.
-          # The default value is 'false'
           preRelease: true
-
-          # The github tag. e.g: v1.0.1
-          # Download assets from a specific tag/version
           tag: 'it-data'
-
-          # The release id to download files from
-          #releaseId: ''
-
-          # The name of the file to download.
-          # Use this field only to specify filenames other than tarball or zipball, if any.
-          # Supports wildcard pattern (eg: '*', '*.deb', '*.zip' etc..)
           fileName: 'it-data.zip'
-
-          # Download the attached tarball (*.tar.gz)
-          #tarBall: true
-
-          # Download the attached zipball (*.zip)
           zipBall: true
-
-          # Relative path under $GITHUB_WORKSPACE to place the downloaded file(s)
-          # It will create the target directory automatically if not present
-          # eg: out-file-path: "my-downloads" => It will create directory $GITHUB_WORKSPACE/my-downloads
           out-file-path: 'it-data'
-
-          # A flag to set if the downloaded assets are archives and should be extracted
-          # Checks all downloaded files if they end with zip, tar or tar.gz and extracts them, if true.
-          # Prints a warning if enabled but file is not an archive - but does not fail.
           extract: true
-
-          # Github access token to download files from private repositories
-          # https://docs.github.com/en/actions/configuring-and-managing-workflows/creating-and-storing-encrypted-secrets
-          # eg: token: ${{ secrets.MY_TOKEN }}
-          #token: ''
-
-          # The URL of the Github API, only use this input if you are using Github Enterprise
-          # Default: "https://api.github.com"
-          # Use http(s)://[hostname]/api/v3 to access the API for GitHub Enterprise Server
-          #github-api-url: ''
-
+      # The full Dugite LEDGER corpus (ledger-rules spec [CV-21]): a third-party release asset,
+      # pinned by tag and by sha256
+      - name: Cache Dugite ledger corpus
+        uses: actions/cache@v4
+        with:
+          path: dugite/ledger-rules.tar.gz
+          key: dugite-ledger-rules-018c480caad1abf311b7203998d0e905b743d17ee26213edc4575d027faab996
+      - name: Download Dugite ledger corpus
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          f=dugite/ledger-rules.tar.gz
+          [ -f "$f" ] || gh release download conformance-corpus-v20261101-084724 \
+            -R michaeljfazio/dugite -p ledger-rules.tar.gz -D dugite
+          echo "018c480caad1abf311b7203998d0e905b743d17ee26213edc4575d027faab996  $f" | sha256sum -c
       - uses: nixbuild/nix-quick-install-action@v34
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
-      - name: Build and test in Nix devshell
-        run: nix develop .#ci --accept-flake-config --command bash -c "export SCALUS_IT_DATA_PATH=$GITHUB_WORKSPACE/it-data/it-data; sbt it"
+      - name: Run the conformance tests in the Nix devshell
+        run: nix develop .#ci --accept-flake-config --command bash -c "export SCALUS_IT_DATA_PATH=$GITHUB_WORKSPACE/it-data/it-data; export SCALUS_DUGITE_LEDGER_RULES=$GITHUB_WORKSPACE/dugite/ledger-rules.tar.gz; sbt it-conformance"
+      - name: Report test results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "Conformance ${{ job.status == 'success' && '✅' || '❌' }} - ${{ github.ref_name }}"
+          description: "[${{ github.event_name }}] - (${{ github.sha }})"
+          url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          username: "GitHub Actions"
+          avatar_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+          nodetail: true
+          notimestamp: true
+
+  integration:
+    # Against a live network: Yaci DevKit in Docker, and Blockfrost (canceled without
+    # BLOCKFROST_API_KEY).
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: coursier/cache-action@v7
+      - uses: nixbuild/nix-quick-install-action@v34
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          use-flakehub: false
+      - name: Run the integration tests in the Nix devshell
+        run: nix develop .#ci --accept-flake-config --command bash -c "sbt it-network"
       - name: Report test results
         uses: sarisia/actions-status-discord@v1
         if: always()

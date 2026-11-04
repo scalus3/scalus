@@ -1,4 +1,4 @@
-package scalus.testing.integration
+package scalus.testing.mainnet
 
 import co.nstant.in.cbor.{model as cbor, CborException}
 import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier

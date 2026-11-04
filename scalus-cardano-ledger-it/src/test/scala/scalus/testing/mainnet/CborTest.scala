@@ -1,4 +1,4 @@
-package scalus.testing.integration
+package scalus.testing.mainnet
 
 import com.bloxbean.cardano.yaci.core.model.serializers.util.WitnessUtil
 import io.bullet.borer.Cbor
@@ -6,7 +6,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.{BlockFile, OriginalCborByteArray}
-import scalus.testing.integration.BlocksTestUtils.*
+import scalus.testing.mainnet.BlocksTestUtils.*
 
 import java.math.BigInteger
 import java.nio.file.Files
