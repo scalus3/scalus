@@ -39,6 +39,14 @@ case class PlanPhantomFunction(p: PlanPhantom[BigInt => BigInt], m: BigInt)
 @Compile
 object PlanPhantomFunction
 
+/** A tree with a function in its leaves: it contains itself, and has no `Data` form. */
+enum PlanFunctionTree:
+    case Node(left: PlanFunctionTree, right: PlanFunctionTree)
+    case Leaf(f: BigInt => BigInt)
+
+@Compile
+object PlanFunctionTree
+
 /** The plan of how a statement's variables reach Lean ([[MappingPlan]]): which nodes of a
   * variable's type are decided, how the statement maps them today, and that the plan is what the
   * Lean variables are.
@@ -322,13 +330,9 @@ class MappingPlanTest extends AnyFunSuite {
         assert(refusedPhantom.left.exists(_.contains("has no Data form")), refusedPhantom)
     }
 
-    test("a fixed plan can cut a type that contains itself with Data nodes") {
+    test("rule 1: a type that contains itself is Data where it repeats") {
         val tree = forAll[BlasterTree](t => denotes(t))
-        // By fields, the type has no end.
-        val byFields = UplcBlaster.lower(tree, FunctionTable.empty)
-        assert(byFields.left.exists(_.contains("contains itself")), byFields)
-        // The plan is asked about a node before the node is expanded, and a Data node is not.
-        val cut = loweredAsData(tree, "t.Node.left", "t.Node.right")
+        val cut = lowered(tree)
         assert(names(cut) == List("t.case", "t.Node.left", "t.Node.right"))
         assert(
           written(cut.plan) == List(
@@ -338,10 +342,53 @@ class MappingPlanTest extends AnyFunSuite {
           ),
           cut.plan.show
         )
-        // Below their first level, the trees are any Data to Lean: the variables have more
-        // values than their type, and stand only for every value.
-        asData(exists[BlasterTree](t => denotes(t)), "t.Node.left", "t.Node.right") match
-            case Left(reason)   => assert(reason.contains("stands for every value"), reason)
+        assert(
+          cut.plan.nodes.map(_.reason) == List(
+            Reason.Quantified(Quantifier.ForAll),
+            Reason.ContainsItself,
+            Reason.ContainsItself
+          ),
+          cut.plan.show
+        )
+        // A fixed plan of the same nodes is the same check: the reasons are not in its text.
+        val fixed = loweredAsData(tree, "t.Node.left", "t.Node.right")
+        assert(fixed.binders == cut.binders)
+        assert(fixed.predicates == cut.predicates)
+        assert(fixed.programHashes == cut.programHashes)
+        // A forAll in a positive position stands for every value, also in a conclusion, and so
+        // does an exists in a negative one.
+        assert(UplcBlaster.lower(Prop(true) ==> tree, FunctionTable.empty).isRight)
+        assert(
+          UplcBlaster.lower(!exists[BlasterTree](t => denotes(t)), FunctionTable.empty).isRight
+        )
+    }
+
+    test("a type that contains itself is refused where its variable asks for a witness") {
+        // Below its first level a Data node is any Data to Lean, more values than its type has,
+        // and a witness could be none of the type's.
+        def refusedForAWitness(prop: Prop): Unit =
+            UplcBlaster.lower(prop, FunctionTable.empty) match
+                case Left(reason) =>
+                    // Refused once the statement is lowered, as any variable with more values
+                    // than its type, with the reason of a type that contains itself.
+                    assert(reason.startsWith("t.Node.left, t.Node.right: "), reason)
+                    assert(reason.contains("contains itself"), reason)
+                    assert(reason.contains("asks for a witness"), reason)
+                case Right(lowered) => fail(s"expected a refusal, got ${lowered.plan.show}")
+        val tree = forAll[BlasterTree](t => denotes(t))
+        refusedForAWitness(exists[BlasterTree](t => denotes(t)))
+        refusedForAWitness(!tree)
+        refusedForAWitness(tree ==> Prop(true))
+        refusedForAWitness(tree <=> Prop(true))
+        refusedForAWitness(Prop(true) <=> exists[BlasterTree](t => denotes(t)))
+    }
+
+    test("rule 1: a type that contains itself and has no Data form is refused") {
+        UplcBlaster.lower(forAll[PlanFunctionTree](t => denotes(t)), FunctionTable.empty) match
+            case Left(reason) =>
+                assert(reason.startsWith("t.Node.left: a "), reason)
+                assert(reason.contains("contains itself"), reason)
+                assert(reason.contains("has no Data form"), reason)
             case Right(lowered) => fail(s"expected a refusal, got ${lowered.plan.show}")
     }
 
