@@ -1,0 +1,18 @@
+Source: https://scalus.org/docs/smart-contract-optimisations/algorithmic-optimisations
+
+# Algorithmic Optimisations
+
+Before diving into compiler-level techniques, apply algorithmic optimizations. These give the biggest wins and are backend-agnostic. Scalus provides a library of [Design Patterns](/docs/design-patterns) for common cases:
+
+- **[Withdraw Zero](/docs/design-patterns/withdraw-zero)** -- run heavy logic once via a stake validator instead of per-UTxO (O(N) instead of O(N²))
+- **[UTxO Indexer](/docs/design-patterns/utxo-indexer)** -- pass indexes in the redeemer for O(1) lookup instead of linear search
+- **[Transaction Level Minting](/docs/design-patterns/transaction-level-minting)** -- batch minting validation into a single check
+- **[Merkelized Validator](/docs/design-patterns/merkelized-validator)** -- split large validators into smaller pieces, include only the branch you need
+
+See the full `OptimizedPaymentSplitterValidator` example in `scalus-examples/.../paymentsplitter/` for a real-world application of the withdraw-zero pattern.
+
+## What's Next?
+
+- **[Design Patterns](/docs/design-patterns)** — full reference for every pattern listed above, with implementations and trade-offs.
+- **[Scala Metaprogramming](/docs/smart-contract-optimisations/scala-metaprogramming)** — once the algorithm is right, eliminate per-call overhead with `inline` and compile-time evaluation.
+- **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** — quantify the impact of each pattern on real transaction fees.

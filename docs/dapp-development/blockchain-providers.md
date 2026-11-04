@@ -1,0 +1,183 @@
+Source: https://scalus.org/docs/dapp-development/blockchain-providers
+
+# Blockchain Providers
+
+The `Provider` trait is Scalus's abstraction for interacting with the Cardano blockchain. Providers allow you to send transactions and query blockchain state in a consistent way, regardless of whether you're working with a real blockchain, test node, or local emulator.
+
+## Overview
+
+The `Provider` interface provides methods for:
+- Querying UTxOs by address, datum, or tokens
+- Submitting CBOR-encoded transactions
+- Retrieving transaction information
+- Accessing blockchain state
+
+## Available Providers
+
+### Emulator
+
+The `Emulator` implements the `Provider` trait but operates entirely locally, without any network connection. It provides:
+- In-memory UTxO set management
+- Local transaction validation using [ledger rules](/ledger/ledger-rules)
+- Instant feedback without network delays
+- Perfect isolation for testing
+
+The Emulator is ideal for:
+- Unit test suites
+- Rapid development iterations
+- Scenarios where launching a local node would be inconvenient
+
+Learn more about the Emulator in the [Emulator documentation](/docs/testing/emulator).
+
+### BlockfrostProvider
+
+`BlockfrostProvider` connects to the Cardano blockchain via any Blockfrost-compatible API. The Blockfrost API has become a de-facto standard implemented by multiple providers including [Blockfrost](https://blockfrost.io), [Yaci DevKit](https://github.com/bloxbean/yaci-devkit), and others.
+
+This provider is useful for:
+- Verifying transactions and scripts against a real blockchain
+- Testing against testnets (preview, preprod) or local devnets
+- Production deployments
+
+**Creating a BlockfrostProvider:**
+
+```scala
+import scalus.cardano.node.BlockfrostProvider
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
+
+// Connect to preprod testnet
+val provider = BlockfrostProvider.preprod("your-api-key").await(30.seconds)
+
+// Other networks:
+// BlockfrostProvider.mainnet("your-api-key").await(30.seconds)
+// BlockfrostProvider.preview("your-api-key").await(30.seconds)
+// BlockfrostProvider.localYaci().await(30.seconds)
+```
+
+The same API works on both JVM and JavaScript platforms.
+
+Interacting with remote APIs incurs network delays, making them less suitable for rapid development cycles or unit tests. For fast local testing, use the Emulator or Yaci DevKit.
+
+## Example Usage
+
+Here's how you might use different providers interchangeably:
+
+```scala
+import scalus.cardano.node.{BlockfrostProvider, BlockchainProvider, Emulator}
+import scalus.cardano.txbuilder.TxBuilder
+import scalus.cardano.ledger.Value
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
+
+// Using Blockfrost-compatible API for production/testnet
+val blockfrostProvider = BlockfrostProvider.preprod("your-api-key").await(30.seconds)
+
+// Using Emulator for fast local testing
+val emulatorProvider = Emulator(
+  Map(
+    input(0) -> adaOutput(Alice.address, 100)
+  )
+)
+
+// Same code works with both providers
+def buildAndSubmit(provider: BlockchainProvider) = {
+  val tx = TxBuilder(provider.cardanoInfo)
+    .payTo(Bob.address, Value.ada(10))
+    .complete(provider, Alice.address)
+    .await(30.seconds)
+    .transaction
+
+  provider.submit(tx).await(30.seconds)
+}
+
+// Works with Blockfrost
+buildAndSubmit(blockfrostProvider)
+
+// Works with Emulator
+buildAndSubmit(emulatorProvider)
+```
+
+## Querying UTXOs
+
+Providers offer several ways to query UTXOs from the blockchain.
+
+### Basic Queries
+
+```scala
+import scalus.cardano.address.Address.addr
+
+val myAddress = addr"addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer..."
+
+// Query all UTXOs at an address
+val utxosResult = provider.findUtxos(myAddress).await(30.seconds)
+
+utxosResult match {
+  case Right(utxos) =>
+    println(s"Found ${utxos.size} UTXOs")
+    utxos.foreach { case (input, output) =>
+      println(s"  ${input.transactionId.toHex}#${input.index}: ${output.value.coin} lovelace")
+    }
+  case Left(error) =>
+    println(s"Query failed: $error")
+}
+
+// Find a specific UTXO by transaction input
+val specificUtxo = provider.findUtxo(Input(txHash, 0)).await(30.seconds)
+```
+
+### Query DSL
+
+For more complex queries, use the `queryUtxos` DSL which provides a type-safe way to filter and paginate results:
+
+```scala
+import scalus.cardano.ledger.{Coin, PolicyId, AssetName}
+
+// Query UTXOs with a specific native token
+val policyId = PolicyId.fromHex("abc123...")
+val assetName = AssetName.fromString("MyToken")
+
+val tokenUtxos = provider.queryUtxos { u =>
+  u.output.address == myAddress && u.output.value.hasAsset(policyId, assetName)
+}.execute().await(30.seconds)
+
+// Query with minimum lovelace amount
+val largeUtxos = provider.queryUtxos { u =>
+  u.output.address == myAddress && u.output.value.coin >= Coin.ada(10)
+}.execute().await(30.seconds)
+
+// Query with early termination once you have enough funds
+val enoughFunds = provider.queryUtxos { u =>
+  u.output.address == myAddress
+}.minTotal(Coin.ada(50)).execute().await(30.seconds)
+
+// Combine multiple conditions
+val complexQuery = provider.queryUtxos { u =>
+  u.output.address == myAddress &&
+  u.output.value.coin >= Coin.ada(5) &&
+  u.output.value.hasAsset(policyId, assetName)
+}.limit(10).execute().await(30.seconds)
+```
+
+### Supported Query Expressions
+
+The DSL supports these expressions:
+- `u.output.address == addr` - filter by address
+- `u.input.transactionId == txId` - filter by transaction
+- `u.output.value.hasAsset(policyId, assetName)` - filter by native token
+- `u.output.value.coin >= amount` - filter by minimum lovelace
+- `u.output.hasDatumHash(hash)` - filter by datum hash
+- `&&` - AND combination
+- `||` - OR combination
+
+Query modifiers:
+- `.limit(n)` - limit number of results
+- `.skip(n)` - skip first n results
+- `.minTotal(amount)` - stop early once total lovelace reaches amount (optimization)
+
+## See Also
+
+- [Emulator](/ledger/emulator) - Local development and testing
+- [Transaction Builder](/transaction-builder) - Building transactions with providers
+- [Ledger Rules](/ledger/ledger-rules) - Understanding transaction validation

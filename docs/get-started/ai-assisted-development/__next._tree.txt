@@ -1,0 +1,8 @@
+:HL["/_next/static/chunks/19c3uztuejf4_.css","style"]
+:HL["/_next/static/chunks/2xdxvesoqq_er.css","style"]
+:HL["/_next/static/chunks/3lvtl_acyr17g.css","style"]
+:HL["/scalus-logo-dark.png","image"]
+3:[["children",{"s":"__PAGE__","h":160}]]
+2:[["children",{"s":{"n":"mdxPath","t":"oc","k":"get-started/ai-assisted-development","s":[]},"h":96,"c":"$Q3"}]]
+1:[["children",{"s":"docs","h":64,"c":"$Q2"}]]
+0:{"b":"FEfgpBjL-_Ne3CvwMdGB6","t":{"t":{"s":"","h":16,"c":"$Q1"}}}

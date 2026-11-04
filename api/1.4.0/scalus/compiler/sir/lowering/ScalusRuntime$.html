@@ -1,0 +1,292 @@
+<!DOCTYPE html><html data-pathToRoot="../../../../" data-rawLocation="scalus/compiler/sir/lowering/ScalusRuntime$" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>ScalusRuntime</title><link rel="shortcut icon" type="image/x-icon" href="../../../../favicon.ico"></link><script type="text/javascript" src="../../../../scripts/theme.js"></script><script type="text/javascript" src="../../../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../../../styles/nord-light.css"></link><link rel="stylesheet" href="../../../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../../../styles/searchbar.css"></link><link rel="stylesheet" href="../../../../styles/social-links.css"></link><link rel="stylesheet" href="../../../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../../../styles/fontawesome.css"></link><script type="text/javascript" src="../../../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../../../styles/apistyles.css"></link><script>var pathToRoot = "../../../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../../../index.html">Scalus</a>/<a href="../../../../scalus.html">scalus</a>/<a href="../../../compiler.html">scalus.compiler</a>/<a href="../../sir.html">scalus.compiler.sir</a>/<a href="../lowering.html">scalus.compiler.sir.lowering</a>/<a href="ScalusRuntime$.html">ScalusRuntime</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon ob"></span></span>
+ <h1 class="h600 single">ScalusRuntime</h1>
+</div>
+<div class="fqname body-large">
+ <span>scalus.compiler.sir.lowering.ScalusRuntime</span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="ScalusRuntime$.html" t="n" class="documentableName ">ScalusRuntime</a>
+ </div>
+</div>
+<div class="cover">
+ <div class="doc"></div>
+ <section id="attributes">
+  <h2 class="h500">Attributes</h2>
+  <dl class="attributes">
+   <dt class="body-small">
+    Graph
+   </dt>
+   <dd class="body-medium">
+    <div id="inheritance-diagram" class="diagram-class showGraph">
+     <button type="button" class="label-only-button" onclick="zoomOut()">Reset zoom</button><button type="button" class="label-only-button" onclick="hideGraph()">Hide graph</button><button type="button" class="label-only-button" onclick="showGraph()">Show graph</button>
+     <svg id="graph"></svg>
+     <script type="text/dot" id="dot"> digraph g {
+ node0 [id=node0, label="<span style=\"color: #FFFFFF;\">object <a href=\"ScalusRuntime$.html\" t=\"n\">ScalusRuntime</a></span>", class="object vertex"];
+node1 [id=node1, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Object</span></span>", class="class vertex"];
+node2 [id=node2, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Any</span></span>", class="class vertex"];
+node3 [id=node3, label="<span style=\"color: #FFFFFF;\">trait <span data-unresolved-link=\"\" t=\"n\">Matchable</span></span>", class="trait vertex"];
+
+
+ node0 -> node1;
+node1 -> node2;
+node1 -> node3;
+node3 -> node2;
+
+}
+</script>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Supertypes
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <div>
+      class <span data-unresolved-link="" t="n">Object</span>
+     </div>
+     <div>
+      trait <span data-unresolved-link="" t="n">Matchable</span>
+     </div>
+     <div>
+      class <span data-unresolved-link="" t="n">Any</span>
+     </div><span></span>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Self type
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <span></span>
+     <div>
+      <a href="ScalusRuntime$.html" t="n">ScalusRuntime</a>.<span t="k">type</span>
+     </div>
+    </div>
+   </dd>
+  </dl>
+ </section>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Concrete-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete methods</h4>
+        </div>
+        <div class="documentableElement" id="arrayToList-fffffd85">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ScalusRuntime$.html#arrayToList-fffffd85" t="n" class="documentableName ">arrayToList</a>(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="builtinListToUplcConstr-cd6">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ScalusRuntime$.html#builtinListToUplcConstr-cd6" t="n" class="documentableName ">builtinListToUplcConstr</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">input</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">outSum</span>: <a href="SumCaseClassRepresentation$$SumUplcConstr.html" t="t">SumUplcConstr</a>, <span t="k"></span><span data-unresolved-link="" t="n">listType</span>: <a href="../SIRType.html" t="t">SIRType</a>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Convert a builtin list (SumBuiltinList repr) to a UplcConstr chain: Cons(h,t) = Constr(0, [h, t]), Nil = Constr(1, []).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Convert a builtin list (SumBuiltinList repr) to a UplcConstr chain: Cons(h,t) = Constr(0, [h, t]), Nil = Constr(1, []).</p>
+             </div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               input
+              </dt>
+              <dd class="body-medium">
+               <p>the builtin list value</p>
+              </dd>
+              <dt class="body-small">
+               listType
+              </dt>
+              <dd class="body-medium">
+               <p>the SIR type of the list (e.g., List[Point])</p>
+              </dd>
+              <dt class="body-small">
+               outSum
+              </dt>
+              <dd class="body-medium">
+               <p>the target SumUplcConstr representation</p>
+              </dd>
+              <dt class="body-small">
+               pos
+              </dt>
+              <dd class="body-medium">
+               <p>source position</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="initContext-fffff359">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ScalusRuntime$.html#initContext-fffff359" t="n" class="documentableName ">initContext</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <span data-unresolved-link="" t="t">Unit</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Add to context scope lazy val with runtime functions.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Add to context scope lazy val with runtime functions.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="initSupportBindings-fffff359">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ScalusRuntime$.html#initSupportBindings-fffff359" t="n" class="documentableName ">initSupportBindings</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <span data-unresolved-link="" t="t">Unit</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Eagerly materialize every support-module binding into <code>lctx.scope</code> as a lazy named var.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Eagerly materialize every support-module binding into <code>lctx.scope</code> as a lazy named var.</p>
+              <p>Called from <a href="ScalusRuntime$.html#initContext-fffff359">initContext</a> so repeated <code>SIR.ExternalVar</code> references to a support-module binding all resolve (via <code>lctx.scope.getByName</code>) to the SAME <code>VariableLoweredValue</code>, avoiding duplicate definitions and leaking pattern-bound vars across support-binding bodies.</p>
+              <p>For bindings in the <code>UplcConstrListOperations</code> / <code>UplcConstrOptionOperations</code> modules we lower under <code>inUplcConstrListScope = true</code> so inner <code>List.Cons(...)</code> / <code>Option.Some(...)</code> / <code>List.Nil</code> / <code>Option.None</code> emissions pick <code>SumCaseUplcConstrEmitter</code>.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="mapList-fffffd85">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ScalusRuntime$.html#mapList-fffffd85" t="n" class="documentableName ">mapList</a>(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="uplcConstrToBuiltinList-fffff51e">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="ScalusRuntime$.html#uplcConstrToBuiltinList-fffff51e" t="n" class="documentableName ">uplcConstrToBuiltinList</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">input</span>: <a href="LoweredValue.html" t="t">LoweredValue</a>, <span t="k"></span><span data-unresolved-link="" t="n">outListRepr</span>: <a href="SumCaseClassRepresentation$$SumBuiltinList.html" t="t">SumBuiltinList</a>, <span t="k"></span><span data-unresolved-link="" t="n">pos</span>: <a href="../../sir.html#SIRPosition-0" t="t">SIRPosition</a>)(<span t="k">using </span><span t="k"></span><span data-unresolved-link="" t="n">lctx</span>: <a href="LoweringContext.html" t="t">LoweringContext</a>): <a href="LoweredValue.html" t="t">LoweredValue</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Convert a UplcConstr list (Constr chain) to a builtin list (SumBuiltinList).</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Convert a UplcConstr list (Constr chain) to a builtin list (SumBuiltinList).</p>
+              <p>Iterates the Constr chain using Case-based matching, converts each element to the target element repr, and builds a builtin list with mkCons. Reverse of builtinListToUplcConstr.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+      <section id="Concrete-fields">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete fields</h4>
+        </div>
+        <div class="documentableElement" id="ARRAY_TO_LIST_NAME-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">val </span></span><a href="ScalusRuntime$.html#ARRAY_TO_LIST_NAME-0" t="n" class="documentableName ">ARRAY_TO_LIST_NAME</a>: <span data-unresolved-link="" t="t">String</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="BUILTIN_LIST_TO_UPLC_CONSTR_NAME-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">val </span></span><a href="ScalusRuntime$.html#BUILTIN_LIST_TO_UPLC_CONSTR_NAME-0" t="n" class="documentableName ">BUILTIN_LIST_TO_UPLC_CONSTR_NAME</a>: <span data-unresolved-link="" t="t">String</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="MAP_LIST_NAME-0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">val </span></span><a href="ScalusRuntime$.html#MAP_LIST_NAME-0" t="n" class="documentableName ">MAP_LIST_NAME</a>: <span data-unresolved-link="" t="t">String</span>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#attributes">Attributes</a></li><li><a href="#members-list">Members list</a><ul><li><a href="#Value-members">Value members</a><ul><li><a href="#Concrete-methods">Concrete methods</a></li><li><a href="#Concrete-fields">Concrete fields</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

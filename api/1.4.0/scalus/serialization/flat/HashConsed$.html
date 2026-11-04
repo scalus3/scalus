@@ -1,0 +1,864 @@
+<!DOCTYPE html><html data-pathToRoot="../../../" data-rawLocation="scalus/serialization/flat/HashConsed$" data-dynamicSideMenu="true"><head><meta charset="utf-8"></meta><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"></meta><title>HashConsed</title><link rel="shortcut icon" type="image/x-icon" href="../../../favicon.ico"></link><script type="text/javascript" src="../../../scripts/theme.js"></script><script type="text/javascript" src="../../../scripts/searchData.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scastieConfiguration.js" defer="true"></script><link rel="stylesheet" href="../../../styles/theme/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/components/button/bundle.css"></link><link rel="stylesheet" href="../../../styles/theme/layout/bundle.css"></link><link rel="stylesheet" href="../../../styles/nord-light.css"></link><link rel="stylesheet" href="../../../styles/dotty-icons.css"></link><link rel="stylesheet" href="../../../styles/filter-bar.css"></link><link rel="stylesheet" href="../../../styles/code-snippets.css"></link><link rel="stylesheet" href="../../../styles/searchbar.css"></link><link rel="stylesheet" href="../../../styles/social-links.css"></link><link rel="stylesheet" href="../../../styles/versions-dropdown.css"></link><link rel="stylesheet" href="../../../styles/content-contributors.css"></link><link rel="stylesheet" href="../../../styles/fontawesome.css"></link><script type="text/javascript" src="../../../hljs/highlight.pack.js" defer="true"></script><script type="text/javascript" src="../../../scripts/hljs-scala3.js" defer="true"></script><script type="text/javascript" src="../../../scripts/ux.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/component.js" defer="true"></script><script type="text/javascript" src="../../../scripts/common/utils.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterBar.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/DocumentableList.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Input.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/FilterGroup.js" defer="true"></script><script type="text/javascript" src="../../../scripts/components/Filter.js" defer="true"></script><script type="text/javascript" src="../../../scripts/scaladoc-scalajs.js" defer="true"></script><script type="text/javascript" src="../../../scripts/contributors.js" defer="true"></script><script type="text/javascript" src="https://code.jquery.com/jquery-3.5.1.min.js" defer="true"></script><script type="text/javascript" src="https://d3js.org/d3.v6.min.js" defer="true"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/graphlib-dot@0.6.2/dist/graphlib-dot.min.js" defer="true"></script><script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/dagre-d3/0.6.1/dagre-d3.min.js" defer="true"></script><script type="text/javascript" src="https://scastie.scala-lang.org/embedded.js" defer="true"></script><script type="text/javascript" src="../../../scripts/data.js" defer="true"></script><link rel="stylesheet" href="../../../styles/apistyles.css"></link><script>var pathToRoot = "../../../";</script><script>var versionsDictionaryUrl = "https://scalus.org/api/versions.json";</script></head><body><div id=""><div id="header" class="body-small"><div class="header-container-left"><a href="../../../" class="logo-container"><span class="project-name h300">Scalus</span></a><span onclick="dropdownHandler(event)" class="text-button with-arrow" id="dropdown-trigger"><a><div class="projectVersion">1.4.0</div></a></span><div id="version-dropdown" class="dropdown-menu"></div></div><div class="header-container-right"><button id="search-toggle" class="icon-button"></button><span id="theme-toggle" class="icon-button"></span><span id="mobile-menu-toggle" class="icon-button hamburger"></span></div></div><div id="mobile-menu"><div class="mobile-menu-header body-small"><span class="mobile-menu-logo"><span class="project-name h300">Scalus</span></span><button id="mobile-menu-close" class="icon-button close"></button></div><div class="mobile-menu-container body-medium"><input id="mobile-scaladoc-searchbar-input" class="scaladoc-searchbar-input" type="search" placeholder="Find anything"></input><span id="mobile-theme-toggle" class="mobile-menu-item mode"></span></div></div><span id="mobile-sidebar-toggle" class="floating-button"></span><div id="leftColumn" class="body-small"></div><div id="footer" class="body-small"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div><div id="scaladoc-searchBar"></div><div id="main"><div class="breadcrumbs container"><a href="../../../index.html">Scalus</a>/<a href="../../../scalus.html">scalus</a>/<a href="../../serialization.html">scalus.serialization</a>/<a href="../flat.html">scalus.serialization.flat</a>/<a href="HashConsed$.html">HashConsed</a></div><div id="content" class="body-medium"><div><div class="cover-header">
+ <span class="icon"><span class="micon ob"></span></span>
+ <h1 class="h600 single">HashConsed</h1>
+</div>
+<div class="fqname body-large">
+ <span>scalus.serialization.flat.HashConsed</span>
+</div>
+<div class="main-signature mono-small-block">
+ <div class="signature">
+  <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="HashConsed$.html" t="n" class="documentableName ">HashConsed</a>
+ </div>
+</div>
+<div class="cover">
+ <div class="doc">
+  <p>Objects are hash-consed during restoring from file. Note, that identityHashCode can be different on the different VM-s, so it is not safe to reky on it. value-based hash-code now is not determenistics on recuresive data structures with self-references. So, we use identityHashCode on VN which store file and restore internal references on other VN.</p>
+ </div>
+ <section id="attributes">
+  <h2 class="h500">Attributes</h2>
+  <dl class="attributes">
+   <dt class="body-small">
+    Graph
+   </dt>
+   <dd class="body-medium">
+    <div id="inheritance-diagram" class="diagram-class showGraph">
+     <button type="button" class="label-only-button" onclick="zoomOut()">Reset zoom</button><button type="button" class="label-only-button" onclick="hideGraph()">Hide graph</button><button type="button" class="label-only-button" onclick="showGraph()">Show graph</button>
+     <svg id="graph"></svg>
+     <script type="text/dot" id="dot"> digraph g {
+ node0 [id=node0, label="<span style=\"color: #FFFFFF;\">object <a href=\"HashConsed$.html\" t=\"n\">HashConsed</a></span>", class="object vertex"];
+node1 [id=node1, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Object</span></span>", class="class vertex"];
+node2 [id=node2, label="<span style=\"color: #FFFFFF;\">class <span data-unresolved-link=\"\" t=\"n\">Any</span></span>", class="class vertex"];
+node3 [id=node3, label="<span style=\"color: #FFFFFF;\">trait <span data-unresolved-link=\"\" t=\"n\">Matchable</span></span>", class="trait vertex"];
+
+
+ node0 -> node1;
+node1 -> node2;
+node1 -> node3;
+node3 -> node2;
+
+}
+</script>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Supertypes
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <div>
+      class <span data-unresolved-link="" t="n">Object</span>
+     </div>
+     <div>
+      trait <span data-unresolved-link="" t="n">Matchable</span>
+     </div>
+     <div>
+      class <span data-unresolved-link="" t="n">Any</span>
+     </div><span></span>
+    </div>
+   </dd>
+   <dt class="body-small">
+    Self type
+   </dt>
+   <dd class="body-medium">
+    <div class="mono-small-block supertypes">
+     <span></span>
+     <div>
+      <a href="HashConsed$.html" t="n">HashConsed</a>.<span t="k">type</span>
+     </div>
+    </div>
+   </dd>
+  </dl>
+ </section>
+</div>
+<section id="members-list">
+ <h2 class="h500">Members list</h2>
+ <div class="documentableFilter">
+  <div class="filtersContainer"></div><input class="filterableInput" placeholder="Filter by any phrase" data-test-id="filterBarInput" type="search"><button class="clearButton label-only-button" data-test-id="filterBarClearButton">Clear all</button>
+ </div>
+ <div class="membersList expand">
+  <div class="tabs">
+   <div class="contents">
+    <section id="Type-members">
+     <div data-togglable="Type members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Type members" class="h400">Type members</h3>
+      </div>
+      <section id="Classlikes">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Classlikes</h4>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="HashConsed$$CachedTaggedRef.html" t="n" class="documentableName ">CachedTaggedRef</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>](<span t="k"></span><span t="k">val </span><span data-unresolved-link="" t="n">tag</span>: <a href="HashConsed$.html#Tag-0" t="t">Tag</a>, <span t="k">val </span><span data-unresolved-link="" t="n">ref</span>: <a href="HashConsedRef.html" t="t">HashConsedRef</a>[<span data-unresolved-link="" t="t">A</span>])<span t="k"> extends </span><a href="HashConsedRef.html" t="t">HashConsedRef</a>[<span t="t">A</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="HashConsedRef.html" t="n">HashConsedRef</a>[<span t="t">A</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="HashConsed$$ConstRef.html" t="n" class="documentableName ">ConstRef</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">value</span>: <span data-unresolved-link="" t="t">A</span>)<span t="k"> extends </span><a href="HashConsedRef.html" t="t">HashConsedRef</a>[<span t="t">A</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="HashConsed$$ConstRef$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 trait <a href="HashConsedRef.html" t="n">HashConsedRef</a>[<span t="t">A</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="HashConsed$$ConstRef$.html" t="n" class="documentableName ">ConstRef</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="HashConsed$$ConstRef.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="HashConsed$$ConstRef$.html" t="n">ConstRef</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="HashConsed$$ForwardRef.html" t="n" class="documentableName ">ForwardRef</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>](<span t="k"></span><span t="k">val </span><span data-unresolved-link="" t="n">ihc</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k">val </span><span data-unresolved-link="" t="n">tag</span>: <a href="HashConsed$.html#Tag-0" t="t">Tag</a>)<span t="k"> extends </span><a href="HashConsedRef.html" t="t">HashConsedRef</a>[<span t="t">A</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="HashConsed$$ForwardRef$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="HashConsedRef.html" t="n">HashConsedRef</a>[<span t="t">A</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="HashConsed$$ForwardRef$.html" t="n" class="documentableName ">ForwardRef</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="HashConsed$$ForwardRef.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="HashConsed$$ForwardRef$.html" t="n">ForwardRef</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="HashConsed$$ForwardRefAcceptor.html" t="n" class="documentableName ">ForwardRefAcceptor</a>(<span t="k"></span><span t="k">val </span><span data-unresolved-link="" t="n">ihc</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k">val </span><span data-unresolved-link="" t="n">tag</span>: <a href="HashConsed$.html#Tag-0" t="t">Tag</a>, <span t="k">var </span><span data-unresolved-link="" t="n">setRefActions</span>: <span data-unresolved-link="" t="t">List</span>[(<a href="HashConsedRef.html" t="t">HashConsedRef</a>[<span t="k">_</span>])<span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Unit</span>])
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="HashConsed$$ForwardValueAcceptor.html" t="n" class="documentableName ">ForwardValueAcceptor</a>(<span t="k"></span><span t="k">var </span><span data-unresolved-link="" t="n">setValueActions</span>: <span data-unresolved-link="" t="t">List</span>[<span data-unresolved-link="" t="t">AnyRef</span><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Unit</span>])
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="HashConsed$$KeyAssignment.html" t="n" class="documentableName ">KeyAssignment</a>(<span t="k"></span><span t="k">val </span><span data-unresolved-link="" t="n">tag</span>: <a href="HashConsed$.html#Tag-0" t="t">Tag</a>, <span t="k">val </span><span data-unresolved-link="" t="n">key</span>: <span data-unresolved-link="" t="t">Int</span>)
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Key assigned to an object during encoding. The tag is remembered to detect an attempt to encode the same object under two different tag namespaces, which would leave the second namespace without an encoded body.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Key assigned to an object during encoding. The tag is remembered to detect an attempt to encode the same object under two different tag namespaces, which would leave the second namespace without an encoded body.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="signature-short"><span class="modifiers"></span><span class="kind"><span t="k">class </span></span><a href="HashConsed$$MutRef.html" t="n" class="documentableName ">MutRef</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>](<span t="k"></span><span t="k">var </span><span data-unresolved-link="" t="n">value</span>: <span data-unresolved-link="" t="t">A</span><span t="k"> | </span><span data-unresolved-link="" t="t">Null</span>)<span t="k"> extends </span><a href="HashConsedRef.html" t="t">HashConsedRef</a>[<span t="t">A</span>]</span><span class="signature-long"></span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="HashConsed$$MutRef$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <a href="HashConsedRef.html" t="n">HashConsedRef</a>[<span t="t">A</span>]
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="HashConsed$$MutRef$.html" t="n" class="documentableName ">MutRef</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="HashConsed$$MutRef.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="HashConsed$$MutRef$.html" t="n">MutRef</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" data-f-keywords="case">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">case </span></span><span class="kind"><span t="k">class </span></span><a href="HashConsed$$State.html" t="n" class="documentableName ">State</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">forwardRefAcceptors</span>: <span data-unresolved-link="" t="t">Map</span>[(<span data-unresolved-link="" t="t">Int</span>, <span data-unresolved-link="" t="t">Int</span>), <a href="HashConsed$$ForwardRefAcceptor.html" t="t">ForwardRefAcceptor</a>], <span t="k"></span><span data-unresolved-link="" t="n">refs</span>: <span data-unresolved-link="" t="t">Map</span>[(<span data-unresolved-link="" t="t">Int</span>, <span data-unresolved-link="" t="t">Int</span>), <a href="HashConsed$$CachedTaggedRef.html" t="t">CachedTaggedRef</a>[<span t="k">_</span>]], <span t="k"></span><span data-unresolved-link="" t="n">forwardValueAcceptors</span>: <span data-unresolved-link="" t="t">Map</span>[(<span data-unresolved-link="" t="t">Int</span>, <span data-unresolved-link="" t="t">Int</span>), <a href="HashConsed$$ForwardValueAcceptor.html" t="t">ForwardValueAcceptor</a>])
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Value parameters</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               forwardRefAcceptors
+              </dt>
+              <dd class="body-medium">
+               <p>- set of forward references, which are not yet resolved from hashConded</p>
+              </dd>
+              <dt class="body-small">
+               forwardValueAcceptors
+              </dt>
+              <dd class="body-medium">
+               <p>- set of callbacks, which should be called after the value is readed.</p>
+              </dd>
+              <dt class="body-small">
+               refs
+              </dt>
+              <dd class="body-medium">
+               <p>- set of references</p>
+              </dd>
+             </dl>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="HashConsed$$State$.html">object</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Serializable</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Equals</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span class="show-all-code show-content text-button h100">Show all</span>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">object </span></span><a href="HashConsed$$State$.html" t="n" class="documentableName ">State</a>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="cover">
+             <div class="doc"></div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small">
+              <dt class="body-small">
+               Companion
+              </dt>
+              <dd class="body-medium">
+               <a href="HashConsed$$State.html">class</a>
+              </dd>
+              <dt class="body-small">
+               Supertypes
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <div>
+                 trait <span data-unresolved-link="" t="n">Product</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Mirror</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Object</span>
+                </div>
+                <div>
+                 trait <span data-unresolved-link="" t="n">Matchable</span>
+                </div>
+                <div>
+                 class <span data-unresolved-link="" t="n">Any</span>
+                </div><span></span>
+               </div>
+              </dd>
+              <dt class="body-small">
+               Self type
+              </dt>
+              <dd class="body-medium">
+               <div class="mono-small-block supertypes">
+                <span></span>
+                <div>
+                 <a href="HashConsed$$State$.html" t="n">State</a>.<span t="k">type</span>
+                </div>
+               </div>
+              </dd>
+             </dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+      <section id="Types">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Types</h4>
+        </div>
+        <div class="documentableElement" id="Tag-0" data-f-keywords="opaque">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"><span t="k">opaque </span></span><span class="kind"><span t="k">type </span></span><a href="HashConsed$.html#Tag-0" t="n" class="documentableName ">Tag</a>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+    <section id="Value-members">
+     <div data-togglable="Value members" class="tab expand">
+      <div class="member-group-header">
+       <h3 data-togglable="Value members" class="h400">Value members</h3>
+      </div>
+      <section id="Concrete-methods">
+       <div class="documentableList expand">
+        <div class="documentableList-expander">
+         <button class="icon-button show-content expand"></button>
+         <h4 class="groupHeader h200">Concrete methods</h4>
+        </div>
+        <div class="documentableElement" id="allocKey-fffff1fa">
+         <div class="documentableElement-expander">
+          <button class="icon-button ar show-content"></button>
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="HashConsed$.html#allocKey-fffff1fa" t="n" class="documentableName ">allocKey</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">state</span>: <a href="HashConsed$$State.html" t="t">State</a>, <span t="k"></span><span data-unresolved-link="" t="n">a</span>: <span data-unresolved-link="" t="t">AnyRef</span>, <span t="k"></span><span data-unresolved-link="" t="n">tag</span>: <a href="HashConsed$.html#Tag-0" t="t">Tag</a>): <span data-unresolved-link="" t="t">Int</span>
+           </div>
+          </div>
+         </div>
+         <div class="docs">
+          <span class="modifiers"></span>
+          <div>
+           <div class="originInfo"></div>
+           <div class="memberDocumentation">
+            <div class="documentableBrief doc">
+             <p>Allocate the wire key for <code>a</code> on the encoder side.</p>
+            </div>
+            <div class="cover">
+             <div class="doc">
+              <p>Allocate the wire key for <code>a</code> on the encoder side.</p>
+              <p>The key written to the stream is an opaque identifier: the decoder only uses it to match references, so the encoder is free to choose any value. <code>a.hashCode</code> is only the starting point; if the slot is occupied by a structurally different object (a 32-bit hash collision, routine for recursive types whose hash passes through <code>TypeProxy.identityHashCode</code>), we probe successive keys until we find a free slot or an equal object. Without this, a collision would silently encode the second object as a reference to the first.</p>
+              <p>Deterministic given the traversal order, so the bitSize and encode passes (each starting from an empty <a href="HashConsed$$State.html">State</a>) assign identical keys.</p>
+             </div>
+             <h2 class="h200">Attributes</h2>
+             <dl class="attributes attributes-small"></dl>
+            </div>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="finishCallbacks-fffff3c5">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="HashConsed$.html#finishCallbacks-fffff3c5" t="n" class="documentableName ">finishCallbacks</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">s</span>: <a href="HashConsed$$State.html" t="t">State</a>, <span t="k"></span><span data-unresolved-link="" t="n">debug</span>: <span data-unresolved-link="" t="t">Boolean</span> = ...): <span data-unresolved-link="" t="t">Unit</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lookup-8e4">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="HashConsed$.html#lookup-8e4" t="n" class="documentableName ">lookup</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">s</span>: <a href="HashConsed$$State.html" t="t">State</a>, <span t="k"></span><span data-unresolved-link="" t="n">ihc</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">tag</span>: <a href="HashConsed$.html#Tag-0" t="t">Tag</a>): <span data-unresolved-link="" t="t">Option</span>[<span data-unresolved-link="" t="t">Either</span>[<a href="HashConsed$$ForwardRefAcceptor.html" t="t">ForwardRefAcceptor</a>, <a href="HashConsedRef.html" t="t">HashConsedRef</a>[<span t="k">_</span>]]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="lookupValue-8e4">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="HashConsed$.html#lookupValue-8e4" t="n" class="documentableName ">lookupValue</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">s</span>: <a href="HashConsed$$State.html" t="t">State</a>, <span t="k"></span><span data-unresolved-link="" t="n">ihc</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">tag</span>: <a href="HashConsed$.html#Tag-0" t="t">Tag</a>): <span data-unresolved-link="" t="t">Option</span>[<a href="HashConsedRef.html" t="t">HashConsedRef</a>[<span t="k">_</span>]]
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="putForwadValueAcceptor-ec7">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="HashConsed$.html#putForwadValueAcceptor-ec7" t="n" class="documentableName ">putForwadValueAcceptor</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">state</span>: <a href="HashConsed$$State.html" t="t">State</a>, <span t="k"></span><span data-unresolved-link="" t="n">ihc</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">tag</span>: <a href="HashConsed$.html#Tag-0" t="t">Tag</a>, <span t="k"></span><span data-unresolved-link="" t="n">acceptor</span>: <span t="t">A</span><span t="k"> =&gt; </span><span data-unresolved-link="" t="t">Unit</span>): <span data-unresolved-link="" t="t">Unit</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="putForwardRefAcceptor-2b6">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="HashConsed$.html#putForwardRefAcceptor-2b6" t="n" class="documentableName ">putForwardRefAcceptor</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">state</span>: <a href="HashConsed$$State.html" t="t">State</a>, <span t="k"></span><span data-unresolved-link="" t="n">fw</span>: <a href="HashConsed$$ForwardRefAcceptor.html" t="t">ForwardRefAcceptor</a>): <span data-unresolved-link="" t="t">Unit</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="setRef-909">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="HashConsed$.html#setRef-909" t="n" class="documentableName ">setRef</a>[<span t="k"></span><span data-unresolved-link="" t="t">A</span><span t="k"> &lt;: </span><span data-unresolved-link="" t="t">AnyRef</span>](<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">state</span>: <a href="HashConsed$$State.html" t="t">State</a>, <span t="k"></span><span data-unresolved-link="" t="n">ihc</span>: <span data-unresolved-link="" t="t">Int</span>, <span t="k"></span><span data-unresolved-link="" t="n">tag</span>: <a href="HashConsed$.html#Tag-0" t="t">Tag</a>, <span t="k"></span><span data-unresolved-link="" t="n">ra</span>: <a href="HashConsedRef.html" t="t">HashConsedRef</a>[<span t="t">A</span>]): <span data-unresolved-link="" t="t">Unit</span>
+           </div>
+          </div>
+         </div>
+        </div>
+        <div class="documentableElement" id="tag-fffffbe0">
+         <div class="documentableElement-expander">
+          <div class="header monospace mono-medium">
+           <div class="signature">
+            <span class="modifiers"></span><span class="kind"><span t="k">def </span></span><a href="HashConsed$.html#tag-fffffbe0" t="n" class="documentableName ">tag</a>(<span t="k"></span><span t="k"></span><span data-unresolved-link="" t="n">value</span>: <span data-unresolved-link="" t="t">Int</span>): <a href="HashConsed$.html#Tag-0" t="t">Tag</a>
+           </div>
+          </div>
+         </div>
+        </div>
+       </div>
+      </section>
+     </div>
+    </section>
+   </div>
+  </div>
+ </div>
+</section></div><div id="toc" class="body-small"><div id="toc-container"><span class="toc-title h200">In this article</span><nav class="toc-nav"><ul class="toc-list"><li><a href="#attributes">Attributes</a></li><li><a href="#members-list">Members list</a><ul><li><a href="#Type-members">Type members</a><ul><li><a href="#Classlikes">Classlikes</a></li><li><a href="#Types">Types</a></li></ul></li><li><a href="#Value-members">Value members</a><ul><li><a href="#Concrete-methods">Concrete methods</a></li></ul></li></ul></li></ul></nav></div></div></div><div id="footer" class="body-small mobile-footer"><div class="left-container">Generated with</div><div class="right-container"><div class="text"></div></div><div class="text-mobile"></div></div></div></div></body></html>

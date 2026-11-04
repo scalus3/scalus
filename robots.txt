@@ -1,0 +1,11 @@
+# *
+User-agent: *
+Allow: /
+Disallow: /api/1.
+Disallow: /llms/
+
+# Host
+Host: https://scalus.org/
+
+# Sitemaps
+Sitemap: https://scalus.org/sitemap.xml

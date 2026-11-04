@@ -1,0 +1,236 @@
+Source: https://scalus.org/docs/get-started/for-cardano-developers
+
+# Scalus for Cardano Developers
+
+Welcome! You know Cardano's eUTxO model, Plutus, and blockchain fundamentals. Now learn how to build validators using Scala 3's powerful type system and professional tooling.
+
+## Why This Path Works for You
+
+You already understand:
+- ✓ UTxO model, datums, and redeemers
+- ✓ Validator logic and on-chain execution
+- ✓ Plutus Core and script evaluation
+
+You'll learn:
+- **Scala 3 fundamentals** - Just enough to write validators
+- **Type-safe development** - Catch errors at compile time
+- **Professional debugging** - Use IDE breakpoints, not trace logs
+- **Familiar concepts** - Datums, redeemers, and script context in Scala
+
+**Time Investment:** ~4-6 hours to productivity, ~2-3 days to proficiency
+
+---
+
+## Your Journey in 4 Steps
+
+### Step 1: Quick Start (30-45 minutes)
+
+**Goal:** Get your first Scalus validator running and see it work in your IDE
+
+#### Setup
+
+- [ ] **[Install Scalus](/docs/get-started)** - Set up Scala, SBT, and your development environment
+
+#### First Contract
+- [ ] **[Write your first smart contract](/docs/smart-contracts/developing-smart-contracts)** - Build a "Hello, Cardano!" spending validator
+- [ ] **[Debug in your IDE](/docs/testing/debugging)** - Set breakpoints and step through validator execution
+
+**🎯 Quick Win:** You'll have a working validator and see it execute step-by-step in IntelliJ IDEA or VS Code. No more blind `trace` debugging!
+
+**What You Just Learned:**
+- Scalus validators look familiar (datums, redeemers, script context)
+- But you can debug them like regular code with breakpoints
+- The `@Compile` annotation marks code for on-chain compilation
+
+---
+
+### Step 2: Learn Scala Essentials (2-3 hours)
+
+**Goal:** Understand enough Scala to write and read validators confidently
+
+#### Scala 3 Crash Course for Cardano Devs
+
+**Don't Skip This:** You need Scala basics to be productive. These resources are curated for speed.
+
+**Option A: Quick Video Course (Recommended)**
+- [ ] **[Scala 3 for Beginners](https://www.youtube.com/watch?v=-8V6bMjThNo)** by Rock the JVM (2 hours)
+  - Focus on: vals, defs, case classes, pattern matching, collections
+  - Skip: implicits, type classes, advanced features (you won't need them initially)
+
+**Option B: Interactive Tutorial**
+- [ ] **[Scala Exercises - Std Lib](https://www.scala-exercises.org/std_lib)** - Hands-on practice
+- [ ] **[Tour of Scala](https://docs.scala-lang.org/tour/tour-of-scala.html)** - Official quick tour
+  - Focus on: Basics, Classes, Pattern Matching, Collections
+
+**Option C: Quick Reference (If you're in a hurry)**
+- [ ] **[Scala 3 Syntax Summary](https://docs.scala-lang.org/scala3/book/taste-intro.html)** - 15-minute overview
+- [ ] Then jump straight to writing code and learn by doing
+
+#### Scalus-Specific Scala Features
+
+- [ ] **[Why Scala 3?](/docs/language-guide/scala3)** - Why it's great for blockchain development
+- [ ] **[Supported Scala Features](/docs/language-guide/support)** - What works in Scalus (CRITICAL to read!)
+- [ ] **[Primitive Types](/docs/language-guide/constants-primitives)** - `BigInt`, `ByteString`, `Data`, etc.
+- [ ] **[Functions](/docs/language-guide/functions)** - Defining functions, lambdas, higher-order functions
+- [ ] **[Pattern Matching](/docs/language-guide/control-flow)** - `if-then-else`, `match` expressions
+
+**🎯 Quick Win:** Write a simple token minting policy using pattern matching and Scala collections. 
+
+---
+
+### Step 3: Cardano-Specific Development (2-3 hours)
+
+**Goal:** Build production-ready validators using Cardano-specific features
+#### Core Validator Concepts
+
+- [ ] **[Validators in Depth](/docs/smart-contracts/validators)** - Spending, minting, rewarding, certifying validators in Scalus
+- [ ] **[HTLC Tutorial](/docs/smart-contracts/htlc-tutorial)** - Complete Hash Time-Locked Contract with transactions and tests
+- [ ] **[Plutus Data](/docs/smart-contracts/plutus-data)** - Automatic conversion between Scala types and Plutus `Data`
+- [ ] **[Custom Data Types](/docs/language-guide/data-types)** - Define datums and redeemers with case classes
+
+#### Testing & Quality
+
+- [ ] **[Testing Smart Contracts](/docs/testing/unit-testing)** - Property-based testing with ScalaCheck
+- [ ] **[Builtin Functions](/docs/language-guide/builtin-functions)** - Cryptographic operations, hashing, serialization
+
+#### Build & Deploy
+
+- [ ] **[Compiling Validators](/docs/smart-contracts/compiling)** - Generate UPLC, create blueprints, attach to transactions
+- [ ] **Evaluating Scripts (In progress)** - Run validators locally, check execution costs
+
+#### Off-Chain Transaction Building
+
+- [ ] **[Transaction Builder](/docs/transactions)** - Build complete Cardano transactions in Scala
+- [ ] **[Building Your First Transaction](/docs/transactions/building-first-transaction)** - Send ADA and native tokens
+- [ ] **[Spending UTxOs](/docs/transactions/spending-utxos)** - Spend from validator scripts
+- [ ] **[Minting & Burning Assets](/docs/transactions/minting-burning-assets)** - Create and burn native tokens
+- [ ] **[Staking & Rewards](/docs/transactions/staking-rewards)** - Register, delegate, and withdraw rewards
+- [ ] **[Governance](/docs/transactions/governance)** - Participate in Cardano governance with DReps
+
+**🎯 Quick Win:** Build a tested, optimized validator and deploy it to testnet with a complete off-chain application that interacts with it.
+---
+
+### Step 4: Production Ready (Ongoing)
+
+**Goal:** Master advanced patterns and optimizations
+
+#### Optimisations
+- [ ] **[Smart Contract Optimisations](/docs/smart-contract-optimisations)** - Reduce script size and execution costs
+- [ ] **[Collections](/docs/language-guide/collections)** - Efficient `List` and `AssocMap` operations
+- [ ] **[Modules](/docs/language-guide/modules)** - Organize code into reusable libraries
+- [ ] **[Real-World Examples](https://github.com/scalus3/scalus/tree/master/scalus-examples)** - Study production validator patterns
+
+#### Design Patterns & Security
+
+- [ ] **[Design Patterns](/docs/design-patterns)** - Proven patterns for efficient multi-input validators
+- [ ] **[Security Guide](/docs/security)** - Common security issues and mitigations
+
+**🎯 Quick Win:** Optimize a validator to reduce execution units by 20-30% using advanced techniques.
+
+---
+
+## Common Questions from Cardano Devs
+
+### "Do I really need to learn Scala?"
+
+**Short answer:** Yes, but not all of it.
+
+You need ~10% of Scala to be productive:
+- Basic syntax (vals, defs, case classes)
+- Pattern matching (you already know this concept from Plutus)
+- Collections (List, Map)
+- Type annotations
+
+That's it. You can learn this in 2-3 hours and be writing validators.
+
+### "How different is Scalus from Aiken/Plutarch?"
+
+**Conceptually:** Almost identical. Datums, redeemers, script context, validators - all the same.
+
+**Syntactically:** Different, but familiar patterns:
+
+| Concept | Aiken | Scalus |
+|---------|-------|--------|
+| Type annotation | `value: Int` | `value: BigInt` |
+| Pattern matching | `when` | `match` |
+| List operations | `list.filter(fn)` | `list.filter(fn)` |
+| Require check | `expect True = ...` | `require(condition, "msg")` |
+
+### "What about debugging?"
+
+This is where Scalus shines:
+
+**Aiken/Plutarch:**
+```
+trace @"checkpoint 1"  // Hope you see this in logs
+trace @"value" value   // Print debugging
+```
+
+**Scalus:**
+```scala
+// Set breakpoint in IDE
+val owner = datum.to[PubKeyHash]  // ← Breakpoint here
+// Step through, inspect variables, see call stack
+```
+
+You get **real debugging** with IntelliJ IDEA or VS Code.
+
+### "Is it production-ready?"
+
+Yes. Scalus validators compile to standard Plutus Core and run on Cardano mainnet just like any other Plutus script.
+
+---
+
+## Common Pitfalls & Solutions
+
+**Pitfall #1: Trying to use unsupported Scala features**
+
+**Problem:** Not all Scala features compile to UPLC (e.g., mutable vars, try-catch, complex type classes).
+
+**Solution:** Always check [Supported Features](/docs/language-guide/support) before using advanced Scala features.
+
+**Pitfall #2: Forgetting the `@Compile` annotation**
+
+**Problem:** Your validator runs in Scala but doesn't compile to UPLC.
+
+**Solution:** Always annotate validator objects with `@Compile`:
+```scala
+@Compile  // ← Don't forget this!
+object MyValidator extends Validator
+```
+
+**Pitfall #3: Using Scala standard library directly**
+
+**Problem:** Scala's `scala.collection.List` doesn't exist on-chain.
+
+**Solution:** Use Scalus types: `scalus.cardano.onchain.plutus.prelude.List`, `scalus.uplc.builtin.ByteString`, etc.
+
+---
+
+## Essential Scala Resources
+
+### Quick References
+- **[Scala 3 Cheat Sheet](https://docs.scala-lang.org/cheatsheets/index.html)** - Syntax at a glance
+- **[Scala 3 Book](https://docs.scala-lang.org/scala3/book/introduction.html)** - Comprehensive but readable guide
+
+### Video Courses
+- **[Scala at Light Speed](https://www.youtube.com/watch?v=-8V6bMjThNo)** - Best crash course (2 hours)
+
+### Interactive Learning
+- **[Scala Exercises](https://www.scala-exercises.org/)** - Hands-on practice
+- **[Scastie](https://scastie.scala-lang.org/)** - Online Scala playground
+
+### When You're Stuck
+- **[Scalus Examples](https://github.com/scalus3/scalus/tree/master/scalus-examples)** - Real validator code
+- **[Scalus API Docs](https://javadoc.io/doc/org.scalus/scalus_3/latest/index.html)** - Complete API reference
+
+---
+
+## Get Help
+
+Need assistance? Connect with the Scalus community:
+- **Join Discord:** [Ask questions](https://discord.gg/B6tXmBzhTn)
+- **Join Scalus Club:** [Check new features & discuss](https://luma.com/scalus)
+- **Examples:** [Real-world validator code](https://github.com/scalus3/scalus/tree/master/scalus-examples)
+
+Happy building! 🚀

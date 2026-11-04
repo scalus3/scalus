@@ -1,0 +1,28 @@
+2:"$Sreact.fragment"
+3:"/_next/static/chunks/28z-u-ek9af9z.js"
+4:"/_next/static/chunks/2x21_7yjlsr5l.js"
+5:"/_next/static/chunks/22ikwqvjef92l.js"
+6:"/_next/static/chunks/38dq6bzbtejoz.js"
+7:I[12928,["$3","$4","$5","$6"],"default"]
+8:I[56961,["$3","$4","$5","$6"],"default"]
+d:I[59598,["$3","$4","$5","$6"],"OutletBoundary"]
+e:"$Sreact.suspense"
+11:"ViewportBoundary"
+12:I[59598,["$3","$4","$5","$6"],"$11"]
+13:"MetadataBoundary"
+14:I[59598,["$3","$4","$5","$6"],"$13"]
+15:I[93904,["$3","$4","$5","$6"],"IconMark"]
+a:X
+a:C
+b:X
+c:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$2","c",{"children":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],null,["$","$Ld",null,{"children":["$","$e",null,{"name":"Next.MetadataOutlet","children":"$@f"}]}]]}],"p":"$@10","v":null,"s":"$b"}}]]
+1:[["children",{"s":"/_not-found","h":64,"d":{"r":["$","$2","c",{"children":[null,["$","$L7",null,{"parallelRouterKey":"children","template":["$","$L8",null,{}]}]]}],"p":"$@9","v":"$a","s":"$b"},"c":"$Qc"}]]
+0:{"t":{"t":{"s":"","h":16,"c":"$Q1"},"h":{"r":["$","$2","h",{"children":[["$","meta",null,{"name":"robots","content":"noindex"}],["$","$L12",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L14",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$e",null,{"name":"Next.Metadata","children":[["$","meta","0",{"name":"description","content":"Documentation for Scalus: Cardano Smart Contracts and dApps Development Platform"}],["$","meta","1",{"name":"application-name","content":"Scalus"}],["$","meta","2",{"name":"msapplication-TileImage","content":"/ms-icon-144x144.png"}],["$","meta","3",{"name":"msapplication-TileColor","content":"#fff"}],["$","link","4",{"rel":"canonical","href":"https://scalus.org/_not-found"}],["$","meta","5",{"name":"mobile-web-app-capable","content":"yes"}],["$","meta","6",{"name":"apple-mobile-web-app-title","content":"Scalus"}],["$","meta","7",{"name":"apple-mobile-web-app-status-bar-style","content":"default"}],["$","meta","8",{"property":"og:description","content":"Documentation for Scalus: Cardano Smart Contracts and dApps Development Platform"}],["$","meta","9",{"property":"og:image","content":"https://scalus.org/opengraph-image.png?opengraph-image.0u5y1fuhy4k1d.png"}],["$","meta","10",{"property":"og:image:type","content":"image/png"}],["$","meta","11",{"property":"og:image:width","content":"1400"}],["$","meta","12",{"property":"og:image:height","content":"1400"}],["$","meta","13",{"name":"twitter:card","content":"summary"}],["$","meta","14",{"name":"twitter:site","content":"https://scalus.org"}],["$","meta","15",{"name":"twitter:description","content":"Documentation for Scalus: Cardano Smart Contracts and dApps Development Platform"}],["$","meta","16",{"name":"twitter:image","content":"https://scalus.org/opengraph-image.png?opengraph-image.0u5y1fuhy4k1d.png"}],["$","meta","17",{"name":"twitter:image:type","content":"image/png"}],["$","meta","18",{"name":"twitter:image:width","content":"1400"}],["$","meta","19",{"name":"twitter:image:height","content":"1400"}],["$","link","20",{"rel":"icon","href":"/favicon.ico?favicon.1lttoi3ao6-hb.ico","sizes":"32x32","type":"image/x-icon"}],["$","link","21",{"rel":"icon","href":"/icon.png?icon.0oeu4-j7c95s5.png","sizes":"90x90","type":"image/png"}],["$","link","22",{"rel":"apple-touch-icon","href":"/apple-icon.png?apple-icon.05bmb-1n3q5jk.png","sizes":"180x180","type":"image/png"}],["$","$L15","23",{}]]}]}],null]}],null]}],"p":"$@16","v":null,"s":"$b"}},"a":"$@17","u":"$@18","b":"FEfgpBjL-_Ne3CvwMdGB6"}
+f:null
+18:true
+b:300
+b:C
+17:0
+9:"$undefined"
+16:"$undefined"
+10:"$undefined"
