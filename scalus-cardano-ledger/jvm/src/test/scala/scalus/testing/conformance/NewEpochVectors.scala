@@ -216,17 +216,6 @@ object NewEpochVectors {
         )
     }
 
-    /** `[mark, set, go, fee]` (core State/SnapShots.hs:355-361). */
-    private given Decoder[SnapShots] = r => {
-        r.readArrayHeader(4)
-        SnapShots(
-          r.read[StakeSnapshot](),
-          r.read[StakeSnapshot](),
-          r.read[StakeSnapshot](),
-          r.read[Coin]()
-        )
-    }
-
     /** `[activeStake, pools]` with `activeStake` a map from credential to `[stake, pool]` (core
       * State/SnapShots.hs:290-296, State/Stake.hs:116-117). Checks the stake ratio of each pool
       * against the stake and the total active stake of the snapshot, so that equal snapshots have
@@ -250,6 +239,17 @@ object NewEpochVectors {
             )
         }
         snapshot
+    }
+
+    /** `[mark, set, go, fee]` (core State/SnapShots.hs:355-361). */
+    private given Decoder[SnapShots] = r => {
+        r.readArrayHeader(4)
+        SnapShots(
+          r.read[StakeSnapshot](),
+          r.read[StakeSnapshot](),
+          r.read[StakeSnapshot](),
+          r.read[Coin]()
+        )
     }
 
     /** A pool of a snapshot with its `spssStakeRatio`. */
