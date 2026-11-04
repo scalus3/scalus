@@ -118,6 +118,22 @@ Do the steps in order. Each step tells you which file or command to use.
      (`scalus-core/shared/src/main/resources/builtinCostModel*.json`).
    - **cardano-ledger**: read the `cardano-ledger-conway` CHANGELOG for rule changes that the
      Emulator and `scalus.cardano.ledger.rules` must follow.
+   - **Protocol parameters**: `CardanoInfo` bundles one parameter snapshot per network
+     (`blockfrost-params-{epoch-N,preprod-N,preview-N}.json` in
+     `scalus-core/shared/src/main/resources/`). No test compares them with a live network, so a
+     parameter change on chain makes them stale silently. Compare each snapshot with the current
+     epoch, without an API key:
+
+     ```bash
+     curl -s "https://api.koios.rest/api/v1/epoch_params?limit=1&order=epoch_no.desc" |
+       jq '.[0] | {epoch_no, max_tx_ex_mem, max_block_ex_mem, min_pool_cost, min_fee_a, cost_models}'
+     ```
+
+     Use `preprod.koios.rest` and `preview.koios.rest` for the testnets. If a value differs,
+     take a full new snapshot, change the file names and the scaladoc in `CardanoInfo.scala`,
+     and update `protocol-params.json`. Also list the open mainnet `ParameterChange`
+     proposals (`api/v1/proposal_list`): one that a vote may enact before the release is a
+     reason to wait or to say so in the CHANGELOG.
    - Update the [Current state](#current-state) table, even if nothing changed.
 
 2. **Update the dependencies.** Take only versions that were published at least 14 days ago. A
@@ -327,7 +343,7 @@ cardano-node release**. Check this on every cardano-node release and every Plutu
 
 ### Current state
 
-Last checked against cardano-node 11.1.3 (plutus-core 1.70.0.0) on 2026-10-25.
+Last checked against cardano-node 11.1.3 (plutus-core 1.70.0.0) on 2026-11-04.
 
 | Library | cardano-node 11.1.3 | Scalus JVM | Scalus Native |
 |---|---|---|---|
