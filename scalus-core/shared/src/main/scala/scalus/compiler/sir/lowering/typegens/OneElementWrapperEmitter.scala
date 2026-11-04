@@ -31,8 +31,10 @@ case class OneElementWrapperEmitter(
           argGenerator.defaultTypeVarReperesentation(tp)
         )
 
+    // `argGenerator` generates the one field, so it is asked of the field's type: a generator of a
+    // list reads the list's element type from the type it is given.
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean =
-        argGenerator.canBeConvertedToData(tp)
+        argGenerator.canBeConvertedToData(OneElementWrapperEmitter.fieldType(tp))
 
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
@@ -284,6 +286,23 @@ case class OneElementWrapperEmitter(
 }
 
 object OneElementWrapperEmitter {
+
+    /** The type of the one field of the wrapper type `tp`, with the wrapper's type arguments, as
+      * the generator of the field is chosen for it ([[SirTypeUplcGenerator]]).
+      */
+    def fieldType(tp: SIRType): SIRType = tp match
+        case SIRType.CaseClass(constrDecl, typeArgs, _) =>
+            SIRType.substitute(
+              constrDecl.params.head.tp,
+              constrDecl.typeParams.zip(typeArgs).toMap,
+              Map.empty
+            )
+        case SIRType.TypeProxy(ref)      => fieldType(ref)
+        case SIRType.Annotated(inner, _) => fieldType(inner)
+        case other =>
+            throw IllegalArgumentException(
+              s"a one-element wrapper is a case class of one field, not ${other.show}"
+            )
 
     case class WrappedArg(constr: SIR.Constr, arg: LoweredValue) extends ProxyLoweredValue(arg) {
 
