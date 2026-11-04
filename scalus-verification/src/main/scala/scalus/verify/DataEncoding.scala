@@ -84,7 +84,7 @@ enum DataEncoding {
                 .nextOption()
 
     /** Why `data` is not encoded so, or `None` where it is. A `Data` this cannot tell, under an
-      * [[Unknown]] encoding, is not encoded so.
+      * `Unknown` encoding, is not encoded so.
       */
     def outside(data: Data): Option[String] = {
         def no(what: String) = Some(s"${data.toString.take(80)} is no $what")

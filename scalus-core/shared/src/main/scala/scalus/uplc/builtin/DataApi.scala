@@ -524,10 +524,9 @@ private trait DataApi {
     /** Pretty prints Data in debug format with rainbow brackets: `<constr, [args]>`, `{k: v}`,
       * `[v]`, `123`, `"hex"`.
       *
-      * A list, map or `Constr` nested more than [[maxDepth]] levels deep is printed as `...`.
-      * paiges lays out nested groups with a recursion over the nesting, and in memory that grows
-      * faster than the depth: 10000 levels exhaust a 3 GB heap. The document is built without
-      * recursion.
+      * A list, map or `Constr` nested more than `maxDepth` levels deep is printed as `...`. paiges
+      * lays out nested groups with a recursion over the nesting, and in memory that grows faster
+      * than the depth: 10000 levels exhaust a 3 GB heap. The document is built without recursion.
       */
     given Pretty[Data] with
 

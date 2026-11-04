@@ -111,9 +111,9 @@ object Timelock:
     /** Timelock encoder, based on the Haskell code, which uses sum types with tags.
       *
       * It does not recurse over the scripts of `AllOf`, `AnyOf` and `MOf`: it keeps the lists of
-      * scripts it has opened on the heap ([[NestedCbor.writeNested]]), so how deep it writes does
-      * not depend on the stack of the thread that writes. A list of scripts is written as borer
-      * writes an `IndexedSeq`.
+      * scripts it has opened on the heap (`NestedCbor.writeNested`), so how deep it writes does not
+      * depend on the stack of the thread that writes. A list of scripts is written as borer writes
+      * an `IndexedSeq`.
       */
     given Encoder[Timelock] = Encoder((w, value) => NestedCbor.writeNested(w, value)(head(w, _)))
 
@@ -167,8 +167,8 @@ object Timelock:
       * `matchSize` checks.
       *
       * The decoder does not recurse over the scripts of `AllOf`, `AnyOf` and `MOf`: it keeps those
-      * it has opened on the heap ([[NestedCbor]]), so how deep it reads does not depend on the
-      * stack of the thread that reads. It reads at most
+      * it has opened on the heap (`NestedCbor`), so how deep it reads does not depend on the stack
+      * of the thread that reads. It reads at most
       * [[scalus.serialization.cbor.Cbor.maxMetadataAndScriptNestingLevels]] levels of arrays: a
       * deeper script fails to decode.
       */

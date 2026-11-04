@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 import scala.annotation.nowarn
 
 /** The performance gate of the Term traversal refactoring: hand-written walks against
-  * [[TermTraversal]] on the Plutus `validation` benchmark programs.
+  * `TermTraversal` on the Plutus `validation` benchmark programs.
   *
   * Spec: docs/superpowers/specs/2026-10-27-term-traversal-design.md, rules `[GT-4]` to `[GT-9]`.
   * Each `old*` method runs a copy of the code as it was before the migration `[GT-6]`, so one JMH

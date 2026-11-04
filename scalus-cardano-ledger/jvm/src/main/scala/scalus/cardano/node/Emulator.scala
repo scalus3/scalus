@@ -139,7 +139,7 @@ object Emulator {
     def withAddresses(addresses: Seq[Address], initialValue: Value): Emulator =
         withAddresses(addresses, initialValue, ChainConfig.instant)
 
-    /** [[withAddresses]] with a [[ChainConfig]], spec [CF-5]. */
+    /** [[withAddresses]] with a [[scalus.cardano.node.emulator.ChainConfig]], spec [CF-5]. */
     def withAddresses(
         addresses: Seq[Address],
         initialValue: Value,
@@ -166,7 +166,9 @@ object Emulator {
     def withAddresses(addresses: java.util.List[Address], initialValue: Value): Emulator =
         withAddresses(addresses, initialValue, ChainConfig.instant)
 
-    /** Java-friendly overload of [[withAddresses]] with a [[ChainConfig]], spec [CF-5]. */
+    /** Java-friendly overload of [[withAddresses]] with a
+      * [[scalus.cardano.node.emulator.ChainConfig]], spec [CF-5].
+      */
     def withAddresses(
         addresses: java.util.List[Address],
         initialValue: Value,
@@ -182,7 +184,7 @@ object Emulator {
     def withState(initState: EmulatorInitialState, context: Context): Emulator =
         withState(initState, context, ChainConfig.instant)
 
-    /** [[withState]] with a [[ChainConfig]], spec [CF-5]. */
+    /** [[withState]] with a [[scalus.cardano.node.emulator.ChainConfig]], spec [CF-5]. */
     def withState(
         initState: EmulatorInitialState,
         context: Context,
@@ -229,7 +231,9 @@ object Emulator {
           ChainConfig.instant
         )
 
-    /** [[withRegisteredStakeCredentials]] with a [[ChainConfig]], spec [CF-5]. */
+    /** [[withRegisteredStakeCredentials]] with a [[scalus.cardano.node.emulator.ChainConfig]], spec
+      * [CF-5].
+      */
     def withRegisteredStakeCredentials(
         initialUtxos: Utxos,
         initialStakeRewards: Map[Credential, Coin],

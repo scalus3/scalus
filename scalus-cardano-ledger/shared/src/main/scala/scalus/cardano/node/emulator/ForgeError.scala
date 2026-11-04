@@ -12,7 +12,7 @@ enum ForgeError {
     /** The forge slot is not after the slot of `on`, spec [FG-12]. */
     case SlotNotAfterParent(slot: SlotNo, parentSlot: SlotNo)
 
-    /** `on` is not in the block tree, spec [FG-13]. Genesis is [[ChainPoint.origin]]. */
+    /** `on` is not in the block tree, spec [FG-13]. Genesis is `ChainPoint.origin`. */
     case UnknownPoint(point: ChainPoint)
 
     /** `on`, or the fork point of the branch it is on, is deeper than k, spec [FG-14]. */

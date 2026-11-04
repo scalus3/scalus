@@ -147,7 +147,7 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
     // `produceBlock()`, `tip` and `txStatus` take and return Java-usable types already, spec
     // [SF-5]. The members below replace a Scala `Seq` or `Either` in the signature.
 
-    /** [[produceBlock]] on a branch with a Java list: forge `txs` on `on`, at slot `on.slot + 1`,
+    /** `produceBlock` on a branch with a Java list: forge `txs` on `on`, at slot `on.slot + 1`,
       * spec [FG-11].
       */
     final def tryProduceBlock(
@@ -156,7 +156,7 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
     ): EmulatorResult[ForgeError, ChainPoint] =
         EmulatorResult.fromEither(produceBlock(on, txs.asScala.toSeq))
 
-    /** [[produceBlock]] on a branch at `slot` with a Java list, spec section 8.2. */
+    /** `produceBlock` on a branch at `slot` with a Java list, spec section 8.2. */
     final def tryProduceBlock(
         on: ChainPoint,
         slot: Long,
@@ -164,15 +164,15 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
     ): EmulatorResult[ForgeError, ChainPoint] =
         EmulatorResult.fromEither(produceBlock(on, slot, txs.asScala.toSeq))
 
-    /** [[rollback]], with the result as an [[EmulatorResult]], spec section 11.3. */
+    /** `rollback`, with the result as an [[EmulatorResult]], spec section 11.3. */
     final def tryRollback(n: Int): EmulatorResult[RollbackError, ChainPoint] =
         EmulatorResult.fromEither(rollback(n))
 
     /** The pending txs, oldest first, as a Java list. */
     final def getMempoolTxs: java.util.List[Transaction] = mempoolTxs.asJava
 
-    /** [[diff]] as a Java list, spec section 12.1. Experimental, as [[diff]] is: the event types
-      * live in `scalus.cardano.node.stream.internal` and may change in a minor release.
+    /** `diff` as a Java list, spec section 12.1. Experimental, as `diff` is: the event types live
+      * in `scalus.cardano.node.stream.internal` and may change in a minor release.
       */
     final def getDiff(from: ChainTip, to: ChainTip): java.util.List[ChainEvent] =
         diff(from, to).asJava

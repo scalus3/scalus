@@ -398,7 +398,7 @@ trait EmulatorBase extends BlockchainProvider {
         produceBlock(on, on.slot + 1, txs)
 
     /** Forge a block of `txs` at `slot` on `on`, a block anywhere in the block tree, or
-      * [[ChainPoint.origin]] for genesis, and return its point, spec section 8.2. It models a block
+      * `ChainPoint.origin` for genesis, and return its point, spec section 8.2. It models a block
       * from another pool: the txs come from the caller, not from the mempool, spec [FG-20].
       *
       * The txs are applied in order to the ledger after `on`, spec [FG-15]. Then chain selection
@@ -428,13 +428,13 @@ trait EmulatorBase extends BlockchainProvider {
     /** The pending txs, oldest first. */
     def mempoolTxs: Seq[Transaction] = readState.mempool.map(_.applied.tx)
 
-    /** The tip of the selected chain, or [[ChainTip.origin]] before the first block. */
+    /** The tip of the selected chain, or `ChainTip.origin` before the first block. */
     def tip: ChainTip = readState.tip
 
     /** The ChainSync events that take a follower from `from` to `to`, two tips of the block tree,
       * spec section 12.1: one `RollBackward` to their common ancestor when `from` is not an
       * ancestor of `to`, then one `RollForward` per block up to `to`, in height order.
-      * [[ChainTip.origin]] is genesis.
+      * `ChainTip.origin` is genesis.
       *
       * Experimental: `ChainEvent`, `AppliedBlock` and `AppliedTransaction` live in
       * `scalus.cardano.node.stream.internal`, outside the binary-compatibility check, and may
@@ -488,9 +488,9 @@ trait EmulatorBase extends BlockchainProvider {
     }
 
     /** Wait for the transaction to leave the mempool, without sleeping, spec [SF-2]: with
-      * [[AwaitTxPolicy.ProduceBlock]], forge a block while it is `Pending`, at most `maxAttempts`
-      * blocks, spec [SF-3]; with [[AwaitTxPolicy.WaitOnly]], report the status as it is, spec
-      * [SF-4]. `delayMs` is ignored: the emulator has virtual time.
+      * `AwaitTxPolicy.ProduceBlock`, forge a block while it is `Pending`, at most `maxAttempts`
+      * blocks, spec [SF-3]; with `AwaitTxPolicy.WaitOnly`, report the status as it is, spec [SF-4].
+      * `delayMs` is ignored: the emulator has virtual time.
       */
     override def pollForConfirmation(
         txHash: TransactionHash,

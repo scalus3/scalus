@@ -59,7 +59,7 @@ object ProgramFlatCodec:
       * input. A filler longer than it needs to be is allowed. Use [[decodeFlatWithRemainingBytes]]
       * when other bytes follow the program.
       *
-      * @throws FlatDecodingError
+      * @throws scalus.serialization.flat.FlatDecodingError
       *   if the filler is missing or ends inside a byte, or if bytes follow it
       * @throws IllegalArgumentException
       *   see [[requireVersionCanCarry]]
@@ -78,7 +78,7 @@ object ProgramFlatCodec:
     /** Decodes Flat-encoded [[DeBruijnedProgram]] from bytes, returning any remaining bytes that
       * were not part of the program.
       *
-      * @throws FlatDecodingError
+      * @throws scalus.serialization.flat.FlatDecodingError
       *   if the filler is missing or ends inside a byte
       * @throws IllegalArgumentException
       *   see [[requireVersionCanCarry]]

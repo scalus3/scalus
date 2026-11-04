@@ -54,7 +54,7 @@ class BlockfrostEndpointsTest extends AnyFunSuite {
     /** Discover a stake address from a pool delegator, then derive a real address from it. This
       * guarantees both testStakeAddress and testAddress are valid and linked.
       */
-    private lazy val (testStakeAddress, testAddress): (String, String) = {
+    private lazy val testAddresses: (String, String) = {
         // Find a pool, get a delegator's stake address
         val pools = provider.fetchPoolsExtended(page = Some(1), count = 1).await(timeout)
         val stakeAddr = pools.iterator
@@ -77,6 +77,9 @@ class BlockfrostEndpointsTest extends AnyFunSuite {
 
         (stakeAddr, addr)
     }
+
+    private lazy val testStakeAddress: String = testAddresses._1
+    private lazy val testAddress: String = testAddresses._2
 
     private lazy val testBlockHash: String = testBlock.hash
 

@@ -30,9 +30,9 @@ object Metadatum:
     /** CBOR encoder for TransactionMetadatum.
       *
       * It does not recurse over the nesting: it keeps the lists and maps it has opened on the heap
-      * ([[NestedCbor.writeNested]]), so how deep it writes does not depend on the stack of the
-      * thread that writes. A list is written as borer writes an `IndexedSeq`, and a map entry by
-      * entry, in its order.
+      * (`NestedCbor.writeNested`), so how deep it writes does not depend on the stack of the thread
+      * that writes. A list is written as borer writes an `IndexedSeq`, and a map entry by entry, in
+      * its order.
       */
     given Encoder[Metadatum] with
         def write(w: Writer, value: Metadatum): Writer =
@@ -65,9 +65,9 @@ object Metadatum:
     /** CBOR decoder for TransactionMetadatum.
       *
       * It does not recurse over the nesting: it keeps the arrays and maps it has opened on the heap
-      * ([[NestedCbor]]), so how deep it reads does not depend on the stack of the thread that
-      * reads, with one exception: a map compares and hashes its keys, and the equality and the hash
-      * of a key recurse over it, as those of a case class do. It reads at most
+      * (`NestedCbor`), so how deep it reads does not depend on the stack of the thread that reads,
+      * with one exception: a map compares and hashes its keys, and the equality and the hash of a
+      * key recurse over it, as those of a case class do. It reads at most
       * [[scalus.serialization.cbor.Cbor.maxMetadataAndScriptNestingLevels]] levels: a deeper
       * metadatum fails to decode.
       *
