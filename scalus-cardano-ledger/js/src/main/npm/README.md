@@ -31,6 +31,16 @@ success but disagrees on cost still produces transactions a node rejects.
 npm install scalus
 ```
 
+## Upgrading from 1.4.x
+
+- **Crossing two or more epoch boundaries now pays rewards and moves `deltaT` from the reserves
+  to the treasury.** A test that asserts an absolute treasury, reserves or reward balance after
+  such a jump changes.
+- **`Emulator.create` without `treasury` starts with the mainnet treasury, not 0.** Use
+  `getTreasury()` as the transaction's `currentTreasuryValue`.
+- **A PlutusV3 transaction that spends and references one UTxO is rejected**, as on the ledger.
+- `getTransactionStatus` can also return `"Pending"`, `"Dropped"` and `"RolledBack"`.
+
 ## Upgrading from 1.3.x
 
 The Emulator now follows more of the ledger rules, so a test that passed on 1.3 can fail:
@@ -118,7 +128,10 @@ if (result.isSuccess) {
 `CardanoInfo.mainnet()`, `.preprod()`, `.preview()` and `.custom(network, slotConfig, params)`
 cover the networks. Every field of the options object is optional: `utxos`, `slot`,
 `stakeRegistrations`, `poolRegistrations`, `drepRegistrations`, `datums`, `treasury`,
-`protocolParams` and `clock`. An invalid option throws a `TypeError`.
+`reserves`, `protocolParams`, `clock`, the chain options (`blockProduction`, `awaitTx`,
+`orphanTxs`, `securityParam`), the governance options (`committee`, `committeeHotKeys`,
+`constitution`) and the reward options (`blockIssuer`, `poolPerformance`, `activeSlotsCoeff`).
+An invalid option throws a `TypeError`.
 
 ### Querying UTxOs
 
@@ -222,6 +235,48 @@ emulator.getTransactionStatus(txHashHex); // "Pending" | "Confirmed" | "Dropped"
 emulator.getTransaction(txHashHex);       // Uint8Array | undefined
 emulator.getAppliedTxs();                 // [{ txHash, slot }, ...], oldest first
 ```
+
+### Blocks, Mempool and Rollback
+
+With the default `blockProduction: "instant"`, each accepted transaction is a block of its own.
+With `"manual"`, accepted transactions wait in the mempool until you forge a block, so a test can
+see a pending transaction, a fork and a rollback:
+
+```typescript
+const emulator = Emulator.create(CardanoInfo.preview(), { utxos, blockProduction: "manual" });
+
+emulator.submitTx(txCborBytes);
+emulator.getTxStatus(txHash).status; // "Pending"
+emulator.getMempool();               // [txHash]
+
+const point = emulator.produceBlock(); // forge a block from the mempool
+emulator.getTxStatus(txHash);          // { status: "Confirmed", depth: 1, point }
+
+const back = emulator.rollback(1);     // drop the last block
+if (!back.isSuccess) throw new Error(back.error);
+emulator.getTxStatus(txHash).status;   // "Pending": back in the mempool (orphanTxs: "returnToMempool")
+```
+
+`produceBlockOn(point, txs)` forges a rival block on any block of the tree, for example one that
+double-spends a pending transaction. The emulator follows the longest chain. `getTip()` gives the
+tip and its height, and `awaitTx(txHash)` forges until the transaction is in a block, as a
+provider's `awaitTx` does.
+
+### Why a Transaction Fails
+
+`submitTx` reports the first failure. `ledgerFailures` lists every ledger-rule failure in the
+ledger's order, by its cardano-ledger name, without submitting:
+
+```typescript
+emulator.ledgerFailures(txCborBytes); // for example ["MissingRedeemers", "ConwayWdrlNotDelegatedToDRep"]
+```
+
+### Epochs, Rewards and Governance
+
+Crossing an epoch boundary with `setSlot` or `tick` runs the ledger's epoch rules: stake
+snapshots, rewards, pool retirement, and the expiry, ratification and enactment of proposals.
+Read the results with `getEpoch()`, `getReserves()`, `getTreasury()`, `getStakeSnapshots()`,
+`getPendingRewards()`, `getGovState()` and `getLedgerState()`.
 
 ### Staking and Delegation
 

@@ -35,7 +35,7 @@ Study existing validators before creating new ones:
 
 ## Key Patterns
 
-**Imports:** an on-chain file needs two imports.
+**Imports:** an on-chain file needs two imports (Scalus 1.5.0 or newer).
 
 ```scala
 import scalus.cardano.onchain.plutus.v3.*     // ledger types, OutputDatum, ByteString, Data, FromData, ToData, @Compile

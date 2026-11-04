@@ -1,763 +1,341 @@
 # Changelog
 
-## Unreleased
+## 1.5.0 (2026-11-04)
+
+### Highlights
+
+- **Test forks and rollbacks in a unit test, with no devnet.** The Emulator now works as a small
+  Cardano node: a mempool, real blocks, forks and rollback. dApp, wallet and indexer authors can
+  check what their code does with a pending, dropped or rolled-back transaction, from Scala, Java
+  or JavaScript.
+- **Test staking, rewards and governance across epochs.** The Emulator runs the ledger's epoch
+  boundary: stake snapshots, rewards, pool retirement, and the expiry, ratification and enactment
+  of proposals. It is tested against 533 epoch transitions of the Haskell ledger.
+- **Assert the node's own error names.** `Emulator.ledgerFailures(tx)` lists every ledger failure
+  of a transaction by its cardano-ledger name, such as `MissingRedeemers`. A test can check that
+  a bad transaction fails for the right reason, or port a Haskell ledger test as it is.
+- **Run one compiled validator on many transactions.** The JIT compiles a script once, and
+  `applyTo` runs it on each script context, with the CEK machine's result and budget. This suits
+  indexers, chain replays and fuzzers.
+- **Write a validator with two imports.** `scalus.cardano.onchain.plutus.v3.*` and `prelude.*` now
+  also bring `OutputDatum`, the builtin data types and `Compile`.
+- **Get the node's verdict on unusual bytes.** A deeply nested datum decodes, and a script with
+  bytes after its program, or a string that is not UTF-8, fails as on chain.
+
+### Upgrading
+
+- The Emulator runs the epoch rules at each epoch boundary, with no off switch. A test that
+  crosses two or more boundaries and asserts an absolute treasury, reserves or reward balance
+  changes.
+- `Context.testMainnet()`, `UtxoEnv.testMainnet()` and the JavaScript `Emulator.create` without
+  `treasury` hold the mainnet treasury, not 0. Use `emulator.treasury` as `currentTreasuryValue`.
+- The Emulator rejects a PlutusV3 transaction that spends and references one UTxO, and the
+  proposals and votes that the ledger rejects, such as a vote by an unregistered DRep.
+- `ProtocolParams.monetaryExpansion` and `treasuryCut` are `UnitInterval`, and
+  `poolPledgeInfluence` is `NonNegativeInterval`; read them with `.toDouble`. Recompile a 1.4 jar
+  that calls `ProtocolParams.copy` with named arguments: it fails with `NoSuchMethodError`.
+- `GovState` is a case class, not an `Array[Dom.Element]`. Use `GovState.empty` and `==`.
+- A positional pattern on `PoolsState`, `VotingState`, `EmulatorState`, `EmulatorInitialState` or
+  the testkit `ImmutableEmulator` no longer compiles. Use the field accessors.
+- `Block.hash` is the header hash. The old value is `block.header.headerBody.blockBodyHash`.
+- `checkTransaction` reports `NotFound` for a transaction of an imported applied-tx log.
+- Flat decoding (`decodeFlat`, `fromCbor`, `PlutusScript.program`) rejects bytes after the filler.
+  Read a program that other bytes follow with `decodeFlatWithRemainingBytes`.
+- `SubmitError.rule` is `PassedUnexpectedly` or `CollectErrors` where it was `IllegalArgument`.
+- `UplcEvaluator` has a new abstract method, `applyTo`. An implementation outside Scalus must add
+  it.
+- `scalus-plugin` is no longer published for Scala 3.3.7. Use Scala 3.3.8 or 3.3.9.
+- The API deprecated in 1.3.0 is removed. See Removed.
 
 ### Added
 
-- The Emulator behaves like a small Cardano node: a block tree, a mempool, block forging and
-  chain selection. `ChainConfig.manual`, a new preset, holds a submitted transaction in the
-  mempool until an explicit `produceBlock()`; `ChainConfig.instant`, the default, keeps today's
-  "every submit is a block" behaviour. `txStatus(hash)` reports `Pending`,
-  `Confirmed(depth, point)`, `Dropped(reason)`, `RolledBack` or `NotFound`, and
-  `findUtxos(query, view)` reads the tip, the mempool, or a `ChainView.Stable(depth)` block.
-  `ChainConfig`, `TxStatus`, `ChainView` and the other new types live in
-  `scalus.cardano.node.emulator`.
-- Forks and rollback: `produceBlock(on, txs)` forges a block anywhere in the block tree, for
-  example a rival that double-spends a pending transaction's input. Chain selection switches to
-  the longest resulting chain, and `rollback(n)` removes the last `n` blocks. Either way, the
-  orphaned transactions follow `ChainConfig.orphanTxs`: back to the mempool (`ReturnToMempool`,
-  the default) or `RolledBack` (`Drop`). The testkit `ImmutableEmulator` gains the same
-  `produceBlock` and `rollback`, which return the next `ImmutableEmulator` alongside the result,
-  and `txStatus`.
-- `StreamingEmulator` now delivers the Emulator's real blocks, so it also serves block
-  subscriptions: a forged block is a `RollForward` carrying it, and a fork switch or a `rollback`
-  is a `RollBackward` to the common ancestor.
-  `EmulatorBase.diff(from, to)` computes the same `ChainEvent`s between any two chain tips
-  directly, without a subscription. `diff` and the Java `getDiff` are experimental: the event
-  types live in `scalus.cardano.node.stream.internal` and may change in a minor release.
-- New `BlockHeader.hash` (blake2b-256 of the header CBOR, how Cardano names a block) and
-  `Block.bodyHash(bodies, witnessSets, auxiliaryData, invalidTxs)`, which computes the block body
-  hash of the Alonzo and later eras from the four body segments.
-- JVM and JS `Emulator` gain a constructor that takes `chainConfig: ChainConfig` in place of the
-  applied-tx log, with no default arguments (the Emulator is a Java/JS-usable type);
-  `withAddresses`, `withState` and the other factories gain an overload that takes one, as do the
-  testkit `ImmutableEmulator.withAddresses`, `fromPreconfiguration` and `fromJson`.
-- Java: `EmulatorJavaApi` gains `tryProduceBlock`, `tryRollback`, `getMempoolTxs`, `getDiff` and
-  `findUtxosForAddress(address, view)`, returning the new `EmulatorResult`; `ChainView.tip()`,
-  `mempool()` and `stable(depth)` build a view, and `TxStatus.pending()`, `rolledBack()`,
-  `notFound()`, `DropReason.expired()` and `inputsSpent()` name the cases, since a Scala 3 enum
-  case is only a static field of its module class. `ForgeError` and `RollbackError` have a
-  `message` in prose. JavaScript: `Emulator.create` takes `blockProduction`, `awaitTx`,
-  `orphanTxs` and `securityParam`, and gains `produceBlock`, `produceBlockOn`, `rollback`,
-  `getMempool`, `getTip`, `getTxStatus` and `awaitTx`; `getTransactionStatus` now also returns
-  `"Pending"`, `"Dropped"` and `"RolledBack"`.
-- JIT: `UplcEvaluator.applyTo(args*)` evaluates a compiled script applied to constant arguments,
-  so a validator compiles once and runs with the script context of each transaction:
-  `UplcCompiler.compile(term).withFallback().applyTo(Constant.Data(ctx)).evaluateScript(...)`.
-  The result, failures and budget per category are those of the CEK machine on
-  `[term (con ctx)]`; the CEK fallback evaluates the applied term. `applyTo` is a new abstract
-  method of `UplcEvaluator`: an implementation outside Scalus must add it.
-- At protocol version 11 the Emulator rejects a pool registration whose VRF key another pool
-  has, as the ledger does, with the new `TransactionException.VrfKeyHashAlreadyRegisteredException`.
-  It checks each certificate against the earlier ones of the same transaction, so two new pools
-  with one VRF key in one transaction fail. `PoolsState` gains `vrfKeyHashes`, the number of pools
-  per VRF key, which the Emulator fills from its seeded pools at a genesis at protocol version
-  11 or more, and which a hard fork into protocol version 11 fills at an epoch boundary.
-- `Emulator.ledgerFailures(tx)` lists every ledger-rule failure of a transaction, as the
-  cardano-ledger collects them and in the ledger's order, without submitting it;
-  `TransactionException.ledgerNames` gives the cardano-ledger constructor names of each failure,
-  such as `MissingRedeemers` or `ConwayWdrlNotDelegatedToDRep`, as a Haskell ledger test asserts
-  them at protocol version 11. `STS.Mutator.transitAll` and `CardanoMutator.transitAll` give the
-  same list for any rule set. For the list, the Plutus scripts run only when no earlier rule
-  failed, as in the ledger.
-  `submit` still reports one failure. Java: `getLedgerFailureNames(tx)`; JavaScript:
-  `Emulator.ledgerFailures(txCborBytes)`; both return the names.
-- The Emulator keeps `State.deposited` (the deposits of a valid transaction, proposal deposits
-  included, minus its refunds; at genesis, the deposits of the seeded registrations) and
-  `DRepState.delegates` (the accounts that delegate their vote to the DRep) as the ledger does.
-- DRep expiry follows the ledger: a registration or update expires `dRepActivity` epochs after
-  the current one, less the dormant epochs; a DRep vote renews its DRep's expiry the same way; a
-  transaction with a proposal adds the dormant epochs to every active DRep and resets the count.
-  `VotingState` gains `numDormantEpochs`, and a seeded DRep now expires `dRepActivity` epochs
-  after genesis instead of at epoch 0.
-- The ledger state models governance: `GovState` holds the active proposals in the order they
-  were made (each a `GovActionState` with its committee, DRep and pool votes, `proposedIn` and
-  `expiresAfter`), the last enacted action of each purpose (`GovRoots`), the `Committee` and the
-  `Constitution`; `govState.proposal(id)` finds one proposal. `VotingState` gains
-  `committeeState`, the `CommitteeAuthorization` (`HotCredential` or `Resigned`) of each committee
-  member.
-- The Emulator runs the Conway GOV rule: a valid transaction's proposals and votes are stored in
-  `State.govState`, a new vote replaces the voter's earlier vote on the same action, and
-  unregistering a DRep removes its votes. A rejection is the new
-  `TransactionException.GovException`, whose `failure` is a `GovFailure` case named as the
-  ledger's `ConwayGovPredFailure` constructor (`MalformedProposal`, `InvalidPrevGovActionId`,
-  `ProposalCantFollow`, `VotersDoNotExist`, `GovActionsDoNotExist`, `DisallowedVoters`,
-  `UnelectedCommitteeVoters` and the others); `TransactionException.ruleName` returns that name.
-  `GovState` gains `addProposal`, `withVote` and `withoutDRepVotes`, and `GovActionPurpose.of`
-  gives the purpose of an action.
-- The Emulator keeps the committee state: `AuthCommitteeHotCert` stores the member's hot key
-  and `ResignCommitteeColdCert` marks the member resigned. A certificate for a member that
-  resigned fails with the new `TransactionException.CommitteeHasPreviouslyResignedException`,
-  and one for a cold credential that is neither a committee member nor added by a pending
-  `UpdateCommittee` proposal fails with `CommitteeIsUnknownException`. `ruleName` returns the
-  ledger names `ConwayCommitteeHasPreviouslyResigned` and `ConwayCommitteeIsUnknown`.
-- `EmulatorInitialState` gains `committee`, `committeeHotKeys` (cold credential to hot
-  credential) and `constitution`, and its Java `Builder` gains `committee`, `addCommitteeHotKey`
-  and `constitution`. With none given, the gov state has no committee and a constitution with no
-  guardrails script. A hot key for a cold credential that is not a seeded member throws
-  `IllegalArgumentException`. `EmulatorBase.govState` and the Java `getGovState` read the gov
-  state. JavaScript: `Emulator.create` takes `committee`, `committeeHotKeys` and `constitution`,
-  and `getGovState()` returns the proposals with their votes, the committee and the
-  constitution.
-- The Emulator runs one epoch transition for each epoch boundary that a slot change crosses, in
-  order, also when `setSlot` jumps over many epochs; the move of the donations into the treasury
-  is one step of it. The ticked ledger is computed once per state, so reads after a long `setSlot`
-  do not run the transitions again. A slot moved back below the tip does not run again the
-  boundaries the ledger already ran, so a donation made there moves into the treasury at the next
-  boundary after the tip's epoch. The treasury and the reserves are an `AccountState` in the
-  new package `scalus.cardano.ledger.epoch`, and `UtxoEnv.treasury` follows its treasury.
-- `Emulator.ledgerState` returns the whole ledger state in the node's `NewEpochState` shape: the
-  last epoch, the blocks made, the reward update, the pool distribution, and an `EpochState` with
-  the account state, a `LedgerState` (`utxoState`, `certState`), the stake snapshots, the
-  current, previous and future pparams and the pending ratify result. The types
-  (`scalus.cardano.ledger.epoch.NewEpochState`, `EpochState`, `PoolDistr`,
-  `IndividualPoolStake`, `NonMyopic`, `FuturePParams` and `scalus.cardano.ledger.LedgerState`)
-  are read-only. JavaScript: `getLedgerState()` returns the same state as one flat object.
-  Java: `getLedgerState()`, with `getBlocksMadePrev`, `getBlocksMadeCur`,
-  `getPendingRewardsOrNull`, `PoolDistr.getPools` and `NonMyopic.getLikelihoods` as Java maps,
-  and `FuturePParams.noPParamsUpdate()` and `definitePParamsUpdate(params)`. The new
-  `BlockProduction`, `AwaitTxPolicy` and `OrphanTxPolicy` are Java enums.
-- `EmulatorInitialState` gains `reserves`, by default the mainnet reserves at epoch 665
-  (`AccountState.mainnet.reserves`, 6 029 414 056 167 760 lovelace); no UTxO holds them. The Java
-  `Builder` gains `reserves`. `EmulatorBase.reserves` and `currentEpoch`, the Java `getReserves`
-  and `getCurrentEpoch`, and the testkit `ImmutableEmulator.reserves` read them. JavaScript:
-  `Emulator.create` takes `reserves`, and the emulator gains `getReserves()` and `getEpoch()`.
-- At each epoch boundary the Emulator now reaps pools as the ledger's POOLREAP does: a pool
-  re-registration takes effect, and a pool whose retirement epoch has come is removed, its
-  delegators lose the delegation, and its deposit goes to its reward account, or to the treasury
-  when that account is not registered.
-- At each epoch boundary the Emulator now expires proposals as the ledger's EPOCH rule does: a
-  proposal that was not ratified goes two boundaries after its last epoch (`expiresAfter`), with
-  the proposals that name it as their parent, and its deposit goes to its return account, or to
-  the treasury when that account is not registered. The boundary also counts the dormant epochs
-  (`VotingState.numDormantEpochs` grows at each boundary with no active proposal, so a DRep
-  registered after a long `setSlot` jump gets an earlier expiry, as on a node), drops the
-  committee state of credentials that are not committee members, and sets
-  `State.deposited` to the sum of all deposits the ledger holds.
-- At each epoch boundary the Emulator now takes the stake snapshots as the ledger's SNAP does:
-  the new `mark` holds the stake of each registered credential that delegates to a pool (the
-  coin of its base-address outputs plus its reward balance) and a record of every registered
-  pool, and the old `mark` and `set` move to `set` and `go`. The genesis fills all three from
-  the initial state. The types `SnapShots`, `StakeSnapshot` and `PoolSnapshot` are in
-  `scalus.cardano.ledger.epoch`; the reward update reads `go`.
-- `ChainConfig.withBlockIssuer(BlockIssuer.pool(poolId))` makes every block the Emulator forges
-  count for that pool, as the ledger counts the blocks each pool makes in an epoch;
-  `BlockIssuer.Unattributed`, the default of both presets, counts none. JavaScript:
-  `Emulator.create` takes `blockIssuer`, a hex pool id.
-- At each epoch boundary the Emulator now computes the reward update of the new epoch from the
-  `go` snapshot, the fee snapshot, the blocks made and the reserves, with the ledger's formulas
-  in exact rational arithmetic and its rounding. `RewardUpdate` is in
-  `scalus.cardano.ledger.epoch`. The next boundary applies it, as the ledger's NEWEPOCH does:
-  the reward of a registered account goes to its balance, a reward to an unregistered account and
-  `deltaT` go to the treasury, and `deltaR` and `deltaF` change the reserves and the fees. A
-  credential that delegates in epoch e is paid at the boundary into epoch e + 4; stake seeded
-  through `EmulatorInitialState` is paid at the second boundary.
-  `ChainConfig.withPoolPerformance` picks `PoolPerformance.Ideal`, the default of both presets,
-  where every pool with stake earns as a perfect pool, or `PoolPerformance.Measured`, where
-  pools earn by the blocks they made, as on a real chain. `ChainConfig.withActiveSlotsCoeff`
-  sets `f` (default 1/20), which sets the expected blocks of an epoch. Java:
-  `PoolPerformance.ideal()` and `measured()`. JavaScript: `Emulator.create` takes
-  `poolPerformance` (`"ideal"` or `"measured"`) and `activeSlotsCoeff`, a `Fraction`.
-- The Emulator reads the stake snapshots and the pending reward update: `snapshots` and
-  `pendingRewards` on `Emulator`, `EmulatorState` and the testkit `ImmutableEmulator`. Java:
-  `getSnapshots` and `getPendingRewardsOrNull`. JavaScript: `getStakeSnapshots()` and
-  `getPendingRewards()`.
-- The Emulator epoch boundary is tested against the epoch scenarios of the Haskell ledger's Imp
-  test suite (proposal expiry and deposit refunds, the dormant-epoch DRep expiry, crossing many
-  boundaries), with the epochs and amounts of the Haskell tests.
-- The epoch transition is also tested against 533 NEWEPOCH transitions of the Haskell ledger at
-  protocol version 11 (the Dugite conformance corpus, vendored as a 0.7 MB test resource). The
-  pool, proposal-expiry, dormant-epoch, committee-state, donation and deposit fields, the stake
-  snapshots, the blocks made, the reserves, the fees and the treasury after the reward update
-  match in every case that decodes, and so does the reward update computed from each input
-  state. The governance fields are compared too: the proposals, roots, committee, constitution,
-  current and previous pparams, enacted treasury withdrawals, the pending ratify result and the
-  DRep and pool stake it reads. Every case matches, also the 106 that enact an action, except 7
-  whose ledger ratifies a hard fork to protocol version 12, which the Emulator does not accept.
-  These cases make no blocks, so they pay no pool rewards.
-- `ProtocolParamUpdate.applyTo(params)` gives the pparams after the update, as the ledger enacts a
-  `ParameterChange`: each field the update holds replaces the pparam, cost models merge per
-  language with the update winning, and `minFeeRefScriptCoinsPerByte` takes the floor of its
-  interval. After an enacted non-integer `minFeeRefScriptCoinsPerByte`, for example 25/2, the
-  Emulator computes the reference-script fee with 12 where the ledger uses 12.5, so it can accept
-  a tx whose fee the ledger rejects.
-- At each epoch boundary the Emulator ratifies the active proposals as the ledger's RATIFY rule
-  does: by priority and in the order they were made, with delaying actions, the committee, SPO
-  and DRep thresholds of the pparams, the default vote of a pool that did not vote, expired DReps
-  and committee members left out, proposal deposits counted as voting stake, and the PV 9
-  bootstrap rules. The boundary after the one that ratified an action enacts it: the pparams of
-  an Emulator change when a ParameterChange or a HardForkInitiation is enacted, the committee and
-  the constitution take their enacted values, enacted treasury withdrawals are paid to registered
-  accounts, and the enacted action becomes the root of its purpose while its competing proposals
-  are removed and their deposits refunded. `pendingRatify` (Java `getPendingRatify`, JS
-  `getPendingRatify()`) reads the ratify result that the next boundary enacts. RATIFY never
-  accepts a HardForkInitiation to protocol version 12 or more: the action delays nothing, and it
-  expires with its deposit refunded. The `subscribeProtocolParams` stream of `StreamingEmulator`
-  emits the enacted pparams.
+- Emulator chain: `ChainConfig.manual` keeps submitted transactions in a mempool until
+  `produceBlock()`; `ChainConfig.instant`, the default, forges one block per submit.
+  `txStatus(hash)` reports `Pending`, `Confirmed`, `Dropped`, `RolledBack` or `NotFound`.
+- Forks and rollback: `produceBlock(on, txs)` forges a block anywhere in the block tree, chain
+  selection takes the longest chain, and `rollback(n)` removes blocks. `ChainConfig.orphanTxs`
+  sends orphaned transactions back to the mempool or drops them.
+- `findUtxos(query, view)` reads the tip, the mempool or a `ChainView.Stable(depth)` block.
+  `EmulatorBase.diff(from, to)` gives the `ChainEvent`s between two tips (experimental).
+- `StreamingEmulator` streams the Emulator's real blocks, forks and rollbacks included.
+- Epoch boundary: stake snapshots, the reward update and its payout, pool reaping, proposal
+  expiry, ratification and enactment, and DRep expiry with dormant epochs.
+  `ChainConfig.withPoolPerformance`, `withActiveSlotsCoeff` and `withBlockIssuer` set how pools
+  earn.
+- Governance: the Conway GOV rule, a `GovState` with proposals, votes, roots, the committee and the
+  constitution, and committee hot keys and resignations. `EmulatorInitialState` takes
+  `committee`, `committeeHotKeys`, `constitution` and `reserves`.
+- `Emulator.ledgerState` returns the whole ledger state in the node's `NewEpochState` shape.
+  `snapshots`, `pendingRewards`, `pendingRatify`, `govState`, `reserves` and `currentEpoch` read
+  its parts.
+- `Emulator.ledgerFailures(tx)` and `TransactionException.ledgerNames` give every ledger failure
+  in the ledger's order, with the ledger's names.
+- Java: `EmulatorJavaApi` gains `tryProduceBlock`, `tryRollback`, `getMempoolTxs`, `getDiff`,
+  `getLedgerState` and `getLedgerFailureNames`. The new parameterless enums are Java enums.
+- JavaScript: `Emulator.create` takes the chain, governance and reward options. The emulator gains
+  `produceBlock`, `rollback`, `getTxStatus`, `awaitTx`, `getLedgerState` and `ledgerFailures`.
+- `ProtocolParamUpdate.applyTo(params)` applies a parameter update as the ledger enacts it.
+- `BlockHeader.hash` and `Block.bodyHash(...)`.
+- JIT: `UplcEvaluator.applyTo(args*)` evaluates a compiled script applied to constant arguments.
+- `scalus.cardano.onchain.plutus.v3` re-exports `OutputDatum`, the builtin data types and
+  `Compile`.
+- `scalus-verification` (experimental): quantify over enums, lists, maps and `Data` encodings
+  (`forAllData`, `forAllDataLimited`, `DataEncoding`), and over types that contain themselves.
+  `Budget.Within(n)` proves a statement on the runs that end within `n` steps.
+- Examples: the USDCx minting policy, recreated from its Plinth script (446 bytes against 483),
+  and verified guarantees of the one-shot minting policy.
 
 ### Changed
 
-- **Migration hazard: `Context.testMainnet()`, `UtxoEnv.testMainnet()` and the JS `Emulator.create`
-  without a `treasury` option now carry the mainnet treasury at epoch 665
-  (`AccountState.mainnet.treasury`, 1 392 896 975 262 771 lovelace) instead of 0.** A transaction
-  that states `currentTreasuryValue = 0` against them fails with `TreasuryValueMismatch`; state
-  `emulator.treasury` (JS: `getTreasury()`) instead. `UtxoEnv.default` keeps a treasury of 0.
-- **Migration hazard: every Emulator factory runs the epoch rules at each epoch boundary that a
-  slot change crosses, and no option turns them off.** A test that crosses a boundary sees the
-  effects of each rule as it lands: the move of the donations, the reaping of retired pools and
-  the expiry of proposals, the rewards for delegated accounts and the enactment of ratified
-  proposals. From the second boundary on, every boundary also moves `deltaT` of the
-  reward update from the reserves to the treasury, with no stake too (about 3.6 M ADA with the
-  default reserves), and takes the fees of the previous epoch out of `fees`. A test that crosses
-  two or more boundaries and asserts an absolute treasury, reserves or reward balance changes.
-- The Emulator rejects proposals and votes that the ledger rejects. For example, a proposal whose
-  deposit return account is not registered, a ParameterChange or TreasuryWithdrawals whose
-  guardrails script hash differs from the constitution's, a vote by an unregistered DRep or pool,
-  or a vote on an action that does not exist now fail. At protocol version 11, a committee vote
-  by a hot key that no member of the current committee authorized fails.
-- `PoolsState` gains `vrfKeyHashes` and `VotingState` gains `numDormantEpochs` and
-  `committeeState`. Their 1.4 constructor, `apply` and `copy` stay, and the 1.4 `copy` keeps the
-  new fields. A positional pattern match such as `case PoolsState(a, b, c, d)` or
-  `case VotingState(m)` no longer compiles.
-- **Migration hazard: `GovState` is a case class instead of an alias of
-  `Array[io.bullet.borer.Dom.Element]`, so `State.govState` and `UTxOState.govState` change type.**
-  Code that builds an array for them, or compares them with `sameElements`, no longer compiles;
-  use `GovState.empty` and `==`.
-- **Migration hazard: `ProtocolParams.monetaryExpansion` (rho) and `treasuryCut` (tau) change
-  type from `Double` to `UnitInterval`, and `poolPledgeInfluence` (a0) from `Double` to
-  `NonNegativeInterval`, the ledger types; Java's `monetaryExpansion()`, `treasuryCut()` and
-  `poolPledgeInfluence()` return them.** Code that reads the three fields as numbers no longer
-  compiles; call `.toDouble` on the value. The constructor, `apply` and `copy` keep a 1.4
-  overload that takes all fields with the three as `Double` and converts them to the exact
-  decimal (`0.003` is `3/1000`); `copy(monetaryExpansion = 0.003)` alone needs
-  `UnitInterval(3, 1000)`.
-- **Migration hazard: a jar compiled against 1.4 that calls `ProtocolParams.copy` with named
-  arguments, such as `pp.copy(maxTxSize = 32768)`, fails at run time with `NoSuchMethodError`;
-  recompile it against this version.** Such a call reads every field it does not name through
-  the default getters `copy$default$20`, `copy$default$21` and `copy$default$28`, which now
-  return `UnitInterval` and `NonNegativeInterval` instead of `Double`. A class has one default
-  getter per parameter, so no overload can keep the 1.4 ones. A 1.4 jar that calls the
-  constructor, `apply` or `copy` with all fields keeps working. The Blockfrost and cardano-cli JSON readers take the exact decimal, so
-  `"rho": 0.003` reads as `3/1000`; the JSON they write is unchanged.
-- **`scalus-plugin` is no longer published for Scala 3.3.7. A project on Scala 3.3.x must use
-  3.3.8 or 3.3.9.** The `_3` library artifacts are built with Scala 3.3.9.
-- **`ProgramFlatCodec.decodeFlat`, `DeBruijnedProgram.fromFlatEncoded`, `fromCbor` and
-  `fromCborPrefix`, the matching `Program` methods and the `PlutusScript` accessors `program` and
-  `deBruijnedProgram` require the program's filler to end the bytes, as `unflat` in Plutus does.
-  Bytes after the filler, a missing filler and a filler that ends inside a byte throw
-  `FlatDecodingError`. Before, they were ignored, so an accessor returned a program for a script
-  that `isWellFormed` refuses. In JavaScript, `uplc.decodeProgram`, `uplc.applyArgs`,
-  `uplc.applyParamsToScript` and `evaluateScript` throw a `TypeError` for such a script. Read a
-  program that other bytes follow with
-  `decodeFlatWithRemainingBytes`, which now reports a filler that ends inside a byte as
-  `FlatDecodingError` instead of `IllegalArgumentException`.**
-- **Migration hazard: `checkTransaction` reports `NotFound` for a transaction of an imported
-  applied-tx log; such a transaction has no block.** Before, they
-  reported `Confirmed`. `hasTx`, `getTransaction`, `getAppliedTx` and `appliedTxLog` still find
-  it. A transaction in a block below the `clearAppliedTxs` cursor is `Confirmed`; it used to be
-  `NotFound`.
-- `StreamingEmulator` keeps up to `k` blocks (the Emulator's `securityParam`, default 2160), so a
-  `rollback` or fork switch of the Emulator reaches subscribers as `RolledBack`. The advertised
-  `rollbackHorizon` is the constructor's `securityParam` as `Some(securityParam)`, so `noRollback`
-  subscribers wait as before. The default is now `Some(0)` instead of `None`, since the stream can
-  deliver `RolledBack`. A `noRollback` subscriber can now get `RolledBack` when a test rolls back
-  deeper than the advertised horizon.
-- `StreamingEmulator.newEmptyBlock()` still ticks the slot by one, then forges through the
-  Emulator's `produceBlock()`, so the block is part of the Emulator's own chain, visible in `tip`
-  and `diff`. Under `ChainConfig.manual` it also confirms the pending transactions.
-- **Migration hazard: the testkit `ImmutableEmulator` now wraps one shared `EmulatorState`**
-  instead of its own 9-field model. `copy` and `unapply` of the old fields are gone, so code that
-  pattern-matches it, or copies it by field name, no longer compiles. The companion `apply` with
-  the old fields and the field accessors (`state`, `utxos`, `env`, `appliedTxLog`, ...) stay.
-- `EmulatorState` holds a block tree and a mempool, so it has 12 product elements instead of 6,
-  and `_1` .. `_6` return the new fields. A pattern match on its elements, such as
-  `case EmulatorState(ledger, context, ...)`, no longer compiles; use the `ledger`, `context`,
-  `binaryDatums` and `appliedTxLog` accessors.
-- Two kinds of Plutus rejection get their own `TransactionException` case instead of
-  `IllegalArgumentException`, so `SubmitError.rule` changes for them. A transaction marked
-  `isValid = false` whose scripts all pass fails with `PassedUnexpectedlyException`, rule
-  `PassedUnexpectedly`. A Plutus script that has no redeemer, no cost model or no script context
-  (for example a PlutusV3 spend of a UTxO that is also a reference input, at protocol version 11)
-  fails with `CollectErrorsException`, rule `CollectErrors`, which lists each `CollectError`
-  (`NoRedeemer`, `NoCostModel`, `BadTranslation`) as the ledger does. Both rules were
-  `IllegalArgument`.
-- The message of a script context that cannot be built now starts with the ledger
-  `ContextError` constructor, for example `CertificateNotSupported: ...` or
-  `InlineDatumsNotSupported: ...`. A PlutusV1 context with both an inline datum and a Byron
-  address reports the first one in ledger order instead of one message for both.
-- `scalus.js` grows by about 83 KB for the chain feature, since the linker now reaches block
-  forging, chain selection, rollback and poll code; the bundle-size cap CI checks is 2.4 MiB.
+- `StreamingEmulator` keeps up to `securityParam` blocks and delivers rollbacks. Its default
+  `rollbackHorizon` is `Some(0)`, and `newEmptyBlock()` forges through `produceBlock()`.
+- A script context error starts with the ledger's `ContextError` name, for example
+  `InlineDatumsNotSupported: ...`.
+- The `_3` library artifacts are built with Scala 3.3.9.
+- `scalus.js` grows by about 83 KB for the chain features.
+- Dependency updates: jsoniter-scala 2.41.6, jackson-databind 2.22.4, Yaci DevKit 0.4.7.
 
 ### Deprecated
 
-- `RewardsCalculation` and `StakeDistribution`: they use `Double` and not the ledger's formulas.
-  The Emulator computes the stake snapshots and the reward update at each epoch boundary; read
-  them with `snapshots` and `pendingRewards` (types in `scalus.cardano.ledger.epoch`).
-  `Emulator.stakeDistribution` stays, and now sums the same instant stake as the snapshots.
-- The `EmulatorInitialState` constructor, companion `apply` and `copy`: start from
-  `EmulatorInitialState.empty` and set fields with `withUtxos`, `withStakeRegistrations`,
-  `withReserves` and the other `with` methods, or use the Java `Builder`. The class is final with
-  a private constructor, so later fields add `with` methods only. The 1.4 forms with their
-  defaults stay; a positional pattern match such as `case EmulatorInitialState(a, b, c, d, e)` no
-  longer compiles.
-- `clearAppliedTxs`: the selected chain is the applied-tx log now; start a new Emulator for an
-  empty log.
-- `StreamingEmulator.syntheticBlockHash`: the stream delivers the Emulator's real blocks, named by
-  their header hash.
-- The `initialAppliedTxLog` parameter of the JVM and JS `Emulator` constructor, the
-  `appliedTxLog` parameter of the testkit `ImmutableEmulator.apply`, and the `appliedTxLog`
-  parameter of `EmulatorState.initial`: the log has no blocks, so status APIs report `NotFound`
-  for its transactions. Use `snapshot()` or `ImmutableEmulator.fromEmulator`/`toEmulator`, which
-  keep the blocks. The deprecation is in the scaladoc only: the parameters have defaults, so the
-  compiler cannot warn.
-
-### Fixed
-
-- The flat decoder reads a `data` constant as Plutus does: it takes the first CBOR item of the
-  constant's bytes and ignores the bytes after it, where it used to reject the script.
-  `Data.fromCbor` still rejects trailing bytes, as the ledger does for a datum or a redeemer. A
-  malformed `data` constant fails with `FlatDecodingError`, like other malformed flat input.
-- The flat decoder rejects a `string` constant that is not UTF-8, as Plutus does. Before,
-  malformed bytes became U+FFFD. The `decodeUtf8` builtin uses the same check, which is written out
-  so that JVM, Scala.js and Scala Native reject the same bytes.
-- `PlutusScriptEvaluator` reports a script it cannot decode as an `IllegalArgumentException` that
-  names the script, and the Emulator rejects the transaction in phase 1. Before protocol version 7
-  (Babbage), the ledger had no phase 1 check: `ScriptsWellFormedValidator` accepts the script, and
-  it fails in phase 2.
-- A flat decoding error shows the bytes around the failure, not the whole input.
-- `Block.hash` returns the header hash (`BlockHeader.hash`), as Cardano names a block. It
-  returned the block body hash, so two empty blocks on different parents had the same hash.
-  **Migration hazard: code that stored or compared `Block.hash` gets a different value; the old
-  value is `block.header.headerBody.blockBodyHash`.**
-- Instant: moving the current slot backward with `setSlot` before an epoch boundary no block has
-  crossed now restores the donations that boundary moved into the treasury, as on a node. Before,
-  the move could not be undone.
-- The Emulator rejects a pool registration whose metadata hash is longer than 32 bytes, as the
-  ledger's POOL rule does (`PoolMedataHashTooBig`), with the new
-  `TransactionException.PoolMetadataHashTooBigException`.
-- The Emulator checks the bootstrap address attributes of the collateral return output too, as
-  the ledger's UTXO rule does (`validateOutputBootAddrAttrsTooBig`, which a Conway node reports
-  as `OutputBootAddrAttrsTooBig`). Before, it checked only the regular outputs.
-- The Emulator measures the value of an output for `maxValueSize` as the ledger serializes it
-  (`OutputTooBigUTxO`). The ledger writes a map of more than 23 entries with an indefinite length,
-  so a policy of 256 or more assets, or 256 or more policies, is one byte smaller there than in
-  Scalus CBOR. Before, the Emulator rejected such an output at exactly `maxValueSize`, and
-  `OutputsHaveTooBigValueStorageSizeException` reported a size one byte too large.
-- `ByronAddress.attributesSize` computes what the ledger's `bootstrapAddressAttrsSize` computes:
-  the length of the HD payload in attribute 1, without its CBOR head, plus the bytes of the
-  unknown attributes. Before, it counted the CBOR head of the payload and skipped the unknown
-  attributes. So the Emulator rejected an output whose Byron address has a 63- or 64-byte HD
-  payload, which a node accepts, and accepted one whose unknown attributes are over 64 bytes,
-  which a node rejects.
-- A PlutusV3 transaction that spends a UTxO and also references it was accepted by the Emulator
-  and built by `TxBuilder` at protocol version 11. The ledger rejects it: the PlutusV3 script
-  context fails with `ReferenceInputsNotDisjointFromInputs`, whatever `isValid` says, so no
-  collateral is taken. `LedgerToPlutusTranslation.getTxInfoV3` now fails the same way and names the
-  common inputs, so the Emulator rejects such a transaction and `TxBuilder.complete` fails with a
-  `BalancingException` that names them. A transaction that runs only PlutusV1, PlutusV2 or native
-  scripts may still spend and reference one UTxO from version 11. **Migration hazard: a test that
-  spends and references one UTxO with a PlutusV3 script now fails; drop the reference or the
-  spend.**
-- The Emulator's forge keeps the total reference-script size of a block within 1 MiB, as the
-  ledger's BBODY rule does (`BodyRefScriptsSizeTooBig`). A `Manual` or `Instant` forge leaves the
-  txs past the limit in the mempool for the next block, and `produceBlock(on, txs)` returns
-  `ForgeError.BlockTooBig`. From protocol version 11 a tx's total also counts the outputs of the
-  earlier txs of the block, as on a node. `submit` refuses a transaction over the 200 KiB
-  per-transaction reference-script limit whatever `isValid` says, as the node's mempool does; the
-  ledger rule skips the check for a phase-2-invalid transaction, so such a transaction was accepted
-  and forged into a block over 1 MiB.
-
-## 1.4.1 (2026-10-26)
-
-### Added
-
-- The experimental UPLC JIT compiler is published as `org.scalus::scalus-uplc-jit-compiler`. It has
-  no binary compatibility check yet. Its staging compiler is `scala3-compiler` 3.3.8, so a project
-  that uses it builds on Scala 3.3.x. `UplcEvaluator.run` returns the budget and the logs for a
-  script whose result is a function, where `evaluate` throws `FunctionResultError`.
-  `UplcCompiler.compile` and `JIT.jitUplc` take the protocol version (PV11 by default). At PV12
-  (Dijkstra) the generated code supports `case` on `Data`, and `evaluate` rejects a `PlutusVM` of
-  another protocol version.
-- JavaScript: `new PlutusVM(options)` builds the machine once, and `uplc.decodeProgram` (or
-  `new Program`) decodes a script once. `vm.evaluateScript` and `evaluator.evaluateScript` take a
-  `Program` in place of the bytes, and `Program.toFlat()` returns the flat bytes. Before, each
-  evaluation converted the cost model again, about 114 us per call.
-- `UplcBlaster` quantifies over `String`, and `equal` compares `ByteString` and `String` values.
-  Blaster's SMT strings have other characters than Lean's
-  ([input-output-hk/Lean-blaster#389](https://github.com/input-output-hk/Lean-blaster/issues/389)),
-  so a counterexample's characters that are none of their type are read as unused ones before the
-  CEK replay decides. A statement with variables whose programs apply `encodeUtf8` or
-  `decodeUtf8` is refused.
-- Kept results survive an update of Blaster or of the Lean library. Their entries move to a
-  `former` section of the `*.proofs.json` file. A budget search starts at the old budget, also in
-  a later run, and a kept refutation is replayed on the Scalus CEK without Lean. A kept entry that
-  no longer stands, such as an edited one, is stale with a reason, and no longer fails the suite.
-- `DeBruijnedProgram.fromCborPrefix` reads a program from the CBOR byte string that the input
-  starts with, and returns it with the bytes after that byte string as a `PrefixDecodeResult`.
-
-### Changed
-
-- The CEK machine takes 31% less time on the Plutus use-case scripts (geometric mean) and allocates
-  62% less (1506 KB to 573 KB per evaluation). Budgets and errors do not change.
-- The inliner caches the free variables of each term in a pass, so deep terms no longer take
-  quadratic time. The example corpus compiles to the same bytes, about 15% faster.
-- `scalus-verification` pins Lean-blaster to `main` at `6c27ff9`.
-- `LeanProofs.check(statement)` and `check(statement, budget: Budget)` are one method,
-  `check(statement, budget: Budget = Budget.Auto)`. Calls compile as before; code compiled against
-  1.4.0 that calls `check(statement)` must be recompiled.
-- **Breaking (experimental `scalus-verification`): `Tactic.run(prepared)` and
-  `Tactic.run(prepared, earlier: Kept)` are one method, `run(prepared, earlier: Option[Kept] =
-  None)`, and `Tactic.restore` returns `Either[String, ExecutionResult]` instead of an `Option`. A
-  tactic implemented against 1.4.0 must override the new signatures. `UplcBlaster.Artifact` has a
-  new field `read`, so positional constructions and patterns of it need one more argument.**
-
-### Deprecated
-
-- `CekValue.VList`. Plutus has no list of non-constant values, and since the `mkCons` fix below
-  nothing creates one. The experimental JIT drops its counterpart, `ListValue`.
-
-### Fixed
-
-- `Interval.intersection` and `Interval.hull` order lower bounds correctly when two bounds share a
-  time: `intersection([5,10], (5,10])` is `(5,10]`. `Interval.isNever` is true for intervals that
-  contain no time, such as `(5,5]`.
-- `Math.log(x, 1)` fails with a message: there is no logarithm in base 1. Before, it looped forever
-  on the JVM and ran out of budget on chain.
-- UtxoCell: a cell spend keeps the beacon. A non-terminal spend requires one input of the cell
-  script, no mint or burn under the cell policy and the same cell-policy tokens on the continuing
-  output; a terminal spend also requires a single cell input. Before, the beacon could leave the
-  cell while the cell continued.
-- `UtxoFlow.define` reads variables bound outside the flow body, such as script parameters, from
-  the closure instead of the datum, and the flow mint requires an empty initial datum. Before, the
-  initial datum could replace a parameter checked in the first step. A flow that does not start
-  with an await, or whose first chunk has datum fields, is a compile error.
-- Example and pattern validators:
-  - `LotteryValidator`: `Lose` and `Timeout` require exactly one lottery input, so one payout no
-    longer settles two pots (double satisfaction). A first reveal keeps the tokens and at least
-    the lovelace of the pot in the lottery; it may add ADA for the larger datum.
-  - Payment splitters (`OptimizedPaymentSplitterValidator`, `StakeValidatorPaymentSplitterValidator`)
-    count each payee once, so two outputs to one payee no longer stand in for another payee. The
-    design-pattern splitter also rejects contract inputs with native tokens, as the examples do.
-  - Vault: a transaction spends one vault input. A withdrawal request keeps the wait time; it may
-    add lovelace but no tokens, and the datum amount must record the new lovelace.
-  - Groth16: `grothVerify` fails when there are more public inputs than the verification key
-    binds.
-  - Betting: the mint requires the bet output to hold the minted bet token.
-  - `OracleValidator`: `Update` checks the new exchange rate, not the input one, so an update can
-    no longer lock the oracle. The mint puts the beacon in an output at the oracle script with a
-    valid inline rate, and `Update` keeps it there, so every UTxO that holds the beacon is a valid
-    oracle.
-  - `PubKeyValidator`: `findSignatureOrFail` walks the list it is given; a signer after the first
-    signatory is found.
-- **`equalsData` and `Data` equality compare `Data.Map` entries in order, as Plutus does. Before, two
-  maps with the same entries in a different order, or with a repeated entry, were equal, so the
-  CEK and the Emulator returned `True` where the node returns `False`. Scala code that compares
-  `Data` maps with `==` now sees the order.**
-- `mkCons` fails for a non-constant head, such as a `constr` value, as Plutus does, on the CEK machine
-  and in the JIT. Before, consing onto a `(list value)` constant succeeded, and dropped the elements
-  of a non-empty one.
-- The compiler plugin rejects `@UplcRepr(SumBuiltinList(UplcConstr))`: a builtin list holds constants
-  only, so such a list fails on chain at the first `mkCons`. Annotate the list with `UplcConstr` for
-  a list of native `constr` values.
-- `Term.~=~` compares the number of `Constr` fields and `Case` branches.
-- `Transaction.fromCbor` accepts a transaction without the `isValid` flag, `[body, witnesses,
-  auxiliary data]`, as cardano-node 11.1.3 does, with `isValid = true`. A decoded transaction
-  encodes back to its original bytes until it is changed. The Emulator's `maxTxSize` check counts
-  the size without the flag, as the ledger does, so a transaction of exactly `maxTxSize` bytes is no
-  longer rejected.
-- Scalus decoded a `HardForkInitiation` governance action whose major protocol version exceeds
-  12, the Conway maximum, so it accepted a transaction that the node (11.1.3) fails to
-  deserialise. Such an action now fails to decode, as in the ledger's `decodeProtVer`.
-- The flat decoder kept the low 64 bits of a `constr` tag or variable index that does not fit in
-  64 bits, so it accepted a script with a `constr` tag of 2^64 that Plutus rejects. It now fails to
-  decode, as Plutus does. A variable index above `Int.MaxValue` kept its low 32 bits, so an index
-  of 2^32 + 1 became 1 and passed the scope check. It is now out of scope, as in Plutus.
-- `PlutusScript.isWellFormed` rejected a Plutus V1 or V2 script with bytes after its CBOR byte
-  string, which the ledger ignores, so Scalus rejected transactions that are on chain (#397). It
-  also accepted a V1 or V2 script with bytes after the program inside the byte string, which the
-  ledger rejects in every language. It now reads a script as `deserialiseScript` in
-  plutus-ledger-api does, and also rejects an indefinite-length byte string, as cborg does.
-  `PlutusScript.program` and `deBruijnedProgram` read the byte string by the same rules: they
-  ignore the bytes after it in a V1 or V2 script, so such a script also evaluates, and still fail
-  on them in a V3 or V4 script. They now also fail on an indefinite-length byte string, which they
-  used to read.
-
-## 1.4.0 (2026-10-20)
-
-Scalus 1.4 runs Ed25519, secp256k1 and BLS12-381 on the C libraries that cardano-node links, and
-brings the Emulator closer to the Cardano ledger: withdrawals, delegation targets, the treasury,
-pool updates, pointer addresses, and datum and native-script bytes now behave as on chain. The
-JavaScript Emulator gains what a Lucid Evolution provider needs, and the new `scalus-verification`
-module proves properties of compiled validators with Lean.
-
-### Added
-
-- JavaScript Emulator API for SDK providers. `Emulator.create` takes `protocolParams` to override
-  fields of the preset, `treasury`, `clock: "wall"` to follow `Date.now()`, and pool registrations
-  by `{ poolId }` alone. `addRewards` pays lovelace into a registered reward account, `getAccount`
-  reads its balance, deposit, pool and DRep, `getTreasury` reads the treasury, and
-  `getStakeDistribution` entries carry `rewardAddress`. `Utxo.script` and `PlainUtxo.script` return
-  the reference script as `{ type, script }`, the shape `withScriptRef` takes; `withScriptRef` and
-  `scriptHash` also take `"PlutusV4"`.
-- `Emulator.addDatum` adds a datum to the store that `getDatum` reads, so a UTxO added with
-  `addUtxo` that holds only a datum hash has its datum found. It keeps the given bytes and returns
-  their hash. `ImmutableEmulator.withDatum` is the immutable form. The Scala Emulator also gets
-  `addRewards` and `treasury`. Donations move into the treasury at the next epoch boundary.
-- JavaScript `TxEvaluator` evaluates many transactions under one set of parameters and prepares the
-  cost models once. `ScriptCache` keeps decoded scripts across evaluations: pass it to
-  `TxEvaluator` as `scriptCache`, or on the JVM to the new `PlutusScriptEvaluator` overload. On
-  recorded Midgard requests the cache saves **17–25%** on the JVM.
-- `scalus-verification` and `scalus-verification-scalatest`: state properties of Scalus functions
-  in Scala (`Props`: `forAll`, `exists`, `call`, `denotes`) and prove them against the compiled
-  UPLC with the `UplcBlaster` tactic (Lean 4 and IOG's Blaster). A counterexample is replayed on
-  the CEK machine. `LeanProofsSuite` runs the proofs as ScalaTest tests. **Experimental.**
-- `Spec.expects`, `Spec.ensures` and `ensuring` state a function's contract in its body for the
-  verifier. They are removed before lowering, so a script has the same bytes and hash with and
-  without them. Off-chain, `expects` and `ensuring` throw `SpecificationError`.
-- The `scalus` Claude Code plugin has a session-start hook: in a Scalus project it loads the
-  `using-scalus` routing skill, so an agent picks the contract skills before it writes code.
-  Plugin 1.4.0 follows the 1.4 API and the new Emulator rules.
-- `TxBuilder.updatePool(cert)` updates a registered pool and pays no pool deposit; a certificate
-  added with `IssueCertificate` still pays it, as for a new pool.
-  `TransactionBuilder.calculateChangeValue`, `balanceFeeAndChange`,
-  `balanceFeeAndChangeWithTokens`, `Context.balance` and `Context.balanceContext` have overloads
-  that take a `CertState`, and `Context.validate`, `validateContext` and `finalizeContext`
-  overloads that take the treasury. **The old `validate` forms validate against a treasury of 0,
-  so they reject a transaction that states a non-zero `currentTreasuryValue`.**
-  `TxBalance.produced(tx, certState, params)` and
-  `Certificate.shelleyTotalDeposits(params, isRegisteredPool, certificates)` charge no deposit for
-  a pool re-registration.
-- `DatumOption.Inline.fromCbor`, `DatumOption.Inline.fromBinaryData` and `Script.Native.fromCbor`
-  build values that keep their bytes. `Script.fromCbor` decodes a `[language, script]` script.
-- `Address.fromBytes(bytes, protocolVersion)`, `Pointer.fromBytes(bytes, protocolVersion)` and
-  `Pointer.parseFrom(bytes, startIndex, protocolVersion)` read a pointer address as a node reads it
-  at that protocol version. `Address.fromBytesLenient` and `fromBech32Lenient` read an address
-  that a node already holds, as the ledger's `decompactAddr` does.
-- The bloxbean `StakeStateResolver.resolveForTx(tx, slot)` gives the cert state that a mainnet
-  transaction saw: each account's reward balance, deposit, pool and DRep, and the pools and DReps
-  it delegates to, as of its slot. `treasuryAt(epoch)` gives the treasury at the start of an epoch.
-
-### Changed
-
-- **Breaking:** on the JVM, Ed25519, secp256k1 and BLS12-381 run on the native library of
-  `scalus-crypto-jni`, which needs Linux with glibc 2.34+, macOS 11+ (arm64) or 10.15+ (x64), or
-  Windows x64. **On other platforms these operations throw `IllegalStateException`; Alpine/musl
-  is not supported.** blst-java is no longer a dependency. Ed25519 verification on the JVM takes
-  about 30 µs instead of 52 µs.
-- **`CekValue.VBuiltin` keeps the arguments of a partly applied builtin** instead of a copied
-  `BuiltinRuntime` and a closure that rebuilds its term. Code that builds or matches `VBuiltin`
-  directly must change; code that only evaluates scripts is not affected.
-- Script evaluation is faster on recorded Midgard replays: **13–15%** on the JVM, because source
-  positions are read only for profiling and tracing, and up to **19%** in JavaScript, because
-  builtins are applied without copies. `unConstrData`, `unListData` and `unMapData` build their
-  result in one pass.
-- **Breaking:** `DatumOption` is a sealed trait instead of an enum, and `Inline` holds a
-  `KeepRaw[Data]` with the original CBOR. `Inline(data)`, `Hash(hash)` and `case Inline(d)` with
-  `d: Data` still compile; `ordinal`, `fromOrdinal` and `Inline.copy` are gone. **Two inline
-  datums with the same `Data` and different bytes are no longer equal**; use `contentEquals` to
-  compare by `Data`. The `EmulatorState` field `datums` and the testkit `ImmutableEmulator` field
-  `datums` are now `binaryDatums`, a `Map[DataHash, KeepRaw[Data]]`; `datums` remains as a decoded
-  view. **`copy(datums = ...)` and a named `datums` argument of `ImmutableEmulator` no longer
-  compile.**
-- **Breaking:** `Script.Native` holds a `KeepRaw[Timelock]` with the original CBOR, its
-  constructor is private, and `copy` is gone. `Native(timelock)`, `case Native(t)` and
-  `native.script` still compile. **Two native scripts with the same timelock and different bytes
-  are no longer equal.** **Replace `Cbor.decode(bytes).to[Script].value` with
-  `Script.fromCbor(bytes)`**: `Codec[Script]` is now an `Encoder` and a `Decoder` that needs an
-  `OriginalCborByteArray`. Encode a native script in a non-canonical encoding, or a value that
-  holds one, with `scalus.serialization.cbor.Cbor`: borer's validating `Cbor.encode` rejects its
-  bytes.
-- **Breaking:** `DelegationState` stores one `ConwayAccountState` per account in `accounts`. The
-  `rewards`, `deposits`, `stakePools` and `dreps` maps remain as deprecated read-only views, and
-  `DelegationState(r, d, p, v)` still compiles and links. **A 1.3 binary that left out one of the 4
-  maps does not link, and `copy` with the old field names and a pattern match on 4 fields no
-  longer compile**; update `accounts` instead.
-- **Breaking:** `UtxoEnv` has a fifth field, `treasury`. **Under the deprecated 4-argument `apply`
-  and constructor, which use `Coin.zero`, a transaction that states a non-zero
-  `currentTreasuryValue` fails with `TreasuryValueMismatch`.** A positional pattern match on
-  `UtxoEnv` needs the fifth field, and a 1.3 binary call of `copy` no longer links.
-- **Breaking:** `StakeCertificatesException` has 2 new fields, the unregistered pools and DReps
-  that a transaction delegates to. A positional pattern match needs them, and a 1.3 binary call of
-  `copy` no longer links.
-- **Breaking:** the V3 on-chain `Constitution` is a case class,
-  `Constitution(constitutionScript: Option[ScriptHash])`, instead of an alias of
-  `Option[ScriptHash]`. A node wraps the guardrails script hash in the `Constitution`
-  constructor, so a script read a different proposal than on chain; `LedgerToPlutusTranslation`
-  and the bloxbean `Interop` now encode it as the node does. **Code that builds or matches a
-  `GovernanceAction.NewConstitution` has to wrap the script hash**, and a file that imports both
-  `scalus.cardano.ledger.*` and the V3 on-chain types must qualify one `Constitution`.
-- `CertsMutator` applies the withdrawals, then every certificate in one pass, in transaction
-  order, as the Conway LEDGER and CERTS rules do. `DefaultMutators.all` is `CertsMutator` and
-  `PlutusScriptsTransactionMutator`. A mutator set that lists `CertsMutator` skips the deprecated
-  certificate mutators.
-- JavaScript `Emulator.create` throws a `TypeError` for every invalid option, where a bad `clock`,
-  pool registration or credential type threw an `IllegalArgumentException`. It also rejects a
-  `datums` entry whose `hash` is not the blake2b-256 hash of its `datum` bytes.
-- Dependency updates: cardano-client-lib 0.7.3, Yaci DevKit 0.4.6, BouncyCastle 1.86,
-  jsoniter-scala 2.41.2, sttp client4 4.0.27, fs2 3.14.0 with cats-effect 3.7.1, slf4j 2.0.20,
-  jackson-databind 2.22.3, magnolia 1.3.24.
-- The UPLC parser rejects a `value` constant that is not in canonical form: currency symbols or
-  token names out of strictly ascending order, a zero quantity, or an empty token list. It used to
-  sort, merge and drop them. Plutus 1.66 made the same change.
-- The flat decoder rejects a `value` constant that Plutus rejects: keys out of strictly ascending
-  order, an empty token list, a zero quantity, a key over 32 bytes or a quantity outside the
-  signed 128-bit range. It used to repair the value, so Scalus could accept a script that the
-  node fails to deserialise.
-- The Plutus conformance tests run on the Plutus 1.70.0.0 corpus, the version cardano-node 11.1.3
-  uses: 1009 UPLC evaluation cases, none skipped on JVM, JavaScript and Native.
-
-### Deprecated
-
-- The `scalus.builtin` aliases and the `scalus.prelude` package-object forwarders: use
-  `scalus.uplc.builtin` and `scalus.cardano.onchain.plutus.prelude`.
-- `Value.lovelaceAmount`: use `getLovelace`, which lowers to the `lookupCoin` builtin at PV11.
-  `lovelaceAmount` walks the `Data` map, and on a value without lovelace it returns another
-  token's quantity.
-- `VarUInt`: use `Pointer.toBytes` and `Pointer.parseFrom`. **`VarUInt` now writes the most
-  significant 7-bit group first, so bytes stored with the old `VarUInt` read back as other
-  numbers.**
-- `StakeCertificatesMutator`, `StakePoolCertificatesMutator` and `VotingCertificatesMutator`: use
-  `CertsMutator`.
-- The `DelegationState` maps `rewards`, `deposits`, `stakePools` and `dreps`, and its 4-map
-  `apply` and constructor: use `accounts`.
-- The 4-argument `UtxoEnv` and 6-argument `StakeCertificatesException` `apply` and constructors,
-  `EmulatorState.datums` and the 9-argument `ImmutableEmulator.apply`.
-- The bloxbean `StakeStateResolver.resolveForTx(tx, epoch, defaultDeposit)`: use
-  `resolveForTx(tx, slot)`. It now registers an account whose cached state has no deposit with a
-  deposit of 0.
+- `RewardsCalculation` and `StakeDistribution`: use `snapshots` and `pendingRewards`.
+- The `EmulatorInitialState` constructor, `apply` and `copy`: start from
+  `EmulatorInitialState.empty` and use the `with` methods, or the Java `Builder`.
+- `clearAppliedTxs`, `StreamingEmulator.syntheticBlockHash`, and the `initialAppliedTxLog` and
+  `appliedTxLog` parameters (in the scaladoc only). Use `snapshot()`.
+- `SIRHashCodeInRec`: it never worked.
 
 ### Removed
 
-API deprecated in 1.2.0 or earlier is removed. Two JavaScript members stay deprecated: the
-`new Emulator(...)` constructor, because Scala.js needs a public constructor on an exported class,
-and the `Scalus` exports (`evaluateScript`, `evalPlutusScripts` and others), which are deprecated
-only in their documentation.
+The API deprecated in 1.3.0. The JavaScript `new Emulator(...)` constructor stays deprecated.
 
-- **V3 `TxInfo.findOwn*` is removed.** Use `findInput`, `findInputOrFail`, `findDatum`,
-  `findOutputsByScriptHash`, `findInputsByCredential` and `findOutputsByCredential`. For
-  `findOwnInputs(pred)` and `findOwnOutputs(pred)`, use `inputs.filter(pred)` and
-  `outputs.filter(pred)`.
-- **V3 `TxInfo.getValidityStartTime` is removed.** Use `validFromOrFail(message)`, which fails on
-  an unbounded range instead of returning `0`.
-- **V3 `Utils.getAdaFromOutputs` and `Utils.getAdaFromInputs` are removed.** Use
-  `TxInfo.valuePaidTo(addr)` and `TxInfo.valueSpentFrom(addr)`, which sum the whole `Value`; add
-  `.getLovelace` for ADA only.
-- **`List.single` and `PairList.single` are removed.** Use `List.singleton` and
-  `PairList.singleton`.
-- **The `SIR` extensions `toLoweredValue` and `lowerToUplc` are removed.** Use `toUplc`, or
-  `SirToUplcV3Lowering.fromOptions(sir, options).toLoweredValue()` to inspect the lowering.
-- **The `Ordering[ExUnits]` given is removed.** Execution units are only partially ordered. Use
-  `fitsWithin` or `exceeds` for budget checks. To sort, give an explicit ordering, for example
-  `sortBy(e => (e.memory, e.steps))`.
-- **`scalus.compiler.sir.BooleanOptimizer` and `scalus.compiler.sir.StaticArgumentTransformation`
-  are removed.** Use the passes in `scalus.compiler.sir.transform`.
-- **JavaScript `Emulator.getUtxosForAddress` and `Emulator.getAllUtxos` are removed.** Use
-  `getUtxos({ address })` and `getUtxos()`, which return `Utxo` handles instead of CBOR maps.
-- **JavaScript `Emulator.withState`, `Emulator.withAddresses` and the `EmulatorInitialState` type
-  are removed.** Use `Emulator.create(info, options)`; seed funds with `utxos`, and stake, pool,
-  DRep and datum state with the options of the same names.
-- **`G1Element.apply(P1)`, `G2Element.apply(P2)` and `MLResult.apply(PT)` are removed**, without
-  a deprecation first: the blst-java types are gone with that dependency. `G1Element`, `G2Element`
-  and `MLResult` now hold the blst point as `Array[Byte]`. Build points with
-  `G1Element(ByteString)` or the builtins.
+- The `scalus.prelude` package-object forwarders (`===`, `asScalus`, `pow`, `log2` and the
+  others): use the same names in `scalus.cardano.onchain.plutus.prelude`.
+- The `scalus.builtin` aliases `G1Element`, `G2Element`, `MLResult` and the JavaScript
+  `NodeJsPlatformSpecific`: use `scalus.uplc.builtin` and `scalus.uplc.builtin.bls12_381`.
+- `Value.lovelaceAmount`: use `getLovelace`.
+- `CaseDataBranchError`: use `CaseDataNonConstrError` or `CaseIndexOutOfBounds`.
+- `TallyingBudgetSpenderLogger.getLogsWithBudget`: use `traces`, or `getLogs` for the text.
+- `VarUInt`: use `Pointer.toBytes` and `Pointer.parseFrom`.
+- The `DelegationState` maps `rewards`, `deposits`, `stakePools` and `dreps`, and its 4-map
+  constructor and `apply`: use `accounts`.
+- The 4-argument `UtxoEnv` and the 6-argument `StakeCertificatesException` constructors and
+  `apply`.
+- `StakeCertificatesMutator`, `StakePoolCertificatesMutator` and `VotingCertificatesMutator`: use
+  `CertsMutator`.
+- `EmulatorState.datums` and the testkit `ImmutableEmulator.apply` with decoded `datums`: use
+  `binaryDatums`.
+- bloxbean `StakeStateResolver.resolveForTx(tx, epoch, defaultDeposit)`: use
+  `resolveForTx(tx, slot)`.
 
 ### Fixed
 
-- The Emulator's value-conservation check added amounts as `Long`s, so a sum past
-  `Long.MaxValue` wrapped around, and a transaction could create ADA or tokens from nothing. Both
-  sides of the check, the deposits and refunds, and the collateral are now summed exactly, as the
-  ledger sums them. **`Coin`, `MultiAsset` and `Value` arithmetic, `TxBalance.consumed`,
-  `TxBalance.produced` and the `Certificate` deposit and refund totals throw `ArithmeticException`
-  on overflow instead of wrapping.**
-- Ed25519, secp256k1 and BLS12-381 give the Cardano node's verdicts on every platform. On the JVM
-  they run the C libraries that cardano-node 11.1.3 links (libsodium IOG fork, libsecp256k1
-  v0.3.2, blst v0.3.15) through `scalus-crypto-jni` 0.1.0, called as cardano-crypto-class calls
-  them; JavaScript Ed25519 applies libsodium's rules. Before, the JVM and JavaScript accepted some
-  Ed25519 signatures that the node rejects.
-- Builtins match Plutus: `verifyEcdsaSecp256k1Signature` returns False for r = 0 or s = 0, and
-  JavaScript reads the signature as compact only; `bls12_381_G1_hashToGroup` and
-  `bls12_381_G2_hashToGroup` give the node's point for a DST byte of 0x80 or more on the JVM;
-  `bls12_381_G1_scalarMul` and `bls12_381_G2_scalarMul` reject a scalar outside the signed
-  4096-bit range in semantics variants D and E; `sliceByteString` reads its start and length as
-  64-bit integers, where a start of 2^32 returned the whole bytestring. Scala Native adds a
-  BLS12-381 point to itself correctly and signs with extended (BIP32-Ed25519) keys; JavaScript
-  pairs the point at infinity as blst does.
-- `MachineParams.fromCostModels` costs `verifyEd25519Signature` by the signature in semantics
-  variant A (PlutusV1 and V2 before protocol version 9), as Plutus does. It costed by the message,
-  so a script that verifies a long message exceeded a budget that the node accepts.
-- Pointer addresses wrote and read their variable-length numbers least significant 7-bit group
-  first, where the ledger and CIP-19 put the most significant group first, so every slot or index
-  of 128 or more came out wrong. **A pointer address that Scalus built with such a slot or index is
-  a different address from the one now built.** Pointer addresses now decode as a node decodes
-  them at the transaction's protocol version: `Transaction.fromCbor` reads its outputs at its
-  version, and `Address.fromBytes`, `fromBech32`, `Pointer.fromBytes` and the CBOR decoders read
-  as at version 9. Before version 9, a pointer that does not fit reads as `Pointer(Slot(0), 0, 0)`,
-  as the node keeps it. **An address with bytes after its pointer now fails to decode, and
-  constructing a `Pointer` that does not fit the ledger's 32-bit slot and 16-bit indexes
-  (`Pointer.MaxSlot`, `Pointer.MaxIndex`) throws `IllegalArgumentException`.**
-  `BlockfrostProvider` and the bloxbean `Interop` read UTxO addresses leniently, as a node holds
-  them. `UtxoCellBuilder.toOffchainAddress` now builds a pointer address for a `StakingPtr`, where
-  it dropped the delegation.
-- The Emulator now rejects these transactions, as a node does. **A test that submits one now
-  fails:**
-  - a delegation to an unregistered pool or DRep; register it first, or seed it with
-    `poolRegistrations`;
-  - a `currentTreasuryValue` other than the treasury (`TreasuryValueMismatch`);
-  - from protocol version 10, a withdrawal from a key-hash reward account with no DRep delegation
-    (`WithdrawalsNotDelegatedToDRep`); delegate the votes first, for example to `AlwaysAbstain`.
-    Script-hash accounts are exempt;
-  - reference scripts that total more than 200 KiB (`TxRefScriptsSizeTooBig`);
-  - a proposal whose deposit differs from `govActionDeposit` (`ProposalDepositIncorrect`, from the
-    new default `ProposalDepositValidator`).
-- The Emulator accepted the same reward withdrawn twice. Withdrawals now subtract from the balance
-  and keep the account registered. **A test that expected a drained account to be deregistered
-  now finds it registered with balance 0.**
-- The Emulator applied the certificates of a transaction by kind, not in their order, so after
-  `[UnregDRepCert(X), RegDRepCert(X), VoteDelegCert(c, X)]`, `c` had no DRep. A DRep
-  deregistration now also clears the vote delegations to that DRep.
-- A pool update could not be built or applied. A re-registration of a registered pool was charged
-  a second pool deposit and rejected with `ValueNotConserved`; it now pays none, and two
-  registrations of one new pool in a transaction pay one deposit. `TxBuilder` now expects the
-  signatures of a pool's operator and owners for a registration or update, and of its operator for
-  a retirement, so the fee covers them. **The fee of such a transaction rises by about 100 bytes
-  for each distinct operator or owner key.** `Context.finalizeContext` balances against its
-  `certState`, as it validates.
-- A stake deregistration missed its refund. `TxBuilder.deregisterStake(stakeAddress)` emitted a
-  certificate without one, and the balancer refunded nothing for a legacy `UnregCert(cred, None)`
-  unless the `CertState` held the account; both were rejected with `ValueNotConserved`. They now
-  refund the current `stakeAddressDeposit`.
-- JavaScript `balancer.balanceTx` priced only the signatures of key inputs, collateral and
-  required signers. A withdrawal, a certificate or a vote that a key must sign now adds its
-  signature too, so the fee covers it.
-- An inline datum or a native script in a non-minimal encoding, such as `d879811a0000000a` or
-  `82041a0000000a`, was re-encoded, so its hash and the bytes of the output or witness set
-  differed from the chain. They now match in the decoder, the Emulator, `BlockfrostProvider`, the
-  bloxbean `Interop`, the testkit `Preconfiguration` and the JavaScript `Utxo` API, and
-  `getDatum(h)` returns bytes whose hash is `h`. `contentEquals` of a datum hash and an inline
-  datum now compares against the original bytes.
-- A native script encoded with indefinite-length arrays failed to decode, though the ledger
-  accepts it. A definite-length array of the wrong size, such as a `Signature` of size 3, decoded;
-  it is now rejected, as by the ledger.
-- A transaction with a repeat in a set or map decoded, keeping one of the repeats, where a node
-  fails to deserialize it. From protocol version 9 Scalus rejects a repeated input, collateral
-  input, reference input, required signer, withdrawal account, voter, vote or proposal, and in a
-  governance action a repeated committee member, treasury withdrawal account, protocol-parameter
-  key or cost-model language. The witness set's key and bootstrap witnesses still merge repeats,
-  as the ledger does until protocol version 12.
-- Spending and referencing the same UTxO: `TxBuilder` refused it with `InputAlreadyExists`, which
-  the ledger accepts from protocol version 11, and the Emulator rejected it at protocol version 8,
-  where the ledger accepts it. Only versions 9 and 10 reject it now. The min fee counted the
-  reference script of such a UTxO twice; it now counts it once, as on chain.
-- A V3 `UpdateCommittee` governance action listed the removed committee members in Scala `Set`
-  order and passed the quorum as encoded, such as 6/10. `LedgerToPlutusTranslation` now lists
-  scripts first, then by hash, and gives the quorum in lowest terms, 3/5, as the node does.
-- A phase-2-invalid transaction with an invalid certificate or withdrawal was rejected. It is now
-  accepted, and only its collateral is taken.
-- `snapshot()`, `ImmutableEmulator.fromEmulator` and `toEmulator` dropped the fees and donations.
-- `.toData` on an enum case written directly, such as `Action.Timeout.toData`, failed to compile
-  with "Unsupported conversion from ProdDataList to DataConstr" (#377).
-- An inline method of a trait, such as `validate`, called next to a computed argument or in a
-  block failed to compile with "Module ... is not found".
+- The Emulator checks what the ledger checks and it missed: a repeated VRF key at protocol version
+  11, a pool metadata hash over 32 bytes, the Byron attributes of the collateral return, the
+  output size as the ledger writes it, Byron `attributesSize`, and the reference-script limits of
+  a block (1 MiB) and of the mempool (200 KiB).
+- The Emulator keeps the ledger's bookkeeping: `State.deposited`, `DRepState.delegates`, DRep
+  expiry and the committee state.
+- Moving the slot back before a boundary that no block crossed restores the donations it moved.
+- `Data` CBOR decoding, encoding and `serialiseData` have no nesting limit, as in Plutus.
+  Metadata and native scripts stop at 1000 levels with an error, not a stack overflow.
+- The flat decoder reads a `data` constant as its first CBOR item and rejects a `string` that is
+  not UTF-8, as Plutus does. Its errors show the bytes around the failure.
+- `PlutusScriptEvaluator` names a script it cannot decode, and the Emulator rejects it in phase 1.
+- The compiler accepts a case class with a one-field wrapper of a `List`, such as `Varargs`, and
+  `Validator` objects under `-Yexplicit-nulls`.
+
+## 1.4.1 (2026-10-26)
+
+### Highlights
+
+- **Try the UPLC JIT compiler.** It is now published as `org.scalus::scalus-uplc-jit-compiler`
+  (experimental), for hot evaluation loops on the JVM.
+- **Evaluate faster with less memory.** The CEK machine takes 31% less time on the Plutus
+  use-case scripts and allocates 62% less. Budgets and errors do not change.
+- **Reuse a decoded script and a built machine in JavaScript.** `new PlutusVM(options)` and
+  `uplc.decodeProgram` remove about 114 µs of setup from each evaluation.
+- **Get the node's answer on `Data` maps and odd transactions.** `Data` equality sees map order,
+  and transactions without the `isValid` flag decode, as on cardano-node 11.1.3.
+
+### Upgrading
+
+- `equalsData` and `Data` equality compare `Data.Map` entries in order, as Plutus does. Scala code
+  that compares `Data` maps with `==` now sees the order.
+- `scalus-verification` (experimental): `Tactic.run` takes `earlier: Option[Kept] = None`,
+  `Tactic.restore` returns `Either[String, ExecutionResult]`, and `UplcBlaster.Artifact` has a new
+  field `read`.
+- Recompile code that calls `LeanProofs.check(statement)` against 1.4.0.
+
+### Added
+
+- The experimental JIT is published. `UplcEvaluator.run` returns the budget and logs of a script
+  whose result is a function. `UplcCompiler.compile` and `JIT.jitUplc` take the protocol version.
+- JavaScript: `new PlutusVM(options)`, `uplc.decodeProgram`, `new Program` and `Program.toFlat()`.
+  `vm.evaluateScript` and `evaluator.evaluateScript` take a `Program`.
+- `UplcBlaster` quantifies over `String`, and `equal` compares `ByteString` and `String` values.
+- Kept proof results survive an update of Blaster or of the Lean library.
+- `DeBruijnedProgram.fromCborPrefix` reads a program from the start of the input.
+
+### Changed
+
+- The CEK machine is 31% faster and allocates 62% less (1506 KB to 573 KB per evaluation).
+- The inliner no longer takes quadratic time on deep terms; the examples compile about 15% faster
+  to the same bytes.
+- `scalus-verification` pins Lean-blaster `main` at `6c27ff9`.
+
+### Deprecated
+
+- `CekValue.VList`: Plutus has no list of non-constant values.
+
+### Fixed
+
+- `Interval.intersection` and `hull` order lower bounds that share a time, and `isNever` is true
+  for an empty interval such as `(5,5]`.
+- `Math.log(x, 1)` fails with a message instead of looping.
+- UtxoCell keeps the beacon in the cell, and `UtxoFlow.define` reads script parameters from the
+  closure, not from the datum.
+- Example validators: `LotteryValidator`, the payment splitters, Vault, Groth16, Betting,
+  `OracleValidator` and `PubKeyValidator` close double-satisfaction and token-stripping holes.
+- `mkCons` fails for a non-constant head, as Plutus does. The plugin rejects
+  `@UplcRepr(SumBuiltinList(UplcConstr))`.
+- `Term.~=~` compares the number of `Constr` fields and `Case` branches.
+- `Transaction.fromCbor` accepts a transaction without the `isValid` flag, and `maxTxSize` counts
+  the size without it.
+- A `HardForkInitiation` to a major version above 12 fails to decode, as in the ledger.
+- The flat decoder rejects a `constr` tag or variable index that does not fit, as Plutus does.
+- `PlutusScript.isWellFormed`, `program` and `deBruijnedProgram` read a script as
+  `deserialiseScript` does: bytes after a V1 or V2 byte string are ignored, bytes after the program
+  are rejected (#397).
+
+## 1.4.0 (2026-10-20)
+
+### Highlights
+
+- **Get the node's signature verdicts.** On the JVM, Ed25519, secp256k1 and BLS12-381 run on the
+  same C libraries as cardano-node, at the same commits. Ed25519 verification is also faster,
+  30 µs against 52 µs.
+- **Trust the Emulator on staking and treasury.** Withdrawals, delegation targets, the treasury,
+  pool updates, pointer addresses and the bytes of datums and native scripts now behave as on
+  chain. A test that passes is closer to a transaction that passes on a node.
+- **Plug the Emulator into a JavaScript SDK.** The JavaScript Emulator gains what a Lucid
+  Evolution provider needs: parameter overrides, rewards, the treasury, a wall clock and datums.
+- **Prove properties of a compiled validator.** The new `scalus-verification` module (experimental)
+  states properties in Scala and proves them against the compiled UPLC with Lean.
+- **Evaluate many transactions faster.** `TxEvaluator` and `ScriptCache` reuse cost models and
+  decoded scripts: 17–25% saved on recorded Midgard requests.
+
+### Upgrading
+
+- On the JVM, Ed25519, secp256k1 and BLS12-381 need the `scalus-crypto-jni` native library: Linux
+  with glibc 2.34+, macOS 11+ (arm64) or 10.15+ (x64), or Windows x64. Elsewhere, including
+  Alpine/musl, they throw `IllegalStateException`.
+- `DatumOption` is a sealed trait, and `Inline` keeps its original CBOR. Two inline datums with
+  the same `Data` and different bytes are not equal; use `contentEquals`. `EmulatorState.datums`
+  and `ImmutableEmulator.datums` are `binaryDatums`.
+- `Script.Native` keeps its original CBOR. Replace `Cbor.decode(bytes).to[Script].value` with
+  `Script.fromCbor(bytes)`.
+- `DelegationState` stores one `ConwayAccountState` per account in `accounts`.
+- `UtxoEnv` has a fifth field, `treasury`. The old 4-argument forms and `Context.validate` use a
+  treasury of 0, so they reject a non-zero `currentTreasuryValue`.
+- `StakeCertificatesException` has two new fields.
+- The V3 on-chain `Constitution` is a case class. Wrap the script hash in a
+  `GovernanceAction.NewConstitution`.
+- `CekValue.VBuiltin` keeps the arguments of a partly applied builtin.
+- `Coin`, `MultiAsset`, `Value` and deposit arithmetic throw `ArithmeticException` on overflow.
+- Pointer addresses use the CIP-19 byte order, so a pointer with a slot or index of 128 or more
+  is a different address. An address with bytes after its pointer fails to decode.
+- The Emulator rejects what a node rejects: a delegation to an unregistered pool or DRep, a wrong
+  `currentTreasuryValue`, a withdrawal from a key-hash account with no DRep delegation (from
+  protocol version 10), over 200 KiB of reference scripts, and a wrong proposal deposit.
+- A drained reward account stays registered with balance 0.
+- The fee of a pool registration, update or retirement rises by about 100 bytes per signing key.
+- The API deprecated in 1.2.0 or earlier is removed. See Removed.
+
+### Added
+
+- JavaScript Emulator for SDK providers: `protocolParams`, `treasury`, `clock: "wall"`,
+  `addRewards`, `getAccount`, `getTreasury` and `Utxo.script`.
+- `Emulator.addDatum` and `ImmutableEmulator.withDatum`; the Scala Emulator gains `addRewards` and
+  `treasury`.
+- JavaScript `TxEvaluator` and `ScriptCache` (also on the JVM `PlutusScriptEvaluator`).
+- `scalus-verification` and `scalus-verification-scalatest` (experimental): `Props`, the
+  `UplcBlaster` tactic, and `LeanProofsSuite` for ScalaTest.
+- `Spec.expects`, `Spec.ensures` and `ensuring` state a contract that the compiler erases.
+- The `scalus` Claude Code plugin loads its routing skill at session start.
+- `TxBuilder.updatePool(cert)`, and balancing and validation overloads that take a `CertState` or
+  the treasury.
+- `DatumOption.Inline.fromCbor`, `fromBinaryData`, `Script.Native.fromCbor` and
+  `Script.fromCbor`.
+- `Address.fromBytes(bytes, protocolVersion)` and the lenient address readers.
+- bloxbean `StakeStateResolver.resolveForTx(tx, slot)` and `treasuryAt(epoch)`.
+
+### Changed
+
+- Script evaluation is 13–15% faster on the JVM and up to 19% faster in JavaScript on recorded
+  Midgard replays.
+- `CertsMutator` applies withdrawals, then certificates in transaction order, as the ledger does.
+- JavaScript `Emulator.create` throws a `TypeError` for every invalid option.
+- The UPLC parser and the flat decoder reject a `value` constant that is not canonical, as Plutus
+  1.66 does.
+- The conformance tests run on the Plutus 1.70.0.0 corpus: 1009 cases, none skipped.
+- Dependency updates: cardano-client-lib 0.7.3, Yaci DevKit 0.4.6, BouncyCastle 1.86,
+  jsoniter-scala 2.41.2, sttp client4 4.0.27, fs2 3.14.0, cats-effect 3.7.1, slf4j 2.0.20,
+  jackson-databind 2.22.3, magnolia 1.3.24.
+
+### Deprecated
+
+- The `scalus.builtin` aliases and the `scalus.prelude` forwarders: use `scalus.uplc.builtin` and
+  `scalus.cardano.onchain.plutus.prelude`.
+- `Value.lovelaceAmount`: use `getLovelace`.
+- `VarUInt`: use `Pointer.toBytes` and `Pointer.parseFrom`. It now writes the most significant
+  group first.
+- `StakeCertificatesMutator`, `StakePoolCertificatesMutator` and `VotingCertificatesMutator`: use
+  `CertsMutator`.
+- The `DelegationState` maps, the 4-argument `UtxoEnv`, the 6-argument
+  `StakeCertificatesException`, `EmulatorState.datums`, the 9-argument `ImmutableEmulator.apply`,
+  and `StakeStateResolver.resolveForTx(tx, epoch, defaultDeposit)`.
+
+### Removed
+
+The JavaScript `new Emulator(...)` constructor and the `Scalus` exports stay deprecated.
+
+- V3 `TxInfo.findOwn*`: use `findInput`, `findDatum`, `findOutputsByScriptHash` and the others.
+- V3 `TxInfo.getValidityStartTime`: use `validFromOrFail(message)`.
+- V3 `Utils.getAdaFromOutputs` and `getAdaFromInputs`: use `TxInfo.valuePaidTo` and
+  `valueSpentFrom`.
+- `List.single` and `PairList.single`: use `singleton`.
+- The `SIR` extensions `toLoweredValue` and `lowerToUplc`: use `toUplc`.
+- The `Ordering[ExUnits]` given: use `fitsWithin` or `exceeds`.
+- `scalus.compiler.sir.BooleanOptimizer` and `StaticArgumentTransformation`: use
+  `scalus.compiler.sir.transform`.
+- JavaScript `Emulator.getUtxosForAddress`, `getAllUtxos`, `withState`, `withAddresses` and the
+  `EmulatorInitialState` type: use `getUtxos` and `Emulator.create`.
+- `G1Element.apply(P1)`, `G2Element.apply(P2)` and `MLResult.apply(PT)`, with no deprecation
+  first: blst-java is gone. Use `G1Element(ByteString)` or the builtins.
+
+### Fixed
+
+- The Emulator's value-conservation check summed `Long`s, so a sum past `Long.MaxValue` could
+  create ADA from nothing. It now sums exactly.
+- Ed25519, secp256k1 and BLS12-381 give the node's verdicts on every platform. Before, the JVM
+  and JavaScript accepted some Ed25519 signatures that the node rejects.
+- Builtins match Plutus at their edges: `verifyEcdsaSecp256k1Signature`, `hashToGroup`,
+  `scalarMul`, `sliceByteString`, and BLS on Scala Native and JavaScript.
+- `verifyEd25519Signature` is costed by the signature in semantics variant A.
+- Pointer addresses decode as a node decodes them at the transaction's protocol version.
+- The Emulator applies certificates in order, refunds stake deregistrations, accepts pool
+  updates, rejects a reward withdrawn twice, and takes only collateral from a phase-2-invalid
+  transaction.
+- JavaScript `balancer.balanceTx` prices the signatures of withdrawals, certificates and votes.
+- Inline datums and native scripts in a non-minimal encoding keep their bytes and hash.
+- Native scripts with indefinite-length arrays decode; a wrong-size array is rejected.
+- From protocol version 9, a repeat in a transaction set or map fails to decode, as on a node.
+- Spending and referencing one UTxO follows the ledger at each protocol version, and its
+  reference script is counted once in the fee.
+- A V3 `UpdateCommittee` action lists members and the quorum as the node does.
+- `snapshot()`, `fromEmulator` and `toEmulator` keep fees and donations.
+- `.toData` on an enum case (#377), and an inline trait method next to a computed argument,
+  compile.
 
 ## 1.3.0 (2026-09-28)
 

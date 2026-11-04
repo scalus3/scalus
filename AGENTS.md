@@ -236,8 +236,20 @@ is out of scope for interop style rules and stays fully idiomatic Scala.
 ## Changelog
 
 To write a CHANGELOG.md entry for a version, find the last version in CHANGELOG.md and list the
-changes with `git log v<last_version>..HEAD --oneline`. Follow the existing style and put the most
-important features and fixes first. Use a neutral voice; use bold only for migration hazards.
+changes with `git log v<last_version>..HEAD --oneline`. Put the most important features and fixes
+first. Use a neutral voice.
+
+Each version section has these parts, in this order (see 1.5.0):
+
+1. `### Highlights`: 3 to 6 bullets. Each starts with a bold phrase that says what a user can now
+   do, then one or two sentences on who gains and how. Sell the use, not the implementation, but
+   claim only what the entries below support.
+2. `### Upgrading`: one bullet per change that can break a build, a test or a binary, with what to
+   do. Leave it out if there is none.
+3. `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`: one or two lines per
+   entry. Name the API; put long explanations in the docs or the commit message.
+
+The GitHub release notes are the whole section. Use bold only for the Highlights phrases.
 
 ## Libraries in Tests
 

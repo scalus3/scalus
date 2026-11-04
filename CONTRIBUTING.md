@@ -161,9 +161,10 @@ Do the steps in order. Each step tells you which file or command to use.
    Keep the JavaScript `new Emulator(...)` constructor: Scala.js needs a public constructor on an
    exported class. Ignore the deliberately bad fixtures in `scalus-ts-exporter`. Each deletion
    breaks MiMa. Add a `mimaBinaryIssueFilters` entry with a comment for each one.
-   List each deletion in the CHANGELOG `Removed` section, in bold, as a migration hazard.
+   List each deletion in the CHANGELOG `Removed` section, and point to it from `Upgrading`.
 
-4. **Write the CHANGELOG.** See "Changelog" in `AGENTS.md`. Rename `## Unreleased` to
+4. **Write the CHANGELOG.** Follow the section format in "Changelog" in `AGENTS.md`
+   (Highlights, Upgrading, then the usual parts). Rename `## Unreleased` to
    `## X.Y.Z (YYYY-MM-DD)`. Compare it with `git log v<last>..HEAD --oneline`, so that no
    user-visible change is missing.
 
@@ -235,8 +236,11 @@ Do the steps in order. Each step tells you which file or command to use.
 5. Create the GitHub release with the CHANGELOG section of this version as the notes:
 
    ```bash
-   gh release create vX.Y.Z --title vX.Y.Z --notes-file <changelog-section.md>
+   awk '/^## X\.Y\.Z /{f=1; next} /^## /{f=0} f' CHANGELOG.md > /tmp/notes.md
+   gh release create vX.Y.Z --title vX.Y.Z --notes-file /tmp/notes.md
    ```
+
+   For an announcement, take the `### Highlights` part of the same section.
 
 ### After the release
 

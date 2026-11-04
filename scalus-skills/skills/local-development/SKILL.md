@@ -137,7 +137,7 @@ TxBuilder(env, evaluator)
 // Then submit to the Emulator and assert Left(SubmitError.ScriptFailure(...))
 ```
 
-## Testing delay and rollbacks with the Manual preset (Scalus newer than 1.4.1)
+## Testing delay and rollbacks with the Manual preset (Scalus 1.5.0 or newer)
 
 By default the Emulator forges a block on every `submit`, so a test never sees a transaction
 `Pending`. Use `ChainConfig.manual` to test code that depends on confirmation delay, or on
@@ -189,3 +189,13 @@ The Emulator rejects what a node rejects. A test that sets up stake or governanc
 - A withdrawal subtracts from the balance; a drained account stays registered with balance 0.
 - A UTxO added with `provider.addUtxo(input, output)` that holds only a datum hash: call
   `provider.addDatum(datum)` so the Emulator finds the datum.
+
+From Scalus 1.5.0:
+
+- To assert *why* a transaction fails, use `provider.ledgerFailures(tx)`: every ledger-rule
+  failure, in the ledger's order. `failures.flatMap(TransactionException.ledgerNames)` gives the cardano-ledger names,
+  such as `MissingRedeemers`. `submit` reports only the first failure.
+- Crossing an epoch boundary (`setSlot`, `tick`) runs the epoch rules: rewards, pool retirement,
+  proposal expiry, ratification and enactment. A test that crosses two or more boundaries and
+  asserts an absolute treasury, reserves or reward balance must account for them.
+- A PlutusV3 transaction that spends a UTxO and also references it fails, as on the ledger.
