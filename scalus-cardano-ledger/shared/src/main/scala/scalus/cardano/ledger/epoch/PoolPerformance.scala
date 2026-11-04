@@ -6,7 +6,7 @@ package scalus.cardano.ledger.epoch
   * the expected blocks and `Measured` rewards are close to 0. `Ideal`, the default, pays what a
   * node where every pool is perfect pays.
   */
-enum PoolPerformance {
+enum PoolPerformance extends Enum[PoolPerformance] {
 
     /** Every pool with stake earns with an apparent performance of 1 and `eta = 1`; the blocks made
       * are not read, spec [RW-4], [RW-15].

@@ -188,6 +188,9 @@ only form (Tier 0). If it degrades Scala ergonomics, put it in a per-platform
 - Public callback types are `@FunctionalInterface` single-method interfaces.
 - No `using`/context params on public entry points — take them as ordinary
   parameters, with a Scala overload that supplies the `given` (see `fromCbor`).
+- A public enum whose cases take no parameters extends `java.lang.Enum`
+  (`enum PoolPerformance extends Enum[PoolPerformance]`), so Java can `switch` on it.
+  Its `hashCode` is identity-based: never let its hash order reach an output.
 
 **Tier 1 — per-platform `<ClassName>Platform` mixin (only for divergent members):**
 

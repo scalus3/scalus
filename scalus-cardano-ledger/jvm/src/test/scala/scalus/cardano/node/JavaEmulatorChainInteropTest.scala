@@ -50,6 +50,11 @@ class JavaEmulatorChainInteropTest extends AnyFunSuite {
         assert(JavaEmulatorChainInterop.ideal() == PoolPerformance.Ideal)
     }
 
+    test("Java switches over PoolPerformance as over a Java enum") {
+        assert(JavaEmulatorChainInterop.performanceWord(PoolPerformance.Measured) == "measured")
+        assert(JavaEmulatorChainInterop.performanceCount() == PoolPerformance.values.length)
+    }
+
     test("Java submits to the mempool, reads the views, and forges") {
         val e = manual()
         val tx = payment(e.utxos, 2_000_000)

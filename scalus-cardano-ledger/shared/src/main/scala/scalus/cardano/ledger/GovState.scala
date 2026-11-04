@@ -234,7 +234,7 @@ object GovState {
   * (eras/conway/impl/src/Cardano/Ledger/Conway/Governance/Procedures.hs:782-790). The actions of
   * one purpose form a chain from the purpose's root, spec [GV-6].
   */
-enum GovActionPurpose {
+enum GovActionPurpose extends Enum[GovActionPurpose] {
     case PParamUpdate, HardFork, Committee, Constitution
 }
 

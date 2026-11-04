@@ -23,6 +23,7 @@ import scalus.cardano.node.stream.ChainTip;
 import scalus.cardano.node.stream.internal.ChainEvent;
 import scalus.uplc.builtin.ByteString;
 
+import java.util.EnumSet;
 import java.util.List;
 
 /**
@@ -63,6 +64,22 @@ public final class JavaEmulatorChainInterop {
 
     public static PoolPerformance ideal() {
         return PoolPerformance.ideal();
+    }
+
+    // PoolPerformance is a Java enum: a switch over its cases and an EnumSet of them.
+    public static String performanceWord(PoolPerformance performance) {
+        switch (performance) {
+            case Ideal:
+                return "ideal";
+            case Measured:
+                return "measured";
+            default:
+                throw new IllegalArgumentException(performance.name());
+        }
+    }
+
+    public static int performanceCount() {
+        return EnumSet.allOf(PoolPerformance.class).size();
     }
 
     public static ChainPoint produceBlock(Emulator emulator) {
