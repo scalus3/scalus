@@ -1205,6 +1205,84 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         refuted(forAll[BlasterOwned](o => o.amount >= BigInt(0)), budget = 160)
     }
 
+    /** `statement` checked at `budget` with the nodes at `paths` mapped as Data
+      * ([[MappingPlan.Fixed]]), and held to what it was declared to expect. Each check here takes
+      * seconds; one that takes minutes is given up.
+      */
+    private def checkedAsData(
+        statement: Statement,
+        budget: Budget,
+        paths: String*
+    ): VerificationResult =
+        check(
+          VerificationRequest(
+            statement,
+            UplcBlaster(budget, lean, 3.minutes).withFixedPlan(MappingPlan.Fixed.asData(paths*))
+          )
+        )
+
+    test("a node below the root mapped as Data is decoded in each test, under its premise") {
+        // The owner is one Data variable. The test reads its key through `fromData`, which fails
+        // on a Data that encodes no BlasterOwner: only the premise makes the statement true.
+        val keyLength = forAll[BlasterOwned](o =>
+            Builtins.lengthOfByteString(o.owner.key) >= BigInt(0) && o.amount != o.amount + 1
+        )
+        val plan = MappingPlan.Fixed.asData("o.owner")
+        val asData = UplcBlaster
+            .lower(keyLength, FunctionTable.empty, plan)
+            .fold(reason => fail(reason), identity)
+        assert(asData.binders.map(b => PropIdentity.written(b.name)) == List("o.owner", "o.amount"))
+        val byFields = lowered(keyLength, FunctionTable.empty)
+        assert(asData.programHashes != byFields.programHashes)
+        // The proof is of the programs the plan makes, which the statement by fields has not.
+        checkedAsData(verifier.statement(keyLength), Budget.LeanSteps(300), "o.owner") match
+            case VerificationResult.Proven(proof) =>
+                val artifact = proof.artifact.asInstanceOf[UplcBlaster.Artifact]
+                assert(artifact.programHashes == asData.programHashes, artifact)
+            case other => fail(s"expected a proof, got $other")
+        // negative control: the key need not be empty. The counterexample is the encoding of a
+        // BlasterOwner, replayed on the Scalus CEK.
+        val emptyKey = forAll[BlasterOwned](o => o.owner.key == ByteString.empty)
+        refutedWith(
+          checkedAsData(verifier.refute(emptyKey), Budget.LeanSteps(300), "o.owner")
+        ) match
+            case List(Constant.Data(owner), Constant.Integer(_)) =>
+                assert(DataEncoding.of[BlasterOwner].outside(owner).isEmpty, owner)
+                assert(owner != BlasterOwner(ByteString.empty).toData, owner)
+            case other => fail(s"expected the owner's Data and an integer, got $other")
+    }
+
+    test("Data nodes cut a type that contains itself, which by fields has no end") {
+        // The root by fields, an integer for its constructor, and the subtrees of a Node as Data.
+        // The test decodes the left one and matches on it, which fails on a Data that is no
+        // constructor of a tree: the premise of its encoding leaves those out.
+        val leftIsATree = forAll[BlasterTree](t =>
+            t match
+                case BlasterTree.Leaf => true
+                case BlasterTree.Node(left, _) =>
+                    left match
+                        case BlasterTree.Leaf       => true
+                        case BlasterTree.Node(_, _) => true
+        )
+        checkedAsData(
+          verifier.statement(leftIsATree),
+          Budget.LeanSteps(300),
+          "t.Node.left",
+          "t.Node.right"
+        )
+    }
+
+    test("a check under a fixed plan keeps no result, and the tactic keeps its name") {
+        // No Lean here. A statement keeps one result, which its check under the tactic's own plan
+        // would have.
+        val goal = lowered(forAll[BlasterOwned](o => o.amount == o.amount), FunctionTable.empty)
+        val own = UplcBlaster(Budget.LeanSteps(100), lean)
+        val fixed = own.withFixedPlan(MappingPlan.Fixed.asData("o.owner"))
+        assert(own.fingerprint(goal).isDefined)
+        assert(fixed.fingerprint(goal).isEmpty)
+        assert(fixed.name == own.name)
+    }
+
     test("states that an expression fails, whatever its type") {
         // A builtin that fails: unBData of an I value, for every x.
         proven(forAll[BigInt](x => fails(Builtins.unBData(Builtins.iData(x)))), budget = 60)

@@ -6,6 +6,7 @@ import scalus.cardano.onchain.plutus.prelude
 import scalus.cardano.onchain.plutus.v1.Value
 import scalus.cardano.onchain.plutus.v2.TxOut
 import scalus.compiler.Compile
+import scalus.uplc.builtin.{FromData, ToData}
 import scalus.verify.*
 import scalus.verify.Props.*
 import scalus.verify.uplcblaster.MappingPlan.{Mapping, Quantifier, Reason}
@@ -16,6 +17,28 @@ case class PlanFunction(f: BigInt => BigInt)
 @Compile
 object PlanFunction
 
+/** A class with a string field: its encoding is not exact, as the UTF-8 of the string is not
+  * checked by its premise, while its fields are.
+  */
+case class PlanNamed(name: String, amount: BigInt) derives FromData, ToData
+
+@Compile
+object PlanNamed
+
+/** A class whose type argument is not the type of a field. */
+case class PlanPhantom[A](n: BigInt)
+
+@Compile
+object PlanPhantom
+
+/** A class with a field of a phantom function: the compiler gives it no `Data` form, though no part
+  * of its values is a function.
+  */
+case class PlanPhantomFunction(p: PlanPhantom[BigInt => BigInt], m: BigInt)
+
+@Compile
+object PlanPhantomFunction
+
 /** The plan of how a statement's variables reach Lean ([[MappingPlan]]): which nodes of a
   * variable's type are decided, how the statement maps them today, and that the plan is what the
   * Lean variables are.
@@ -25,6 +48,17 @@ class MappingPlanTest extends AnyFunSuite {
 
     private def lowered(prop: Prop): UplcBlaster.Lowered =
         UplcBlaster.lower(prop, FunctionTable.empty).fold(reason => fail(reason), identity)
+
+    /** `prop` lowered with the nodes at `paths` mapped as `Data` ([[MappingPlan.Fixed]]). */
+    private def asData(prop: Prop, paths: String*): Either[String, UplcBlaster.Lowered] =
+        UplcBlaster.lower(prop, FunctionTable.empty, MappingPlan.Fixed.asData(paths*))
+
+    private def loweredAsData(prop: Prop, paths: String*): UplcBlaster.Lowered =
+        asData(prop, paths*).fold(reason => fail(reason), identity)
+
+    /** The binders' names, as the statement writes them. */
+    private def names(lowered: UplcBlaster.Lowered): List[String] =
+        lowered.binders.map(binder => PropIdentity.written(binder.name))
 
     /** The plan's nodes, with each variable named as the statement writes it. */
     private def written(plan: MappingPlan): List[(String, Mapping)] =
@@ -173,6 +207,165 @@ class MappingPlanTest extends AnyFunSuite {
             "out.referenceScript.Some.value"
           )
         )
+    }
+
+    test("a fixed plan maps a node below the root as one Data variable, named by its path") {
+        // The plan between the two of docs/design/verification-details/uplc-blaster.md, "Nodes":
+        // the address by fields, and its staking credential as Data, in 10 Lean variables.
+        val staking = "out.address.stakingCredential"
+        val out = loweredAsData(forAll[TxOut](out => denotes(out)), staking)
+        assert(
+          names(out) == List(
+            "out.address.credential.case",
+            "out.address.credential.PubKeyCredential.hash.hash",
+            "out.address.credential.ScriptCredential.hash",
+            staking,
+            "out.value",
+            "out.datum.case",
+            "out.datum.OutputDatumHash.datumHash",
+            "out.datum.OutputDatum.datum",
+            "out.referenceScript.case",
+            "out.referenceScript.Some.value"
+          )
+        )
+        // The node is in the plan, as Data, for the plan's reason; nothing below it is.
+        assert(
+          written(out.plan) == List(
+            "out" -> Mapping.ByFields,
+            "out.address" -> Mapping.ByFields,
+            "out.address.credential" -> Mapping.ByFields,
+            "out.address.credential.PubKeyCredential.hash" -> Mapping.ByFields,
+            staking -> Mapping.AsData,
+            "out.datum" -> Mapping.ByFields,
+            "out.referenceScript" -> Mapping.ByFields
+          ),
+          out.plan.show
+        )
+        assert(
+          out.plan.nodes.map(_.reason).distinct ==
+              List(Reason.Quantified(Quantifier.ForAll), Reason.ByFixedPlan)
+        )
+        assert(
+          out.plan.nodes.find(_.mapping == Mapping.AsData).forall(_.reason == Reason.ByFixedPlan)
+        )
+        // The Data variable is restricted to the encodings of an Option[StakingCredential], and
+        // the map of the Value by its own premise, as the doc's p3 and p4.
+        val premises = out.predicates.zipWithIndex.collect { case (Some(_), at) => names(out)(at) }
+        assert(premises == Vector(staking, "out.value"), out.predicates)
+        assert(out.predicates(3).exists(_.contains("Data.Constr")), out.predicates(3))
+        // Each test decodes it where it builds the value.
+        val (variable, decoder) = DataEncoding
+            .encoded(out.binders(3).tp)
+            .getOrElse(fail(s"not a Data variable: ${out.binders(3).tp.show}"))
+        assert(variable.show.contains("StakingCredential"), variable.show)
+        assert(decoder.pretty.render(100).contains("UniversalDataConversion$.fromData"))
+    }
+
+    test("a fixed plan can map the root of a forAll variable as Data") {
+        val owned = loweredAsData(forAll[BlasterOwned](o => o.amount == o.amount), "o")
+        assert(names(owned) == List("o"))
+        assert(written(owned.plan) == List("o" -> Mapping.AsData))
+        assert(owned.plan.nodes.map(_.reason) == List(Reason.ByFixedPlan))
+        // A node the plan names that the statement does not have is an error, not a plan by fields.
+        asData(forAll[BlasterOwned](o => o.amount == o.amount), "o.amount", "o.ownr") match
+            case Left(reason) =>
+                assert(reason.startsWith("the fixed plan names o.amount, o.ownr, which"), reason)
+            case Right(lowered) => fail(s"expected a refusal, got ${lowered.plan.show}")
+        // So is one inside a node it maps as Data, which it is not asked about.
+        asData(forAll[BlasterOwned](o => true), "o", "o.owner") match
+            case Left(reason) =>
+                assert(reason.startsWith("the fixed plan names o.owner, which"), reason)
+                assert(reason.contains("inside a node that is one Data variable"), reason)
+            case Right(lowered) => fail(s"expected a refusal, got ${lowered.plan.show}")
+    }
+
+    test(
+      "a Data node whose encoding is not exact is a variable only where it stands for every value"
+    ) {
+        // As Data, a string is a byte string whose UTF-8 the premise does not check: the variable
+        // has more values than PlanNamed. A forAll in a positive position stands for every value.
+        assert(asData(forAll[PlanNamed](n => n.amount == n.amount), "n").isRight)
+        // An exists claims one, which could be none of the type's.
+        asData(exists[PlanNamed](n => n.amount == BigInt(1)), "n") match
+            case Left(reason)   => assert(reason.contains("stands for every value"), reason)
+            case Right(lowered) => fail(s"expected a refusal, got ${lowered.plan.show}")
+        // By fields, the string is a Lean String, but the test builds the value in its Data
+        // representation, which encodes the string with encodeUtf8: that is refused as well
+        // (input-output-hk/Lean-blaster#389), whichever the quantifier.
+        val byFields =
+            UplcBlaster.lower(exists[PlanNamed](n => n.amount == BigInt(1)), FunctionTable.empty)
+        assert(byFields.left.exists(_.contains("encodeUtf8")), byFields)
+    }
+
+    test("a node with a part that has no Data form cannot be Data") {
+        // A value of PlanFunction is no decoding of any Data: its field is a function.
+        val refused = asData(forAll[prelude.Option[PlanFunction]](o => denotes(o)), "o.Some.value")
+        assert(
+          refused.left.exists(reason =>
+              reason.startsWith("o.Some.value: a ") && reason.contains("has no Data form")
+          ),
+          refused
+        )
+        // So is the Option around it, at the root.
+        assert(
+          asData(forAll[prelude.Option[PlanFunction]](o => denotes(o)), "o").left
+              .exists(_.contains("has no Data form"))
+        )
+        // A class whose type argument is a function, but none of its fields, has a Data form: its
+        // values are their integers. The compiler gives none to a class with a field of it, as it
+        // looks into the field's type arguments: so a node of that class is refused, as the
+        // compiler says, and its representation is not asked for.
+        val phantom = forAll[PlanPhantomFunction](c => c.m == c.m)
+        assert(UplcBlaster.lower(phantom, FunctionTable.empty).isRight)
+        assert(asData(phantom, "c.p").isRight)
+        val refusedPhantom = asData(phantom, "c")
+        assert(refusedPhantom.left.exists(_.contains("has no Data form")), refusedPhantom)
+    }
+
+    test("a fixed plan can cut a type that contains itself with Data nodes") {
+        val tree = forAll[BlasterTree](t => denotes(t))
+        // By fields, the type has no end.
+        val byFields = UplcBlaster.lower(tree, FunctionTable.empty)
+        assert(byFields.left.exists(_.contains("contains itself")), byFields)
+        // The plan is asked about a node before the node is expanded, and a Data node is not.
+        val cut = loweredAsData(tree, "t.Node.left", "t.Node.right")
+        assert(names(cut) == List("t.case", "t.Node.left", "t.Node.right"))
+        assert(
+          written(cut.plan) == List(
+            "t" -> Mapping.ByFields,
+            "t.Node.left" -> Mapping.AsData,
+            "t.Node.right" -> Mapping.AsData
+          ),
+          cut.plan.show
+        )
+        // Below their first level, the trees are any Data to Lean: the variables have more
+        // values than their type, and stand only for every value.
+        asData(exists[BlasterTree](t => denotes(t)), "t.Node.left", "t.Node.right") match
+            case Left(reason)   => assert(reason.contains("stands for every value"), reason)
+            case Right(lowered) => fail(s"expected a refusal, got ${lowered.plan.show}")
+    }
+
+    test("a fixed plan tells two variables of one name apart by their places") {
+        val byFields = forAll[BlasterOwned](x => true)
+        val both = Prop.And(byFields, byFields)
+        // The second variable's owner, the first's by fields.
+        val second = new MappingPlan.Fixed(
+          Set("x.owner"),
+          (variable, path, _) => Option.when(variable == 1 && path == "x.owner")(Mapping.AsData)
+        )
+        val lowered = UplcBlaster
+            .lower(both, FunctionTable.empty, second)
+            .fold(reason => fail(reason), identity)
+        assert(
+          lowered.plan.nodes.map(node => node.variable -> node.mapping) == List(
+            0 -> Mapping.ByFields,
+            0 -> Mapping.ByFields,
+            1 -> Mapping.ByFields,
+            1 -> Mapping.AsData
+          ),
+          lowered.plan.show
+        )
+        assert(names(lowered) == List("x.owner.key", "x.amount", "x.owner", "x.amount"))
     }
 }
 

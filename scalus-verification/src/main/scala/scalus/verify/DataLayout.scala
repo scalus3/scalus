@@ -1,7 +1,7 @@
 package scalus.verify
 
 import scalus.compiler.sir.SIRType
-import scalus.compiler.sir.lowering.{LoweringContext, ProductCaseClassRepresentation, SumCaseClassRepresentation}
+import scalus.compiler.sir.lowering.{LoweredValueRepresentation, LoweringContext, ProductCaseClassRepresentation, SumCaseClassRepresentation}
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.verify.DataEncoding.KeyOrder
 import scalus.verify.SirTypes.*
@@ -52,23 +52,43 @@ private[verify] object DataLayout {
     /** The layout of the values of `tp`, by the `Data` representation the compiler gives it with
       * the verifier's options ([[UplcBlaster.options]]).
       */
-    def of(tp: SIRType): DataLayout = {
-        def derive: DataLayout = {
+    def of(tp: SIRType): DataLayout = derivation(tp).layout
+
+    /** The type of a part of the values of `tp` that has no `Data` form, if one has none: a
+      * function, `Unit`, a value of a Miller loop, or a case class or an enum the compiler
+      * represents without `Data` because it holds one of these, in a field or a type argument. Of a
+      * case class or an enum the compiler says which (`canBeConvertedToData`); it is not asked of
+      * another type, for which it may not answer. A value with such a part is the decoding of no
+      * `Data`, so a `Data` variable does not stand for it. Its part's layout is an unknown
+      * encoding.
+      */
+    def withoutDataForm(tp: SIRType): Option[SIRType] = derivation(tp).withoutDataForm
+
+    /** The layout of the values of a type, and the first part of them that has no `Data` form. */
+    private final case class Derivation(layout: DataLayout, withoutDataForm: Option[SIRType])
+
+    private def derivation(tp: SIRType): Derivation = {
+        def derive: Derivation = {
             given LoweringContext = UplcBlaster.representations
             val parts = new Parts
             val layout = layoutOf(tp, Set.empty, parts)
             // A layout cut off is no layout: its encoding's premise would be as large as the cut.
             if parts.count > maxParts then
-                Plain(
-                  DataEncoding.Unknown(s"the encoding of ${tp.show} has more than $maxParts parts")
+                Derivation(
+                  Plain(
+                    DataEncoding.Unknown(
+                      s"the encoding of ${tp.show} has more than $maxParts parts"
+                    )
+                  ),
+                  parts.withoutDataForm
                 )
-            else layout
+            else Derivation(layout, parts.withoutDataForm)
         }
         derived.getOrElseUpdate(typeKey(tp), derive)
     }
 
-    /** [[of]] of each type it was asked about, by its [[SirTypes.typeKey]]. */
-    private val derived = scala.collection.concurrent.TrieMap.empty[String, DataLayout]
+    /** [[derivation]] of each type it was asked about, by its [[SirTypes.typeKey]]. */
+    private val derived = scala.collection.concurrent.TrieMap.empty[String, Derivation]
 
     /** How many parts a layout may have: many more than a type of the ledger has, and an end to a
       * type that contains itself under other arguments each time, which `enclosing` does not tell,
@@ -76,8 +96,8 @@ private[verify] object DataLayout {
       */
     private val maxParts = 100_000
 
-    /** The parts of a layout derived so far. */
-    private final class Parts(var count: Int = 0)
+    /** The parts of a layout derived so far, and the first that has no `Data` form. */
+    private final class Parts(var count: Int = 0, var withoutDataForm: Option[SIRType] = None)
 
     /** The layout of the values of `tp`. `enclosing` are the types it is derived in, and `parts`
       * counts the parts derived so far.
@@ -95,6 +115,9 @@ private[verify] object DataLayout {
                 case SIRType.String              => Plain(DataEncoding.Text)
                 case SIRType.Boolean             => Plain(DataEncoding.Bool)
                 case whole if isWholeData(whole) => Plain(DataEncoding.AnyData)
+                case none @ (_: SIRType.Fun | _: SIRType.TypeLambda | SIRType.Unit |
+                    SIRType.BLS12_381_MlResult) =>
+                    withoutDataForm(none, parts)
                 case other @ (_: SIRType.CaseClass | _: SIRType.SumCaseClass) =>
                     if enclosing.contains(other.show) then
                         Plain(DataEncoding.Unknown(s"${other.show} contains itself"))
@@ -107,10 +130,33 @@ private[verify] object DataLayout {
                     Plain(DataEncoding.Unknown(s"${other.show} has no Data encoding told here"))
     }
 
-    /** [[layoutOf]] of a case class or a sum type, by its `Data` representation. */
+    /** The layout of a part of type `tp` that has no `Data` form, recorded as the first such part
+      * where it is.
+      */
+    private def withoutDataForm(tp: SIRType, parts: Parts): DataLayout = {
+        if parts.withoutDataForm.isEmpty then parts.withoutDataForm = Some(tp)
+        Plain(DataEncoding.Unknown(s"${tp.show} has no Data form"))
+    }
+
+    /** [[layoutOf]] of a case class or a sum type, by its `Data` representation. The compiler is
+      * asked whether it gives the type one before it is asked which: it gives none to a type that
+      * holds a function, and fails where it is asked for it.
+      */
     private def representedLayout(tp: SIRType, inner: Set[String], parts: Parts)(using
         LoweringContext
     ): DataLayout = {
+        val generator = SirTypeUplcGenerator(tp)
+        if !generator.canBeConvertedToData(tp) then withoutDataForm(tp, parts)
+        else representedBy(generator.defaultDataRepresentation(tp), tp, inner, parts)
+    }
+
+    /** [[representedLayout]] of a type the compiler represents as `Data` by `representation`. */
+    private def representedBy(
+        representation: LoweredValueRepresentation,
+        tp: SIRType,
+        inner: Set[String],
+        parts: Parts
+    )(using LoweringContext): DataLayout = {
         def unknown(reason: String) = Plain(DataEncoding.Unknown(reason))
         def arguments: List[SIRType] = typeArgumentsOf(tp)
         def layout(of: SIRType): DataLayout = layoutOf(of, inner, parts)
@@ -118,7 +164,7 @@ private[verify] object DataLayout {
             Mapping(layout(keyType), layout(valueType), order)
         def named(constructor: scalus.compiler.sir.ConstrDecl, types: List[SIRType]) =
             constructor.params.map(_.name).zip(types.map(layout))
-        SirTypeUplcGenerator.defaultDataRepresentation(tp) match {
+        representation match {
             case ProductCaseClassRepresentation.OneElementWrapper(_) =>
                 unwrap(tp) match
                     case SIRType.CaseClass(constructor, typeArguments, _) =>
@@ -160,8 +206,8 @@ private[verify] object DataLayout {
                             unknown(s"the constructors of ${tp.show} are not told here")
                         else Choice(constructors.flatten)
                     case _ => unknown(s"the constructors of ${tp.show} are not told here")
-            case representation =>
-                unknown(s"${tp.show} is represented as ${representation.show}")
+            case other =>
+                unknown(s"${tp.show} is represented as ${other.show}")
         }
     }
 

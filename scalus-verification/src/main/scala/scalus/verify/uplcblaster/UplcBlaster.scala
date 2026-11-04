@@ -80,7 +80,8 @@ final class UplcBlaster private (
     val attemptTimeout: Option[FiniteDuration],
     val maxHeartbeats: Int,
     val checksKeptIn: Option[Path],
-    lastChecksOnly: Boolean
+    lastChecksOnly: Boolean,
+    fixedPlan: MappingPlan.Fixed
 ) extends Tactic {
     override type Prepared = UplcBlaster.Lowered
 
@@ -109,7 +110,8 @@ final class UplcBlaster private (
           attemptTimeout,
           limit,
           checksKeptIn,
-          lastChecksOnly
+          lastChecksOnly,
+          fixedPlan
         )
 
     /** The same tactic with no time limit, of the whole run or of one attempt. A check then runs
@@ -117,7 +119,16 @@ final class UplcBlaster private (
       * thread is interrupted or the server closed.
       */
     def withoutTimeout: UplcBlaster =
-        new UplcBlaster(budget, servers, None, None, maxHeartbeats, checksKeptIn, lastChecksOnly)
+        new UplcBlaster(
+          budget,
+          servers,
+          None,
+          None,
+          maxHeartbeats,
+          checksKeptIn,
+          lastChecksOnly,
+          fixedPlan
+        )
 
     /** The same tactic with a time limit for one attempt, beside that of the whole run. A tactic
       * that finds its budget ([[Budget.Auto]]) makes one check after the other, and its time limit
@@ -134,7 +145,8 @@ final class UplcBlaster private (
           Some(limit),
           maxHeartbeats,
           checksKeptIn,
-          lastChecksOnly
+          lastChecksOnly,
+          fixedPlan
         )
 
     /** The same tactic, writing every check it runs into `directory` as well, each in a directory
@@ -150,7 +162,8 @@ final class UplcBlaster private (
           attemptTimeout,
           maxHeartbeats,
           Some(directory),
-          false
+          false,
+          fixedPlan
         )
 
     /** [[withChecksKeptIn]], keeping only the checks of the tactic's last run in `directory`: a run
@@ -166,7 +179,8 @@ final class UplcBlaster private (
           attemptTimeout,
           maxHeartbeats,
           Some(directory),
-          true
+          true,
+          fixedPlan
         )
 
     /** Where the tactic writes the checks it runs: the directory it was told
@@ -174,11 +188,27 @@ final class UplcBlaster private (
       */
     def keptChecks: Option[Path] = checksKeptIn.orElse(UplcBlaster.keptChecksFromEnvironment)
 
+    /** The same tactic, mapping the variables' nodes that `plan` fixes as it says, in place of its
+      * own decisions ([[MappingPlan.Fixed]]): for the tactic's tests, and for measuring its rules.
+      * It keeps no results ([[fingerprint]]).
+      */
+    private[verify] def withFixedPlan(plan: MappingPlan.Fixed): UplcBlaster =
+        new UplcBlaster(
+          budget,
+          servers,
+          timeout,
+          attemptTimeout,
+          maxHeartbeats,
+          checksKeptIn,
+          lastChecksOnly,
+          plan
+        )
+
     override val name: String = "uplc-blaster"
 
     override def prepare(goal: Goal): Either[CompatibilityReport, Prepared] =
         UplcBlaster
-            .lower(goal.statement.prop, goal.functions)
+            .lower(goal.statement.prop, goal.functions, fixedPlan)
             .flatMap(lowered =>
                 budget match
                     case Budget.Within(_) if lowered.hasExistential =>
@@ -240,12 +270,17 @@ final class UplcBlaster private (
 
     /** What a result rests on: the statement as Lean is given it, the programs, and Lean's side,
       * which is read from the workspace of the tactic's servers. A tactic whose provider does not
-      * say which workspace that is, or names a directory that is none, keeps no results.
+      * say which workspace that is, or names a directory that is none, keeps no results, nor does
+      * one with a fixed plan ([[withFixedPlan]]).
       */
     override def fingerprint(prepared: Prepared): Option[Fingerprint] =
-        servers.workspace
-            .filter(workspace => Files.isRegularFile(workspace.resolve("lean-toolchain")))
-            .map(UplcBlaster.fingerprint(prepared, _))
+        // A check under a fixed plan is a test or a measurement. A statement keeps one result,
+        // which the check under the tactic's own plan would have.
+        if fixedPlan ne MappingPlan.Fixed.none then None
+        else
+            servers.workspace
+                .filter(workspace => Files.isRegularFile(workspace.resolve("lean-toolchain")))
+                .map(UplcBlaster.fingerprint(prepared, _))
 
     override def keep(prepared: Prepared, result: ExecutionResult): Option[Kept] =
         UplcBlaster.kept(prepared, result)
@@ -330,7 +365,7 @@ object UplcBlaster {
         private[uplcblaster] val within: Option[Int] = None,
         /** How the variables reach Lean ([[MappingPlan]]): each case class and enum of a variable
           * by fields, and the root of a variable over `Data` encodings, whatever its type, as
-          * `Data`.
+          * `Data`, but for the nodes a fixed plan maps otherwise ([[MappingPlan.Fixed]]).
           */
         plan: MappingPlan = MappingPlan.empty
     ) {
@@ -373,12 +408,22 @@ object UplcBlaster {
           None,
           defaultMaxHeartbeats,
           None,
-          false
+          false,
+          MappingPlan.Fixed.none
         )
     }
 
     def apply(budget: Budget, servers: LeanServerProvider, timeout: FiniteDuration): UplcBlaster = {
-        new UplcBlaster(budget, servers, Some(timeout), None, defaultMaxHeartbeats, None, false)
+        new UplcBlaster(
+          budget,
+          servers,
+          Some(timeout),
+          None,
+          defaultMaxHeartbeats,
+          None,
+          false,
+          MappingPlan.Fixed.none
+        )
     }
 
     /** The time a check gets unless told otherwise: ten minutes by the clock, from the moment the
@@ -434,6 +479,18 @@ object UplcBlaster {
       * in turn. Other `@Compile` definitions a test uses are compiled together with the test.
       */
     def lower(prop: Prop, functions: FunctionTable): Either[String, Lowered] =
+        lower(prop, functions, MappingPlan.Fixed.none)
+
+    /** [[lower]], with the nodes that `fixed` maps mapped as it says, in place of the tactic's own
+      * decisions ([[MappingPlan.Fixed]]). A node of a case class or an enum mapped as `Data` is one
+      * Lean `Data` variable, named by its path, restricted to the encodings of its type's values as
+      * a [[Props.forAllData]] variable is, and decoded in the value each test builds.
+      */
+    private[verify] def lower(
+        prop: Prop,
+        functions: FunctionTable,
+        fixed: MappingPlan.Fixed
+    ): Either[String, Lowered] =
         checkSignatures(prop, functions).flatMap { _ =>
             // How each variable reaches Lean: its decided nodes, each recorded as it is mapped, and
             // the number of variables quantified so far, which tells the nodes of each apart.
@@ -492,8 +549,9 @@ object UplcBlaster {
             /** The primitive Lean binders for one statement binder that `quantifier` introduces,
               * and a binding that rebuilds a case class from its fields in every leaf in its scope.
               * The binder is one `Data` where the statement quantifies over the `Data` encodings of
-              * its type, and is mapped by fields otherwise; its decided nodes are recorded in
-              * `planned` as they are mapped ([[MappingPlan]]).
+              * its type, and is mapped by fields otherwise, but for the nodes `fixed` maps as
+              * `Data`; its decided nodes are recorded in `planned` as they are mapped
+              * ([[MappingPlan]]).
               *
               * A list's or a map's items are any `Data` to Lean: the quantifier restricts them to
               * the type's with a predicate derived from the type. Where the predicate is not exact,
@@ -524,7 +582,7 @@ object UplcBlaster {
                         }
                     case None =>
                         val reason = MappingPlan.Reason.Quantified(quantifier)
-                        quantifiedValues(ident, new Expansion(variable, reason))
+                        quantifiedValues(ident, new Expansion(variable, reason, fixed))
             }
 
             /** A [[Props.forAllData]] variable: one Lean `Data`, restricted to the encodings of its
@@ -552,6 +610,13 @@ object UplcBlaster {
                         )
                     case DataEncoding.Unknown(reason) =>
                         Left(s"a forAllData binder of ${valueType.show} is not supported: $reason")
+                    // As of a node mapped as Data: such a value is the decoding of no Data.
+                    case _ if DataLayout.withoutDataForm(valueType).isDefined =>
+                        Left(
+                          s"a forAllData binder of ${valueType.show} is not supported: its part " +
+                              s"of type ${DataLayout.withoutDataForm(valueType).get.show} has no " +
+                              "Data form"
+                        )
                     // `d.to[A]` compiles to the compiler's own reading, whatever FromData is
                     // given. A decoder that is not would read other Data than the premise admits.
                     case _ if !decodesByRepresentation(decoded, ident.name) =>
@@ -708,9 +773,10 @@ object UplcBlaster {
                 if claimed.isEmpty then Right(formula)
                 else
                     Left(
-                      s"${claimed.map(binders(_).name).mkString(", ")}: a list, a map or a " +
-                          "forAllData variable whose type cannot be told from Data exactly, as a " +
-                          "type that contains itself, or a forAllDataLimited variable whose guard " +
+                      s"${claimed.map(binders(_).name).mkString(", ")}: a list, a map, a " +
+                          "forAllData variable or a case class or enum mapped as Data, whose type " +
+                          "cannot be told from Data exactly, as a type that contains itself or " +
+                          "has a string, or a forAllDataLimited variable whose guard " +
                           "checks less than its limits say, as of the elements of a list that has " +
                           "no most, has more values as a variable than its type or its limits " +
                           "allow. A statement that holds of all of them holds of the type's, but a " +
@@ -721,7 +787,25 @@ object UplcBlaster {
                     )
             }
 
+            // Each node the fixed plan names is one it mapped.
+            def namesItsNodes(formula: LeafFormula): Either[String, LeafFormula] = {
+                val mapped = planned
+                    .filter(_.reason == MappingPlan.Reason.ByFixedPlan)
+                    .map(node => PropIdentity.written(node.path))
+                    .toSet
+                val missed = fixed.paths -- mapped
+                if missed.isEmpty then Right(formula)
+                else
+                    Left(
+                      s"the fixed plan names ${missed.toList.sorted.mkString(", ")}, which it was " +
+                          "not asked about: no case class or enum of the statement's variables is " +
+                          "there, or it is inside a node that is one Data variable, which the plan " +
+                          "maps as Data or the statement quantifies over its encodings"
+                    )
+            }
+
             loop(withDistinctNames(prop), Nil, Nil)
+                .flatMap(namesItsNodes)
                 .flatMap(standsForEvery)
                 .flatMap { formula =>
                     val utf8 =
@@ -879,8 +963,10 @@ object UplcBlaster {
     private enum Variable(val leanType: String) {
 
         /** Whether the variable has values its type does not have: the items of a list or a map are
-          * any `Data`. A statement about all its values holds of the type's, and one that claims
-          * some value can be shown by a value the type does not have.
+          * any `Data`, and so is a variable over the encodings of a type, of [[Props.forAllData]]
+          * or a node mapped as `Data`, but for its premise. A statement about all its values holds
+          * of the type's, and one that claims some value can be shown by a value the type does not
+          * have.
           */
         def isLarger: Boolean = this match
             case DataList | PairList | DataMap | EncodedData => true
@@ -900,7 +986,9 @@ object UplcBlaster {
         /** The entries of one `Data.Map`. */
         case DataMap extends Variable("List (Data × Data)")
 
-        /** The `Data` encoding of a value of its type ([[Props.forAllData]]). */
+        /** The `Data` encoding of a value of its type: of a [[Props.forAllData]] variable, or of a
+          * node mapped as `Data` ([[asData]]).
+          */
         case EncodedData extends Variable("Data")
 
         /** The term that passes the value of the Lean variable `name`. The text is part of every
@@ -933,6 +1021,9 @@ object UplcBlaster {
       * second for 1, and so on, and the last for every other integer, so that each integer is some
       * value. A type that contains itself, such as `List`, has values of every size, which no set
       * of variables stands for, and is not supported. `enclosing` names the types being expanded.
+      *
+      * A case class or an enum that the plan maps as `Data` is not expanded: it is one Lean `Data`
+      * variable named `name`, and its value is decoded from it ([[asData]]).
       */
     private def expand(
         name: String,
@@ -967,9 +1058,11 @@ object UplcBlaster {
               constructor.typeParams,
               constructor.annotations
             )
-            nested(product, enclosing).flatMap { inner =>
-                count.decide(name, product) match
-                    case MappingPlan.Mapping.ByFields =>
+            // Decided before it is expanded: a node as Data is not, and so may be of a type that
+            // contains itself.
+            count.decide(name, product) match
+                case MappingPlan.Mapping.ByFields =>
+                    nested(product, enclosing).flatMap { inner =>
                         constructed(
                           name,
                           declaration,
@@ -979,17 +1072,17 @@ object UplcBlaster {
                           inner,
                           count
                         )
-                    case MappingPlan.Mapping.AsData => asDataNotSupported(name)
-            }
+                    }
+                case MappingPlan.Mapping.AsData => asData(name, product)
         case sum @ SIRType.SumCaseClass(declaration, _) if declaration.constructors.isEmpty =>
             Left(s"a ${sum.show} binder is not supported: the type has no constructors")
         case sum @ SIRType.SumCaseClass(declaration, typeArguments) =>
-            nested(sum, enclosing).flatMap { inner =>
-                count.decide(name, sum) match
-                    case MappingPlan.Mapping.ByFields =>
+            count.decide(name, sum) match
+                case MappingPlan.Mapping.ByFields =>
+                    nested(sum, enclosing).flatMap { inner =>
                         expandSum(name, sum, declaration, typeArguments, inner, count)
-                    case MappingPlan.Mapping.AsData => asDataNotSupported(name)
-            }
+                    }
+                case MappingPlan.Mapping.AsData => asData(name, sum)
         case one @ SIRType.CaseClass(_, _, Some(parent)) =>
             Left(
               s"a ${one.show} binder is not supported: it is one constructor of ${parent.show}, " +
@@ -1007,47 +1100,91 @@ object UplcBlaster {
       * `Data` representation, the one its premise is derived from. Definitions the compiler put
       * around it do not change what it reads.
       */
-    private def decodesByRepresentation(decoded: SIR, name: String): Boolean = {
-        val fromData = "scalus.uplc.builtin.internal.UniversalDataConversion$.fromData"
+    private def decodesByRepresentation(decoded: SIR, name: String): Boolean =
         Wrappers.of(decoded)._2 match
             case SIR.Apply(SIR.ExternalVar(_, function, _, _), SIR.Var(argument, _, _), _, _) =>
-                function == fromData && argument == name
+                function == fromDataName && argument == name
             case SIR.Apply(SIR.Var(function, _, _), SIR.Var(argument, _, _), _, _) =>
-                function == fromData && argument == name
+                function == fromDataName && argument == name
             case _ => false
-    }
 
     /** One statement variable, the `variable`-th the statement quantifies over, as [[expand]]
       * expands it: the parts expanded so far, its fields and theirs, whether they are Lean
       * variables or are expanded in turn; and its decided nodes, each as it was decided
       * ([[MappingPlan]]).
       */
-    private final class Expansion(variable: Int, reason: MappingPlan.Reason) {
+    private final class Expansion(
+        variable: Int,
+        reason: MappingPlan.Reason,
+        fixed: MappingPlan.Fixed
+    ) {
         var parts: Int = 0
         val nodes: ArrayBuffer[MappingPlan.Node] = ArrayBuffer.empty
 
         /** The mapping of the node at `path`, of type `tp`, a case class or an enum, recorded with
-          * why. Today every node of a variable that is not over `Data` encodings is by fields.
+          * why: the one `fixed` gives, or else by fields, as is every node of a variable that is
+          * not over `Data` encodings today.
           */
         def decide(path: String, tp: SIRType): MappingPlan.Mapping = {
-            val mapping = MappingPlan.Mapping.ByFields
-            nodes += MappingPlan.Node(variable, path, tp, mapping, reason)
+            val (mapping, why) = fixed.mapping(variable, PropIdentity.written(path), tp) match
+                case Some(chosen) => chosen -> MappingPlan.Reason.ByFixedPlan
+                case None         => MappingPlan.Mapping.ByFields -> reason
+            nodes += MappingPlan.Node(variable, path, tp, mapping, why)
             mapping
         }
     }
 
-    /** Why the node at `path`, which [[Expansion.decide]] maps as `Data`, is not expanded: a node
-      * that the expansion meets as `Data` is not built yet, at the root or below it
-      * (docs/design/verification-details/uplc-blaster.md, "Mapping a variable", step 2). A variable
-      * over `Data` encodings is mapped so before it is expanded ([[lower]]).
+    /** The node at `path`, of type `tp`, a case class or an enum, as one Lean `Data` variable named
+      * `path`, and its value decoded from it. The variable ranges over the encodings of the type's
+      * values, as that of a [[Props.forAllData]] is: its type is marked so
+      * ([[DataEncoding.encodedVariable]]) with its decoder, and the quantifier restricts it with
+      * the premise of its type's encoding. The decoder is `UniversalDataConversion.fromData`, the
+      * compiler's own reading of the type's `Data` representation, which the premise is derived
+      * from, and which the compiler gives `d.to[A]`; the value is that decoder applied to the
+      * variable. Nothing below the node is expanded, so the type may contain itself.
+      *
+      * A type with a part that has no `Data` form, as a function, has values that are the decoding
+      * of no `Data`, which the variable would not stand for: it is refused
+      * ([[DataLayout.withoutDataForm]]). So is a type whose encoding is not told at all, whose
+      * premise would hold of every `Data`. One whose encoding is told but not exactly, as of a
+      * string field or of a type that contains itself, is a variable with more values than its
+      * type, which the statement may quantify over only where it stands for every value
+      * ([[lower]]).
       */
-    private def asDataNotSupported(
-        path: String
-    ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] =
-        Left(
-          s"${PropIdentity.written(path)}: a case class or an enum inside a variable cannot be " +
-              "mapped as Data yet: quantify over the Data encodings of the whole variable, " +
-              "with forAllData"
+    private def asData(
+        path: String,
+        tp: SIRType
+    ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] = {
+        def refused(reason: String) =
+            Left(s"${PropIdentity.written(path)}: a ${tp.show} cannot be mapped as Data: $reason")
+        (DataLayout.withoutDataForm(tp), DataEncoding.of(tp)) match
+            case (Some(part), _) => refused(s"its part of type ${part.show} has no Data form")
+            case (None, DataEncoding.Unknown(reason)) =>
+                refused(s"its encoding is not told: $reason")
+            case _ =>
+                // The decoder the variable's type is marked with, and the value: one reading.
+                def decoded(data: AnnotatedSIR): AnnotatedSIR =
+                    SIR.Apply(fromDataOf(tp), data, tp, AnnotationsDecl.empty)
+                val parameter = SIR.Var("data", SIRType.Data(), AnnotationsDecl.empty)
+                val decoder = SIR.LamAbs(parameter, decoded(parameter), Nil, AnnotationsDecl.empty)
+                val variable =
+                    DataEncoding.encodedVariable(new PropExpr.Ident[Any](path, 0L, tp), decoder)
+                val value = decoded(SIR.Var(path, SIRType.Data(), AnnotationsDecl.empty))
+                Right(List(variable) -> Some(value))
+    }
+
+    /** The compiler's name of `UniversalDataConversion.fromData`, which its lowering reads by the
+      * type's `Data` representation.
+      */
+    private val fromDataName = "scalus.uplc.builtin.internal.UniversalDataConversion$.fromData"
+
+    /** `UniversalDataConversion.fromData` for values of `tp`, written as the linker writes it. */
+    private def fromDataOf(tp: SIRType): SIR.ExternalVar =
+        SIR.ExternalVar(
+          fromDataName.stripSuffix(".fromData"),
+          fromDataName,
+          SIRType.Fun(SIRType.Data(), tp),
+          AnnotationsDecl.empty
         )
 
     /** How many parts one statement variable may have: many more than a type of the ledger has, and
@@ -2666,10 +2803,10 @@ object UplcBlaster {
     }
 
     /** Why `value`, Lean's value for a variable of type `tp`, is no value of the type, or `None`
-      * where it is one. Only a list, a map or a [[Props.forAllData]] variable has values its type
-      * does not have ([[Variable.isLarger]]): its items, or itself, are any `Data`, unless the
-      * quantifier's predicate is exact. A value that cannot be checked here counts as none of the
-      * type's, so that a refutation never rests on it.
+      * where it is one. Only a list, a map, a [[Props.forAllData]] variable or a node mapped as
+      * `Data` has values its type does not have ([[Variable.isLarger]]): its items, or itself, are
+      * any `Data`, unless the quantifier's predicate is exact. A value that cannot be checked here
+      * counts as none of the type's, so that a refutation never rests on it.
       */
     private[uplcblaster] def outsideType(value: Constant, tp: SIRType): Option[String] =
         outsideEncoding(value, tp).orElse(outsideLimits(value, tp))
