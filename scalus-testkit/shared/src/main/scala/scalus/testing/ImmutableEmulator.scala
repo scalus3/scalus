@@ -9,7 +9,6 @@ import scalus.cardano.node.emulator.{ChainConfig, ForgeError, RollbackError, TxS
 import scalus.cardano.node.stream.ChainPoint
 import scalus.uplc.builtin.Data
 
-import scala.annotation.targetName
 import scala.concurrent.{ExecutionContext, Future}
 
 /** An immutable emulator for Cardano transactions.
@@ -267,33 +266,6 @@ object ImmutableEmulator {
         validators: Iterable[STS.Validator],
         mutators: Iterable[STS.Mutator]
     ): ImmutableEmulator = new ImmutableEmulator(state, validators, mutators)
-
-    /** The 1.3 parameter list: the datums decoded, without their original bytes. Each datum keeps
-      * the bytes of its canonical encoding.
-      */
-    @deprecated("pass binaryDatums: Map[DataHash, KeepRaw[Data]] instead", "1.3.0")
-    @targetName("applyWithDecodedDatums")
-    def apply(
-        state: State,
-        env: UtxoEnv,
-        slotConfig: SlotConfig,
-        evaluatorMode: EvaluatorMode,
-        validators: Iterable[STS.Validator],
-        mutators: Iterable[STS.Mutator],
-        appliedTxLog: Vector[AppliedTx],
-        appliedTxIndex: Map[TransactionHash, AppliedTx],
-        datums: Map[DataHash, Data]
-    ): ImmutableEmulator = ImmutableEmulator(
-      state,
-      env,
-      slotConfig,
-      evaluatorMode,
-      validators,
-      mutators,
-      appliedTxLog,
-      appliedTxIndex,
-      datums.view.mapValues(KeepRaw(_)).toMap
-    )
 
     /** Create an ImmutableEmulator from a mutable [[scalus.cardano.node.EmulatorBase]].
       *

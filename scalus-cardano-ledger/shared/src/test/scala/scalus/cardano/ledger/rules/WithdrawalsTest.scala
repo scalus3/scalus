@@ -6,8 +6,7 @@ import org.scalatest.matchers.should.Matchers
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 
-import scala.annotation.nowarn
-import scala.collection.immutable.{ListSet, SortedMap}
+import scala.collection.immutable.SortedMap
 
 /** Withdrawals and certificates through the default mutator pipeline, spec 13.1. */
 class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
@@ -314,44 +313,5 @@ class WithdrawalsTest extends AnyFunSuite with Matchers with EitherValues {
             case e: TransactionException.StakeCertificatesException =>
                 e.delegateeStakePoolsNotRegistered shouldBe Set(newPoolId)
             case other => fail(s"expected StakeCertificatesException, got $other")
-    }
-
-    // 1.3 mutator sets may still list the deprecated per-kind mutators next to CertsMutator
-
-    private val newCredential = Credential.KeyHash(AddrKeyHash.fromHex("9" * 56))
-
-    private def withMutators(
-        mutators: Iterable[STS.Mutator],
-        state: State,
-        transaction: Transaction
-    ) =
-        STS.Mutator.transit[TransactionException](
-          Seq(CertsValidator, StakeCertificatesValidator, StakePoolCertificatesValidator),
-          mutators,
-          context(state),
-          state,
-          transaction
-        )
-
-    @nowarn("cat=deprecation")
-    private val withDeprecatedStakeMutator: Iterable[STS.Mutator] =
-        ListSet(CertsMutator, StakeCertificatesMutator, PlutusScriptsTransactionMutator)
-
-    test("a deprecated stake mutator next to CertsMutator does not register twice") {
-        val state = stateWith(Coin.zero)
-        val registration = certs(Certificate.RegCert(newCredential, Some(keyDeposit)))
-        withMutators(withDeprecatedStakeMutator, state, registration).value shouldBe
-            step(state, registration).value
-    }
-
-    @nowarn("cat=deprecation")
-    private val onlyDeprecatedStakeMutator: Iterable[STS.Mutator] = Seq(StakeCertificatesMutator)
-
-    test("a deprecated stake mutator without CertsMutator still registers") {
-        val state = stateWith(Coin.zero)
-        val registration = certs(Certificate.RegCert(newCredential, Some(keyDeposit)))
-        val result = withMutators(onlyDeprecatedStakeMutator, state, registration).value
-        result.certState.dstate.accounts.get(newCredential) shouldBe
-            Some(ConwayAccountState(Coin.zero, keyDeposit, None, None))
     }
 }

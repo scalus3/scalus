@@ -136,10 +136,6 @@ case class EmulatorState private (
       */
     def ledgerState: NewEpochState = tipSnapshot.newEpochState
 
-    /** Every datum this state has seen, decoded. */
-    @deprecated("use binaryDatums, which keeps the datum bytes", "1.3.0")
-    def datums: Map[DataHash, Data] = binaryDatums.view.mapValues(_.value).toMap
-
     /** The state after a submit of `tx`, and the submit result, spec section 7.
       *
       * The tx is validated on the snapshot of the last mempool entry, or the tip snapshot if the

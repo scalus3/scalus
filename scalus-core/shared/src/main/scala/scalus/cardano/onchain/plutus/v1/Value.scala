@@ -700,25 +700,6 @@ object Value extends ValueOffchainOps {
           */
         def getLovelace: BigInt = quantityOf(adaPolicyId, adaTokenName)
 
-        /** Returns the quantity of the first token of the first policy in this `Value`.
-          *
-          * Deprecated: use [[getLovelace]]. At PV11 `getLovelace` lowers to one `lookupCoin`
-          * builtin, while this walks the `Data` map: about 30 more machine steps per call (measured
-          * on the Midgard DA bond pool port: 2485 -> 2431 B and 6-10% less memory per transaction
-          * after replacing 7 calls). It also assumes lovelace is the first entry: on a value
-          * without lovelace it returns another token's quantity, and on an empty value it fails.
-          *
-          * @return
-          *   The amount of Lovelace in this `Value`
-          * @example
-          *   {{{
-          *   val value = Value.lovelace(BigInt(1000000))
-          *   value.lovelaceAmount === BigInt(1000000)
-          *   }}}
-          */
-        @deprecated("use getLovelace: it lowers to the lookupCoin builtin at PV11", "1.3.0")
-        def lovelaceAmount: BigInt = v.toSortedMap.toPairList.head._2.toPairList.head._2
-
         /** Checks if this `Value` is zero, meaning it contains no tokens or currency symbols.
           *
           * @return

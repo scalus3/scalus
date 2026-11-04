@@ -401,21 +401,6 @@ class CaseListBranchError(
       sourcePos
     )
 
-@deprecated(
-  "Case on Data selects a branch by the Data.Constr tag, see CaseDataNonConstrError and CaseIndexOutOfBounds",
-  "1.3.0"
-)
-class CaseDataBranchError(
-    val branchCount: Int,
-    env: CekValEnv,
-    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
-) extends CaseOnBuiltinError(
-      s"Case on data with $branchCount branches: the branch-per-Data-variant form does not exist, " +
-          "Case on data selects the branch by the Data.Constr tag",
-      env,
-      sourcePos
-    )
-
 /** Case on a Data value that is not a `Data.Constr`. Only `Data.Constr` can be scrutinized: the
   * branch is selected by the constructor tag and receives the list of fields.
   */
@@ -823,9 +808,6 @@ final class TallyingBudgetSpenderLogger(val budgetSpender: BudgetSpender)
     /** Every trace with the budget spent when it was emitted, in order. */
     def traces: Seq[TraceProfile] = _logs.map((msg, budget) => TraceProfile(msg, budget)).toSeq
 
-    @deprecated("use traces for the budgets, or getLogs for the bare text", "1.3.0")
-    def getLogsWithBudget: Seq[String] =
-        _logs.map((log, budget) => s"$log: ${budget.showJson}").toSeq
     def log(msg: String): Unit = _logs.append((msg, getSpentBudget))
 }
 

@@ -7,8 +7,6 @@ import scalus.cardano.ledger.AddrKeyHash
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 
-import scala.annotation.nowarn
-
 class StakeCertificatesValidatorTest extends AnyFunSuite with Matchers with EitherValues {
 
     private val cardanoInfo = CardanoInfo.preprod
@@ -245,43 +243,5 @@ class StakeCertificatesValidatorTest extends AnyFunSuite with Matchers with Eith
         )
         runValidator(certs, registered).left.value.delegateeDRepsNotRegistered shouldBe
             Set(drepCredential)
-    }
-
-    // 1.3 binary call sites construct the exception with 6 arguments
-    private val txId = TransactionHash.fromHex("0" * 64)
-
-    @nowarn("cat=deprecation")
-    private def oldPositional = new TransactionException.StakeCertificatesException(
-      txId,
-      Set(credential),
-      Set.empty,
-      Map.empty,
-      Map(credential -> (keyDeposit, Coin.zero)),
-      Map.empty
-    )
-
-    @nowarn("cat=deprecation")
-    private def oldNamed = new TransactionException.StakeCertificatesException(
-      transactionId = txId,
-      alreadyRegistered = Set(credential),
-      missingRegistrations = Set.empty,
-      nonZeroRewardAccounts = Map.empty,
-      invalidDeposits = Map(credential -> (keyDeposit, Coin.zero)),
-      invalidRefunds = Map.empty
-    )
-
-    test("the deprecated 6-argument constructor reports no unregistered delegatees") {
-        val expected = TransactionException.StakeCertificatesException(
-          txId,
-          Set(credential),
-          Set.empty,
-          Map.empty,
-          Map(credential -> (keyDeposit, Coin.zero)),
-          Map.empty,
-          Set.empty,
-          Set.empty
-        )
-        oldPositional shouldBe expected
-        oldNamed shouldBe expected
     }
 }

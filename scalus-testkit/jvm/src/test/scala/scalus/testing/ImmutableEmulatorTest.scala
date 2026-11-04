@@ -12,8 +12,6 @@ import scalus.uplc.PlutusV3
 import scalus.uplc.builtin.{Builtins, ByteString, Data}
 import scalus.utils.await
 
-import scala.annotation.nowarn
-
 class ImmutableEmulatorTest extends AnyFunSuite {
 
     given CardanoInfo = CardanoInfo.mainnet
@@ -370,32 +368,6 @@ class ImmutableEmulatorTest extends AnyFunSuite {
                 assert(state.stakeDistribution == ledger.stakeDistribution)
                 assert(state.donation == ledger.donation)
             }
-    }
-
-    // 1.3 call sites pass the datums positionally, decoded, as the last argument
-    @nowarn("cat=deprecation")
-    private def withOldDatums(state: State, env: UtxoEnv, datums: Map[DataHash, Data]) =
-        ImmutableEmulator(
-          state,
-          env,
-          SlotConfig.mainnet,
-          EvaluatorMode.Validate,
-          Emulator.defaultValidators,
-          Emulator.defaultMutators,
-          Vector.empty,
-          Map.empty,
-          datums
-        )
-
-    test("the deprecated apply takes the decoded datums of 1.3") {
-        val hash = DataHash.fromByteString(ByteString.fromHex("1" * 64))
-        val datum = Data.I(10)
-        // one state instance: `State()` holds arrays, so two of them are not equal
-        val state = State()
-        val env = UtxoEnv.testMainnet()
-        val expected =
-            ImmutableEmulator(state = state, env = env, binaryDatums = Map(hash -> KeepRaw(datum)))
-        assert(withOldDatums(state, env, Map(hash -> datum)) == expected)
     }
 
     test("withDatum stores the given bytes under their hash and leaves the original unchanged") {

@@ -4,8 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 
-import scala.annotation.nowarn
-
 /** The Conway LEDGER `validateTreasuryValue` check, spec [SC-7], [SC-7e]. */
 class TreasuryValueMismatchValidatorTest extends AnyFunSuite {
 
@@ -67,25 +65,5 @@ class TreasuryValueMismatchValidatorTest extends AnyFunSuite {
           expected = Coin(2)
         )
         assert(TransactionException.ruleName(error) == "TreasuryValueMismatch")
-    }
-
-    // 1.3 binary call sites construct `UtxoEnv` with 4 arguments
-    @nowarn("cat=deprecation")
-    private def oldPositional =
-        new UtxoEnv(7, cardanoInfo.protocolParams, CertState.empty, Network.Testnet)
-
-    @nowarn("cat=deprecation")
-    private def oldNamed = new UtxoEnv(
-      network = Network.Testnet,
-      slot = 7,
-      certState = CertState.empty,
-      params = cardanoInfo.protocolParams
-    )
-
-    test("the deprecated 4-argument constructor sets an empty treasury") {
-        val expected =
-            UtxoEnv(7, cardanoInfo.protocolParams, CertState.empty, Network.Testnet, Coin.zero)
-        assert(oldPositional == expected)
-        assert(oldNamed == expected)
     }
 }

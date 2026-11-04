@@ -215,7 +215,7 @@ Methods built on intrinsics inherit them: `hasNft` is `quantityOf(...) === 1`, a
 
 | Write | Not | Why |
 |---|---|---|
-| `value.getLovelace` | `value.lovelaceAmount` (deprecated) | one builtin against a walk of the `Data` map, about 30 machine steps per call |
+| `value.getLovelace` | `value.lovelaceAmount` (removed in 1.5.0) | one builtin against a walk of the `Data` map, about 30 machine steps per call |
 | `xs.contains(x)` | `xs.exists(_ === x)` | `exists` allocates an `Option` and an `Eq` closure |
 | `xs.count(p)` | `xs.filter(p).length` | one pass, no intermediate list |
 

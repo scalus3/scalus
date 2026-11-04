@@ -38,7 +38,7 @@ val paid = output.value.quantityOf(policyId, tokenName)
 
 Not rewritten (they are already cheap or have no builtin counterpart): `===` (a single
 `equalsData` on the underlying `Data`), `flatten`, `policyIds`, `tokens`, `isPositive`,
-`hasOnly`, `lovelaceAmount` (deprecated, use `getLovelace`), and the constructors
+`hasOnly`, and the constructors
 (`Value.zero`, `Value.lovelace`, `Value.apply`, `Value.fromList`).
 
 Methods built on the rewritten ones get the builtins too: `hasNft` is `quantityOf(...) === 1`,
@@ -112,8 +112,8 @@ This is roughly 35% cheaper in fee than the equivalent
 `tx.mint.tokens(policyId) === SortedMap.singleton(beaconName, BigInt(1))`.
 
 **"How much ADA is in this output"** – use `getLovelace`. It is one `lookupCoin` call. The
-deprecated `lovelaceAmount` walks the `Data` map to the first entry instead: about 30 more
-machine steps per call, and on a value without lovelace it returns another token's quantity.
+old `lovelaceAmount`, removed in 1.5.0, walked the `Data` map to the first entry instead: about 30 more
+machine steps per call, and on a value without lovelace it returned another token's quantity.
 Replacing 7 `lovelaceAmount` calls in a port of the Midgard DA bond pool validator cut the script
 from 2485 to 2431 bytes and memory by 6–10% per transaction:
 

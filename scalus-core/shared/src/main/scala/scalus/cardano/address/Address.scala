@@ -89,40 +89,6 @@ private[scalus] object VarLen {
     }
 }
 
-/** The variable-length natural numbers of a pointer address (CIP-19), most significant 7-bit group
-  * first. Scalus 1.3.0 and earlier wrote the least significant group first, which is not CIP-19.
-  */
-@deprecated(
-  "it now writes the most significant 7-bit group first, as CIP-19 does, where it wrote the " +
-      "least significant first; use Pointer.toBytes and Pointer.parseFrom",
-  "1.3.0"
-)
-object VarUInt {
-
-    /** Encode a non-negative integer as a variable-length natural number, most significant 7-bit
-      * group first.
-      *
-      * @param value
-      *   The positive integer to encode (must be >= 0)
-      * @return
-      *   Encoded bytes with continuation bit protocol
-      */
-    def encodeVariableLengthUInt(value: Long): Array[Byte] = VarLen.encode(value)
-
-    /** Decode a variable-length natural number, most significant 7-bit group first, kept to its low
-      * 64 bits.
-      *
-      * @param bytes
-      *   Source byte array
-      * @param startIndex
-      *   Index to start decoding from
-      * @return
-      *   Tuple of (decoded value, number of bytes consumed)
-      */
-    def decodeVariableLengthUInt(bytes: Array[Byte], startIndex: Int): (Long, Int) =
-        VarLen.decode(bytes, startIndex)
-}
-
 /** Network identification for Cardano addresses */
 sealed trait Network {
 

@@ -531,6 +531,43 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ),
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.ledger.ProtocolParams.copy$default$28"
+        ),
+        // removed in 1.5.0: deprecated since 1.3.0
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.prelude.package"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.prelude.package$"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.builtin.package"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.builtin.package$"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.builtin.NodeJsPlatformSpecific"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.builtin.NodeJsPlatformSpecific$"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.cardano.address.VarUInt"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.cardano.address.VarUInt$"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.CaseDataBranchError"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.CaseDataBranchError$"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.onchain.plutus.v1.Value.lovelaceAmount(scalus.cardano.onchain.plutus.v1.Value)scala.math.BigInt"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.uplc.eval.TallyingBudgetSpenderLogger.getLogsWithBudget()scala.collection.immutable.Seq"
         )
       ),
 
@@ -905,6 +942,15 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       scalacOptions ++= commonScalacOptions,
       jvmReleaseTarget,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
+      mimaBinaryIssueFilters ++= Seq(
+        // removed in 1.5.0: deprecated since 1.3.0
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.bloxbean.StakeStateResolver.resolveForTx(scalus.cardano.ledger.Transaction,Int,scalus.cardano.ledger.Coin)scalus.cardano.ledger.CertState"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.bloxbean.StakeStateResolver.resolveForTx$default$3()scalus.cardano.ledger.Coin"
+        )
+      ),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "org.slf4j" % "slf4j-api" % slf4jVersion,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
@@ -1252,6 +1298,70 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ),
         ProblemFilters.exclude[ReversedMissingMethodProblem](
           "scalus.cardano.node.JsEmulatorOptions.scalus$cardano$node$JsEmulatorOptions$_setter_$activeSlotsCoeff_="
+        ),
+        // removed in 1.5.0: deprecated since 1.3.0
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesMutator"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.cardano.ledger.rules.StakeCertificatesMutator$"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.cardano.ledger.rules.StakePoolCertificatesMutator"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.cardano.ledger.rules.StakePoolCertificatesMutator$"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.cardano.ledger.rules.VotingCertificatesMutator"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.cardano.ledger.rules.VotingCertificatesMutator$"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.this(scala.collection.immutable.Map,scala.collection.immutable.Map,scala.collection.immutable.Map,scala.collection.immutable.Map)Unit"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.apply(scala.collection.immutable.Map,scala.collection.immutable.Map,scala.collection.immutable.Map,scala.collection.immutable.Map)scalus.cardano.ledger.DelegationState"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.apply$default$1()scala.collection.immutable.Map"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.apply$default$2()scala.collection.immutable.Map"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.apply$default$3()scala.collection.immutable.Map"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.apply$default$4()scala.collection.immutable.Map"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.rewards()scala.collection.immutable.Map"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.deposits()scala.collection.immutable.Map"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.stakePools()scala.collection.immutable.Map"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.DelegationState.dreps()scala.collection.immutable.Map"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.TransactionException#StakeCertificatesException.this(scalus.uplc.builtin.ByteString,scala.collection.immutable.Set,scala.collection.immutable.Set,scala.collection.immutable.Map,scala.collection.immutable.Map,scala.collection.immutable.Map)Unit"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.TransactionException#StakeCertificatesException.apply(scalus.uplc.builtin.ByteString,scala.collection.immutable.Set,scala.collection.immutable.Set,scala.collection.immutable.Map,scala.collection.immutable.Map,scala.collection.immutable.Map)scalus.cardano.ledger.TransactionException#StakeCertificatesException"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.rules.UtxoEnv.this(Long,scalus.cardano.ledger.ProtocolParams,scalus.cardano.ledger.CertState,scalus.cardano.address.Network)Unit"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.rules.UtxoEnv.apply(Long,scalus.cardano.ledger.ProtocolParams,scalus.cardano.ledger.CertState,scalus.cardano.address.Network)scalus.cardano.ledger.rules.UtxoEnv"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.node.EmulatorState.datums()scala.collection.immutable.Map"
         )
       ),
       crossScalaVersions := supportedScalaVersions,

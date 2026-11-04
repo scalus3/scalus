@@ -128,6 +128,14 @@ takes a message, so the failure names the check.
 `findUniqueOrFail` finds the one element that satisfies a predicate among many, and keeps scanning
 to prove there is no second. `.head` after `filter` is the anti-idiom for both.
 
+## Removed in 1.5.0
+
+Scalus 1.5.0 removes these members. They were deprecated in 1.3.0. Use the replacement.
+
+| Removed | Replacement | Note |
+|---|---|---|
+| `value.lovelaceAmount` | `value.getLovelace` | `getLovelace` is one `lookupCoin` builtin at PV11; `lovelaceAmount` walked the `Data` map and returned another token's quantity when there was no lovelace |
+
 ## Removed in 1.4.0
 
 Scalus 1.4.0 removes these members. They were deprecated in 1.1.1. Use the replacement.
@@ -155,7 +163,6 @@ change in the last row is different: it is in place, with no deprecated overload
 
 | Deprecated | Replacement | Note |
 |---|---|---|
-| `value.lovelaceAmount` | `value.getLovelace` | `getLovelace` is one `lookupCoin` builtin at PV11; `lovelaceAmount` walks the `Data` map and returns another token's quantity when there is no lovelace |
 | Design-pattern `Boolean` callbacks (`UtxoIndexer`, `StakeValidator`, `TransactionLevelMinterValidator`) | `=> Unit` callbacks that `require` / `fail` with their own message | changed in place, no overload. **Hazard:** a `Boolean` lambda still compiles against the `Unit` parameter (value discard) and then checks nothing. Grep every callback and wrap its condition in `require(..., message)` |
 
 ## Worked example: the vesting validator

@@ -4,8 +4,6 @@ package rules
 import scalus.cardano.address.Network
 import scalus.uplc.DebugScript
 
-import scala.annotation.nowarn
-
 // It's mutable state for transient calculation
 case class Context(
     var fee: Coin = Coin.zero,
@@ -47,24 +45,8 @@ case class UtxoEnv(
     certState: CertState,
     network: Network,
     treasury: Coin
-) {
-
-    /** An environment with an empty treasury, as the deprecated 4-argument `apply`. */
-    @deprecated("use the constructor that takes the treasury", "1.3.0")
-    def this(slot: SlotNo, params: ProtocolParams, certState: CertState, network: Network) =
-        this(slot, params, certState, network, Coin.zero)
-}
+)
 object UtxoEnv {
-
-    /** An environment with an empty treasury. */
-    @deprecated("use the overload that takes the treasury", "1.3.0")
-    def apply(
-        slot: SlotNo,
-        params: ProtocolParams,
-        certState: CertState,
-        network: Network
-    ): UtxoEnv =
-        UtxoEnv(slot, params, certState, network, Coin.zero)
 
     // Uses CardanoInfo.mainnet.protocolParams (inlined at compile time via macro)
     // TODO: remove
@@ -192,16 +174,14 @@ object STS {
         ): Mutator { type Error = ErrorT } =
             Mutator[ErrorT](validators, mutators, Mutator.defaultName)
 
-        /** Applies the mutators in order. A set with [[CertsMutator]] skips the deprecated per-kind
-          * certificate mutators, which would apply the certificates a second time, spec [SC-22].
-          */
+        /** Applies the mutators in order. */
         def transit[ErrorT <: TransactionException](
             mutators: Iterable[Mutator { type Error <: ErrorT }],
             context: Mutator#Context,
             state: Mutator#State,
             event: Mutator#Event
         ): (Mutator { type Error = ErrorT })#Result = {
-            effective(mutators).foldLeft(success(state): (Mutator { type Error = ErrorT })#Result) {
+            mutators.foldLeft(success(state): (Mutator { type Error = ErrorT })#Result) {
                 (acc, mutator) =>
                     acc.flatMap(currentState => mutator.transit(context, currentState, event))
             }
@@ -243,7 +223,7 @@ object STS {
         ): Either[Seq[TransactionException], Mutator#State] = {
             val validated: Seq[TransactionException] =
                 validators.toSeq.flatMap(_.validate(context, state, event).left.toOption)
-            val (failures, after) = effective(mutators).foldLeft((validated, state)) {
+            val (failures, after) = mutators.foldLeft((validated, state)) {
                 case ((failures, current), mutator) =>
                     val result: Either[Seq[TransactionException], State] = mutator match
                         case GovMutator => GovMutator.transitAll(context, current, event, event.id)
@@ -287,17 +267,5 @@ object STS {
         def success(state: STS#State): (Mutator { type Error = Nothing })#Result = Right(state)
 
         private val defaultName: String = "AnonymousMutator"
-
-        /** The 1.3 mutators that [[CertsMutator]] replaces. */
-        @nowarn("cat=deprecation")
-        private val perKindCertMutators: Set[Mutator] =
-            Set(StakeCertificatesMutator, StakePoolCertificatesMutator, VotingCertificatesMutator)
-
-        /** `mutators` without the per-kind certificate mutators when [[CertsMutator]] is among
-          * them, spec [SC-22]; [[transit]] and [[transitAll]] run the same set, spec [FL-3].
-          */
-        private def effective[M <: Mutator](mutators: Iterable[M]): Iterable[M] =
-            if mutators.exists(_ == CertsMutator) then mutators.filterNot(perKindCertMutators)
-            else mutators
     }
 }
