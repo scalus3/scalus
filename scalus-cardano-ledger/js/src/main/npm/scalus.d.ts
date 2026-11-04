@@ -501,6 +501,12 @@ export class Emulator {
    */
   getPendingRatify(): PendingRatify;
   /**
+   * The whole ledger state, read at once, so its parts come from one state: the UTxOs, the pots,
+   * the gov state, the stake snapshots, the reward update, the ratify result, the pparams and
+   * the pool distribution. Each part equals what its own getter returns.
+   */
+  getLedgerState(): LedgerState;
+  /**
    * Looks a datum up by its hash, across the datums seeded into this emulator and the ones
    * witnessed by accepted transactions.
    *
@@ -825,6 +831,44 @@ export interface GovVote {
   readonly vote: "Yes" | "No" | "Abstain";
 }
 
+/** The result of `Emulator.getLedgerState`: the whole ledger state, read at once. */
+export interface LedgerState {
+  /** The epoch of the last boundary the ledger ran. */
+  readonly lastEpoch: number;
+  /** The blocks each pool made in the epoch before the last boundary, sorted by pool. */
+  readonly blocksMadePrev: PoolBlocks[];
+  /** The blocks each pool made since the last boundary, sorted by pool. */
+  readonly blocksMadeCur: PoolBlocks[];
+  /** The treasury in lovelace, as `getTreasury`. */
+  readonly treasury: bigint;
+  /** The reserves in lovelace, as `getReserves`. */
+  readonly reserves: bigint;
+  /** The UTxO set, as `getUtxos`. */
+  readonly utxos: Utxo[];
+  /** The deposits the ledger holds, in lovelace. */
+  readonly deposited: bigint;
+  /** The fee pot, in lovelace. */
+  readonly fees: bigint;
+  /** The donations of this epoch, in lovelace. */
+  readonly donation: bigint;
+  /** The gov state, as `getGovState`. */
+  readonly govState: GovState;
+  /** The stake snapshots, as `getStakeSnapshots`. */
+  readonly stakeSnapshots: StakeSnapshots;
+  /** The reward update the next boundary pays, as `getPendingRewards`. */
+  readonly pendingRewards?: RewardUpdate;
+  /** The ratify result the next boundary enacts, as `getPendingRatify`. */
+  readonly pendingRatify: PendingRatify;
+  /** The current pparams, as `getProtocolParameters`. */
+  readonly protocolParams: ProtocolParams;
+  /** The pparams before the last boundary. */
+  readonly prevProtocolParams: ProtocolParams;
+  /** The pparams the next boundary adopts, or `undefined` when it adopts none. */
+  readonly futureProtocolParams?: ProtocolParams;
+  /** The stake distribution of the pools for this epoch. */
+  readonly poolDistr: PoolDistr;
+}
+
 /** Identifies one transaction output: the pair a `TransactionInput` is made of. */
 export interface OutRef {
   readonly txHash: string;
@@ -970,6 +1014,22 @@ export class PlutusVM {
   evaluateScript(script: string | Uint8Array | Program, args: readonly (string | Uint8Array)[]): EvaluationResult;
 }
 
+/** The blocks one pool made, in `LedgerState.blocksMadePrev` and `blocksMadeCur`. */
+export interface PoolBlocks {
+  /** Hex-encoded 28-byte key hash of the pool. */
+  readonly pool: string;
+  /** The number of blocks. */
+  readonly blocks: number;
+}
+
+/** The stake distribution of the pools, `LedgerState.poolDistr`. */
+export interface PoolDistr {
+  /** One row per pool with at least one delegator, sorted by pool. */
+  readonly pools: PoolStake[];
+  /** The total active stake in lovelace, at least 1. */
+  readonly totalActiveStake: bigint;
+}
+
 /** Pool registration entry for `EmulatorOptions`. Give exactly one of `params` and `poolId`. */
 export interface PoolRegistration {
   /**
@@ -985,6 +1045,20 @@ export interface PoolRegistration {
    * relays.
    */
   readonly poolId?: string;
+}
+
+/** The stake of one pool in `PoolDistr.pools`. */
+export interface PoolStake {
+  /** Hex-encoded 28-byte key hash of the pool. */
+  readonly pool: string;
+  /** The numerator of the pool's share of the total active stake, in lowest terms. */
+  readonly stakeShareNumerator: bigint;
+  /** The denominator of the pool's share of the total active stake, in lowest terms. */
+  readonly stakeShareDenominator: bigint;
+  /** The stake delegated to the pool, in lovelace. */
+  readonly totalStake: bigint;
+  /** Hex-encoded 32-byte hash of the pool's VRF key. */
+  readonly vrfKeyHash: string;
 }
 
 /**

@@ -8,7 +8,7 @@ import scalus.utils.scalajs.internal.*
 import scalus.cardano.address.{Address, StakeAddress, StakePayload}
 import scalus.cardano.ledger.rules.{Context, UtxoEnv}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.{AccountState, PoolPerformance, StakeSnapshot}
+import scalus.cardano.ledger.epoch.{AccountState, FuturePParams, PoolPerformance, RatifyState, RewardUpdate, SnapShots, StakeSnapshot}
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.emulator.{AwaitTxPolicy, BlockIssuer, BlockProduction, ChainConfig, ChainView, ChainViewError, DropReason, ForgeError, OrphanTxPolicy, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
@@ -727,8 +727,9 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       * `mark`.
       */
     // ledger-rules spec [ES-9a], D82
-    def getStakeSnapshots(): JsStakeSnapshots = {
-        val snapshots = emulator.snapshots
+    def getStakeSnapshots(): JsStakeSnapshots = stakeSnapshotsOf(emulator.snapshots)
+
+    private def stakeSnapshotsOf(snapshots: SnapShots): JsStakeSnapshots = {
         js.Dynamic
             .literal(
               mark = stakeRows(snapshots.mark),
@@ -756,25 +757,27 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       */
     // ledger-rules spec [ES-9a], D82
     def getPendingRewards(): js.UndefOr[JsRewardUpdate] =
-        emulator.pendingRewards.map { update =>
-            val rewards = update.rewards.toSeq.map { (credential, amount) =>
-                js.Dynamic
-                    .literal(
-                      credential = credentialHex(credential),
-                      rewardAddress = rewardAddressOf(credential),
-                      amount = amount.value.toJsBigInt
-                    )
-                    .asInstanceOf[JsRewardEntry]
-            }.toJSArray
+        emulator.pendingRewards.map(rewardUpdateOf).orUndefined
+
+    private def rewardUpdateOf(update: RewardUpdate): JsRewardUpdate = {
+        val rewards = update.rewards.toSeq.map { (credential, amount) =>
             js.Dynamic
                 .literal(
-                  deltaT = update.deltaT.value.toJsBigInt,
-                  deltaR = update.deltaR.value.toJsBigInt,
-                  deltaF = update.deltaF.value.toJsBigInt,
-                  rewards = rewards
+                  credential = credentialHex(credential),
+                  rewardAddress = rewardAddressOf(credential),
+                  amount = amount.value.toJsBigInt
                 )
-                .asInstanceOf[JsRewardUpdate]
-        }.orUndefined
+                .asInstanceOf[JsRewardEntry]
+        }.toJSArray
+        js.Dynamic
+            .literal(
+              deltaT = update.deltaT.value.toJsBigInt,
+              deltaR = update.deltaR.value.toJsBigInt,
+              deltaF = update.deltaF.value.toJsBigInt,
+              rewards = rewards
+            )
+            .asInstanceOf[JsRewardUpdate]
+    }
 
     /** The ratify result the last epoch boundary computed, which the next boundary enacts: the ids
       * of the actions it enacts, in order, the ids of the actions that expired, and whether an
@@ -782,8 +785,9 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       * shows after it in `getGovState`, `getProtocolParameters` and the balances.
       */
     // ledger-rules spec [ES-9b], D94
-    def getPendingRatify(): JsPendingRatify = {
-        val ratified = emulator.pendingRatify
+    def getPendingRatify(): JsPendingRatify = pendingRatifyOf(emulator.pendingRatify)
+
+    private def pendingRatifyOf(ratified: RatifyState): JsPendingRatify = {
         def ref(id: GovActionId): JsGovActionRef =
             js.Dynamic
                 .literal(txHash = id.transactionId.toHex, index = id.govActionIndex.toDouble)
@@ -797,6 +801,67 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
               delayed = ratified.delayed
             )
             .asInstanceOf[JsPendingRatify]
+    }
+
+    /** The whole ledger state, read at once, so its parts come from one state: the UTxOs, the pots,
+      * the gov state, the stake snapshots, the reward update, the ratify result, the pparams and
+      * the pool distribution. Each part equals what its own getter returns.
+      */
+    // ledger-rules spec D122, D126
+    def getLedgerState(): JsLedgerState = {
+        val state = emulator.ledgerState
+        val es = state.epochState
+        val utxoState = es.ledgerState.utxoState
+        def blocks(made: Map[PoolKeyHash, Long]): js.Array[JsPoolBlocks] =
+            made.toSeq
+                .sortBy(_._1.toHex)
+                .map((pool, n) =>
+                    js.Dynamic
+                        .literal(pool = pool.toHex, blocks = n.toDouble)
+                        .asInstanceOf[JsPoolBlocks]
+                )
+                .toJSArray
+        val pools = state.poolDistr.pools.toSeq.sortBy(_._1.toHex).map { (pool, stake) =>
+            js.Dynamic
+                .literal(
+                  pool = pool.toHex,
+                  stakeShareNumerator = stake.stakeShare.numerator.toJsBigInt,
+                  stakeShareDenominator = stake.stakeShare.denominator.toJsBigInt,
+                  totalStake = stake.totalStake.value.toJsBigInt,
+                  vrfKeyHash = stake.vrfKeyHash.toHex
+                )
+                .asInstanceOf[JsPoolStake]
+        }
+        val poolDistr = js.Dynamic
+            .literal(
+              pools = pools.toJSArray,
+              totalActiveStake = state.poolDistr.totalActiveStake.value.toJsBigInt
+            )
+            .asInstanceOf[JsPoolDistr]
+        val future: js.UndefOr[JsProtocolParams] = es.futureParams match
+            case FuturePParams.DefinitePParamsUpdate(params) => JsProtocolParams.wrap(params)
+            case FuturePParams.NoPParamsUpdate               => js.undefined
+        js.Dynamic
+            .literal(
+              lastEpoch = state.lastEpoch.toDouble,
+              blocksMadePrev = blocks(state.blocksMadePrev),
+              blocksMadeCur = blocks(state.blocksMadeCur),
+              treasury = es.accountState.treasury.value.toJsBigInt,
+              reserves = es.accountState.reserves.value.toJsBigInt,
+              utxos = wrapAll(utxoState.utxo),
+              deposited = utxoState.deposited.value.toJsBigInt,
+              fees = utxoState.fees.value.toJsBigInt,
+              donation = utxoState.donation.value.toJsBigInt,
+              govState = JEmulator.govStateOf(utxoState.govState),
+              stakeSnapshots = stakeSnapshotsOf(es.snapshots),
+              pendingRewards = state.pendingRewards.map(rewardUpdateOf).orUndefined,
+              pendingRatify = pendingRatifyOf(es.pendingRatify),
+              protocolParams = JsProtocolParams.wrap(es.params),
+              prevProtocolParams = JsProtocolParams.wrap(es.prevParams),
+              futureProtocolParams = future,
+              poolDistr = poolDistr
+            )
+            .asInstanceOf[JsLedgerState]
     }
 
     private def credentialHex(credential: Credential): String = credential match
@@ -1029,6 +1094,104 @@ trait JsPendingRatify extends js.Object {
 
     /** Whether an enacted action delayed every other action to a later boundary. */
     val delayed: Boolean
+}
+
+/** The result of `Emulator.getLedgerState`: the whole ledger state, read at once. */
+@TsName("LedgerState")
+trait JsLedgerState extends js.Object {
+
+    /** The epoch of the last boundary the ledger ran. */
+    val lastEpoch: Double
+
+    /** The blocks each pool made in the epoch before the last boundary, sorted by pool. */
+    val blocksMadePrev: js.Array[JsPoolBlocks]
+
+    /** The blocks each pool made since the last boundary, sorted by pool. */
+    val blocksMadeCur: js.Array[JsPoolBlocks]
+
+    /** The treasury in lovelace, as `getTreasury`. */
+    val treasury: js.BigInt
+
+    /** The reserves in lovelace, as `getReserves`. */
+    val reserves: js.BigInt
+
+    /** The UTxO set, as `getUtxos`. */
+    val utxos: js.Array[JsUtxo]
+
+    /** The deposits the ledger holds, in lovelace. */
+    val deposited: js.BigInt
+
+    /** The fee pot, in lovelace. */
+    val fees: js.BigInt
+
+    /** The donations of this epoch, in lovelace. */
+    val donation: js.BigInt
+
+    /** The gov state, as `getGovState`. */
+    val govState: JGovState
+
+    /** The stake snapshots, as `getStakeSnapshots`. */
+    val stakeSnapshots: JsStakeSnapshots
+
+    /** The reward update the next boundary pays, as `getPendingRewards`. */
+    val pendingRewards: js.UndefOr[JsRewardUpdate]
+
+    /** The ratify result the next boundary enacts, as `getPendingRatify`. */
+    val pendingRatify: JsPendingRatify
+
+    /** The current pparams, as `getProtocolParameters`. */
+    val protocolParams: JsProtocolParams
+
+    /** The pparams before the last boundary. */
+    val prevProtocolParams: JsProtocolParams
+
+    /** The pparams the next boundary adopts, or `undefined` when it adopts none. */
+    val futureProtocolParams: js.UndefOr[JsProtocolParams]
+
+    /** The stake distribution of the pools for this epoch. */
+    val poolDistr: JsPoolDistr
+}
+
+/** The blocks one pool made, in `LedgerState.blocksMadePrev` and `blocksMadeCur`. */
+@TsName("PoolBlocks")
+trait JsPoolBlocks extends js.Object {
+
+    /** Hex-encoded 28-byte key hash of the pool. */
+    val pool: String
+
+    /** The number of blocks. */
+    val blocks: Double
+}
+
+/** The stake distribution of the pools, `LedgerState.poolDistr`. */
+@TsName("PoolDistr")
+trait JsPoolDistr extends js.Object {
+
+    /** One row per pool with at least one delegator, sorted by pool. */
+    val pools: js.Array[JsPoolStake]
+
+    /** The total active stake in lovelace, at least 1. */
+    val totalActiveStake: js.BigInt
+}
+
+/** The stake of one pool in `PoolDistr.pools`. */
+@TsName("PoolStake")
+trait JsPoolStake extends js.Object {
+
+    /** Hex-encoded 28-byte key hash of the pool. */
+    val pool: String
+
+    /** The numerator of the pool's share of the total active stake, in lowest terms. */
+    val stakeShareNumerator: js.BigInt
+
+    /** The denominator of the pool's share of the total active stake, in lowest terms. */
+    val stakeShareDenominator: js.BigInt
+
+    /** The stake delegated to the pool, in lovelace. */
+    val totalStake: js.BigInt
+
+    /** Hex-encoded 32-byte hash of the pool's VRF key. */
+    val vrfKeyHash: String
 }
 
 /** The id of a gov action: the proposing transaction and the index of the proposal in it, as in

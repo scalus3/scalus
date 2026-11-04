@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{Address, Network, StakeAddress}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.epoch.{AccountState, PoolPerformance, RewardUpdate, SnapShots}
-import scalus.cardano.ledger.epoch.internal.EpochState
+import scalus.cardano.ledger.epoch.internal.EpochBookkeeping
 import scalus.cardano.node.emulator.{BlockIssuer, ChainConfig}
 import scalus.cardano.txbuilder.{PubKeyWitness, TransactionBuilderStep, TransactionSigner, TxBuilder}
 import scalus.testing.kit.Party
@@ -715,7 +715,7 @@ class EmulatorEpochTest extends AnyFunSuite {
 
     // The stake snapshots and the blocks made, spec [EB-6], [EB-21], [ES-3] to [ES-5], [ES-8]
 
-    private def epochOf(e: Emulator): EpochState = stateOf(e).tipSnapshot.epoch
+    private def epochOf(e: Emulator): EpochBookkeeping = stateOf(e).tipSnapshot.epoch
 
     /** Charles's base address: Party addresses are enterprise addresses, which hold no stake. */
     private val charlesBase: Address = Address(

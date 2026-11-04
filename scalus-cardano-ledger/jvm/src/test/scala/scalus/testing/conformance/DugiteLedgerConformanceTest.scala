@@ -3,7 +3,7 @@ package scalus.testing.conformance
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.Transaction
 import scalus.testing.conformance.DugiteLedgerVectors.{Case, Summary}
-import scalus.testing.conformance.LedgerState.*
+import scalus.testing.conformance.VectorLedgerState.*
 
 import java.nio.file.{Files, Path, Paths}
 import scala.collection.mutable
@@ -146,8 +146,10 @@ class DugiteLedgerConformanceTest extends AnyFunSuite {
             // The output state differs from the input one, so the comparison of [CV-24] is live
             c.stOut.foreach { stOut =>
                 Try {
-                    val before = LedgerState.fromCbor(c.st).ruleState
-                    LedgerStateComparison.compare(LedgerState.fromCbor(stOut), before).nonEmpty
+                    val before = VectorLedgerState.fromCbor(c.st).ruleState
+                    LedgerStateComparison
+                        .compare(VectorLedgerState.fromCbor(stOut), before)
+                        .nonEmpty
                 }.foreach(count("state changes", _))
             }
         }

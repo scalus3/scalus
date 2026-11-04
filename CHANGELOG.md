@@ -106,6 +106,17 @@
   boundaries the ledger already ran, so a donation made there moves into the treasury at the next
   boundary after the tip's epoch. The treasury and the reserves are an `AccountState` in the
   new package `scalus.cardano.ledger.epoch`, and `UtxoEnv.treasury` follows its treasury.
+- `Emulator.ledgerState` returns the whole ledger state in the node's `NewEpochState` shape: the
+  last epoch, the blocks made, the reward update, the pool distribution, and an `EpochState` with
+  the account state, a `LedgerState` (`utxoState`, `certState`), the stake snapshots, the
+  current, previous and future pparams and the pending ratify result. The types
+  (`scalus.cardano.ledger.epoch.NewEpochState`, `EpochState`, `PoolDistr`,
+  `IndividualPoolStake`, `NonMyopic`, `FuturePParams` and `scalus.cardano.ledger.LedgerState`)
+  are read-only. JavaScript: `getLedgerState()` returns the same state as one flat object.
+  Java: `getLedgerState()`, with `getBlocksMadePrev`, `getBlocksMadeCur`,
+  `getPendingRewardsOrNull`, `PoolDistr.getPools` and `NonMyopic.getLikelihoods` as Java maps,
+  and `FuturePParams.noPParamsUpdate()` and `definitePParamsUpdate(params)`. The new
+  `BlockProduction`, `AwaitTxPolicy` and `OrphanTxPolicy` are Java enums.
 - `EmulatorInitialState` gains `reserves`, by default the mainnet reserves at epoch 665
   (`AccountState.mainnet.reserves`, 6 029 414 056 167 760 lovelace); no UTxO holds them. The Java
   `Builder` gains `reserves`. `EmulatorBase.reserves` and `currentEpoch`, the Java `getReserves`

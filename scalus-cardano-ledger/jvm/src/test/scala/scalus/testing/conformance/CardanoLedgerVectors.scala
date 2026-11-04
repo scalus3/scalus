@@ -59,7 +59,7 @@ object CardanoLedgerVectors {
         file: String,
         success: Boolean,
         result: Try[CardanoMutator.Result],
-        newLedgerState: Option[LedgerState],
+        newLedgerState: Option[VectorLedgerState],
         epoch: Long
     )
 
@@ -80,9 +80,11 @@ object CardanoLedgerVectors {
             val file = path.getFileName.toFile.getName
             val transaction = Try(Transaction.fromCbor(Hex.hexToBytes(vector.cbor)))
             val states = Try {
-                val old = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState))
+                val old = VectorLedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState))
                 val next =
-                    vector.newLedgerState.map(hex => LedgerState.fromCbor(Hex.hexToBytes(hex)))
+                    vector.newLedgerState.map(hex =>
+                        VectorLedgerState.fromCbor(Hex.hexToBytes(hex))
+                    )
                 (old, next)
             }
             states match
@@ -132,8 +134,8 @@ object CardanoLedgerVectors {
       */
     private def caseEpoch(
         tx: Transaction,
-        oldState: LedgerState,
-        newState: LedgerState,
+        oldState: VectorLedgerState,
+        newState: VectorLedgerState,
         dRepActivity: Long
     ): Option[Long] = {
         val proposed = newState.utxos.govState.proposals

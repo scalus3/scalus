@@ -5,7 +5,7 @@ import io.bullet.borer.Dom.{ArrayElem, Element, MapElem, TaggedElem}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.epoch.{AccountState, EnactState, PoolSnapshot, RatifyState, RewardUpdate, SnapShots, StakeSnapshot}
 import scalus.testing.conformance.CardanoLedgerVectors.{cacheDirectory, extractOnce}
-import scalus.testing.conformance.LedgerState.given
+import scalus.testing.conformance.VectorLedgerState.given
 
 import java.nio.file.{Files, Path, Paths}
 import scala.jdk.CollectionConverters.*
@@ -29,7 +29,7 @@ object NewEpochVectors {
         blocksPrev: Map[PoolKeyHash, Long],
         blocksCur: Map[PoolKeyHash, Long],
         accountState: AccountState,
-        ledger: LedgerState,
+        ledger: VectorLedgerState,
         snapshots: SnapShots
     )
 
@@ -126,7 +126,7 @@ object NewEpochVectors {
             r.readArrayHeader(4)
             r.readArrayHeader(2) // ChainAccountState, K/State/ChainAccount.hs:46-48
             val accountState = AccountState(treasury = r.read[Coin](), reserves = r.read[Coin]())
-            val ledger = r.read[LedgerState]()
+            val ledger = r.read[VectorLedgerState]()
             val snapshots = r.read[SnapShots]()
             r.read[Element]() // non-myopic
             r.read[Element]() // reward update
@@ -267,7 +267,7 @@ object NewEpochVectors {
         r.readArrayHeader(2)
         val numerator = r.read[BigInt]()
         val denominator = r.read[BigInt]()
-        val owners = LedgerState.readTaggedSet[AddrKeyHash](r)
+        val owners = VectorLedgerState.readTaggedSet[AddrKeyHash](r)
         RatedPool(
           PoolSnapshot(
             stake = stake,

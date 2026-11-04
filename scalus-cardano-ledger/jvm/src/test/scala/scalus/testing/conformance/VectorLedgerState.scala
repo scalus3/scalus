@@ -8,9 +8,12 @@ import scalus.cardano.ledger.*
 import java.nio.file.{Files, Path}
 import scala.util.Using
 
+/** The ledger state of a conformance vector, as its CBOR has it; the public read view is
+  * `scalus.cardano.ledger.LedgerState`.
+  */
 // Decoders only: nothing encodes a vector state, and the gov state has no encoder (spec D36)
-case class LedgerState(certs: LedgerState.CertState, utxos: UTxOState) derives Decoder
-object LedgerState {
+case class VectorLedgerState(certs: VectorLedgerState.CertState, utxos: UTxOState) derives Decoder
+object VectorLedgerState {
 
     /** A CBOR set, with or without tag 258. */
     private[conformance] def readTaggedSet[A: Decoder](r: Reader): Set[A] =
@@ -19,9 +22,9 @@ object LedgerState {
             if tag.code != 258 then r.validationFailure(s"Expected tag 258 for Set, got $tag")
         r.read[Set[A]]()
 
-    def fromCbor(cbor: Array[Byte]): LedgerState = {
+    def fromCbor(cbor: Array[Byte]): VectorLedgerState = {
         given OriginalCborByteArray = OriginalCborByteArray(cbor)
-        Cbor.decode(cbor).to[LedgerState].value
+        Cbor.decode(cbor).to[VectorLedgerState].value
     }
 
     /** Create UtxoEnv for conformance testing with small deposit values.
@@ -50,7 +53,7 @@ object LedgerState {
           scalus.cardano.ledger.Coin.zero
         )
 
-    extension (ledgerState: LedgerState)
+    extension (ledgerState: VectorLedgerState)
         def ruleState = rules.State(
           utxos = ledgerState.utxos.utxo,
           deposited = ledgerState.utxos.deposited,

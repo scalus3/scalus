@@ -57,7 +57,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
             println(s"Transaction ID: ${tx.id.toHex}")
 
             // Load ledger state
-            val ledgerState = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState))
+            val ledgerState = VectorLedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState))
             val state = ledgerState.ruleState
             val utxos = state.utxos
 
@@ -200,7 +200,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
 
         for case (path, vector) <- loadVector(vectorName) do {
             val tx = Transaction.fromCbor(Hex.hexToBytes(vector.cbor))
-            val ledgerState = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState))
+            val ledgerState = VectorLedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState))
             val state = ledgerState.ruleState
             val utxos = state.utxos
 
@@ -278,7 +278,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
 
         for case (path, vector) <- loadVector(vectorName) do {
             val tx = Transaction.fromCbor(Hex.hexToBytes(vector.cbor))
-            val ledgerState = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState))
+            val ledgerState = VectorLedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState))
             val state = ledgerState.ruleState
             val utxos = state.utxos
 

@@ -31,10 +31,10 @@ object EpochTransition {
       */
     def transition(
         ledger: State,
-        epoch: EpochState,
+        epoch: EpochBookkeeping,
         boundary: EpochNo,
         env: EpochEnv
-    ): (State, EpochState, ProtocolParams) = {
+    ): (State, EpochBookkeeping, ProtocolParams) = {
         val (paid, paidEpoch) = applyRewards(ledger, epoch)
         val (reaped, reapedEpoch) = poolReap(paid, snap(paid, paidEpoch), boundary)
         // [EB-13a]: read before [EB-12] removes the enacted proposals
@@ -99,7 +99,7 @@ object EpochTransition {
       */
     private def ratify(
         ledger: State,
-        epoch: EpochState,
+        epoch: EpochBookkeeping,
         boundary: EpochNo,
         params: ProtocolParams
     ): RatifyState = {
@@ -141,7 +141,7 @@ object EpochTransition {
       * nothing is pending, which is the first boundary after the genesis ([ES-8a]). The update is
       * cleared (`nesRu = SNothing`, conway Rules/NewEpoch.hs:190); [EB-22] sets the next one.
       */
-    private def applyRewards(ledger: State, epoch: EpochState): (State, EpochState) =
+    private def applyRewards(ledger: State, epoch: EpochBookkeeping): (State, EpochBookkeeping) =
         epoch.pendingRewards match
             case None => (ledger, epoch)
             case Some(update) =>
@@ -167,7 +167,7 @@ object EpochTransition {
       * POOLREAP (conway Rules/Epoch.hs:293-296), so a pool that retires at this boundary is in the
       * new mark.
       */
-    private def snap(ledger: State, epoch: EpochState): EpochState = {
+    private def snap(ledger: State, epoch: EpochBookkeeping): EpochBookkeeping = {
         val old = epoch.snapshots
         epoch.copy(snapshots = SnapShots(stakeSnapshot(ledger), old.mark, old.set, ledger.fees))
     }
@@ -250,9 +250,9 @@ object EpochTransition {
       */
     private def poolReap(
         ledger: State,
-        epoch: EpochState,
+        epoch: EpochBookkeeping,
         boundary: EpochNo
-    ): (State, EpochState) = {
+    ): (State, EpochBookkeeping) = {
         val pstate = ledger.certState.pstate
         val retired: Set[PoolKeyHash] =
             pstate.retiring.iterator.collect { case (pool, e) if e == boundary => pool }.toSet
@@ -347,7 +347,7 @@ object EpochTransition {
       *     return account when that account is registered after the withdrawals
       *     (`returnProposalDeposits`, :186-200, 333-336).
       */
-    private def enact(ledger: State, epoch: EpochState): (State, EpochState, Coin) = {
+    private def enact(ledger: State, epoch: EpochBookkeeping): (State, EpochBookkeeping, Coin) = {
         val ratified = epoch.pendingRatify
         val enactState = ratified.enactState
         val (withdrawn, unpaid) = credit(ledger.certState.dstate.accounts, enactState.withdrawals)
@@ -401,9 +401,9 @@ object EpochTransition {
       */
     private def movedToTreasury(
         ledger: State,
-        epoch: EpochState,
+        epoch: EpochBookkeeping,
         unclaimed: Coin
-    ): (State, EpochState) = {
+    ): (State, EpochBookkeeping) = {
         val moved = ledger.donation + unclaimed
         if moved == Coin.zero then (ledger, epoch)
         else

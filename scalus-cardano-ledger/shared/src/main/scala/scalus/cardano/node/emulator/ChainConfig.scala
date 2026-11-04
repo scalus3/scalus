@@ -3,8 +3,8 @@ package scalus.cardano.node.emulator
 import scalus.cardano.ledger.{PoolKeyHash, UnitInterval}
 import scalus.cardano.ledger.epoch.PoolPerformance
 
-/** When the Emulator forges a block, spec section 5. */
-enum BlockProduction {
+/** When the Emulator forges a block, spec section 5. A Java enum, interop rule 8. */
+enum BlockProduction extends Enum[BlockProduction] {
 
     /** Every submit forges a block at once, so a valid tx is visible right after `submit`. */
     case Instant
@@ -13,8 +13,10 @@ enum BlockProduction {
     case Manual
 }
 
-/** What awaiting a tx does while the tx is still pending, spec section 5. */
-enum AwaitTxPolicy {
+/** What awaiting a tx does while the tx is still pending, spec section 5. A Java enum, interop rule
+  * 8.
+  */
+enum AwaitTxPolicy extends Enum[AwaitTxPolicy] {
 
     /** Forge blocks until the tx leaves the mempool. */
     case ProduceBlock
@@ -23,8 +25,10 @@ enum AwaitTxPolicy {
     case WaitOnly
 }
 
-/** What happens to the txs of a block that leaves the selected chain, spec section 11.2. */
-enum OrphanTxPolicy {
+/** What happens to the txs of a block that leaves the selected chain, spec section 11.2. A Java
+  * enum, interop rule 8.
+  */
+enum OrphanTxPolicy extends Enum[OrphanTxPolicy] {
 
     /** Put them back in the mempool, before the txs already there. */
     case ReturnToMempool

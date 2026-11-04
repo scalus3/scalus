@@ -3,8 +3,8 @@ package scalus.testing.conformance
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{ProtocolParams, UnitInterval}
 import scalus.cardano.ledger.epoch.{PoolPerformance, RatifyState, StakeSnapshot}
-import scalus.cardano.ledger.epoch.internal.{EpochEnv, EpochState, EpochTransition, Ratify}
-import scalus.testing.conformance.LedgerState.*
+import scalus.cardano.ledger.epoch.internal.{EpochBookkeeping, EpochEnv, EpochTransition, Ratify}
+import scalus.testing.conformance.VectorLedgerState.*
 import scalus.testing.conformance.LedgerStateComparison.{compareMap, compareValue, FieldMismatch}
 import scalus.testing.conformance.NewEpochVectors.Case
 
@@ -64,7 +64,7 @@ class NewEpochConformanceTest extends AnyFunSuite {
         val before = c.before
         val (ledger, epoch, params) = EpochTransition.transition(
           before.ledger.ruleState,
-          EpochState(
+          EpochBookkeeping(
             before.accountState,
             before.lastEpoch,
             before.snapshots,

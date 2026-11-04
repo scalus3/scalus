@@ -1,7 +1,8 @@
 package scalus.cardano.node.emulator
 
-import scalus.cardano.ledger.{DataHash, KeepRaw, SlotNo, Transaction}
-import scalus.cardano.ledger.epoch.internal.{EpochEnv, EpochState, EpochTransition}
+import scalus.cardano.ledger.{DataHash, KeepRaw, LedgerState, SlotNo, Transaction, UTxOState}
+import scalus.cardano.ledger.epoch.{EpochState, FuturePParams, NewEpochState, NonMyopic, PoolDistr}
+import scalus.cardano.ledger.epoch.internal.{EpochBookkeeping, EpochEnv, EpochTransition}
 import scalus.cardano.ledger.rules.{Context, State}
 import scalus.cardano.node.EmulatorBase
 import scalus.uplc.builtin.Data
@@ -30,7 +31,7 @@ private[node] case class LedgerSnapshot(
     ledger: State,
     context: Context,
     binaryDatums: Map[DataHash, KeepRaw[Data]],
-    epoch: EpochState
+    epoch: EpochBookkeeping
 ) {
 
     /** The snapshot ticked to `slot`, the tick of spec [NL-2]: one epoch transition for each
@@ -64,6 +65,39 @@ private[node] case class LedgerSnapshot(
               treasury = newEpoch.accountState.treasury
             )
             LedgerSnapshot(newLedger, context.copy(env = env), binaryDatums, newEpoch)
+
+    /** This ledger in the shape of the node's `NewEpochState`, ledger-rules spec D122. The pool
+      * distribution is that of `set`: the node takes it from `mark` before SNAP moves `mark` to
+      * `set` (eras/conway/impl/src/Cardano/Ledger/Conway/Rules/NewEpoch.hs:182), D123.
+      */
+    private[node] def newEpochState: NewEpochState = {
+        val utxoState = UTxOState(
+          ledger.utxos,
+          ledger.deposited,
+          ledger.fees,
+          ledger.govState,
+          ledger.stakeDistribution,
+          ledger.donation
+        )
+        val epochState = EpochState(
+          epoch.accountState,
+          LedgerState(utxoState, ledger.certState),
+          epoch.snapshots,
+          NonMyopic.empty,
+          context.env.params,
+          epoch.prevParams,
+          FuturePParams.of(epoch.pendingRatify, ledger.govState),
+          epoch.pendingRatify
+        )
+        NewEpochState(
+          epoch.lastEpoch,
+          epoch.blocksMadePrev,
+          epoch.blocksMadeCur,
+          epochState,
+          epoch.pendingRewards,
+          PoolDistr.of(epoch.snapshots.set)
+        )
+    }
 
     /** The snapshot after `tx` moved the ledger to `newLedger`: the tx's datums join the store. */
     private[node] def after(newLedger: State, tx: Transaction): LedgerSnapshot =

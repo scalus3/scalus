@@ -58,19 +58,59 @@ These help all platforms with zero Scala cost, so there is one real API:
 7. **No `using`/context params on public entry points** — take them as ordinary
    parameters, with a Scala overload that supplies the `given` (as `fromCbor`
    already does).
-8. **A public enum whose cases all have no parameters MUST extend
+8. **A new public enum whose cases all have no parameters MUST extend
    `java.lang.Enum`** (`enum PoolPerformance extends Enum[PoolPerformance]`).
    Java then can `switch` over it and put it in an `EnumSet` or `EnumMap`.
    Scala.js implements `java.lang.Enum`, and `Language` already compiles to JS
    this way. A JS caller still sees the enum through its `Platform` trait or a
    string option, as before.
+   A released enum MUST keep its superclass until the next major version.
 9. **An enum with a parameterised case MUST NOT extend `java.lang.Enum`.** Scala 3
-   rejects it. Its companion forwards each case as a static method instead, for
-   example `BlockIssuer.pool(poolId)`.
+   rejects it.
+   The companion of a public enum with a parameterised case MUST forward each
+   case as a static method, for example `BlockIssuer.pool(poolId)` and
+   `BlockIssuer.unattributed`.
 10. **Code MUST NOT let the hash order of a `java.lang.Enum` value reach an
     output.** `java.lang.Enum.hashCode` is final and identity-based, so it can
     differ between runs. A plain Scala enum hashes its name. Sort by `ordinal`
     before iterating a hashed collection that holds such values.
+
+**Why rule 8 applies to new enums only:** extending `java.lang.Enum` changes the
+superclass of the enum class. MiMa rejects that change, and a jar compiled
+against the old superclass breaks.
+
+**Why rule 9:** Java names a case of a Scala 3 enum only through the module
+class, `BlockIssuer$.MODULE$`. A static forwarder gives Java a plain call. A
+forwarder is additive, so MiMa accepts it on a released enum too.
+
+*Implementation status (2026-11-04):* these released public enums have only
+parameterless cases and do not extend `java.lang.Enum`. Rule 8 lets them keep
+their superclass until the next major version:
+
+- `scalus.cardano.ledger`: `RedeemerTag`, `Vote`, `DumpArtifact`,
+  `ProfileLevel`, `ProfileFormat`. `Era` extends `scala.Enumeration` instead.
+- `scalus.cardano.txbuilder`: `WitnessKind`.
+- `scalus.cardano.node`: `TransactionStatus`.
+- `scalus.cardano.node.stream`: `PushdownKind`, `SubscriptionKind`,
+  `ScanSupport`, `UtxoEventType`.
+
+`BlockProduction`, `AwaitTxPolicy` and `OrphanTxPolicy`
+(`scalus.cardano.node.emulator`) were not in 1.4.1, so they extend
+`java.lang.Enum` under rule 8.
+
+*Implementation status (2026-11-04):* rule 9 holds for `BlockIssuer`,
+`ChainView` and `FuturePParams`. These public enums with a parameterised case
+lack a forwarder for some or all cases:
+
+- forwarders for some cases only: `TxStatus` (`Confirmed`, `Dropped`),
+  `DropReason` (`Invalid`);
+- no forwarders: `AuxiliaryData`, `Certificate`, `Credential`, `DRep`,
+  `GovAction`, `Relay`, `Timelock`, `Voter`, `ProfileDestination`,
+  `CollectError`, `CommitteeAuthorization`, `GovFailure`, `ChainViewError`,
+  `ForgeError`, `RollbackError`, `ResolvedTxInput`, `TxBalancingError`,
+  `SomeBuildError`, `UtxoQueryError`, `StartFrom`, `ReplaySupport`,
+  `DeltaBufferPolicy`, `SubscriptionRequest`, `SubscriptionSupport`, `UtxoEvent`, `TransactionEvent`,
+  `BlockEvent`, `TransactionQuery`, `BlockQuery`.
 
 **Why rule 10:** the identity hash of `DefaultFun`, a `java.lang.Enum`, once set
 the tie order of CSE and changed a script hash between runs.

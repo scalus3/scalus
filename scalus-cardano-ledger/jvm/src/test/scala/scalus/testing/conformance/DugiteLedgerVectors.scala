@@ -6,7 +6,7 @@ import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{CardanoMutator, Context, UtxoEnv}
-import scalus.testing.conformance.LedgerState.*
+import scalus.testing.conformance.VectorLedgerState.*
 import scalus.utils.Hex
 
 import java.io.{BufferedInputStream, FileInputStream}
@@ -119,7 +119,7 @@ object DugiteLedgerVectors {
         val epoch = impGenesisSlotConfig.epochOf(env.slot)
         if !env.epoch.contains(epoch) then
             return Left(s"slot ${env.slot} is in epoch $epoch, env says ${env.epoch}")
-        val state = LedgerState.fromCbor(c.st).ruleState
+        val state = VectorLedgerState.fromCbor(c.st).ruleState
         val tx = Transaction.fromCbor(c.sig)
         // The default evaluator mode, Validate: the dumps come from a ledger run, which enforces
         // the script budgets. ImpTest.hs:808 sets the network to Testnet.
@@ -135,7 +135,7 @@ object DugiteLedgerVectors {
             case (Right(actual), Some(stOut)) =>
                 val mismatches = LedgerStateComparison.withoutExcluded(
                   c.name,
-                  LedgerStateComparison.compare(LedgerState.fromCbor(stOut), actual),
+                  LedgerStateComparison.compare(VectorLedgerState.fromCbor(stOut), actual),
                   LedgerStateComparison.exclusions
                 )
                 if mismatches.isEmpty then Right(None)

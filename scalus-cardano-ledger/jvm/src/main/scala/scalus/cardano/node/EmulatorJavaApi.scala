@@ -5,7 +5,7 @@ import scalus.uplc.DebugScript
 import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.{RatifyState, RewardUpdate, SnapShots}
+import scalus.cardano.ledger.epoch.{NewEpochState, RatifyState, RewardUpdate, SnapShots}
 import scalus.cardano.node.emulator.{ChainView, ChainViewError, EmulatorResult, ForgeError, RollbackError}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.internal.ChainEvent
@@ -83,6 +83,11 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
       * ledger-rules spec [ES-9b].
       */
     final def getPendingRatify: RatifyState = pendingRatify
+
+    /** The whole ledger state in the shape of the node's `NewEpochState`, read from one state,
+      * ledger-rules spec D122; its Java getters are those of `NewEpochStatePlatform`, D128.
+      */
+    final def getLedgerState: NewEpochState = ledgerState
 
     // ─── Submission ─────────────────────────────────────────────────────────
 

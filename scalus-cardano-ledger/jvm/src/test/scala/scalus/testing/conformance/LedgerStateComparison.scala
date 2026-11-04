@@ -1,7 +1,7 @@
 package scalus.testing.conformance
 
 import scalus.cardano.ledger.*
-import scalus.testing.conformance.LedgerState.*
+import scalus.testing.conformance.VectorLedgerState.*
 
 /** Compares the state Scalus computes for a conformance vector with the vector's `newLedgerState`,
   * field by field (spec 13.0a).
@@ -48,7 +48,7 @@ object LedgerStateComparison {
     /** Compares `actual` with `expected`. Returns one entry per mismatching field, in a fixed
       * order. spec [SC-14], [SC-14a]
       */
-    def compare(expected: LedgerState, actual: rules.State): List[FieldMismatch] = {
+    def compare(expected: VectorLedgerState, actual: rules.State): List[FieldMismatch] = {
         val exp = expected.utxos
         val expCerts = expected.certs
         val actCerts = actual.certState

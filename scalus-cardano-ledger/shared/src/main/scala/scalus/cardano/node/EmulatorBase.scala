@@ -5,7 +5,7 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, STS, State}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.{AccountState, RatifyState, RewardUpdate, SnapShots}
+import scalus.cardano.ledger.epoch.{AccountState, NewEpochState, RatifyState, RewardUpdate, SnapShots}
 import scalus.cardano.ledger.epoch.internal.EpochTransition
 import scalus.cardano.node.emulator.{AwaitTxPolicy, ChainConfig, ChainView, ChainViewError, ForgeError, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
@@ -122,6 +122,13 @@ trait EmulatorBase extends BlockchainProvider {
       * such an action delays nothing, and it expires with its deposit refunded.
       */
     def pendingRatify: RatifyState = readState.pendingRatify
+
+    /** The whole ledger state in the shape of the node's `NewEpochState`, read from one state,
+      * ledger-rules spec D122: the UTxO and cert state, the gov state, the account state, the stake
+      * snapshots, the reward update, the ratify result, the pparams and the pool distribution. Its
+      * fields equal the getters above; its treasury is [[treasury]], spec [DM-13].
+      */
+    def ledgerState: NewEpochState = readState.ledgerState
 
     /** The epoch of the current slot, ledger-rules spec [ES-9]. */
     def currentEpoch: EpochNo = {

@@ -11,11 +11,11 @@ class GovStateDecoderTest extends AnyFunSuite {
 
     private val prefix = "Conway.Imp.ConwayImpSpec - Version 10."
 
-    private def states(vectorName: String): List[(LedgerState, Option[LedgerState])] =
+    private def states(vectorName: String): List[(VectorLedgerState, Option[VectorLedgerState])] =
         CardanoLedgerVectors.loadVector(vectorName).map { (_, vector) =>
             (
-              LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)),
-              vector.newLedgerState.map(hex => LedgerState.fromCbor(Hex.hexToBytes(hex)))
+              VectorLedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)),
+              vector.newLedgerState.map(hex => VectorLedgerState.fromCbor(Hex.hexToBytes(hex)))
             )
         }
 
@@ -37,7 +37,7 @@ class GovStateDecoderTest extends AnyFunSuite {
             if !aboveLong.exists(name.endsWith)
             (path, vector) <- CardanoLedgerVectors.loadVector(name)
             hex <- vector.oldLedgerState :: vector.newLedgerState.toList
-            error <- Try(LedgerState.fromCbor(Hex.hexToBytes(hex))).failed.toOption
+            error <- Try(VectorLedgerState.fromCbor(Hex.hexToBytes(hex))).failed.toOption
         yield s"$name/$path: $error"
         assert(failures.isEmpty, failures.take(5).mkString("\n"))
     }

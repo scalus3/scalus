@@ -85,4 +85,83 @@ class EmulatorInitialStateTest extends AnyFunSuite {
     test("the deprecated 1.4 apply keeps its defaults") {
         assert(viaDeprecatedApply == EmulatorInitialState.empty.withUtxos(Map(input -> output)))
     }
+
+    private val datumHash = DataHash.fromHex("1" * 64)
+    private val pool = EmulatorPoolRegistration(
+      Certificate.PoolRegistration(
+        Alice.addrKeyHash,
+        VrfKeyHash.fromHex("a1" * 32),
+        Coin(1),
+        Coin(2),
+        UnitInterval(1, 10),
+        RewardAccount(Alice.account.stakeAddress(Network.Mainnet)),
+        Set.empty,
+        IndexedSeq.empty,
+        None
+      )
+    )
+
+    /** The value the 1.4 entry points build from all five 1.4 fields. */
+    private val all14Fields = EmulatorInitialState.empty
+        .withUtxos(Map(input -> output))
+        .withStakeRegistrations(Seq(stake))
+        .withPoolRegistrations(Seq(pool))
+        .withDRepRegistrations(Seq(drep))
+        .withDatums(Map(datumHash -> datum))
+
+    // The 1.4 apply is deprecated: a 1.4 caller that names its arguments calls it, and the
+    // default getters `apply$default$N` for the arguments it leaves out.
+    @nowarn("msg=deprecated")
+    private def viaDeprecatedApplyNamed: (EmulatorInitialState, EmulatorInitialState) = (
+      EmulatorInitialState(
+        datums = Map(datumHash -> datum),
+        drepRegistrations = Seq(drep),
+        poolRegistrations = Seq(pool),
+        stakeRegistrations = Seq(stake),
+        utxos = Map(input -> output)
+      ),
+      EmulatorInitialState(datums = Map(datumHash -> datum))
+    )
+
+    test("the deprecated 1.4 apply takes each field by name and defaults the rest") {
+        val (named, onlyDatums) = viaDeprecatedApplyNamed
+        assert(named == all14Fields)
+        assert(onlyDatums == EmulatorInitialState.empty.withDatums(Map(datumHash -> datum)))
+    }
+
+    // The 1.4 constructor is deprecated: a 1.4 caller calls it, and its default getters
+    // `$lessinit$greater$default$N` for the arguments it leaves out.
+    @nowarn("msg=deprecated")
+    private def viaDeprecatedConstructor: (EmulatorInitialState, EmulatorInitialState) = (
+      new EmulatorInitialState(
+        Map(input -> output),
+        Seq(stake),
+        Seq(pool),
+        Seq(drep),
+        Map(datumHash -> datum)
+      ),
+      new EmulatorInitialState(datums = Map(datumHash -> datum))
+    )
+
+    test("the deprecated 1.4 constructor builds the 1.4 value with the mainnet reserves") {
+        val (positional, onlyDatums) = viaDeprecatedConstructor
+        assert(positional == all14Fields)
+        assert(onlyDatums == EmulatorInitialState.empty.withDatums(Map(datumHash -> datum)))
+        assert(onlyDatums.reserves == AccountState.mainnet.reserves)
+    }
+
+    // The 1.4 copy is deprecated: a 1.4 caller calls it with named arguments, and its default
+    // getters `copy$default$N` for the fields it leaves out.
+    @nowarn("msg=deprecated")
+    private def viaDeprecatedCopy(from: EmulatorInitialState): EmulatorInitialState =
+        from.copy(datums = Map.empty)
+
+    test("the deprecated 1.4 copy keeps every field it is not given") {
+        val full = all14Fields
+            .withCommittee(committee)
+            .withCommitteeHotKeys(Map(coldKey -> hotKey))
+            .withConstitution(constitution)
+            .withReserves(Coin(77))
+        assert(viaDeprecatedCopy(full) == full.withDatums(Map.empty))
+    }
 }

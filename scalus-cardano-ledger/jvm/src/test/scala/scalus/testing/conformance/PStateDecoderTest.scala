@@ -3,7 +3,7 @@ package scalus.testing.conformance
 import io.bullet.borer.Cbor
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
-import scalus.testing.conformance.LedgerState.PState
+import scalus.testing.conformance.VectorLedgerState.PState
 import scalus.utils.Hex
 
 class PStateDecoderTest extends AnyFunSuite {

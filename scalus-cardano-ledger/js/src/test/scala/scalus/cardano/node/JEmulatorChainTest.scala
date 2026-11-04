@@ -362,4 +362,67 @@ class JEmulatorChainTest extends AnyFunSuite {
         assert(parts.map(p => BigInt(p.toString)).sum == 0)
         assert(BigInt(update.deltaT.toString) > 0)
     }
+
+    test("getLedgerState reads the whole ledger state, equal to the single getters") {
+        // ledger-rules spec D122, D123, D126
+        val pool = "c3" * 28
+        val bobStake = Bob.account.stakeAddress(Network.Mainnet)
+        val bobBase =
+            Address(Network.Mainnet, Credential.KeyHash(Bob.addrKeyHash), bobStake.credential)
+        val bobUtxo = Input(genesisHash, 1) -> Output(bobBase, Value.ada(500))
+        val stakeHash = bobStake.credential match
+            case Credential.KeyHash(hash) => hash.toHex
+            case other                    => fail(s"not a key credential: $other")
+        val options = js.Dynamic.literal(
+          utxos = js.Array((initialUtxos + bobUtxo).toSeq.map((i, o) => JsUtxo.wrap(i, o))*),
+          slot = 0.0,
+          stakeRegistrations = js.Array(
+            js.Dynamic.literal(
+              credentialType = "key",
+              credentialHash = stakeHash,
+              rewards = js.BigInt(3),
+              delegatedTo = pool
+            )
+          ),
+          poolRegistrations = js.Array(js.Dynamic.literal(poolId = pool))
+        )
+        val emulator =
+            JEmulator.create(JsCardanoInfo.mainnet(), options.asInstanceOf[JsEmulatorOptions])
+        val genesis = emulator.getLedgerState()
+        assert(genesis.lastEpoch == emulator.getEpoch())
+        assert(genesis.pendingRewards.toOption.isEmpty)
+        assert(genesis.futureProtocolParams.toOption.isEmpty)
+        // one pool holds all the stake: 500 ADA of Bob's base address and 3 lovelace of rewards
+        val stake = (Coin.ada(500) + Coin(3)).value.toString
+        assert(genesis.poolDistr.totalActiveStake.toString == stake)
+        assert(genesis.poolDistr.pools.length == 1)
+        val poolStake = genesis.poolDistr.pools(0)
+        assert(poolStake.pool == pool)
+        assert(poolStake.totalStake.toString == stake)
+        assert(poolStake.stakeShareNumerator.toString == "1")
+        assert(poolStake.stakeShareDenominator.toString == "1")
+
+        val slotConfig = testEnv.slotConfig
+        emulator.setSlot(slotConfig.firstSlotOfEpoch(slotConfig.epochOf(0L) + 1).toDouble)
+        val after = emulator.getLedgerState()
+        assert(after.lastEpoch == emulator.getEpoch())
+        assert(after.treasury.toString == emulator.getTreasury().toString)
+        assert(after.reserves.toString == emulator.getReserves().toString)
+        assert(after.utxos.length == emulator.getUtxos().length)
+        assert(after.fees.toString == "0" && after.donation.toString == "0")
+        assert(after.govState.proposals.length == emulator.getGovState().proposals.length)
+        val snapshots = emulator.getStakeSnapshots()
+        assert(
+          after.stakeSnapshots.mark.map(_.stake.toString).toSeq ==
+              snapshots.mark.map(_.stake.toString).toSeq
+        )
+        assert(after.stakeSnapshots.fee.toString == snapshots.fee.toString)
+        val update = after.pendingRewards.toOption.getOrElse(fail("nothing pending"))
+        val expected = emulator.getPendingRewards().toOption.getOrElse(fail("nothing pending"))
+        assert(update.deltaT.toString == expected.deltaT.toString)
+        assert(update.rewards.length == expected.rewards.length)
+        assert(after.pendingRatify.enacted.length == 0)
+        assert(after.protocolParams.underlying == emulator.getProtocolParameters().underlying)
+        assert(after.prevProtocolParams.underlying == emulator.getProtocolParameters().underlying)
+    }
 }

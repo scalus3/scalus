@@ -1,8 +1,8 @@
 package scalus.cardano.node
 
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.epoch.{AccountState, RatifyState, RewardUpdate, SnapShots}
-import scalus.cardano.ledger.epoch.internal.{EpochState, EpochTransition, Ratify}
+import scalus.cardano.ledger.epoch.{AccountState, NewEpochState, RatifyState, RewardUpdate, SnapShots}
+import scalus.cardano.ledger.epoch.internal.{EpochBookkeeping, EpochTransition, Ratify}
 import scalus.cardano.ledger.rules.{Context, STS, State, TxRefScriptsSizeValidator}
 import scalus.cardano.node.emulator.{BlockForge, BlockIssuer, BlockProduction, ChainConfig, ChainView, ChainViewError, DropReason, ForgeError, LedgerSnapshot, OrphanTxPolicy, RollbackError, TxStatus}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
@@ -130,6 +130,11 @@ case class EmulatorState private (
       * ledger-rules spec [ES-9b], [EB-20]. At genesis it enacts nothing, spec [DM-9c].
       */
     def pendingRatify: RatifyState = tipSnapshot.epoch.pendingRatify
+
+    /** The whole ledger state of the tip snapshot in the shape of the node's `NewEpochState`,
+      * ledger-rules spec D122.
+      */
+    def ledgerState: NewEpochState = tipSnapshot.newEpochState
 
     /** Every datum this state has seen, decoded. */
     @deprecated("use binaryDatums, which keeps the datum bytes", "1.3.0")
@@ -876,7 +881,7 @@ object EmulatorState {
         // enters Conway (conway Translation.hs:69-83), D85
         val stake = EpochTransition.stakeSnapshot(ledger)
         val params = context.env.params
-        val epoch = EpochState(
+        val epoch = EpochBookkeeping(
           AccountState(context.env.treasury, reserves),
           context.slotConfig.epochOf(context.env.slot),
           SnapShots(stake, stake, stake, Coin.zero),

@@ -1,21 +1,30 @@
 package scalus.cardano.node;
 
 import scalus.cardano.address.Address;
+import scalus.cardano.ledger.ProtocolParams;
 import scalus.cardano.ledger.Transaction;
+import scalus.cardano.ledger.TransactionInput;
+import scalus.cardano.ledger.TransactionOutput;
 import scalus.cardano.ledger.UnitInterval;
 import scalus.cardano.ledger.Utxo;
 import scalus.cardano.ledger.Value;
+import scalus.cardano.ledger.epoch.FuturePParams;
+import scalus.cardano.ledger.epoch.IndividualPoolStake;
+import scalus.cardano.ledger.epoch.NewEpochState;
 import scalus.cardano.ledger.epoch.PoolPerformance;
 import scalus.cardano.ledger.epoch.RatifyState;
 import scalus.cardano.ledger.epoch.RewardUpdate;
 import scalus.cardano.ledger.epoch.SnapShots;
+import scalus.cardano.node.emulator.AwaitTxPolicy;
 import scalus.cardano.node.emulator.BlockIssuer;
+import scalus.cardano.node.emulator.BlockProduction;
 import scalus.cardano.node.emulator.ChainConfig;
 import scalus.cardano.node.emulator.ChainView;
 import scalus.cardano.node.emulator.ChainViewError;
 import scalus.cardano.node.emulator.DropReason;
 import scalus.cardano.node.emulator.EmulatorResult;
 import scalus.cardano.node.emulator.ForgeError;
+import scalus.cardano.node.emulator.OrphanTxPolicy;
 import scalus.cardano.node.emulator.RollbackError;
 import scalus.cardano.node.emulator.TxStatus;
 import scalus.cardano.node.stream.ChainPoint;
@@ -25,6 +34,7 @@ import scalus.uplc.builtin.ByteString;
 
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Exercises the chain members of the Emulator from real Java, spec [SF-5]. If this compiles, they
@@ -64,6 +74,19 @@ public final class JavaEmulatorChainInterop {
 
     public static PoolPerformance ideal() {
         return PoolPerformance.ideal();
+    }
+
+    // The chain policies are Java enums, interop rule 8: an EnumSet of each.
+    public static EnumSet<BlockProduction> blockProductions() {
+        return EnumSet.allOf(BlockProduction.class);
+    }
+
+    public static EnumSet<AwaitTxPolicy> awaitTxPolicies() {
+        return EnumSet.allOf(AwaitTxPolicy.class);
+    }
+
+    public static EnumSet<OrphanTxPolicy> orphanTxPolicies() {
+        return EnumSet.allOf(OrphanTxPolicy.class);
     }
 
     // PoolPerformance is a Java enum: a switch over its cases and an EnumSet of them.
@@ -179,5 +202,60 @@ public final class JavaEmulatorChainInterop {
     public static RatifyState pendingRatify(Emulator emulator) {
         return emulator.getPendingRatify();
     }
-}
 
+    // The node-shaped ledger state from Java, ledger-rules spec D122
+
+    /** The whole ledger state, read once, D122. */
+    public static NewEpochState ledgerState(Emulator emulator) {
+        return emulator.getLedgerState();
+    }
+
+    /** The reward update the next boundary pays, or null before the first boundary. */
+    public static RewardUpdate ledgerStatePendingRewards(NewEpochState state) {
+        return state.getPendingRewardsOrNull();
+    }
+
+    /** The blocks of each pool in the epoch before the last boundary. A pool id is a ByteString. */
+    public static Map<ByteString, Long> blocksMadePrev(NewEpochState state) {
+        return state.getBlocksMadePrev();
+    }
+
+    /** The blocks of each pool since the last boundary. */
+    public static Map<ByteString, Long> blocksMadeCur(NewEpochState state) {
+        return state.getBlocksMadeCur();
+    }
+
+    /** The stake of each pool in the pool distribution, D123. */
+    public static Map<ByteString, IndividualPoolStake> poolDistr(NewEpochState state) {
+        return state.poolDistr().getPools();
+    }
+
+    /** The pool-ranking log-weights of each pool, D124. */
+    public static Map<ByteString, List<Float>> likelihoods(NewEpochState state) {
+        return state.epochState().nonMyopic().getLikelihoods();
+    }
+
+    /** The UTxO set, read through the ledger state of the epoch state. */
+    public static scala.collection.immutable.Map<TransactionInput, TransactionOutput> ledgerStateUtxos(
+            Emulator emulator) {
+        return emulator.ledgerState().epochState().ledgerState().utxoState().utxo();
+    }
+
+    // FuturePParams from Java: the static forwarders of its cases, interop rule 9, D125.
+    public static FuturePParams noPParamsUpdate() {
+        return FuturePParams.noPParamsUpdate();
+    }
+
+    public static FuturePParams definitePParamsUpdate(ProtocolParams params) {
+        return FuturePParams.definitePParamsUpdate(params);
+    }
+
+    /** The pparams the next boundary adopts, or null when it adopts none, D125. */
+    public static ProtocolParams futureParamsOrNull(Emulator emulator) {
+        FuturePParams future = emulator.ledgerState().epochState().futureParams();
+        if (future instanceof FuturePParams.DefinitePParamsUpdate) {
+            return ((FuturePParams.DefinitePParamsUpdate) future).params();
+        }
+        return null;
+    }
+}

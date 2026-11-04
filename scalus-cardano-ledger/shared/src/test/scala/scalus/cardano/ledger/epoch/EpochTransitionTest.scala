@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{Address, Network, Pointer, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.epoch.GovFixtures.*
-import scalus.cardano.ledger.epoch.internal.{EpochEnv, EpochState, EpochTransition, Ratify}
+import scalus.cardano.ledger.epoch.internal.{EpochBookkeeping, EpochEnv, EpochTransition, Ratify}
 import scalus.cardano.ledger.rules.State
 import scalus.uplc.builtin.ByteString
 
@@ -18,7 +18,7 @@ class EpochTransitionTest extends AnyFunSuite {
           Map.empty
         )
 
-    private val epoch = EpochState(
+    private val epoch = EpochBookkeeping(
       AccountState(Coin(1000), Coin(5000)),
       lastEpoch = 6L,
       snapshots = SnapShots(oneStake(1), oneStake(2), oneStake(3), Coin(77)),
@@ -35,7 +35,7 @@ class EpochTransitionTest extends AnyFunSuite {
     /** `epoch` with the genesis ratify result of the gov state of `ledger`, spec [DM-9c], so that
       * [EB-13a] keeps its committee and constitution.
       */
-    private def epochFor(ledger: State): EpochState =
+    private def epochFor(ledger: State): EpochBookkeeping =
         epoch.copy(pendingRatify = nothingRatified(ledger.govState))
 
     private val env = EpochEnv(
@@ -48,7 +48,7 @@ class EpochTransitionTest extends AnyFunSuite {
     /** `epoch` after the transition of `ledger` into epoch 7 with no other change: SNAP, spec
       * [EB-6], and the blocks made and the last epoch, spec [EB-21].
       */
-    private def ticked(ledger: State): EpochState =
+    private def ticked(ledger: State): EpochBookkeeping =
         epoch.copy(
           lastEpoch = 7L,
           snapshots = SnapShots(
@@ -158,7 +158,7 @@ class EpochTransitionTest extends AnyFunSuite {
         )
     }
 
-    private def reaped(ledger: State): (State, EpochState) = {
+    private def reaped(ledger: State): (State, EpochBookkeeping) = {
         val (newLedger, newEpoch, _) = EpochTransition.transition(ledger, epoch, boundary, env)
         (newLedger, newEpoch)
     }
@@ -337,7 +337,7 @@ class EpochTransitionTest extends AnyFunSuite {
         )
 
     /** `ledger`'s genesis ratify result (`epochFor`) that expired `ids`, spec [EB-12c]. */
-    private def expiring(ledger: State, ids: Int*): EpochState = {
+    private def expiring(ledger: State, ids: Int*): EpochBookkeeping = {
         val epoch = epochFor(ledger)
         epoch.copy(pendingRatify = epoch.pendingRatify.copy(expired = ids.map(actionId).toSet))
     }
@@ -709,11 +709,11 @@ class EpochTransitionTest extends AnyFunSuite {
     // (applyRUpdFiltered, shelley LedgerState/IncrementalStake.hs:95-128)
 
     /** `epoch` with `update` pending. */
-    private def pending(update: RewardUpdate): EpochState =
+    private def pending(update: RewardUpdate): EpochBookkeeping =
         epoch.copy(pendingRewards = Some(update))
 
     /** The lovelace in the treasury, the reserves, the fees and the account balances. */
-    private def pots(ledger: State, epoch: EpochState): Coin =
+    private def pots(ledger: State, epoch: EpochBookkeeping): Coin =
         ledger.certState.dstate.accounts.values.foldLeft(
           epoch.accountState.treasury + epoch.accountState.reserves + ledger.fees
         )(_ + _.balance)
@@ -779,7 +779,7 @@ class EpochTransitionTest extends AnyFunSuite {
     }
 
     /** `epoch` with a ratify result that enacted `ids` into an enact state with `params`. */
-    private def enacted(params: ProtocolParams, ids: GovActionId*): EpochState = {
+    private def enacted(params: ProtocolParams, ids: GovActionId*): EpochBookkeeping = {
         val genesis = nothingRatified(GovState.empty)
         epoch.copy(pendingRatify =
             genesis.copy(
@@ -1045,7 +1045,7 @@ class EpochTransitionTest extends AnyFunSuite {
         ledger: State,
         ids: Seq[Int],
         withdrawals: Map[Credential, Coin] = Map.empty
-    ): EpochState = {
+    ): EpochBookkeeping = {
         val epoch = epochFor(ledger)
         val ratified = epoch.pendingRatify
         epoch.copy(pendingRatify =

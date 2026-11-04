@@ -29,7 +29,7 @@ import scalus.cardano.ledger.epoch.{AccountState, RatifyState, RewardUpdate, Sna
   *   `cgsDRepPulsingState`, spec [EB-10a], [EB-20]; at genesis the enact state of the genesis with
   *   nothing enacted or expired, spec [DM-9c], D85
   */
-case class EpochState(
+case class EpochBookkeeping(
     accountState: AccountState,
     lastEpoch: EpochNo,
     snapshots: SnapShots,

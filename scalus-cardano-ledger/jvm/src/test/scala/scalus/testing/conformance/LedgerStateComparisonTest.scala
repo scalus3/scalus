@@ -3,7 +3,7 @@ package scalus.testing.conformance
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
-import scalus.testing.conformance.LedgerState.*
+import scalus.testing.conformance.VectorLedgerState.*
 
 class LedgerStateComparisonTest extends AnyFunSuite {
 
@@ -17,9 +17,9 @@ class LedgerStateComparisonTest extends AnyFunSuite {
       dRepDelegation = Some(DRep.AlwaysAbstain)
     )
 
-    private val expected = LedgerState(
-      certs = LedgerState.CertState.empty.copy(
-        dstate = LedgerState.DState.empty.copy(accounts = Map(credential -> account))
+    private val expected = VectorLedgerState(
+      certs = VectorLedgerState.CertState.empty.copy(
+        dstate = VectorLedgerState.DState.empty.copy(accounts = Map(credential -> account))
       ),
       utxos = UTxOState(
         utxo = Map.empty,
