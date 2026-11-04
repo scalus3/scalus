@@ -74,6 +74,9 @@
   `getLedgerState` and `getLedgerFailureNames`. The new parameterless enums are Java enums.
 - JavaScript: `Emulator.create` takes the chain, governance and reward options. The emulator gains
   `produceBlock`, `rollback`, `getTxStatus`, `awaitTx`, `getLedgerState` and `ledgerFailures`.
+- AI agents in TypeScript projects: scalus.org serves `llms-ts.txt`, the npm README and
+  `scalus.d.ts` in one file. The `scalus` Claude Code plugin (1.9.0) adds the `scalus:typescript`
+  skill and loads its routing table in any project whose `package.json` depends on `scalus`.
 - `ProtocolParamUpdate.applyTo(params)` applies a parameter update as the ledger enacts it.
 - `BlockHeader.hash` and `Block.bodyHash(...)`.
 - JIT: `UplcEvaluator.applyTo(args*)` evaluates a compiled script applied to constant arguments.
