@@ -108,18 +108,32 @@ enum DataEncoding {
 
     /** Why `data` is not encoded so, or `None` where it is. A `Data` this cannot tell, under an
       * `Unknown` encoding, is not encoded so.
+      *
+      * The parts are checked in a loop, not by recursion: a type that contains itself is as deep as
+      * its `Data`, which may be deeper than a thread's stack.
       */
-    def outside(data: Data): Option[String] = outsideIn(data, Map.empty)
+    def outside(data: Data): Option[String] = {
+        val pending = DataEncoding.Pending()
+        pending.later(this, data, Map.empty)
+        pending.run()
+    }
 
-    /** [[outside]], where the [[Recursive]] encodings of the names in `bound` enclose this one. */
-    private def outsideIn(data: Data, bound: Map[String, DataEncoding]): Option[String] = {
+    /** Why `data`, but for its parts, is not encoded so, where the [[Recursive]] encodings of the
+      * names in `bound` enclose this one. The checks of its parts go to `pending`, to be made in
+      * their order.
+      */
+    private def outsideIn(
+        data: Data,
+        bound: Map[String, DataEncoding],
+        pending: DataEncoding.Pending
+    ): Option[String] = {
         def no(what: String) = Some(s"${data.toString.take(80)} is no $what")
         (this, data) match
             case (recursive @ Recursive(name, body), _) =>
-                body.outsideIn(data, bound + (name -> recursive))
+                body.outsideIn(data, bound + (name -> recursive), pending)
             case (Again(name), _) =>
                 bound.get(name) match
-                    case Some(recursive) => recursive.outsideIn(data, bound)
+                    case Some(recursive) => recursive.outsideIn(data, bound, pending)
                     case None            => Some(s"the type $name is again outside its encoding")
             case (Integer, Data.I(_)) => None
             case (Integer, _)         => no("integer")
@@ -142,18 +156,22 @@ enum DataEncoding {
                 if types.size != values.size then
                     Some(s"constructor $tag has ${types.size} fields, not ${values.size}")
                 else
-                    values.zip(types).iterator.flatMap((v, t) => t.outsideIn(v, bound)).nextOption()
+                    pending.later(types.zip(values), bound)
+                    None
             case (Constr(_), _) => no("constructor of its type")
             case (Items(items), Data.List(values)) =>
-                values.toScalaList.iterator.flatMap(items.outsideIn(_, bound)).nextOption()
+                pending.later(values.toScalaList.map(items -> _), bound)
+                None
             case (Items(_), _) => no("list")
             case (Entries(keys, values, order), Data.Map(entries)) =>
-                DataEncoding.entriesOutside(
-                  keys.outsideIn(_, bound),
-                  values.outsideIn(_, bound),
-                  order,
-                  entries.toScalaList
+                val all = entries.toScalaList
+                // The order of the keys is told after the entries.
+                pending.later(() => DataEncoding.orderOutside(order, all.map(_._1)))
+                pending.later(
+                  all.flatMap((key, value) => List(keys -> key, values -> value)),
+                  bound
                 )
+                None
             case (Entries(_, _, _), _) => no("map")
     }
 
@@ -316,27 +334,24 @@ object DataEncoding {
         values: DataEncoding,
         order: KeyOrder,
         entries: List[(Data, Data)]
-    ): Option[String] = entriesOutside(keys.outside, values.outside, order, entries)
-
-    /** [[entriesOutside]], with the checks of a key and of a value. */
-    private def entriesOutside(
-        keys: Data => Option[String],
-        values: Data => Option[String],
-        order: KeyOrder,
-        entries: List[(Data, Data)]
-    ): Option[String] = {
-        val entry = entries.iterator
-            .flatMap((key, value) => keys(key).orElse(values(value)))
+    ): Option[String] =
+        entries.iterator
+            .flatMap((key, value) => keys.outside(key).orElse(values.outside(value)))
             .nextOption()
+            .orElse(orderOutside(order, entries.map(_._1)))
+
+    /** Why `keys`, the keys of a map in their order, are not in `order`, or `None` where they are.
+      */
+    private def orderOutside(order: KeyOrder, keys: List[Data]): Option[String] = {
         def ascending(less: (Data, Data) => Option[Boolean]) =
-            entries.map(_._1).sliding(2).collectFirst {
+            keys.sliding(2).collectFirst {
                 case List(a, b) if !less(a, b).contains(true) =>
                     "the keys are not in ascending order"
             }
-        entry.orElse(order match
+        order match
             case KeyOrder.Any => None
             case KeyOrder.Unchecked =>
-                Option.when(entries.size > 1)("the order of the keys is not checked here")
+                Option.when(keys.size > 1)("the order of the keys is not checked here")
             case KeyOrder.Bytes =>
                 ascending {
                     case (Data.B(a), Data.B(b)) =>
@@ -347,7 +362,34 @@ object DataEncoding {
                 ascending {
                     case (Data.I(a), Data.I(b)) => Some(a < b)
                     case _                      => None
-                })
+                }
+    }
+
+    /** The checks of [[DataEncoding.outside]] still to make, the next one last, which [[run]] makes
+      * in a loop: a check of a part leaves those of its own parts here.
+      */
+    private final class Pending {
+        private val checks = scala.collection.mutable.ArrayBuffer.empty[() => Option[String]]
+
+        /** A check, to be made after those of the parts left before it. */
+        def later(check: () => Option[String]): Unit = checks += check
+
+        /** The checks of `parts`, each `Data` by its encoding, to be made in their order. */
+        def later(parts: List[(DataEncoding, Data)], bound: Map[String, DataEncoding]): Unit =
+            parts.reverseIterator.foreach((encoding, part) =>
+                checks += (() => encoding.outsideIn(part, bound, this))
+            )
+
+        /** The check of `data` by `encoding`. */
+        def later(encoding: DataEncoding, data: Data, bound: Map[String, DataEncoding]): Unit =
+            later(List(encoding -> data), bound)
+
+        /** The first reason a check gives, making them until one does or none is left. */
+        def run(): Option[String] = {
+            var reason: Option[String] = None
+            while reason.isEmpty && checks.nonEmpty do reason = checks.remove(checks.length - 1)()
+            reason
+        }
     }
 
     /** The Lean name of the recursive definition of the encoding of a type that contains itself,

@@ -102,27 +102,76 @@ private[verify] object DataLayout {
       */
     private val maxParts = 100_000
 
-    /** The parts of a layout derived so far, the first that has no `Data` form, and the keys
-      * ([[SirTypes.recursionKey]]) of the enclosing types that repeat below the part being derived.
+    /** The parts of a layout derived so far, the first that has no `Data` form, and how many parts
+      * were cut off where types nest more than [[SirTypes.maxNesting]] deep.
       */
     private final class Parts(
         var count: Int = 0,
         var withoutDataForm: Option[SIRType] = None,
-        val repeated: scala.collection.mutable.Set[String] = scala.collection.mutable.Set.empty
+        var cuts: Int = 0
     )
 
     /** The name of the encoding of `tp`, of the key `key` ([[SirTypes.recursionKey]]), where it
       * contains itself: its declaration's name, as a Lean name may have it ([[leanSimpleName]]),
-      * and its key as a hash, so that two types of one name are told apart, and a type has one name
-      * in every check.
+      * and 64 bits of its key's hash, so that two types of one name are told apart, and a type has
+      * one name in every check.
       */
     private def recursionName(tp: SIRType, key: String): String = {
         val hash = scalus.utils.Hex
             .bytesToHex(scalus.utils.Utils.sha2_256(key.getBytes("UTF-8")))
-            .take(8)
+            .take(16)
             .toLowerCase
         s"${leanSimpleName(declarationName(tp))}_$hash"
     }
+
+    /** The name of a type that contains itself, `name`, where its layout was cut off below
+      * ([[asCut]]).
+      */
+    private def cutName(name: String): String =
+        if name.endsWith(CutSuffix) then name else name + CutSuffix
+
+    private val CutSuffix = "_cut"
+
+    /** `layout`, derived as a part of the types `names` that contain themselves and were cut off
+      * where they nest too deep, with the name of a cut type ([[cutName]]) for each of them and for
+      * each type in it that repeats one of them.
+      *
+      * A type's premise is defined once, by its name, from the first layout of it met. A layout cut
+      * off holds less, its parts there are any `Data`, so it gets a name of its own: the type's
+      * name is then always of a layout that holds all of the type, whose premise is exact where the
+      * type's is. A type in it that repeats none of `names` is laid out as it would be anywhere,
+      * and keeps its name.
+      */
+    private def asCut(layout: DataLayout, names: Set[String]): DataLayout = {
+        def inner(part: DataLayout) = asCut(part, names)
+        layout match
+            case Plain(DataEncoding.Again(name)) if names(name) =>
+                Plain(DataEncoding.Again(cutName(name)))
+            case plain: Plain   => plain
+            case Record(fields) => Record(fields.map((name, field) => name -> inner(field)))
+            case Choice(constructors) =>
+                Choice(constructors.map { (name, fields) =>
+                    name -> fields.map((field, part) => field -> inner(part))
+                })
+            case Wrapper(field, part)         => Wrapper(field, inner(part))
+            case Collection(items)            => Collection(inner(items))
+            case Mapping(keys, values, order) => Mapping(inner(keys), inner(values), order)
+            case Recursive(name, part) if names.exists(repeats(part, _)) =>
+                Recursive(cutName(name), asCut(part, names + name))
+            case recursive: Recursive => recursive
+    }
+
+    /** Whether `layout` has the type named `name` again ([[DataEncoding.Again]]). */
+    private def repeats(layout: DataLayout, name: String): Boolean = layout match
+        case Plain(DataEncoding.Again(again)) => again == name
+        case Plain(_)                         => false
+        case Record(fields)                   => fields.exists((_, field) => repeats(field, name))
+        case Choice(constructors) =>
+            constructors.exists((_, fields) => fields.exists((_, field) => repeats(field, name)))
+        case Wrapper(_, inner)        => repeats(inner, name)
+        case Collection(items)        => repeats(items, name)
+        case Mapping(keys, values, _) => repeats(keys, name) || repeats(values, name)
+        case Recursive(_, inner)      => repeats(inner, name)
 
     /** The last part of the declaration name `declaration`, of the letters, digits and `_` of ASCII
       * only, which every Lean name may have; `T` where none is left.
@@ -157,19 +206,24 @@ private[verify] object DataLayout {
                 case other @ (_: SIRType.CaseClass | _: SIRType.SumCaseClass) =>
                     val key = recursionKey(other)
                     if enclosing.contains(key) then
-                        parts.repeated += key
                         Plain(DataEncoding.Again(recursionName(other, key)))
                     else if enclosing.size >= maxNesting then
+                        parts.cuts += 1
                         Plain(
                           DataEncoding.Unknown(s"${other.show} nests more than $maxNesting deep")
                         )
                     else
+                        val cutsBefore = parts.cuts
                         val inner = representedLayout(other, enclosing + key, parts)
-                        // A type whose encoding is not told is that, whatever repeats in it.
-                        val repeats = parts.repeated.remove(key)
-                        if repeats && !inner.isInstanceOf[Plain] then
-                            Recursive(recursionName(other, key), inner)
-                        else inner
+                        val name = recursionName(other, key)
+                        // A type whose encoding is not told is that, whatever repeats in it; and
+                        // one whose layout has no repeat of it, where a part that had one turned
+                        // out unknown, does not contain itself.
+                        val recursive =
+                            if repeats(inner, name) && !inner.isInstanceOf[Plain] then
+                                Recursive(name, inner)
+                            else inner
+                        if parts.cuts > cutsBefore then asCut(recursive, Set(name)) else recursive
                 case other =>
                     Plain(DataEncoding.Unknown(s"${other.show} has no Data encoding told here"))
     }

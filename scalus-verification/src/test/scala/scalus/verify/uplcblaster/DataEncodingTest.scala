@@ -11,7 +11,7 @@ import scalus.compiler.sir.SIRType
 import scalus.uplc.Constant
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.Data.toData
-import scalus.verify.{DataEncoding, DataLayout, FunctionTable, Prop, SirTypes}
+import scalus.verify.{DataEncoding, DataLayout, FunctionTable, Limit, Limits, Prop, SirTypes}
 import scalus.verify.Props.*
 import scalus.verify.lean.LeanServer.{Message, Result, Severity}
 
@@ -58,6 +58,36 @@ enum EncodingForest derives FromData, ToData:
 @Compile
 object EncodingForest
 
+/** A case class of two fields, to nest a type deep. */
+case class EncodingWrap[A](a: A, n: BigInt)
+
+@Compile
+object EncodingWrap
+
+type EncodingWrap4[A] = EncodingWrap[EncodingWrap[EncodingWrap[EncodingWrap[A]]]]
+type EncodingWrap16[A] = EncodingWrap4[EncodingWrap4[EncodingWrap4[EncodingWrap4[A]]]]
+
+/** A type that contains itself, beside a part 16 types deep. */
+case class EncodingDeep(next: prelude.Option[EncodingDeep], extra: EncodingWrap16[BigInt])
+
+@Compile
+object EncodingDeep
+
+/** A type with a field of an enum that holds the type, one of whose constructors has a type
+  * argument its enum does not pass on: an enum whose constructors are not told.
+  */
+case class EncodingHolder(held: EncodingHeld[BigInt], n: BigInt)
+
+@Compile
+object EncodingHolder
+
+enum EncodingHeld[A]:
+    case Holds(holder: EncodingHolder)
+    case Other[B](b: B) extends EncodingHeld[BigInt]
+
+@Compile
+object EncodingHeld
+
 class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
     import DataEncodingTest.*
@@ -84,6 +114,73 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
         assert(option.outside(prelude.Option.Some(BigInt(5)).toData).isEmpty)
         assert(option.outside((prelude.Option.None: prelude.Option[BigInt]).toData).isEmpty)
         assert(option.outside(Data.Constr(2, prelude.List.Nil)).nonEmpty)
+    }
+
+    test("a type cut off where it nests too deep has a name of its own, and so its own premise") {
+        def names(encoding: DataEncoding): Set[String] = encoding match
+            case DataEncoding.Recursive(name, body)    => names(body) + name
+            case DataEncoding.Constr(constructors)     => constructors.flatten.flatMap(names).toSet
+            case DataEncoding.Items(items)             => names(items)
+            case DataEncoding.Entries(keys, values, _) => names(keys) ++ names(values)
+            case _                                     => Set.empty
+        val deep = DataEncoding.of[EncodingDeep]
+        assert(deep.exact, deep)
+        // Under 16 more types, the part 16 deep in it is cut off, and is any Data.
+        val nested = DataEncoding.of[EncodingWrap16[EncodingDeep]]
+        assert(!nested.exact)
+        assert(names(deep).size == 1, names(deep))
+        val name = names(deep).head
+        assert(names(nested) == Set(s"${name}_cut"), names(nested))
+        // Whichever is met first, each has its definition, the exact one of the exact layout.
+        val recursions = DataEncoding.leanRecursions(List(nested, deep)).mkString("\n")
+        assert(recursions.contains(s"def scalusRec_$name ("), recursions)
+        assert(recursions.contains(s"def scalusRec_${name}_cut ("), recursions)
+    }
+
+    test("a type whose repeat is in a part not told does not contain itself") {
+        val holder = DataEncoding.of[EncodingHolder]
+        assert(!holder.isInstanceOf[DataEncoding.Recursive], holder)
+        assert(holder.leanRecursions.isEmpty, holder.leanRecursions)
+    }
+
+    test("a value as deep as a type that contains itself is checked in a loop, not on the stack") {
+        // A chain of 100000 links, which a check by recursion would need far more stack for.
+        val deep = (1 to 100000).foldLeft(Data.Constr(0, prelude.List.Nil): Data) { (rest, n) =>
+            Data.Constr(1, prelude.List(Data.Constr(0, prelude.List(Data.I(n), rest))))
+        }
+        val tp = UplcBlaster
+            .lower(forAllData[EncodingChain](_ => true), FunctionTable.empty)
+            .fold(
+              reason => fail(reason),
+              lowered => DataEncoding.valueType(lowered.binders.head.tp)
+            )
+        def onSmallStack[A](body: => A): A = {
+            var result: Option[Either[Throwable, A]] = None
+            val thread = new Thread(
+              null,
+              () =>
+                  result = Some(
+                    try Right(body)
+                    catch case e: Throwable => Left(e)
+                  ),
+              "small-stack",
+              1L << 20
+            )
+            thread.start()
+            thread.join()
+            result.get.fold(e => fail(s"the check failed with $e"), identity)
+        }
+        assert(onSmallStack(DataEncoding.of[EncodingChain].outside(deep)).isEmpty)
+        assert(onSmallStack(Limits.of(Limit.MaxCollectionLength(1)).outside(deep, tp)).isEmpty)
+        // And a part deep down that is not of the type is told.
+        val broken = Data.Constr(
+          1,
+          prelude.List(Data.Constr(0, prelude.List(Data.B(ByteString.empty), deep)))
+        )
+        assert(
+          onSmallStack(DataEncoding.of[EncodingChain].outside(broken))
+              .exists(_.contains("is no integer"))
+        )
     }
 
     test("a type that contains itself is a recursive encoding, exact, checked to any depth") {

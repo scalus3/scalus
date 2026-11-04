@@ -168,7 +168,13 @@ result, and any run of a statement whose result was not kept.
    searches from the start.
 2. **A step over the least.** The search ends at the least budget, and so makes a check for
    every place the validator can stop. A budget a few percent above each counterexample's
-   would skip some of them, and could step over a narrow window.
+   would skip some of them, and could step over a narrow window. Measured on Vesting's "every
+   accepted spend is signed by the beneficiary", over script contexts of one input, at most one
+   output and one signatory (2026-11-04): the search from 1263 steps found a proof at 2444 in 60
+   minutes, and one check at 2444 took 8. Each check costs more than the last, as Lean's run
+   grows with the budget, so the steps below the end cost most of the search. Doubling the budget
+   after the first spurious counterexample would have found a proof in about one more check, and
+   kept a budget above the least, which every later run that asks Lean pays for.
 
 ## Limits
 

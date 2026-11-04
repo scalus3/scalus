@@ -389,12 +389,47 @@ counterexample are named by their nodes' paths, as now
 4. Rule 3: the suites run under fixed plans, to measure the number.
 5. `forAllData` as `forAll`, and its parameter annotation with it.
 
+### Follow-ups
+
+Left from the review of the recursive premise (2026-11-05), whose soundness findings were fixed
+then: the guard reads a repeat as its type, a layout cut off where types nest too deep is named
+apart, a type's name has 64 bits of its key's hash, and the JVM checks of a `Data` walk it in a
+loop.
+
+- **One way to follow a repeat to its type.** `DataEncoding.outside`, `Limits.largest`, the check
+  of a value's lengths, `LimitGuards`' test of whether a part has a collection, and a test's sample
+  each keep a map of the types around a part that contain themselves. A shared one, an unfolding of
+  `Again` on the root layout, would close the class of gaps that the guard had: it did not follow
+  a repeat at all.
+- **A type's definition from its own layout.** A type's definition is written once, from the
+  first of its layouts that a check meets, though a layout depends on where the type is: inside a
+  type that contains it, the outer type is `Again`; on its own, it is expanded. They mean the same
+  where no layout is cut off, which naming the cut ones apart keeps. A definition from the type's
+  own closed layout would not rest on that, nor on the order the layouts are met in.
+- **One Lean renderer.** `leanPredicate` and the block writer (`LeanRecursions`) each render an
+  encoding to Lean: integers, byte strings, constructors, lists, maps, the order of keys. A change
+  to one, as a check of UTF-8, would have to be made to both. Both could be one renderer of a test
+  on a variable, `leanPredicate` its `fun d => …`.
+- **Dead branches.** `unknownReason` of a `Recursive`, whose body is never an `Unknown`; and the
+  map case of the recursive list in `outsideEncoding`, whose value comes as `Data`.
+- **A key cut off.** `SirTypes.recursionKey` ends at 32 levels of type arguments, so two types
+  that differ deeper have one key, and one name.
+
 ## Premises of a type that contains itself
 
 `DataLayout` marks where a type repeats. The encoding of a type that contains itself is
 `DataEncoding.Recursive(name, body)`, and the type inside it, where it repeats, is `Again(name)`.
-The name is the type's declaration name and a hash of its key, as `BlasterTree_3fa2c0d4`: the same
-in every check, and different for two types of one name or one type with other arguments.
+The name is the type's declaration name and 64 bits of a hash of its key, as
+`BlasterTree_3fa2c0d4e1b5a796`: the same in every check, and different for two types of one name or
+one type with other arguments. The key is what the type is made of, its declarations and their
+arguments through proxies (`SirTypes.recursionKey`), and not the type as shown, which shows every
+proxy as `Proxy`.
+
+A type's definition is written once, from the first layout of it that a check meets. A layout of a
+type deep in another may be cut off where types nest more than 32 deep, its parts there any `Data`,
+so it holds less than the type: it is named apart, `…_cut`, as is every type in it that repeats one
+cut so. The name of a type is then always that of a layout that holds all of it, whose definition
+is exact where the type's encoding is, and an exact variable never reads a cut one.
 
 Its premise is a recursive Lean definition, `scalusRec_<name>`, which a check writes after the
 definitions the predicates use (`DataEncoding.leanDefinitions`), only where a variable's premise
@@ -436,7 +471,8 @@ Measured in Lean alone (2026-11-04), over a tree:
 Z3 seldom finds a witness through a recursive premise, as for a list: `existsLet` gives one.
 
 Not told: a type that contains itself under other arguments each time, as a `T[A]` that holds a
-`T[List[A]]`, does not repeat by its shown type. Its layout ends at the most parts, unknown there.
+`T[List[A]]`, does not repeat: its key differs at each level. Its layout ends at the most parts,
+unknown there.
 
 `DataEncodingTest` holds the encodings to `FromData` and `ToData`, on `Data` the encoding gives,
 on such `Data` changed in one part, and on `Data` of no type:
@@ -849,8 +885,10 @@ the tests do there says nothing: their failing at once is what prunes the run. L
 takes each limited list apart as the guard walks it, into its empty list and a cell, and the test's
 own reads of the list find it taken apart. So a loop over a limited list runs to its end, and the
 statement of the values within the limits is proved as a theorem. The guard may check less than the
-limits say, and never more: it does not look into the constructors of a type of several, nor at the
-elements of a list that has no most. Such a guard is not exact: its variable has more values than
+limits say, and never more: it does not look into the constructors of a type of several, nor into
+the type again where it repeats, nor at the elements of a list that has no most. Where what it does
+not look into has a collection, a constructor's field that is the type again having the type's
+collections, the guard is not exact: its variable has more values than
 the limits allow, and is a variable only where it stands for every value, as one whose encoding is
 not exact is. Under `!` or in a premise, where the statement asks for a witness, the guard could
 let one through that the limits exclude, so the tactic refuses it there. A counterexample is checked
