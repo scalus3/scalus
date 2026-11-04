@@ -54,7 +54,7 @@ describe("scalus.js bundle", () => {
         expect(Object.values(result.metafile!.outputs).flatMap(o => o.imports)).toEqual([]);
     });
 
-    test("should be smaller than 2.4MB", () => {
+    test("should be smaller than 2.6MB", () => {
         // About 2.19 MiB since the tzdb exclusion (lever 5). `ProtocolParams.fromBlockfrostJson`/
         // `toBlockfrostJson` still re-link upickle and ujson for ~117 KB, which is a deliberate,
         // recorded trade (the jsoniter port that would have recovered it broke scalus-native and
@@ -65,8 +65,13 @@ describe("scalus.js bundle", () => {
         // reaches EmulatorState's forge, chain selection and rollback, BlockForge, and the ledger's
         // Block/BlockHeader types. `awaitTx` calls the emulator synchronously, so the bundle does
         // not link `scala.concurrent` (17 KB).
+        //
+        // The ledger rules (epoch boundary, stake snapshots and rewards, GOV, RATIFY and ENACT, the
+        // ledger failure names: emulator-ledger-rules spec) raised it from 2.4 MiB: 2,627,400 bytes
+        // after them. The emulator runs them on every tick and every submit, so the facade links
+        // them all.
         const sizeInBytes = Buffer.byteLength(bundle, "utf8");
-        const limit = 2.4 * 1024 * 1024;
+        const limit = 2.6 * 1024 * 1024;
         expect(sizeInBytes).toBeLessThan(limit);
     });
 });
