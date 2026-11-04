@@ -27,7 +27,7 @@ class EmulatorDiffTest extends AnyFunSuite {
 
     private def manual(): Emulator =
         Emulator.withState(
-          EmulatorInitialState(initialUtxos),
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
           rules.Context.testMainnet(),
           ChainConfig.manual
         )

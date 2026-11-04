@@ -577,6 +577,10 @@ object EmulatorDRepRegistration {
 
 /** What an emulator starts with, beyond its chain parameters.
   *
+  * The constructor is private, so a new field later adds a `with` method, not a break. Start from
+  * [[EmulatorInitialState.empty]] and set a field with its `with` method, or use the Java
+  * [[EmulatorInitialState.builder]], D121.
+  *
   * @param committee
   *   the constitutional committee at genesis; `None`, the default, is a gov state with no
   *   committee, spec [ES-13]
@@ -590,29 +594,26 @@ object EmulatorDRepRegistration {
   *   the reserves at genesis; the default is the mainnet reserves at epoch 665, spec [ES-7]. No
   *   UTxO holds them, spec [ES-7b].
   */
-case class EmulatorInitialState(
-    utxos: Utxos = Map.empty,
-    stakeRegistrations: Seq[EmulatorStakeRegistration] = Seq.empty,
-    poolRegistrations: Seq[EmulatorPoolRegistration] = Seq.empty,
-    drepRegistrations: Seq[EmulatorDRepRegistration] = Seq.empty,
-    datums: Map[DataHash, Data] = Map.empty,
-    committee: Option[Committee] = None,
-    committeeHotKeys: Map[Credential, Credential] = Map.empty,
-    constitution: Option[Constitution] = None,
-    reserves: Coin = AccountState.mainnet.reserves
+final case class EmulatorInitialState private (
+    utxos: Utxos,
+    stakeRegistrations: Seq[EmulatorStakeRegistration],
+    poolRegistrations: Seq[EmulatorPoolRegistration],
+    drepRegistrations: Seq[EmulatorDRepRegistration],
+    datums: Map[DataHash, Data],
+    committee: Option[Committee],
+    committeeHotKeys: Map[Credential, Credential],
+    constitution: Option[Constitution],
+    reserves: Coin
 ) {
 
-    /** The 1.4 constructor, without the gov fields, spec [ES-6], D33. */
-    @deprecated(
-      "use the constructor with committee, committeeHotKeys, constitution and reserves",
-      "1.4.1"
-    )
+    /** The 1.4 constructor, kept for binary compatibility, D121. */
+    @deprecated("use EmulatorInitialState.empty and the with methods", "1.4.1")
     def this(
-        utxos: Utxos,
-        stakeRegistrations: Seq[EmulatorStakeRegistration],
-        poolRegistrations: Seq[EmulatorPoolRegistration],
-        drepRegistrations: Seq[EmulatorDRepRegistration],
-        datums: Map[DataHash, Data]
+        utxos: Utxos = Map.empty,
+        stakeRegistrations: Seq[EmulatorStakeRegistration] = Seq.empty,
+        poolRegistrations: Seq[EmulatorPoolRegistration] = Seq.empty,
+        drepRegistrations: Seq[EmulatorDRepRegistration] = Seq.empty,
+        datums: Map[DataHash, Data] = Map.empty
     ) = this(
       utxos,
       stakeRegistrations,
@@ -624,37 +625,138 @@ case class EmulatorInitialState(
       None,
       AccountState.mainnet.reserves
     )
-}
 
-object EmulatorInitialState {
-
-    /** The 1.4 `apply`, without the gov fields, spec [ES-6], D33. */
-    @deprecated(
-      "use the apply with committee, committeeHotKeys, constitution and reserves",
-      "1.4.1"
+    /** The 1.4 `copy` with its defaults, kept for binary compatibility (1.4 callers call its
+      * `copy$default$N`); it keeps the fields 1.4 did not have, D121.
+      */
+    @deprecated("use the with methods", "1.4.1")
+    def copy(
+        utxos: Utxos = this.utxos,
+        stakeRegistrations: Seq[EmulatorStakeRegistration] = this.stakeRegistrations,
+        poolRegistrations: Seq[EmulatorPoolRegistration] = this.poolRegistrations,
+        drepRegistrations: Seq[EmulatorDRepRegistration] = this.drepRegistrations,
+        datums: Map[DataHash, Data] = this.datums
+    ): EmulatorInitialState = withFields(
+      utxos = utxos,
+      stakeRegistrations = stakeRegistrations,
+      poolRegistrations = poolRegistrations,
+      drepRegistrations = drepRegistrations,
+      datums = datums
     )
-    def apply(
+
+    /** Replaces the synthetic `copy`, whose defaults would forbid those of the 1.4 one: only one
+      * overload may have defaults.
+      */
+    private def copy(
         utxos: Utxos,
         stakeRegistrations: Seq[EmulatorStakeRegistration],
         poolRegistrations: Seq[EmulatorPoolRegistration],
         drepRegistrations: Seq[EmulatorDRepRegistration],
-        datums: Map[DataHash, Data]
-    ): EmulatorInitialState =
-        new EmulatorInitialState(
-          utxos,
-          stakeRegistrations,
-          poolRegistrations,
-          drepRegistrations,
-          datums,
-          None,
-          Map.empty,
-          None,
-          AccountState.mainnet.reserves
-        )
+        datums: Map[DataHash, Data],
+        committee: Option[Committee],
+        committeeHotKeys: Map[Credential, Credential],
+        constitution: Option[Constitution],
+        reserves: Coin
+    ): EmulatorInitialState = new EmulatorInitialState(
+      utxos,
+      stakeRegistrations,
+      poolRegistrations,
+      drepRegistrations,
+      datums,
+      committee,
+      committeeHotKeys,
+      constitution,
+      reserves
+    )
 
-    /** Java-friendly builder — the case class keeps its Scala default arguments, which Java cannot
-      * use.
+    private def withFields(
+        utxos: Utxos = this.utxos,
+        stakeRegistrations: Seq[EmulatorStakeRegistration] = this.stakeRegistrations,
+        poolRegistrations: Seq[EmulatorPoolRegistration] = this.poolRegistrations,
+        drepRegistrations: Seq[EmulatorDRepRegistration] = this.drepRegistrations,
+        datums: Map[DataHash, Data] = this.datums,
+        committee: Option[Committee] = this.committee,
+        committeeHotKeys: Map[Credential, Credential] = this.committeeHotKeys,
+        constitution: Option[Constitution] = this.constitution,
+        reserves: Coin = this.reserves
+    ): EmulatorInitialState = copy(
+      utxos,
+      stakeRegistrations,
+      poolRegistrations,
+      drepRegistrations,
+      datums,
+      committee,
+      committeeHotKeys,
+      constitution,
+      reserves
+    )
+
+    def withUtxos(utxos: Utxos): EmulatorInitialState = withFields(utxos = utxos)
+
+    def withStakeRegistrations(
+        stakeRegistrations: Seq[EmulatorStakeRegistration]
+    ): EmulatorInitialState = withFields(stakeRegistrations = stakeRegistrations)
+
+    def withPoolRegistrations(
+        poolRegistrations: Seq[EmulatorPoolRegistration]
+    ): EmulatorInitialState = withFields(poolRegistrations = poolRegistrations)
+
+    def withDRepRegistrations(
+        drepRegistrations: Seq[EmulatorDRepRegistration]
+    ): EmulatorInitialState = withFields(drepRegistrations = drepRegistrations)
+
+    def withDatums(datums: Map[DataHash, Data]): EmulatorInitialState =
+        withFields(datums = datums)
+
+    /** The constitutional committee at genesis, spec [ES-6]. */
+    def withCommittee(committee: Committee): EmulatorInitialState =
+        withFields(committee = Some(committee))
+
+    /** The hot key of each committee member, cold credential to hot credential, spec [ES-6a]. */
+    def withCommitteeHotKeys(committeeHotKeys: Map[Credential, Credential]): EmulatorInitialState =
+        withFields(committeeHotKeys = committeeHotKeys)
+
+    /** The constitution at genesis, spec [ES-6]. */
+    def withConstitution(constitution: Constitution): EmulatorInitialState =
+        withFields(constitution = Some(constitution))
+
+    /** The reserves at genesis, spec [ES-7]. */
+    def withReserves(reserves: Coin): EmulatorInitialState = withFields(reserves = reserves)
+}
+
+object EmulatorInitialState {
+
+    /** No UTxOs, no registrations, no datums, no committee, no constitution and the mainnet
+      * reserves, spec [ES-7], [ES-13], [ES-14].
       */
+    val empty: EmulatorInitialState = new EmulatorInitialState(
+      Map.empty,
+      Seq.empty,
+      Seq.empty,
+      Seq.empty,
+      Map.empty,
+      None,
+      Map.empty,
+      None,
+      AccountState.mainnet.reserves
+    )
+
+    /** The 1.4 `apply`, kept for source and binary compatibility, D121. */
+    @deprecated("use EmulatorInitialState.empty and the with methods", "1.4.1")
+    def apply(
+        utxos: Utxos = Map.empty,
+        stakeRegistrations: Seq[EmulatorStakeRegistration] = Seq.empty,
+        poolRegistrations: Seq[EmulatorPoolRegistration] = Seq.empty,
+        drepRegistrations: Seq[EmulatorDRepRegistration] = Seq.empty,
+        datums: Map[DataHash, Data] = Map.empty
+    ): EmulatorInitialState = empty
+        .withUtxos(utxos)
+        .withStakeRegistrations(stakeRegistrations)
+        .withPoolRegistrations(poolRegistrations)
+        .withDRepRegistrations(drepRegistrations)
+        .withDatums(datums)
+
+    /** The Java form of `empty` and the `with` methods. */
     def builder(): Builder = new Builder
 
     final class Builder private[EmulatorInitialState] () {

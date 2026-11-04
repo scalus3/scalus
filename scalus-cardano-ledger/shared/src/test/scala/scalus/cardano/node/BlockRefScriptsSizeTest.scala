@@ -141,7 +141,7 @@ class BlockRefScriptsSizeTest extends AnyFunSuite {
 
     private def emulator(): Emulator =
         Emulator.withState(
-          EmulatorInitialState(initialUtxos),
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
           rules.Context.testMainnet(),
           ChainConfig.manual
         )
@@ -169,7 +169,7 @@ class BlockRefScriptsSizeTest extends AnyFunSuite {
         // count must come from the ticked base of each forge.
         val pool = PoolKeyHash.fromHex("b7" * 28)
         val e = Emulator.withState(
-          EmulatorInitialState(initialUtxos),
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
           rules.Context.testMainnet(),
           ChainConfig.instant.withBlockIssuer(BlockIssuer.pool(pool))
         )
@@ -218,7 +218,7 @@ class BlockRefScriptsSizeTest extends AnyFunSuite {
             .transaction
             .copy(isValid = false)
         val e = Emulator.withState(
-          EmulatorInitialState(utxos),
+          EmulatorInitialState.empty.withUtxos(utxos),
           rules.Context.testMainnet(),
           ChainConfig.manual
         )

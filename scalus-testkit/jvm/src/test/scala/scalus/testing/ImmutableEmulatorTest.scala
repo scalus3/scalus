@@ -427,7 +427,7 @@ class ImmutableEmulatorTest extends AnyFunSuite {
             UtxoEnv.testMainnet()
           ).reserves == AccountState.mainnet.reserves
         )
-        val seeded = Emulator.withState(EmulatorInitialState(reserves = Coin(77)))
+        val seeded = Emulator.withState(EmulatorInitialState.empty.withReserves(Coin(77)))
         assert(ImmutableEmulator.fromEmulator(seeded).reserves == Coin(77))
     }
 
@@ -450,11 +450,11 @@ class ImmutableEmulatorTest extends AnyFunSuite {
         )
         val stake = Coin.ada(10_000_000)
         val emulator = Emulator.withState(
-          EmulatorInitialState(
-            stakeRegistrations =
-                Seq(EmulatorStakeRegistration(alice.credential, stake, Some(pool))),
-            poolRegistrations = Seq(EmulatorPoolRegistration(registration))
-          )
+          EmulatorInitialState.empty
+              .withStakeRegistrations(
+                Seq(EmulatorStakeRegistration(alice.credential, stake, Some(pool)))
+              )
+              .withPoolRegistrations(Seq(EmulatorPoolRegistration(registration)))
         )
         val genesis = ImmutableEmulator.fromEmulator(emulator)
         val genesisMark = genesis.snapshots.mark
@@ -475,7 +475,7 @@ class ImmutableEmulatorTest extends AnyFunSuite {
 
     test("pendingRatify reads the ratify result of the tip") {
         // ledger-rules spec [ES-9b] (D94), [DM-9c]: the genesis result enacts nothing
-        val emulator = Emulator.withState(EmulatorInitialState())
+        val emulator = Emulator.withState(EmulatorInitialState.empty)
         val genesis = ImmutableEmulator.fromEmulator(emulator)
         assert(genesis.pendingRatify == emulator.pendingRatify)
         assert(genesis.pendingRatify.enacted.isEmpty)
@@ -487,10 +487,9 @@ class ImmutableEmulatorTest extends AnyFunSuite {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val aliceStake = Alice.account.stakeAddress(Network.Mainnet)
         val emulator = Emulator.withState(
-          EmulatorInitialState(
-            utxos = Map(Input(genesisHash, 0) -> Output(Alice.address, Value.ada(200_000))),
-            stakeRegistrations = Seq(EmulatorStakeRegistration(aliceStake.credential))
-          ),
+          EmulatorInitialState.empty
+              .withUtxos(Map(Input(genesisHash, 0) -> Output(Alice.address, Value.ada(200_000))))
+              .withStakeRegistrations(Seq(EmulatorStakeRegistration(aliceStake.credential))),
           Context.testMainnet(epochStart + 10)
         )
         val params = summon[CardanoInfo].protocolParams

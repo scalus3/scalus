@@ -29,8 +29,8 @@ class EmulatorGenesisVrfKeyHashesTest extends AnyFunSuite with Matchers {
         // as the hard-fork fill does, conway Rules/HardFork.hs:107-125
         val vrf1 = VrfKeyHash.fromHex("a1" * 32)
         val vrf2 = VrfKeyHash.fromHex("a2" * 32)
-        val initState = EmulatorInitialState(
-          poolRegistrations = Seq(pool("1", vrf1), pool("2", vrf1), pool("3", vrf2))
+        val initState = EmulatorInitialState.empty.withPoolRegistrations(
+          Seq(pool("1", vrf1), pool("2", vrf1), pool("3", vrf2))
         )
         val (certState, _) = EmulatorBase.buildInitialState(initState, Context.testMainnet())
         certState.pstate.vrfKeyHashes shouldBe Map(vrf1 -> 2L, vrf2 -> 1L)
@@ -39,8 +39,8 @@ class EmulatorGenesisVrfKeyHashesTest extends AnyFunSuite with Matchers {
     test("spec [BK-7a]: a genesis below PV 11 counts no VRF key") {
         // the ledger fills the map only on the hard fork into PV 11, so at PV 10 it is empty and
         // [EB-19a] gives the ledger's counts at that fork
-        val initState = EmulatorInitialState(
-          poolRegistrations = Seq(pool("1", VrfKeyHash.fromHex("a1" * 32)))
+        val initState = EmulatorInitialState.empty.withPoolRegistrations(
+          Seq(pool("1", VrfKeyHash.fromHex("a1" * 32)))
         )
         val context = Context.testMainnet()
         val params = context.env.params.copy(protocolVersion = ProtocolVersion(10, 0))

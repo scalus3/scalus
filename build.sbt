@@ -1171,13 +1171,11 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.node.EmulatorState._6"
         ),
-        // EmulatorInitialState gains committee, committeeHotKeys, constitution and reserves,
-        // ledger-rules spec [ES-6], [ES-7], D33. The 5-argument constructor and apply stay as
-        // deprecated overloads; a case class copy cannot, since two copy overloads with defaults
-        // do not compile.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.node.EmulatorInitialState.copy(scala.collection.immutable.Map,scala.collection.immutable.Seq,scala.collection.immutable.Seq,scala.collection.immutable.Seq,scala.collection.immutable.Map)scalus.cardano.node.EmulatorInitialState"
-        ),
+        // EmulatorInitialState is final with a private constructor, the ChainConfig pattern
+        // (ledger-rules D121), so a new field only adds a with method. The 1.4 constructor,
+        // apply and copy, with their defaults, stay as deprecated overloads; nobody subclasses a
+        // case class.
+        ProblemFilters.exclude[FinalClassProblem]("scalus.cardano.node.EmulatorInitialState"),
         // JsEmulatorOptions (Scala.js only) gains the chain options of emulator-chain spec [SF-6]. It
         // is a JS-object facade that callers build as a JS literal, never a Scala subclass, so a new
         // optional field cannot break a caller.

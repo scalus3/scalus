@@ -1963,20 +1963,21 @@ object JEmulator {
           cardanoInfo.network,
           treasury
         )
-        val initState = EmulatorInitialState(
-          utxos = utxos,
-          stakeRegistrations = parseStakeRegistrations(options.stakeRegistrations),
-          poolRegistrations = parsePoolRegistrations(options.poolRegistrations, env),
-          drepRegistrations = parseDrepRegistrations(options.drepRegistrations),
-          datums = Map.empty,
-          committee = options.committee.toOption.map(committeeOf),
-          committeeHotKeys = options.committeeHotKeys.toOption.toSeq.flatten.map { k =>
-              parseCredential(k.coldCredentialType, k.coldCredentialHash) ->
-                  parseCredential(k.hotCredentialType, k.hotCredentialHash)
-          }.toMap,
-          constitution = options.constitution.toOption.map(constitutionOf),
-          reserves = reserves
-        )
+        val seeded = EmulatorInitialState.empty
+            .withUtxos(utxos)
+            .withStakeRegistrations(parseStakeRegistrations(options.stakeRegistrations))
+            .withPoolRegistrations(parsePoolRegistrations(options.poolRegistrations, env))
+            .withDRepRegistrations(parseDrepRegistrations(options.drepRegistrations))
+            .withCommitteeHotKeys(options.committeeHotKeys.toOption.toSeq.flatten.map { k =>
+                parseCredential(k.coldCredentialType, k.coldCredentialHash) ->
+                    parseCredential(k.hotCredentialType, k.hotCredentialHash)
+            }.toMap)
+            .withReserves(reserves)
+        val withCommittee =
+            options.committee.toOption.map(committeeOf).fold(seeded)(seeded.withCommittee)
+        val initState = options.constitution.toOption
+            .map(constitutionOf)
+            .fold(withCommittee)(withCommittee.withConstitution)
         val context = Context(env = env, slotConfig = cardanoInfo.slotConfig)
         val scalaEmulator = Emulator.withState(initState, context, chainConfigOf(options))
         scalaEmulator.seedDatums(parseDatums(options.datums))

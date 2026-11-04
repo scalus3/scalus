@@ -283,10 +283,12 @@
   The Emulator computes the stake snapshots and the reward update at each epoch boundary; read
   them with `snapshots` and `pendingRewards` (types in `scalus.cardano.ledger.epoch`).
   `Emulator.stakeDistribution` stays, and now sums the same instant stake as the snapshots.
-- The 5-argument `EmulatorInitialState` constructor and companion `apply`, which have no gov
-  fields: use the 9-argument form, named arguments or the `Builder`. The 5-argument `copy` is
-  gone; a call by field name still compiles. A positional pattern match such as
-  `case EmulatorInitialState(a, b, c, d, e)` no longer compiles.
+- The `EmulatorInitialState` constructor, companion `apply` and `copy`: start from
+  `EmulatorInitialState.empty` and set fields with `withUtxos`, `withStakeRegistrations`,
+  `withReserves` and the other `with` methods, or use the Java `Builder`. The class is final with
+  a private constructor, so later fields add `with` methods only. The 1.4 forms with their
+  defaults stay; a positional pattern match such as `case EmulatorInitialState(a, b, c, d, e)` no
+  longer compiles.
 - `clearAppliedTxs`: the selected chain is the applied-tx log now; start a new Emulator for an
   empty log.
 - `StreamingEmulator.syntheticBlockHash`: the stream delivers the Emulator's real blocks, named by

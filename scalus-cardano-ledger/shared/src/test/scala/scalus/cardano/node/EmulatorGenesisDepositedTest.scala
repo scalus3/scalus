@@ -26,16 +26,19 @@ class EmulatorGenesisDepositedTest extends AnyFunSuite with Matchers {
           poolMetadata = None
         )
         val drepDeposit = Coin.ada(7)
-        val initState = EmulatorInitialState(
-          stakeRegistrations = Seq(
-            EmulatorStakeRegistration.of(Credential.KeyHash(AddrKeyHash.fromHex("2" * 56)))
-          ),
-          poolRegistrations = Seq(EmulatorPoolRegistration(pool)),
-          drepRegistrations = Seq(
-            EmulatorDRepRegistration
-                .of(Credential.KeyHash(AddrKeyHash.fromHex("3" * 56)), drepDeposit)
-          )
-        )
+        val initState = EmulatorInitialState.empty
+            .withStakeRegistrations(
+              Seq(
+                EmulatorStakeRegistration.of(Credential.KeyHash(AddrKeyHash.fromHex("2" * 56)))
+              )
+            )
+            .withPoolRegistrations(Seq(EmulatorPoolRegistration(pool)))
+            .withDRepRegistrations(
+              Seq(
+                EmulatorDRepRegistration
+                    .of(Credential.KeyHash(AddrKeyHash.fromHex("3" * 56)), drepDeposit)
+              )
+            )
         val (certState, _) = EmulatorBase.buildInitialState(initState, context)
         val state =
             EmulatorState.initial(Utxos.empty, certState, context, Map.empty, ChainConfig.instant)

@@ -166,10 +166,9 @@ class JavaEmulatorChainInteropTest extends AnyFunSuite {
         val aliceStake = Alice.account.stakeAddress(Network.Mainnet)
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val e = Emulator.withState(
-          EmulatorInitialState(
-            utxos = Map(Input(genesisHash, 0) -> Output(alice, Value.ada(200_000))),
-            stakeRegistrations = Seq(EmulatorStakeRegistration(aliceStake.credential))
-          ),
+          EmulatorInitialState.empty
+              .withUtxos(Map(Input(genesisHash, 0) -> Output(alice, Value.ada(200_000))))
+              .withStakeRegistrations(Seq(EmulatorStakeRegistration(aliceStake.credential))),
           Context.testMainnet(slotConfig.firstSlotOfEpoch(startEpoch) + 10)
         )
         val params = testEnv.protocolParams

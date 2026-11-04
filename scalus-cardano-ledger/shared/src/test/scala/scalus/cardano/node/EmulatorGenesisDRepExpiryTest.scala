@@ -11,11 +11,10 @@ class EmulatorGenesisDRepExpiryTest extends AnyFunSuite with Matchers {
         val context = Context.testMainnet()
         val genesisEpoch = context.slotConfig.epochOf(context.env.slot)
         val drep = Credential.KeyHash(AddrKeyHash.fromHex("3" * 56))
-        val initState = EmulatorInitialState(
-          stakeRegistrations = Seq.empty,
-          poolRegistrations = Seq.empty,
-          drepRegistrations = Seq(EmulatorDRepRegistration.of(drep, Coin.ada(500)))
-        )
+        val initState = EmulatorInitialState.empty
+            .withStakeRegistrations(Seq.empty)
+            .withPoolRegistrations(Seq.empty)
+            .withDRepRegistrations(Seq(EmulatorDRepRegistration.of(drep, Coin.ada(500))))
         val (certState, _) = EmulatorBase.buildInitialState(initState, context)
         context.env.params.dRepActivity should be > 0L
         certState.vstate.dreps(drep).expiry shouldBe genesisEpoch + context.env.params.dRepActivity

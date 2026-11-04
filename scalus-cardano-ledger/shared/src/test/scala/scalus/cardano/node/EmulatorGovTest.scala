@@ -43,17 +43,17 @@ class EmulatorGovTest extends AnyFunSuite with Matchers with EitherValues with O
         committee: Option[Committee],
         hotKeys: Map[Credential, Credential],
         constitution: Option[Constitution]
-    ): EmulatorInitialState =
-        EmulatorInitialState(
-          utxos = initialUtxos,
-          stakeRegistrations = Seq(EmulatorStakeRegistration.of(aliceKey)),
-          drepRegistrations = Seq(
-            EmulatorDRepRegistration.of(aliceKey, Coin(testEnv.protocolParams.dRepDeposit))
-          ),
-          committee = committee,
-          committeeHotKeys = hotKeys,
-          constitution = constitution
-        )
+    ): EmulatorInitialState = {
+        val seeded = EmulatorInitialState.empty
+            .withUtxos(initialUtxos)
+            .withStakeRegistrations(Seq(EmulatorStakeRegistration.of(aliceKey)))
+            .withDRepRegistrations(
+              Seq(EmulatorDRepRegistration.of(aliceKey, Coin(testEnv.protocolParams.dRepDeposit)))
+            )
+            .withCommitteeHotKeys(hotKeys)
+        val withCommittee = committee.fold(seeded)(seeded.withCommittee)
+        constitution.fold(withCommittee)(withCommittee.withConstitution)
+    }
 
     private def emulator(config: ChainConfig = ChainConfig.instant): Emulator =
         Emulator.withState(initialState(None, Map.empty, None), rules.Context.testMainnet(), config)

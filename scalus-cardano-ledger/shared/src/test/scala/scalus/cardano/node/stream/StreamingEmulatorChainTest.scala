@@ -29,7 +29,11 @@ class StreamingEmulatorChainTest extends AnyFunSuite {
     }.toMap
 
     private def emulator(config: ChainConfig): Emulator =
-        Emulator.withState(EmulatorInitialState(initialUtxos), rules.Context.testMainnet(), config)
+        Emulator.withState(
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
+          rules.Context.testMainnet(),
+          config
+        )
 
     /** A payment to Bob that spends exactly the genesis UTxO `i`. */
     private def pay(i: Int, lovelace: Long): Transaction =

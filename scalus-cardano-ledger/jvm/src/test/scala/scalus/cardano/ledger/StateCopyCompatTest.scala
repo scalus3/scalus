@@ -1,8 +1,13 @@
 package scalus.cardano.ledger
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.node.EmulatorInitialState
 
-/** `PoolsState` and `VotingState` keep the 1.4 `copy` beside the full one, spec D120. */
+import java.lang.reflect.Modifier
+
+/** `PoolsState` and `VotingState` keep the 1.4 `copy` beside the full one, spec D120;
+  * `EmulatorInitialState` keeps its 1.4 entry points, D121.
+  */
 class StateCopyCompatTest extends AnyFunSuite {
 
     private val vrf = VrfKeyHash.fromHex("a1" * 32)
@@ -33,5 +38,15 @@ class StateCopyCompatTest extends AnyFunSuite {
         val back = voting.copy(dreps = Map.empty)
         assert(back == voting)
         assert(voting.copy(numDormantEpochs = 0L) == VotingState.empty)
+    }
+
+    test("EmulatorInitialState keeps the public 1.4 copy and its defaults in its bytecode") {
+        val cls = classOf[EmulatorInitialState]
+        val map = classOf[Map[?, ?]]
+        val seq = classOf[Seq[?]]
+        assert(Modifier.isPublic(cls.getMethod("copy", map, seq, seq, seq, map).getModifiers))
+        assert(Modifier.isPublic(cls.getConstructor(map, seq, seq, seq, map).getModifiers))
+        for i <- 1 to 5 do
+            assert(Modifier.isPublic(cls.getMethod(s"copy$$default$$$i").getModifiers))
     }
 }

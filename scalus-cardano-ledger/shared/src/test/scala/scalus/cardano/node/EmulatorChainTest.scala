@@ -32,7 +32,11 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     }.toMap
 
     private def emulator(config: ChainConfig): Emulator =
-        Emulator.withState(EmulatorInitialState(initialUtxos), rules.Context.testMainnet(), config)
+        Emulator.withState(
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
+          rules.Context.testMainnet(),
+          config
+        )
 
     private def stateOf(emulator: Emulator): EmulatorState = EmulatorBase.stateOf(emulator)
 
@@ -59,7 +63,9 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         // spec [CF-4]
         assert(stateOf(Emulator(initialUtxos = initialUtxos)).config == ChainConfig.instant)
         assert(stateOf(Emulator.withAddresses(Seq(alice))).config == ChainConfig.instant)
-        assert(stateOf(Emulator.withState(EmulatorInitialState())).config == ChainConfig.instant)
+        assert(
+          stateOf(Emulator.withState(EmulatorInitialState.empty)).config == ChainConfig.instant
+        )
     }
 
     test("every factory has an overload that takes a ChainConfig") {
@@ -68,7 +74,7 @@ class EmulatorChainTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val context = rules.Context.testMainnet()
         val built = Seq(
           Emulator.withAddresses(Seq(alice), Value.ada(10), manual),
-          Emulator.withState(EmulatorInitialState(), context, manual),
+          Emulator.withState(EmulatorInitialState.empty, context, manual),
           Emulator.withRegisteredStakeCredentials(initialUtxos, Map.empty, context, manual)
         )
         for e <- built do assert(stateOf(e).config == manual)

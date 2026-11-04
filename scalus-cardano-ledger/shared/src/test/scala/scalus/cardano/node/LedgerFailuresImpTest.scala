@@ -54,7 +54,7 @@ class LedgerFailuresImpTest extends AnyFunSuite {
                 ))
         val context = rules.Context.testMainnet()
         Emulator.withState(
-          seed(EmulatorInitialState(utxos)),
+          seed(EmulatorInitialState.empty.withUtxos(utxos)),
           context.copy(env = context.env.copy(params = adjust(context.env.params))),
           config
         )
@@ -296,10 +296,8 @@ class LedgerFailuresImpTest extends AnyFunSuite {
         val e = emulator(
           alwaysOk,
           params => onlyV1V2(params).copy(govActionDeposit = deposit),
-          seed = _.copy(
-            stakeRegistrations = Seq(EmulatorStakeRegistration.of(returnTo.credential)),
-            constitution = Some(Constitution(anchor, Some(alwaysOk.scriptHash)))
-          )
+          seed = _.withStakeRegistrations(Seq(EmulatorStakeRegistration.of(returnTo.credential)))
+              .withConstitution(Constitution(anchor, Some(alwaysOk.scriptHash)))
         )
         val v3 = env.protocolParams.costModels.models.filter(_._1 == Language.PlutusV3.ordinal)
         val proposal = ProposalProcedure(

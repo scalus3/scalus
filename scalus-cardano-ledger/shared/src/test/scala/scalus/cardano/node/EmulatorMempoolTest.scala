@@ -32,7 +32,11 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     }.toMap
 
     private def emulator(config: ChainConfig): Emulator =
-        Emulator.withState(EmulatorInitialState(initialUtxos), rules.Context.testMainnet(), config)
+        Emulator.withState(
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
+          rules.Context.testMainnet(),
+          config
+        )
 
     private def stateOf(emulator: Emulator): EmulatorState = EmulatorBase.stateOf(emulator)
 
@@ -469,7 +473,7 @@ class EmulatorMempoolTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val context = rules.Context.testMainnet()
         val params = context.env.params.copy(maxBlockBodySize = maxBlockBodySize)
         Emulator.withState(
-          EmulatorInitialState(initialUtxos),
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
           context.copy(env = context.env.copy(params = params)),
           ChainConfig.manual
         )

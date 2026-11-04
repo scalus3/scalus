@@ -33,7 +33,11 @@ class EmulatorForkTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     private val manual = ChainConfig.manual
 
     private def emulator(config: ChainConfig): Emulator =
-        Emulator.withState(EmulatorInitialState(initialUtxos), rules.Context.testMainnet(), config)
+        Emulator.withState(
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
+          rules.Context.testMainnet(),
+          config
+        )
 
     private def stateOf(emulator: Emulator): EmulatorState = EmulatorBase.stateOf(emulator)
 
@@ -129,7 +133,7 @@ class EmulatorForkTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val context = rules.Context.testMainnet()
         val params = context.env.params.copy(maxBlockBodySize = BlockForge.bodySize(txs.take(1)))
         val e = Emulator.withState(
-          EmulatorInitialState(initialUtxos),
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
           context.copy(env = context.env.copy(params = params)),
           manual
         )
@@ -421,7 +425,7 @@ class EmulatorForkTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val start = testEnv.slotConfig.firstSlotOfEpoch(500) + 10
         val context = rules.Context.testMainnet(start)
         val e = Emulator.withState(
-          EmulatorInitialState(initialUtxos),
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
           context.copy(env = context.env.copy(treasury = Coin(1000))),
           manual
         )
@@ -456,7 +460,7 @@ class EmulatorForkTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val start = testEnv.slotConfig.firstSlotOfEpoch(500) + 10
         val context = rules.Context.testMainnet(start)
         val e = Emulator.withState(
-          EmulatorInitialState(initialUtxos),
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
           context.copy(env = context.env.copy(treasury = Coin(1000))),
           manual.withOrphanTxs(OrphanTxPolicy.Drop)
         )

@@ -167,7 +167,7 @@ class EmulatorEpochTest extends AnyFunSuite {
         // spec [ES-6], [ES-7]: the reserves are given through EmulatorInitialState
         val context = rules.Context.testMainnet(slotConfig.firstSlotOfEpoch(startEpoch))
         val e = Emulator.withState(
-          EmulatorInitialState(initialUtxos, reserves = Coin(77)),
+          EmulatorInitialState.empty.withUtxos(initialUtxos).withReserves(Coin(77)),
           context,
           ChainConfig.instant
         )
@@ -229,14 +229,15 @@ class EmulatorEpochTest extends AnyFunSuite {
           */
         def poolEmulator(): Emulator =
             Emulator.withState(
-              EmulatorInitialState(
-                utxos = initialUtxos,
-                stakeRegistrations = Seq(
-                  EmulatorStakeRegistration(bob),
-                  EmulatorStakeRegistration(charles, delegatedTo = Some(id))
-                ),
-                poolRegistrations = Seq(EmulatorPoolRegistration(registration))
-              ),
+              EmulatorInitialState.empty
+                  .withUtxos(initialUtxos)
+                  .withStakeRegistrations(
+                    Seq(
+                      EmulatorStakeRegistration(bob),
+                      EmulatorStakeRegistration(charles, delegatedTo = Some(id))
+                    )
+                  )
+                  .withPoolRegistrations(Seq(EmulatorPoolRegistration(registration))),
               rules.Context.testMainnet(slotConfig.firstSlotOfEpoch(startEpoch) + 10),
               ChainConfig.instant
             )
@@ -412,11 +413,10 @@ class EmulatorEpochTest extends AnyFunSuite {
               dRepActivity = dRepActivity
             )
             Emulator.withState(
-              EmulatorInitialState(
-                utxos = initialUtxos,
-                stakeRegistrations = Seq(EmulatorStakeRegistration(aliceAccount)),
-                drepRegistrations = dreps.map(EmulatorDRepRegistration(_, drepDeposit))
-              ),
+              EmulatorInitialState.empty
+                  .withUtxos(initialUtxos)
+                  .withStakeRegistrations(Seq(EmulatorStakeRegistration(aliceAccount)))
+                  .withDRepRegistrations(dreps.map(EmulatorDRepRegistration(_, drepDeposit))),
               context.copy(env = context.env.copy(params = params)),
               ChainConfig.instant
             )
@@ -729,11 +729,10 @@ class EmulatorEpochTest extends AnyFunSuite {
         import alicePool.*
         val charlesUtxo = Input(genesisHash, 7) -> Output(charlesBase, Value.ada(50))
         val e = Emulator.withState(
-          EmulatorInitialState(
-            utxos = initialUtxos + charlesUtxo,
-            stakeRegistrations = Seq(EmulatorStakeRegistration(charles, Coin(3), Some(id))),
-            poolRegistrations = Seq(EmulatorPoolRegistration(registration))
-          ),
+          EmulatorInitialState.empty
+              .withUtxos(initialUtxos + charlesUtxo)
+              .withStakeRegistrations(Seq(EmulatorStakeRegistration(charles, Coin(3), Some(id))))
+              .withPoolRegistrations(Seq(EmulatorPoolRegistration(registration))),
           rules.Context.testMainnet(slotConfig.firstSlotOfEpoch(startEpoch) + 10),
           ChainConfig.instant
         )
@@ -774,7 +773,7 @@ class EmulatorEpochTest extends AnyFunSuite {
       */
     private def issuedEmulator(): Emulator =
         Emulator.withState(
-          EmulatorInitialState(initialUtxos),
+          EmulatorInitialState.empty.withUtxos(initialUtxos),
           rules.Context.testMainnet(slotConfig.firstSlotOfEpoch(startEpoch) + 10),
           ChainConfig.manual.withBlockIssuer(BlockIssuer.pool(issuerPool))
         )
@@ -964,15 +963,16 @@ class EmulatorEpochTest extends AnyFunSuite {
         val charlesReg =
             if seeded then Seq(EmulatorStakeRegistration(charles, delegatedTo = Some(id))) else Nil
         Emulator.withState(
-          EmulatorInitialState(
-            utxos = initialUtxos + charlesUtxo,
-            stakeRegistrations = EmulatorStakeRegistration(bob) +: charlesReg,
-            poolRegistrations = Seq(
-              EmulatorPoolRegistration(
-                registration.copy(pledge = Coin.zero, cost = cost, margin = margin)
-              )
-            )
-          ),
+          EmulatorInitialState.empty
+              .withUtxos(initialUtxos + charlesUtxo)
+              .withStakeRegistrations(EmulatorStakeRegistration(bob) +: charlesReg)
+              .withPoolRegistrations(
+                Seq(
+                  EmulatorPoolRegistration(
+                    registration.copy(pledge = Coin.zero, cost = cost, margin = margin)
+                  )
+                )
+              ),
           rules.Context.testMainnet(slotConfig.firstSlotOfEpoch(startEpoch) + 10),
           config
         )

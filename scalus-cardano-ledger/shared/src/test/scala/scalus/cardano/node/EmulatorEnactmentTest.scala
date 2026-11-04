@@ -59,13 +59,12 @@ class EmulatorEnactmentTest extends AnyFunSuite {
               params.poolVotingThresholds.copy(ppSecurityGroup = UnitInterval.zero)
         )
         Emulator.withState(
-          EmulatorInitialState(
-            utxos = initialUtxos,
-            stakeRegistrations = Seq(EmulatorStakeRegistration(aliceAccount, Coin.ada(10))),
-            drepRegistrations = Seq(EmulatorDRepRegistration(drep, Coin(params.dRepDeposit))),
-            committee = Some(Committee(Map(coldKey -> (startEpoch + 100)), UnitInterval.half)),
-            committeeHotKeys = Map(coldKey -> hotKey)
-          ),
+          EmulatorInitialState.empty
+              .withUtxos(initialUtxos)
+              .withStakeRegistrations(Seq(EmulatorStakeRegistration(aliceAccount, Coin.ada(10))))
+              .withDRepRegistrations(Seq(EmulatorDRepRegistration(drep, Coin(params.dRepDeposit))))
+              .withCommittee(Committee(Map(coldKey -> (startEpoch + 100)), UnitInterval.half))
+              .withCommitteeHotKeys(Map(coldKey -> hotKey)),
           context.copy(env = context.env.copy(params = newParams)),
           config
         )

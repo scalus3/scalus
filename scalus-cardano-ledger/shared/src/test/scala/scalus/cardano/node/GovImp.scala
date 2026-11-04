@@ -84,14 +84,13 @@ final class GovImp(
             else Map.empty[Credential, Credential]
         val context = rules.Context.testMainnet(slotConfig.firstSlotOfEpoch(startEpoch) + 10)
         val emulator = Emulator.withState(
-          EmulatorInitialState(
-            utxos = utxos,
-            stakeRegistrations = stakeRegs,
-            poolRegistrations = poolRegs,
-            drepRegistrations = dRepRegs,
-            committee = Some(committee),
-            committeeHotKeys = hot
-          ),
+          EmulatorInitialState.empty
+              .withUtxos(utxos)
+              .withStakeRegistrations(stakeRegs)
+              .withPoolRegistrations(poolRegs)
+              .withDRepRegistrations(dRepRegs)
+              .withCommittee(committee)
+              .withCommitteeHotKeys(hot),
           context.copy(env = context.env.copy(params = params, treasury = treasury)),
           ChainConfig.instant
         )
