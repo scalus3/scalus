@@ -45,9 +45,290 @@ case class ProtocolParams(
     txFeeFixed: Long,
     txFeePerByte: Long,
     utxoCostPerByte: Long
-)
+) {
+
+    /** The 1.4 constructor, with rho, a0 and tau as `Double`. Each converts to the shortest decimal
+      * that reads back as that `Double`, as the JSON readers do, so `0.003` is `3/1000`. spec
+      * [DM-20a], D119
+      *
+      * @throws IllegalArgumentException
+      *   if rho or tau is not in [0, 1], or a0 is negative; the message names the field
+      */
+    def this(
+        collateralPercentage: Long,
+        committeeMaxTermLength: Long,
+        committeeMinSize: Long,
+        costModels: CostModels,
+        dRepActivity: Long,
+        dRepDeposit: Long,
+        dRepVotingThresholds: DRepVotingThresholds,
+        executionUnitPrices: ExUnitPrices,
+        govActionDeposit: Long,
+        govActionLifetime: Long,
+        maxBlockBodySize: Long,
+        maxBlockExecutionUnits: ExUnits,
+        maxBlockHeaderSize: Long,
+        maxCollateralInputs: Long,
+        maxTxExecutionUnits: ExUnits,
+        maxTxSize: Long,
+        maxValueSize: Long,
+        minFeeRefScriptCostPerByte: Long,
+        minPoolCost: Long,
+        monetaryExpansion: Double,
+        poolPledgeInfluence: Double,
+        poolRetireMaxEpoch: Long,
+        poolVotingThresholds: PoolVotingThresholds,
+        protocolVersion: ProtocolVersion,
+        stakeAddressDeposit: Long,
+        stakePoolDeposit: Long,
+        stakePoolTargetNum: Long,
+        treasuryCut: Double,
+        txFeeFixed: Long,
+        txFeePerByte: Long,
+        utxoCostPerByte: Long
+    ) = this(
+      collateralPercentage,
+      committeeMaxTermLength,
+      committeeMinSize,
+      costModels,
+      dRepActivity,
+      dRepDeposit,
+      dRepVotingThresholds,
+      executionUnitPrices,
+      govActionDeposit,
+      govActionLifetime,
+      maxBlockBodySize,
+      maxBlockExecutionUnits,
+      maxBlockHeaderSize,
+      maxCollateralInputs,
+      maxTxExecutionUnits,
+      maxTxSize,
+      maxValueSize,
+      minFeeRefScriptCostPerByte,
+      minPoolCost,
+      ProtocolParams.unitIntervalOf("monetaryExpansion", monetaryExpansion),
+      ProtocolParams.nonNegativeIntervalOf("poolPledgeInfluence", poolPledgeInfluence),
+      poolRetireMaxEpoch,
+      poolVotingThresholds,
+      protocolVersion,
+      stakeAddressDeposit,
+      stakePoolDeposit,
+      stakePoolTargetNum,
+      ProtocolParams.unitIntervalOf("treasuryCut", treasuryCut),
+      txFeeFixed,
+      txFeePerByte,
+      utxoCostPerByte
+    )
+
+    /** The copy of a case class, written out because the 1.4 `copy` below suppresses the synthetic
+      * one. D119
+      */
+    def copy(
+        collateralPercentage: Long = this.collateralPercentage,
+        committeeMaxTermLength: Long = this.committeeMaxTermLength,
+        committeeMinSize: Long = this.committeeMinSize,
+        costModels: CostModels = this.costModels,
+        dRepActivity: Long = this.dRepActivity,
+        dRepDeposit: Long = this.dRepDeposit,
+        dRepVotingThresholds: DRepVotingThresholds = this.dRepVotingThresholds,
+        executionUnitPrices: ExUnitPrices = this.executionUnitPrices,
+        govActionDeposit: Long = this.govActionDeposit,
+        govActionLifetime: Long = this.govActionLifetime,
+        maxBlockBodySize: Long = this.maxBlockBodySize,
+        maxBlockExecutionUnits: ExUnits = this.maxBlockExecutionUnits,
+        maxBlockHeaderSize: Long = this.maxBlockHeaderSize,
+        maxCollateralInputs: Long = this.maxCollateralInputs,
+        maxTxExecutionUnits: ExUnits = this.maxTxExecutionUnits,
+        maxTxSize: Long = this.maxTxSize,
+        maxValueSize: Long = this.maxValueSize,
+        minFeeRefScriptCostPerByte: Long = this.minFeeRefScriptCostPerByte,
+        minPoolCost: Long = this.minPoolCost,
+        monetaryExpansion: UnitInterval = this.monetaryExpansion,
+        poolPledgeInfluence: NonNegativeInterval = this.poolPledgeInfluence,
+        poolRetireMaxEpoch: Long = this.poolRetireMaxEpoch,
+        poolVotingThresholds: PoolVotingThresholds = this.poolVotingThresholds,
+        protocolVersion: ProtocolVersion = this.protocolVersion,
+        stakeAddressDeposit: Long = this.stakeAddressDeposit,
+        stakePoolDeposit: Long = this.stakePoolDeposit,
+        stakePoolTargetNum: Long = this.stakePoolTargetNum,
+        treasuryCut: UnitInterval = this.treasuryCut,
+        txFeeFixed: Long = this.txFeeFixed,
+        txFeePerByte: Long = this.txFeePerByte,
+        utxoCostPerByte: Long = this.utxoCostPerByte
+    ): ProtocolParams = new ProtocolParams(
+      collateralPercentage,
+      committeeMaxTermLength,
+      committeeMinSize,
+      costModels,
+      dRepActivity,
+      dRepDeposit,
+      dRepVotingThresholds,
+      executionUnitPrices,
+      govActionDeposit,
+      govActionLifetime,
+      maxBlockBodySize,
+      maxBlockExecutionUnits,
+      maxBlockHeaderSize,
+      maxCollateralInputs,
+      maxTxExecutionUnits,
+      maxTxSize,
+      maxValueSize,
+      minFeeRefScriptCostPerByte,
+      minPoolCost,
+      monetaryExpansion,
+      poolPledgeInfluence,
+      poolRetireMaxEpoch,
+      poolVotingThresholds,
+      protocolVersion,
+      stakeAddressDeposit,
+      stakePoolDeposit,
+      stakePoolTargetNum,
+      treasuryCut,
+      txFeeFixed,
+      txFeePerByte,
+      utxoCostPerByte
+    )
+
+    /** The 1.4 `copy`, with rho, a0 and tau as `Double`, converted as the 1.4 constructor converts
+      * them. No defaults: only one overload may have them. D119
+      */
+    def copy(
+        collateralPercentage: Long,
+        committeeMaxTermLength: Long,
+        committeeMinSize: Long,
+        costModels: CostModels,
+        dRepActivity: Long,
+        dRepDeposit: Long,
+        dRepVotingThresholds: DRepVotingThresholds,
+        executionUnitPrices: ExUnitPrices,
+        govActionDeposit: Long,
+        govActionLifetime: Long,
+        maxBlockBodySize: Long,
+        maxBlockExecutionUnits: ExUnits,
+        maxBlockHeaderSize: Long,
+        maxCollateralInputs: Long,
+        maxTxExecutionUnits: ExUnits,
+        maxTxSize: Long,
+        maxValueSize: Long,
+        minFeeRefScriptCostPerByte: Long,
+        minPoolCost: Long,
+        monetaryExpansion: Double,
+        poolPledgeInfluence: Double,
+        poolRetireMaxEpoch: Long,
+        poolVotingThresholds: PoolVotingThresholds,
+        protocolVersion: ProtocolVersion,
+        stakeAddressDeposit: Long,
+        stakePoolDeposit: Long,
+        stakePoolTargetNum: Long,
+        treasuryCut: Double,
+        txFeeFixed: Long,
+        txFeePerByte: Long,
+        utxoCostPerByte: Long
+    ): ProtocolParams = new ProtocolParams(
+      collateralPercentage,
+      committeeMaxTermLength,
+      committeeMinSize,
+      costModels,
+      dRepActivity,
+      dRepDeposit,
+      dRepVotingThresholds,
+      executionUnitPrices,
+      govActionDeposit,
+      govActionLifetime,
+      maxBlockBodySize,
+      maxBlockExecutionUnits,
+      maxBlockHeaderSize,
+      maxCollateralInputs,
+      maxTxExecutionUnits,
+      maxTxSize,
+      maxValueSize,
+      minFeeRefScriptCostPerByte,
+      minPoolCost,
+      monetaryExpansion,
+      poolPledgeInfluence,
+      poolRetireMaxEpoch,
+      poolVotingThresholds,
+      protocolVersion,
+      stakeAddressDeposit,
+      stakePoolDeposit,
+      stakePoolTargetNum,
+      treasuryCut,
+      txFeeFixed,
+      txFeePerByte,
+      utxoCostPerByte
+    )
+}
 
 object ProtocolParams {
+
+    /** The 1.4 `apply`, with rho, a0 and tau as `Double`, converted as the 1.4 constructor converts
+      * them. D119
+      */
+    def apply(
+        collateralPercentage: Long,
+        committeeMaxTermLength: Long,
+        committeeMinSize: Long,
+        costModels: CostModels,
+        dRepActivity: Long,
+        dRepDeposit: Long,
+        dRepVotingThresholds: DRepVotingThresholds,
+        executionUnitPrices: ExUnitPrices,
+        govActionDeposit: Long,
+        govActionLifetime: Long,
+        maxBlockBodySize: Long,
+        maxBlockExecutionUnits: ExUnits,
+        maxBlockHeaderSize: Long,
+        maxCollateralInputs: Long,
+        maxTxExecutionUnits: ExUnits,
+        maxTxSize: Long,
+        maxValueSize: Long,
+        minFeeRefScriptCostPerByte: Long,
+        minPoolCost: Long,
+        monetaryExpansion: Double,
+        poolPledgeInfluence: Double,
+        poolRetireMaxEpoch: Long,
+        poolVotingThresholds: PoolVotingThresholds,
+        protocolVersion: ProtocolVersion,
+        stakeAddressDeposit: Long,
+        stakePoolDeposit: Long,
+        stakePoolTargetNum: Long,
+        treasuryCut: Double,
+        txFeeFixed: Long,
+        txFeePerByte: Long,
+        utxoCostPerByte: Long
+    ): ProtocolParams = new ProtocolParams(
+      collateralPercentage,
+      committeeMaxTermLength,
+      committeeMinSize,
+      costModels,
+      dRepActivity,
+      dRepDeposit,
+      dRepVotingThresholds,
+      executionUnitPrices,
+      govActionDeposit,
+      govActionLifetime,
+      maxBlockBodySize,
+      maxBlockExecutionUnits,
+      maxBlockHeaderSize,
+      maxCollateralInputs,
+      maxTxExecutionUnits,
+      maxTxSize,
+      maxValueSize,
+      minFeeRefScriptCostPerByte,
+      minPoolCost,
+      monetaryExpansion,
+      poolPledgeInfluence,
+      poolRetireMaxEpoch,
+      poolVotingThresholds,
+      protocolVersion,
+      stakeAddressDeposit,
+      stakePoolDeposit,
+      stakePoolTargetNum,
+      treasuryCut,
+      txFeeFixed,
+      txFeePerByte,
+      utxoCostPerByte
+    )
 
     /** A single field difference between two ProtocolParams */
     case class ParamDiff(field: String, expected: String, actual: String)
@@ -446,9 +727,13 @@ object ProtocolParams {
       */
     private def decimalFraction(json: ujson.Value, field: String): NonNegativeInterval = {
         val value = json(field)
-        val decimal = value.strOpt match
-            case Some(text) => BigDecimal(text)
-            case None       => BigDecimal.decimal(value.num)
+        value.strOpt match
+            case Some(text) => fractionOf(field, BigDecimal(text))
+            case None       => fractionOf(field, BigDecimal.decimal(value.num))
+    }
+
+    /** The exact fraction, in lowest terms, of `decimal`. */
+    private def fractionOf(field: String, decimal: BigDecimal): NonNegativeInterval = {
         val unscaled = BigInt(decimal.bigDecimal.unscaledValue)
         val scale = decimal.scale
         val (num, den) =
@@ -461,8 +746,20 @@ object ProtocolParams {
                 throw IllegalArgumentException(s"$field: $decimal: ${e.getMessage}")
     }
 
-    private def unitIntervalField(json: ujson.Value, field: String): UnitInterval = {
-        val r = decimalFraction(json, field)
+    /** The 1.4 `Double` form of a0: the shortest decimal that reads back as `value`, as
+      * [[decimalFraction]] takes a JSON number. D119
+      */
+    private def nonNegativeIntervalOf(field: String, value: Double): NonNegativeInterval =
+        fractionOf(field, BigDecimal.decimal(value))
+
+    /** The 1.4 `Double` form of rho and tau, as [[nonNegativeIntervalOf]], in [0, 1]. D119 */
+    private def unitIntervalOf(field: String, value: Double): UnitInterval =
+        toUnitInterval(field, nonNegativeIntervalOf(field, value))
+
+    private def unitIntervalField(json: ujson.Value, field: String): UnitInterval =
+        toUnitInterval(field, decimalFraction(json, field))
+
+    private def toUnitInterval(field: String, r: NonNegativeInterval): UnitInterval = {
         require(
           r.numerator <= r.denominator,
           s"$field: ${r.numerator}/${r.denominator} is not in the unit interval [0, 1]"

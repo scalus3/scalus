@@ -204,6 +204,10 @@
   guardrails script hash differs from the constitution's, a vote by an unregistered DRep or pool,
   or a vote on an action that does not exist now fail. At protocol version 11, a committee vote
   by a hot key that no member of the current committee authorized fails.
+- `PoolsState` gains `vrfKeyHashes` and `VotingState` gains `numDormantEpochs` and
+  `committeeState`. Their 1.4 constructor, `apply` and `copy` stay, and the 1.4 `copy` keeps the
+  new fields. A positional pattern match such as `case PoolsState(a, b, c, d)` or
+  `case VotingState(m)` no longer compiles.
 - **Migration hazard: `GovState` is a case class instead of an alias of
   `Array[io.bullet.borer.Dom.Element]`, so `State.govState` and `UTxOState.govState` change type.**
   Code that builds an array for them, or compares them with `sameElements`, no longer compiles;
@@ -211,9 +215,18 @@
 - **Migration hazard: `ProtocolParams.monetaryExpansion` (rho) and `treasuryCut` (tau) change
   type from `Double` to `UnitInterval`, and `poolPledgeInfluence` (a0) from `Double` to
   `NonNegativeInterval`, the ledger types; Java's `monetaryExpansion()`, `treasuryCut()` and
-  `poolPledgeInfluence()` return them.** Code that builds a `ProtocolParams` or reads the three
-  fields as numbers no longer compiles; call `.toDouble` on the value, or pass
-  `UnitInterval(3, 1000)`. The Blockfrost and cardano-cli JSON readers take the exact decimal, so
+  `poolPledgeInfluence()` return them.** Code that reads the three fields as numbers no longer
+  compiles; call `.toDouble` on the value. The constructor, `apply` and `copy` keep a 1.4
+  overload that takes all fields with the three as `Double` and converts them to the exact
+  decimal (`0.003` is `3/1000`); `copy(monetaryExpansion = 0.003)` alone needs
+  `UnitInterval(3, 1000)`.
+- **Migration hazard: a jar compiled against 1.4 that calls `ProtocolParams.copy` with named
+  arguments, such as `pp.copy(maxTxSize = 32768)`, fails at run time with `NoSuchMethodError`;
+  recompile it against this version.** Such a call reads every field it does not name through
+  the default getters `copy$default$20`, `copy$default$21` and `copy$default$28`, which now
+  return `UnitInterval` and `NonNegativeInterval` instead of `Double`. A class has one default
+  getter per parameter, so no overload can keep the 1.4 ones. A 1.4 jar that calls the
+  constructor, `apply` or `copy` with all fields keeps working. The Blockfrost and cardano-cli JSON readers take the exact decimal, so
   `"rho": 0.003` reads as `3/1000`; the JSON they write is unchanged.
 - **`scalus-plugin` is no longer published for Scala 3.3.7. A project on Scala 3.3.x must use
   3.3.8 or 3.3.9.** The `_3` library artifacts are built with Scala 3.3.9.
@@ -270,18 +283,10 @@
   The Emulator computes the stake snapshots and the reward update at each epoch boundary; read
   them with `snapshots` and `pendingRewards` (types in `scalus.cardano.ledger.epoch`).
   `Emulator.stakeDistribution` stays, and now sums the same instant stake as the snapshots.
-- The 4-argument `PoolsState` constructor and companion `apply`, which have no VRF map: use the
-  5-argument form or `PoolsState.empty`. The 4-argument `PoolsState.copy` is gone, since a case
-  class has one `copy`; a call by field name such as `copy(retiring = ...)` still compiles. A
-  positional pattern match such as `case PoolsState(a, b, c, d)` no longer compiles.
 - The 5-argument `EmulatorInitialState` constructor and companion `apply`, which have no gov
   fields: use the 9-argument form, named arguments or the `Builder`. The 5-argument `copy` is
   gone; a call by field name still compiles. A positional pattern match such as
   `case EmulatorInitialState(a, b, c, d, e)` no longer compiles.
-- The 1-argument `VotingState` constructor and companion `apply`, which have no dormant count
-  and no committee state: use the 3-argument form or `VotingState.empty`. The 1-argument
-  `VotingState.copy` is gone; a call by field name such as `copy(dreps = ...)` still compiles. A
-  positional pattern match such as `case VotingState(m)` no longer compiles.
 - `clearAppliedTxs`: the selected chain is the applied-tx log now; start a new Emulator for an
   empty log.
 - `StreamingEmulator.syntheticBlockHash`: the stream delivers the Emulator's real blocks, named by

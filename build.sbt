@@ -502,17 +502,9 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[Problem]("scalus.utils.scalajs.internal.*"),
         // Intentional break (ledger rules spec [DM-18], [DM-19], [DM-21], D79): the reward pparams
         // rho, tau and a0 change from Double to the ledger's exact UnitInterval and
-        // NonNegativeInterval, so the reward calculation can use them exactly. No Double
-        // forwarders. The constructor, apply and copy have one overload each.
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.ProtocolParams.this"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.ProtocolParams.apply"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.ProtocolParams.copy"
-        ),
+        // NonNegativeInterval, so the reward calculation can use them exactly. The 1.4 Double
+        // constructor, apply and copy stay as overloads (D119); the accessors, the product
+        // accessors and the copy defaults cannot keep Double.
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.ledger.ProtocolParams.monetaryExpansion"
         ),
@@ -1105,17 +1097,6 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // (phases 3 to 5: snapshots, rewards, ratify). Wholly internal, as `stream.internal` is;
         // the value types a caller reads live in `scalus.cardano.ledger.epoch`, outside it (D47).
         ProblemFilters.exclude[Problem]("scalus.cardano.ledger.epoch.internal.*"),
-        // PoolsState gained the VRF map (ledger-rules spec [DM-4], D17). A deprecated
-        // constructor and companion apply keep the 1.4 shape; the 4-argument copy cannot stay,
-        // as a case class has one copy.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.PoolsState.copy(scala.collection.immutable.Map,scala.collection.immutable.Map,scala.collection.immutable.Map,scala.collection.immutable.Map)scalus.cardano.ledger.PoolsState"
-        ),
-        // VotingState gained numDormantEpochs (ledger-rules spec [DM-3], D17), with the same
-        // deprecated constructor and apply; its 1-argument copy cannot stay.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.VotingState.copy(scala.collection.immutable.Map)scalus.cardano.ledger.VotingState"
-        ),
         // GovState is a case class now instead of an alias of Array[Element] (ledger-rules spec
         // [DM-5], [DM-5a], D27). The alias's companion object goes, and State.govState and
         // UTxOState.govState change type: their constructor, apply, copy, accessor, product

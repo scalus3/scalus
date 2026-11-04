@@ -999,12 +999,25 @@ case class VotingState(
     committeeState: Map[Credential, CommitteeAuthorization]
 ) {
 
-    /** The 1.4 constructor, with no dormant counter and no committee state, spec D17. */
-    @deprecated(
-      "use the constructor with numDormantEpochs and committeeState, or VotingState.empty",
-      "1.4.1"
-    )
+    /** The 1.4 constructor, with no dormant counter and no committee state, spec D17. Not
+      * deprecated: a call that names only `dreps` resolves to it, and is correct (D120).
+      */
     def this(dreps: Map[Credential, DRepState] = Map.empty) = this(dreps, 0L, Map.empty)
+
+    /** The copy of a case class, written out because the 1.4 `copy` below suppresses the synthetic
+      * one, D120.
+      */
+    def copy(
+        dreps: Map[Credential, DRepState] = this.dreps,
+        numDormantEpochs: EpochNo = this.numDormantEpochs,
+        committeeState: Map[Credential, CommitteeAuthorization] = this.committeeState
+    ): VotingState = new VotingState(dreps, numDormantEpochs, committeeState)
+
+    /** The 1.4 `copy`, binary compatible; it keeps the dormant counter and the committee state,
+      * D120.
+      */
+    def copy(dreps: Map[Credential, DRepState]): VotingState =
+        new VotingState(dreps, numDormantEpochs, committeeState)
 }
 
 object VotingState {
@@ -1012,11 +1025,9 @@ object VotingState {
     /** No DReps, no dormant epochs and no committee authorization. */
     val empty: VotingState = VotingState(Map.empty, 0L, Map.empty)
 
-    /** The 1.4 factory, with no dormant counter and no committee state, spec D17. */
-    @deprecated(
-      "use the factory with numDormantEpochs and committeeState, or VotingState.empty",
-      "1.4.1"
-    )
+    /** The 1.4 factory, with no dormant counter and no committee state, spec D17; not deprecated,
+      * D120.
+      */
     def apply(dreps: Map[Credential, DRepState] = Map.empty): VotingState =
         VotingState(dreps, 0L, Map.empty)
 }
@@ -1068,14 +1079,37 @@ case class PoolsState(
     vrfKeyHashes: Map[VrfKeyHash, Long]
 ) {
 
-    /** The 1.4 constructor, with no VRF map, spec D17. */
-    @deprecated("use the constructor with vrfKeyHashes, or PoolsState.empty", "1.4.1")
+    /** The 1.4 constructor, with no VRF map, spec D17. Not deprecated: a call that names only the
+      * 1.4 fields resolves to it, and is correct (D120).
+      */
     def this(
         stakePools: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
         futureStakePoolParams: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
         retiring: Map[PoolKeyHash, EpochNo] = Map.empty,
         deposits: Map[PoolKeyHash, Coin] = Map.empty
     ) = this(stakePools, futureStakePoolParams, retiring, deposits, Map.empty)
+
+    /** The copy of a case class, written out because the 1.4 `copy` below suppresses the synthetic
+      * one, D120.
+      */
+    def copy(
+        stakePools: Map[PoolKeyHash, Certificate.PoolRegistration] = this.stakePools,
+        futureStakePoolParams: Map[PoolKeyHash, Certificate.PoolRegistration] =
+            this.futureStakePoolParams,
+        retiring: Map[PoolKeyHash, EpochNo] = this.retiring,
+        deposits: Map[PoolKeyHash, Coin] = this.deposits,
+        vrfKeyHashes: Map[VrfKeyHash, Long] = this.vrfKeyHashes
+    ): PoolsState =
+        new PoolsState(stakePools, futureStakePoolParams, retiring, deposits, vrfKeyHashes)
+
+    /** The 1.4 `copy`, binary compatible; it keeps the VRF map, D120. */
+    def copy(
+        stakePools: Map[PoolKeyHash, Certificate.PoolRegistration],
+        futureStakePoolParams: Map[PoolKeyHash, Certificate.PoolRegistration],
+        retiring: Map[PoolKeyHash, EpochNo],
+        deposits: Map[PoolKeyHash, Coin]
+    ): PoolsState =
+        new PoolsState(stakePools, futureStakePoolParams, retiring, deposits, vrfKeyHashes)
 }
 
 object PoolsState {
@@ -1083,8 +1117,7 @@ object PoolsState {
     /** No pools. */
     val empty: PoolsState = PoolsState(Map.empty, Map.empty, Map.empty, Map.empty, Map.empty)
 
-    /** The 1.4 factory, with no VRF map, spec D17. */
-    @deprecated("use the factory with vrfKeyHashes, or PoolsState.empty", "1.4.1")
+    /** The 1.4 factory, with no VRF map, spec D17; not deprecated, D120. */
     def apply(
         stakePools: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
         futureStakePoolParams: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
