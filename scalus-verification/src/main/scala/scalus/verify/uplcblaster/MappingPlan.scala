@@ -15,9 +15,11 @@ import scalus.verify.PropIdentity
   *
   * [[UplcBlaster.lower]] decides each node as it maps the variable, before anything below the node
   * is mapped, and records the decision: so the plan is what the Lean variables are. A decision
-  * reads only the statement and the types. Today it is the one the statement writes: every node by
-  * fields for a `forAll` or an `exists` variable, and the variable as `Data` for a `forAllData`
-  * one. A plan [[MappingPlan.Fixed]] for a check maps the nodes it names as it says instead.
+  * reads only the statement and the types. Today it is mostly the one the statement writes: every
+  * node by fields for a `forAll` or an `exists` variable, and the variable as `Data` for a
+  * `forAllData` one; but a type that contains itself is `Data` at the node where it repeats, which
+  * by fields would have no end (rule 1). A plan [[MappingPlan.Fixed]] for a check maps the nodes it
+  * names as it says instead.
   *
   * @param nodes
   *   the decided nodes of the statement's variables, in the order the variables are quantified, and
@@ -93,6 +95,11 @@ object MappingPlan {
         /** The plan the check was given maps the node so ([[MappingPlan.Fixed]]). */
         case ByFixedPlan
 
+        /** The node's type contains itself and repeats at the node: by fields it would have no end,
+          * so it is one `Data` variable (rule 1).
+          */
+        case ContainsItself
+
         /** The reason in words. */
         def describe: String = this match
             case Quantified(quantifier) =>
@@ -101,6 +108,8 @@ object MappingPlan {
                 s"${word(quantifier)} over the Data encodings of its type, which maps it as Data"
             case Limited     => "forAllDataLimited, whose guards walk the variable's Data"
             case ByFixedPlan => "fixed by the plan the check was given"
+            case ContainsItself =>
+                "its type contains itself and repeats here, so by fields it would have no end"
     }
 
     /** Mappings fixed for a check in place of the tactic's own decisions: for the tactic's tests,
@@ -113,15 +122,17 @@ object MappingPlan {
       * below it is asked about. A variable over `Data` encodings is mapped before it is expanded,
       * and is not asked about.
       *
-      * A check under a fixed plan keeps no result ([[UplcBlaster.withFixedPlan]]): it is a test of
-      * the tactic or a measurement, and the file of kept results keeps one result for a statement's
-      * name, which it would take from the check of the statement under the tactic's own plan.
+      * A check under a fixed plan, any but [[Fixed.none]], keeps no result
+      * ([[UplcBlaster.withFixedPlan]]): it is a test of the tactic or a measurement, and the file
+      * of kept results keeps one result for a statement's name, which it would take from the check
+      * of the statement under the tactic's own plan.
       *
       * @param paths
       *   the nodes it names, each written as the statement writes it: lowering fails where one is
       *   not a node the statement's variables have and the plan was asked about, so that a check
-      *   that misses it does not run as if it had not. A plan that decides by another thing than
-      *   paths, as by size, names none.
+      *   that misses it does not run as if it had not. Only these are checked: a node `decide` maps
+      *   that is not among them is mapped as it says. [[Fixed.asData]] makes the two of one list; a
+      *   plan that decides by another thing than paths, as by size, names none.
       * @param decide
       *   the mapping of the node at a path written as the statement writes it,
       *   `out.address.stakingCredential`, of a type, a case class or an enum, in the variable of a

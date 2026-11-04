@@ -190,7 +190,7 @@ final class UplcBlaster private (
 
     /** The same tactic, mapping the variables' nodes that `plan` fixes as it says, in place of its
       * own decisions ([[MappingPlan.Fixed]]): for the tactic's tests, and for measuring its rules.
-      * It keeps no results ([[fingerprint]]).
+      * Given any plan but [[MappingPlan.Fixed.none]], it keeps no results ([[fingerprint]]).
       */
     private[verify] def withFixedPlan(plan: MappingPlan.Fixed): UplcBlaster =
         new UplcBlaster(
@@ -596,6 +596,7 @@ object UplcBlaster {
                 limits: Limits
             ): Either[String, (List[Int], List[Binding])] =
                 val decoded = Props.openVariables(decoder, List(ident.name))
+                val withoutForm = DataLayout.withoutDataForm(valueType)
                 val unfit = Option.when(limits.all.nonEmpty)(limits.unfit(valueType)).flatten
                 lazy val guard = LimitGuards.guard(DataLayout.of(valueType), limits)
                 DataEncoding.of(valueType) match
@@ -611,11 +612,10 @@ object UplcBlaster {
                     case DataEncoding.Unknown(reason) =>
                         Left(s"a forAllData binder of ${valueType.show} is not supported: $reason")
                     // As of a node mapped as Data: such a value is the decoding of no Data.
-                    case _ if DataLayout.withoutDataForm(valueType).isDefined =>
+                    case _ if withoutForm.nonEmpty =>
                         Left(
                           s"a forAllData binder of ${valueType.show} is not supported: its part " +
-                              s"of type ${DataLayout.withoutDataForm(valueType).get.show} has no " +
-                              "Data form"
+                              s"of type ${withoutForm.map(_.show).mkString} has no Data form"
                         )
                     // `d.to[A]` compiles to the compiler's own reading, whatever FromData is
                     // given. A decoder that is not would read other Data than the premise admits.
@@ -770,10 +770,27 @@ object UplcBlaster {
                     }
                     .flatten
                     .distinct
+                // The nodes where a type repeats are Data by rule 1, and have no other mapping.
+                val repeating = planned.collect {
+                    case node if node.reason == MappingPlan.Reason.ContainsItself => node.path
+                }.toSet
+                val (repeated, others) = claimed.partition(at => repeating(binders(at).name))
+                def written(at: List[Int]) =
+                    at.map(index => PropIdentity.written(binders(index).name)).mkString(", ")
+                val ofRepeated = Option.when(repeated.nonEmpty)(
+                  s"${written(repeated)}: the type contains itself and repeats here, so by fields " +
+                      "it has no end, and it is one Data variable, whose parts below its first " +
+                      "level are any Data to Lean: more values than the type has. The variable " +
+                      "asks for a witness, an exists in a positive position or a forAll in a " +
+                      "negative one or either under <=>, which such a value could be none of the " +
+                      "type's: it may only stand for every value"
+                )
                 if claimed.isEmpty then Right(formula)
+                else if others.isEmpty then Left(ofRepeated.mkString)
                 else
                     Left(
-                      s"${claimed.map(binders(_).name).mkString(", ")}: a list, a map, a " +
+                      ofRepeated.fold("")(_ + "; ") +
+                          s"${others.map(binders(_).name).mkString(", ")}: a list, a map, a " +
                           "forAllData variable or a case class or enum mapped as Data, whose type " +
                           "cannot be told from Data exactly, as a type that contains itself or " +
                           "has a string, or a forAllDataLimited variable whose guard " +
@@ -1019,8 +1036,9 @@ object UplcBlaster {
       * the fields of every constructor, named `name.Constructor.field`. Its value is the
       * constructor the integer chooses, applied to that constructor's fields: the first for 0, the
       * second for 1, and so on, and the last for every other integer, so that each integer is some
-      * value. A type that contains itself, such as `List`, has values of every size, which no set
-      * of variables stands for, and is not supported. `enclosing` names the types being expanded.
+      * value. A type that contains itself has values of every size, which no set of variables
+      * stands for: where it repeats, its node is one `Data` variable ([[Expansion.decide]], rule
+      * 1). `enclosing` names the types being expanded.
       *
       * A case class or an enum that the plan maps as `Data` is not expanded: it is one Lean `Data`
       * variable named `name`, and its value is decoded from it ([[asData]]).
@@ -1060,9 +1078,10 @@ object UplcBlaster {
             )
             // Decided before it is expanded: a node as Data is not, and so may be of a type that
             // contains itself.
-            count.decide(name, product) match
+            val node = count.decide(name, product, enclosing)
+            node.mapping match
                 case MappingPlan.Mapping.ByFields =>
-                    nested(product, enclosing).flatMap { inner =>
+                    nested(name, product, enclosing).flatMap { inner =>
                         constructed(
                           name,
                           declaration,
@@ -1073,16 +1092,17 @@ object UplcBlaster {
                           count
                         )
                     }
-                case MappingPlan.Mapping.AsData => asData(name, product)
+                case MappingPlan.Mapping.AsData => asData(name, product, node.reason)
         case sum @ SIRType.SumCaseClass(declaration, _) if declaration.constructors.isEmpty =>
             Left(s"a ${sum.show} binder is not supported: the type has no constructors")
         case sum @ SIRType.SumCaseClass(declaration, typeArguments) =>
-            count.decide(name, sum) match
+            val node = count.decide(name, sum, enclosing)
+            node.mapping match
                 case MappingPlan.Mapping.ByFields =>
-                    nested(sum, enclosing).flatMap { inner =>
+                    nested(name, sum, enclosing).flatMap { inner =>
                         expandSum(name, sum, declaration, typeArguments, inner, count)
                     }
-                case MappingPlan.Mapping.AsData => asData(name, sum)
+                case MappingPlan.Mapping.AsData => asData(name, sum, node.reason)
         case one @ SIRType.CaseClass(_, _, Some(parent)) =>
             Left(
               s"a ${one.show} binder is not supported: it is one constructor of ${parent.show}, " +
@@ -1121,16 +1141,22 @@ object UplcBlaster {
         var parts: Int = 0
         val nodes: ArrayBuffer[MappingPlan.Node] = ArrayBuffer.empty
 
-        /** The mapping of the node at `path`, of type `tp`, a case class or an enum, recorded with
-          * why: the one `fixed` gives, or else by fields, as is every node of a variable that is
-          * not over `Data` encodings today.
+        /** The node at `path`, of type `tp`, a case class or an enum, inside the types `enclosing`,
+          * with its mapping and why, recorded (docs/design/verification-details/uplc-blaster.md,
+          * "The plan"): the mapping `fixed` gives; else, where the type contains itself and repeats
+          * here, `Data`, as by fields it would have no end (rule 1); else by fields. A node of a
+          * type that contains itself has more values than its type as `Data`, so where its variable
+          * asks for a witness the statement is refused once it is lowered.
           */
-        def decide(path: String, tp: SIRType): MappingPlan.Mapping = {
+        def decide(path: String, tp: SIRType, enclosing: Set[String]): MappingPlan.Node = {
             val (mapping, why) = fixed.mapping(variable, PropIdentity.written(path), tp) match
                 case Some(chosen) => chosen -> MappingPlan.Reason.ByFixedPlan
-                case None         => MappingPlan.Mapping.ByFields -> reason
-            nodes += MappingPlan.Node(variable, path, tp, mapping, why)
-            mapping
+                case None if enclosing.contains(tp.show) =>
+                    MappingPlan.Mapping.AsData -> MappingPlan.Reason.ContainsItself
+                case None => MappingPlan.Mapping.ByFields -> reason
+            val node = MappingPlan.Node(variable, path, tp, mapping, why)
+            nodes += node
+            node
         }
     }
 
@@ -1141,7 +1167,8 @@ object UplcBlaster {
       * the premise of its type's encoding. The decoder is `UniversalDataConversion.fromData`, the
       * compiler's own reading of the type's `Data` representation, which the premise is derived
       * from, and which the compiler gives `d.to[A]`; the value is that decoder applied to the
-      * variable. Nothing below the node is expanded, so the type may contain itself.
+      * variable. Nothing below the node is expanded, so the type may contain itself. `why` is why
+      * the node is mapped so, which a refusal says.
       *
       * A type with a part that has no `Data` form, as a function, has values that are the decoding
       * of no `Data`, which the variable would not stand for: it is refused
@@ -1153,10 +1180,19 @@ object UplcBlaster {
       */
     private def asData(
         path: String,
-        tp: SIRType
+        tp: SIRType,
+        why: MappingPlan.Reason
     ): Either[String, (List[PropExpr.Ident[?]], Option[AnnotatedSIR])] = {
+        // A node of a type that contains itself has no other mapping, which the reason says.
+        val repeating =
+            if why == MappingPlan.Reason.ContainsItself then
+                "the type contains itself and repeats here, so by fields it has no end, and it "
+            else "it "
         def refused(reason: String) =
-            Left(s"${PropIdentity.written(path)}: a ${tp.show} cannot be mapped as Data: $reason")
+            Left(
+              s"${PropIdentity.written(path)}: a ${tp.show} binder is not supported: " +
+                  s"${repeating}cannot be mapped as Data: $reason"
+            )
         (DataLayout.withoutDataForm(tp), DataEncoding.of(tp)) match
             case (Some(part), _) => refused(s"its part of type ${part.show} has no Data form")
             case (None, DataEncoding.Unknown(reason)) =>
@@ -1193,19 +1229,26 @@ object UplcBlaster {
       */
     private val maxParts = 10_000
 
-    /** The types being expanded, with `tp`, which is expanded inside them, or why it cannot be. A
-      * type is told by its arguments as well: an `Option[Address]` holds an `Option` of another
-      * type, and does not contain itself.
+    /** The types being expanded, with `tp`, the type of the node at `path`, which is expanded by
+      * fields inside them, or why it cannot be. A type is told by its arguments as well: an
+      * `Option[Address]` holds an `Option` of another type, and does not contain itself.
       */
-    private def nested(tp: SIRType, enclosing: Set[String]): Either[String, Set[String]] = {
+    private def nested(
+        path: String,
+        tp: SIRType,
+        enclosing: Set[String]
+    ): Either[String, Set[String]] = {
         val shown = tp.show
+        val at = PropIdentity.written(path)
         if enclosing.contains(shown) then
             Left(
-              s"a $shown binder is not supported: the type contains itself, so its values have " +
-                  "no bound in size, and no set of variables stands for them"
+              s"$at: a $shown binder is not supported: the type contains itself, so its values " +
+                  "have no bound in size, and no set of variables stands for them"
             )
         else if enclosing.size >= maxNesting then
-            Left(s"a $shown binder is not supported: its types nest more than $maxNesting deep")
+            Left(
+              s"$at: a $shown binder is not supported: its types nest more than $maxNesting deep"
+            )
         else Right(enclosing + shown)
     }
 

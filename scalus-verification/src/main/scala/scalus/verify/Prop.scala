@@ -207,10 +207,10 @@ object Props {
 
     /** Every value of `A`, as Lean has its `Data` encoding: [[forAll]], with the variable one
       * `Data` to Lean, restricted to the encodings of the values of `A` ([[DataEncoding.of]]), and
-      * `d.to[A]` to the programs, which read the `Data` themselves. A type that contains itself,
-      * which [[forAll]] cannot quantify over, can be quantified over so. Where the restriction is
-      * not exact, the variable has more values than `A`, and is a variable only where it stands for
-      * every value, as a list's is.
+      * `d.to[A]` to the programs, which read the `Data` themselves. A type that contains itself is
+      * quantified over so as a whole; [[forAll]] maps it by fields down to where it repeats, and as
+      * `Data` there. Where the restriction is not exact, the variable has more values than `A`, and
+      * is a variable only where it stands for every value, as a list's is.
       *
       * Its values are the encodings that `toData` gives, as the node gives a script its context:
       * `forAllData[ScriptContext]` stands for every context. They are not all the `Data` that

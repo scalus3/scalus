@@ -1068,7 +1068,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             case List(Constant.Data(data)) =>
                 assert(DataEncoding.of[BlasterPair].outside(data).isEmpty, data)
             case other => fail(s"expected one Data value, got $other")
-        // A type that contains itself, which forAll does not quantify over. Its fields are any
+        // A type that contains itself, whose fields are any
         // Data to Lean: the variable has more values than its type, and is one only where it
         // stands for every value.
         proven(
@@ -1252,10 +1252,10 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             case other => fail(s"expected the owner's Data and an integer, got $other")
     }
 
-    test("Data nodes cut a type that contains itself, which by fields has no end") {
-        // The root by fields, an integer for its constructor, and the subtrees of a Node as Data.
-        // The test decodes the left one and matches on it, which fails on a Data that is no
-        // constructor of a tree: the premise of its encoding leaves those out.
+    test("a type that contains itself is a forAll variable, Data where it repeats") {
+        // The root by fields, an integer for its constructor, and the subtrees of a Node as Data
+        // (rule 1). The test decodes the left one and matches on it, which fails on a Data that
+        // is no constructor of a tree: the premise of its encoding leaves those out.
         val leftIsATree = forAll[BlasterTree](t =>
             t match
                 case BlasterTree.Leaf => true
@@ -1264,11 +1264,25 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
                         case BlasterTree.Leaf       => true
                         case BlasterTree.Node(_, _) => true
         )
-        checkedAsData(
-          verifier.statement(leftIsATree),
-          Budget.LeanSteps(300),
-          "t.Node.left",
-          "t.Node.right"
+        proven(leftIsATree, 300)
+        // negative control: the left subtree need not be a Node
+        val leftIsANode = forAll[BlasterTree](t =>
+            t match
+                case BlasterTree.Leaf => true
+                case BlasterTree.Node(left, _) =>
+                    left match
+                        case BlasterTree.Leaf       => false
+                        case BlasterTree.Node(_, _) => true
+        )
+        // A Node, whose left subtree is a Leaf: the encoding of one, replayed. The integer of the
+        // constructor is 0 for a Leaf, and every other integer is a Node, the last constructor.
+        val counterexample = refuted(leftIsANode, 300)
+        def valueOf(suffix: String): Option[Constant] =
+            counterexample.collectFirst { case (name, value) if name.endsWith(suffix) => value }
+        assert(valueOf(".case").exists(_ != Constant.Integer(0)), counterexample)
+        assert(
+          valueOf(".Node.left").contains(Constant.Data(BlasterTree.Leaf.toData)),
+          counterexample
         )
     }
 
@@ -2049,13 +2063,14 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     test("statements outside the fragment are unsupported") {
         // The tactic reports these without running Lean. A type that contains itself, and is
         // passed through its constructors, has values of every size, which no set of variables
-        // stands for.
+        // stands for: where it repeats it is one Data variable, which has more values than the
+        // type, so a variable that asks for a witness is refused.
         // One constructor of a type, as List.Cons, would be a variable of the whole type.
         val cons =
             UplcBlaster.lower(forAll[prelude.List.Cons[BigInt]](_ => true), FunctionTable.empty)
         assert(cons.left.exists(_.contains("one constructor")), cons)
 
-        val tree = forAll[BlasterTree](_ => true)
+        val tree = exists[BlasterTree](_ => true)
         val trees = UplcBlaster.lower(tree, FunctionTable.empty)
         assert(trees.left.exists(_.contains("contains itself")), trees)
 

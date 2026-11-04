@@ -68,7 +68,9 @@ before, so that each integer is a value and the integer needs no premise. A coun
 names the constructor by that integer. A constructor passes its type parameters on to the
 enum's, so `Option[BigInt]` is the integer and the `BigInt` of `Some`. A type that contains
 itself and is passed through its constructors has values of every size, which no set of
-variables stands for: it is refused, with that reason, and `forAllData` quantifies over it.
+variables stands for: where it repeats, its node is one `Data` variable
+([Mapping a variable](#mapping-a-variable-proposed), rule 1), which has more values than its
+type below its first level, so the variable may be only where it stands for every value.
 `Quantifiable` has an instance for every type of several constructors; the tactic checks their
 fields.
 
@@ -168,9 +170,10 @@ Today the statement chooses how a variable of a case class or an enum reaches Le
 it by its fields, and `forAllData` as one `Data`. This section proposes that the tactic choose,
 part by part of the variable's type, from the statement and the types alone.
 
-Status: steps 1 and 2 of [the steps](#steps) are built. `lower` records the plan as it maps each
-variable, and `Lowered.plan`, a `MappingPlan`, carries it; a node below the root can be `Data`. The
-plan is still the one the statement writes, unless a check is given a fixed one (step 2).
+Status: steps 1 and 2 of [the steps](#steps) are built, and rule 1 of step 3. `lower` records the
+plan as it maps each variable, and `Lowered.plan`, a `MappingPlan`, carries it; a node below the
+root can be `Data`; a type that contains itself is `Data` where it repeats (rule 1). Otherwise the
+plan is the one the statement writes, unless a check is given a fixed one (step 2).
 
 ### The mapping does not change what a statement means
 
@@ -345,7 +348,7 @@ counterexample are named by their nodes' paths, as now
    choose. A check under a fixed plan keeps no result: it is a test or a measurement, and a
    statement keeps one result, which its check under the tactic's own plan has. A plan names its
    paths, each of which must be a node the plan was asked about, or lowering fails. A node is decided before it is expanded, so a plan can map
-   a type that contains itself as `Data` where it repeats, which rule 1 will do. The node is one
+   a type that contains itself as `Data` where it repeats, which rule 1 does (step 3). The node is one
    Lean `Data` variable named by its path, of the type a `forAllData` variable has, so its
    premise, its default value and the check of a counterexample's value are those of the node's
    type. The test reads it with `UniversalDataConversion.fromData`, written as the linker writes
@@ -364,7 +367,26 @@ counterexample are named by their nodes' paths, as now
    to the pointer's fields did not finish within 5 minutes at 100 steps by fields either
    (2026-11-03).
 3. Rules 1 and 2. A type that contains itself is then a `forAll` variable, where it stands for
-   every value.
+   every value. Rule 1 is built: `Expansion.decide` maps a node as `Data` where its type is on its
+   own path already (`Reason.ContainsItself`), so `forAll[BlasterTree]` is the root by fields and
+   `t.Node.left` and `t.Node.right` as `Data`, the same check as the fixed plan of those two
+   nodes. Such a node has no by-fields mapping and its premise is not exact, so where its variable
+   asks for a witness the statement is refused once it is lowered, as any variable with more
+   values than its type is, with the reason of a type that contains itself; and a node of a type
+   with a part that has no `Data` form is refused. Rule 2's choice of fields over an inexact
+   `Data` has no node to apply to yet: no rule maps as `Data` a node that has fields, until rule 3.
+   It is left to step 4, with the knowledge it needs as `lower` goes, whether a quantifier asks for
+   a witness, which today `lower` tells only once the statement is lowered. `UplcBlasterTest`
+   proves a statement that decodes a subtree of a `BlasterTree`, and refutes one with the
+   counterexample `Node(Leaf, Leaf)`, replayed.
+
+   Limit: the premise of such a node describes its first level only. Below it, where the type
+   repeats again, `DataLayout` has an unknown encoding, which holds of every `Data`, and a
+   counterexample whose value there is no value of the type is not replayed as one. So a statement
+   whose tests read a tree two levels below a `Data` node is proved only where its tests hold on
+   every `Data` there, and is refuted only by a counterexample that is a value of the type. A
+   recursive Lean predicate for a type that contains itself would make the premise exact, and
+   would let such a node give a witness as well.
 4. Rule 3: the suites run under fixed plans, to measure the number.
 5. `forAllData` as `forAll`, and its parameter annotation with it.
 
@@ -857,9 +879,9 @@ is canceled.
 - **Types.** A quantified variable is a `BigInt`, a `Boolean`, a `ByteString`, a `String`, a `Data`,
   a list or a map, or a case class or an enum of them. A list or a map is restricted to its type's
   values by a predicate derived from the type; where that cannot be exact it is a variable only in a
-  universal position. A type that contains itself and is passed through its constructors cannot be
-  quantified over with `forAll`; `forAllData` quantifies over it, as a variable only where it stands
-  for every value. `forAll[Data](d => denotes(d.to[A]) ==> …)` does not stand for it: `d.to[A]`
+  universal position. A type that contains itself and is passed through its constructors is
+  quantified over with `forAll` by fields down to where it repeats, and as `Data` there, and with
+  `forAllData` as one `Data`: either way as a variable only where it stands for every value. `forAll[Data](d => denotes(d.to[A]) ==> …)` does not stand for it: `d.to[A]`
   checks nothing itself, and the premise holds of every `d` that the program's conversion to `A`'s
   representation reads without failing, which is part of what makes `d` a value of `A`, and a part
   that depends on the representation. Nor can one constructor of `Data`, such as `Data.I`, be

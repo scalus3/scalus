@@ -25,6 +25,11 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
         assert(DataEncoding.of[Data] == DataEncoding.AnyData)
         // A type that wraps one field is that field.
         assert(DataEncoding.of[PubKeyHash] == DataEncoding.Bytes)
+        // A wrapper of a list is its list's encoding: the compiler is asked of the list's type
+        // whether its items have a Data form.
+        assert(
+          DataEncoding.of[prelude.Varargs[BigInt]] == DataEncoding.Items(DataEncoding.Integer)
+        )
         assert(DataEncoding.of[prelude.List[BigInt]] == DataEncoding.Items(DataEncoding.Integer))
         val outRef = DataEncoding.of[TxOutRef]
         assert(outRef.exact, outRef)
