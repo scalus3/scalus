@@ -29,7 +29,17 @@ object ProductCaseUplcConstrOnlyEmitter extends SirTypeUplcGenerator {
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         LoweringContext
     ): LoweredValue = {
-        TypeRepresentationProxyLoweredValue(input, targetType, input.representation, pos)
+        // Upcast to the parent sum: the bytes are already `Constr(tag, fields)`, which is exactly
+        // the shape of a `SumUplcConstr`, so only the representation label changes. Keeping the
+        // `ProdUplcConstr` label on a sum-typed value is what `lvIfThenElse` guards against
+        // (`GUARD lvIfThenElse ... Sum type X with ProdUplcConstr`): downstream `genMatch` on
+        // the sum dispatches on the representation. Mirrors `ProductCaseUplcConstrEmitter`;
+        // unlike it, no Data-side conversion is needed here - a Fun-bearing value is always in
+        // UplcConstr form.
+        val targetRepr =
+            if SIRType.isSum(targetType) then SumUplcConstrOps.buildSumUplcConstr(targetType)
+            else input.representation
+        TypeRepresentationProxyLoweredValue(input, targetType, targetRepr, pos)
     }
 
     override def genConstrLowered(
