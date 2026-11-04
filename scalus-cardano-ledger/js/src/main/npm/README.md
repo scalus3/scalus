@@ -813,6 +813,14 @@ See [BROWSER-TESTING.md](BROWSER-TESTING.md) for browser setup and interactive t
 (`sbt scalusCardanoLedgerJS/generateDts`). Do not edit it by hand. CI fails
 if it drifts from the Scala facades.
 
+## For AI Coding Agents
+
+Point your agent at `node_modules/scalus/scalus.d.ts` and this README. They match the installed
+version. Without the package installed, <https://scalus.org/llms-ts.txt> holds both for the latest
+release. Claude Code users can install the `scalus` plugin
+(`/plugin marketplace add scalus3/scalus`, then `/plugin install scalus@scalus`). Its
+`scalus:typescript` skill loads in any project whose `package.json` depends on `scalus`.
+
 ## License
 
 Apache-2.0

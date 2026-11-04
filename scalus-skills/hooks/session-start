@@ -22,7 +22,16 @@ is_scalus_project() {
     done
     return 1
 }
-is_scalus_project || exit 0
+
+# A TypeScript or JavaScript project names the npm package scalus as a key in package.json
+# [TS-21]. The quoted key with its colon rejects other packages, such as "scalus-helper".
+# grep only, no jq or node [TS-23].
+is_scalus_npm_project() {
+    local f="$PROJECT_DIR/package.json"
+    [ -f "$f" ] && grep -q '"scalus"[[:space:]]*:' "$f"
+}
+
+is_scalus_project || is_scalus_npm_project || exit 0
 
 # JSON-escape with bash parameter substitution: no jq or python dependency.
 escape_for_json() {

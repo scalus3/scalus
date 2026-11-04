@@ -4,7 +4,25 @@ on:
     paths:
       - 'scalus-skills/**'
       - 'scripts/check-skills-version.sh'
+      - 'scalus-site/scripts/generate-llms-ts*'
+      - 'scalus-cardano-ledger/js/src/main/npm/README.md'
+      - 'scalus-cardano-ledger/js/src/main/npm/scalus.d.ts'
+      - '.github/workflows/skills.yml'
 jobs:
+  agent-artifacts:
+    # Spec: docs/superpowers/specs/2026-11-04-llm-docs-typescript-java-design.md [TS-32] [TS-33]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Session-start hook routes Scala and npm projects
+        run: bash scalus-skills/hooks/session-start.test.sh
+      - name: llms-ts.txt generator
+        run: node --test scalus-site/scripts/generate-llms-ts.test.mjs
+
   plugin-version:
     runs-on: ubuntu-latest
     timeout-minutes: 5

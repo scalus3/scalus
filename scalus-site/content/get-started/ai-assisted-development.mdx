@@ -21,12 +21,21 @@ agent the current ground truth:
 | [/llms-api.txt](https://scalus.org/llms-api.txt) | Version-pinned public API signatures: prelude, builtins, validator traits, ledger, TxBuilder, Emulator, testkit | Before writing any Scalus code |
 | [/llms-examples.txt](https://scalus.org/llms-examples.txt) | 21 complete example validators with their tests | When writing a new validator or test |
 | [/llms-full.txt](https://scalus.org/llms-full.txt) | All documentation pages as one markdown file | Deep dives |
+| [/llms-ts.txt](https://scalus.org/llms-ts.txt) | The npm package README and the full TypeScript definitions (`scalus.d.ts`) | Before writing TypeScript or JavaScript that uses the npm package `scalus` |
 
 Every documentation page is also available as plain markdown: append `.md` to its URL, e.g.
 [/docs/smart-contracts/validators.md](https://scalus.org/docs/smart-contracts/validators.md).
 
 All artifacts are generated from the source of truth on every release – the API cheatsheet comes
 from the compiled code itself, so it cannot drift from the published library.
+
+### TypeScript and JavaScript projects
+
+`/llms-api.txt` and `/llms-examples.txt` describe the Scala API. A TypeScript or JavaScript agent
+needs `/llms-ts.txt` instead. Once `scalus` is installed from npm, the same two files are in
+`node_modules/scalus/` (`scalus.d.ts` and `README.md`) at the version the project uses. Tell the
+agent to read those first. `scalus.d.ts` is generated from the compiled code, like the Scala
+cheatsheet.
 
 ## AI-ready project templates
 
@@ -50,8 +59,9 @@ For existing projects, install the skills with the Scalus plugin:
 ```
 
 In a Scalus project, the plugin adds a routing table to each session at start-up, so the
-agent picks the right skill before it writes code. The five task skills load when the task
-matches:
+agent picks the right skill before it writes code. A Scalus project is a Scala build that names
+Scalus, or a `package.json` that depends on the npm package `scalus`. The six task skills load
+when the task matches:
 
 | Skill | Use |
 |---|---|
@@ -60,6 +70,7 @@ matches:
 | `scalus:local-development` | Emulator + TxBuilder development loop |
 | `scalus:optimize-contract` | Execution-budget optimization review |
 | `scalus:smart-contract-security-review` | Pre-deploy security audit |
+| `scalus:typescript` | The npm package from TypeScript or JavaScript: Emulator, script evaluation, parameters |
 
 Skills are plain markdown in
 [`scalus-skills/`](https://github.com/scalus3/scalus/tree/master/scalus-skills) – agents other

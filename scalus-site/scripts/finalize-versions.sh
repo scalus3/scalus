@@ -32,7 +32,7 @@ cp -R "$DIR/api/$LATEST/." "$DIR/api/"
 } > "$DIR/api/versions.json"
 
 # Root llms files from the latest version, without the version header line [VW-6] [VW-12].
-for name in llms-api.txt llms-examples.txt llms-full.txt; do
+for name in llms-api.txt llms-examples.txt llms-full.txt llms-ts.txt; do # llms-ts.txt [TS-10]
     if [ -f "$DIR/llms/$LATEST/$name" ]; then
         tail -n +2 "$DIR/llms/$LATEST/$name" > "$DIR/$name"
     else

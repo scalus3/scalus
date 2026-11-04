@@ -128,7 +128,8 @@ installed copy matches the version the project uses. The site copy matches only 
     `[TS-17]`
   - The skill MUST state that the package is an ES module, and that older Node versions need
     `await import("scalus")` instead of `require`. `[TS-18]`
-  - The skill MUST state that evaluation uses the mainnet PV11 cost models by default. `[TS-38]`
+  - The skill MUST state that `EvaluationOptions.mainnet` uses a bundled PV11 mainnet snapshot,
+    and name `EvaluationOptions.fromProtocolParams` for other parameters. `[TS-38]`
   - The skill MUST state that a Plutus V3 validator that does not return unit fails with
     `INVALID_RETURN_VALUE`, and that the budget is still reported. `[TS-39]`
   - The skill MUST NOT copy API signatures from the d.ts file. `[TS-19]`

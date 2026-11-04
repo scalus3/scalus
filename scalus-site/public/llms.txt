@@ -13,6 +13,17 @@ Fetch these before writing Scalus code; do not rely on trained knowledge - Scalu
 
 Claude Code users: `/plugin marketplace add scalus3/scalus` then `/plugin install scalus@scalus` installs Scalus task skills (write, test, optimize, security-review validators).
 
+## For TypeScript and JavaScript agents
+
+The npm package `scalus` gives TypeScript and JavaScript a Cardano node Emulator, a Plutus script evaluator with exact budgets, parameter application, and transaction evaluation and balancing.
+
+- If `scalus` is installed, read `node_modules/scalus/scalus.d.ts` and `node_modules/scalus/README.md` first. They match the version your project uses.
+- /llms-ts.txt - the npm README and the full TypeScript definitions (scalus.d.ts) of the latest release.
+- /docs/testing/js-emulator - Emulator and profiling from JavaScript/TypeScript.
+- /llms-api.txt and /llms-examples.txt are Scala only. Do not read them as the TypeScript API.
+
+Claude Code users: the same `scalus` plugin routes TypeScript projects to its `scalus:typescript` skill.
+
 ## Key Features
 
 - **One Language**: Write smart contracts and off-chain code in Scala 3

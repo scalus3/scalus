@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the Scaladoc and the llms files of one release tag:
 #   $OUT/api/<version>/   Scaladoc with the version dropdown
-#   $OUT/llms/<version>/  llms.txt, llms-api.txt, llms-examples.txt, llms-full.txt (as the tag has them)
+#   $OUT/llms/<version>/  llms.txt, llms-api.txt, llms-examples.txt, llms-full.txt, llms-ts.txt (as the tag has them)
 # OUT defaults to scalus-site/public. Spec: docs/superpowers/specs/2026-10-22-versioned-api-docs-design.md
 #
 # Usage: scalus-site/scripts/build-version.sh v1.3.0
@@ -66,9 +66,10 @@ if [ -f "$SRC/scalus-site/public/llms-api.txt" ]; then
 fi
 
 # The tag's own generators [VB-6]: their example list matches the tag's examples. They read and
-# write paths relative to scalus-site/ and need no pnpm install. Keep only the two files [VB-7];
+# write paths relative to scalus-site/ and need no pnpm install. Keep only their llms files [VB-7];
 # the per-page .md copies they also write are for the unversioned prose docs.
-for gen in generate-llms.mjs:llms-full.txt generate-llms-examples.mjs:llms-examples.txt; do
+# generate-llms-ts.mjs exists from v1.5.0 [TS-7] [TS-8]; spec 2026-11-04-llm-docs-typescript-java-design.md.
+for gen in generate-llms.mjs:llms-full.txt generate-llms-examples.mjs:llms-examples.txt generate-llms-ts.mjs:llms-ts.txt; do
     script=${gen%%:*}
     file=${gen##*:}
     if [ -f "$SRC/scalus-site/scripts/$script" ]; then
@@ -83,7 +84,7 @@ done
 # Links to /docs/ pages stay: the prose docs are not versioned.
 if [ -f "$SRC/scalus-site/public/llms.txt" ]; then
     perl -pe '
-        s{(?<![\w/.-])((?:https://scalus\.org)?)/(llms(?:-api|-examples|-full)?\.txt)}{$1/llms/'"$VERSION"'/$2}g;
+        s{(?<![\w/.-])((?:https://scalus\.org)?)/(llms(?:-api|-examples|-full|-ts)?\.txt)}{$1/llms/'"$VERSION"'/$2}g;
         s{https://scalus\.org/api(?:/index\.html)?(?=$|[\s)\]"'"'"'])}{https://scalus.org/api/'"$VERSION"'/}g;
         s{https://scalus\.org/api/(?![0-9])}{https://scalus.org/api/'"$VERSION"'/}g;
     ' "$SRC/scalus-site/public/llms.txt" > "$LLMS/llms.txt"

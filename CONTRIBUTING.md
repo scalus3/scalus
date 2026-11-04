@@ -272,7 +272,12 @@ AI coding agents get Scalus knowledge from three places. Each has its own update
 | `scalus` Claude Code plugin (skills, session-start routing) | `scalus-skills/` | `version` in `scalus-skills/.claude-plugin/plugin.json` changes and users update the plugin |
 | `llms.txt` | `scalus-site/public/llms.txt` on the deployed branch, plus a generated Versions section | the Deploy Site workflow runs |
 | `llms-api.txt`, `llms-examples.txt`, `llms-full.txt` | the **latest release tag** (`scalus-site/scripts/build-version.sh`) | the Deploy Site workflow runs |
+| `llms-ts.txt` | the npm `README.md` and `scalus.d.ts` in `scalus-cardano-ledger/js/src/main/npm/` of the **latest release tag** (`generate-llms-ts.mjs`, from v1.5.0) | the Deploy Site workflow runs |
 | `/llms/<version>/*.txt`, `/api/<version>/` | that release tag | the Deploy Site workflow builds that tag; other versions stay as they are on gh-pages |
+
+A change to the npm README or to `scalus.d.ts` reaches `llms-ts.txt` at the next release tag, not
+at the next push. TypeScript agents that read `node_modules/scalus/` see it at the next npm
+release.
 
 The `.claude/skills/` copies in the `scalus3/hello.g8` and `scalus3/validator.g8` templates are
 retired: the templates enable the plugin instead (`.claude/settings.json`).
