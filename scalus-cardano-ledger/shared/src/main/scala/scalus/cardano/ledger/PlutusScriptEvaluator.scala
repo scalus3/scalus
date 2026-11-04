@@ -15,7 +15,6 @@ import scalus.utils.ScalusSourcePos
 import scalus.cardano.ledger.internal.Logger
 
 import scala.collection.mutable
-import scala.util.Try
 import scala.util.control.NonFatal
 
 enum EvaluatorMode extends Enum[EvaluatorMode] {
@@ -179,11 +178,22 @@ object PlutusScriptEvaluator {
       * @param slotConfig
       *   Slot configuration for time conversions
       * @param protocolVersion
-      *   Protocol version for validation rules
+      *   Protocol version for validation rules Unlike the evaluator, it skips a needed script that
+      *   the tx does not provide and a needed script without a redeemer, and it builds the context
+      *   of a V1 or V2 spend without a datum.
+      *
       * @return
       *   Map from Redeemer to ScriptContext (union type: v1 | v2 | v3)
+      * @throws scalus.cardano.ledger.TransactionException.BadInputsUTxOException
+      *   if an input is not in `utxos`
+      * @throws scalus.cardano.ledger.TransactionException.BadReferenceInputsUTxOException
+      *   if a reference input is not in `utxos`
+      * @throws java.lang.IllegalArgumentException
+      *   if the tx cannot be translated to the context of a script's language, for example a V1 or
+      *   V2 script in a tx with a donation
       * @throws java.lang.IllegalStateException
-      *   if script resolution fails or required data is missing
+      *   if the tx cannot be translated to the context of a script's language for another reason,
+      *   for example an inline datum in a tx with a V1 script
       * @throws java.lang.UnsupportedOperationException
       *   if any redeemer's script is `Script.PlutusV4` — V4 evaluation is not yet implemented
       */
@@ -193,75 +203,89 @@ object PlutusScriptEvaluator {
         slotConfig: SlotConfig,
         protocolVersion: MajorProtocolVersion
     ): Map[Redeemer, ScriptContext] = {
-        import LedgerToPlutusTranslation.*
-
-        // 1. Resolve all scripts from transaction and UTxOs
-        val scriptsMap = AllResolvedScripts.allResolvedScriptsMap(tx, utxos) match
+        val scripts = AllResolvedScripts.allResolvedScriptsMap(tx, utxos) match
             case Right(map)  => map
             case Left(error) => throw error
+        neededPlutusScripts(tx, utxos, scripts, slotConfig, protocolVersion, strict = false)
+            .map(needed => needed.redeemer -> needed.context)
+            .toMap
+    }
 
-        // 2. Get needed script data
-        val neededScripts = AllNeededScriptHashes.allNeededScriptData(tx, utxos) match
+    /** A needed Plutus script of a tx, with its redeemer, its datum and its script context. */
+    private final case class NeededPlutusScript(
+        redeemer: Redeemer,
+        script: PlutusScript,
+        hash: ScriptHash,
+        datum: Option[Data],
+        context: ScriptContext
+    )
+
+    /** The needed Plutus scripts of `tx` with their script contexts, in the order of
+      * `allNeededScriptData`. A native script is skipped.
+      *
+      * The `TxInfo` of a language is built once, and only for a language a needed script uses: a V1
+      * `TxInfo` cannot be built for a tx with reference inputs, which a V3 script accepts.
+      *
+      * When `strict`, a needed script missing from `scripts`, a V1 or V2 spend without a datum and
+      * a missing redeemer throw `IllegalStateException`; otherwise the script is skipped, and a
+      * spend without a datum gets its context.
+      *
+      * @throws java.lang.UnsupportedOperationException
+      *   for a `Script.PlutusV4`: V4 evaluation is not yet implemented
+      */
+    private def neededPlutusScripts(
+        tx: Transaction,
+        utxos: Utxos,
+        scripts: Map[ScriptHash, Script],
+        slotConfig: SlotConfig,
+        protocolVersion: MajorProtocolVersion,
+        strict: Boolean
+    ): Seq[NeededPlutusScript] = {
+        val needed = AllNeededScriptHashes.allNeededScriptData(tx, utxos) match
             case Right(data) => data
             case Left(error) => throw error
-
-        // 3. Get redeemers map
-        val redeemersMap = tx.witnessSet.redeemers.map(_.value.toMap).getOrElse(Map.empty)
-
-        // 4. Pre-compute TxInfo for each Plutus version the needed scripts use (reused across
-        // redeemers)
+        val redeemers = tx.witnessSet.redeemers.map(_.value.toMap).getOrElse(Map.empty)
+        // `lazy val`, not `val` and not inlined: a TxInfo translates the whole tx, so it is built
+        // once for all scripts of its language, and never for a language no script uses, as
+        // getTxInfoV1 throws on a tx with reference inputs that a V3 script accepts
         lazy val txInfoV1 = getTxInfoV1(tx, utxos, slotConfig, protocolVersion)
         lazy val txInfoV2 = getTxInfoV2(tx, utxos, slotConfig, protocolVersion)
         lazy val txInfoV3 = getTxInfoV3(tx, utxos, slotConfig, protocolVersion)
-        plutusLanguages(scriptsMap, neededScripts.map(_._3)).foreach {
-            case PlutusV1 => txInfoV1
-            case PlutusV2 => txInfoV2
-            case PlutusV3 => txInfoV3
-            case PlutusV4 => ()
-        }
-
-        // 5. Build contexts for each Plutus script redeemer
-        neededScripts.flatMap { case (tag, index, hash, outputOpt) =>
+        def missing(message: => String): Option[Nothing] =
+            if strict then throw new IllegalStateException(message) else None
+        needed.flatMap { (tag, index, hash, out) =>
+            val datum = out.flatMap(_.resolveDatum(tx))
             for
-                script <- scriptsMap.get(hash)
-                plutusScript <- script match
-                    case ps: PlutusScript => Some(ps)
-                    case _                => None // Skip native scripts
-                (data, exUnits) <- redeemersMap.get((tag, index))
+                script <- scripts.get(hash) match
+                    case Some(script: PlutusScript) => Some(script)
+                    case Some(_)                    => None // a native script
+                    case None                       => missing(s"Script not found: $hash")
+                _ <- script match
+                    case _: Script.PlutusV1 | _: Script.PlutusV2
+                        if tag == RedeemerTag.Spend && datum.isEmpty && strict =>
+                        missing(s"Missing required datum for plutus script: $script")
+                    case _ => Some(())
+                (data, exUnits) <- redeemers.get((tag, index)) match
+                    case None =>
+                        missing(s"Redeemer not found for tag $tag and index $index")
+                    case found => found
             yield
                 val redeemer = Redeemer(tag, index, data, exUnits)
-                val datum = outputOpt.flatMap(_.resolveDatum(tx))
-                val context: ScriptContext = plutusScript match
+                val context: ScriptContext = script match
                     case _: Script.PlutusV1 =>
-                        val purpose = getScriptPurposeV1(tx, redeemer)
-                        v1.ScriptContext(txInfoV1, purpose)
+                        v1.ScriptContext(txInfoV1, getScriptPurposeV1(tx, redeemer))
                     case _: Script.PlutusV2 =>
-                        val purpose = getScriptPurposeV2(tx, redeemer)
-                        v2.ScriptContext(txInfoV2, purpose)
+                        v2.ScriptContext(txInfoV2, getScriptPurposeV2(tx, redeemer))
                     case _: Script.PlutusV3 =>
-                        val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
-                        v3.ScriptContext(txInfoV3, redeemer.data, scriptInfo)
+                        v3.ScriptContext(
+                          txInfoV3,
+                          redeemer.data,
+                          getScriptInfoV3(tx, redeemer, datum)
+                        )
                     case _: Script.PlutusV4 => unsupportedV4
-                redeemer -> context
-        }.toMap
+                NeededPlutusScript(redeemer, script, hash, datum, context)
+        }.toSeq
     }
-
-    /** The Plutus versions of the scripts of `hashes` in `scripts`; a native script has none.
-      *
-      * The `TxInfo` of each of them is built before any script runs, as cardano-ledger builds every
-      * script context first (`collectPlutusScriptsWithContext`,
-      * eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Plutus/Evaluate.hs:157-214). So a `TxInfo` that
-      * cannot be built, spec [TX-1], fails the tx whichever script would fail first, and no
-      * collateral is taken.
-      */
-    private def plutusLanguages(
-        scripts: Map[ScriptHash, Script],
-        hashes: Iterable[ScriptHash]
-    ): Set[Language] =
-        hashes.view
-            .flatMap(scripts.get)
-            .collect { case script: PlutusScript => script.language }
-            .toSet
 
     /** The collect errors of `tx`, the collect step of `collectPlutusScriptsWithContext` apart from
       * the evaluation (eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Plutus/Evaluate.hs:157-214), spec
@@ -292,10 +316,14 @@ object PlutusScriptEvaluator {
             def txInfoError(language: Language): Option[String] =
                 txInfos.getOrElseUpdate(
                   language,
-                  translationError(language match
-                      case PlutusV1 => getTxInfoV1(tx, utxos, slotConfig, protocolVersion)
-                      case PlutusV2 => getTxInfoV2(tx, utxos, slotConfig, protocolVersion)
-                      case _        => getTxInfoV3(tx, utxos, slotConfig, protocolVersion))
+                  language match
+                      case PlutusV1 =>
+                          translationError(getTxInfoV1(tx, utxos, slotConfig, protocolVersion))
+                      case PlutusV2 =>
+                          translationError(getTxInfoV2(tx, utxos, slotConfig, protocolVersion))
+                      case PlutusV3 =>
+                          translationError(getTxInfoV3(tx, utxos, slotConfig, protocolVersion))
+                      case PlutusV4 => notCollectedV4
                 )
             // `apply` of Evaluate.hs:189-199: the cost model, then the context
             def apply(script: PlutusScript, redeemer: Redeemer, out: Option[TransactionOutput]) =
@@ -303,17 +331,23 @@ object PlutusScriptEvaluator {
                     Some(CollectError.NoCostModel(script.language))
                 else
                     txInfoError(script.language)
-                        .orElse(translationError(script match
-                            case _: Script.PlutusV1 => getScriptPurposeV1(tx, redeemer)
-                            case _: Script.PlutusV2 => getScriptPurposeV2(tx, redeemer)
-                            case _ =>
-                                getScriptInfoV3(tx, redeemer, out.flatMap(_.resolveDatum(tx)))))
+                        .orElse(script match
+                            case _: Script.PlutusV1 =>
+                                translationError(getScriptPurposeV1(tx, redeemer))
+                            case _: Script.PlutusV2 =>
+                                translationError(getScriptPurposeV2(tx, redeemer))
+                            case _: Script.PlutusV3 =>
+                                val datum = out.flatMap(_.resolveDatum(tx))
+                                translationError(getScriptInfoV3(tx, redeemer, datum))
+                            case _: Script.PlutusV4 => notCollectedV4)
                         .map(CollectError.BadTranslation(_))
             // the ledger order of the needed scripts: Spend, Reward, Cert, Mint, Voting, Proposing
             // (eras/conway/impl/src/Cardano/Ledger/Conway/UTxO.hs:64-70), in index order inside
-            // each tag; `needed` is a Set, a HashSet beyond 4 elements, so sort by the index too
+            // each tag; `needed` comes in Spend, Mint, Cert, Reward, Voting, Proposing order, so
+            // sort it by the rank of the tag; each tag is in index order already, and the index in
+            // the key keeps it so
             val ledgerOrder =
-                needed.toList.sortBy((tag, index, _, _) => (collectRank(tag), index))
+                needed.toArray.sortBy((tag, index, _, _) => (collectRank(tag), index))
             ledgerOrder.foldLeft(List.empty[CollectError]) {
                 case (errors, (tag, index, hash, out)) =>
                     scripts.get(hash) match
@@ -330,7 +364,9 @@ object PlutusScriptEvaluator {
         collected.getOrElse(Nil)
     }
 
-    /** The rank of `tag` in the ledger order of the needed scripts, see [[collectErrors]]. */
+    /** The rank of `tag` in the ledger order of the needed scripts, see [[collectErrors]]. Not
+      * `Ordering[RedeemerTag]`: that is the CBOR tag order, where Mint comes before Reward.
+      */
     private def collectRank(tag: RedeemerTag): Int = tag match
         case RedeemerTag.Spend     => 0
         case RedeemerTag.Reward    => 1
@@ -339,9 +375,16 @@ object PlutusScriptEvaluator {
         case RedeemerTag.Voting    => 4
         case RedeemerTag.Proposing => 5
 
+    /** [[collectErrors]] skips a Plutus V4 script, as its evaluation is not implemented. */
+    private def notCollectedV4: Nothing =
+        throw new IllegalStateException("collectErrors does not collect Plutus V4 scripts")
+
     /** The message of the exception that `translate` throws, if it throws. */
     private def translationError(translate: => Any): Option[String] =
-        Try(translate).failed.toOption.map(e => String.valueOf(e.getMessage))
+        try
+            translate
+            None
+        catch case NonFatal(e) => Some(String.valueOf(e.getMessage))
 
     /** A no-op evaluator that returns empty sequences.
       *
@@ -667,274 +710,77 @@ object PlutusScriptEvaluator {
 
             if report.enabled then prepareReportDir()
 
-            val redeemers = tx.witnessSet.redeemers.map(_.value.toMap).getOrElse(Map.empty)
-
             // Resolve all scripts from transaction and UTxOs
             val scriptsMap = allResolvedScripts(tx, utxos)
 
-            // Pre-compute TxInfo for each Plutus version the needed scripts use, to reuse across
-            // redeemers
-            lazy val txInfoV1 = getTxInfoV1(tx, utxos, slotConfig, protocolMajorVersion)
-            lazy val txInfoV2 = getTxInfoV2(tx, utxos, slotConfig, protocolMajorVersion)
-            lazy val txInfoV3 = getTxInfoV3(tx, utxos, slotConfig, protocolMajorVersion)
+            // Every context is built before any script runs, as the ledger does
+            // (`collectPlutusScriptsWithContext`, Evaluate.hs:157-214)
+            val needed = neededPlutusScripts(
+              tx,
+              utxos,
+              scriptsMap,
+              slotConfig,
+              protocolMajorVersion,
+              strict = true
+            )
 
-            // Evaluate each redeemer
             var remainingBudget = initialBudget
+            val result = needed.map { script =>
+                val redeemer = script.redeemer
+                val cost = evalNeeded(tx, script, debugScripts, remainingBudget).budget
+                val evaluatedRedeemer = redeemer.copy(exUnits = cost)
 
-            val neededScriptsData =
-                AllNeededScriptHashes.allNeededScriptData(tx, utxos) match
-                    case Right(data) =>
-                        data.map { case (tag, index, hash, outputOpt) =>
-                            val datum = outputOpt.flatMap(_.resolveDatum(tx))
-                            (tag, index, hash, datum)
-                        }
-                    case Left(error) => throw error
-
-            plutusLanguages(scriptsMap, neededScriptsData.map(_._3)).foreach {
-                case PlutusV1 => txInfoV1
-                case PlutusV2 => txInfoV2
-                case PlutusV3 => txInfoV3
-                case PlutusV4 => ()
-            }
-
-            val evaluatedRedeemers =
-                for
-                    (redeemerTag, index, scriptHash, datum) <- neededScriptsData
-                    plutusScript <- scriptsMap.get(scriptHash) match {
-                        case Some(plutusScript: PlutusScript) => Some(plutusScript)
-                        case Some(other)                      => None
-                        case None =>
-                            throw new IllegalStateException(s"Script not found: $scriptHash")
-                    }
-                yield {
-                    if redeemerTag == RedeemerTag.Spend then {
-                        // V1 and V2 scripts require datums
-                        plutusScript match
-                            case _: Script.PlutusV1 | _: Script.PlutusV2 =>
-                                if datum.isEmpty then
-                                    throw new IllegalStateException(
-                                      s"Missing required datum for plutus script: $plutusScript"
-                                    )
-                            case _ => // V3 and Native scripts don't require datums in the traditional sense
-                    }
-
-                    val redeemer = redeemers.get((redeemerTag, index)) match
-                        case Some(data, exUnits) =>
-                            Redeemer(
-                              tag = redeemerTag,
-                              index = index,
-                              data = data,
-                              exUnits = exUnits
-                            )
-                        case None =>
-                            throw new IllegalStateException(
-                              s"Redeemer not found for tag $redeemerTag and index $index"
-                            )
-
-                    val (evaluatedRedeemer, sc) = {
-                        val result = plutusScript match
-                            case ps: Script.PlutusV1 =>
-                                evalPlutusV1Script(
-                                  tx,
-                                  txInfoV1,
-                                  redeemer,
-                                  ps,
-                                  datum,
-                                  debugScripts,
-                                  remainingBudget
-                                )
-
-                            case ps: Script.PlutusV2 =>
-                                evalPlutusV2Script(
-                                  tx,
-                                  txInfoV2,
-                                  redeemer,
-                                  ps,
-                                  datum,
-                                  debugScripts,
-                                  remainingBudget
-                                )
-
-                            case ps: Script.PlutusV3 =>
-                                evalPlutusV3Script(
-                                  tx,
-                                  txInfoV3,
-                                  redeemer,
-                                  ps,
-                                  datum,
-                                  debugScripts,
-                                  remainingBudget
-                                )
-
-                            case _: Script.PlutusV4 => unsupportedV4
-
-                        val cost = result._1.budget
-                        log.debug(s"Evaluation result: $result")
-
-                        // Return redeemer with computed execution units
-                        redeemer.copy(exUnits = cost) -> result._2
-                    }
-
-                    // Log execution unit differences for debugging (only if enabled)
-                    if logBudgetDifferences && evaluatedRedeemer.exUnits != redeemer.exUnits then
-                        val orig = redeemer.exUnits
-                        val comp = evaluatedRedeemer.exUnits
-                        val memDiff = comp.memory - orig.memory
-                        val cpuDiff = comp.steps - orig.steps
-                        log.info(
-                          s"Budget difference for ${redeemer.tag}[${redeemer.index}]: " +
-                              s"original(mem=${orig.memory}, cpu=${orig.steps}) -> " +
-                              s"computed(mem=${comp.memory}, cpu=${comp.steps}), " +
-                              s"diff(mem=${if memDiff >= 0 then "+" else ""}$memDiff, " +
-                              s"cpu=${if cpuDiff >= 0 then "+" else ""}$cpuDiff)"
-                        )
-
-                    // Update remaining budget (safe subtraction as evaluation would fail if budget exceeded)
-                    remainingBudget = ExUnits(
-                      remainingBudget.memory - evaluatedRedeemer.exUnits.memory,
-                      remainingBudget.steps - evaluatedRedeemer.exUnits.steps
+                // Log execution unit differences for debugging (only if enabled)
+                if logBudgetDifferences && cost != redeemer.exUnits then
+                    val orig = redeemer.exUnits
+                    val memDiff = cost.memory - orig.memory
+                    val cpuDiff = cost.steps - orig.steps
+                    log.info(
+                      s"Budget difference for ${redeemer.tag}[${redeemer.index}]: " +
+                          s"original(mem=${orig.memory}, cpu=${orig.steps}) -> " +
+                          s"computed(mem=${cost.memory}, cpu=${cost.steps}), " +
+                          s"diff(mem=${if memDiff >= 0 then "+" else ""}$memDiff, " +
+                          s"cpu=${if cpuDiff >= 0 then "+" else ""}$cpuDiff)"
                     )
 
-                    (evaluatedRedeemer, sc, scriptHash)
-                }
+                // Update remaining budget (safe subtraction as evaluation would fail if budget exceeded)
+                remainingBudget = ExUnits(
+                  remainingBudget.memory - cost.memory,
+                  remainingBudget.steps - cost.steps
+                )
+
+                (evaluatedRedeemer, script.context, script.hash)
+            }
 
             log.debug(s"Phase 2 evaluation completed. Remaining budget: $remainingBudget")
-            val result = evaluatedRedeemers.toSeq
             if report.enabled && report.dumps(DumpArtifact.Flat) then
                 writeManifest(tx, result, scriptsMap)
             result
         }
 
-        /** Evaluate a Plutus V1 script with the V1 script context.
-          *
-          * @param tx
-          *   The transaction being evaluated
-          * @param txInfoV1
-          *   Pre-computed TxInfo for Plutus V1
-          * @param redeemer
-          *   The redeemer to evaluate
-          * @param plutusScript
-          *   The Plutus script to execute
-          * @param datum
-          *   Optional datum for spending scripts
+        /** Evaluate `script` with its context: a V1 or V2 script takes its datum, if any, its
+          * redeemer and its context; a V3 script takes only its context.
           */
-        private def evalPlutusV1Script(
+        private def evalNeeded(
             tx: Transaction,
-            txInfoV1: v1.TxInfo,
-            redeemer: Redeemer,
-            plutusScript: PlutusScript,
-            datum: Option[Data],
+            script: NeededPlutusScript,
             debugScripts: Map[ScriptHash, DebugScript],
             limit: ExUnits
-        ): (Result, v1.ScriptContext) = {
-            // Build V1 script context using pre-computed TxInfo
-            val purpose = getScriptPurposeV1(tx, redeemer)
-            val scriptContext = v1.ScriptContext(txInfoV1, purpose)
-            val ctxData = scriptContext.toData
+        ): Result = {
+            val (vm, ctxData) = script.context match
+                case context: v1.ScriptContext => (plutusV1VM, context.toData)
+                case context: v2.ScriptContext => (plutusV2VM, context.toData)
+                case context: v3.ScriptContext => (plutusV3VM, context.toData)
+            val args = script.script match
+                case _: Script.PlutusV3 => Seq(ctxData)
+                case _                  => script.datum.toSeq :+ script.redeemer.data :+ ctxData
 
-            log.debug(s"Evaluating PlutusV1 script, purpose: $purpose")
-            log.debug(s"Datum: ${datum.map(_.toJson)}")
-            log.debug(s"Redeemer: ${redeemer.data.toJson}")
+            log.debug(s"Evaluating ${script.script.language} script ${script.hash.toHex}")
+            log.debug(s"Datum: ${script.datum.map(_.toJson)}")
+            log.debug(s"Redeemer: ${script.redeemer.data.toJson}")
             log.debug(s"Script context: ${ctxData.toJson}")
 
-            // Apply script arguments based on whether datum is present
-            evalScript(
-              redeemer,
-              tx.id,
-              plutusV1VM,
-              plutusScript,
-              debugScripts,
-              limit,
-              datum.toSeq :+ redeemer.data :+ ctxData*
-            ) -> scriptContext
-        }
-
-        /** Evaluate a Plutus V2 script with the V2 script context.
-          *
-          * @param tx
-          *   The transaction being evaluated
-          * @param txInfoV2
-          *   Pre-computed TxInfo for Plutus V2
-          * @param redeemer
-          *   The redeemer to evaluate
-          * @param plutusScript
-          *   The Plutus script to execute
-          * @param datum
-          *   Optional datum for spending scripts
-          */
-        private def evalPlutusV2Script(
-            tx: Transaction,
-            txInfoV2: v2.TxInfo,
-            redeemer: Redeemer,
-            plutusScript: PlutusScript,
-            datum: Option[Data],
-            debugScripts: Map[ScriptHash, DebugScript],
-            limit: ExUnits
-        ): (Result, v2.ScriptContext) = {
-            // Build V2 script context using pre-computed TxInfo
-            val purpose = getScriptPurposeV2(tx, redeemer)
-            val scriptContext = v2.ScriptContext(txInfoV2, purpose)
-            val ctxData = scriptContext.toData
-
-            log.debug(s"Evaluating PlutusV2 script, purpose: $purpose")
-            log.debug(s"Datum: ${datum.map(_.toJson)}")
-            log.debug(s"Redeemer: ${redeemer.data.toJson}")
-            log.debug(s"Script context: ${ctxData.toJson}")
-
-            // Apply script arguments
-            evalScript(
-              redeemer,
-              tx.id,
-              plutusV2VM,
-              plutusScript,
-              debugScripts,
-              limit,
-              datum.toSeq :+ redeemer.data :+ ctxData*
-            ) -> scriptContext
-        }
-
-        /** Evaluate a Plutus V3 script with the V3 script context.
-          *
-          * @param tx
-          *   The transaction being evaluated
-          * @param txInfoV3
-          *   Pre-computed TxInfo for Plutus V3
-          * @param redeemer
-          *   The redeemer to evaluate
-          * @param plutusScript
-          *   The Plutus script to execute
-          * @param datum
-          *   Optional datum for spending scripts
-          */
-        private def evalPlutusV3Script(
-            tx: Transaction,
-            txInfoV3: v3.TxInfo,
-            redeemer: Redeemer,
-            plutusScript: PlutusScript,
-            datum: Option[Data],
-            debugScripts: Map[ScriptHash, DebugScript],
-            limit: ExUnits
-        ): (Result, v3.ScriptContext) = {
-            // Build V3 script context using pre-computed TxInfo
-            val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
-            val scriptContext = v3.ScriptContext(txInfoV3, redeemer.data, scriptInfo)
-            val ctxData = scriptContext.toData
-
-            log.debug(s"Evaluating PlutusV3 script, scriptInfo: $scriptInfo")
-            log.debug(s"Datum: ${datum.map(_.toJson)}")
-            log.debug(s"Redeemer: ${redeemer.data.toJson}")
-            log.debug(s"Script context: ${ctxData.toJson}")
-
-            // V3 scripts only take the script context as argument
-            evalScript(
-              redeemer,
-              tx.id,
-              plutusV3VM,
-              plutusScript,
-              debugScripts,
-              limit,
-              ctxData
-            ) -> scriptContext
+            evalScript(script.redeemer, tx.id, vm, script.script, debugScripts, limit, args*)
         }
 
         /** Execute a UPLC script with the given arguments.
