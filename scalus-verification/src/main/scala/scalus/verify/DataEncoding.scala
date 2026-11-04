@@ -74,6 +74,13 @@ enum DataEncoding {
     /** Whether every `Data` is encoded so, and the predicate says nothing. */
     def isAnything: Boolean = this == AnyData
 
+    /** Whether the Lean predicate holds of every `Data`: of [[AnyData]], and of an [[Unknown]]
+      * encoding, which it does not check.
+      */
+    private[verify] def holdsOfEvery: Boolean = this match
+        case AnyData | Unknown(_) => true
+        case _                    => false
+
     /** Why the encoding is not told, where it is not as a whole: an [[Unknown]]. The body of a
       * [[Recursive]] one never is, as it has the type again.
       */
@@ -183,20 +190,24 @@ enum DataEncoding {
     /** The Lean predicate, a `Data → Bool`, that holds of the `Data` encoded so. It names
       * PlutusCore's `Data` as `Data`, as after `open PlutusCore.Data (Data)`, and uses
       * [[DataEncoding.leanDefinitions]] and the recursive definitions of [[leanRecursions]].
+      *
+      * It takes no function as an argument: a list or a map is checked by a walk of its own, a
+      * recursive definition of [[leanRecursions]]. Blaster gives the solver a function argument as
+      * a lambda with quantified axioms, on which Z3 did not finish a check of a script context in
+      * 15 minutes; the same check with a walk of each list answered in under a second.
       */
     def leanPredicate: String = leanPredicate(Iterator.from(0))
 
     /** A Lean definition of [[leanPredicate]], `def name (d : Data) : Bool := …`, on one line. It
-      * comes after [[DataEncoding.leanDefinitions]] and the recursive definitions of the types in
-      * it that contain themselves: those of [[DataEncoding.leanRecursions]] of all the encodings of
-      * a file, which define each type's once.
+      * comes after [[DataEncoding.leanDefinitions]] and the recursive definitions it uses: those of
+      * [[DataEncoding.leanRecursions]] of all the encodings of a file, which define each once.
       */
     def leanDefinition(name: String): String = s"def $name (d : Data) : Bool := $leanPredicate d"
 
-    /** The recursive Lean definitions that [[leanPredicate]] uses, of the types that contain
-      * themselves in this encoding: `mutual` blocks, each after the blocks it uses. None for an
-      * encoding without such a type. A file of several encodings has
-      * [[DataEncoding.leanRecursions]] of them all, which writes a type's once.
+    /** The recursive Lean definitions that [[leanPredicate]] uses, each after those it uses: a walk
+      * of each kind of list or map in this encoding, and `mutual` blocks of the types that contain
+      * themselves. None for an encoding without a list, a map or such a type. A file of several
+      * encodings has [[DataEncoding.leanRecursions]] of them all, which writes each once.
       */
     def leanRecursions: List[String] = DataEncoding.leanRecursions(List(this))
 
@@ -211,7 +222,7 @@ enum DataEncoding {
         case Again(name)        => DataEncoding.leanName(name)
         case Items(items) =>
             val d = s"d${fresh.next()}"
-            s"(fun $d => match $d with | Data.List xs => scalusAll ${items.leanPredicate(fresh)} xs | _ => false)"
+            s"(fun $d => match $d with | Data.List xs => ${DataEncoding.leanItems(items)} xs | _ => false)"
         case Entries(keys, values, order) =>
             val d = s"d${fresh.next()}"
             s"(fun $d => match $d with | Data.Map ps => ${DataEncoding.leanEntries(keys, values, order, fresh)} ps | _ => false)"
@@ -309,10 +320,6 @@ object DataEncoding {
       "def scalusIsI : Data → Bool | Data.I _ => true | _ => false",
       "def scalusIsB : Data → Bool | Data.B _ => true | _ => false",
       "def scalusIsBool : Data → Bool | Data.Constr t [] => t == 0 || t == 1 | _ => false",
-      "def scalusAll (p : Data → Bool) : List Data → Bool | [] => true | x :: rest => " +
-          "p x && scalusAll p rest",
-      "def scalusAllPairs (p q : Data → Bool) : List (Data × Data) → Bool | [] => true " +
-          "| (a, b) :: rest => p a && q b && scalusAllPairs p q rest",
       "def scalusAscendingBytes : List (Data × Data) → Bool | [] => true | [(Data.B _, _)] => true " +
           "| (Data.B a, _) :: tail@((Data.B b, _) :: _) => decide (a < b) && " +
           "scalusAscendingBytes tail | _ => false",
@@ -329,8 +336,50 @@ object DataEncoding {
         fresh: Iterator[Int]
     ): String = {
         val e = s"e${fresh.next()}"
-        val ascending = ascendingKeys(order, e)
-        s"(fun $e => scalusAllPairs ${keys.leanPredicate(fresh)} ${values.leanPredicate(fresh)} $e$ascending)"
+        s"(fun $e => ${leanPairs(keys, values)} $e${ascendingKeys(order, e)})"
+    }
+
+    /** The Lean predicate on a list of `items`, a `List Data → Bool`: the name of its walk, which
+      * [[leanRecursions]] defines, or a constant where the items' predicate holds of every `Data`.
+      * The name is that of the walk's text, so that two encodings of one file share it.
+      */
+    private[verify] def leanItems(items: DataEncoding): String =
+        if items.holdsOfEvery then "(fun _ => true)"
+        else s"scalusAll_${digest(items.leanPredicate)}"
+
+    /** The Lean predicate on the entries of a map of `keys` and `values`, a
+      * `List (Data × Data) → Bool`, as [[leanItems]] is of a list: without the order of its keys.
+      */
+    private[verify] def leanPairs(keys: DataEncoding, values: DataEncoding): String =
+        if keys.holdsOfEvery && values.holdsOfEvery then "(fun _ => true)"
+        else s"scalusAllPairs_${digest(s"${keys.leanPredicate} ${values.leanPredicate}")}"
+
+    /** The walk named [[leanItems]] of a list of `items`, whose predicate does not hold of every
+      * `Data`.
+      */
+    private def itemsWalk(items: DataEncoding): String = {
+        val walk = leanItems(items)
+        s"def $walk : List Data → Bool | [] => true | x :: rest => ${items.leanPredicate} x && " +
+            s"$walk rest"
+    }
+
+    /** The walk named [[leanPairs]] of the entries of a map of `keys` and `values`, not both of
+      * whose predicates hold of every `Data`.
+      */
+    private def pairsWalk(keys: DataEncoding, values: DataEncoding): String = {
+        val walk = leanPairs(keys, values)
+        s"def $walk : List (Data × Data) → Bool | [] => true | (k, v) :: rest => " +
+            s"${keys.leanPredicate} k && ${values.leanPredicate} v && $walk rest"
+    }
+
+    /** Sixteen hexadecimal digits of the SHA-256 of `text`: a walk's name, which tells its text
+      * apart from the others of a file. [[leanRecursions]] fails on two texts of one name.
+      */
+    private def digest(text: String): String = {
+        val hash = java.security.MessageDigest
+            .getInstance("SHA-256")
+            .digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        hash.iterator.take(8).map(byte => f"${byte & 0xff}%02x").mkString
     }
 
     /** Why `entries` are not entries of a map encoded so, or `None` where they are. */
@@ -404,10 +453,11 @@ object DataEncoding {
       */
     private[verify] def leanName(name: String): String = s"scalusRec_$name"
 
-    /** The recursive Lean definitions that the predicates of `encodings` use, of their types that
-      * contain themselves ([[Recursive]]), each type's once: `mutual` blocks, each after the blocks
-      * it uses. A Lean file of several definitions ([[DataEncoding.leanDefinition]]) has them once,
-      * after [[leanDefinitions]].
+    /** The recursive Lean definitions that the predicates of `encodings` use, each once and after
+      * those it uses: the walks of their lists and maps ([[leanItems]], [[leanPairs]]), and the
+      * `mutual` blocks of their types that contain themselves ([[Recursive]]). A Lean file of
+      * several definitions ([[DataEncoding.leanDefinition]]) has them once, after
+      * [[leanDefinitions]].
       */
     def leanRecursions(encodings: Iterable[DataEncoding]): List[String] = {
         val recursions = new LeanRecursions
@@ -446,7 +496,11 @@ object DataEncoding {
         case KeyOrder.Integers                 => s" && scalusAscendingIntegers $entries"
         case KeyOrder.Any | KeyOrder.Unchecked => ""
 
-    /** The `mutual` blocks of recursive definitions, by the name of the type each is for.
+    /** The recursive definitions: the walks of lists and maps, by their names, and the `mutual`
+      * blocks, by the name of the type each is for, each after those it uses.
+      *
+      * A walk is of the lists or the maps of one kind of element, whose elements repeat no type
+      * around them: `scalusAll_…` of a list, `scalusAllPairs_…` of a map's entries.
       *
       * A type's block defines its predicate, those of the types inside it that repeat it, which
       * call each other, and a walk of each list or map whose elements repeat one of them. Each is
@@ -464,16 +518,48 @@ object DataEncoding {
         /** [[free]] of each encoding asked about, by identity: an encoding is asked about once. */
         private val freeNames = new java.util.IdentityHashMap[DataEncoding, Set[String]]()
 
-        /** Every block that the predicate of `encoding` uses, written. */
+        /** Every definition that the predicate of `encoding` uses, written. */
         def reach(encoding: DataEncoding): Unit = {
             encoding match
-                case recursive: Recursive => root(recursive)
-                case Constr(constructors) => constructors.foreach(_.foreach(reach))
-                case Items(items)         => reach(items)
-                case Entries(keys, values, _) =>
-                    reach(keys)
-                    reach(values)
-                case _ => ()
+                case recursive: Recursive     => root(recursive)
+                case Constr(constructors)     => constructors.foreach(_.foreach(reach))
+                case Items(items)             => walkItems(items)
+                case Entries(keys, values, _) => walkPairs(keys, values)
+                case _                        => ()
+        }
+
+        /** The name of the walk of a list of `items`, defined after what it uses. */
+        def walkItems(items: DataEncoding): String = {
+            reach(items)
+            val name = leanItems(items)
+            if !items.holdsOfEvery then writeWalk(name, itemsWalk(items))
+            name
+        }
+
+        /** The name of the walk of a map's entries of `keys` and `values`, defined after what it
+          * uses.
+          */
+        def walkPairs(keys: DataEncoding, values: DataEncoding): String = {
+            reach(keys)
+            reach(values)
+            val name = leanPairs(keys, values)
+            if !(keys.holdsOfEvery && values.holdsOfEvery) then
+                writeWalk(name, pairsWalk(keys, values))
+            name
+        }
+
+        /** The walk named `name`, of the text `definition`, where no definition has it yet. The
+          * name is a digest of what the walk checks, and two walks of one name would be one.
+          */
+        private def writeWalk(name: String, definition: String): Unit = {
+            val key = s"walk $name"
+            blocks.get(key) match
+                case None                                   => blocks(key) = definition
+                case Some(written) if written == definition => ()
+                case Some(written) =>
+                    throw new IllegalStateException(
+                      s"two walks of one name, $name: $written and $definition"
+                    )
         }
 
         /** The names of the types of [[Again]] in `encoding` that it does not enclose. */
@@ -543,9 +629,7 @@ object DataEncoding {
                                     s"(match $xs with | [] => true | $y :: $rest => " +
                                     s"${on(y, items)} && $walk $rest)"
                                 s"$walk $xs"
-                            else
-                                reach(items)
-                                s"scalusAll ${items.leanPredicate} $xs"
+                            else s"${walkItems(items)} $xs"
                         s"(match $x with | Data.List $xs => $all | _ => false)"
                     case Entries(keys, values, order) =>
                         val ps = next("ps")
@@ -557,10 +641,7 @@ object DataEncoding {
                                     s"(match $ps with | [] => true | ($k, $v) :: $rest => " +
                                     s"${on(k, keys)} && ${on(v, values)} && $walk $rest)"
                                 s"$walk $ps"
-                            else
-                                reach(keys)
-                                reach(values)
-                                s"scalusAllPairs ${keys.leanPredicate} ${values.leanPredicate} $ps"
+                            else s"${walkPairs(keys, values)} $ps"
                         s"(match $x with | Data.Map $ps => $all${ascendingKeys(order, ps)} | _ => false)"
                 }
             }

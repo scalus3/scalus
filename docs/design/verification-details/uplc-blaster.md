@@ -91,8 +91,22 @@ check), a Boolean `Constr 0|1 []`, a case class or an enum's constructor `Constr
 its fields' encodings, a list `List` of its items', a map `Map` of its keys' and values', with the
 keys of a `SortedMap` of byte strings or integers in ascending order, and a type whose one field it
 wraps, as `PubKeyHash` or `Value`, that field's. The few definitions the predicates use
-(`scalusAll`, `scalusAllPairs`, `scalusAscendingBytes`, …) are written into a check that needs them,
-and not into the library, whose hash every kept result rests on.
+(`scalusIsI`, `scalusAscendingBytes`, …) are written into a check that needs them, and not into the
+library, whose hash every kept result rests on.
+
+A list or a map is checked by a walk of its own kind of elements, a recursive definition that the
+check writes before the predicates (`DataEncoding.leanRecursions`):
+
+```lean
+def scalusAll_5d0c… : List Data → Bool | [] => true | x :: rest => scalusIsB x && scalusAll_5d0c… rest
+```
+
+Its name is a digest of what it checks, so the predicates of one check share it. No definition is
+given a predicate as an argument: Blaster gives the solver such an argument as a lambda, with
+quantified axioms that define it and say when two functions are equal. On the shaped vesting
+guarantee (one input, at most one output and one signatory), Z3 had not decided the check after
+15 minutes with three sets of its options; with a walk of each list, it answered the same check in
+0.3 s.
 
 The description is public, as `scalus.verify.DataEncoding`: `DataEncoding.of[A]` derives it,
 `leanPredicate` and `leanDefinition(name)` give the Lean predicate (with `leanRecursions`, the
@@ -452,10 +466,10 @@ end
 
 - **Lean has to accept it as total.** Each call is of a part the definition took apart with
   `match`, so the recursion is structural on `Data`, through the list of a constructor's fields.
-  So the parts are matched as they are, `match fs2_0 with …`, and not applied to a lambda, as
-  the premises of other types are.
+  So the parts are matched as they are, `match fs2_0 with …`, and not applied to a lambda.
 - **A list or a map whose elements repeat a type** has a walk of its own in the block
-  (`…_items0`, `…_entries0`), as Lean sees a call through `scalusAll` as no structural one.
+  (`…_items0`, `…_entries0`), which calls the type's definition; a list of other elements has the
+  shared walk of its kind, before the block.
 - **Types that contain each other** have their definitions in one `mutual` block. A type inside
   that repeats none of the enclosing ones has a block of its own, before.
 - **Blaster** translates each definition to an SMT `define-fun-rec`.

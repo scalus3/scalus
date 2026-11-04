@@ -279,8 +279,19 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
         assert(optionalTree.exact, optionalTree)
         assert(optionalTree.leanRecursions.size == 1, optionalTree.leanRecursions)
         assert(optionalTree.leanRecursions == tree.leanRecursions)
-        // A type without one has none.
+        // A type without one, and without a list or a map, has none.
         assert(DataEncoding.of[TxOutRef].leanRecursions.isEmpty)
+        // A list is checked by a walk of its own, and not by a definition given its items'
+        // predicate, which Blaster would give the solver as a lambda. Two encodings with such
+        // lists share the walk.
+        val walks = DataEncoding.leanRecursions(
+          List(
+            DataEncoding.of[prelude.List[BigInt]],
+            DataEncoding.of[prelude.Option[prelude.List[BigInt]]]
+          )
+        )
+        assert(walks.size == 1 && walks.head.startsWith("def scalusAll_"), walks)
+        assert(!DataEncoding.leanDefinitions.contains("scalusAll"), DataEncoding.leanDefinitions)
         // Types that repeat each other are defined once each, in one block, whichever is met first.
         val bothWays = DataEncoding
             .leanRecursions(List(DataEncoding.of[EncodingTree], DataEncoding.of[EncodingForest]))
@@ -405,17 +416,15 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
           "isChain" -> DataEncoding.of[EncodingChain],
           "isForestTree" -> DataEncoding.of[EncodingTree]
         )
-        val definitions = List(
-          DataEncoding.leanDefinitions,
-          DataEncoding.of[ScriptContext].leanDefinition("isScriptContext"),
-          DataEncoding.of[SortedMap[ByteString, BigInt]].leanDefinition("isTokens"),
-          // The recursive definitions of all of them, each type's once, which Lean has to see as
-          // structural, and then the definitions that use them.
-          DataEncoding
-              .leanRecursions(recursive.map(_._2))
-              .mkString("\n\n")
-        ).mkString("\n\n") + "\n\n" +
-            recursive.map((name, encoding) => encoding.leanDefinition(name)).mkString("\n\n")
+        val all = List(
+          "isScriptContext" -> DataEncoding.of[ScriptContext],
+          "isTokens" -> DataEncoding.of[SortedMap[ByteString, BigInt]]
+        ) ++ recursive
+        // The recursive definitions of all of them, each once, which Lean has to see as
+        // structural, and then the definitions that use them.
+        val definitions = (DataEncoding.leanDefinitions ::
+            DataEncoding.leanRecursions(all.map(_._2)) ++
+            all.map((name, encoding) => encoding.leanDefinition(name))).mkString("\n\n")
         val leaf = BlasterTree.Leaf
         val deepTree = BlasterTree.Node(BlasterTree.Node(leaf, leaf), leaf).toData
         val notATree = Data.Constr(

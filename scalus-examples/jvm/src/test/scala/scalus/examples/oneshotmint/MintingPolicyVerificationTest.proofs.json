@@ -29,7 +29,7 @@
     "one_shot_mint.deployed.only_the_seed_mints.two_of_each": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "ac1544421a39aad6",
+      "statement": "e436a1f95ad77fc5",
       "programs": [
         "ff418a018d567015",
         "9297d02ce7e2bd0c",
@@ -46,7 +46,7 @@
     "one_shot_mint.deployed.only_the_seed_mints_as_read.two_of_each": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "ac1544421a39aad6",
+      "statement": "e436a1f95ad77fc5",
       "programs": [
         "ff418a018d567015",
         "278301000bc336aa",
