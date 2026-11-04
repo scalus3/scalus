@@ -23,6 +23,12 @@ class LedgerRulesValidationTest extends AnyFunSuite {
       getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
     )
 
+    /** The default rules without [[GovMutator]]. The it-data holds no gov state of the blocks'
+      * slots (the active proposals, the DReps that vote), so the GOV rule would reject every vote
+      * with `VotersDoNotExist` or `GovActionsDoNotExist`, however valid the tx was on mainnet.
+      */
+    private val replayedMutators = DefaultMutators.all.filterNot(_ == GovMutator)
+
     /** The context of a tx at `slot`, with the treasury at the start of its epoch. */
     private def blocksEraContext(slot: SlotNo): Context = {
         val treasury = stakeStateResolver.treasuryAt(SlotConfig.mainnet.epochOf(slot).toInt)
@@ -49,8 +55,14 @@ class LedgerRulesValidationTest extends AnyFunSuite {
             _ = utxosResolvedCount.incrementAndGet()
             certState = stakeStateResolver.resolveForTx(transaction, block.slot)
             state = State(utxos = utxos, certState = certState)
-            result <- CardanoMutator
-                .transit(blocksEraContext(block.slot), state, transaction)
+            result <- STS.Mutator
+                .transit[TransactionException](
+                  DefaultValidators.all,
+                  replayedMutators,
+                  blocksEraContext(block.slot),
+                  state,
+                  transaction
+                )
                 .swap
                 .toOption
         yield (path.getFileName, transaction, result)
@@ -63,7 +75,8 @@ class LedgerRulesValidationTest extends AnyFunSuite {
         }
 
         // Mainnet blocks hold only valid transactions, so with the stake state each saw, from
-        // StakeStateResolver.resolveForTx(tx, slot), and the treasury of its epoch, every one passes.
+        // StakeStateResolver.resolveForTx(tx, slot), and the treasury of its epoch, every one passes
+        // the rules this replay can check.
         assert(failed.isEmpty, s"Expected no failed transactions, got ${failed.size}")
     }
 }
