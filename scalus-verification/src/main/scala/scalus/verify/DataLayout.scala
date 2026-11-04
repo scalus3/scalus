@@ -35,6 +35,11 @@ private[verify] enum DataLayout {
     /** A map, with its keys in `order`. */
     case Mapping(keys: DataLayout, values: DataLayout, order: KeyOrder)
 
+    /** A type that contains itself, named `name`: `inner`, in which a part laid out as
+      * `Plain(DataEncoding.Again(name))` is the type again, where it repeats.
+      */
+    case Recursive(name: String, inner: DataLayout)
+
     /** The encoding of the values laid out so, derived once. */
     lazy val encoding: DataEncoding = this match
         case Plain(encoding) => encoding
@@ -45,6 +50,7 @@ private[verify] enum DataLayout {
         case Collection(items) => DataEncoding.Items(items.encoding)
         case Mapping(keys, values, order) =>
             DataEncoding.Entries(keys.encoding, values.encoding, order)
+        case Recursive(name, inner) => DataEncoding.Recursive(name, inner.encoding)
 }
 
 private[verify] object DataLayout {
@@ -96,11 +102,39 @@ private[verify] object DataLayout {
       */
     private val maxParts = 100_000
 
-    /** The parts of a layout derived so far, and the first that has no `Data` form. */
-    private final class Parts(var count: Int = 0, var withoutDataForm: Option[SIRType] = None)
+    /** The parts of a layout derived so far, the first that has no `Data` form, and the keys
+      * ([[SirTypes.recursionKey]]) of the enclosing types that repeat below the part being derived.
+      */
+    private final class Parts(
+        var count: Int = 0,
+        var withoutDataForm: Option[SIRType] = None,
+        val repeated: scala.collection.mutable.Set[String] = scala.collection.mutable.Set.empty
+    )
 
-    /** The layout of the values of `tp`. `enclosing` are the types it is derived in, and `parts`
-      * counts the parts derived so far.
+    /** The name of the encoding of `tp`, of the key `key` ([[SirTypes.recursionKey]]), where it
+      * contains itself: its declaration's name, as a Lean name may have it ([[leanSimpleName]]),
+      * and its key as a hash, so that two types of one name are told apart, and a type has one name
+      * in every check.
+      */
+    private def recursionName(tp: SIRType, key: String): String = {
+        val hash = scalus.utils.Hex
+            .bytesToHex(scalus.utils.Utils.sha2_256(key.getBytes("UTF-8")))
+            .take(8)
+            .toLowerCase
+        s"${leanSimpleName(declarationName(tp))}_$hash"
+    }
+
+    /** The last part of the declaration name `declaration`, of the letters, digits and `_` of ASCII
+      * only, which every Lean name may have; `T` where none is left.
+      */
+    private[verify] def leanSimpleName(declaration: String): String = {
+        val simple =
+            declaration.split('.').last.filter(c => c < 128 && (c.isLetterOrDigit || c == '_'))
+        if simple.isEmpty then "T" else simple
+    }
+
+    /** The layout of the values of `tp`. `enclosing` are the keys of the types it is derived in
+      * ([[SirTypes.recursionKey]]), and `parts` counts the parts derived so far.
       */
     private def layoutOf(tp: SIRType, enclosing: Set[String], parts: Parts)(using
         LoweringContext
@@ -118,14 +152,24 @@ private[verify] object DataLayout {
                 case none @ (_: SIRType.Fun | _: SIRType.TypeLambda | SIRType.Unit |
                     SIRType.BLS12_381_MlResult) =>
                     withoutDataForm(none, parts)
+                // A type that repeats is its encoding again, and the type where it repeats is
+                // the encoding of that name: a recursive one.
                 case other @ (_: SIRType.CaseClass | _: SIRType.SumCaseClass) =>
-                    if enclosing.contains(other.show) then
-                        Plain(DataEncoding.Unknown(s"${other.show} contains itself"))
+                    val key = recursionKey(other)
+                    if enclosing.contains(key) then
+                        parts.repeated += key
+                        Plain(DataEncoding.Again(recursionName(other, key)))
                     else if enclosing.size >= maxNesting then
                         Plain(
                           DataEncoding.Unknown(s"${other.show} nests more than $maxNesting deep")
                         )
-                    else representedLayout(other, enclosing + other.show, parts)
+                    else
+                        val inner = representedLayout(other, enclosing + key, parts)
+                        // A type whose encoding is not told is that, whatever repeats in it.
+                        val repeats = parts.repeated.remove(key)
+                        if repeats && !inner.isInstanceOf[Plain] then
+                            Recursive(recursionName(other, key), inner)
+                        else inner
                 case other =>
                     Plain(DataEncoding.Unknown(s"${other.show} has no Data encoding told here"))
     }

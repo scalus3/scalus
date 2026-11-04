@@ -12,8 +12,9 @@ import scalus.uplc.builtin.{ByteString, Data}
   * It is told in two forms that agree: a Lean predicate on `Data`, [[leanPredicate]], that holds of
   * the encodings of the type's values, and a check of a `Data` on the JVM, [[outside]]. Where the
   * encoding is [[exact]], the predicate holds of exactly those encodings. Where it is not, as for a
-  * type that contains itself, it holds of more `Data` than that, and [[outside]] says which of them
-  * it cannot tell.
+  * string, whose UTF-8 the predicate does not check, it holds of more `Data` than that, and
+  * [[outside]] says which of them it cannot tell. A type that contains itself is a [[Recursive]]
+  * encoding, whose predicate is a recursive Lean definition, exact where its other parts are.
   *
   * {{{
   * val mint = DataEncoding.of[Mint]
@@ -50,10 +51,21 @@ enum DataEncoding {
     /** An encoding not told here, with the reason. Its Lean predicate holds of every `Data`. */
     case Unknown(reason: String)
 
+    /** The encoding of a type that contains itself, named `name`: `body`, in which [[Again]] of the
+      * name is the type again, where it repeats. Its Lean predicate is a recursive definition
+      * ([[leanRecursions]]), so it is exact where the rest of `body` is.
+      */
+    case Recursive(name: String, body: DataEncoding)
+
+    /** The type of the enclosing [[Recursive]] encoding named `name`, again. */
+    case Again(name: String)
+
     /** Whether the Lean predicate holds of exactly the `Data` encoded so. */
     def exact: Boolean = this match
         case Integer | Bytes | Bool | AnyData => true
         case Text | Unknown(_)                => false
+        case Recursive(_, body)               => body.exact
+        case Again(_)                         => true
         case Constr(constructors)             => constructors.forall(_.forall(_.exact))
         case Items(items)                     => items.exact
         case Entries(keys, values, order) =>
@@ -61,6 +73,14 @@ enum DataEncoding {
 
     /** Whether every `Data` is encoded so, and the predicate says nothing. */
     def isAnything: Boolean = this == AnyData
+
+    /** Why the encoding is not told, where it is not as a whole: an [[Unknown]], also as the body
+      * of a [[Recursive]] one.
+      */
+    private[verify] def unknownReason: Option[String] = this match
+        case Unknown(reason)    => Some(reason)
+        case Recursive(_, body) => body.unknownReason
+        case _                  => None
 
     /** A small `Data` encoded so, where this tells one: the value of a variable Lean leaves out of
       * a counterexample. A constructor is the first whose fields have one, so a type that contains
@@ -73,6 +93,9 @@ enum DataEncoding {
         case Items(_)          => Some(Data.List(PList.Nil))
         case Entries(_, _, _)  => Some(Data.Map(PList.Nil))
         case Unknown(_)        => None
+        // A constructor without the type again ends the value.
+        case Recursive(_, body) => body.example
+        case Again(_)           => None
         case Constr(constructors) =>
             constructors.iterator.zipWithIndex
                 .flatMap { (fields, tag) =>
@@ -86,9 +109,18 @@ enum DataEncoding {
     /** Why `data` is not encoded so, or `None` where it is. A `Data` this cannot tell, under an
       * `Unknown` encoding, is not encoded so.
       */
-    def outside(data: Data): Option[String] = {
+    def outside(data: Data): Option[String] = outsideIn(data, Map.empty)
+
+    /** [[outside]], where the [[Recursive]] encodings of the names in `bound` enclose this one. */
+    private def outsideIn(data: Data, bound: Map[String, DataEncoding]): Option[String] = {
         def no(what: String) = Some(s"${data.toString.take(80)} is no $what")
         (this, data) match
+            case (recursive @ Recursive(name, body), _) =>
+                body.outsideIn(data, bound + (name -> recursive))
+            case (Again(name), _) =>
+                bound.get(name) match
+                    case Some(recursive) => recursive.outsideIn(data, bound)
+                    case None            => Some(s"the type $name is again outside its encoding")
             case (Integer, Data.I(_)) => None
             case (Integer, _)         => no("integer")
             case (Bytes, Data.B(_))   => None
@@ -109,24 +141,41 @@ enum DataEncoding {
                 val values = fields.toScalaList
                 if types.size != values.size then
                     Some(s"constructor $tag has ${types.size} fields, not ${values.size}")
-                else values.zip(types).iterator.flatMap((v, t) => t.outside(v)).nextOption()
+                else
+                    values.zip(types).iterator.flatMap((v, t) => t.outsideIn(v, bound)).nextOption()
             case (Constr(_), _) => no("constructor of its type")
             case (Items(items), Data.List(values)) =>
-                values.toScalaList.iterator.flatMap(items.outside).nextOption()
+                values.toScalaList.iterator.flatMap(items.outsideIn(_, bound)).nextOption()
             case (Items(_), _) => no("list")
             case (Entries(keys, values, order), Data.Map(entries)) =>
-                DataEncoding.entriesOutside(keys, values, order, entries.toScalaList)
+                DataEncoding.entriesOutside(
+                  keys.outsideIn(_, bound),
+                  values.outsideIn(_, bound),
+                  order,
+                  entries.toScalaList
+                )
             case (Entries(_, _, _), _) => no("map")
     }
 
     /** The Lean predicate, a `Data → Bool`, that holds of the `Data` encoded so. It names
       * PlutusCore's `Data` as `Data`, as after `open PlutusCore.Data (Data)`, and uses
-      * [[DataEncoding.leanDefinitions]].
+      * [[DataEncoding.leanDefinitions]] and the recursive definitions of [[leanRecursions]].
       */
     def leanPredicate: String = leanPredicate(Iterator.from(0))
 
-    /** A Lean definition of [[leanPredicate]], `def name (d : Data) : Bool := …`, on one line. */
+    /** A Lean definition of [[leanPredicate]], `def name (d : Data) : Bool := …`, on one line. It
+      * comes after [[DataEncoding.leanDefinitions]] and the recursive definitions of the types in
+      * it that contain themselves: those of [[DataEncoding.leanRecursions]] of all the encodings of
+      * a file, which define each type's once.
+      */
     def leanDefinition(name: String): String = s"def $name (d : Data) : Bool := $leanPredicate d"
+
+    /** The recursive Lean definitions that [[leanPredicate]] uses, of the types that contain
+      * themselves in this encoding: `mutual` blocks, each after the blocks it uses. None for an
+      * encoding without such a type. A file of several encodings has
+      * [[DataEncoding.leanRecursions]] of them all, which writes a type's once.
+      */
+    def leanRecursions: List[String] = DataEncoding.leanRecursions(List(this))
 
     /** [[leanPredicate]], where `fresh` numbers the names it binds. */
     private[verify] def leanPredicate(fresh: Iterator[Int]): String = this match
@@ -134,6 +183,9 @@ enum DataEncoding {
         case Bytes | Text         => "scalusIsB"
         case Bool                 => "scalusIsBool"
         case AnyData | Unknown(_) => "(fun _ => true)"
+        // A type that contains itself is its recursive definition, of which this is the name.
+        case Recursive(name, _) => DataEncoding.leanName(name)
+        case Again(name)        => DataEncoding.leanName(name)
         case Items(items) =>
             val d = s"d${fresh.next()}"
             s"(fun $d => match $d with | Data.List xs => scalusAll ${items.leanPredicate(fresh)} xs | _ => false)"
@@ -144,20 +196,8 @@ enum DataEncoding {
             val d = s"d${fresh.next()}"
             val tag = s"t${fresh.next()}"
             val fields = s"fs${fresh.next()}"
-            val branches = constructors.zipWithIndex.map { (types, index) =>
-                val names = types.indices.map(i => s"${fields}_$i")
-                val test =
-                    if types.isEmpty then s"$fields.isEmpty"
-                    else
-                        val all = types
-                            .zip(names)
-                            .map((field, name) => s"${field.leanPredicate(fresh)} $name")
-                            .mkString(" && ")
-                        s"(match $fields with | [${names.mkString(", ")}] => $all | _ => false)"
-                index -> test
-            }
-            val chain = branches.foldRight("false") { case ((index, test), otherwise) =>
-                s"(if $tag == $index then $test else $otherwise)"
+            val chain = DataEncoding.constructorTests(tag, fields, constructors) { (field, name) =>
+                s"${field.leanPredicate(fresh)} $name"
             }
             s"(fun $d => match $d with | Data.Constr $tag $fields => $chain | _ => false)"
 }
@@ -266,10 +306,7 @@ object DataEncoding {
         fresh: Iterator[Int]
     ): String = {
         val e = s"e${fresh.next()}"
-        val ascending = order match
-            case KeyOrder.Bytes                    => s" && scalusAscendingBytes $e"
-            case KeyOrder.Integers                 => s" && scalusAscendingIntegers $e"
-            case KeyOrder.Any | KeyOrder.Unchecked => ""
+        val ascending = ascendingKeys(order, e)
         s"(fun $e => scalusAllPairs ${keys.leanPredicate(fresh)} ${values.leanPredicate(fresh)} $e$ascending)"
     }
 
@@ -279,9 +316,17 @@ object DataEncoding {
         values: DataEncoding,
         order: KeyOrder,
         entries: List[(Data, Data)]
+    ): Option[String] = entriesOutside(keys.outside, values.outside, order, entries)
+
+    /** [[entriesOutside]], with the checks of a key and of a value. */
+    private def entriesOutside(
+        keys: Data => Option[String],
+        values: Data => Option[String],
+        order: KeyOrder,
+        entries: List[(Data, Data)]
     ): Option[String] = {
         val entry = entries.iterator
-            .flatMap((key, value) => keys.outside(key).orElse(values.outside(value)))
+            .flatMap((key, value) => keys(key).orElse(values(value)))
             .nextOption()
         def ascending(less: (Data, Data) => Option[Boolean]) =
             entries.map(_._1).sliding(2).collectFirst {
@@ -303,6 +348,174 @@ object DataEncoding {
                     case (Data.I(a), Data.I(b)) => Some(a < b)
                     case _                      => None
                 })
+    }
+
+    /** The Lean name of the recursive definition of the encoding of a type that contains itself,
+      * named `name` ([[Recursive]]).
+      */
+    private[verify] def leanName(name: String): String = s"scalusRec_$name"
+
+    /** The recursive Lean definitions that the predicates of `encodings` use, of their types that
+      * contain themselves ([[Recursive]]), each type's once: `mutual` blocks, each after the blocks
+      * it uses. A Lean file of several definitions ([[DataEncoding.leanDefinition]]) has them once,
+      * after [[leanDefinitions]].
+      */
+    def leanRecursions(encodings: Iterable[DataEncoding]): List[String] = {
+        val recursions = new LeanRecursions
+        encodings.foreach(recursions.reach)
+        recursions.blocks.values.toList
+    }
+
+    /** The tests of a constructor of `constructors`, whose tag and list of fields a `match` named
+      * `tag` and `fields`: for each, its fields, each by the test `field` gives of its encoding and
+      * its name, and `false` for a tag that none has.
+      */
+    private def constructorTests(
+        tag: String,
+        fields: String,
+        constructors: List[List[DataEncoding]]
+    )(field: (DataEncoding, String) => String): String = {
+        val branches = constructors.zipWithIndex.map { (types, index) =>
+            val names = types.indices.map(i => s"${fields}_$i")
+            val test =
+                if types.isEmpty then s"$fields.isEmpty"
+                else
+                    val all = types.zip(names).map(field.tupled).mkString(" && ")
+                    s"(match $fields with | [${names.mkString(", ")}] => $all | _ => false)"
+            index -> test
+        }
+        branches.foldRight("false") { case ((index, test), otherwise) =>
+            s"(if $tag == $index then $test else $otherwise)"
+        }
+    }
+
+    /** The test that the keys of the entries `entries` are in `order`, after `&&`, or nothing for
+      * an order that is not checked.
+      */
+    private def ascendingKeys(order: KeyOrder, entries: String): String = order match
+        case KeyOrder.Bytes                    => s" && scalusAscendingBytes $entries"
+        case KeyOrder.Integers                 => s" && scalusAscendingIntegers $entries"
+        case KeyOrder.Any | KeyOrder.Unchecked => ""
+
+    /** The `mutual` blocks of recursive definitions, by the name of the type each is for.
+      *
+      * A type's block defines its predicate, those of the types inside it that repeat it, which
+      * call each other, and a walk of each list or map whose elements repeat one of them. Each is
+      * written with `match` on a part it took apart, as `match fs with | [a, b] => …`, so that Lean
+      * sees every call is of a part of its argument: the recursion is structural, and the
+      * definition total. A type inside that repeats no enclosing type has a block of its own,
+      * before this one; and a type is defined once, in whichever block meets it first.
+      */
+    private final class LeanRecursions {
+        val blocks = scala.collection.mutable.LinkedHashMap.empty[String, String]
+
+        /** The names of the types whose predicates are defined, in any block. */
+        private val defined = scala.collection.mutable.Set.empty[String]
+
+        /** [[free]] of each encoding asked about, by identity: an encoding is asked about once. */
+        private val freeNames = new java.util.IdentityHashMap[DataEncoding, Set[String]]()
+
+        /** Every block that the predicate of `encoding` uses, written. */
+        def reach(encoding: DataEncoding): Unit = {
+            encoding match
+                case recursive: Recursive => root(recursive)
+                case Constr(constructors) => constructors.foreach(_.foreach(reach))
+                case Items(items)         => reach(items)
+                case Entries(keys, values, _) =>
+                    reach(keys)
+                    reach(values)
+                case _ => ()
+        }
+
+        /** The names of the types of [[Again]] in `encoding` that it does not enclose. */
+        private def free(encoding: DataEncoding): Set[String] = {
+            val known = freeNames.get(encoding)
+            if known != null then known
+            else
+                val names = encoding match
+                    case Again(name)              => Set(name)
+                    case Recursive(name, body)    => free(body) - name
+                    case Constr(constructors)     => constructors.flatten.flatMap(free).toSet
+                    case Items(items)             => free(items)
+                    case Entries(keys, values, _) => free(keys) ++ free(values)
+                    case _                        => Set.empty[String]
+                freeNames.put(encoding, names)
+                names
+        }
+
+        /** The block of `recursive`, a type that repeats no enclosing type, after those it uses. */
+        private def root(recursive: Recursive): Unit = {
+            if !defined.contains(recursive.name) then
+                val block = new Block(recursive.name)
+                block.define(recursive)
+                blocks(recursive.name) = block.definitions.mkString("mutual\n", "\n", "\nend")
+        }
+
+        /** The definitions of the block of the type `rootName`. */
+        private final class Block(rootName: String) {
+            val definitions = scala.collection.mutable.ArrayBuffer.empty[String]
+            private val fresh = Iterator.from(0)
+            private def next(prefix: String) = s"$prefix${fresh.next()}"
+
+            /** The predicate of `recursive`, in this block, where no block has it yet. */
+            def define(recursive: Recursive): Unit = {
+                if defined.add(recursive.name) then
+                    val d = next("d")
+                    val body = on(d, recursive.body)
+                    definitions += s"def ${leanName(recursive.name)} ($d : Data) : Bool := $body"
+            }
+
+            /** That `x`, a part taken apart, is encoded so: a Boolean of Lean. A part of no type of
+              * this block is tested as the predicates of other types are, after the blocks of the
+              * types in it.
+              */
+            private def on(x: String, encoding: DataEncoding): String = {
+                encoding match {
+                    case Integer              => s"scalusIsI $x"
+                    case Bytes | Text         => s"scalusIsB $x"
+                    case Bool                 => s"scalusIsBool $x"
+                    case AnyData | Unknown(_) => "true"
+                    case Again(name)          => s"${leanName(name)} $x"
+                    case recursive @ Recursive(name, _) =>
+                        if free(recursive).isEmpty then root(recursive) else define(recursive)
+                        s"${leanName(name)} $x"
+                    case Constr(constructors) =>
+                        val tag = next("t")
+                        val fields = next("fs")
+                        val chain = constructorTests(tag, fields, constructors)((t, n) => on(n, t))
+                        s"(match $x with | Data.Constr $tag $fields => $chain | _ => false)"
+                    case Items(items) =>
+                        val xs = next("xs")
+                        val all =
+                            if free(items).nonEmpty then
+                                val walk = s"${leanName(rootName)}_items${fresh.next()}"
+                                val (y, rest) = (next("y"), next("rest"))
+                                definitions += s"def $walk ($xs : List Data) : Bool := " +
+                                    s"(match $xs with | [] => true | $y :: $rest => " +
+                                    s"${on(y, items)} && $walk $rest)"
+                                s"$walk $xs"
+                            else
+                                reach(items)
+                                s"scalusAll ${items.leanPredicate} $xs"
+                        s"(match $x with | Data.List $xs => $all | _ => false)"
+                    case Entries(keys, values, order) =>
+                        val ps = next("ps")
+                        val all =
+                            if free(keys).nonEmpty || free(values).nonEmpty then
+                                val walk = s"${leanName(rootName)}_entries${fresh.next()}"
+                                val (k, v, rest) = (next("k"), next("v"), next("rest"))
+                                definitions += s"def $walk ($ps : List (Data × Data)) : Bool := " +
+                                    s"(match $ps with | [] => true | ($k, $v) :: $rest => " +
+                                    s"${on(k, keys)} && ${on(v, values)} && $walk $rest)"
+                                s"$walk $ps"
+                            else
+                                reach(keys)
+                                reach(values)
+                                s"scalusAllPairs ${keys.leanPredicate} ${values.leanPredicate} $ps"
+                        s"(match $x with | Data.Map $ps => $all${ascendingKeys(order, ps)} | _ => false)"
+                }
+            }
+        }
     }
 
     /** Whether `bytes` are UTF-8. */

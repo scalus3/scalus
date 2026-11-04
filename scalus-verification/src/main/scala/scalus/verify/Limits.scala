@@ -103,7 +103,7 @@ final case class Limits(all: List[Limit]) {
         val layout = DataLayout.of(tp)
         unfit(layout)
             .orElse(DataEncoding.of(tp).outside(value))
-            .orElse(lengthsOutside(layout, value, Some(Nil)))
+            .orElse(lengthsOutside(layout, value, Some(Nil), Map.empty))
     }
 
     private[verify] def unfit(layout: DataLayout): Option[String] = {
@@ -141,6 +141,7 @@ final case class Limits(all: List[Limit]) {
     ): Option[String] = {
         def at = Limits.show(walked)
         (layout, path) match
+            case (DataLayout.Recursive(_, inner), _) => unreached(inner, path, walked)
             case (DataLayout.Collection(_) | DataLayout.Mapping(_, _, _), Nil) => None
             case (_, Nil) => Some(s"$at is no list or map")
             case (DataLayout.Record(fields), (step @ Step.Field(name)) :: rest) =>
@@ -162,6 +163,10 @@ final case class Limits(all: List[Limit]) {
                 Some(s"$at is any Data, which has no collection of its type")
             case (DataLayout.Plain(DataEncoding.Unknown(reason)), _) =>
                 Some(s"$at has an encoding not told here: $reason")
+            case (DataLayout.Plain(DataEncoding.Again(_)), _) =>
+                Some(
+                  s"$at is its type again, which contains itself: a limit does not reach into it"
+                )
             case (_, step :: _) => Some(s"$at has no ${Limits.show(List(step))}")
     }
 
@@ -172,9 +177,17 @@ final case class Limits(all: List[Limit]) {
       * example, which no map of the ledger does: the value is then one to count steps on, not one
       * of the type. Each other part is its encoding's example. None where a part has none.
       */
-    private[verify] def largest(layout: DataLayout): Option[Data] = largest(layout, Some(Nil))
+    private[verify] def largest(layout: DataLayout): Option[Data] =
+        largest(layout, Some(Nil), Map.empty)
 
-    private def largest(layout: DataLayout, path: Option[List[Step]]): Option[Data] = {
+    /** [[largest]] of `layout` at `path`, where the recursive layouts of the names in `bound`
+      * enclose it. Where the type repeats it is its smallest value, which ends the value.
+      */
+    private def largest(
+        layout: DataLayout,
+        path: Option[List[Step]],
+        bound: Map[String, DataLayout]
+    ): Option[Data] = {
         def all(parts: List[Option[Data]]): Option[List[Data]] =
             Option.when(parts.forall(_.isDefined))(parts.flatten)
         def count = {
@@ -186,22 +199,26 @@ final case class Limits(all: List[Limit]) {
         def bytes(i: Int) =
             Data.B(ByteString.fromArray(Array(i >>> 24, i >>> 16, i >>> 8, i).map(_.toByte)))
         layout match {
+            case recursive @ DataLayout.Recursive(name, inner) =>
+                largest(inner, path, bound + (name -> recursive))
+            case DataLayout.Plain(DataEncoding.Again(name)) =>
+                bound.get(name).flatMap(_.encoding.example)
             case DataLayout.Plain(encoding) => encoding.example
             case DataLayout.Record(fields) =>
-                all(fields.map((name, field) => largest(field, under(Step.Field(name)))))
+                all(fields.map((name, field) => largest(field, under(Step.Field(name)), bound)))
                     .map(values => Data.Constr(0, PList.from(values)))
             case DataLayout.Choice(constructors) =>
                 constructors.iterator.zipWithIndex
                     .flatMap { case ((_, fields), tag) =>
-                        all(fields.map((_, field) => largest(field, None)))
+                        all(fields.map((_, field) => largest(field, None, bound)))
                             .map(values => Data.Constr(tag, PList.from(values)))
                     }
                     .nextOption()
-            case DataLayout.Wrapper(name, inner) => largest(inner, under(Step.Field(name)))
+            case DataLayout.Wrapper(name, inner) => largest(inner, under(Step.Field(name)), bound)
             case DataLayout.Collection(items) =>
                 if count == 0 then Some(Data.List(PList.Nil))
                 else
-                    largest(items, under(Step.Elements))
+                    largest(items, under(Step.Elements), bound)
                         .map(item => Data.List(PList.from(List.fill(count)(item))))
             case DataLayout.Mapping(keys, values, order) =>
                 if count == 0 then Some(Data.Map(PList.Nil))
@@ -213,10 +230,10 @@ final case class Limits(all: List[Limit]) {
                         case (DataEncoding.KeyOrder.Integers, _) |
                             (_, DataLayout.Plain(DataEncoding.Integer)) =>
                             Some((0 until count).map(i => Data.I(BigInt(i))).toList)
-                        case _ => largest(keys, under(Step.Keys)).map(List.fill(count)(_))
+                        case _ => largest(keys, under(Step.Keys), bound).map(List.fill(count)(_))
                     for
                         keys <- distinct
-                        item <- largest(values, under(Step.Values))
+                        item <- largest(values, under(Step.Values), bound)
                     yield Data.Map(PList.from(keys.map(_ -> item)))
         }
     }
@@ -227,10 +244,11 @@ final case class Limits(all: List[Limit]) {
     private def lengthsOutside(
         layout: DataLayout,
         value: Data,
-        path: Option[List[Step]]
+        path: Option[List[Step]],
+        bound: Map[String, DataLayout]
     ): Option[String] = {
         def inner(layout: DataLayout, value: Data, step: Step) =
-            lengthsOutside(layout, value, path.map(_ :+ step))
+            lengthsOutside(layout, value, path.map(_ :+ step), bound)
         def elements(count: Int) = {
             val (min, max) = bounds(path)
             Option.when(count < min || max.exists(count > _)) {
@@ -240,6 +258,12 @@ final case class Limits(all: List[Limit]) {
             }
         }
         (layout, value) match {
+            // Where the type repeats, its collections are checked as the type's: a limit of every
+            // collection is of them too.
+            case (recursive @ DataLayout.Recursive(name, layout), _) =>
+                lengthsOutside(layout, value, path, bound + (name -> recursive))
+            case (DataLayout.Plain(DataEncoding.Again(name)), _) =>
+                bound.get(name).flatMap(lengthsOutside(_, value, path, bound))
             case (DataLayout.Record(fields), Data.Constr(_, values)) =>
                 fields.iterator
                     .zip(values.toScalaList)
@@ -251,7 +275,9 @@ final case class Limits(all: List[Limit]) {
             case (DataLayout.Choice(constructors), Data.Constr(tag, values)) =>
                 constructors(tag.toInt)._2.iterator
                     .zip(values.toScalaList)
-                    .flatMap { case ((_, field), value) => lengthsOutside(field, value, None) }
+                    .flatMap { case ((_, field), value) =>
+                        lengthsOutside(field, value, None, bound)
+                    }
                     .nextOption()
             case (DataLayout.Wrapper(name, field), _) => inner(field, value, Step.Field(name))
             case (DataLayout.Collection(items), Data.List(values)) =>

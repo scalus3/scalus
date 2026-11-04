@@ -82,6 +82,30 @@ private[verify] object SirTypes {
         key(tp, 0)
     }
 
+    /** `tp` as the verifier tells apart a type that repeats on its own path: the names of what it
+      * is made of and its arguments, through type proxies and without annotations, which the layout
+      * of a type does not read either. Unlike the shown type, which shows every proxy as `Proxy`,
+      * it tells apart the types behind two proxies; unlike [[typeKey]], it is the same in every
+      * run, as it reads no annotation's value.
+      */
+    def recursionKey(tp: SIRType): String = {
+        def key(tp: SIRType, depth: Int): String =
+            if depth > maxNesting then "…"
+            else
+                def arguments(types: List[SIRType]) = types.map(key(_, depth + 1)).mkString(",")
+                unwrap(tp) match
+                    case SIRType.CaseClass(constructor, types, _) =>
+                        s"${constructor.name}[${arguments(types)}]"
+                    case SIRType.SumCaseClass(declaration, types) =>
+                        s"${declaration.name}[${arguments(types)}]"
+                    case SIRType.Fun(in, out) =>
+                        s"(${key(in, depth + 1)} => ${key(out, depth + 1)})"
+                    case SIRType.TypeLambda(params, body) =>
+                        s"[${params.map(_.name).mkString(",")}] ${key(body, depth + 1)}"
+                    case other => other.show
+        key(tp, 0)
+    }
+
     /** How deep the types of a variable's fields may nest: deep enough for any type of the ledger,
       * and an end to a type that contains itself under other arguments each time.
       */

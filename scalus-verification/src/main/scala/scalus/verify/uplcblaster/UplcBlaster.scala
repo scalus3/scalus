@@ -367,7 +367,11 @@ object UplcBlaster {
           * by fields, and the root of a variable over `Data` encodings, whatever its type, as
           * `Data`, but for the nodes a fixed plan maps otherwise ([[MappingPlan.Fixed]]).
           */
-        plan: MappingPlan = MappingPlan.empty
+        plan: MappingPlan = MappingPlan.empty,
+        /** The recursive Lean definitions that [[predicates]] use, of the types among the
+          * variables' that contain themselves ([[DataEncoding.leanRecursions]]), each type's once.
+          */
+        private[uplcblaster] val recursions: List[String] = Nil
     ) {
 
         /** The SHA-256 of each leaf's program CBOR, in the order of [[leaves]]. */
@@ -497,8 +501,9 @@ object UplcBlaster {
             val planned = ArrayBuffer.empty[MappingPlan.Node]
             var quantifiedSoFar = 0
             val binders = ArrayBuffer.empty[PropExpr.Ident[?]]
-            // The predicate of each binder, in the order of `binders`.
+            // The predicate of each binder, in the order of `binders`, and the encodings they are of.
             val predicates = ArrayBuffer.empty[Option[String]]
+            val restricted = ArrayBuffer.empty[DataEncoding]
             // The binders whose predicate is not exact, which may stand only for every value.
             val inexact = scala.collection.mutable.Set.empty[Int]
             val leaves = ArrayBuffer.empty[Program]
@@ -609,8 +614,11 @@ object UplcBlaster {
                           s"the limits of a binder of ${valueType.show} are not checked: " +
                               guard.left.toOption.mkString
                         )
-                    case DataEncoding.Unknown(reason) =>
-                        Left(s"a forAllData binder of ${valueType.show} is not supported: $reason")
+                    case encoding if encoding.unknownReason.nonEmpty =>
+                        Left(
+                          s"a forAllData binder of ${valueType.show} is not supported: " +
+                              encoding.unknownReason.mkString
+                        )
                     // As of a node mapped as Data: such a value is the decoding of no Data.
                     case _ if withoutForm.nonEmpty =>
                         Left(
@@ -631,6 +639,7 @@ object UplcBlaster {
                         val position = binders.size
                         binders += new PropExpr.Ident[Any](ident.name, 0L, ident.tp)
                         predicates += restriction.premise
+                        restricted ++= restriction.uses
                         if !restriction.exact then inexact += position
                         // A guard that checks less than the limits say leaves the variable more
                         // values than they allow, as a predicate that is not exact does.
@@ -655,6 +664,7 @@ object UplcBlaster {
                     val from = binders.size
                     binders ++= variables
                     predicates ++= restrictions.map(_.flatMap(_.premise))
+                    restricted ++= restrictions.flatMap(_.flatMap(_.uses))
                     inexact ++= variables.indices
                         .filter(i => restrictions(i).exists(!_.exact))
                         .map(from + _)
@@ -770,30 +780,13 @@ object UplcBlaster {
                     }
                     .flatten
                     .distinct
-                // The nodes where a type repeats are Data by rule 1, and have no other mapping.
-                val repeating = planned.collect {
-                    case node if node.reason == MappingPlan.Reason.ContainsItself => node.path
-                }.toSet
-                val (repeated, others) = claimed.partition(at => repeating(binders(at).name))
-                def written(at: List[Int]) =
-                    at.map(index => PropIdentity.written(binders(index).name)).mkString(", ")
-                val ofRepeated = Option.when(repeated.nonEmpty)(
-                  s"${written(repeated)}: the type contains itself and repeats here, so by fields " +
-                      "it has no end, and it is one Data variable, whose parts below its first " +
-                      "level are any Data to Lean: more values than the type has. The variable " +
-                      "asks for a witness, an exists in a positive position or a forAll in a " +
-                      "negative one or either under <=>, which such a value could be none of the " +
-                      "type's: it may only stand for every value"
-                )
                 if claimed.isEmpty then Right(formula)
-                else if others.isEmpty then Left(ofRepeated.mkString)
                 else
                     Left(
-                      ofRepeated.fold("")(_ + "; ") +
-                          s"${others.map(binders(_).name).mkString(", ")}: a list, a map, a " +
+                      s"${claimed.map(binders(_).name).mkString(", ")}: a list, a map, a " +
                           "forAllData variable or a case class or enum mapped as Data, whose type " +
-                          "cannot be told from Data exactly, as a type that contains itself or " +
-                          "has a string, or a forAllDataLimited variable whose guard " +
+                          "cannot be told from Data exactly, as one with a string, or one that " +
+                          "nests too deep, or a forAllDataLimited variable whose guard " +
                           "checks less than its limits say, as of the elements of a list that has " +
                           "no most, has more values as a variable than its type or its limits " +
                           "allow. A statement that holds of all of them holds of the type's, but a " +
@@ -843,7 +836,8 @@ object UplcBlaster {
                             leaves.toVector,
                             leafBinders.toVector,
                             predicates.toVector,
-                            plan = MappingPlan(planned.toList)
+                            plan = MappingPlan(planned.toList),
+                            recursions = DataEncoding.leanRecursions(restricted)
                           )
                         )
                 }
@@ -1144,14 +1138,14 @@ object UplcBlaster {
         /** The node at `path`, of type `tp`, a case class or an enum, inside the types `enclosing`,
           * with its mapping and why, recorded (docs/design/verification-details/uplc-blaster.md,
           * "The plan"): the mapping `fixed` gives; else, where the type contains itself and repeats
-          * here, `Data`, as by fields it would have no end (rule 1); else by fields. A node of a
-          * type that contains itself has more values than its type as `Data`, so where its variable
-          * asks for a witness the statement is refused once it is lowered.
+          * here, `Data`, as by fields it would have no end (rule 1); else by fields. As `Data` such
+          * a node's premise is a recursive predicate ([[DataEncoding.Recursive]]), exact where the
+          * type's other parts are.
           */
         def decide(path: String, tp: SIRType, enclosing: Set[String]): MappingPlan.Node = {
             val (mapping, why) = fixed.mapping(variable, PropIdentity.written(path), tp) match
                 case Some(chosen) => chosen -> MappingPlan.Reason.ByFixedPlan
-                case None if enclosing.contains(tp.show) =>
+                case None if enclosing.contains(recursionKey(tp)) =>
                     MappingPlan.Mapping.AsData -> MappingPlan.Reason.ContainsItself
                 case None => MappingPlan.Mapping.ByFields -> reason
             val node = MappingPlan.Node(variable, path, tp, mapping, why)
@@ -1174,9 +1168,9 @@ object UplcBlaster {
       * of no `Data`, which the variable would not stand for: it is refused
       * ([[DataLayout.withoutDataForm]]). So is a type whose encoding is not told at all, whose
       * premise would hold of every `Data`. One whose encoding is told but not exactly, as of a
-      * string field or of a type that contains itself, is a variable with more values than its
-      * type, which the statement may quantify over only where it stands for every value
-      * ([[lower]]).
+      * string field, is a variable with more values than its type, which the statement may quantify
+      * over only where it stands for every value ([[lower]]). A type that contains itself has a
+      * recursive premise, exact where its other parts are.
       */
     private def asData(
         path: String,
@@ -1195,8 +1189,8 @@ object UplcBlaster {
             )
         (DataLayout.withoutDataForm(tp), DataEncoding.of(tp)) match
             case (Some(part), _) => refused(s"its part of type ${part.show} has no Data form")
-            case (None, DataEncoding.Unknown(reason)) =>
-                refused(s"its encoding is not told: $reason")
+            case (None, encoding) if encoding.unknownReason.nonEmpty =>
+                refused(s"its encoding is not told: ${encoding.unknownReason.mkString}")
             case _ =>
                 // The decoder the variable's type is marked with, and the value: one reading.
                 def decoded(data: AnnotatedSIR): AnnotatedSIR =
@@ -1239,8 +1233,9 @@ object UplcBlaster {
         enclosing: Set[String]
     ): Either[String, Set[String]] = {
         val shown = tp.show
+        val key = recursionKey(tp)
         val at = PropIdentity.written(path)
-        if enclosing.contains(shown) then
+        if enclosing.contains(key) then
             Left(
               s"$at: a $shown binder is not supported: the type contains itself, so its values " +
                   "have no bound in size, and no set of variables stands for them"
@@ -1249,7 +1244,7 @@ object UplcBlaster {
             Left(
               s"$at: a $shown binder is not supported: its types nest more than $maxNesting deep"
             )
-        else Right(enclosing + shown)
+        else Right(enclosing + key)
     }
 
     /** The variables of a constructor's fields, named `name.field`, and the constructor applied to
@@ -2810,7 +2805,11 @@ object UplcBlaster {
     /** What the quantifier asks of the values of a list or a map variable: the Lean premise on the
       * variable, none where it says nothing, and whether it holds of exactly the type's values.
       */
-    private final case class Restriction(premise: Option[String], exact: Boolean)
+    private final case class Restriction(
+        premise: Option[String],
+        exact: Boolean,
+        uses: Option[DataEncoding]
+    )
 
     /** The encoding of a variable of type `tp` that has more values than its type
       * ([[Variable.isLarger]]): a builtin list of items, a builtin list of pairs or a `Data.Map`,
@@ -2825,24 +2824,27 @@ object UplcBlaster {
       */
     private def variableRestriction(kind: Variable, tp: SIRType): Restriction = {
         val fresh = Iterator.from(0)
+        def of(encoding: DataEncoding, premise: String) =
+            Restriction(Some(premise), encoding.exact, Some(encoding))
         variableEncoding(tp) match
             case encoding if kind == Variable.EncodedData =>
-                Restriction(
-                  Option.unless(encoding.isAnything)(encoding.leanPredicate(fresh)),
-                  encoding.exact
-                )
-            case DataEncoding.Items(items) if items.isAnything => Restriction(None, exact = true)
+                if encoding.isAnything then Restriction(None, exact = true, None)
+                else of(encoding, encoding.leanPredicate(fresh))
+            case DataEncoding.Items(items) if items.isAnything =>
+                Restriction(None, exact = true, None)
             case DataEncoding.Entries(keys, values, DataEncoding.KeyOrder.Any)
                 if keys.isAnything && values.isAnything =>
-                Restriction(None, exact = true)
+                Restriction(None, exact = true, None)
             case encoding @ DataEncoding.Items(items) =>
-                Restriction(Some(s"(scalusAll ${items.leanPredicate(fresh)})"), encoding.exact)
+                of(encoding, s"(scalusAll ${items.leanPredicate(fresh)})")
             case encoding @ DataEncoding.Entries(keys, values, order) =>
-                Restriction(
-                  Some(DataEncoding.leanEntries(keys, values, order, fresh)),
-                  encoding.exact
-                )
-            case other => Restriction(None, other.exact)
+                of(encoding, DataEncoding.leanEntries(keys, values, order, fresh))
+            // A list or a map whose type contains itself through it, as the children of a tree:
+            // the predicate of its type, of the `Data` that the list or the map is.
+            case encoding @ DataEncoding.Recursive(_, _) =>
+                val wrap = if kind == Variable.DataList then "Data.List" else "Data.Map"
+                of(encoding, s"(fun xs => ${encoding.leanPredicate(fresh)} ($wrap xs))")
+            case other => Restriction(None, other.exact, None)
     }
 
     /** Why `value`, Lean's value for a variable of type `tp`, is no value of the type, or `None`
@@ -2885,6 +2887,17 @@ object UplcBlaster {
                     }
                     if pairs.size != items.size then Some(s"$value is no list of pairs of Data")
                     else DataEncoding.entriesOutside(keys, values, order, pairs)
+                // A list or a map whose type contains itself through it: of the `Data` it is.
+                case (recursive @ DataEncoding.Recursive(_, _), Constant.List(_, items)) =>
+                    val data = items.collect { case Constant.Data(item) => item }
+                    val pairs = items.collect {
+                        case Constant.Pair(Constant.Data(key), Constant.Data(value)) => key -> value
+                    }
+                    if kind == Variable.DataList && data.size == items.size then
+                        recursive.outside(Data.List(PList.from(data)))
+                    else if kind != Variable.DataList && pairs.size == items.size then
+                        recursive.outside(Data.Map(PList.from(pairs)))
+                    else Some(s"$value is no list of Data or of pairs of Data")
                 case (encoding, Constant.Data(data)) => encoding.outside(data)
                 case (encoding, other)               => Some(s"$other is no value of a ${tp.show}")
         }
@@ -3289,9 +3302,11 @@ object UplcBlaster {
                    |${prepared.mkString("\n")}
                    |
                    |#blaster (gen-cex: 1) [$formula]""".stripMargin
-        // The definitions a check uses where a variable is restricted to its type's values. A
-        // check without such a variable has none of them in its text.
-        if goal.predicates.exists(_.isDefined) then s"${DataEncoding.leanDefinitions}\n\n$check"
+        // The definitions a check uses where a variable is restricted to its type's values, and
+        // the recursive ones of the types among them that contain themselves. A check without
+        // such a variable has none of them in its text.
+        if goal.predicates.exists(_.isDefined) then
+            (List(DataEncoding.leanDefinitions) ++ goal.recursions :+ check).mkString("\n\n")
         else check
     }
 

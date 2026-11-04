@@ -2,7 +2,7 @@ package scalus.verify.uplcblaster
 
 import scalus.uplc.{DefaultFun, Term}
 import scalus.uplc.Term.{asTerm, lam, vr}
-import scalus.verify.{DataLayout, Limit, Limits, Step}
+import scalus.verify.{DataEncoding, DataLayout, Limit, Limits, Step}
 
 /** The program that says whether a variable's `Data` meets its limits
   * ([[scalus.verify.Props.forAllDataLimited]]): the guard of every test in the variable's scope.
@@ -72,8 +72,9 @@ private[uplcblaster] object LimitGuards {
         case DataLayout.Record(fields) => fields.exists((_, f) => hasCollection(f))
         case DataLayout.Choice(constructors) =>
             constructors.exists((_, fields) => fields.exists((_, f) => hasCollection(f)))
-        case DataLayout.Wrapper(_, inner) => hasCollection(inner)
-        case DataLayout.Plain(_)          => false
+        case DataLayout.Wrapper(_, inner)   => hasCollection(inner)
+        case DataLayout.Recursive(_, inner) => hasCollection(inner)
+        case DataLayout.Plain(_)            => false
 
     /** `test` and then `rest`, where `rest` runs only where `test` is `true`. */
     private[uplcblaster] def and(test: Term, rest: Term): Term =
@@ -127,7 +128,8 @@ private[uplcblaster] object LimitGuards {
             else
                 val at = path.getOrElse(Nil)
                 layout match {
-                    case DataLayout.Record(fields) => record(fields, value, at)
+                    case DataLayout.Recursive(_, inner) => check(inner, value, path)
+                    case DataLayout.Record(fields)      => record(fields, value, at)
                     case DataLayout.Wrapper(name, inner) =>
                         check(inner, value, Some(at :+ Step.Field(name)))
                     case DataLayout.Collection(items) =>
@@ -147,6 +149,11 @@ private[uplcblaster] object LimitGuards {
                     // collection is limited, and they have one, the guard checks less.
                     case choice @ DataLayout.Choice(_) =>
                         if hasCollection(choice) then exact = false
+                        None
+                    // The type again, whose collections a limit of every collection bounds too:
+                    // the guard does not walk into it, and checks less.
+                    case DataLayout.Plain(DataEncoding.Again(_)) =>
+                        exact = false
                         None
                     case DataLayout.Plain(_) => None
                 }
@@ -169,6 +176,7 @@ private[uplcblaster] object LimitGuards {
             if !limitedUnder(Some(path)) then 0L
             else
                 layout match {
+                    case DataLayout.Recursive(_, inner) => size(inner, path)
                     case DataLayout.Record(fields) =>
                         fields.foldLeft(1L) { case (sum, (name, field)) =>
                             plus(sum, size(field, path :+ Step.Field(name)))
