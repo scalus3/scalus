@@ -103,7 +103,7 @@ final case class Limits(all: List[Limit]) {
         val layout = DataLayout.of(tp)
         unfit(layout)
             .orElse(DataEncoding.of(tp).outside(value))
-            .orElse(lengthsOutside(layout, value, Some(Nil)))
+            .orElse(lengthsOutside(layout, value))
     }
 
     private[verify] def unfit(layout: DataLayout): Option[String] = {
@@ -141,6 +141,7 @@ final case class Limits(all: List[Limit]) {
     ): Option[String] = {
         def at = Limits.show(walked)
         (layout, path) match
+            case (DataLayout.Recursive(_, inner), _) => unreached(inner, path, walked)
             case (DataLayout.Collection(_) | DataLayout.Mapping(_, _, _), Nil) => None
             case (_, Nil) => Some(s"$at is no list or map")
             case (DataLayout.Record(fields), (step @ Step.Field(name)) :: rest) =>
@@ -162,6 +163,10 @@ final case class Limits(all: List[Limit]) {
                 Some(s"$at is any Data, which has no collection of its type")
             case (DataLayout.Plain(DataEncoding.Unknown(reason)), _) =>
                 Some(s"$at has an encoding not told here: $reason")
+            case (DataLayout.Plain(DataEncoding.Again(_)), _) =>
+                Some(
+                  s"$at is its type again, which contains itself: a limit does not reach into it"
+                )
             case (_, step :: _) => Some(s"$at has no ${Limits.show(List(step))}")
     }
 
@@ -172,9 +177,17 @@ final case class Limits(all: List[Limit]) {
       * example, which no map of the ledger does: the value is then one to count steps on, not one
       * of the type. Each other part is its encoding's example. None where a part has none.
       */
-    private[verify] def largest(layout: DataLayout): Option[Data] = largest(layout, Some(Nil))
+    private[verify] def largest(layout: DataLayout): Option[Data] =
+        largest(layout, Some(Nil), Map.empty)
 
-    private def largest(layout: DataLayout, path: Option[List[Step]]): Option[Data] = {
+    /** [[largest]] of `layout` at `path`, where the recursive layouts of the names in `bound`
+      * enclose it. Where the type repeats it is its smallest value, which ends the value.
+      */
+    private def largest(
+        layout: DataLayout,
+        path: Option[List[Step]],
+        bound: Map[String, DataLayout]
+    ): Option[Data] = {
         def all(parts: List[Option[Data]]): Option[List[Data]] =
             Option.when(parts.forall(_.isDefined))(parts.flatten)
         def count = {
@@ -186,22 +199,29 @@ final case class Limits(all: List[Limit]) {
         def bytes(i: Int) =
             Data.B(ByteString.fromArray(Array(i >>> 24, i >>> 16, i >>> 8, i).map(_.toByte)))
         layout match {
+            case recursive @ DataLayout.Recursive(name, inner) =>
+                largest(inner, path, bound + (name -> recursive))
+            // Of the types around, which contain themselves, a repeat is the example: one a
+            // constructor without the type again ends.
+            case DataLayout.Plain(DataEncoding.Again(name)) =>
+                val around = bound.view.mapValues(_.encoding).toMap
+                bound.get(name).flatMap(_.encoding.exampleIn(around - name))
             case DataLayout.Plain(encoding) => encoding.example
             case DataLayout.Record(fields) =>
-                all(fields.map((name, field) => largest(field, under(Step.Field(name)))))
+                all(fields.map((name, field) => largest(field, under(Step.Field(name)), bound)))
                     .map(values => Data.Constr(0, PList.from(values)))
             case DataLayout.Choice(constructors) =>
                 constructors.iterator.zipWithIndex
                     .flatMap { case ((_, fields), tag) =>
-                        all(fields.map((_, field) => largest(field, None)))
+                        all(fields.map((_, field) => largest(field, None, bound)))
                             .map(values => Data.Constr(tag, PList.from(values)))
                     }
                     .nextOption()
-            case DataLayout.Wrapper(name, inner) => largest(inner, under(Step.Field(name)))
+            case DataLayout.Wrapper(name, inner) => largest(inner, under(Step.Field(name)), bound)
             case DataLayout.Collection(items) =>
                 if count == 0 then Some(Data.List(PList.Nil))
                 else
-                    largest(items, under(Step.Elements))
+                    largest(items, under(Step.Elements), bound)
                         .map(item => Data.List(PList.from(List.fill(count)(item))))
             case DataLayout.Mapping(keys, values, order) =>
                 if count == 0 then Some(Data.Map(PList.Nil))
@@ -213,63 +233,106 @@ final case class Limits(all: List[Limit]) {
                         case (DataEncoding.KeyOrder.Integers, _) |
                             (_, DataLayout.Plain(DataEncoding.Integer)) =>
                             Some((0 until count).map(i => Data.I(BigInt(i))).toList)
-                        case _ => largest(keys, under(Step.Keys)).map(List.fill(count)(_))
+                        case _ => largest(keys, under(Step.Keys), bound).map(List.fill(count)(_))
                     for
                         keys <- distinct
-                        item <- largest(values, under(Step.Values))
+                        item <- largest(values, under(Step.Values), bound)
                     yield Data.Map(PList.from(keys.map(_ -> item)))
         }
     }
 
-    /** Why the collections of `value`, laid out as `layout`, at `path`, do not meet the limits, or
-      * none where they do. `value` is laid out so.
+    /** Why the collections of `value`, laid out as `layout`, do not meet the limits, or none where
+      * they do. `value` is laid out so.
+      *
+      * The parts are checked in a loop, not by recursion: a type that contains itself is as deep as
+      * its `Data`, which may be deeper than a thread's stack.
       */
-    private def lengthsOutside(
-        layout: DataLayout,
-        value: Data,
-        path: Option[List[Step]]
-    ): Option[String] = {
-        def inner(layout: DataLayout, value: Data, step: Step) =
-            lengthsOutside(layout, value, path.map(_ :+ step))
-        def elements(count: Int) = {
-            val (min, max) = bounds(path)
-            Option.when(count < min || max.exists(count > _)) {
-                val where = path.fold("a collection in a constructor of an enum")(Limits.show)
-                val noun = if count == 1 then "element" else "elements"
-                s"$where has $count $noun, not from $min to ${max.fold("any number")(_.toString)}"
+    private def lengthsOutside(layout: DataLayout, value: Data): Option[String] = {
+        // The checks still to make, the next one last.
+        val pending = scala.collection.mutable.ArrayBuffer.empty[() => Option[String]]
+
+        /** The checks of `parts`, each a value, its layout and its path, made in their order. */
+        def later(
+            parts: List[(DataLayout, Data, Option[List[Step]])],
+            bound: Map[String, DataLayout]
+        ): None.type = {
+            parts.reverseIterator.foreach((layout, value, path) =>
+                pending += (() => check(layout, value, path, bound))
+            )
+            None
+        }
+
+        /** Why the collections of `value` at `path`, but for those of its parts, do not meet the
+          * limits, where the recursive layouts of the names in `bound` enclose it. The checks of
+          * its parts are left to `later`.
+          */
+        def check(
+            layout: DataLayout,
+            value: Data,
+            path: Option[List[Step]],
+            bound: Map[String, DataLayout]
+        ): Option[String] = {
+            def at(step: Step) = path.map(_ :+ step)
+            def elements(count: Int) = {
+                val (min, max) = bounds(path)
+                Option.when(count < min || max.exists(count > _)) {
+                    val where =
+                        path.fold("a collection in a constructor of an enum, or in a repeat")(
+                          Limits.show
+                        )
+                    val noun = if count == 1 then "element" else "elements"
+                    s"$where has $count $noun, not from $min to ${max.fold("any number")(_.toString)}"
+                }
+            }
+            (layout, value) match {
+                // Where the type repeats, its collections are checked as the type's: a limit of
+                // every collection is of them too.
+                case (recursive @ DataLayout.Recursive(name, inner), _) =>
+                    check(inner, value, path, bound + (name -> recursive))
+                // Below a repeat no path names a collection ([[unreached]]), so the bounds there
+                // are those without one, and the path is not carried as deep as the `Data` goes.
+                case (DataLayout.Plain(DataEncoding.Again(name)), _) =>
+                    bound.get(name).flatMap(check(_, value, None, bound))
+                case (DataLayout.Record(fields), Data.Constr(_, values)) =>
+                    later(
+                      fields.zip(values.toScalaList).map { case ((name, field), value) =>
+                          (field, value, at(Step.Field(name)))
+                      },
+                      bound
+                    )
+                // A path does not reach into the constructors of an enum ([[unreached]]).
+                case (DataLayout.Choice(constructors), Data.Constr(tag, values)) =>
+                    later(
+                      constructors(tag.toInt)._2.zip(values.toScalaList).map {
+                          case ((_, field), value) => (field, value, None)
+                      },
+                      bound
+                    )
+                case (DataLayout.Wrapper(name, field), _) =>
+                    check(field, value, at(Step.Field(name)), bound)
+                case (DataLayout.Collection(items), Data.List(values)) =>
+                    val all = values.toScalaList
+                    elements(all.size).orElse(
+                      later(all.map(item => (items, item, at(Step.Elements))), bound)
+                    )
+                case (DataLayout.Mapping(keys, values, _), Data.Map(entries)) =>
+                    val all = entries.toScalaList
+                    elements(all.size).orElse(
+                      later(
+                        all.flatMap { (key, item) =>
+                            List((keys, key, at(Step.Keys)), (values, item, at(Step.Values)))
+                        },
+                        bound
+                      )
+                    )
+                case _ => None
             }
         }
-        (layout, value) match {
-            case (DataLayout.Record(fields), Data.Constr(_, values)) =>
-                fields.iterator
-                    .zip(values.toScalaList)
-                    .flatMap { case ((name, field), value) =>
-                        inner(field, value, Step.Field(name))
-                    }
-                    .nextOption()
-            // A path does not reach into the constructors of an enum ([[unreached]]).
-            case (DataLayout.Choice(constructors), Data.Constr(tag, values)) =>
-                constructors(tag.toInt)._2.iterator
-                    .zip(values.toScalaList)
-                    .flatMap { case ((_, field), value) => lengthsOutside(field, value, None) }
-                    .nextOption()
-            case (DataLayout.Wrapper(name, field), _) => inner(field, value, Step.Field(name))
-            case (DataLayout.Collection(items), Data.List(values)) =>
-                val all = values.toScalaList
-                elements(all.size).orElse(
-                  all.iterator.flatMap(inner(items, _, Step.Elements)).nextOption()
-                )
-            case (DataLayout.Mapping(keys, values, _), Data.Map(entries)) =>
-                val all = entries.toScalaList
-                elements(all.size).orElse(
-                  all.iterator
-                      .flatMap((key, item) =>
-                          inner(keys, key, Step.Keys).orElse(inner(values, item, Step.Values))
-                      )
-                      .nextOption()
-                )
-            case _ => None
-        }
+
+        pending += (() => check(layout, value, Some(Nil), Map.empty))
+        var reason: Option[String] = None
+        while reason.isEmpty && pending.nonEmpty do reason = pending.remove(pending.length - 1)()
+        reason
     }
 }
 

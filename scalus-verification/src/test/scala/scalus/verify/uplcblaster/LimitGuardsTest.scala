@@ -2,10 +2,19 @@ package scalus.verify.uplcblaster
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.prelude
+import scalus.compiler.Compile
 import scalus.uplc.Constant
-import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.{Data, FromData, ToData}
 import scalus.verify.*
 import scalus.verify.Props.*
+
+/** A type that contains itself in a constructor of an option, beside a list. */
+case class GuardNested(xs: prelude.List[BigInt], next: prelude.Option[GuardNested])
+    derives FromData,
+      ToData
+
+@Compile
+object GuardNested
 
 class LimitGuardsTest extends AnyFunSuite {
 
@@ -37,6 +46,17 @@ class LimitGuardsTest extends AnyFunSuite {
             xss.length <= 2 && xss.forall(xs => xs.length <= 0)
         )(xss => xss.length >= BigInt(0))
         assert(guarded(bounded).exact)
+    }
+
+    test("a guard checks less where a constructor holds the type again, whose lists it has") {
+        // The guard does not look into the option, and the list of the value in it is limited too.
+        val nested = forAllDataLimited[GuardNested](n => maxCollectionLength(n) <= 1)(n =>
+            n.xs.length >= BigInt(0)
+        )
+        assert(!guarded(nested).exact)
+        UplcBlaster.lower(Prop.Not(nested), FunctionTable.empty) match
+            case Left(reason) => assert(reason.contains("checks less than its limits say"), reason)
+            case Right(_) => fail("expected a negated statement of an inexact guard to be refused")
     }
 
     test("a variable whose guard checks less stands only for every value") {

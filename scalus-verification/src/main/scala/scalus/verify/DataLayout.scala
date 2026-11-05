@@ -35,6 +35,11 @@ private[verify] enum DataLayout {
     /** A map, with its keys in `order`. */
     case Mapping(keys: DataLayout, values: DataLayout, order: KeyOrder)
 
+    /** A type that contains itself, named `name`: `inner`, in which a part laid out as
+      * `Plain(DataEncoding.Again(name))` is the type again, where it repeats.
+      */
+    case Recursive(name: String, inner: DataLayout)
+
     /** The encoding of the values laid out so, derived once. */
     lazy val encoding: DataEncoding = this match
         case Plain(encoding) => encoding
@@ -45,6 +50,7 @@ private[verify] enum DataLayout {
         case Collection(items) => DataEncoding.Items(items.encoding)
         case Mapping(keys, values, order) =>
             DataEncoding.Entries(keys.encoding, values.encoding, order)
+        case Recursive(name, inner) => DataEncoding.Recursive(name, inner.encoding)
 }
 
 private[verify] object DataLayout {
@@ -96,11 +102,83 @@ private[verify] object DataLayout {
       */
     private val maxParts = 100_000
 
-    /** The parts of a layout derived so far, and the first that has no `Data` form. */
-    private final class Parts(var count: Int = 0, var withoutDataForm: Option[SIRType] = None)
+    /** The parts of a layout derived so far, the first that has no `Data` form, and how many parts
+      * were cut off where types nest more than [[SirTypes.maxNesting]] deep.
+      */
+    private final class Parts(
+        var count: Int = 0,
+        var withoutDataForm: Option[SIRType] = None,
+        var cuts: Int = 0
+    )
 
-    /** The layout of the values of `tp`. `enclosing` are the types it is derived in, and `parts`
-      * counts the parts derived so far.
+    /** The name of the encoding of `tp`, of the key `key` ([[SirTypes.recursionKey]]), where it
+      * contains itself: its declaration's name, as a Lean name may have it ([[leanSimpleName]]),
+      * and 64 bits of its key's hash, so that two types of one name are told apart, and a type has
+      * one name in every check.
+      */
+    private def recursionName(tp: SIRType, key: String): String =
+        s"${leanSimpleName(declarationName(tp))}_${DataEncoding.digest(key)}"
+
+    /** The name of a type that contains itself, `name`, where its layout was cut off below
+      * ([[asCut]]).
+      */
+    private def cutName(name: String): String =
+        if name.endsWith(CutSuffix) then name else name + CutSuffix
+
+    private val CutSuffix = "_cut"
+
+    /** `layout`, derived as a part of the types `names` that contain themselves and were cut off
+      * where they nest too deep, with the name of a cut type ([[cutName]]) for each of them and for
+      * each type in it that repeats one of them.
+      *
+      * A type's premise is defined once, by its name, from the first layout of it met. A layout cut
+      * off holds less, its parts there are any `Data`, so it gets a name of its own: the type's
+      * name is then always of a layout that holds all of the type, whose premise is exact where the
+      * type's is. A type in it that repeats none of `names` is laid out as it would be anywhere,
+      * and keeps its name.
+      */
+    private def asCut(layout: DataLayout, names: Set[String]): DataLayout = {
+        def inner(part: DataLayout) = asCut(part, names)
+        layout match
+            case Plain(DataEncoding.Again(name)) if names(name) =>
+                Plain(DataEncoding.Again(cutName(name)))
+            case plain: Plain   => plain
+            case Record(fields) => Record(fields.map((name, field) => name -> inner(field)))
+            case Choice(constructors) =>
+                Choice(constructors.map { (name, fields) =>
+                    name -> fields.map((field, part) => field -> inner(part))
+                })
+            case Wrapper(field, part)         => Wrapper(field, inner(part))
+            case Collection(items)            => Collection(inner(items))
+            case Mapping(keys, values, order) => Mapping(inner(keys), inner(values), order)
+            case Recursive(name, part) if names.exists(repeats(part, _)) =>
+                Recursive(cutName(name), asCut(part, names + name))
+            case recursive: Recursive => recursive
+    }
+
+    /** Whether `layout` has the type named `name` again ([[DataEncoding.Again]]). */
+    private def repeats(layout: DataLayout, name: String): Boolean = layout match
+        case Plain(DataEncoding.Again(again)) => again == name
+        case Plain(_)                         => false
+        case Record(fields)                   => fields.exists((_, field) => repeats(field, name))
+        case Choice(constructors) =>
+            constructors.exists((_, fields) => fields.exists((_, field) => repeats(field, name)))
+        case Wrapper(_, inner)        => repeats(inner, name)
+        case Collection(items)        => repeats(items, name)
+        case Mapping(keys, values, _) => repeats(keys, name) || repeats(values, name)
+        case Recursive(_, inner)      => repeats(inner, name)
+
+    /** The last part of the declaration name `declaration`, of the letters, digits and `_` of ASCII
+      * only, which every Lean name may have; `T` where none is left.
+      */
+    private[verify] def leanSimpleName(declaration: String): String = {
+        val simple =
+            declaration.split('.').last.filter(c => c < 128 && (c.isLetterOrDigit || c == '_'))
+        if simple.isEmpty then "T" else simple
+    }
+
+    /** The layout of the values of `tp`. `enclosing` are the keys of the types it is derived in
+      * ([[SirTypes.recursionKey]]), and `parts` counts the parts derived so far.
       */
     private def layoutOf(tp: SIRType, enclosing: Set[String], parts: Parts)(using
         LoweringContext
@@ -118,14 +196,26 @@ private[verify] object DataLayout {
                 case none @ (_: SIRType.Fun | _: SIRType.TypeLambda | SIRType.Unit |
                     SIRType.BLS12_381_MlResult) =>
                     withoutDataForm(none, parts)
+                // A type that repeats is its encoding again, and the type where it repeats is
+                // the encoding of that name: a recursive one.
                 case other @ (_: SIRType.CaseClass | _: SIRType.SumCaseClass) =>
-                    if enclosing.contains(other.show) then
-                        Plain(DataEncoding.Unknown(s"${other.show} contains itself"))
+                    val key = recursionKey(other)
+                    if enclosing.contains(key) then
+                        Plain(DataEncoding.Again(recursionName(other, key)))
                     else if enclosing.size >= maxNesting then
+                        parts.cuts += 1
                         Plain(
                           DataEncoding.Unknown(s"${other.show} nests more than $maxNesting deep")
                         )
-                    else representedLayout(other, enclosing + other.show, parts)
+                    else
+                        val cutsBefore = parts.cuts
+                        val inner = representedLayout(other, enclosing + key, parts)
+                        val name = recursionName(other, key)
+                        // A type whose layout has no repeat of it does not contain itself: also
+                        // where a part that had one turned out unknown, as an encoding not told.
+                        val recursive =
+                            if repeats(inner, name) then Recursive(name, inner) else inner
+                        if parts.cuts > cutsBefore then asCut(recursive, Set(name)) else recursive
                 case other =>
                     Plain(DataEncoding.Unknown(s"${other.show} has no Data encoding told here"))
     }

@@ -39,6 +39,14 @@ case class PlanPhantomFunction(p: PlanPhantom[BigInt => BigInt], m: BigInt)
 @Compile
 object PlanPhantomFunction
 
+/** A tree of names: it contains itself, and its strings are not told exactly as `Data`. */
+enum PlanNamedTree derives FromData, ToData:
+    case Leaf(name: String)
+    case Node(left: PlanNamedTree, right: PlanNamedTree)
+
+@Compile
+object PlanNamedTree
+
 /** A tree with a function in its leaves: it contains itself, and has no `Data` form. */
 enum PlanFunctionTree:
     case Node(left: PlanFunctionTree, right: PlanFunctionTree)
@@ -363,24 +371,57 @@ class MappingPlanTest extends AnyFunSuite {
         )
     }
 
-    test("a type that contains itself is refused where its variable asks for a witness") {
-        // Below its first level a Data node is any Data to Lean, more values than its type has,
-        // and a witness could be none of the type's.
-        def refusedForAWitness(prop: Prop): Unit =
-            UplcBlaster.lower(prop, FunctionTable.empty) match
-                case Left(reason) =>
-                    // Refused once the statement is lowered, as any variable with more values
-                    // than its type, with the reason of a type that contains itself.
-                    assert(reason.startsWith("t.Node.left, t.Node.right: "), reason)
-                    assert(reason.contains("contains itself"), reason)
-                    assert(reason.contains("asks for a witness"), reason)
-                case Right(lowered) => fail(s"expected a refusal, got ${lowered.plan.show}")
+    test("a type that contains itself is a variable also where it asks for a witness") {
+        // Its premise is a recursive predicate, exact: a witness Lean finds is a tree.
         val tree = forAll[BlasterTree](t => denotes(t))
-        refusedForAWitness(exists[BlasterTree](t => denotes(t)))
-        refusedForAWitness(!tree)
-        refusedForAWitness(tree ==> Prop(true))
-        refusedForAWitness(tree <=> Prop(true))
-        refusedForAWitness(Prop(true) <=> exists[BlasterTree](t => denotes(t)))
+        val asking = List(
+          exists[BlasterTree](t => denotes(t)),
+          !tree,
+          tree ==> Prop(true),
+          tree <=> Prop(true),
+          Prop(true) <=> exists[BlasterTree](t => denotes(t))
+        )
+        for prop <- asking do
+            val lowering = UplcBlaster.lower(prop, FunctionTable.empty)
+            assert(lowering.isRight, lowering)
+        val cut = lowered(exists[BlasterTree](t => denotes(t)))
+        val nodes = names(cut).zip(cut.predicates)
+        assert(
+          nodes.collect { case (name, Some(premise)) =>
+              name -> premise.startsWith("scalusRec_")
+          } ==
+              List("t.Node.left" -> true, "t.Node.right" -> true),
+          cut.predicates
+        )
+        // A part that is not told exactly, as a string, still makes it more values than its type.
+        assert(
+          UplcBlaster
+              .lower(exists[PlanNamedTree](t => denotes(t)), FunctionTable.empty)
+              .left
+              .exists(_.contains("stands for every value"))
+        )
+    }
+
+    test("a list or a map whose type contains itself through it has the recursive premise") {
+        // The children of a rose are a list of roses: by fields, `r.children` is one Lean variable
+        // of a list, whose type repeats at its items. Its premise is the recursive predicate of
+        // the list's Data, so an exists over it is sound.
+        val rose = lowered(exists[EncodingRose](r => r.children.isEmpty))
+        val premises = names(rose).zip(rose.predicates).toMap
+        assert(
+          premises("r.children").exists(p =>
+              p.contains("scalusRec_") && p.contains("Data.List xs")
+          ),
+          rose.predicates
+        )
+        assert(rose.recursions.nonEmpty)
+        // And a map, the files of a directory, with its keys in order.
+        val dir = lowered(exists[EncodingDir](d => d.files.isEmpty))
+        assert(
+          names(dir).zip(dir.predicates).toMap.apply("d.files").exists(_.contains("Data.Map xs")),
+          dir.predicates
+        )
+        assert(dir.recursions.exists(_.contains("scalusAscendingBytes")), dir.recursions)
     }
 
     test("rule 1: a type that contains itself and has no Data form is refused") {

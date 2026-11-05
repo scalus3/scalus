@@ -2,7 +2,7 @@ package scalus.verify.uplcblaster
 
 import scalus.uplc.{DefaultFun, Term}
 import scalus.uplc.Term.{asTerm, lam, vr}
-import scalus.verify.{DataLayout, Limit, Limits, Step}
+import scalus.verify.{DataEncoding, DataLayout, Limit, Limits, Step}
 
 /** The program that says whether a variable's `Data` meets its limits
   * ([[scalus.verify.Props.forAllDataLimited]]): the guard of every test in the variable's scope.
@@ -66,14 +66,27 @@ private[uplcblaster] object LimitGuards {
                     Right(Guard(lam(data)(body), guarding.exact))
     }
 
-    /** Whether `layout` has a collection, in a field, a constructor or an element. */
-    private def hasCollection(layout: DataLayout): Boolean = layout match
-        case DataLayout.Collection(_) | DataLayout.Mapping(_, _, _) => true
-        case DataLayout.Record(fields) => fields.exists((_, f) => hasCollection(f))
-        case DataLayout.Choice(constructors) =>
-            constructors.exists((_, fields) => fields.exists((_, f) => hasCollection(f)))
-        case DataLayout.Wrapper(_, inner) => hasCollection(inner)
-        case DataLayout.Plain(_)          => false
+    /** Whether `layout` has a collection, in a field, a constructor or an element, or in its type
+      * again where the type contains itself. `enclosing` are the layouts of the types around
+      * `layout` that contain themselves, by their names: a repeat of one has its collections.
+      */
+    private def hasCollection(
+        layout: DataLayout,
+        enclosing: Map[String, DataLayout]
+    ): Boolean = {
+        def has(part: DataLayout) = hasCollection(part, enclosing)
+        layout match
+            case DataLayout.Collection(_) | DataLayout.Mapping(_, _, _) => true
+            case DataLayout.Record(fields) => fields.exists((_, f) => has(f))
+            case DataLayout.Choice(constructors) =>
+                constructors.exists((_, fields) => fields.exists((_, f) => has(f)))
+            case DataLayout.Wrapper(_, inner) => has(inner)
+            // In its own layout, the type again has no collection that the layout lacks.
+            case DataLayout.Recursive(name, inner) => hasCollection(inner, enclosing - name)
+            case DataLayout.Plain(DataEncoding.Again(name)) =>
+                enclosing.get(name).exists(hasCollection(_, enclosing - name))
+            case DataLayout.Plain(_) => false
+    }
 
     /** `test` and then `rest`, where `rest` runs only where `test` is `true`. */
     private[uplcblaster] def and(test: Term, rest: Term): Term =
@@ -95,6 +108,11 @@ private[uplcblaster] object LimitGuards {
 
         /** Whether the guard checks all that the limits say, so far. */
         var exact = true
+
+        /** The layouts of the types around the part [[check]] is at that contain themselves, by
+          * their names: what a repeat of one is.
+          */
+        private var enclosing = Map.empty[String, DataLayout]
 
         def fresh(what: String): String = {
             variables += 1
@@ -127,6 +145,12 @@ private[uplcblaster] object LimitGuards {
             else
                 val at = path.getOrElse(Nil)
                 layout match {
+                    case DataLayout.Recursive(name, inner) =>
+                        val around = enclosing
+                        enclosing = around + (name -> inner)
+                        val checked = check(inner, value, path)
+                        enclosing = around
+                        checked
                     case DataLayout.Record(fields) => record(fields, value, at)
                     case DataLayout.Wrapper(name, inner) =>
                         check(inner, value, Some(at :+ Step.Field(name)))
@@ -144,9 +168,15 @@ private[uplcblaster] object LimitGuards {
                                 check(values, item, Some(at :+ Step.Values))).reduceOption(and)
                         }
                     // The constructors of a type of several are not looked into: where every
-                    // collection is limited, and they have one, the guard checks less.
+                    // collection is limited, and they have one, the guard checks less. A
+                    // constructor's field may be the type again, which has the type's collections.
                     case choice @ DataLayout.Choice(_) =>
-                        if hasCollection(choice) then exact = false
+                        if hasCollection(choice, enclosing) then exact = false
+                        None
+                    // The type again, whose collections a limit of every collection bounds too:
+                    // the guard does not walk into it, and where it has one, checks less.
+                    case again @ DataLayout.Plain(DataEncoding.Again(_)) =>
+                        if hasCollection(again, enclosing) then exact = false
                         None
                     case DataLayout.Plain(_) => None
                 }
@@ -169,6 +199,7 @@ private[uplcblaster] object LimitGuards {
             if !limitedUnder(Some(path)) then 0L
             else
                 layout match {
+                    case DataLayout.Recursive(_, inner) => size(inner, path)
                     case DataLayout.Record(fields) =>
                         fields.foldLeft(1L) { case (sum, (name, field)) =>
                             plus(sum, size(field, path :+ Step.Field(name)))

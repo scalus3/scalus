@@ -69,8 +69,9 @@ names the constructor by that integer. A constructor passes its type parameters 
 enum's, so `Option[BigInt]` is the integer and the `BigInt` of `Some`. A type that contains
 itself and is passed through its constructors has values of every size, which no set of
 variables stands for: where it repeats, its node is one `Data` variable
-([Mapping a variable](#mapping-a-variable-proposed), rule 1), which has more values than its
-type below its first level, so the variable may be only where it stands for every value.
+([Mapping a variable](#mapping-a-variable-proposed), rule 1), whose premise is a recursive
+predicate ([Premises of a type that contains itself](#premises-of-a-type-that-contains-itself)),
+exact where the type's other parts are.
 `Quantifiable` has an instance for every type of several constructors; the tactic checks their
 fields.
 
@@ -90,18 +91,34 @@ check), a Boolean `Constr 0|1 []`, a case class or an enum's constructor `Constr
 its fields' encodings, a list `List` of its items', a map `Map` of its keys' and values', with the
 keys of a `SortedMap` of byte strings or integers in ascending order, and a type whose one field it
 wraps, as `PubKeyHash` or `Value`, that field's. The few definitions the predicates use
-(`scalusAll`, `scalusAllPairs`, `scalusAscendingBytes`, …) are written into a check that needs them,
-and not into the library, whose hash every kept result rests on.
+(`scalusIsI`, `scalusAscendingBytes`, …) are written into a check that needs them, and not into the
+library, whose hash every kept result rests on.
+
+A list or a map is checked by a walk of its own kind of elements, a recursive definition that the
+check writes before the predicates (`DataEncoding.leanRecursions`):
+
+```lean
+def scalusAll_5d0c… : List Data → Bool | [] => true | x :: rest => scalusIsB x && scalusAll_5d0c… rest
+```
+
+Its name is a digest of what it checks, so the predicates of one check share it. No definition is
+given a predicate as an argument: Blaster gives the solver such an argument as a lambda, with
+quantified axioms that define it and say when two functions are equal. On the shaped vesting
+guarantee (one input, at most one output and one signatory), Z3 had not decided the check after
+15 minutes with three sets of its options; with a walk of each list, it answered the same check in
+0.3 s.
 
 The description is public, as `scalus.verify.DataEncoding`: `DataEncoding.of[A]` derives it,
 `leanPredicate` and `leanDefinition(name)` give the Lean predicate, a `Data → Bool`, for a Lean
-file of one's own (after `DataEncoding.leanDefinitions`, with PlutusCore's `Data` opened as
-`Data`), and `outside(data)` checks a `Data` on the JVM. `exact` says whether the predicate holds
-of exactly the type's values.
+file of one's own. The file has, in order, `DataEncoding.leanDefinitions`, then `leanRecursions`
+(the walks of the predicate's lists and maps and the definitions of its types that contain
+themselves; `DataEncoding.leanRecursions` of several encodings writes each once), then the
+definitions, with PlutusCore's `Data` opened as `Data`. `outside(data)` checks a `Data` on the
+JVM. `exact` says whether the predicate holds of exactly the type's values.
 
 Where the predicate is exact, the variable's values are its type's, and it can be quantified
-anywhere; Lean's counterexamples are of the type. Where it is not, as for a type that contains
-itself, a string, a function, or keys whose order is not checked, the variable has more values than
+anywhere; Lean's counterexamples are of the type. Where it is not, as for a string, a function, or
+keys whose order is not checked, the variable has more values than
 its type: it is refused where it would claim a value (an `exists` in a positive position, a `forAll`
 in a negative one, either under `<=>`), and a counterexample with a value outside the type is
 checked on the JVM and reported as inconclusive. Z3 rarely finds a witness through a recursive
@@ -114,10 +131,9 @@ variable, not built from constructors. It ranges over the values of `A` as `forA
 given as its encoding: each test that uses it starts with `let x = d.to[A]`, the decoder the macro
 compiles, so the programs read the `Data` themselves. The quantifier restricts `d` with the
 predicate of `A`'s encoding, `DataEncoding.of[A]`, derived as for the items of a list, and the same
-rule applies: where it is exact, as for a case class of integers, `x` can be anywhere; where it is
-not, as for a type that contains itself, whose fields are any `Data` to Lean below the first level,
-it is a variable only where it stands for every value, and a counterexample outside the type is
-inconclusive. `forAll[A]` and `forAllData[A]` state the same of an `A` whose predicate is exact;
+rule applies: where it is exact, as for a case class of integers or a tree of them, `x` can be
+anywhere; where it is not, as for a type with a string field, it is a variable only where it stands
+for every value, and a counterexample outside the type is inconclusive. `forAll[A]` and `forAllData[A]` state the same of an `A` whose predicate is exact;
 they differ in what Lean searches: many typed variables, or one `Data` behind a premise.
 `forAllData` takes a `FromData[A]`, which `d.to[A]` needs. Its values are the encodings of `A`'s
 values, the `Data` that `toData` gives: a map's keys in order, a constructor's tag and number of
@@ -294,9 +310,9 @@ limits, and whether the variable asks for a witness, which the quantifier's posi
 1. **What the type forces.**
    - A type that contains itself is a node of the same type again on its path, and by fields would
      have no end: the node where it repeats is `Data`. The walk tells it by the types on the path,
-     as `expand` does now, not by the encoding. As `Data`, the node is any `Data` to Lean below its
-     first level: `DataLayout` describes no more of it, and its premise is not exact. So the
-     variable must stand for every value, or the statement is refused, as it is now.
+     as `expand` does now, not by the encoding. As `Data`, the node's premise is the type's
+     recursive predicate ([Premises of a type that contains itself](#premises-of-a-type-that-contains-itself)),
+     exact where the type's other parts are, so the variable may be anywhere.
    - A node that the compiler gives no `Data` form, as a class with a function field, cannot be
      `Data`: it is by fields, or the statement is refused where its fields cannot be either. Nor is
      a node `Data` whose encoding `DataLayout` cannot describe at all, as a type nested too deep:
@@ -370,25 +386,124 @@ counterexample are named by their nodes' paths, as now
    every value. Rule 1 is built: `Expansion.decide` maps a node as `Data` where its type is on its
    own path already (`Reason.ContainsItself`), so `forAll[BlasterTree]` is the root by fields and
    `t.Node.left` and `t.Node.right` as `Data`, the same check as the fixed plan of those two
-   nodes. Such a node has no by-fields mapping and its premise is not exact, so where its variable
-   asks for a witness the statement is refused once it is lowered, as any variable with more
-   values than its type is, with the reason of a type that contains itself; and a node of a type
-   with a part that has no `Data` form is refused. Rule 2's choice of fields over an inexact
+   nodes. Such a node has no by-fields mapping. Its premise is exact since the recursive premise
+   (the next step, below), so it may be anywhere a variable may; before, it was exact at its first
+   level only, and a variable that asked for a witness was refused. A node of a type with a part
+   that has no `Data` form is refused. Rule 2's choice of fields over an inexact
    `Data` has no node to apply to yet: no rule maps as `Data` a node that has fields, until rule 3.
    It is left to step 4, with the knowledge it needs as `lower` goes, whether a quantifier asks for
    a witness, which today `lower` tells only once the statement is lowered. `UplcBlasterTest`
    proves a statement that decodes a subtree of a `BlasterTree`, and refutes one with the
    counterexample `Node(Leaf, Leaf)`, replayed.
 
-   Limit: the premise of such a node describes its first level only. Below it, where the type
-   repeats again, `DataLayout` has an unknown encoding, which holds of every `Data`, and a
-   counterexample whose value there is no value of the type is not replayed as one. So a statement
-   whose tests read a tree two levels below a `Data` node is proved only where its tests hold on
-   every `Data` there, and is refuted only by a counterexample that is a value of the type. A
-   recursive Lean predicate for a type that contains itself would make the premise exact, and
-   would let such a node give a witness as well.
+   Then, a step of its own: the recursive premise of a type that contains itself
+   ([Premises of a type that contains itself](#premises-of-a-type-that-contains-itself)), built.
+   It lifts the limit of rule 1's nodes, whose premise described their first level only: a test
+   may read the value at any depth below such a node, and a witness Lean gives is a value of the
+   type.
 4. Rule 3: the suites run under fixed plans, to measure the number.
 5. `forAllData` as `forAll`, and its parameter annotation with it.
+
+### Follow-ups
+
+Left from two reviews of the recursive premise (2026-11-05). Their findings were fixed then: the
+guard reads a repeat as its type; a layout cut off where types nest too deep is named apart; a
+type's name has 64 bits of its key's hash; the JVM checks of a `Data` walk it in a loop, without
+carrying a path below a repeat; and the largest value within the limits takes a repeat's example
+through the types around it.
+
+- **One way to follow a repeat to its type.** `DataEncoding.outside`, `Limits.largest`, the check
+  of a value's lengths, `LimitGuards`' test of whether a part has a collection, and a test's sample
+  each keep a map of the types around a part that contain themselves. A shared one, an unfolding of
+  `Again` on the root layout, would close the class of gaps that the guard had: it did not follow
+  a repeat at all.
+- **A type's definition from its own layout.** A type's definition is written once, from the
+  first of its layouts that a check meets, though a layout depends on where the type is: inside a
+  type that contains it, the outer type is `Again`; on its own, it is expanded. They mean the same
+  where no layout is cut off, which naming the cut ones apart keeps. A definition from the type's
+  own closed layout would not rest on that, nor on the order the layouts are met in.
+- **One Lean renderer.** `leanPredicate` and the block writer (`LeanRecursions`) each render an
+  encoding to Lean: integers, byte strings, constructors, lists, maps, the order of keys. A change
+  to one, as a check of UTF-8, would have to be made to both. Both could be one renderer of a test
+  on a variable, `leanPredicate` its `fun d => …`.
+- **Two layouts cut off at different depths.** Both are named `…_cut`, and Lean defines the name
+  from the first met, so one variable's premise can be the other's layout, while the JVM checks a
+  value against the variable's own. Both are inexact, so a variable over them stands for every
+  value and nothing is unsound; a counterexample that the two disagree on is replayed against a
+  layout Lean did not read, and ends as inconclusive. A name of the depth the layout is cut at
+  would tell them apart, with the types in it that repeat one of them named for it too.
+- **Two walks of one name throw.** `LeanRecursions` fails with an exception where two walks of
+  different text have one 64-bit name, inside `lower`, whose other failures are a `Left`. It is
+  an invariant, not an error a statement can meet, but it could be told as a reason.
+
+## Premises of a type that contains itself
+
+`DataLayout` marks where a type repeats. The encoding of a type that contains itself is
+`DataEncoding.Recursive(name, body)`, and the type inside it, where it repeats, is `Again(name)`.
+The name is the type's declaration name and 64 bits of a hash of its key, as
+`BlasterTree_3fa2c0d4e1b5a796`: the same in every check, and different for two types of one name or
+one type with other arguments. The key is what the type is made of, its declarations and their
+arguments through proxies (`SirTypes.recursionKey`), and not the type as shown, which shows every
+proxy as `Proxy`.
+
+A type's definition is written once, from the first layout of it that a check meets. A layout of a
+type deep in another may be cut off where types nest more than 32 deep, its parts there any `Data`,
+so it holds less than the type: it is named apart, `…_cut`, as is every type in it that repeats one
+cut so. The name of a type is then always that of a layout that holds all of it, whose definition
+is exact where the type's encoding is, and an exact variable never reads a cut one.
+
+Its premise is a recursive Lean definition, `scalusRec_<name>`, which a check writes after the
+definitions the predicates use (`DataEncoding.leanDefinitions`), only where a variable's premise
+uses it.
+
+```lean
+mutual
+def scalusRec_BlasterTree_… (d0 : Data) : Bool := (match d0 with | Data.Constr t1 fs2 =>
+  (if t1 == 0 then fs2.isEmpty else (if t1 == 1 then (match fs2 with
+    | [fs2_0, fs2_1] => scalusRec_BlasterTree_… fs2_0 && scalusRec_BlasterTree_… fs2_1
+    | _ => false) else false)) | _ => false)
+end
+```
+
+- **Lean has to accept it as total.** Each call is of a part the definition took apart with
+  `match`, so the recursion is structural on `Data`, through the list of a constructor's fields.
+  So the parts are matched as they are, `match fs2_0 with …`, and not applied to a lambda.
+- **A list or a map whose elements repeat a type** has a walk of its own in the block
+  (`…_items0`, `…_entries0`), which calls the type's definition; a list of other elements has the
+  shared walk of its kind, before the block.
+- **Types that contain each other** have their definitions in one `mutual` block. A type inside
+  that repeats none of the enclosing ones has a block of its own, before.
+- **Blaster** translates each definition to an SMT `define-fun-rec`.
+
+So the premise is exact where the type's other parts are: the variable may be anywhere, a witness
+Lean gives is a value of the type, and a test may read the value at any depth. On the JVM,
+`outside` follows `Again` to its `Recursive`, so a counterexample is checked to any depth.
+
+Measured in Lean alone (2026-11-04), over a tree:
+
+| Statement | Result |
+|---|---|
+| a valid tree is a `Leaf` or a `Node` (one unfolding) | proved, in seconds |
+| the left subtree of the left subtree is a tree (three) | proved, 8 s |
+| a valid tree is a `Leaf` (false) | falsified, with a counterexample |
+| some valid tree has a left-left part that is neither (false) | falsified |
+| some valid tree is a `Node` whose left is a `Node` (true) | undetermined after 60 s |
+
+Z3 seldom finds a witness through a recursive premise, as for a list: `existsLet` gives one.
+
+Not told: a type that contains itself under other arguments each time, as a `T[A]` that holds a
+`T[List[A]]`, does not repeat: its key differs at each level. Its layout ends at the most parts,
+unknown there.
+
+`DataEncodingTest` holds the encodings to `FromData` and `ToData`, on `Data` the encoding gives,
+on such `Data` changed in one part, and on `Data` of no type:
+
+- every `Data` the premise admits is read by `FromData` as a value from which `ToData` gives it
+  back;
+- every `Data` read so is one the premise admits, but for a type with a `SortedMap`, whose
+  `FromData` checks neither the order of the keys nor that they differ.
+
+So a misreading of a representation by `DataLayout` shows in a test, not in a proof.
 
 ## Leaves and `LeafFormula`
 
@@ -791,8 +906,10 @@ the tests do there says nothing: their failing at once is what prunes the run. L
 takes each limited list apart as the guard walks it, into its empty list and a cell, and the test's
 own reads of the list find it taken apart. So a loop over a limited list runs to its end, and the
 statement of the values within the limits is proved as a theorem. The guard may check less than the
-limits say, and never more: it does not look into the constructors of a type of several, nor at the
-elements of a list that has no most. Such a guard is not exact: its variable has more values than
+limits say, and never more: it does not look into the constructors of a type of several, nor into
+the type again where it repeats, nor at the elements of a list that has no most. Where what it does
+not look into has a collection, a constructor's field that is the type again having the type's
+collections, the guard is not exact: its variable has more values than
 the limits allow, and is a variable only where it stands for every value, as one whose encoding is
 not exact is. Under `!` or in a premise, where the statement asks for a witness, the guard could
 let one through that the limits exclude, so the tactic refuses it there. A counterexample is checked
@@ -881,7 +998,8 @@ is canceled.
   values by a predicate derived from the type; where that cannot be exact it is a variable only in a
   universal position. A type that contains itself and is passed through its constructors is
   quantified over with `forAll` by fields down to where it repeats, and as `Data` there, and with
-  `forAllData` as one `Data`: either way as a variable only where it stands for every value. `forAll[Data](d => denotes(d.to[A]) ==> …)` does not stand for it: `d.to[A]`
+  `forAllData` as one `Data`: either way with a recursive premise, exact where its other parts
+  are. `forAll[Data](d => denotes(d.to[A]) ==> …)` does not stand for it: `d.to[A]`
   checks nothing itself, and the premise holds of every `d` that the program's conversion to `A`'s
   representation reads without failing, which is part of what makes `d` a value of `A`, and a part
   that depends on the representation. Nor can one constructor of `Data`, such as `Data.I`, be

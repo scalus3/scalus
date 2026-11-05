@@ -971,23 +971,30 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           ),
           200
         )
-        // For a type that contains itself the predicate is not exact, and the variable keeps more
-        // values than its type: a statement that claims some value is refused.
+        // For items whose predicate is not exact, as strings, whose UTF-8 it does not check, the
+        // variable keeps more values than its type: a statement that claims some value is refused.
         def refused(prop: Prop) = UplcBlaster.lower(prop, FunctionTable.empty) match
             case Left(reason) =>
                 assert(reason.contains("has more values as a variable than its type"), reason)
             case Right(_) => fail("expected the statement to be refused")
-        refused(exists[prelude.List[BlasterTree]](trees => trees.isEmpty))
-        refused(!forAll[prelude.List[BlasterTree]](trees => trees.isEmpty))
-        refused(forAll[prelude.List[BlasterTree]](trees => trees.isEmpty) ==> Prop(true))
-        refused(forAll[prelude.List[BlasterTree]](trees => trees.isEmpty) <=> Prop(true))
+        refused(exists[prelude.List[String]](names => names.isEmpty))
+        refused(!forAll[prelude.List[String]](names => names.isEmpty))
+        refused(forAll[prelude.List[String]](names => names.isEmpty) ==> Prop(true))
+        refused(forAll[prelude.List[String]](names => names.isEmpty) <=> Prop(true))
         // Where it stands for every value it is a variable.
         assert(
           UplcBlaster
               .lower(
-                forAll[prelude.List[BlasterTree]](trees => trees.isEmpty || !trees.isEmpty),
+                forAll[prelude.List[String]](names => names.isEmpty || !names.isEmpty),
                 FunctionTable.empty
               )
+              .isRight
+        )
+        // Items of a type that contains itself have a recursive predicate, which is exact: the
+        // variable is one also where it asks for a witness.
+        assert(
+          UplcBlaster
+              .lower(exists[prelude.List[BlasterTree]](trees => trees.isEmpty), FunctionTable.empty)
               .isRight
         )
     }
@@ -1068,9 +1075,8 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             case List(Constant.Data(data)) =>
                 assert(DataEncoding.of[BlasterPair].outside(data).isEmpty, data)
             case other => fail(s"expected one Data value, got $other")
-        // A type that contains itself, whose fields are any
-        // Data to Lean: the variable has more values than its type, and is one only where it
-        // stands for every value.
+        // A type that contains itself, whose premise is a recursive predicate: exact, so the
+        // variable is one also where it asks for a witness.
         proven(
           forAllData[BlasterTree](tree =>
               tree match
@@ -1079,9 +1085,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           ),
           300
         )
-        UplcBlaster.lower(!forAllData[BlasterTree](_ => true), FunctionTable.empty) match
-            case Left(reason) => assert(reason.contains("forAllData variable"), reason)
-            case Right(_)     => fail("expected the statement to be refused")
+        assert(UplcBlaster.lower(!forAllData[BlasterTree](_ => true), FunctionTable.empty).isRight)
         // The decoder is `d.to[A]`, which the compiler compiles to its own reading of the type's
         // representation, the one the premise is derived from, whatever FromData is given.
         val decoder = lowered(
@@ -1122,9 +1126,10 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           ),
           300
         )
-        // A type that contains itself is a variable only where it stands for every value.
+        // A type whose encoding is not exact, as one with a string, is a variable only where it
+        // stands for every value.
         UplcBlaster.lower(
-          exists((_: BlasterTree @UplcRepr(UplcRepresentation.Data)) => true),
+          exists((_: PlanNamed @UplcRepr(UplcRepresentation.Data)) => true),
           FunctionTable.empty
         ) match
             case Left(reason) => assert(reason.contains("forAllData variable"), reason)
@@ -1284,6 +1289,61 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           valueOf(".Node.left").contains(Constant.Data(BlasterTree.Leaf.toData)),
           counterexample
         )
+    }
+
+    test("a recursive premise is exact: a test may read a tree at any depth below a Data node") {
+        // The left subtree of the left subtree, two levels below the Data node `t.Node.left`:
+        // its premise, a recursive predicate, says it is a tree as well.
+        val deepIsATree = forAll[BlasterTree](t =>
+            t match
+                case BlasterTree.Leaf => true
+                case BlasterTree.Node(left, _) =>
+                    left match
+                        case BlasterTree.Leaf => true
+                        case BlasterTree.Node(leftLeft, _) =>
+                            leftLeft match
+                                case BlasterTree.Leaf       => true
+                                case BlasterTree.Node(_, _) => true
+        )
+        provenAt(deepIsATree)
+        // No tree makes the reading fail: an exists in a negative position, which an inexact
+        // premise would have Lean refute with a value that is no tree.
+        val noneFails = !exists[BlasterTree](t =>
+            !denotes(t match
+                case BlasterTree.Leaf => BigInt(0)
+                case BlasterTree.Node(left, _) =>
+                    left match
+                        case BlasterTree.Leaf => BigInt(0)
+                        case BlasterTree.Node(leftLeft, _) =>
+                            leftLeft match
+                                case BlasterTree.Leaf       => BigInt(0)
+                                case BlasterTree.Node(_, _) => BigInt(1))
+        )
+        provenAt(noneFails)
+        // negative control: the left subtree of the left subtree need not be a Leaf. The
+        // counterexample is a tree, replayed.
+        val deepIsALeaf = forAll[BlasterTree](t =>
+            t match
+                case BlasterTree.Leaf => true
+                case BlasterTree.Node(left, _) =>
+                    left match
+                        case BlasterTree.Leaf => true
+                        case BlasterTree.Node(leftLeft, _) =>
+                            leftLeft match
+                                case BlasterTree.Leaf       => true
+                                case BlasterTree.Node(_, _) => false
+        )
+        // A list of a type that contains itself through it: no rose has a child whose label fails.
+        provenAt(
+          !exists[EncodingRose](r => r.children.nonEmpty && !denotes(r.children.head.label))
+        )
+        val counterexample = refuted(deepIsALeaf, Budget.Auto)
+        val tree = DataEncoding.of[BlasterTree]
+        counterexample.foreach {
+            case (name, Constant.Data(data)) =>
+                assert(tree.outside(data).isEmpty, s"$name is no tree: $data")
+            case _ => ()
+        }
     }
 
     test("a check under a fixed plan keeps no result, and the tactic keeps its name") {
@@ -2061,18 +2121,17 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("statements outside the fragment are unsupported") {
-        // The tactic reports these without running Lean. A type that contains itself, and is
-        // passed through its constructors, has values of every size, which no set of variables
-        // stands for: where it repeats it is one Data variable, which has more values than the
-        // type, so a variable that asks for a witness is refused.
+        // The tactic reports these without running Lean. A variable whose encoding is not exact,
+        // as of a tree of strings, has more values than its type: where it asks for a witness it
+        // is refused.
         // One constructor of a type, as List.Cons, would be a variable of the whole type.
         val cons =
             UplcBlaster.lower(forAll[prelude.List.Cons[BigInt]](_ => true), FunctionTable.empty)
         assert(cons.left.exists(_.contains("one constructor")), cons)
 
-        val tree = exists[BlasterTree](_ => true)
+        val tree = exists[PlanNamedTree](_ => true)
         val trees = UplcBlaster.lower(tree, FunctionTable.empty)
-        assert(trees.left.exists(_.contains("contains itself")), trees)
+        assert(trees.left.exists(_.contains("has more values as a variable than its type")), trees)
 
         // One constructor of `Data` is no type of Lean's: its variable would be any `Data`, and
         // the statement would be about values the Scala type does not have.
@@ -2096,7 +2155,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
                 val reasons = report.issues.collect {
                     case CompatibilityIssue.UnsupportedFeature(_, reason) => reason
                 }
-                assert(reasons.exists(_.contains("contains itself")), report)
+                assert(reasons.exists(_.contains("has more values as a variable")), report)
             case other => fail(s"expected an unsupported result, got $other")
     }
 }
