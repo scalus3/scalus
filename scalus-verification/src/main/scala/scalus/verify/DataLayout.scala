@@ -116,13 +116,8 @@ private[verify] object DataLayout {
       * and 64 bits of its key's hash, so that two types of one name are told apart, and a type has
       * one name in every check.
       */
-    private def recursionName(tp: SIRType, key: String): String = {
-        val hash = scalus.utils.Hex
-            .bytesToHex(scalus.utils.Utils.sha2_256(key.getBytes("UTF-8")))
-            .take(16)
-            .toLowerCase
-        s"${leanSimpleName(declarationName(tp))}_$hash"
-    }
+    private def recursionName(tp: SIRType, key: String): String =
+        s"${leanSimpleName(declarationName(tp))}_${DataEncoding.digest(key)}"
 
     /** The name of a type that contains itself, `name`, where its layout was cut off below
       * ([[asCut]]).

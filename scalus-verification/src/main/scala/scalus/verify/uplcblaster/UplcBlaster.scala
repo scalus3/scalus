@@ -368,8 +368,9 @@ object UplcBlaster {
           * `Data`, but for the nodes a fixed plan maps otherwise ([[MappingPlan.Fixed]]).
           */
         plan: MappingPlan = MappingPlan.empty,
-        /** The recursive Lean definitions that [[predicates]] use, of the types among the
-          * variables' that contain themselves ([[DataEncoding.leanRecursions]]), each type's once.
+        /** The recursive Lean definitions that [[predicates]] use, each once: the walks of the
+          * lists and maps in the variables' types, and the blocks of the types among them that
+          * contain themselves ([[DataEncoding.leanRecursions]]).
           */
         private[uplcblaster] val recursions: List[String] = Nil
     ) {
@@ -2836,7 +2837,7 @@ object UplcBlaster {
                 if keys.isAnything && values.isAnything =>
                 Restriction(None, exact = true, None)
             case encoding @ DataEncoding.Items(items) =>
-                of(encoding, s"(scalusAll ${items.leanPredicate(fresh)})")
+                of(encoding, DataEncoding.leanItems(items))
             case encoding @ DataEncoding.Entries(keys, values, order) =>
                 of(encoding, DataEncoding.leanEntries(keys, values, order, fresh))
             // A list or a map whose type contains itself through it, as the children of a tree:
@@ -3303,8 +3304,9 @@ object UplcBlaster {
                    |
                    |#blaster (gen-cex: 1) [$formula]""".stripMargin
         // The definitions a check uses where a variable is restricted to its type's values, and
-        // the recursive ones of the types among them that contain themselves. A check without
-        // such a variable has none of them in its text.
+        // the recursive ones: the walks of their lists and maps, and the blocks of the types among
+        // them that contain themselves. A check without such a variable has none of them in its
+        // text.
         if goal.predicates.exists(_.isDefined) then
             (List(DataEncoding.leanDefinitions) ++ goal.recursions :+ check).mkString("\n\n")
         else check
