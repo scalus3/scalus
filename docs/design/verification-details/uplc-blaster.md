@@ -109,11 +109,12 @@ guarantee (one input, at most one output and one signatory), Z3 had not decided 
 0.3 s.
 
 The description is public, as `scalus.verify.DataEncoding`: `DataEncoding.of[A]` derives it,
-`leanPredicate` and `leanDefinition(name)` give the Lean predicate (with `leanRecursions`, the
-recursive definitions it uses), a `Data → Bool`, for a Lean
-file of one's own (after `DataEncoding.leanDefinitions`, with PlutusCore's `Data` opened as
-`Data`), and `outside(data)` checks a `Data` on the JVM. `exact` says whether the predicate holds
-of exactly the type's values.
+`leanPredicate` and `leanDefinition(name)` give the Lean predicate, a `Data → Bool`, for a Lean
+file of one's own. The file has, in order, `DataEncoding.leanDefinitions`, then `leanRecursions`
+(the walks of the predicate's lists and maps and the definitions of its types that contain
+themselves; `DataEncoding.leanRecursions` of several encodings writes each once), then the
+definitions, with PlutusCore's `Data` opened as `Data`. `outside(data)` checks a `Data` on the
+JVM. `exact` says whether the predicate holds of exactly the type's values.
 
 Where the predicate is exact, the variable's values are its type's, and it can be quantified
 anywhere; Lean's counterexamples are of the type. Where it is not, as for a string, a function, or
@@ -453,7 +454,7 @@ is exact where the type's encoding is, and an exact variable never reads a cut o
 
 Its premise is a recursive Lean definition, `scalusRec_<name>`, which a check writes after the
 definitions the predicates use (`DataEncoding.leanDefinitions`), only where a variable's premise
-uses it. A check without such a type has the text it had, so no kept result changed.
+uses it.
 
 ```lean
 mutual

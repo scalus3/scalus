@@ -19,6 +19,9 @@ import scalus.uplc.builtin.{ByteString, Data}
   * {{{
   * val mint = DataEncoding.of[Mint]
   * mint.outside(someMint.toData)    // None
+  * // A Lean file of the predicate: what it uses, and then the definition.
+  * DataEncoding.leanDefinitions     // def scalusIsI … and the other few
+  * mint.leanRecursions              // the walks of its lists and maps
   * mint.leanDefinition("isMint")    // def isMint (d : Data) : Bool := …
   * }}}
   */
@@ -196,7 +199,12 @@ enum DataEncoding {
       * a lambda with quantified axioms, on which Z3 did not finish a check of a script context in
       * 15 minutes; the same check with a walk of each list answered in under a second.
       */
-    def leanPredicate: String = leanPredicate(Iterator.from(0))
+    def leanPredicate: String = renderedPredicate
+
+    /** [[leanPredicate]], rendered once: a walk's name is a digest of its items' predicate, and an
+      * encoding inside another is asked for it at every level.
+      */
+    private lazy val renderedPredicate: String = leanPredicate(Iterator.from(0))
 
     /** A Lean definition of [[leanPredicate]], `def name (d : Data) : Bool := …`, on one line. It
       * comes after [[DataEncoding.leanDefinitions]] and the recursive definitions it uses: those of
@@ -343,16 +351,18 @@ object DataEncoding {
       * [[leanRecursions]] defines, or a constant where the items' predicate holds of every `Data`.
       * The name is that of the walk's text, so that two encodings of one file share it.
       */
-    private[verify] def leanItems(items: DataEncoding): String =
+    private[verify] def leanItems(items: DataEncoding): String = {
         if items.holdsOfEvery then "(fun _ => true)"
         else s"scalusAll_${digest(items.leanPredicate)}"
+    }
 
     /** The Lean predicate on the entries of a map of `keys` and `values`, a
       * `List (Data × Data) → Bool`, as [[leanItems]] is of a list: without the order of its keys.
       */
-    private[verify] def leanPairs(keys: DataEncoding, values: DataEncoding): String =
+    private[verify] def leanPairs(keys: DataEncoding, values: DataEncoding): String = {
         if keys.holdsOfEvery && values.holdsOfEvery then "(fun _ => true)"
         else s"scalusAllPairs_${digest(s"${keys.leanPredicate} ${values.leanPredicate}")}"
+    }
 
     /** The walk named [[leanItems]] of a list of `items`, whose predicate does not hold of every
       * `Data`.
@@ -375,12 +385,11 @@ object DataEncoding {
     /** Sixteen hexadecimal digits of the SHA-256 of `text`: a walk's name, which tells its text
       * apart from the others of a file. [[leanRecursions]] fails on two texts of one name.
       */
-    private def digest(text: String): String = {
-        val hash = java.security.MessageDigest
-            .getInstance("SHA-256")
-            .digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8))
-        hash.iterator.take(8).map(byte => f"${byte & 0xff}%02x").mkString
-    }
+    private def digest(text: String): String =
+        scalus.utils.Hex
+            .bytesToHex(scalus.utils.Utils.sha2_256(text.getBytes("UTF-8")))
+            .take(16)
+            .toLowerCase
 
     /** Why `entries` are not entries of a map encoded so, or `None` where they are. */
     private[verify] def entriesOutside(
