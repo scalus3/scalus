@@ -216,13 +216,10 @@ private[verify] object DataLayout {
                         val cutsBefore = parts.cuts
                         val inner = representedLayout(other, enclosing + key, parts)
                         val name = recursionName(other, key)
-                        // A type whose encoding is not told is that, whatever repeats in it; and
-                        // one whose layout has no repeat of it, where a part that had one turned
-                        // out unknown, does not contain itself.
+                        // A type whose layout has no repeat of it does not contain itself: also
+                        // where a part that had one turned out unknown, as an encoding not told.
                         val recursive =
-                            if repeats(inner, name) && !inner.isInstanceOf[Plain] then
-                                Recursive(name, inner)
-                            else inner
+                            if repeats(inner, name) then Recursive(name, inner) else inner
                         if parts.cuts > cutsBefore then asCut(recursive, Set(name)) else recursive
                 case other =>
                     Plain(DataEncoding.Unknown(s"${other.show} has no Data encoding told here"))

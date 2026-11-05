@@ -88,6 +88,22 @@ enum EncodingHeld[A]:
 @Compile
 object EncodingHeld
 
+/** Two types that contain each other, where the smallest part needs the type around it: its owner.
+  */
+enum EncodingOwner derives FromData, ToData:
+    case Owns(part: EncodingPart)
+    case Nobody
+
+@Compile
+object EncodingOwner
+
+case class EncodingPart(parts: prelude.List[EncodingPart], owner: EncodingOwner)
+    derives FromData,
+      ToData
+
+@Compile
+object EncodingPart
+
 class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
     import DataEncodingTest.*
@@ -137,6 +153,23 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
         assert(recursions.contains(s"def scalusRec_${name}_cut ("), recursions)
     }
 
+    test("the largest value within limits has a part whose smallest value needs the type around") {
+        val owner = UplcBlaster
+            .lower(forAllData[EncodingOwner](_ => true), FunctionTable.empty)
+            .fold(
+              reason => fail(reason),
+              lowered => DataEncoding.valueType(lowered.binders.head.tp)
+            )
+        // A part of one part, each owned by nobody: the smallest owner, a constructor without the
+        // part again, ends it.
+        val smallest = EncodingPart(prelude.List.Nil, EncodingOwner.Nobody)
+        val largest = EncodingOwner.Owns(EncodingPart(prelude.List(smallest), EncodingOwner.Nobody))
+        assert(
+          Limits.of(Limit.MaxCollectionLength(1)).largest(DataLayout.of(owner)) ==
+              Some(largest.toData)
+        )
+    }
+
     test("a type whose repeat is in a part not told does not contain itself") {
         val holder = DataEncoding.of[EncodingHolder]
         assert(!holder.isInstanceOf[DataEncoding.Recursive], holder)
@@ -172,6 +205,22 @@ class DataEncodingTest extends AnyFunSuite with LeanProofsSuite {
         }
         assert(onSmallStack(DataEncoding.of[EncodingChain].outside(deep)).isEmpty)
         assert(onSmallStack(Limits.of(Limit.MaxCollectionLength(1)).outside(deep, tp)).isEmpty)
+        // A rose of one child each, 100000 deep, repeats through a field and a list, and is
+        // checked in time proportional to its depth: no path is carried down a repeat.
+        val rose = (1 to 100000).foldLeft(EncodingRose(0, prelude.List.Nil).toData) { (child, n) =>
+            Data.Constr(0, prelude.List(Data.I(n), Data.List(prelude.List(child))))
+        }
+        val roseType = UplcBlaster
+            .lower(forAllData[EncodingRose](_ => true), FunctionTable.empty)
+            .fold(
+              reason => fail(reason),
+              lowered => DataEncoding.valueType(lowered.binders.head.tp)
+            )
+        val started = System.nanoTime()
+        assert(
+          onSmallStack(Limits.of(Limit.MaxCollectionLength(1)).outside(rose, roseType)).isEmpty
+        )
+        assert((System.nanoTime() - started) / 1e9 < 30, "the check of the rose's lengths")
         // And a part deep down that is not of the type is told.
         val broken = Data.Constr(
           1,
@@ -460,7 +509,7 @@ object DataEncodingTest {
             case recursive @ Recursive(name, body) =>
                 sample(body, random, bound + (name -> recursive), depth)
             case Again(name) =>
-                if depth <= 0 then bound(name).example.get
+                if depth <= 0 then bound(name).exampleIn(bound - name).get
                 else sample(bound(name), random, bound, depth - 1)
             case Constr(constructors) =>
                 val tag = random.nextInt(constructors.size)

@@ -13,7 +13,7 @@ import scalus.uplc.builtin.{ByteString, Data}
   * the encodings of the type's values, and a check of a `Data` on the JVM, [[outside]]. Where the
   * encoding is [[exact]], the predicate holds of exactly those encodings. Where it is not, as for a
   * string, whose UTF-8 the predicate does not check, it holds of more `Data` than that, and
-  * [[outside]] says which of them it cannot tell. A type that contains itself is a [[Recursive]]
+  * [[outside]] says which of them it cannot tell. A type that contains itself is a `Recursive`
   * encoding, whose predicate is a recursive Lean definition, exact where its other parts are.
   *
   * {{{
@@ -74,19 +74,24 @@ enum DataEncoding {
     /** Whether every `Data` is encoded so, and the predicate says nothing. */
     def isAnything: Boolean = this == AnyData
 
-    /** Why the encoding is not told, where it is not as a whole: an [[Unknown]], also as the body
-      * of a [[Recursive]] one.
+    /** Why the encoding is not told, where it is not as a whole: an [[Unknown]]. The body of a
+      * [[Recursive]] one never is, as it has the type again.
       */
     private[verify] def unknownReason: Option[String] = this match
-        case Unknown(reason)    => Some(reason)
-        case Recursive(_, body) => body.unknownReason
-        case _                  => None
+        case Unknown(reason) => Some(reason)
+        case _               => None
 
     /** A small `Data` encoded so, where this tells one: the value of a variable Lean leaves out of
       * a counterexample. A constructor is the first whose fields have one, so a type that contains
       * itself ends in a constructor without itself.
       */
-    private[verify] def example: Option[Data] = this match
+    private[verify] def example: Option[Data] = exampleIn(Map.empty)
+
+    /** [[example]], where the [[Recursive]] encodings of the names in `bound` enclose this one: a
+      * repeat of one of them is its example. Within its own encoding a type again has none, so a
+      * constructor without it ends the value.
+      */
+    private[verify] def exampleIn(bound: Map[String, DataEncoding]): Option[Data] = this match
         case Integer | AnyData => Some(Data.I(0))
         case Bytes | Text      => Some(Data.B(ByteString.empty))
         case Bool              => Some(Data.Constr(0, PList.Nil))
@@ -94,12 +99,12 @@ enum DataEncoding {
         case Entries(_, _, _)  => Some(Data.Map(PList.Nil))
         case Unknown(_)        => None
         // A constructor without the type again ends the value.
-        case Recursive(_, body) => body.example
-        case Again(_)           => None
+        case Recursive(name, body) => body.exampleIn(bound - name)
+        case Again(name)           => bound.get(name).flatMap(_.exampleIn(bound - name))
         case Constr(constructors) =>
             constructors.iterator.zipWithIndex
                 .flatMap { (fields, tag) =>
-                    val values = fields.map(_.example)
+                    val values = fields.map(_.exampleIn(bound))
                     Option.when(values.forall(_.isDefined))(
                       Data.Constr(tag, PList.from(values.flatten))
                     )
@@ -334,11 +339,12 @@ object DataEncoding {
         values: DataEncoding,
         order: KeyOrder,
         entries: List[(Data, Data)]
-    ): Option[String] =
+    ): Option[String] = {
         entries.iterator
             .flatMap((key, value) => keys.outside(key).orElse(values.outside(value)))
             .nextOption()
             .orElse(orderOutside(order, entries.map(_._1)))
+    }
 
     /** Why `keys`, the keys of a map in their order, are not in `order`, or `None` where they are.
       */
@@ -375,10 +381,11 @@ object DataEncoding {
         def later(check: () => Option[String]): Unit = checks += check
 
         /** The checks of `parts`, each `Data` by its encoding, to be made in their order. */
-        def later(parts: List[(DataEncoding, Data)], bound: Map[String, DataEncoding]): Unit =
+        def later(parts: List[(DataEncoding, Data)], bound: Map[String, DataEncoding]): Unit = {
             parts.reverseIterator.foreach((encoding, part) =>
                 checks += (() => encoding.outsideIn(part, bound, this))
             )
+        }
 
         /** The check of `data` by `encoding`. */
         def later(encoding: DataEncoding, data: Data, bound: Map[String, DataEncoding]): Unit =

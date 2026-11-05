@@ -201,8 +201,11 @@ final case class Limits(all: List[Limit]) {
         layout match {
             case recursive @ DataLayout.Recursive(name, inner) =>
                 largest(inner, path, bound + (name -> recursive))
+            // Of the types around, which contain themselves, a repeat is the example: one a
+            // constructor without the type again ends.
             case DataLayout.Plain(DataEncoding.Again(name)) =>
-                bound.get(name).flatMap(_.encoding.example)
+                val around = bound.view.mapValues(_.encoding).toMap
+                bound.get(name).flatMap(_.encoding.exampleIn(around - name))
             case DataLayout.Plain(encoding) => encoding.example
             case DataLayout.Record(fields) =>
                 all(fields.map((name, field) => largest(field, under(Step.Field(name)), bound)))
@@ -273,7 +276,10 @@ final case class Limits(all: List[Limit]) {
             def elements(count: Int) = {
                 val (min, max) = bounds(path)
                 Option.when(count < min || max.exists(count > _)) {
-                    val where = path.fold("a collection in a constructor of an enum")(Limits.show)
+                    val where =
+                        path.fold("a collection in a constructor of an enum, or in a repeat")(
+                          Limits.show
+                        )
                     val noun = if count == 1 then "element" else "elements"
                     s"$where has $count $noun, not from $min to ${max.fold("any number")(_.toString)}"
                 }
@@ -283,8 +289,10 @@ final case class Limits(all: List[Limit]) {
                 // every collection is of them too.
                 case (recursive @ DataLayout.Recursive(name, inner), _) =>
                     check(inner, value, path, bound + (name -> recursive))
+                // Below a repeat no path names a collection ([[unreached]]), so the bounds there
+                // are those without one, and the path is not carried as deep as the `Data` goes.
                 case (DataLayout.Plain(DataEncoding.Again(name)), _) =>
-                    bound.get(name).flatMap(check(_, value, path, bound))
+                    bound.get(name).flatMap(check(_, value, None, bound))
                 case (DataLayout.Record(fields), Data.Constr(_, values)) =>
                     later(
                       fields.zip(values.toScalaList).map { case ((name, field), value) =>

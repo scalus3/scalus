@@ -391,10 +391,11 @@ counterexample are named by their nodes' paths, as now
 
 ### Follow-ups
 
-Left from the review of the recursive premise (2026-11-05), whose soundness findings were fixed
-then: the guard reads a repeat as its type, a layout cut off where types nest too deep is named
-apart, a type's name has 64 bits of its key's hash, and the JVM checks of a `Data` walk it in a
-loop.
+Left from two reviews of the recursive premise (2026-11-05). Their findings were fixed then: the
+guard reads a repeat as its type; a layout cut off where types nest too deep is named apart; a
+type's name has 64 bits of its key's hash; the JVM checks of a `Data` walk it in a loop, without
+carrying a path below a repeat; and the largest value within the limits takes a repeat's example
+through the types around it.
 
 - **One way to follow a repeat to its type.** `DataEncoding.outside`, `Limits.largest`, the check
   of a value's lengths, `LimitGuards`' test of whether a part has a collection, and a test's sample
@@ -410,10 +411,15 @@ loop.
   encoding to Lean: integers, byte strings, constructors, lists, maps, the order of keys. A change
   to one, as a check of UTF-8, would have to be made to both. Both could be one renderer of a test
   on a variable, `leanPredicate` its `fun d => …`.
-- **Dead branches.** `unknownReason` of a `Recursive`, whose body is never an `Unknown`; and the
-  map case of the recursive list in `outsideEncoding`, whose value comes as `Data`.
-- **A key cut off.** `SirTypes.recursionKey` ends at 32 levels of type arguments, so two types
-  that differ deeper have one key, and one name.
+- **Two layouts cut off at different depths.** Both are named `…_cut`, and Lean defines the name
+  from the first met, so one variable's premise can be the other's layout, while the JVM checks a
+  value against the variable's own. Both are inexact, so a variable over them stands for every
+  value and nothing is unsound; a counterexample that the two disagree on is replayed against a
+  layout Lean did not read, and ends as inconclusive. A name of the depth the layout is cut at
+  would tell them apart, with the types in it that repeat one of them named for it too.
+- **Two walks of one name throw.** `LeanRecursions` fails with an exception where two walks of
+  different text have one 64-bit name, inside `lower`, whose other failures are a `Left`. It is
+  an invariant, not an error a statement can meet, but it could be told as a reason.
 
 ## Premises of a type that contains itself
 
