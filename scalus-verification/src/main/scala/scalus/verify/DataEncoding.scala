@@ -382,14 +382,16 @@ object DataEncoding {
             s"${keys.leanPredicate} k && ${values.leanPredicate} v && $walk rest"
     }
 
-    /** Sixteen hexadecimal digits of the SHA-256 of `text`: a walk's name, which tells its text
-      * apart from the others of a file. [[leanRecursions]] fails on two texts of one name.
+    /** Sixteen hexadecimal digits, 64 bits, of the SHA-256 of `text`: the part of a Lean name that
+      * tells it apart, of a walk by what it checks and of a type that contains itself by its key
+      * ([[DataLayout]]). [[leanRecursions]] fails on two walks of one name.
       */
-    private def digest(text: String): String =
+    private[verify] def digest(text: String): String = {
         scalus.utils.Hex
             .bytesToHex(scalus.utils.Utils.sha2_256(text.getBytes("UTF-8")))
             .take(16)
             .toLowerCase
+    }
 
     /** Why `entries` are not entries of a map encoded so, or `None` where they are. */
     private[verify] def entriesOutside(
@@ -527,21 +529,33 @@ object DataEncoding {
         /** [[free]] of each encoding asked about, by identity: an encoding is asked about once. */
         private val freeNames = new java.util.IdentityHashMap[DataEncoding, Set[String]]()
 
+        /** The encodings reached, by identity: one of many variables of a type, or a part of many
+          * types, is reached once.
+          */
+        private val reached = java.util.Collections.newSetFromMap(
+          new java.util.IdentityHashMap[DataEncoding, java.lang.Boolean]()
+        )
+
+        /** What each walk written checks, by the walk's name. */
+        private val walks = scala.collection.mutable.Map.empty[String, String]
+
         /** Every definition that the predicate of `encoding` uses, written. */
         def reach(encoding: DataEncoding): Unit = {
-            encoding match
-                case recursive: Recursive     => root(recursive)
-                case Constr(constructors)     => constructors.foreach(_.foreach(reach))
-                case Items(items)             => walkItems(items)
-                case Entries(keys, values, _) => walkPairs(keys, values)
-                case _                        => ()
+            if reached.add(encoding) then
+                encoding match
+                    case recursive: Recursive     => root(recursive)
+                    case Constr(constructors)     => constructors.foreach(_.foreach(reach))
+                    case Items(items)             => walkItems(items)
+                    case Entries(keys, values, _) => walkPairs(keys, values)
+                    case _                        => ()
         }
 
         /** The name of the walk of a list of `items`, defined after what it uses. */
         def walkItems(items: DataEncoding): String = {
-            reach(items)
             val name = leanItems(items)
-            if !items.holdsOfEvery then writeWalk(name, itemsWalk(items))
+            if !items.holdsOfEvery && unwritten(name, items.leanPredicate) then
+                reach(items)
+                blocks(s"walk $name") = itemsWalk(items)
             name
         }
 
@@ -549,25 +563,27 @@ object DataEncoding {
           * uses.
           */
         def walkPairs(keys: DataEncoding, values: DataEncoding): String = {
-            reach(keys)
-            reach(values)
             val name = leanPairs(keys, values)
-            if !(keys.holdsOfEvery && values.holdsOfEvery) then
-                writeWalk(name, pairsWalk(keys, values))
+            val checks = s"${keys.leanPredicate} ${values.leanPredicate}"
+            if !(keys.holdsOfEvery && values.holdsOfEvery) && unwritten(name, checks) then
+                reach(keys)
+                reach(values)
+                blocks(s"walk $name") = pairsWalk(keys, values)
             name
         }
 
-        /** The walk named `name`, of the text `definition`, where no definition has it yet. The
-          * name is a digest of what the walk checks, and two walks of one name would be one.
+        /** Whether no walk named `name` is written yet, which then is to be, of what `checks`. The
+          * name is a digest of what a walk checks, and two walks of one name would be one.
           */
-        private def writeWalk(name: String, definition: String): Unit = {
-            val key = s"walk $name"
-            blocks.get(key) match
-                case None                                   => blocks(key) = definition
-                case Some(written) if written == definition => ()
+        private def unwritten(name: String, checks: String): Boolean = {
+            walks.get(name) match
+                case None =>
+                    walks(name) = checks
+                    true
+                case Some(written) if written == checks => false
                 case Some(written) =>
                     throw new IllegalStateException(
-                      s"two walks of one name, $name: $written and $definition"
+                      s"two walks of one name, $name: of $written and of $checks"
                     )
         }
 
