@@ -5,7 +5,8 @@ import scalus.compiler.Compile
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Builtins.{multiplyInteger, remainderInteger}
-import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
+import scalus.cardano.ledger.MajorProtocolVersion
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.cardano.onchain.plutus.prelude.*
@@ -17,7 +18,8 @@ import scalus.uplc.eval.{ProfileFormatter, Result}
   * reference budgets below predate these source changes; their compiler/source revision is not
   * recorded here. Ratios are historical comparisons, not compiler-only results.
   */
-class KnightsTest extends AnyFunSuite, ScalusTest:
+class KnightsTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite:
+    override protected def budgetTable: BudgetTable = KnightsTestBudgets
     import KnightsTest.{*, given}
     import scalus.uplc.eval.PlutusVM
 
@@ -35,24 +37,6 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
     )
 
     val profilingEnabled = false
-    val ignoreBudgetAssertions = false
-
-    /** Retain this benchmark's existing 5% budget tolerance across compiler versions. CSE now
-      * resolves ties by deterministic traversal order. Semantic checks remain exact.
-      */
-    private def assertBudgetClose(
-        actual: ExUnits,
-        expected: ExUnits,
-        toleranceBps: Int = 500 // 5% tolerance for budget variance
-    ): Unit = {
-        def within(a: Long, e: Long): Boolean =
-            math.abs(a - e) * 10000L <= e * toleranceBps
-        assert(
-          within(actual.memory, expected.memory) && within(actual.steps, expected.steps),
-          s"Budget outside ${toleranceBps} bps tolerance: actual=$actual expected=$expected"
-        )
-    }
-
     extension (term: scalus.uplc.Term)
         private def evalWithOptionalProfile(using PlutusVM): Result =
             val result =
@@ -80,25 +64,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val uplc = sir.toUplc(optimizeUplc = true)
         val result = uplc.evalWithOptionalProfile
 
-        val options = summon[Options]
-        val scalusBudget =
-            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // Explicit descAndNo sharing and insertion sort for at most eight moves.
-                ExUnits(memory = 115750464L, steps = 24141658357L)
-            else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
-            then ExUnits(memory = 324_452274L, steps = 92346_941030L)
-            else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
-            then ExUnits(memory = 247_807177L, steps = 44783_358238L)
-            else {
-                // actually we don't know, need recheck
-                ExUnits(memory = 247_807177L, steps = 44783_358238L)
-            }
-
         if !result.isSuccess then println(s"4x4 Result: $result")
         assert(result.isSuccess)
-        if !ignoreBudgetAssertions then {
-            assertBudgetClose(result.budget, scalusBudget)
-        }
+        assertSuccess(result, uplc.plutusV3)
 
         // Reference budget of the original benchmark: ExUnits(memory = 160_204421L, steps = 54958_831939L)
     }
@@ -117,7 +85,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
     }
 
     test("100_6x6") {
-        val result = compile {
+        val uplc = compile {
             val result = runKnights(100, 6)
 
             val expected: Solution = List(
@@ -190,32 +158,17 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             require(result === expected)
         }
             .toUplc(optimizeUplc = true)
-            .evalWithOptionalProfile
+        val result = uplc.evalWithOptionalProfile
 
-        val options = summon[Options]
-        val scalusBudget =
-            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // Explicit descAndNo sharing and insertion sort for at most eight moves.
-                ExUnits(memory = 380245598L, steps = 79085715783L)
-            else
-                options.targetLoweringBackend match
-                    case TargetLoweringBackend.SirToUplcV3Lowering =>
-                        ExUnits(memory = 822_015659L, steps = 228266_926079L)
-                    case TargetLoweringBackend.SumOfProductsLowering =>
-                        ExUnits(memory = 645_799142L, steps = 115775_218834L)
-                    case _ =>
-                        throw new IllegalStateException("Unsupported target lowering backend")
         if !result.isSuccess then println(s"Result:  $result")
         assert(result.isSuccess)
-        if !ignoreBudgetAssertions then {
-            assertBudgetClose(result.budget, scalusBudget)
-        }
+        assertSuccess(result, uplc.plutusV3)
 
         // Reference budget of the original benchmark: ExUnits(memory = 292_216349L, steps = 131954_064320L)
     }
 
     test("100_8x8") {
-        val result = compile {
+        val uplc = compile {
             val result = runKnights(100, 8)
 
             import scalus.cardano.onchain.plutus.prelude.List.*
@@ -290,27 +243,11 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             require(result === expected)
         }
             .toUplc(optimizeUplc = true)
-            .evalWithOptionalProfile
+        val result = uplc.evalWithOptionalProfile
 
-        val options = summon[Options]
-        val scalusBudget =
-            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // Explicit descAndNo sharing and insertion sort for at most eight moves.
-                ExUnits(memory = 733346016L, steps = 153067851900L)
-            else
-                options.targetLoweringBackend match {
-                    case TargetLoweringBackend.SirToUplcV3Lowering =>
-                        ExUnits(memory = 1645_356753L, steps = 452914_801705L)
-                    case TargetLoweringBackend.SumOfProductsLowering =>
-                        ExUnits(memory = 1315_097779L, steps = 235822_700067L)
-                    case TargetLoweringBackend.ScottEncodingLowering =>
-                        ExUnits(memory = 1315_097779L, steps = 235822_700067L)
-                }
         if !result.isSuccess then println(s"8x8 Result: $result")
         assert(result.isSuccess, s"Runtime failure: $result")
-        if !ignoreBudgetAssertions then {
-            assertBudgetClose(result.budget, scalusBudget)
-        }
+        assertSuccess(result, uplc.plutusV3)
 
         // Reference budget of the original benchmark: ExUnits(memory = 540_217437L, steps = 270266_226527L)
     }

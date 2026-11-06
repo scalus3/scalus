@@ -1,8 +1,9 @@
 package scalus.examples.cape.factorial
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{CardanoInfo, Coin, ExUnits}
+import scalus.cardano.ledger.{CardanoInfo, Script}
 import scalus.examples.cape.{CapeHarness, CapeTestSuite}
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.{Constant, Term}
 import scalus.uplc.internal.TermTraversal.foldLeft
@@ -20,20 +21,25 @@ import scalus.uplc.eval.Result
   * `-5..12` range. The "correctness beyond the fixture" tests below assert this directly, against a
   * `BigInt` factorial computed in Scala (never a hand-typed literal).
   */
-class FactorialCapeTest extends AnyFunSuite with ScalusTest {
+class FactorialCapeTest extends AnyFunSuite with ScalusTest with BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = FactorialCapeTestBudgets
     private given CardanoInfo = CardanoInfo.mainnet
     private val baseProgram = FactorialContract.baseProgram
     private val openProgram = FactorialContract.openProgram
+    private val baseScriptSize = Script.PlutusV3(baseProgram).script.size
+    private val openScriptSize = Script.PlutusV3(openProgram).script.size
 
     private val baseSuite = CapeTestSuite.load("/cape/factorial_naive_recursion/cape-tests.json")
     private val openSuite = CapeTestSuite.load("/cape/factorial/cape-tests.json")
 
-    test(s"Base script size: ${baseProgram.cborByteString.length} bytes") {
-        assert(baseProgram.cborByteString.length == 34)
+    test("Base script size") {
+        info(s"${baseProgram.cborByteString.length} bytes")
+        pinSize(baseProgram.cborEncoded.length)
     }
 
-    test(s"Open script size: ${openProgram.cborByteString.length} bytes") {
-        assert(openProgram.cborByteString.length == 74)
+    test("Open script size") {
+        info(s"${openProgram.cborByteString.length} bytes")
+        pinSize(openProgram.cborEncoded.length)
     }
 
     // The scenario requires results "computed dynamically, not hardcoded". A computed factorial
@@ -50,82 +56,18 @@ class FactorialCapeTest extends AnyFunSuite with ScalusTest {
         test(s"CAPE base: ${c.name}") {
             CapeHarness.run(baseProgram, c).foreach { budget =>
                 info(s"${c.name}: $budget")
-                val fee = budget.fee
-                expectedBaseBudgets.get(c.name).foreach { exp =>
-                    assert(budget == exp, s"${c.name} budget: expected $exp but got $budget")
-                }
-                expectedBaseFees.get(c.name).foreach { exp =>
-                    assert(fee == exp, s"${c.name} fee: expected $exp but got $fee")
-                }
+                pinEval(budget, baseScriptSize)
             }
         }
 
     for c <- openSuite.cases do
+        // FactorialOpen.factorial: one recursive call per four factors, so the cost grows in steps of four.
         test(s"CAPE open: ${c.name}") {
             CapeHarness.run(openProgram, c).foreach { budget =>
                 info(s"${c.name}: $budget")
-                val fee = budget.fee
-                expectedOpenBudgets.get(c.name).foreach { exp =>
-                    assert(budget == exp, s"${c.name} budget: expected $exp but got $budget")
-                }
-                expectedOpenFees.get(c.name).foreach { exp =>
-                    assert(fee == exp, s"${c.name} fee: expected $exp but got $fee")
-                }
+                pinEval(budget, openScriptSize)
             }
         }
-
-    private val expectedBaseBudgets: Map[String, ExUnits] = Map(
-      "factorial_0" -> ExUnits(memory = 1701, steps = 299937),
-      "factorial_1" -> ExUnits(memory = 3706, steps = 855935),
-      "factorial_2" -> ExUnits(memory = 5711, steps = 1_411933),
-      "factorial_3" -> ExUnits(memory = 7716, steps = 1_967931),
-      "factorial_4" -> ExUnits(memory = 9721, steps = 2_523929),
-      "factorial_5" -> ExUnits(memory = 11726, steps = 3_079927),
-      "factorial_8" -> ExUnits(memory = 17741, steps = 4_747921),
-      "factorial_10" -> ExUnits(memory = 21751, steps = 5_859917),
-      "factorial_12" -> ExUnits(memory = 25761, steps = 6_971913),
-      "factorial_negative" -> ExUnits(memory = 1701, steps = 299937)
-    )
-
-    private val expectedBaseFees: Map[String, Coin] = Map(
-      "factorial_0" -> Coin(120),
-      "factorial_1" -> Coin(276),
-      "factorial_2" -> Coin(432),
-      "factorial_3" -> Coin(588),
-      "factorial_4" -> Coin(743),
-      "factorial_5" -> Coin(899),
-      "factorial_8" -> Coin(1366),
-      "factorial_10" -> Coin(1678),
-      "factorial_12" -> Coin(1990),
-      "factorial_negative" -> Coin(120)
-    )
-
-    // FactorialOpen.factorial: one recursive call per four factors, so the cost grows in steps of four.
-    private val expectedOpenBudgets: Map[String, ExUnits] = Map(
-      "factorial_0" -> ExUnits(memory = 2302, steps = 439774),
-      "factorial_1" -> ExUnits(memory = 2302, steps = 439774),
-      "factorial_2" -> ExUnits(memory = 3106, steps = 759935),
-      "factorial_3" -> ExUnits(memory = 3106, steps = 759935),
-      "factorial_4" -> ExUnits(memory = 6419, steps = 1_908255),
-      "factorial_5" -> ExUnits(memory = 6419, steps = 1_908255),
-      "factorial_8" -> ExUnits(memory = 10536, steps = 3_376736),
-      "factorial_10" -> ExUnits(memory = 11340, steps = 3_696897),
-      "factorial_12" -> ExUnits(memory = 14653, steps = 4_845217),
-      "factorial_negative" -> ExUnits(memory = 2302, steps = 439774)
-    )
-
-    private val expectedOpenFees: Map[String, Coin] = Map(
-      "factorial_0" -> Coin(165),
-      "factorial_1" -> Coin(165),
-      "factorial_2" -> Coin(235),
-      "factorial_3" -> Coin(235),
-      "factorial_4" -> Coin(508),
-      "factorial_5" -> Coin(508),
-      "factorial_8" -> Coin(852),
-      "factorial_10" -> Coin(921),
-      "factorial_12" -> Coin(1195),
-      "factorial_negative" -> Coin(165)
-    )
 
     // ---- Correctness gate: the open program must compute correctly for EVERY integer input, not
     // just the 10 fixture cases (-5..12). `scalaFactorial` is a genuine Scala BigInt computation

@@ -1,8 +1,9 @@
 package scalus.examples.cape.linearvesting
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{CardanoInfo, ExUnits}
+import scalus.cardano.ledger.{CardanoInfo, Script}
 import scalus.examples.cape.{CapeHarness, CapeTestSuite}
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 
 /** CAPE test harness for the Linear Vesting benchmark.
@@ -10,33 +11,27 @@ import scalus.testing.kit.ScalusTest
   * Loads the v3.0.0 `cape-tests.json` fixtures via the shared `CapeTestSuite` loader and runs all
   * cases against the compiled `LinearVestingValidator`.
   */
-class LinearVestingCapeTest extends AnyFunSuite with ScalusTest {
+class LinearVestingCapeTest extends AnyFunSuite with ScalusTest with BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = LinearVestingCapeTestBudgets
     private given CardanoInfo = CardanoInfo.mainnet
     private val program = LinearVestingContract.program
     private val suite = CapeTestSuite.load("/cape/linear_vesting/cape-tests.json")
+    private val scriptSize = Script.PlutusV3(program).script.size
 
-    test(s"Script size: ${program.cborByteString.length} bytes") {
-        assert(program.cborByteString.length == 652)
+    test("Script size") {
+        info(s"${program.cborByteString.length} bytes")
+        pinSize(program.cborEncoded.length)
     }
 
     // Pins for the default CIP-0153 build (Options.releaseUntagged): Value.quantityOf lowers to
     // the lookupCoin/unValueData builtins. Requires canonically ordered fixture Values, which the
     // JVM harness (CapeTestSuite) always builds and CAPE's upstream fixture builder emits since
     // the canonical-Value-ordering fix (see docs/internal/UPLC_CAPE_VALUE_CANONICALITY_PR.md).
-    private val expectedBudgets: Map[String, ExUnits] = Map(
-      "partial_unlock_first_installment" -> ExUnits(memory = 62888, steps = 30853223),
-      "partial_unlock_mid_vesting" -> ExUnits(memory = 62888, steps = 30853223),
-      "partial_unlock_near_end" -> ExUnits(memory = 62888, steps = 30853223),
-      "partial_unlock_between_installments" -> ExUnits(memory = 62888, steps = 30853223),
-      "full_unlock_after_period_end" -> ExUnits(memory = 23122, steps = 8935746),
-      "full_unlock_well_after" -> ExUnits(memory = 23122, steps = 8935746)
-    )
-
     for c <- suite.cases do
         test(s"CAPE: ${c.name}") {
             CapeHarness.run(program, c).foreach { budget =>
                 info(s"${c.name}: $budget")
-                expectedBudgets.get(c.name).foreach(exp => assert(budget == exp))
+                pinEval(budget, scriptSize)
             }
         }
 }

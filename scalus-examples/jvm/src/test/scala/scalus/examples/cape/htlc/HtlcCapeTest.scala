@@ -1,8 +1,9 @@
 package scalus.examples.cape.htlc
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{CardanoInfo, ExUnits, RefScriptFee}
+import scalus.cardano.ledger.{CardanoInfo, RefScriptFee, Script}
 import scalus.examples.cape.{CapeHarness, CapeTestSuite}
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 
 /** CAPE test harness for the HTLC (Hashed Time-Locked Contract) benchmark.
@@ -10,25 +11,21 @@ import scalus.testing.kit.ScalusTest
   * Loads the v3.0.0 `cape-tests.json` fixtures via the shared `CapeTestSuite` loader and runs all
   * cases against the compiled `HtlcValidator`.
   */
-class HtlcCapeTest extends AnyFunSuite with ScalusTest {
+class HtlcCapeTest extends AnyFunSuite with ScalusTest with BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = HtlcCapeTestBudgets
     private given CardanoInfo = CardanoInfo.mainnet
     private val program = HtlcContract.program
     private val suite = CapeTestSuite.load("/cape/htlc/cape-tests.json")
     private val protocolParams = summon[CardanoInfo].protocolParams
     private val scriptSize = program.cborByteString.size
+    private val evaluatedScriptSize = Script.PlutusV3(program).script.size
     // Price it as the transaction's only reference script, using the repository's parameter snapshot.
     private val referenceScriptFee = new RefScriptFee().calculate(scriptSize).value
 
-    test(s"Script size: $scriptSize bytes") {
-        assert(scriptSize == 553)
+    test("Script size") {
+        info(s"$scriptSize bytes")
+        pinSize(scriptSize)
     }
-
-    private val expectedBudgets: Map[String, ExUnits] = Map(
-      "claim_well_before_timeout" -> ExUnits(memory = 43317, steps = 17949510),
-      "claim_just_before_timeout" -> ExUnits(memory = 43317, steps = 17949510),
-      "refund_just_after_timeout" -> ExUnits(memory = 40384, steps = 16564141),
-      "refund_well_after_timeout" -> ExUnits(memory = 40384, steps = 16564141)
-    )
 
     for c <- suite.cases do
         test(s"CAPE: ${c.name}") {
@@ -39,7 +36,7 @@ class HtlcCapeTest extends AnyFunSuite with ScalusTest {
                   s"${c.name}: $budget; fees (lovelace): reference-script=$referenceScriptFee, " +
                       s"execution=$executionFee, combined=$combinedFee"
                 )
-                expectedBudgets.get(c.name).foreach(exp => assert(budget == exp))
+                pinEval(budget, evaluatedScriptSize)
             }
         }
 }

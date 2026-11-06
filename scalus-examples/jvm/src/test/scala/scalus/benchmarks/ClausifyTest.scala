@@ -4,16 +4,19 @@ import scalus.compiler.{Compile, Ignore}
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.{compile, Options}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 
 import scala.annotation.nowarn
 import scala.language.implicitConversions
 
-class ClausifyTest extends AnyFunSuite, ScalusTest:
+class ClausifyTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite:
+    override protected def budgetTable: BudgetTable = ClausifyTestBudgets
+
     import ClausifyTest.*
     import scalus.uplc.eval.PlutusVM
 
@@ -43,89 +46,43 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
 
         val result = uplc.evaluateDebug
 
-        val options = summon[Options]
-        val scalusBudget =
-            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 31_290_337, steps = 8_992_712_599L),
-                  since38 = ExUnits(memory = 30_784_417, steps = 8_811_917_735L)
-                )
-            else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
-            then ExUnits(memory = 75014277L, steps = 22595514040L)
-            else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
-            then ExUnits(memory = 45835971L, steps = 7879192811L)
-            else {
-                // not tested
-                ExUnits(memory = 100000L, steps = 1000000000L)
-            }
-        assert(result.isSuccess)
-        assert(result.budget == scalusBudget)
+        assertSuccess(result, uplc.plutusV3)
 
         // Reference budget of the original benchmark: ExUnits(memory = 39891097L, steps = 12325496028L)
     }
 
     test("F2") {
-        val result = compile {
+        val uplc = compile {
             // (a = a = a) = (a = a = a)
             val formula = (1 <-> (1 <-> 1)) <-> (1 <-> (1 <-> 1))
             val expected = List.empty[LRVars]
             require(formula.clauses === expected)
         }
             .toUplcOptimized(false)
-            .evaluateDebug
+        val result = uplc.evaluateDebug
 
-        val options = summon[Options]
-        val scalusBudget =
-            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 39_176_085, steps = 11_226_210_839L),
-                  since38 = ExUnits(memory = 38_647_845, steps = 11_037_439_731L)
-                )
-            else
-                options.targetLoweringBackend match {
-                    case TargetLoweringBackend.SirToUplcV3Lowering =>
-                        ExUnits(memory = 93117893L, steps = 27997423766L)
-                    case TargetLoweringBackend.SumOfProductsLowering =>
-                        ExUnits(memory = 57029883L, steps = 9813458115L)
-                    case TargetLoweringBackend.ScottEncodingLowering =>
-                        // not tested
-                        ExUnits(memory = 100000L, steps = 1000000000L)
-                }
-
-        assert(result.isSuccess)
-        assert(result.budget == scalusBudget)
+        assertSuccess(result, uplc.plutusV3)
 
         // Reference budget of the original benchmark: ExUnits(memory = 50524767L, steps = 15570882882L)
     }
 
     test("F3") {
-        val result = compile {
+        val uplc = compile {
             // (a = a = a) = (a = a) = (a = a)
             val formula = (1 <-> (1 <-> 1)) <-> ((1 <-> 1) <-> (1 <-> 1))
             val expected = List.singleton[LRVars]((List.singleton[Var](1), List.empty[Var]))
             require(formula.clauses === expected)
         }
             .toUplcOptimized(false)
-            .evaluateDebug
+        val result = uplc.evaluateDebug
 
-        val options = summon[Options]
-        val scalusBudget =
-            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 105_256_146, steps = 30_069_454_177L),
-                  since38 = ExUnits(memory = 104_067_606, steps = 29_644_719_184L)
-                )
-            else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
-            then ExUnits(memory = 248968345L, steps = 74900219564L)
-            else ExUnits(memory = 152347441L, steps = 26254484239L)
-        assert(result.isSuccess)
-        assert(result.budget == scalusBudget)
+        assertSuccess(result, uplc.plutusV3)
 
         // Reference budget of the original benchmark: ExUnits(memory = 136054751L, steps = 41872495549L)
     }
 
     test("F4") {
-        val result = compile {
+        val uplc = compile {
             // (a = b = c) = (d = e) = (f = g)
             val formula = (1 <-> (2 <-> 3)) <-> ((4 <-> 5) <-> (6 <-> 7))
 
@@ -1076,44 +1033,24 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
             require(formula.clauses === expected)
         }
             .toUplcOptimized(false)
-            .evaluateDebug
+        val result = uplc.evaluateDebug
 
-        val options = summon[Options]
-        val scalusBudget =
-            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 137_519_579, steps = 38_791_759_143L),
-                  since38 = ExUnits(memory = 136_331_039, steps = 38_367_024_150L)
-                )
-            else ExUnits(memory = 344589971L, steps = 100725854354L)
-        // val scalusBudget = ExUnits(memory = 214968623L, steps = 37733187149L)
-        assert(result.isSuccess)
-        assert(result.budget == scalusBudget)
+        assertSuccess(result, uplc.plutusV3)
 
         // Reference budget of the original benchmark: ExUnits(memory = 181055087L, steps = 56754761923L)
     }
 
     test("F5") {
-        val result = compile {
+        val uplc = compile {
             // (a = a = a) = (a = a = a) = (a = a)
             val formula = (1 <-> (1 <-> 1)) <-> ((1 <-> (1 <-> 1)) <-> (1 <-> 1))
             val expected = List.empty[LRVars]
             require(formula.clauses === expected)
         }
             .toUplcOptimized(false)
-            .evaluateDebug
+        val result = uplc.evaluateDebug
 
-        val options = summon[Options]
-        val scalusBudget =
-            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 509_071_183, steps = 144_779_180_223L),
-                  since38 = ExUnits(memory = 504_369_103, steps = 143_098_851_487L)
-                )
-            else ExUnits(memory = 1205574641L, steps = 363306861308L)
-        // val scalusBudget = ExUnits(memory = 736503639L, steps = 127163562591L)
-        assert(result.isSuccess)
-        assert(result.budget == scalusBudget)
+        assertSuccess(result, uplc.plutusV3)
 
         // Reference budget of the original benchmark: ExUnits(memory = 660668247L, steps = 203182153626L)
     }
