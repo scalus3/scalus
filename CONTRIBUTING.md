@@ -581,7 +581,7 @@ Build and test one version locally with `sbt ci-jvm-3_3_9`, `sbt ci-jvm-3_9_0` o
 4. Version-specific compiler-plugin sources live in `scalus-plugin/src/main/scala-3.3` and
    `scala-3.8`; the selector in `build.sbt` picks `scala-3.8` for 3.5 and later. A new version needs
    a new directory only if the `StandardPlugin` registration hook changes again.
-5. Budgets and compiled script sizes differ between compiler generations.
-   `ScalaCompilerVersion.baseline` picks `pre38` on the 3.3.x LTS and `since38` on 3.8 and later. If
-   a new version desugars differently again, the affected pins in `scalus-examples` need a third arm
-   rather than a silent re-pin.
+5. Budgets and compiled script sizes differ between compiler generations. A `<Suite>Budgets`
+   table keeps one row per `Generation` (`Scala33` for the 3.3.x LTS, `Scala38` for 3.8 and later)
+   where the values differ, and `sbtn updateBudgets` writes both. If a new version desugars
+   differently again, add a `Generation` case rather than a silent re-pin.

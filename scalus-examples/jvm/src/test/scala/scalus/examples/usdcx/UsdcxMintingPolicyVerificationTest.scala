@@ -1,7 +1,7 @@
 package scalus.examples.usdcx
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.ScalaCompilerVersion
+import scalus.testing.budget.Generation
 import scalus.utils.Hex
 import scalus.verify.uplcblaster.LeanProofs
 
@@ -28,8 +28,8 @@ class UsdcxMintingPolicyVerificationTest extends AnyFunSuite {
         // Scala 3.8 and later compile some code more leanly, so the script kept is that of the
         // Scala 3.3 LTS build.
         assume(
-          !ScalaCompilerVersion.hasLeanDesugaring,
-          s"the kept script is Scala 3.3's; this is ${ScalaCompilerVersion.version}"
+          Generation.current == Generation.Scala33,
+          s"the kept script is Scala 3.3's; this is ${Generation.currentCompilerVersion}"
         )
         val compiled = UsdcxMintingPolicyContract.compiled.program
         assert(

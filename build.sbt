@@ -864,9 +864,6 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     )
     .jvmSettings(
       Test / fork := true,
-      // Expose the compiler version to tests so they can pick version-specific baselines
-      // (budgets / script sizes drift between the 3.3.x LTS and 3.8.x). See ScalaCompilerVersion.
-      Test / javaOptions += s"-Dscalus.test.scalaVersion=${scalaVersion.value}",
       // Tests that start a child JVM need the test classpath: sbt 2 starts forked tests through a
       // worker, so the child cannot use the forked JVM's `java.class.path`.
       Test / javaOptions += s"-Dscalus.test.classpath=${classpathFiles((Test / fullClasspath).value, fileConverter.value).map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}",

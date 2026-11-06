@@ -1,8 +1,8 @@
 package scalus.examples
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.ScalaCompilerVersion
 import scalus.cardano.blueprint.Contract
+import scalus.testing.budget.Generation
 
 import scala.io.Source
 import scala.jdk.CollectionConverters.*
@@ -67,7 +67,7 @@ class ExampleScriptHashTest extends AnyFunSuite {
     }
 
     test("every example contract keeps its script hash") {
-        assume(!ScalaCompilerVersion.hasLeanDesugaring, "the table is for the Scala 3.3 LTS")
+        assume(Generation.current == Generation.Scala33, "the table is for the Scala 3.3 LTS")
         val actual = contracts
             .flatMap { (name, contract) =>
                 val validators = contract.blueprint.validators

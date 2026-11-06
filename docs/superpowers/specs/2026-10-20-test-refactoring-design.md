@@ -496,7 +496,7 @@ Definitions for this section:
 - When the pinned values differ between compiler generations, the pin MUST hold one value per
   generation. `[BP-6]`
 - The compiler generation MUST be readable on every platform and project that runs a pinned
-  test. Today only `scalusExamplesJVM` sets `-Dscalus.test.scalaVersion`. `[BP-6a]`
+  test. `Generation.current` reads it at compile time, so it needs no build setting. `[BP-6a]`
 - A pin that checks several `Options` MUST hold one value per `Options`. `[BP-6b]`
 - On a mismatch, the failure message MUST show the expected and actual values and the
   difference in percent, for each pinned quantity. It MUST show the pin key, and the percent

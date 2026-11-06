@@ -13,11 +13,15 @@ package scalus
   * `eject-examples` — which bundle the example tests but depend only on published artifacts — can
   * still resolve `scalus.ScalaCompilerVersion`.
   *
-  * The active compiler version is injected by build.sbt (`-Dscalus.test.scalaVersion`). It can't be
-  * read from `scala.util.Properties.versionNumberString`, which reports the 2.13 standard-library
-  * version (`2.13.x`) on the Scala 3.3 LTS rather than the compiler version. When the property is
-  * absent (e.g. an ejected project, which pins the 3.3.x LTS) it defaults to `"3.3.9"`.
+  * The compiler version comes from the system property `scalus.test.scalaVersion`, which the Scalus
+  * build no longer sets. When the property is absent it defaults to `"3.3.9"`, so on Scala 3.8 and
+  * later it reports the wrong generation. Pin budgets in a `<Suite>Budgets` table instead: the
+  * table reads the generation at compile time with `scalus.testing.budget.Generation.current`.
   */
+@deprecated(
+  "pin budgets in a <Suite>Budgets table; use scalus.testing.budget.Generation.current for the generation",
+  "1.5.0"
+)
 object ScalaCompilerVersion {
 
     /** The compiler version building the tests, e.g. `"3.3.9"` or `"3.9.0"`. */
