@@ -54,6 +54,26 @@ private[verify] object PropMacro {
         )
     }
 
+    /** [[Props.limitedData]]: the type of `A`, its decoder, and the limits `limit` says. */
+    def limitedData[A: Type](limit: Expr[A => Boolean], decode: Expr[FromData[A]])(using
+        Quotes
+    ): Expr[LimitedData] = encodedParameter[A](limitsOf(limit), decode)
+
+    /** [[Props.unlimitedData]]: the type of `A` and its decoder, without limits. */
+    def unlimitedData[A: Type](decode: Expr[FromData[A]])(using Quotes): Expr[LimitedData] =
+        encodedParameter[A]('{ Limits.none }, decode)
+
+    private def encodedParameter[A: Type](limits: Expr[Limits], decode: Expr[FromData[A]])(using
+        Quotes
+    ): Expr[LimitedData] =
+        '{
+            LimitedData.of(
+              Props.variableType(scalus.compiler.compile((value: A) => value)),
+              scalus.compiler.compile((data: Data) => data.to[A](using $decode)),
+              $limits
+            )
+        }
+
     /** The limits that the lambda literal `limit` says of its parameter
       * ([[Props.forAllDataLimited]]): limits on the length of its collections, joined with `&&`.
       * Each is `maxCollectionLength(x) <= n`, or a comparison of the length of a collection of `x`

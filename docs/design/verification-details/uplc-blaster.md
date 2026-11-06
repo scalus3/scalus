@@ -432,6 +432,24 @@ through the types around it.
   value and nothing is unsound; a counterexample that the two disagree on is replayed against a
   layout Lean did not read, and ends as inconclusive. A name of the depth the layout is cut at
   would tell them apart, with the types in it that repeat one of them named for it too.
+- **A claim compiled total.** The rejecting form needs a claim that returns, and falls back to
+  the statement as written where one fails. A claim compiled so that each place it can fail, an
+  `error`, a partial builtin, returns `false` instead would make the rejecting form exact for
+  every claim, with neither the claim that it returns nor the fallback: in effect exceptions in
+  UPLC, a transformation of the claim and of what it calls.
+- **The limits of what the rejected runs read.** A limit on a part the runs never read multiplies
+  the guard's shapes (Vesting: 31 min with the outputs limited, 5 without). The tactic does not
+  tell which parts a run reads, so the limits are the author's; it could tell from the programs'
+  reads, or warn of a limited part that no program reads.
+- **Vesting's third guarantee and liveness over real contexts.** Both are tagged `Unfinished`
+  (see [What `VestingVerificationTest` covers](#what-vestingverificationtest-covers)): the third
+  guarantee's search for its budget climbs past 2500 steps by spurious counterexamples, and an
+  accepted run is the whole validator on every path. Lean's profiler on a check written at a small
+  budget would show which reads branch; a clause that read the datum once, as the validator does,
+  or tighter limits for liveness alone, are what to try.
+- **HTLC and the payment splitter over real contexts.** They still build contexts from the `Data`
+  of their fields, with `ScriptContextData`, which goes once they quantify over real contexts as
+  the vesting suite does.
 - **Two walks of one name throw.** `LeanRecursions` fails with an exception where two walks of
   different text have one 64-bit name, inside `lower`, whose other failures are a `Left`. It is
   an invariant, not an error a statement can meet, but it could be told as a reason.
@@ -655,6 +673,107 @@ The weak readings need `runFor`. With `runSteps`, the negative reading of `denot
 reject `State.Error`, which might be an exhausted budget, so it would be `True`. A premise
 `denotes(f(x))` would then say nothing, and `!denotes(e)` could never be proved.
 
+## The rejecting form
+
+A statement that a success implies a claim, `succeeds(validator, ctx) ==> signedBy(ctx)`, is as
+written two programs: the validator's, whose run Lean explores on every path to its end, and the
+claim's. The rejecting form is one program, `if claim then error else validator`, which fails on
+every value where the statement holds. Lean's run of it ends where the claim holds, and on every
+other path at the check that rejects it: it does not run the validator's paths where the claim
+holds, which are most of them, and the longest.
+
+Measured on Vesting's "every accepted spend is signed by the beneficiary" (2026-11-05), with the
+budget fixed from a replayed context:
+
+| Statement | Limits | Result |
+|---|---|---|
+| as written, one input | outputs and signatories at most one, values of one token | proved at 2444 steps, 8 min |
+| rejecting form, two inputs | as above | proved at 3600 steps, 31 min |
+| rejecting form, two inputs | inputs, signatories and the inputs' values only | proved at 3300 steps, 5 min |
+
+A limit on what no run that matters reads costs: the guard walks it, and each shape it lets
+through runs the program again. A rejected run reads no output.
+
+`lower` uses the rejecting form for `premise ==> claim` in a positive position, where the premise
+is a success, of an expression (`denotes`) or of a call (`succeeds`), the claim is tests (a
+`Bool`, an `Equal` or a conjunction of them, one claim `a && b`), and the statement quantifies over
+values. Elsewhere the rewritten statement, which is stronger, would prove less: under `!`, in a
+premise, inside `<=>`. A test as the premise may guard a conclusion that fails where it is false,
+as `(x != 0) ==> (10 / x > 1)`, and so may a call whose continuation is a test; the expansion of
+`whenReturns` calls the function in its conclusion, which need not return; and a closed statement
+has nothing to prune. A check within a budget (`Budget.Within`) is of the statement as written:
+there a run the budget cuts counts for the statement, and where the claim is false the rejecting
+program runs the validator after it, so its bound would not be that of the validator's run.
+
+The claim and the premise go inside the rejecting program without the definitions the compiler put
+around them of the functions the statement registers, as the operands of `==` do: a call of such a
+function inside the program is linked to its registered program, as a call at the top of a test is,
+and not compiled again from its source.
+
+The rewritten statement claims that the claim returns on every value, and that the rejecting
+program fails: a claim that failed would fail the program whatever the validator does, where the
+statement is false if the validator succeeds. `lower` lowers the statement as written too
+(`Lowered.unrewritten`), over the same binders, and the replay of a counterexample decides by it,
+running the premise's program, which Lean does not:
+
+- false as written: a refutation;
+- true as written and false as rewritten: the claim fails where the premise does not hold, as
+  `denotes(unIData(d)) ==> equal(iData(unIData(d)), d)` does where `d` is no integer. The rejecting
+  form decides nothing.
+
+The rejecting form is an attempt. Where it ends inconclusive, for that reason or another, the
+statement as written is checked: a check at a given budget again at that budget, and a search
+again from its start. The attempt has half the time, and the statement as written what is left of
+it, so the time limit is that of both; where neither decides, the reason is both forms'. Without
+a time limit the attempt has none either, and the statement as written is checked only where the
+attempt ends. An attempt that failed, as on an error of Lean's, is reported as it is, without the
+statement as written. A spurious counterexample of a check at a given budget is not measured in
+the attempt, but in the check as written; in a search, a counterexample of the solver's
+characters, on whose renamed bytes both forms hold, ends the attempt, as no budget changes it.
+Another reason is the solver's byte strings: they
+may hold characters no byte string has (Lean-blaster#389), and the claim that the claim returns,
+which the statement as written does not make where the premise fails, can be false of them only.
+The one-shot mint's deployed statement met it: its counterexample was of such characters, which
+replay as bytes on which both forms hold.
+
+A result the statement as written decided says so (`Artifact.asWritten`), with the programs of
+the statement as written, and is kept with the note `form: as written`: a later run checks the
+statement as written first, and the rejecting form in the time left, where the statement as
+written decides nothing now. What is kept rests on both lowerings: the fingerprint has the text
+and the programs of both. So a claim that returns `false` where it does not hold gets the speed,
+and a statement the statement as written decided is checked as written first.
+`premise ==>? claim` (`Prop.Rejects`) is the rejecting form itself:
+it holds where the claim fails ([its semantics](prop-semantics.md#4-connectives)), so its check is
+the rejecting program alone, in any position, with no claim that the claim returns and no fallback.
+A claim of several tests is the one test `a && b`, which fails where `a` fails, and where `a` holds
+and `b` fails. Within a budget its bound is that of its rejecting program. A claim that failed
+wherever the premise holds would be proved of every value: `LeanProofs.holdsAsImplicationOn`
+reads the statement with `==>` on a value, on the Scalus CEK, so that a sample the function
+accepts shows the claims return `true` there, as the vesting suite's samples do for `spend`'s
+clauses.
+
+The one-shot mint's deployed statement as the script reads its context is stated with `==>?`:
+its claim reads the context with the script's own deserializer, and fails where that cannot read
+it, where the statement of the context's own type says what the script does. Its rejecting program
+runs the deserializer and then the script, so its budget is about twice theirs: 5000 steps, proved
+in 75 s.
+
+A guarantee the Verifier makes of a function's clauses, `denotes(body) ==> clause`, is in the
+rejecting form too. A clause that fails where the function fails makes the attempt end
+inconclusive, and the first run spends up to half its time on it. The one-shot mint's clauses read
+the policy's own tokens, and failed where the mint names none, as the policy does; `ownTokens`
+returns none there now, and the rejecting form proves them at 4010 steps, where the statement as
+written took 5740.
+
+A call obligation (`Origin.Obligation`) is checked as written. Its premise is the caller's code up
+to the call, `reach`, and its claim that code with the precondition at the call, `check`: the
+rejecting form would prune nothing, would run that code once more, and its claim fails wherever
+that code fails, as at a `require` before the call. Follow-up: where the precondition returns on
+every value of its variables, `check` fails exactly where `reach` does, and the obligation is the
+one program `check`, which never returns `false` (`true ==>? check`), so that the caller's code up
+to the call runs once instead of twice. That the precondition returns would be a statement of its
+own, over the callee's variables.
+
 ## The Lean check
 
 For a statement over `x0 : BigInt` and `x1 : Boolean` with one leaf, the tactic writes the file
@@ -738,6 +857,13 @@ messages, each after a `Content-Length` header, on the server's standard input a
   a directory, the tactic writes every check it runs there, each in a directory of its own.
   `tactic.withChecksKeptIn(directory)` says the same in code, in place of the variable, and so do
   `LeanProofs` and a `LeanProofsSuite`'s `keptChecksDirectory`.
+- **Tracing a run.** With the environment variable `SCALUS_BLASTER_TRACE` set, the tactic says
+  what it does, a line at a time on the standard output, each line starting with
+  `[uplc-blaster] <statement>:`: the lowering of each statement (its programs and its formula,
+  with `(as written)` after the name for the lowering as written), the rejecting form's attempt
+  and what it came to, each check with its budget, its time and its outcome, the budget Lean's
+  machine counted next, and on each replay what each program did on the values (`#n` is the
+  program `n` of the formula), in each lowering.
 
 The verdict is read from the messages Lean reports, which are Blaster's:
 
@@ -1103,6 +1229,12 @@ What is not stated, and why:
 properties of the vesting example. The JVM tests of `scalus-examples` depend on this module and
 on its ScalaTest layer (`LeanProofsSuite`), so a contract's proofs sit next to its other tests.
 
+Its statements about the validator quantify over real script contexts, `forAllData[ScriptContext]`
+or a `forAllDataLimited` one, never over a transaction built in the statement: a closed sample is
+the only context written out. Each statement over limited contexts has its counterpart over every
+context: proved where the validator rejects before it reads a list of the context, and otherwise
+an `Unfinished` test, which shows what the limits are for.
+
 | About | Statement | Quantified over | Budget | Time |
 |---|---|---|---|---|
 | `linearVesting` | nothing is vested before the start | the datum, a `Config`, and the time | 400 | 7 s |
@@ -1110,57 +1242,52 @@ on its ScalaTest layer (`LeanProofsSuite`), so a contract's proofs sit next to i
 | | it returns: no division by a zero duration | | | 1 s |
 | | its contract, read from its body: it returns, and for `initialAmount >= 0`, `0 <= vested <= initialAmount` | | | 4 s |
 | | it does not decrease with time, for `initialAmount >= 0` | and a second time | | 2 s |
-| the validator | an output without a datum cannot be spent | `txInfo`, redeemer, reference: any `Data` | 600 | 2 s |
-| | a non-positive amount is rejected | `txInfo`, reference, datum: any `Data` | | 1 s |
-| | nothing but spending is validated | `txInfo`, redeemer, script info: any `Data` | | 2 s |
-| a withdrawal | a sample is accepted, and rejected unsigned | closed, `native_decide` | 12000 | 1 s |
-| | unsigned, it is rejected | datum, locked and requested amounts, time, fee; outputs: any `Data` | | 14 s |
-| | it leaves at least what has not vested | the same, and the amount paid | | 24 s |
-| | after the end, everything locked can be withdrawn | datum, locked amount, time, fee | | 15 s |
-| | the three guarantees `spend` states with `Spec.ensures`: the beneficiary signed, something is withdrawn, at least the unvested amount stays locked | a `Withdrawal`: the shape's numbers, and one signer of any key | | 17 s, together |
-| | had `linearVesting` expected `initialAmount >= 0`, its call would owe it: refuted; proved under the withdrawal's own contract | a `Withdrawal` | | 11 s |
+| the validator | an output without a datum cannot be spent | every script context, `forAllData[ScriptContext]` | 600 | 13 s |
+| | a non-positive amount is rejected | | | 9 s |
+| | nothing but spending is validated | | | 9 s |
+| a withdrawal | samples: everything after the end is accepted, and rejected unsigned; halfway, what has vested is accepted, and one lovelace more rejected | closed, `native_decide` | 20000 | under 1 s each |
+| | `spend`'s guarantees, stated with `==>?`: the beneficiary signed | every context of at most two inputs and one signatory, the inputs' values of one token, `limitedData` | 3300 | 149 s |
+| | something is withdrawn | every script context, `unlimitedData` | | 10 s |
+| | at least the unvested amount stays locked | of at most two inputs, as the first | | not finished (`Unfinished`) |
+| | the first and the third | every script context | | not finished (`Unfinished`) |
+| | had `linearVesting` expected `initialAmount >= 0`, its call would owe it: refuted; proved under the validator's own contract | of at most two inputs, as the first guarantee | 3000 | 289 s; 310 s |
+| | the same two | every script context | | not finished (`Unfinished`) |
+| | after the end, everything locked can be withdrawn | every context of at most two inputs and two outputs | | not finished (`Unfinished`) |
+| | the same | every script context | | not finished (`Unfinished`) |
 
-The times are of the tests, each with its negative controls, in the suite's Lean server; the
-first includes loading the workspace. The suite takes about 2 min. Before the tactic used the
-language server, with a Lean process for every check, it took about 5, and the three guarantees
-alone 67 s together and 3 min one by one.
+The times are of single checks with Blaster compiled, in the suite's Lean server (2026-11-06).
 
 The validator's specification is written in `VestingValidator` itself. `spend` states its three
-guarantees at its head; `Verifier.guarantees` finds them in the code of the function that builds
-a withdrawal and validates it, where the inlined handler ends up, and they are proved as one
-statement, which runs the validator once and not once per clause. The
-schedule's contract is an `ensuring` clause of `linearVesting`, read with
+guarantees at its head; `Verifier.guarantees(spends.ref, fewInputs, Connective.Rejects)` finds them
+in the code of `spends`, the validator on a typed context, where the inlined handler ends up, over
+the contexts `fewInputs` says ([`Props.limitedData`](../verification-overview.md#37-function-contracts-pre--and-postconditions)). Each
+is proved alone: one rejecting program of all three would run every way one of them is false on
+into the validator. They are stated with `==>?`, as a clause reads the datum, the redeemer and the
+spent input as the validator does, and fails where they cannot be read, where the validator
+rejects too: there it says nothing, and the rejecting program ends at once. A clause written to
+return there, reading a default instead, lets each of the datum's twenty-odd unreadable shapes run
+on into the validator, which reads the datum after it walks the inputs, and Lean does not finish.
+
+The schedule's contract is an `ensuring` clause of `linearVesting`, read with
 `FunctionContract.inSource` and proved over a `Config` variable. Its bound is conditional, not a
 precondition, because the validator would not establish one. It has two negative controls, stated
 with `contract(linearVesting)(expects, ensures)`: a wrong postcondition and a bound without its
-condition; the monotonicity statement and the three statements about withdrawals have
-one each. For two of the latter, a refutation is an accepted withdrawal: the solver finds one in
-about 45 s, and it is replayed on the Scalus CEK.
+condition; the monotonicity statement has one. The samples are what the statements about
+withdrawals are not vacuous of: the validator accepts a withdrawal, and the bound of what stays
+locked is exact.
 
-The obligation is `Verifier.obligations` on a function of a `Withdrawal` that builds the context
-and calls the validator; see
-[call-site obligations](prop-semantics.md#call-site-obligations). The registered validator itself
-takes any `Data`, and its obligation is one of the
-[statements that do not finish](#statements-that-do-not-finish).
-
-**Withdrawals have one shape.** The context is written with the ledger types in the statement
-(`ScriptContext(TxInfo(inputs = …), …).toData`), over integer variables: one input, the vesting
-output; at most one output, to the beneficiary; a fixed beneficiary. A statement says nothing about
-another shape.
+The obligation is `Verifier.obligations` of `spends` over the same contexts; see
+[call-site obligations](prop-semantics.md#call-site-obligations). It is checked as written, as
+every obligation is ([The rejecting form](#the-rejecting-form)).
 
 What the suite shows about the tactic:
 
-- **The budget is not the limit for a program without a data-dependent loop.** The validator makes
-  thousands of steps on a withdrawal, and those statements prove at a budget of 12000. The cost
-  explosion measured on `gcd` ([Budgets](#budgets)) comes from a loop whose length depends on a
-  symbolic value, where every further step can branch.
-- **A loop over a list of unknown length is not finished by Lean.** The outputs can be left as
-  any `Data` in the statement about an unsigned withdrawal, because every run fails before the
-  validator reads them. In the statement about the unvested amount only the runs it is about
-  fail before that, and the others go on into the list. It is proved at a budget just beyond
-  the rejection, which the tactic finds, and gives no result at the budget of a whole
-  withdrawal. See
-  [Statements that do not finish](#statements-that-do-not-finish).
+- **A budget just beyond the runs a statement is about.** A rejected run ends at the check that
+  rejects it; every further step lets the runs that have not ended read on, and doubles the time.
+  The first two guarantees prove at 3300; the third's search climbed from 1173 to 2517 steps, by
+  counterexamples of a minute or two each, and did not finish there.
+- **An accepted run is the whole validator on every path.** Liveness has Lean run the validator to
+  its end on every context within the limits, and Lean was still in that run after 16 minutes.
 - **The proofs are not about the published script.** `VestingContract` compiles with
   `Options.release`, which uses the `Value` builtins that Lean's model lacks
   ([Limits](#limits)); the statements are about the validator compiled with `UplcBlaster.options`.
@@ -1351,7 +1478,9 @@ larger context; and the published scripts, which `MintingPolicy` compiles with o
 ## Statements that do not finish
 
 Some statements are natural to write, and Lean does not return on them. `UplcBlasterLimitsTest`
-and one test of `VestingVerificationTest` state them, with a time limit. In each, how long a loop
+and two tests of `VestingVerificationTest` state them, with a time limit: the third of `spend`'s
+guarantees, and that everything can be withdrawn after the end, over contexts of at most two
+inputs. In each, how long a loop
 runs depends on a quantified value.
 
 These tests carry the ScalaTest tag `Unfinished`. The build leaves it out of `test` and
@@ -1368,7 +1497,7 @@ These tests carry the ScalaTest tag `Unfinished`. The build leaves it out of `te
 | | 400 | spurious counterexample | 101 s |
 | `gcd(x, y) >= 0` | 200 | spurious counterexample | 5 s |
 | | 400 | none | over 200 s |
-| vesting: at least the unvested amount stays locked, for any outputs | 1000 | spurious counterexample | 10 s |
+| vesting, of one shape of withdrawal (the suite's former statement): at least the unvested amount stays locked, for any outputs | 1000 | spurious counterexample | 10 s |
 | | 1500 | spurious counterexample | 18 s |
 | | 2000 to 12000 | none | over 150 s; at 4000, over 7 min |
 

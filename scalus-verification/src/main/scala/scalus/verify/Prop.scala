@@ -60,12 +60,28 @@ enum Prop {
     case And(a: Prop, b: Prop)
     case Or(a: Prop, b: Prop)
     case Implies(a: Prop, b: Prop)
+
+    /** `premise` rejects every value that `claim`, a test, is false of: where the claim returns
+      * `false`, the premise does not hold. Where the claim holds, or fails, it says nothing.
+      * Written `premise ==>? claim`. Unlike `premise ==> claim`, a claim that fails is no
+      * counterexample: where the premise holds of a value the claim cannot be evaluated of, as a
+      * validator that accepts a context its claim cannot read, this holds. A tactic checks it in
+      * the rejecting form, `if claim then error else premise`, whose failure on every value it is.
+      * A claim of several tests, `Prop(a) && Prop(b)`, is the one test `a && b`, which reads `b`
+      * only where `a` holds: it fails where `a` fails, and where `a` holds and `b` fails.
+      */
+    case Rejects(premise: Prop, claim: Prop)
     case Iff(a: Prop, b: Prop)
     case Not(a: Prop)
 
     def &&(q: Prop): Prop = And(this, q)
     def ||(q: Prop): Prop = Or(this, q)
     def ==>(q: Prop): Prop = Implies(this, q)
+
+    /** [[Rejects]]: `this` rejects every value `q`, a test, is false of; a value `q` fails on says
+      * nothing.
+      */
+    def ==>?(q: Prop): Prop = Rejects(this, q)
     def <=>(q: Prop): Prop = Iff(this, q)
     def unary_! : Prop = Not(this)
 
@@ -266,6 +282,34 @@ object Props {
         inline body: A => Prop | Boolean
     )(using inline decode: FromData[A]): Prop =
         ${ PropMacro.forAllDataLimited[A]('limit, 'body, 'decode) }
+
+    /** The parameter of a function, in the statements a verifier makes of it, as a
+      * [[forAllDataLimited]] variable: over the `Data` encodings of the values of `A` that meet
+      * `limit`, which says what [[forAllDataLimited]]'s limit does. The function is of one
+      * parameter of type `A`, as the validator's entry point on a typed context:
+      *
+      * {{{
+      * val spends = FunctionDef.named(
+      *   "spends",
+      *   (ctx: ScriptContext) => VestingValidator.validate(ctx.toData)
+      * )
+      * verifier.guarantees(
+      *   spends.ref,
+      *   limitedData[ScriptContext](ctx => ctx.txInfo.inputs.length <= 2)
+      * )
+      * }}}
+      */
+    inline def limitedData[A](inline limit: A => Boolean)(using
+        inline decode: FromData[A]
+    ): LimitedData = ${ PropMacro.limitedData[A]('limit, 'decode) }
+
+    /** The parameter of a function, in the statements a verifier makes of it, as a [[forAllData]]
+      * variable: over the `Data` encodings of all the values of `A`, without limits. It is
+      * [[limitedData]]'s counterpart: a statement over every script context, of which Lean does not
+      * finish a validator that walks a list of the context.
+      */
+    inline def unlimitedData[A](using inline decode: FromData[A]): LimitedData =
+        ${ PropMacro.unlimitedData[A]('decode) }
 
     /** The length of the longest list or map of `value`: of no use but in a limit of
       * [[forAllDataLimited]], which says it of the variable, and does not run it.
@@ -478,6 +522,7 @@ object Props {
             case Prop.And(left, right)     => Prop.And(loop(left), loop(right))
             case Prop.Or(left, right)      => Prop.Or(loop(left), loop(right))
             case Prop.Implies(left, right) => Prop.Implies(loop(left), loop(right))
+            case Prop.Rejects(left, right) => Prop.Rejects(loop(left), loop(right))
             case Prop.Iff(left, right)     => Prop.Iff(loop(left), loop(right))
             case Prop.Not(inner)           => Prop.Not(loop(inner))
         if names.isEmpty then prop else loop(prop)
@@ -534,6 +579,7 @@ object Props {
 
     extension (inline b: Boolean) {
         inline def ==>(q: Prop): Prop = Prop.Implies(Prop(b), q)
+        inline def ==>?(q: Prop): Prop = Prop.Rejects(Prop(b), q)
         infix inline def implies(q: Prop): Prop = Prop.Implies(Prop(b), q)
     }
 }

@@ -151,6 +151,7 @@ object Prop {
 def &&(q: Prop): Prop
 def ||(q: Prop): Prop
 def ==>(q: Prop): Prop
+def ==>?(q: Prop): Prop             // where q, a test, is false, this does not hold; where q fails, nothing
 def <=>(q: Prop): Prop
 def unary_! : Prop
 def implies(q: Prop): Prop          // ==> with the lowest precedence
@@ -163,6 +164,9 @@ above are syntax sugar; compilation turns them into binder and body nodes. The v
 execute a Scala callback to establish the claim. Scala ranks an operator by
 its first character, so `==>` binds like `==` and `<=>` like `<`, both tighter than `&&` and `||`:
 `p && q ==> r` means `p && (q ==> r)`. The alphanumeric aliases `implies` and `iff` bind loosest.
+`==>?` binds as `==>` does. It differs from `==>` only where the claim fails, which it counts as
+holding, and is checked in the rejecting form
+([statement semantics, §4](verification-details/prop-semantics.md#4-connectives)).
 
 The nested syntax for `∀z ∀x. x ≠ 0 ⇒ ∃y. x·y > z` is:
 
@@ -424,6 +428,14 @@ Both forms elaborate to the same statement, with `f` bound to the target:
   `verifier.obligations(g)` declares, for each call in `g` of a function with a contract, the
   statement that the call's arguments satisfy the precondition
   ([statement semantics](verification-details/prop-semantics.md#call-site-obligations)).
+
+  A validator's entry point takes a script context, whose lists have any length, and the tactic
+  cannot follow a loop over one. `Props.limitedData[ScriptContext](ctx => limits)`, given to
+  `guarantees` or `obligations`, makes the function's parameter a `forAllDataLimited` variable:
+  the statements are of every context within the limits, as a hand-written statement over
+  `forAllDataLimited` is. `guarantees(f, parameter, Connective.Rejects)` states each clause with
+  `==>?`: a clause that reads the datum as the validator does fails where the validator cannot
+  read it, which rejects the spend too, and says nothing there.
 
 ### 3.8 Calls and the function table
 
@@ -833,7 +845,12 @@ final class Verifier {
     def contract(name: String, contract: FunctionContract[?, ?]): Statement // §3.7
     def contracts(function: FunctionRef[?, ?]): List[Statement]
     def guarantees(function: FunctionRef[?, ?]): StatedGuarantees
+    // over the values of the one parameter that `parameter` says, a forAllDataLimited variable
+    def guarantees(function: FunctionRef[?, ?], parameter: LimitedData): StatedGuarantees
+    def guarantees(function: FunctionRef[?, ?], parameter: LimitedData,
+                   connective: Connective): StatedGuarantees // Implies (==>) or Rejects (==>?)
     def obligations(caller: FunctionRef[?, ?]): CallObligations
+    def obligations(caller: FunctionRef[?, ?], parameter: LimitedData): CallObligations
     def addTheorem(theorem: Theorem): Unit
     def prepare(statement: Statement, tactic: Tactic): Either[CompatibilityReport, PreparedRun]
     def prove(prepared: PreparedRun): ExecutionResult

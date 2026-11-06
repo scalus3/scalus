@@ -224,17 +224,24 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // minting context as `mint` does, so the two tests read the `Data` with the same builtins,
         // and neither has a `dropList` for the tactic to write as steps: the proof does not rest
         // on that rewriting. It takes the deserializer as given; the statement above, of the
-        // context's own type, is of the deserializer too. The two cost about the same, two
-        // minutes in Lean: the paths are mostly the comparisons of the script's own test, whatever
-        // the statement reads.
+        // context's own type, is of the deserializer too.
+        //
+        // It is stated with `==>?`: a context the deserializer cannot read, where the claim fails,
+        // is no counterexample, and the claim says nothing of it. The statement above says what
+        // the script does there. So the check is the rejecting program alone, `if claim then error
+        // else script`, without the claim that the claim returns, which fails where the
+        // deserializer does, and without a check of the statement with `==>` after it.
         val asRead = verifier.statement(
           "one_shot_mint.deployed.only_the_seed_mints_as_read.two_of_each",
           forAllDataLimited[v1.ScriptContext](ctx =>
               ctx.txInfo.inputs.length <= 2 && ctx.txInfo.mint.toSortedMap.length <= 2 &&
                   ctx.txInfo.mint.toSortedMap.values.forall(tokens => tokens.length <= 2)
-          )(ctx => succeeds(deployed, ctx.toData) ==> onlyTheSeedMintsAsRead(ctx.toData))
+          )(ctx => succeeds(deployed, ctx.toData) ==>? onlyTheSeedMintsAsRead(ctx.toData))
         )
-        check(asRead, 2500)
+        // The rejecting program runs the claim's deserializer and then the script: at the 2500
+        // steps the statement with `==>` was proved at, the runs are cut, and at 5000 it is proved
+        // in 75 s.
+        check(asRead, 5000)
     }
 
     test(

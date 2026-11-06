@@ -21,7 +21,7 @@ import scalus.verify.uplcblaster.MappingPlan.Quantifier
 
 import java.nio.file.{Files, Path}
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration, SECONDS}
 
 /** How far a check lets the program of each test run.
   *
@@ -208,7 +208,18 @@ final class UplcBlaster private (
 
     override def prepare(goal: Goal): Either[CompatibilityReport, Prepared] =
         UplcBlaster
-            .lower(goal.statement.prop, goal.functions, fixedPlan)
+            .lower(
+              goal.statement.prop,
+              goal.functions,
+              fixedPlan,
+              // Within a budget a run the budget cuts counts for the statement, and where the
+              // claim is false the rejecting program runs the premise after it: a proof in the
+              // rejecting form would not be of the inputs on which the premise and the claim end
+              // within the budget. The statement is checked as written.
+              rejecting = UplcBlaster.rejectable(goal.statement.origin) && !budget.isInstanceOf[
+                Budget.Within
+              ]
+            )
             .flatMap(lowered =>
                 budget match
                     case Budget.Within(_) if lowered.hasExistential =>
@@ -221,6 +232,7 @@ final class UplcBlaster private (
                     case Budget.Within(steps) => Right(lowered.copy(within = Some(steps)))
                     case _                    => Right(lowered)
             )
+            .map(UplcBlaster.named(_, goal.statement.name))
             .left
             .map(reason =>
                 CompatibilityReport(
@@ -231,22 +243,30 @@ final class UplcBlaster private (
     /** A search starts at the budget that was kept, also with another revision of Blaster or of the
       * library: where the statement is still decided there, that is one check.
       */
-    override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult =
-        checkOrSearch(
-          prepared,
-          earlier.flatMap(_.notes.get(UplcBlaster.budgetNote)).flatMap(_.toIntOption)
-        )
+    override def run(prepared: Prepared, earlier: Option[Kept]): ExecutionResult = {
+        val first = earlier.flatMap(_.notes.get(UplcBlaster.budgetNote)).flatMap(_.toIntOption)
+        // Where the statement as written decided before, the rejecting form decided nothing then:
+        // the statement as written is checked first, and the rejecting form after it, where it
+        // decides nothing now.
+        val decidedAsWritten =
+            earlier.exists(_.notes.get(UplcBlaster.formNote).contains(UplcBlaster.asWrittenForm))
+        checkOrSearch(prepared, first, asWrittenFirst = decidedAsWritten)
+    }
 
     /** Runs the check, or the search for its budget, which starts at `first` where that is given.
       */
-    private def checkOrSearch(prepared: Prepared, first: Option[Int]): ExecutionResult = {
+    private def checkOrSearch(
+        prepared: Prepared,
+        first: Option[Int],
+        asWrittenFirst: Boolean
+    ): ExecutionResult = {
         val kept = keptChecks
         if lastChecksOnly then kept.foreach(Directories.remove)
         budget match
             case Budget.LeanSteps(steps) =>
-                checkAt(prepared, steps, kept)
+                checkAt(prepared, steps, kept, asWrittenFirst)
             case Budget.Within(steps) =>
-                checkAt(prepared, steps, kept)
+                checkAt(prepared, steps, kept, asWrittenFirst)
             // A search makes several checks, and asks for the server before each.
             case Budget.Auto =>
                 UplcBlaster.search(
@@ -256,17 +276,31 @@ final class UplcBlaster private (
                   timeout,
                   attemptTimeout,
                   kept,
-                  first
+                  first,
+                  asWrittenFirst
                 )
     }
 
     /** One check of `prepared` at `steps`. */
-    private def checkAt(prepared: Prepared, steps: Int, kept: Option[Path]): ExecutionResult =
+    private def checkAt(
+        prepared: Prepared,
+        steps: Int,
+        kept: Option[Path],
+        asWrittenFirst: Boolean
+    ): ExecutionResult =
         servers.server() match
             case Left(reason) => VerificationResult.Failed(reason)
             case Right(server) =>
                 val shorter = (timeout ++ attemptTimeout).minOption
-                UplcBlaster.check(prepared, steps, maxHeartbeats, server, shorter, kept)
+                UplcBlaster.check(
+                  prepared,
+                  steps,
+                  maxHeartbeats,
+                  server,
+                  shorter,
+                  kept,
+                  asWrittenFirst
+                )
 
     /** What a result rests on: the statement as Lean is given it, the programs, and Lean's side,
       * which is read from the workspace of the tactic's servers. A tactic whose provider does not
@@ -319,7 +353,11 @@ object UplcBlaster {
         counterexample: List[(String, Constant)],
         read: String,
         kind: ProofKind,
-        kept: Boolean
+        kept: Boolean,
+        /** Whether the statement as written decided, where the rejecting form decided nothing
+          * ([[Lowered.unrewritten]]).
+          */
+        asWritten: Boolean = false
     ) extends ProofArtifact
 
     /** A lowered statement over its leaves, retaining its quantifiers and connectives.
@@ -372,7 +410,14 @@ object UplcBlaster {
           * lists and maps in the variables' types, and the blocks of the types among them that
           * contain themselves ([[DataEncoding.leanRecursions]]).
           */
-        private[uplcblaster] val recursions: List[String] = Nil
+        private[uplcblaster] val recursions: List[String] = Nil,
+        /** The statement lowered as written, where the rejecting form rewrote an implication of it
+          * ([[UplcBlaster.lower]]), over the same binders: the replay of a counterexample decides
+          * by it, and a check falls back to it where the rejecting form decides nothing.
+          */
+        private[uplcblaster] val unrewritten: Option[Lowered] = None,
+        /** The statement's name, which the trace says ([[UplcBlaster.tracing]]). */
+        private[uplcblaster] val name: String = ""
     ) {
 
         /** The SHA-256 of each leaf's program CBOR, in the order of [[leaves]]. */
@@ -462,6 +507,66 @@ object UplcBlaster {
     private[uplcblaster] def keptChecksFromEnvironment: Option[Path] =
         sys.env.get("SCALUS_LEAN_KEEP_CHECKS").filter(_.nonEmpty).map(Path.of(_))
 
+    /** Whether the tactic says what it does, a line at a time on the standard output, where the
+      * environment variable `SCALUS_BLASTER_TRACE` is set: the lowering of each statement, the
+      * rejecting form's attempt and the check of the statement as written after it, each check of
+      * Lean's with its budget, its time and what it came to, and on each replay what each program
+      * did on the values. A line names its statement, and `(as written)` its lowering as written.
+      */
+    private[uplcblaster] val tracing: Boolean =
+        sys.env.get("SCALUS_BLASTER_TRACE").exists(_.nonEmpty)
+
+    /** Says `message` of `goal`, where the tactic traces ([[tracing]]). */
+    private[uplcblaster] def trace(goal: Lowered, message: => String): Unit =
+        if tracing then println(s"[uplc-blaster] ${goal.name}: $message")
+
+    /** `lowered`, named `name`, and its lowering as written too; the trace says both. */
+    private[uplcblaster] def named(lowered: Lowered, name: String): Lowered = {
+        val result = lowered.copy(
+          name = name,
+          unrewritten = lowered.unrewritten.map(_.copy(name = s"$name (as written)"))
+        )
+        (result :: result.unrewritten.toList).foreach(goal =>
+            trace(goal, s"${goal.leaves.size} programs, ${goal.body}")
+        )
+        result
+    }
+
+    /** ", in" a time limit, for the trace, where there is one. */
+    private def limited(wait: Option[FiniteDuration]): String =
+        wait.fold("")(time => s", in ${time.toSeconds} s")
+
+    /** The time since `started`, a `System.nanoTime`, for the trace. */
+    private def since(started: Long): String =
+        f"after ${(System.nanoTime() - started) / 1e9}%.1f s"
+
+    /** What a check came to, for the trace. */
+    private def described(probe: Probe): String = probe match
+        case Probe.Decided(result)     => described(result)
+        case Probe.Spurious(_, reason) => reason
+        case Probe.Unreplayed(reason)  => s"unreplayed: $reason"
+        case Probe.ClaimFails(reason)  => s"the claim fails: $reason"
+
+    private def described(result: ExecutionResult): String = result match
+        case _: VerificationResult.Proven            => "proved"
+        case _: VerificationResult.ProvenWithin      => "proved within the budget"
+        case _: VerificationResult.Refuted           => "refuted"
+        case VerificationResult.Inconclusive(reason) => s"inconclusive: $reason"
+        case VerificationResult.Failed(reason)       => s"failed: $reason"
+
+    /** What each program did on a replay, by its place among the leaves, for the trace. */
+    private def ran(outcomes: Vector[Outcome]): String =
+        outcomes.zipWithIndex
+            .map { (outcome, leaf) =>
+                val what = outcome match
+                    case Outcome.Returned(Term.Const(Constant.Bool(value), _)) => value.toString
+                    case Outcome.Returned(_)                                   => "returned"
+                    case Outcome.Failed                                        => "failed"
+                    case Outcome.Exhausted => "exhausted the replay budget"
+                s"#$leaf $what"
+            }
+            .mkString(", ")
+
     /** Lowers a statement in the supported fragment, or explains why it is outside it.
       *
       * The fragment has universal and existential quantifiers over `BigInt`, `Boolean`,
@@ -482,6 +587,12 @@ object UplcBlaster {
       * function's bytes appear unchanged in the predicate. A function of several parameters is
       * called with a tuple written out as `(a, b, ...)`, and its program is applied to each value
       * in turn. Other `@Compile` definitions a test uses are compiled together with the test.
+      *
+      * Where the statement claims that a success implies tests, of values it quantifies over, that
+      * implication is in the rejecting form ([[rejectable]]), and [[Lowered.unrewritten]] is the
+      * statement lowered as written: the replay of a counterexample decides by it, and a check
+      * falls back to it where the rejecting form decides nothing
+      * (docs/design/verification-details/uplc-blaster.md, "The rejecting form").
       */
     def lower(prop: Prop, functions: FunctionTable): Either[String, Lowered] =
         lower(prop, functions, MappingPlan.Fixed.none)
@@ -495,7 +606,42 @@ object UplcBlaster {
         prop: Prop,
         functions: FunctionTable,
         fixed: MappingPlan.Fixed
+    ): Either[String, Lowered] = lower(prop, functions, fixed, rejecting = true)
+
+    /** [[lower]], with the rejecting form where `rejecting`. Without it, every implication is
+      * lowered as written, and there is no [[Lowered.unrewritten]].
+      */
+    private[verify] def lower(
+        prop: Prop,
+        functions: FunctionTable,
+        fixed: MappingPlan.Fixed,
+        rejecting: Boolean
     ): Either[String, Lowered] =
+        lowering(prop, functions, fixed, rejecting).flatMap { (lowered, rewritten) =>
+            if !rewritten then Right(lowered)
+            else
+                // The implications the rejecting form rewrites quantify over nothing, so the
+                // statement as written has the same binders, and a counterexample's values are
+                // values of both.
+                lowering(prop, functions, fixed, rejecting = false).map { (unrewritten, _) =>
+                    if unrewritten.binders != lowered.binders then
+                        throw new IllegalStateException(
+                          s"the statement as written has the binders ${unrewritten.binders}, and " +
+                              s"its rejecting form ${lowered.binders}"
+                        )
+                    lowered.copy(unrewritten = Some(unrewritten))
+                }
+        }
+
+    /** [[lower]] without [[Lowered.unrewritten]]: with the rejecting form where `rejecting`, and
+      * with every implication as written where not; and whether the rejecting form rewrote one.
+      */
+    private def lowering(
+        prop: Prop,
+        functions: FunctionTable,
+        fixed: MappingPlan.Fixed,
+        rejecting: Boolean
+    ): Either[String, (Lowered, Boolean)] =
         checkSignatures(prop, functions).flatMap { _ =>
             // How each variable reaches Lean: its decided nodes, each recorded as it is mapped, and
             // the number of variables quantified so far, which tells the nodes of each apart.
@@ -515,6 +661,15 @@ object UplcBlaster {
             val indices = scala.collection.mutable.Map.empty[(String, List[Int]), Int]
             // The guard of each binder with limits ([[LimitGuards]]), by its position.
             val guards = scala.collection.mutable.Map.empty[Int, Term]
+            // Whether the rejecting form rewrote an implication.
+            var rewritten = false
+
+            // An expression that goes inside another, as an operand of `==` or the claim and the
+            // premise of a rejecting program, without the definitions of the functions in
+            // `functions` that the compiler put around it ([[unlinkModuleDefinitions]]). Only
+            // those around a whole program are taken off, and one left inside would be compiled
+            // from its SIR, in place of the function's own program.
+            def part(sir: SIR): SIR = unlinkModuleDefinitions(sir, functions)._1
 
             // A test in the scope of a binder with limits checks its guard first, and fails where
             // the binder's value does not meet them: there the guard, the premise of what the
@@ -690,10 +845,14 @@ object UplcBlaster {
             )(formula: Int => LeafFormula): Either[String, LeafFormula] =
                 compile(sir, scope, built).map(term => formula(leaf(term, scope)))
 
+            // `polarity` is whether `current` is in a positive position: `true` in a conclusion,
+            // which the statement claims; `false` in a negative one, under `!` or in a premise;
+            // and none in both, inside `<=>`.
             def loop(
                 current: Prop,
                 scope: List[Int],
-                built: List[Binding]
+                built: List[Binding],
+                polarity: Option[Boolean]
             ): Either[String, LeafFormula] = current match {
                 case Prop.Call(fn, arg, result, false, body) =>
                     for
@@ -704,44 +863,53 @@ object UplcBlaster {
                             Prop.Call(fn, arg, result, true, body)
                           ),
                           scope,
-                          built
+                          built,
+                          polarity
                         )
                     yield formula
                 case _: Prop.Bool | _: Prop.Call[?, ?] =>
                     predicateSir(current, functions)
                         .flatMap(sir => test(sir, scope, built)(LeafFormula.Test(_)))
                 case Prop.Equal(left, right) =>
-                    equality(expressionSir(left), expressionSir(right))
+                    equality(part(expressionSir(left)), part(expressionSir(right)))
                         .flatMap(sir => test(sir, scope, built)(LeafFormula.Test(_)))
                 case Prop.Denotes(expr) =>
                     test(expressionSir(expr), scope, built)(LeafFormula.Denotes(_))
                 case Prop.And(left, right) =>
                     for
-                        l <- loop(left, scope, built)
-                        r <- loop(right, scope, built)
+                        l <- loop(left, scope, built, polarity)
+                        r <- loop(right, scope, built, polarity)
                     yield LeafFormula.And(l, r)
                 case Prop.Or(left, right) =>
                     for
-                        l <- loop(left, scope, built)
-                        r <- loop(right, scope, built)
+                        l <- loop(left, scope, built, polarity)
+                        r <- loop(right, scope, built, polarity)
                     yield LeafFormula.Or(l, r)
                 case Prop.Not(inner) =>
-                    loop(inner, scope, built).map(LeafFormula.Not(_))
+                    loop(inner, scope, built, polarity.map(!_)).map(LeafFormula.Not(_))
+                // Where the statement claims that a success implies tests, of values it
+                // quantifies over, it is checked in the rejecting form ([[rejectingForm]]). A
+                // closed statement, which Lean evaluates, has nothing to prune.
+                case Prop.Implies(premise, claim)
+                    if rejecting && scope.nonEmpty && polarity.contains(true) &&
+                        rejectable(premise, claim) =>
+                    rejectingForm(premise, claim, scope, built)
                 case Prop.Implies(premise, conclusion) =>
                     for
-                        p <- loop(premise, scope, built)
-                        c <- loop(conclusion, scope, built)
+                        p <- loop(premise, scope, built, polarity.map(!_))
+                        c <- loop(conclusion, scope, built, polarity)
                     yield LeafFormula.Implies(p, c)
+                case Prop.Rejects(premise, claim) => rejects(premise, claim, scope, built)
                 case Prop.Iff(left, right) =>
                     for
-                        l <- loop(left, scope, built)
-                        r <- loop(right, scope, built)
+                        l <- loop(left, scope, built, None)
+                        r <- loop(right, scope, built, None)
                     yield LeafFormula.And(LeafFormula.Implies(l, r), LeafFormula.Implies(r, l))
                 // A binder with limits stands for the values that meet them: its guard, a test of
                 // its own, is the premise of the rest.
                 case Prop.Forall(ident, body) =>
                     quantified(ident, Quantifier.ForAll).flatMap { (introduced, bindings) =>
-                        loop(body, scope ++ introduced, built ++ bindings).map { inner =>
+                        loop(body, scope ++ introduced, built ++ bindings, polarity).map { inner =>
                             val premises = introduced.flatMap(binder =>
                                 guards
                                     .get(binder)
@@ -764,12 +932,108 @@ object UplcBlaster {
                     )
                 case Prop.Exists(ident, None, body) =>
                     quantified(ident, Quantifier.Exists).flatMap { (introduced, bindings) =>
-                        loop(body, scope ++ introduced, built ++ bindings)
+                        loop(body, scope ++ introduced, built ++ bindings, polarity)
                             .map(LeafFormula.Exists(introduced, _))
                     }
                 case Prop.Exists(ident, Some(witness), body) =>
-                    loop(instantiate(body, ident, witness), scope, built)
+                    loop(instantiate(body, ident, witness), scope, built, polarity)
             }
+
+            // The programs of the rejecting form of `premise` and `claim`, a test: the claim's,
+            // and the rejecting program `if claim then error else premise`. The rejecting program fails where the claim holds, and runs the premise where it does
+            // not, failing where the premise does not hold: so it fails on every value where the
+            // premise holds of none of the values the claim is false of, or the claim fails. Lean's
+            // run of it ends where the claim holds, and on every other path at the step at which
+            // the premise fails: it does not run the premise's paths where the claim holds.
+            //
+            // A conjunction of tests is one claim, `a && b`, which tests `b` only where `a` holds:
+            // the premise is in one program. A premise is a success, of an expression or of a
+            // total call, or a test, whose program fails where it is not `true`.
+            def rejectingPrograms(premise: Prop, claim: Prop): Either[String, (SIR, SIR)] = {
+                val annotations = AnnotationsDecl.empty
+                def tested(test: Prop): Either[String, SIR] = test match
+                    case Prop.Bool(expr) => Right(part(expressionSir(expr)))
+                    case Prop.Equal(left, right) =>
+                        equality(part(expressionSir(left)), part(expressionSir(right)))
+                    case Prop.And(left, right) =>
+                        for
+                            l <- tested(left)
+                            r <- tested(right)
+                        yield withExpressions(l, r)(SIR.And(_, _, annotations))
+                    case other => Left(s"the claim of a rejecting form is no test: $other")
+                for
+                    claimSir <- tested(claim)
+                    premiseSir <- premise match
+                        case Prop.Denotes(expr) => Right(part(expressionSir(expr)))
+                        case call @ Prop.Call(_, _, _, true, _) =>
+                            predicateSir(call, functions).map(part)
+                        case test @ (Prop.Bool(_) | Prop.Equal(_, _)) => tested(test)
+                        case other =>
+                            Left(
+                              "the premise of a rejecting form is a success or a test, of an " +
+                                  s"expression or a total call: $other"
+                            )
+                    holds = premise match
+                        case Prop.Denotes(_) => premiseSir
+                        case _ =>
+                            val (data, test) = declarations(premiseSir)
+                            withDeclarations(
+                              data,
+                              SIR.IfThenElse(
+                                test,
+                                SIR.Const(Constant.Bool(true), SIRType.Boolean, annotations),
+                                SIR.Error("the premise does not hold", annotations),
+                                SIRType.Boolean,
+                                annotations
+                              )
+                            )
+                    rejectingSir = withExpressions(claimSir, holds)((test, run) =>
+                        SIR.IfThenElse(
+                          test,
+                          SIR.Error("the claim holds", annotations),
+                          run,
+                          run.tp,
+                          annotations
+                        )
+                    )
+                yield (claimSir, rejectingSir)
+            }
+
+            // `premise ==> claim`, a success that implies a test, in the rejecting form: its
+            // rejecting program fails on every value, and the claim returns on every value, as a
+            // claim that failed would fail the program whatever the premise does. The replay
+            // decides by the statement as written ([[Lowered.unrewritten]]).
+            def rejectingForm(
+                premise: Prop,
+                claim: Prop,
+                scope: List[Int],
+                built: List[Binding]
+            ): Either[String, LeafFormula] =
+                rejectingPrograms(premise, claim).flatMap { (claimSir, rejectingSir) =>
+                    for
+                        claimTerm <- compile(claimSir, scope, built)
+                        rejectingTerm <- compile(rejectingSir, scope, built)
+                    yield
+                        rewritten = true
+                        LeafFormula.And(
+                          LeafFormula.Denotes(leaf(claimTerm, scope)),
+                          LeafFormula.Not(LeafFormula.Denotes(leaf(rejectingTerm, scope)))
+                        )
+                }
+
+            // `premise ==>? claim`: its rejecting program fails on every value. That is what the
+            // statement says, a claim that fails included, so it is the statement in any position.
+            def rejects(
+                premise: Prop,
+                claim: Prop,
+                scope: List[Int],
+                built: List[Binding]
+            ): Either[String, LeafFormula] =
+                rejectingPrograms(premise, claim).flatMap { (_, rejectingSir) =>
+                    compile(rejectingSir, scope, built).map(rejectingTerm =>
+                        LeafFormula.Not(LeafFormula.Denotes(leaf(rejectingTerm, scope)))
+                    )
+                }
 
             // A variable with more values than its type is sound only where it stands for every
             // value: a statement that holds of all of them holds of the type's, but a value that
@@ -815,7 +1079,7 @@ object UplcBlaster {
                     )
             }
 
-            loop(withDistinctNames(prop), Nil, Nil)
+            loop(withDistinctNames(prop), Nil, Nil, Some(true))
                 .flatMap(namesItsNodes)
                 .flatMap(standsForEvery)
                 .flatMap { formula =>
@@ -839,10 +1103,43 @@ object UplcBlaster {
                             predicates.toVector,
                             plan = MappingPlan(planned.toList),
                             recursions = DataEncoding.leanRecursions(restricted)
-                          )
+                          ) -> rewritten
                         )
                 }
         }
+
+    /** Whether a statement of `origin` may be checked in the rejecting form. A call obligation
+      * ([[Origin.Obligation]]) is checked as written. Its premise is the caller's code up to the
+      * call, and its claim is that code with the precondition at the call: the rejecting form would
+      * prune nothing, would run that code once more, and its claim fails wherever that code fails,
+      * as at a `require` before the call, so that it would decide nothing.
+      */
+    private[uplcblaster] def rejectable(origin: Origin): Boolean = origin match
+        case _: Origin.Obligation => false
+        case _                    => true
+
+    /** Whether `premise ==> conclusion` is checked in the rejecting form: the premise is a success,
+      * of an expression (`denotes`) or of a call (`succeeds`, a total call whose continuation is
+      * `true`), and the conclusion is tests, a `Bool` or an `Equal` or a conjunction of them. The
+      * rejecting form claims that the tests return on every value. So a premise that is a test does
+      * not have it, as its conclusion may fail where it is false: `(x != 0) ==> (10 / x > 1)`. Nor
+      * does a call whose continuation is a test, for the same reason. Neither does a conclusion
+      * that calls a function, as the expansion of `whenReturns` has: the call need not return.
+      */
+    private def rejectable(premise: Prop, conclusion: Prop): Boolean = {
+        def tests(prop: Prop): Boolean = prop match
+            case _: Prop.Bool | _: Prop.Equal[?] => true
+            case Prop.And(left, right)           => tests(left) && tests(right)
+            case _                               => false
+        val success = premise match
+            case _: Prop.Denotes[?] => true
+            case Prop.Call(_, _, _, true, Prop.Bool(PropExpr.SIRExpr(continuation))) =>
+                declarations(continuation)._2 match
+                    case SIR.Const(Constant.Bool(true), _, _) => true
+                    case _                                    => false
+            case _ => false
+        success && tests(conclusion)
+    }
 
     /** The builtins that see the characters of a string: Blaster cannot translate them today, and
       * where it can, the solver's characters would decide a statement about them.
@@ -1429,6 +1726,7 @@ object UplcBlaster {
             case Prop.And(left, right)     => Prop.And(loop(left), loop(right))
             case Prop.Or(left, right)      => Prop.Or(loop(left), loop(right))
             case Prop.Implies(left, right) => Prop.Implies(loop(left), loop(right))
+            case Prop.Rejects(left, right) => Prop.Rejects(loop(left), loop(right))
             case Prop.Iff(left, right)     => Prop.Iff(loop(left), loop(right))
             case Prop.Not(inner)           => Prop.Not(loop(inner))
 
@@ -1516,6 +1814,8 @@ object UplcBlaster {
                       loop(premise, inScope, renames),
                       loop(conclusion, inScope, renames)
                     )
+                case Prop.Rejects(premise, claim) =>
+                    Prop.Rejects(loop(premise, inScope, renames), loop(claim, inScope, renames))
                 case Prop.Iff(left, right) =>
                     Prop.Iff(loop(left, inScope, renames), loop(right, inScope, renames))
                 case Prop.Not(inner) => Prop.Not(loop(inner, inScope, renames))
@@ -1822,6 +2122,7 @@ object UplcBlaster {
             case Prop.And(left, right)     => usedFunctions(left) ++ usedFunctions(right)
             case Prop.Or(left, right)      => usedFunctions(left) ++ usedFunctions(right)
             case Prop.Implies(left, right) => usedFunctions(left) ++ usedFunctions(right)
+            case Prop.Rejects(left, right) => usedFunctions(left) ++ usedFunctions(right)
             case Prop.Iff(left, right)     => usedFunctions(left) ++ usedFunctions(right)
             case Prop.Not(inner)           => usedFunctions(inner)
     }
@@ -2024,6 +2325,12 @@ object UplcBlaster {
           */
         case Unreplayed(reason: String)
 
+        /** Lean falsified the statement in the rejecting form where a claim fails and its premise
+          * does not hold, so the statement holds there: the rejecting form decides nothing, and the
+          * check is of the statement as written ([[Lowered.unrewritten]]).
+          */
+        case ClaimFails(reason: String)
+
         /** The result where the budget was given: a falsification that the budget may be at fault
           * for decides nothing.
           */
@@ -2031,6 +2338,7 @@ object UplcBlaster {
             case Decided(result)     => result
             case Spurious(_, reason) => VerificationResult.Inconclusive(reason)
             case Unreplayed(reason)  => VerificationResult.Inconclusive(reason)
+            case ClaimFails(reason)  => VerificationResult.Inconclusive(reason)
     }
 
     /** Runs the check of a lowered statement in `server`, and reads what Lean reported.
@@ -2044,11 +2352,99 @@ object UplcBlaster {
         maxHeartbeats: Int,
         server: LeanServer,
         timeout: Option[FiniteDuration],
+        keep: Option[Path],
+        asWrittenFirst: Boolean = false
+    ): ExecutionResult =
+        attempted(goal, timeout, asWrittenFirst)((lowered, time) =>
+            checkOf(lowered, budget, maxHeartbeats, server, time, keep)
+        )
+
+    /** What `checked` comes to on `goal` in `timeout`. Where the rejecting form rewrote the
+      * statement, its two forms are checked in turn: the first in half the time, and where it ends
+      * inconclusive, the second in the time that is left. The rejecting form is first, and the
+      * statement as written ([[Lowered.unrewritten]]) is, where it decided before
+      * (`asWrittenFirst`). A result of the statement as written says so ([[Artifact.asWritten]]).
+      * Where neither decides, the reason is both forms'. A check that failed, as on an error of
+      * Lean's, is reported as it is. Without a time limit, the first check has none either, and the
+      * second is made only where the first ends.
+      */
+    private def attempted(
+        goal: Lowered,
+        timeout: Option[FiniteDuration],
+        asWrittenFirst: Boolean
+    )(
+        checked: (Lowered, Option[FiniteDuration]) => ExecutionResult
+    ): ExecutionResult = {
+        goal.unrewritten match
+            case None              => checked(goal, timeout)
+            case Some(unrewritten) =>
+                // Each form, with whether it is the statement as written, in the order checked.
+                val rejecting = goal -> false
+                val written = unrewritten -> true
+                val (first, second) =
+                    if asWrittenFirst then (written, rejecting) else (rejecting, written)
+                def form(asWritten: Boolean) =
+                    if asWritten then "the statement as written" else "the rejecting form"
+                def of(result: ExecutionResult, asWritten: Boolean) =
+                    if asWritten then markedAsWritten(result) else result
+                val deadline = timeout.map(_.fromNow)
+                val started = System.nanoTime()
+                trace(goal, s"${form(first._2)} first${limited(timeout.map(_ / 2))}")
+                checked(first._1, timeout.map(_ / 2)) match {
+                    case firstResult @ VerificationResult.Inconclusive(firstReason) =>
+                        // In whole seconds, as the reasons say it.
+                        val left = deadline.map(time =>
+                            FiniteDuration(time.timeLeft.toSeconds max 1, SECONDS)
+                        )
+                        trace(
+                          goal,
+                          s"${form(first._2)} came to ${described(firstResult)}, " +
+                              s"${since(started)}; ${form(second._2)} next${limited(left)}"
+                        )
+                        checked(second._1, left) match
+                            case VerificationResult.Inconclusive(secondReason) =>
+                                VerificationResult.Inconclusive(
+                                  s"${form(first._2).capitalize}: $firstReason. Then " +
+                                      s"${form(second._2)}: $secondReason"
+                                )
+                            case result => of(result, second._2)
+                    case result =>
+                        trace(
+                          goal,
+                          s"${form(first._2)} came to ${described(result)}, ${since(started)}"
+                        )
+                        of(result, first._2)
+                }
+    }
+
+    /** `result`, decided by the statement as written ([[Artifact.asWritten]]). */
+    private[uplcblaster] def markedAsWritten(result: ExecutionResult): ExecutionResult = {
+        def marked(proof: Proof) = proof.artifact match
+            case artifact: Artifact => Proof(artifact.copy(asWritten = true), proof.usedLemmas)
+            case _                  => proof
+        result match
+            case VerificationResult.Proven(proof) => VerificationResult.Proven(marked(proof))
+            case VerificationResult.ProvenWithin(proof, bound) =>
+                VerificationResult.ProvenWithin(marked(proof), bound)
+            case VerificationResult.Refuted(proof) => VerificationResult.Refuted(marked(proof))
+            case other                             => other
+    }
+
+    /** One check of `goal` at `budget`, as it is lowered. */
+    private def checkOf(
+        goal: Lowered,
+        budget: Int,
+        maxHeartbeats: Int,
+        server: LeanServer,
+        timeout: Option[FiniteDuration],
         keep: Option[Path]
     ): ExecutionResult = {
         keep.foreach(keepCheck(goal, budget, maxHeartbeats, _))
+        val started = System.nanoTime()
         val checked = server.check(checkSource(goal, budget, maxHeartbeats, _), timeout)
-        probed(goal, budget, checked, timeout.mkString) match
+        val probe = probed(goal, budget, checked, timeout.mkString)
+        trace(goal, s"at $budget steps${limited(timeout)}: ${described(probe)}, ${since(started)}")
+        probe match
             // Within a budget a run the budget cuts counts for the statement, and a run that ends
             // within it ends so with more steps: the budget is not at fault.
             case Probe.Spurious(_, reason) if goal.within.isDefined =>
@@ -2057,6 +2453,10 @@ object UplcBlaster {
                       "more steps change nothing: the values read from Lean's counterexample do " +
                       "not show what Lean found" + unknownTo(goal)
                 )
+            // The rejecting form is an attempt ([[attempted]]): the statement as written is
+            // checked next, and Lean's machine is asked about the budget there.
+            case Probe.Spurious(_, reason) if goal.unrewritten.isDefined =>
+                VerificationResult.Inconclusive(reason)
             // The budget was given, so no other is tried. Lean's machine says whether the budget
             // is at fault: a counterexample is spurious for another reason too.
             case Probe.Spurious(values, reason) =>
@@ -2155,6 +2555,21 @@ object UplcBlaster {
         timeout: Option[FiniteDuration],
         attempt: Option[FiniteDuration],
         keep: Option[Path],
+        first: Option[Int],
+        asWrittenFirst: Boolean = false
+    ): ExecutionResult =
+        attempted(goal, timeout, asWrittenFirst)((lowered, time) =>
+            searchOf(lowered, maxHeartbeats, servers, time, attempt, keep, first)
+        )
+
+    /** The search for the budget of `goal`, as it is lowered. */
+    private def searchOf(
+        goal: Lowered,
+        maxHeartbeats: Int,
+        servers: LeanServerProvider,
+        timeout: Option[FiniteDuration],
+        attempt: Option[FiniteDuration],
+        keep: Option[Path],
         first: Option[Int]
     ): ExecutionResult = {
         val deadline = timeout.map(_.fromNow)
@@ -2199,7 +2614,13 @@ object UplcBlaster {
                 case Right(server) =>
                     val text = renderCheck(goal, flats, steps, maxHeartbeats)
                     keep.foreach(keepCheck(goal, steps, maxHeartbeats, _))
-                    probed(goal, steps, server.check(text, wait), limit)
+                    val started = System.nanoTime()
+                    val came = probed(goal, steps, server.check(text, wait), limit)
+                    trace(
+                      goal,
+                      s"at $steps steps${limited(wait)}: ${described(came)}, ${since(started)}"
+                    )
+                    came
 
         // The budget after `steps`, whose check gave the spurious counterexample `values`.
         def counted(
@@ -2227,14 +2648,26 @@ object UplcBlaster {
                         case Probe.Decided(VerificationResult.Inconclusive(reason)) =>
                             inconclusive(reason, steps :: tried, last)
                         case Probe.Decided(result) => result
+                        // Of the rejecting form, values that are not Lean's, on which both forms
+                        // hold, are of the solver's characters, which no budget changes: the
+                        // statement as written is checked next.
+                        case Probe.Unreplayed(reason) if goal.unrewritten.isDefined =>
+                            inconclusive(reason, steps :: tried, last)
                         case Probe.Unreplayed(reason) =>
                             if steps * 2 <= maxDoubledBudget then
                                 at(steps * 2, steps :: tried, last)
                             else inconclusive(reason, steps :: tried, last)
                         case Probe.Spurious(values, reason) =>
                             counted(values, steps, steps :: tried, reason) match
-                                case Right(more)  => at(more, steps :: tried, Some(reason))
+                                case Right(more) =>
+                                    trace(
+                                      goal,
+                                      s"Lean's machine counted the runs: $more steps next"
+                                    )
+                                    at(more, steps :: tried, Some(reason))
                                 case Left(result) => result
+                        // The rejecting form decides nothing: another budget would not help.
+                        case Probe.ClaimFails(reason) => inconclusive(reason, steps :: tried, last)
 
         // A budget that was kept is tried first. Where it does not decide the statement any
         // more, it says nothing about where to look, and the search is from the start. It gets
@@ -2243,11 +2676,15 @@ object UplcBlaster {
         def kept: Option[ExecutionResult] =
             for
                 steps <- first
+                _ = trace(goal, s"the budget that was kept first, $steps steps")
                 (wait, limit) <- time()
                 result <- probe(steps, wait.map(_ / 2), limit) match
                     case Probe.Decided(proved: VerificationResult.Proven)   => Some(proved)
                     case Probe.Decided(refuted: VerificationResult.Refuted) => Some(refuted)
-                    case _                                                  => None
+                    // The rejecting form decides nothing: the statement as written is checked.
+                    case Probe.ClaimFails(reason) =>
+                        Some(VerificationResult.Inconclusive(reason): ExecutionResult)
+                    case _ => None
             yield result
 
         // A statement with limits starts where every test ends on the largest values that meet
@@ -2767,10 +3204,10 @@ object UplcBlaster {
             if shown.isEmpty then "Lean's falsification"
             else if read.isEmpty then s"Lean's counterexample ($shown)"
             else s"Lean's counterexample ($shown, $read)"
-        val outcomes = goal.leaves.zip(goal.leafBinders).map { (program, scope) =>
-            evaluate(program, scope.map(values))
-        }
-        holds(goal.body, outcomes) match
+        def outcomes(lowered: Lowered) = lowered.leaves
+            .zip(lowered.leafBinders)
+            .map((program, scope) => evaluate(program, scope.map(values)))
+        def decided(written: Option[Boolean]): Probe = written match
             case Some(false) =>
                 Probe.Decided(
                   VerificationResult.Refuted(
@@ -2801,6 +3238,72 @@ object UplcBlaster {
                     s"replaying $falsification exhausted the replay budget"
                   )
                 )
+
+        // The statement as written decides. Where the rejecting form rewrote it, Lean's reading can
+        // be false where the statement holds: where a claim fails, and its premise does not hold.
+        val written = goal.unrewritten.getOrElse(goal)
+        val writtenOutcomes = outcomes(written)
+        val asWritten = holds(written.body, writtenOutcomes)
+        trace(written, s"replayed $falsification: ${ran(writtenOutcomes)}; it holds: $asWritten")
+        // Lean's reading, of the rejecting form: only where the statement as written holds is it
+        // more than the statement's.
+        def rewritten: Option[Boolean] = {
+            val rewrittenOutcomes = outcomes(goal)
+            val reading = holds(goal.body, rewrittenOutcomes)
+            trace(goal, s"replayed: ${ran(rewrittenOutcomes)}; it holds: $reading")
+            reading
+        }
+        if goal.unrewritten.isDefined && asWritten.contains(true) && rewritten.contains(false)
+        then
+            Probe.ClaimFails(
+              s"$falsification: a claim does not return there, where the function it is " +
+                  "claimed of does not succeed either, so the statement holds there. It is " +
+                  "checked in the rejecting form, `if claim then error else function`, which " +
+                  "fails wherever the claim fails: a claim that returns false where it does " +
+                  "not hold makes it true of every value"
+            )
+        else decided(asWritten)
+    }
+
+    /** Whether `prop` holds on `values`, the values of its variables in the order it quantifies
+      * over them, read with `==>` for each `==>?`: run on the Scalus CEK, as a replay runs a
+      * counterexample. None where a program did not end within the replay budget.
+      *
+      * Stated with `==>?`, a claim that fails says nothing, so a claim that failed wherever the
+      * function returns would be proved of every value. Read with `==>`, the statement holds on a
+      * value the function accepts only where the claim returns `true` there: a sample the function
+      * accepts shows that its claims are not vacuous.
+      */
+    private[verify] def holdsAsImplicationOn(
+        prop: Prop,
+        functions: FunctionTable,
+        values: List[Constant]
+    ): Either[String, Option[Boolean]] = {
+        def implications(prop: Prop): Prop = prop match
+            case Prop.Rejects(premise, claim) =>
+                Prop.Implies(implications(premise), implications(claim))
+            case Prop.Implies(a, b)             => Prop.Implies(implications(a), implications(b))
+            case Prop.And(a, b)                 => Prop.And(implications(a), implications(b))
+            case Prop.Or(a, b)                  => Prop.Or(implications(a), implications(b))
+            case Prop.Iff(a, b)                 => Prop.Iff(implications(a), implications(b))
+            case Prop.Not(a)                    => Prop.Not(implications(a))
+            case Prop.Forall(ident, b)          => Prop.Forall(ident, implications(b))
+            case Prop.Exists(ident, witness, b) => Prop.Exists(ident, witness, implications(b))
+            case Prop.Call(fn, arg, result, total, body) =>
+                Prop.Call(fn, arg, result, total, implications(body))
+            case leaf => leaf
+        lower(implications(prop), functions, MappingPlan.Fixed.none, rejecting = false).flatMap {
+            lowered =>
+                if lowered.binders.size != values.size then
+                    Left(
+                      s"the statement has ${lowered.binders.size} variables, and ${values.size} values were given"
+                    )
+                else
+                    val outcomes = lowered.leaves
+                        .zip(lowered.leafBinders)
+                        .map((program, scope) => evaluate(program, scope.map(values)))
+                    Right(holds(lowered.body, outcomes))
+        }
     }
 
     /** What the quantifier asks of the values of a list or a map variable: the Lean premise on the
@@ -3321,12 +3824,22 @@ object UplcBlaster {
       * exception: its proof is of the inputs its budget reaches, and is none at another budget, so
       * its text has its budget.
       */
-    private[uplcblaster] def fingerprint(goal: Lowered, workspace: Path): Fingerprint =
+    private[uplcblaster] def fingerprint(goal: Lowered, workspace: Path): Fingerprint = {
+        // A result may be of the statement as written ([[Lowered.unrewritten]]): it rests on that
+        // check too.
+        val checked = goal :: goal.unrewritten.toList
         Fingerprint(
           LeanWorkspace.environment(workspace),
-          Fingerprint.hash(document(Vector.empty, checkBody(goal, goal.within.getOrElse(0)), 0)),
-          goal.leaves.toList.map(program => Fingerprint.hash(program.cborEncoded))
+          Fingerprint.hash(
+            checked
+                .map(lowered =>
+                    document(Vector.empty, checkBody(lowered, lowered.within.getOrElse(0)), 0)
+                )
+                .mkString("\n")
+          ),
+          checked.flatMap(_.leaves).map(program => Fingerprint.hash(program.cborEncoded)).distinct
         )
+    }
 
     /** The notes the tactic keeps with a result: the budget the check ran with, which a later
       * search starts at, and how the statement was decided.
@@ -3335,12 +3848,19 @@ object UplcBlaster {
     private val kindNote = "kind"
     private val readNote = "read"
 
+    /** The note of a result the statement as written decided, where the rejecting form decided
+      * nothing: a later run checks it so at once.
+      */
+    private[uplcblaster] val formNote = "form"
+    private[uplcblaster] val asWrittenForm = "as written"
+
     /** What is kept of a result: a proof, or a refutation with the values of its counterexample.
       */
     private[uplcblaster] def kept(goal: Lowered, result: ExecutionResult): Option[Kept] = {
         def notes(artifact: Artifact) =
             Map(budgetNote -> artifact.budget.toString, kindNote -> artifact.kind.toString) ++
-                Option.when(artifact.read.nonEmpty)(readNote -> artifact.read)
+                Option.when(artifact.read.nonEmpty)(readNote -> artifact.read) ++
+                Option.when(artifact.asWritten)(formNote -> asWrittenForm)
         result match
             case VerificationResult.Proven(proof) =>
                 proof.artifact match
@@ -3376,14 +3896,18 @@ object UplcBlaster {
                 .get(kindNote)
                 .flatMap(word => ProofKind.values.find(_.toString == word))
                 .toRight(s"its kind note, ${kept.notes.get(kindNote)}, is no kind of proof")
+            asWritten = kept.notes.get(formNote).contains(asWrittenForm)
+            // The programs of the lowering that decided, as a result just found has them.
+            decided = goal.unrewritten.filter(_ => asWritten).getOrElse(goal)
             artifact = Artifact(
-              goal.programHashes,
+              decided.programHashes,
               budget,
               "",
               Nil,
               kept.notes.getOrElse(readNote, ""),
               kind,
-              kept = true
+              kept = true,
+              asWritten = asWritten
             )
             result <- restored(goal, kept, artifact)
         yield result
