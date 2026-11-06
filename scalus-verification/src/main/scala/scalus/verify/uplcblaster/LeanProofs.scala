@@ -339,6 +339,16 @@ final class LeanProofs private (
         inconclusive(own, own.statement(statement.name, statement.prop), tactic)
     }
 
+    /** That `statement`, declared in [[verifier]], holds on `values` read with `==>` for each
+      * `==>?` ([[UplcBlaster.holdsAsImplicationOn]]): run on the Scalus CEK, without Lean. Of a
+      * sample the function accepts, that its claims return `true` there, and so are not vacuous.
+      */
+    def holdsAsImplicationOn(statement: Statement, values: Constant*): Boolean =
+        UplcBlaster.holdsAsImplicationOn(statement.prop, verifier.functions, values.toList) match
+            case Right(Some(holds)) => holds
+            case Right(None)  => failed(s"${statement.name} did not end within the replay budget")
+            case Left(reason) => failed(s"${statement.name} cannot be run: $reason")
+
     /** What [[UplcBlaster]] reported with the proof or the refutation that a check returned. */
     def artifactOf(result: VerificationResult): UplcBlaster.Artifact = {
         val proof = result match

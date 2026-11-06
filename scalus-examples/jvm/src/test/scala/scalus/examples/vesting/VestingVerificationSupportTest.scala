@@ -2,18 +2,13 @@ package scalus.examples.vesting
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.cardano.onchain.plutus.prelude
-import scalus.cardano.onchain.plutus.v3.{ScriptContext, ScriptInfo, TxId, TxInfo, TxOutRef}
 import scalus.compiler.Options
 import scalus.uplc.PlutusV3
-import scalus.uplc.builtin.ByteString.hex
-import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.Data.toData
 import scalus.verify.{FunctionDef, Representation}
 import scalus.verify.uplcblaster.LeanProofs
 
 /** What [[VestingVerificationTest]] rests on, checked without Lean: the example's Lean workspace,
-  * the specification's erasure, and the contexts the statements build.
+  * and the specification's erasure.
   */
 class VestingVerificationSupportTest extends AnyFunSuite {
     import VestingVerificationTest.*
@@ -48,23 +43,5 @@ class VestingVerificationSupportTest extends AnyFunSuite {
         assert(script.contains(VestingValidator.DatumNotFound))
         assert(!schedule.contains("postcondition"))
         assert(!script.contains("postcondition"))
-    }
-
-    test("the contexts built from Data are the ledger's encoding") {
-        // The statements of `VestingVerificationTest` say that the validator fails, which a malformed context would make
-        // true for the wrong reason.
-        val ref = TxOutRef(TxId(hex"00"), 0)
-        val datum = config(BigInt(1), BigInt(2), BigInt(3)).toData
-        val redeemer = Action(BigInt(4)).toData
-        def expected(datum: prelude.Option[Data]) =
-            ScriptContext(
-              TxInfo.placeholder,
-              redeemer,
-              ScriptInfo.SpendingScript(ref, datum)
-            ).toData
-        def built(datum: Data) =
-            scriptContext(TxInfo.placeholder.toData, redeemer, spendingInfo(ref.toData, datum))
-        assert(built(noDatum) == expected(prelude.Option.None))
-        assert(built(someDatum(datum)) == expected(prelude.Option.Some(datum)))
     }
 }

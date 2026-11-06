@@ -125,6 +125,7 @@ private[verify] object PropIdentity {
             case Prop.And(a, b)     => node("and") { this.prop(a); this.prop(b) }
             case Prop.Or(a, b)      => node("or") { this.prop(a); this.prop(b) }
             case Prop.Implies(a, b) => node("implies") { this.prop(a); this.prop(b) }
+            case Prop.Rejects(a, b) => node("rejects") { this.prop(a); this.prop(b) }
             case Prop.Iff(a, b)     => node("iff") { this.prop(a); this.prop(b) }
             case Prop.Not(a)        => node("not")(this.prop(a))
         }

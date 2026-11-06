@@ -2,11 +2,14 @@ package scalus.verify.uplcblaster
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.cardano.onchain.plutus.prelude.{require, Spec}
+import scalus.cardano.onchain.plutus.prelude.{require, List as PList, Spec}
 import scalus.cardano.onchain.plutus.prelude.Spec.ensuring
 import scalus.compiler.Compile
 import scalus.compiler.sir.SIRType
+import scalus.uplc.builtin.ByteString
 import scalus.verify.*
+
+import scala.util.chaining.*
 
 /** Functions that state their contracts in their bodies, and callers of one of them. */
 @Compile
@@ -59,6 +62,14 @@ object SpecifiedExamples {
     def clampAtHead(x: BigInt, lo: BigInt, hi: BigInt): BigInt = {
         Spec.expects(lo <= hi)
         (if x < lo then lo else if x > hi then hi else x) .ensuring(r => lo <= r && r <= hi)
+    }
+
+    /** Every element of a list is positive where it returns: it walks the list to its end, which a
+      * symbolic run reaches only on lists of a bounded length.
+      */
+    def positives(xs: PList[BigInt]): Unit = {
+        Spec.ensures(xs.forall(x => x > BigInt(0)))
+        require(xs.forall(x => x > BigInt(0)))
     }
 
     /** A check returns nothing: it states what holds of its parameters where it returns. */
@@ -124,6 +135,7 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
     import proofs.*
 
     private val clamp = FunctionDef(SpecifiedExamples.clamp)
+    private val positives = FunctionDef(SpecifiedExamples.positives)
     private val increment = FunctionDef(SpecifiedExamples.increment)
     private val wrong = FunctionDef(SpecifiedExamples.wrong)
     private val plain = FunctionDef(SpecifiedExamples.plain)
@@ -183,6 +195,39 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
         proven(inSource(checked).prop, 80, checked)
         // negative control: it returns at the limit
         refuted(inSource(checkedWrongly).prop, 80, checkedWrongly)
+    }
+
+    test("the guarantees of a function of a list are of the lists that meet limits") {
+        val verifier = Verifier.empty
+        verifier.addFunction(positives)
+        val parameter = Props.limitedData[PList[BigInt]](xs => xs.length <= 2)
+        val List(limited) = verifier.guarantees(positives.ref, parameter).statements
+        // Its variable is a forAllDataLimited one: over the lists' Data encodings, with the limits.
+        limited.prop match
+            case Prop.Forall(variable, _) =>
+                assert(DataEncoding.encoded(variable.tp).isDefined, variable.tp.show)
+                assert(DataEncoding.limits(variable.tp).all.nonEmpty, variable.tp.show)
+            case other => fail(s"expected a forAll, got $other")
+        // Without limits, a forAllData variable.
+        val unlimited = Verifier.empty.tap(_.addFunction(positives))
+        unlimited.guarantees(positives.ref, Props.unlimitedData[PList[BigInt]]).statements match
+            case List(statement) =>
+                statement.prop match
+                    case Prop.Forall(variable, _) =>
+                        assert(DataEncoding.encoded(variable.tp).isDefined, variable.tp.show)
+                        assert(DataEncoding.limits(variable.tp).all.isEmpty, variable.tp.show)
+                    case other => fail(s"expected a forAll, got $other")
+            case other => fail(s"expected one guarantee, got $other")
+        // Limits of another type than the parameter's are refused.
+        assertThrows[IllegalArgumentException](
+          Verifier.empty
+              .tap(_.addFunction(positives))
+              .guarantees(positives.ref, Props.limitedData[PList[ByteString]](_.length <= 2))
+        )
+        // Lean proves it: each run checks the limits first, and walks two elements at most.
+        requireLean()
+        val proved = verifier.verify(limited, UplcBlaster(Budget.Auto, lean))
+        assert(proved.isInstanceOf[VerificationResult.Proven], proved)
     }
 
     test("a clause anywhere on a path states what holds where the function returns through it") {
@@ -256,14 +301,15 @@ class SpecificationsTest extends AnyFunSuite with LeanProofsSuite {
             case Origin.Guarantees(function, lines) =>
                 assert(function == bounded.ref && lines.size == 2 && lines.forall(_ > 0))
             case other => fail(s"expected the origin of several guarantees, got $other")
-        // Each statement says that the function returns: a program for its body, and one for the
-        // clause. Together they have the body's program once.
+        // Each statement claims a clause where the function returns: in the rejecting form, a
+        // program for the clause and one that runs the body where the clause is false. Together
+        // they have the body's program once, with both clauses one claim.
         def programs(statement: Statement): Int =
             UplcBlaster.lower(statement.prop, FunctionTable(bounded)) match
                 case Right(lowered) => lowered.leaves.size
                 case Left(reason)   => fail(reason)
         assert(each.statements.map(programs) == List(2, 2))
-        assert(programs(together) == 3)
+        assert(programs(together) == 2)
         assert(
           verifier
               .verify(together, UplcBlaster(Budget.LeanSteps(120), lean))

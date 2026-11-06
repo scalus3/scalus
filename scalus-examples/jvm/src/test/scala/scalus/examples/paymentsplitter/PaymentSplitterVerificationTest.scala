@@ -5,7 +5,7 @@ import scalus.*
 import scalus.cardano.onchain.plutus.prelude
 import scalus.cardano.onchain.plutus.v3.{Address, Credential, PubKeyHash, TxCert, TxId, TxInInfo, TxOut, TxOutRef, Value}
 import scalus.compiler.Compile
-import scalus.examples.vesting.VestingVerificationTest.{scriptContext, spendingInfo}
+import scalus.examples.ScriptContextData.{scriptContext, spendingInfo}
 import scalus.uplc.builtin.Builtins.{constrData, mkCons, mkNilData, unConstrData}
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.hex

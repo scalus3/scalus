@@ -142,9 +142,16 @@ object MintingPolicy {
     def spendsSeed(context: MintingContext, txId: ByteString, txOutIdx: BigInt): Boolean =
         context.inputs.exists(ref => ref.id.hash == txId && ref.idx == txOutIdx)
 
-    /** The quantities of the policy's own tokens in the transaction's mint. */
+    /** The quantities of the policy's own tokens in the transaction's mint: none where the mint
+      * names no token of the policy.
+      *
+      * The clauses are total. Where the mint names no token of the policy, the policy fails, so
+      * what a clause says there does not count, and a clause that failed there too would make the
+      * verifier's rejecting form decide nothing (docs/design/verification-details/uplc-blaster.md,
+      * "The rejecting form").
+      */
     def ownTokens(context: MintingContext): SortedMap[ByteString, BigInt] =
-        context.minted.toSortedMap.get(context.ownSymbol).getOrFail(NoOwnTokens)
+        context.minted.toSortedMap.get(context.ownSymbol).getOrElse(SortedMap.empty)
 
     /** Whether the transaction burns each of the policy's tokens that it names: every quantity is
       * negative.
@@ -164,8 +171,6 @@ object MintingPolicy {
     /** The quantity of the token `name` in `tokens`, zero where it is not named. */
     def quantityOf(tokens: SortedMap[ByteString, BigInt], name: ByteString): BigInt =
         tokens.get(name).getOrElse(BigInt(0))
-
-    inline val NoOwnTokens = "The mint names no token of the policy"
 
     @Ignore
     given Options = Options(

@@ -82,6 +82,24 @@ final case class StatedGuarantees(
     together: Option[Statement]
 )
 
+/** How a verifier's statement of a clause says the clause of where the function returns
+  * ([[Verifier.guarantees]]).
+  */
+enum Connective {
+
+    /** `denotes(body) ==> clause` ([[Prop.Implies]]): wherever the function returns, the clause
+      * returns `true`. A clause that fails where the function returns is false there.
+      */
+    case Implies
+
+    /** `denotes(body) ==>? clause` ([[Prop.Rejects]]): wherever the clause returns `false`, the
+      * function does not return. Where the clause fails it says nothing, as where it reads a part
+      * of the function's input that the function rejects, and a tactic checks it in the rejecting
+      * form alone, whose runs end where the clause fails.
+      */
+    case Rejects
+}
+
 /** Which proof mechanism checked an artifact. */
 enum ProofKind {
 
@@ -260,15 +278,38 @@ final class Verifier private (results: Option[KeptResults]) {
       * arguments satisfy that contract's precondition, whenever the call is reached
       * (prop-semantics.md §6). `caller` must be in the function table, with its SIR.
       */
-    def obligations(caller: FunctionRef[?, ?]): CallObligations = declareObligations(caller, None)
+    def obligations(caller: FunctionRef[?, ?]): CallObligations =
+        declareObligations(caller, None, None)
+
+    /** [[obligations]] of `caller`, a function of one parameter, over the values of it that
+      * `parameter` says ([[Props.limitedData]]).
+      */
+    def obligations(caller: FunctionRef[?, ?], parameter: LimitedData): CallObligations =
+        declareObligations(caller, None, Some(parameter))
 
     /** [[obligations]] of the function `callerContract` is about, where that contract's own
       * precondition holds: the calling function may assume what its callers establish. They are
       * named after the contract, not the function, so both can be declared in one verifier.
       */
-    def obligations(callerContract: Statement): CallObligations = callerContract.origin match
+    def obligations(callerContract: Statement): CallObligations =
+        obligationsOf(callerContract, None)
+
+    /** [[obligations]] of the function `callerContract` is about, a function of one parameter, over
+      * the values of it that `parameter` says ([[Props.limitedData]]).
+      */
+    def obligations(callerContract: Statement, parameter: LimitedData): CallObligations =
+        obligationsOf(callerContract, Some(parameter))
+
+    private def obligationsOf(
+        callerContract: Statement,
+        parameter: Option[LimitedData]
+    ): CallObligations = callerContract.origin match
         case Origin.Contract(contract) =>
-            declareObligations(contract.function, Some(callerContract.name -> contract))
+            declareObligations(
+              contract.function,
+              Some(callerContract.name -> contract),
+              parameter
+            )
         case _ =>
             throw new IllegalArgumentException(s"${callerContract.name} is not a contract")
 
@@ -296,17 +337,73 @@ final class Verifier private (results: Option[KeptResults]) {
       * for all of them.
       */
     def guarantees(function: FunctionRef[?, ?]): StatedGuarantees =
-        declareGuarantees(function, None)
+        declareGuarantees(function, None, None)
+
+    /** [[guarantees]] of `function`, a function of one parameter, over the values of it that
+      * `parameter` says ([[Props.limitedData]]): as for a validator's entry point, over the script
+      * contexts whose collections are within limits.
+      */
+    def guarantees(function: FunctionRef[?, ?], parameter: LimitedData): StatedGuarantees =
+        declareGuarantees(function, None, Some(parameter))
+
+    /** [[guarantees]] of `function` over the values of its parameter that `parameter` says, each
+      * stated with `connective`: with [[Connective.Rejects]], a clause that fails, as one that
+      * reads a datum the function does not read, says nothing where it fails.
+      */
+    def guarantees(
+        function: FunctionRef[?, ?],
+        parameter: LimitedData,
+        connective: Connective
+    ): StatedGuarantees =
+        declareGuarantees(function, None, Some(parameter), connective)
 
     /** [[guarantees]] of the function `contract` is about, where that contract's own precondition
       * holds: a clause may rely on what the function's callers establish. They are named after the
       * contract, not the function, so both can be declared in one verifier.
       */
-    def guarantees(contract: Statement): StatedGuarantees = contract.origin match
+    def guarantees(contract: Statement): StatedGuarantees = guaranteesOf(contract, None)
+
+    /** [[guarantees]] of the function `contract` is about, a function of one parameter, over the
+      * values of it that `parameter` says ([[Props.limitedData]]).
+      */
+    def guarantees(contract: Statement, parameter: LimitedData): StatedGuarantees =
+        guaranteesOf(contract, Some(parameter))
+
+    private def guaranteesOf(
+        contract: Statement,
+        parameter: Option[LimitedData]
+    ): StatedGuarantees = contract.origin match
         case Origin.Contract(stated) =>
-            declareGuarantees(stated.function, Some(contract.name -> stated))
+            declareGuarantees(stated.function, Some(contract.name -> stated), parameter)
         case _ =>
             throw new IllegalArgumentException(s"${contract.name} is not a contract")
+
+    /** The variables of a statement about the function of `body`: its parameters, each a variable
+      * of its type, but for a function of one parameter that `parameter` says, which is a
+      * [[Props.forAllDataLimited]] variable ([[Props.limitedData]]).
+      */
+    private def variablesOf(
+        function: FunctionRef[?, ?],
+        body: Obligations.Body,
+        parameter: Option[LimitedData]
+    ): List[PropExpr.Ident[Any]] = parameter match
+        case None => body.variables
+        case Some(limited) =>
+            body.variables match
+                // By what they show: the parameter's type is the function's SIR's, and `limited`'s
+                // is compiled apart, so their annotations differ.
+                case List(variable) if variable.tp.show == limited.tp.show =>
+                    List(DataEncoding.encodedVariable(variable, limited.decoder, limited.limits))
+                case List(variable) =>
+                    throw new IllegalArgumentException(
+                      s"${function.displayName} takes a ${variable.tp.show}, and the values that " +
+                          s"meet the limits are of ${limited.tp.show}"
+                    )
+                case variables =>
+                    throw new IllegalArgumentException(
+                      s"${function.displayName} takes ${variables.size} parameters: limits are of " +
+                          "the one parameter of a function"
+                    )
 
     /** The precondition of `contract` over the parameters of the function it is about. */
     private def assumption(contract: FunctionContract[?, ?], parameters: List[SIR.Var]): Prop =
@@ -317,20 +414,25 @@ final class Verifier private (results: Option[KeptResults]) {
 
     private def declareGuarantees(
         function: FunctionRef[?, ?],
-        premise: Option[(String, FunctionContract[?, ?])]
+        premise: Option[(String, FunctionContract[?, ?])],
+        parameter: Option[LimitedData],
+        connective: Connective = Connective.Implies
     ): StatedGuarantees = {
         val definition = functionTable(function)
         val body = Obligations.body(definition, definition(Representation.Sir))
         val owner = premise.fold(function.displayName)(_._1)
         val assumed = premise.map((_, contract) => assumption(contract, body.parameters))
+        // The variables, whether or not there is a clause: a parameter that does not fit is
+        // refused at once.
+        val variables = variablesOf(function, body, parameter)
         // Where the function returns, `conclusion` holds, over its parameters.
         def stated(conclusion: Prop): Prop = {
-            val returned = Prop.Implies(
-              Prop.Denotes(PropExpr.SIRExpr[Any](body.wrapped(body.term))),
-              conclusion
-            )
+            val returns = Prop.Denotes(PropExpr.SIRExpr[Any](body.wrapped(body.term)))
+            val returned = connective match
+                case Connective.Implies => Prop.Implies(returns, conclusion)
+                case Connective.Rejects => Prop.Rejects(returns, conclusion)
             val guarded = assumed.fold(returned)(Prop.Implies(_, returned))
-            body.variables.foldRight[Prop](guarded)(Prop.Forall(_, _))
+            variables.foldRight[Prop](guarded)(Prop.Forall(_, _))
         }
         val statements = List.newBuilder[Statement]
         val unsupported = List.newBuilder[String]
@@ -398,7 +500,8 @@ final class Verifier private (results: Option[KeptResults]) {
 
     private def declareObligations(
         caller: FunctionRef[?, ?],
-        premise: Option[(String, FunctionContract[?, ?])]
+        premise: Option[(String, FunctionContract[?, ?])],
+        parameter: Option[LimitedData]
     ): CallObligations = {
         val definition = functionTable(caller)
         val specified = Obligations.body(definition, definition(Representation.Sir))
@@ -413,7 +516,7 @@ final class Verifier private (results: Option[KeptResults]) {
             )
             .groupBy(_._2.function.name)
         val arities = contracts.map((name, declared) => name -> declared.head._2.variables.size)
-        val parameters = body.variables
+        val parameters = variablesOf(caller, body, parameter)
         val owner = premise.fold(caller.displayName)(_._1)
         val assumed = premise.map((_, contract) => assumption(contract, body.parameters))
         val statements = List.newBuilder[Statement]
