@@ -6,8 +6,9 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.Script
 import scalus.compiler.*
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
@@ -17,7 +18,9 @@ import scalus.uplc.transform.{CaseConstrApply, Inliner}
 import scala.annotation.tailrec
 import scala.language.implicitConversions
 
-class FibonacciTest extends AnyFunSuite with ScalusTest {
+class FibonacciTest extends AnyFunSuite with ScalusTest with BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = FibonacciTestBudgets
+
     given Options = Options.default
 
     /** Fibonacci Lookup Implementation using Pre-packed ByteString
@@ -85,9 +88,9 @@ class FibonacciTest extends AnyFunSuite with ScalusTest {
         }
 
         val result = (optFibTerm $ 25.asTerm).evaluateDebug
-        assert(optFibTerm.plutusV3.cborByteString.length == 113)
+        pinLabel("size")(pinSize(optFibTerm.plutusV3.cborEncoded.length))
         assert(result.asInstanceOf[Result.Success].term == 75025.asTerm)
-        assert(result.budget == ExUnits(memory = 2408, steps = 1_573282))
+        pinEval(result.budget, Script.PlutusV3(optFibTerm.plutusV3).script.size)
     }
 
     test("fibonacci unfold") {

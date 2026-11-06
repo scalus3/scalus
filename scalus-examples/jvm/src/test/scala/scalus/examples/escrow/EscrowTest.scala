@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
@@ -16,7 +17,8 @@ import scalus.utils.await
   *   3. Pay: Bob releases payment to Alice OR
   *   4. Refund: Alice refunds to Bob
   */
-class EscrowTest extends AnyFunSuite, ScalusTest {
+class EscrowTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = EscrowTestBudgets
 
     private given env: CardanoInfo = TestUtil.testEnvironment
     private val contract = EscrowContract.compiled.withErrorTraces
@@ -108,10 +110,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
           signer = Bob.signer
         )
 
-        assertResult(
-          ExUnits(memory = 99457, steps = 49_702_903)
-        ):
-            depositTx.witnessSet.redeemers.get.value.totalExUnits
+        pinTx(depositTx)
         val result = provider.submit(depositTx).await()
         assert(result.isRight, s"Deposit tx failed: $result")
 
@@ -213,10 +212,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
           signer = Bob.signer
         )
 
-        assertResult(
-          ExUnits(memory = 91714, steps = 40_604_495)
-        ):
-            payTx.witnessSet.redeemers.get.value.totalExUnits
+        pinTx(payTx)
         val result = provider.submit(payTx).await()
         assert(result.isRight, s"Pay tx failed: $result")
     }
@@ -298,10 +294,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
 
-        assertResult(
-          ExUnits(memory = 100260, steps = 45_526_339)
-        ):
-            refundTx.witnessSet.redeemers.get.value.totalExUnits
+        pinTx(refundTx)
         val result = provider.submit(refundTx).await()
         assert(result.isRight, s"Refund tx failed: $result")
     }

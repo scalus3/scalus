@@ -1,88 +1,30 @@
 package scalus.examples.paymentsplitter
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.ScalaCompilerVersion
 import scalus.*
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{ExUnits, Script}
 import scalus.cardano.onchain.plutus.v3.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.{RewardingScript, SpendingScript}
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, List as SList, Option as SOption, SortedMap}
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 
 /** Tests for OptimizedPaymentSplitterValidator using shared test cases. */
 class OptimizedPaymentSplitterValidatorTest
     extends AnyFunSuite
     with ScalusTest
+    with BudgetPinsSuite
     with PaymentSplitterTestCases {
+
+    override protected def budgetTable: BudgetTable = OptimizedPaymentSplitterValidatorTestBudgets
 
     private val contract = OptimizedPaymentSplitterContract.compiled.withErrorTraces
     private val lockTxId = random[TxId]
     private val payeesTxId = random[TxId]
     private val txId = random[TxId]
     private val scriptHash = contract.script.scriptHash
-
-    private val expectedRewardBudgets: Map[String, ExUnits] = ScalaCompilerVersion.baseline(
-      pre38 = Map(
-        "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 107088,
-          steps = 39_495_034
-        ),
-        "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 133795,
-          steps = 50_744_754
-        ),
-        "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 160502,
-          steps = 61_994_474
-        ),
-        "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 160502,
-          steps = 61_994_474
-        ),
-        "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 160502,
-          steps = 61_994_474
-        ),
-        "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 160502,
-          steps = 61_994_474
-        ),
-        "success between 5 payees" -> ExUnits(memory = 213916, steps = 84_493_914),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 208686, steps = 87_752_426)
-      ),
-      since38 = Map(
-        "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 103368,
-          steps = 38_165_660
-        ),
-        "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 130075,
-          steps = 49_415_380
-        ),
-        "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 156782,
-          steps = 60_665_100
-        ),
-        "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 156782,
-          steps = 60_665_100
-        ),
-        "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 156782,
-          steps = 60_665_100
-        ),
-        "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 156782,
-          steps = 60_665_100
-        ),
-        "success between 5 payees" -> ExUnits(memory = 210196, steps = 83_164_540),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 204966, steps = 86_423_052)
-      )
-    )
-
-    private val expectedSpendBudget: ExUnits = ExUnits(memory = 38168, steps = 12_467_087)
 
     // Run all shared test cases
     testCases.foreach { tc =>
@@ -93,14 +35,9 @@ class OptimizedPaymentSplitterValidatorTest
 
     test("Optimized: budget comparison with multiple UTxOs") {
         val tc = testCases.find(_.name.contains("multiple contract UTxOs")).get
-        val (rewardBudget, spendBudget) = runTestCaseWithBudget(tc)
-        assert(
-          rewardBudget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 208686, steps = 87_752_426),
-            since38 = ExUnits(memory = 204966, steps = 86_423_052)
-          )
-        )
-        assert(spendBudget == expectedSpendBudget)
+        val (rewardBudget, spendBudget, size) = runTestCaseWithBudget(tc)
+        pinEval("reward", rewardBudget, size)
+        pinEval("spend", spendBudget, size)
     }
 
     private def runTestCase(tc: PaymentSplitterTestCase): Unit = {
@@ -194,10 +131,7 @@ class OptimizedPaymentSplitterValidatorTest
         val rewardResult = (applied $ rewardContext.toData).evaluateDebug
 
         if tc.expectedSuccess then
-            assert(
-              rewardResult.isSuccess,
-              clue = s"Expected reward success but got failure: ${rewardResult.logs.mkString(", ")}"
-            )
+            pinLabel("reward")(assertSuccess(rewardResult, applied))
 
             // Also test spending endpoint if reward succeeded
             val spendContext = ScriptContext(
@@ -206,17 +140,7 @@ class OptimizedPaymentSplitterValidatorTest
               scriptInfo = SpendingScript(txOutRef = firstScriptOutRef)
             )
             val spendResult = (applied $ spendContext.toData).evaluateDebug
-            assert(
-              spendResult.isSuccess,
-              clue = s"Expected spend success but got failure: ${spendResult.logs.mkString(", ")}"
-            )
-            expectedRewardBudgets.get(tc.name).foreach { expected =>
-                assert(rewardResult.budget == expected, s"Reward budget mismatch for '${tc.name}'")
-            }
-            assert(
-              spendResult.budget == expectedSpendBudget,
-              s"Spend budget mismatch for '${tc.name}'"
-            )
+            pinLabel("spend")(assertSuccess(spendResult, applied))
         else
             assert(
               rewardResult.isFailure,
@@ -229,7 +153,7 @@ class OptimizedPaymentSplitterValidatorTest
             )
     }
 
-    private def runTestCaseWithBudget(tc: PaymentSplitterTestCase): (ExUnits, ExUnits) = {
+    private def runTestCaseWithBudget(tc: PaymentSplitterTestCase): (ExUnits, ExUnits, Int) = {
         val payeesList = tc.payees.map(_.pkh)
         val payeesData = payeesList.toData
 
@@ -320,6 +244,6 @@ class OptimizedPaymentSplitterValidatorTest
         val spendResult = (applied $ spendContext.toData).evaluateDebug
         val spendBudget = spendResult.budget
 
-        (rewardBudget, spendBudget)
+        (rewardBudget, spendBudget, Script.PlutusV3(applied).script.size)
     }
 }

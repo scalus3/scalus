@@ -4,12 +4,13 @@ import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.ledger.ExUnits
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 
-class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
+class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest with BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = SimpleTransferValidatorTestBudgets
     val fee = 10
 
     private val contract = SimpleTransferContract.compiled.withErrorTraces
@@ -36,10 +37,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
               ),
             )
         val res = contract.program.runWithDebug(ctx)
-        assert(res.isSuccess, res.logs)
-        assert(
-          res.budget == (ExUnits(memory = 73853, steps = 31_550_026))
-        )
+        assertSuccess(res, contract.program)
     }
 
     test("deposit wrong signed") {
@@ -85,10 +83,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
           ),
         )
         val res = contract.program.runWithDebug(ctx)
-        assert(res.isSuccess, res.logs)
-        assert(
-          res.budget == (ExUnits(memory = 88105, steps = 36_679_848))
-        )
+        assertSuccess(res, contract.program)
     }
 
     test("withdraw wrong signed") {
@@ -115,10 +110,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
           ),
         )
         val res = contract.program.runWithDebug(ctx)
-        assert(res.isSuccess, res.logs)
-        assert(
-          res.budget == (ExUnits(memory = 60435, steps = 22_757_728))
-        )
+        assertSuccess(res, contract.program)
     }
 
     test("withdraw more") {

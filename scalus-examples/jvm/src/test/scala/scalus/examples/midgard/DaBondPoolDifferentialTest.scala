@@ -2,11 +2,11 @@ package scalus.examples.midgard
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.ScalaCompilerVersion
 import scalus.cardano.blueprint.Blueprint
-import scalus.cardano.ledger.{CardanoInfo, ExUnits, RefScriptFee}
+import scalus.cardano.ledger.{CardanoInfo, ExUnits, RefScriptFee, Script}
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, List, Option}
 import scalus.cardano.onchain.plutus.v3.*
+import scalus.testing.budget.{BudgetPins, BudgetPinsSuite, BudgetTable}
 import scalus.uplc.Program
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.builtin.Builtins.{blake2b_256, serialiseData}
@@ -33,7 +33,13 @@ object AikenDaBondPool {
   * Each test builds one `ScriptContext` with the same fixture and the same single mutation as its
   * Aiken twin. The test name drops the `da_bond_pool_` prefix.
   */
-class DaBondPoolDifferentialTest extends AnyFunSuite with BeforeAndAfterAll {
+class DaBondPoolDifferentialTest
+    extends AnyFunSuite
+    with BeforeAndAfterAll
+    with BudgetPins
+    with BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = DaBondPoolDifferentialTestBudgets
+
     import DaBondPoolConstants.*
     import DaBondPoolFixtures.*
 
@@ -67,41 +73,8 @@ class DaBondPoolDifferentialTest extends AnyFunSuite with BeforeAndAfterAll {
         )
         if expectSuccess then
             budgets(name) = (aikenResult.budget, scalusResult.budget)
-            assert(scalusResult.budget == scalusPins(name), s"Scalus $name budget")
+            pinEval(scalusResult.budget, Script.PlutusV3(scalus).script.size)
     }
-
-    /** Exact Scalus ExUnits of every accepted case (`scalus:contract-test` pin convention). */
-    private val scalusPins: Map[String, ExUnits] = Map(
-      "init_accepts_honest_pool" -> ExUnits(memory = 50711, steps = 22_525575),
-      "top_up_accepts_honest_bonded" -> ExUnits(memory = 65975, steps = 31_410473),
-      "top_up_accepts_honest_withdrawing" -> ExUnits(memory = 65975, steps = 31_546868),
-      "top_up_accepts_exact_minimum" -> ExUnits(memory = 65975, steps = 31_410473),
-      "slash_accepts_honest_bonded" -> ScalaCompilerVersion.baseline(
-        pre38 = ExUnits(memory = 132537, steps = 58_156509),
-        since38 = ExUnits(memory = 130677, steps = 57_491822)
-      ),
-      "slash_accepts_withdrawing_and_keeps_unlock_at" -> ScalaCompilerVersion.baseline(
-        pre38 = ExUnits(memory = 132537, steps = 58_292904),
-        since38 = ExUnits(memory = 130677, steps = 57_628217)
-      ),
-      "slash_takes_exactly_the_backing_when_short" -> ScalaCompilerVersion.baseline(
-        pre38 = ExUnits(memory = 132537, steps = 58_156509),
-        since38 = ExUnits(memory = 130677, steps = 57_491822)
-      ),
-      "slash_takes_zero_below_the_floor (at the floor)" -> ScalaCompilerVersion.baseline(
-        pre38 = ExUnits(memory = 132537, steps = 58_156509),
-        since38 = ExUnits(memory = 130677, steps = 57_491822)
-      ),
-      "slash_takes_zero_below_the_floor (below the floor)" -> ScalaCompilerVersion.baseline(
-        pre38 = ExUnits(memory = 132537, steps = 58_156509),
-        since38 = ExUnits(memory = 130677, steps = 57_491822)
-      ),
-      "begin_withdraw_accepts_honest" -> ExUnits(memory = 115905, steps = 52_278376),
-      "cancel_withdraw_accepts_honest" -> ExUnits(memory = 105594, steps = 48_212407),
-      "complete_withdraw_accepts_honest" -> ExUnits(memory = 117150, steps = 52_132631),
-      "complete_withdraw_accepts_at_unlock_boundary" -> ExUnits(memory = 117150, steps = 52_132631),
-      "complete_withdraw_accepts_the_whole_backing" -> ExUnits(memory = 117150, steps = 52_132631)
-    )
 
     /** Prints a Markdown table: per honest case, both budgets and the per-tx script cost (ExUnits
       * fee plus the reference-script fee of the applied script).

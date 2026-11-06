@@ -1,86 +1,29 @@
 package scalus.examples.paymentsplitter
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.ScalaCompilerVersion
 import scalus.*
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.onchain.plutus.v3.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.SpendingScript
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, List as SList, Option as SOption}
-import scalus.cardano.ledger.ExUnits
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 
 /** Tests for NaivePaymentSplitterValidator using shared test cases. */
 class NaivePaymentSplitterValidatorTest
     extends AnyFunSuite
     with ScalusTest
+    with BudgetPinsSuite
     with PaymentSplitterTestCases {
+
+    override protected def budgetTable: BudgetTable = NaivePaymentSplitterValidatorTestBudgets
 
     private val contract = NaivePaymentSplitterContract.compiled.withErrorTraces
     private val lockTxId = random[TxId]
     private val payeesTxId = random[TxId]
     private val txId = random[TxId]
     private val scriptHash = contract.script.scriptHash
-
-    private val expectedBudgets: Map[String, ExUnits] = ScalaCompilerVersion.baseline(
-      pre38 = Map(
-        "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 155999,
-          steps = 54_489_071
-        ),
-        "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 243216,
-          steps = 86_132_901
-        ),
-        "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 343541,
-          steps = 124_244_435
-        ),
-        "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 343541,
-          steps = 124_244_435
-        ),
-        "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 343541,
-          steps = 124_244_435
-        ),
-        "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 343541,
-          steps = 124_244_435
-        ),
-        "success between 5 payees" -> ExUnits(memory = 593712, steps = 223_727_208),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 395525, steps = 150_610_387)
-      ),
-      since38 = Map(
-        "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 147663,
-          steps = 51_465_148
-        ),
-        "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 233620,
-          steps = 82_540_291
-        ),
-        "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 332685,
-          steps = 120_083_138
-        ),
-        "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 332685,
-          steps = 120_083_138
-        ),
-        "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 332685,
-          steps = 120_083_138
-        ),
-        "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 332685,
-          steps = 120_083_138
-        ),
-        "success between 5 payees" -> ExUnits(memory = 580336, steps = 218_428_537),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 384669, steps = 146_449_090)
-      )
-    )
 
     // Run all shared test cases
     testCases.foreach { tc =>
@@ -206,14 +149,7 @@ class NaivePaymentSplitterValidatorTest
         val programWithContext = applied $ context.toData
         val result = programWithContext.evaluateDebug
 
-        if tc.expectedSuccess then
-            assert(
-              result.isSuccess,
-              clue = s"Expected success but got failure: ${result.logs.mkString(", ")}"
-            )
-            expectedBudgets.get(tc.name).foreach { expected =>
-                assert(result.budget == expected, s"Budget mismatch for '${tc.name}'")
-            }
+        if tc.expectedSuccess then assertSuccess(result, applied)
         else
             assert(
               result.isFailure,

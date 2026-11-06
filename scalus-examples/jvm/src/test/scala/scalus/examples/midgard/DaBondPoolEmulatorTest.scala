@@ -1,7 +1,6 @@
 package scalus.examples.midgard
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.ScalaCompilerVersion
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.{Emulator, EmulatorBase}
@@ -9,6 +8,7 @@ import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
 import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
+import scalus.testing.budget.{BudgetPins, BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.uplc.builtin.Builtins.blake2b_256
 import scalus.uplc.builtin.Data.toData
@@ -24,7 +24,9 @@ import scala.collection.mutable
   * `Slash` is not run here: it needs a hub oracle, a state-queue mint, and a correction lock. It is
   * covered by [[DaBondPoolDifferentialTest]].
   */
-class DaBondPoolEmulatorTest extends AnyFunSuite {
+class DaBondPoolEmulatorTest extends AnyFunSuite, BudgetPins, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = DaBondPoolEmulatorTestBudgets
+
     import DaBondPoolConstants.*
 
     private given env: CardanoInfo = CardanoInfo.mainnet
@@ -87,13 +89,13 @@ class DaBondPoolEmulatorTest extends AnyFunSuite {
         )
     }
 
-    case class Step(name: String, fee: Long, exUnits: ExUnits, txSize: Int)
+    case class Step(name: String, fee: Long, exUnits: ExUnits, txSize: Int, tx: Transaction)
 
     private def metrics(name: String, tx: Transaction): Step = {
         val exUnits = tx.witnessSet.redeemers
             .map(_.value.toSeq.map(_.exUnits).foldLeft(ExUnits(0, 0))(_ + _))
             .getOrElse(ExUnits(0, 0))
-        Step(name, tx.body.value.fee.value, exUnits, tx.toCbor.length)
+        Step(name, tx.body.value.fee.value, exUnits, tx.toCbor.length, tx)
     }
 
     /** Runs publish, InitPool, TopUp, BeginWithdraw, CancelWithdraw, BeginWithdraw and
@@ -284,24 +286,6 @@ class DaBondPoolEmulatorTest extends AnyFunSuite {
                 f"${s.fee.toDouble / a.fee}%.2f | ${a.exUnits.memory}%,d | ${s.exUnits.memory}%,d | $memRatio |"
         println(lines.mkString("\n"))
         assert(aiken.map(_.name) == scalus.map(_.name))
-        for s <- scalus do
-            val (fee, exUnits) = scalusPins(s.name)
-            assert(s.exUnits == exUnits, s"Scalus ${s.name} ExUnits")
-            assert(s.fee == fee.value, s"Scalus ${s.name} fee")
+        for s <- scalus do pinLabel(s.name)(pinTx(s.tx))
     }
-
-    /** The 3.8+ compiler emits a 16 B smaller script, so every fee has two baselines. */
-    private def fee(pre38: Long, since38: Long): Coin =
-        ScalaCompilerVersion.baseline(Coin(pre38), Coin(since38))
-
-    /** Exact Scalus fee and ExUnits of every step (`scalus:contract-test` pin convention). */
-    private val scalusPins: Map[String, (Coin, ExUnits)] = Map(
-      "publish" -> (fee(273345, 272597), ExUnits(memory = 0, steps = 0)),
-      "InitPool" -> (fee(219761, 219506), ExUnits(memory = 50711, steps = 22_525575)),
-      "TopUp" -> (fee(218950, 218695), ExUnits(memory = 65975, steps = 31_410473)),
-      "BeginWithdraw" -> (fee(233422, 233167), ExUnits(memory = 120326, steps = 54_990725)),
-      "CancelWithdraw" -> (fee(231830, 231575), ExUnits(memory = 110015, steps = 50_924756)),
-      "BeginWithdraw (again)" -> (fee(233422, 233167), ExUnits(memory = 120326, steps = 54_990725)),
-      "CompleteWithdraw" -> (fee(231053, 230798), ExUnits(memory = 117150, steps = 52_132631))
-    )
 }

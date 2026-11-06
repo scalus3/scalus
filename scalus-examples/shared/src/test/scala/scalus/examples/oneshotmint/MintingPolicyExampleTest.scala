@@ -10,6 +10,7 @@ import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.TermDSL.given
@@ -17,7 +18,8 @@ import scalus.uplc.*
 
 import scala.language.implicitConversions
 
-class MintingPolicyExampleTest extends AnyFunSuite, ScalusTest {
+class MintingPolicyExampleTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = MintingPolicyExampleTestBudgets
 
     // Plutus V2 scripts: evaluated on the V2 machine, as BaseValidatorTest did.
     override protected def plutusVM: PlutusVM = PlutusVM.makePlutusV2VM()
@@ -206,7 +208,7 @@ class MintingPolicyExampleTest extends AnyFunSuite, ScalusTest {
         val appliedValidator =
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokens
         val flatSize = Program.plutusV1(appliedValidator).flatEncoded.length
-        assert(flatSize == 649)
+        pinSize(flatSize)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV1)
     }
 
@@ -219,7 +221,7 @@ class MintingPolicyExampleTest extends AnyFunSuite, ScalusTest {
         val appliedValidator =
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokens
         val flatSize = Program.plutusV2(appliedValidator).flatEncoded.length
-        assert(flatSize == 649)
+        pinSize(flatSize)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV2)
     }
 
@@ -242,9 +244,9 @@ class MintingPolicyExampleTest extends AnyFunSuite, ScalusTest {
         val appliedValidator =
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokensScott
         val flatSize = Program.plutusV1(appliedValidator).flatEncoded.length
-        // 687 (was 672 with the Z combinator): the self-application recursion
-        // encoding adds one Var per recursive call site; execution is cheaper.
-        assert(flatSize == 653)
+        // The self-application recursion encoding (replaced the Z combinator) adds one Var per
+        // recursive call site; execution is cheaper.
+        pinSize(flatSize)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV1)
     }
 }

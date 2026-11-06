@@ -9,13 +9,15 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.RedeemerPurpose
 import scalus.cardano.onchain.plutus.v3.PosixTime
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
-import scalus.uplc.eval.{ProfileFormatter, Result}
+import scalus.uplc.eval.ProfileFormatter
 import scalus.utils.await
 
-class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
+class AuctionValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = AuctionValidatorTestBudgets
     import AuctionValidatorTest.*
 
     test(s"Auction validator size is ${AuctionContract.compiled.script.script.size} bytes") {
@@ -60,43 +62,35 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
 
     // Budget assertion tests - limits should decrease as the compiler improves
     test("budget: first bid") {
-        val budget = TestCase(
+        val (budget, size) = TestCase(
           action = TestAction.Bid(bidAmount = 3_000_000L),
           expected = Expected.Success
         ).runWithBudget()
-        assert(
-          budget == ExUnits(memory = 74319, steps = 31_271_176)
-        )
+        pinEval(budget, size)
     }
 
     test("budget: outbid with refund") {
-        val budget = TestCase(
+        val (budget, size) = TestCase(
           action = TestAction.Outbid(newBidAmount = 5_000_000L),
           expected = Expected.Success
         ).runWithBudget()
-        assert(
-          budget == ExUnits(memory = 89435, steps = 37_285_576)
-        )
+        pinEval(budget, size)
     }
 
     test("budget: end auction with winner") {
-        val budget = TestCase(
+        val (budget, size) = TestCase(
           action = TestAction.EndWithWinner,
           expected = Expected.Success
         ).runWithBudget()
-        assert(
-          budget == ExUnits(memory = 128003, steps = 46_341_689)
-        )
+        pinEval(budget, size)
     }
 
     test("budget: end auction without bids") {
-        val budget = TestCase(
+        val (budget, size) = TestCase(
           action = TestAction.EndNoBids,
           expected = Expected.Success
         ).runWithBudget()
-        assert(
-          budget == ExUnits(memory = 108929, steps = 36_483_500)
-        )
+        pinEval(budget, size)
     }
 }
 
@@ -370,8 +364,8 @@ object AuctionValidatorTest extends ScalusTest {
                       s"Expected error '$errorContains' but got '$errorMsg'"
                     )
 
-        /** Run the test and return the execution budget for spend validators */
-        def runWithBudget(): ExUnits =
+        /** Run the test and return the execution budget and script size for spend validators */
+        def runWithBudget(): (ExUnits, Int) =
             val provider = createProvider()
             val (auction, oneShotUtxo) = createAuctionInstanceWithUtxo(provider)
 
@@ -392,7 +386,7 @@ object AuctionValidatorTest extends ScalusTest {
             auction: AuctionInstance,
             oneShotUtxo: Utxo,
             bidAmount: Long
-        ): ExUnits =
+        ): (ExUnits, Int) =
             provider.setSlot(beforeSlot)
             auction
                 .startAuction(
@@ -430,14 +424,14 @@ object AuctionValidatorTest extends ScalusTest {
               auctionUtxo.input,
               utxosBeforeBid,
               "First bid"
-            ).budget
+            )
 
         private def runOutbidWithBudget(
             provider: Emulator,
             auction: AuctionInstance,
             oneShotUtxo: Utxo,
             newBidAmount: Long
-        ): ExUnits =
+        ): (ExUnits, Int) =
             provider.setSlot(beforeSlot)
             auction
                 .startAuction(
@@ -484,13 +478,13 @@ object AuctionValidatorTest extends ScalusTest {
               auctionUtxo.input,
               allUtxosBeforeOutbid,
               "Outbid with refund"
-            ).budget
+            )
 
         private def runEndWithWinnerWithBudget(
             provider: Emulator,
             auction: AuctionInstance,
             oneShotUtxo: Utxo
-        ): ExUnits =
+        ): (ExUnits, Int) =
             provider.setSlot(beforeSlot)
             auction
                 .startAuction(
@@ -537,13 +531,13 @@ object AuctionValidatorTest extends ScalusTest {
               auctionUtxo.input,
               allUtxosBeforeEnd,
               "End auction with winner"
-            ).budget
+            )
 
         private def runEndNoBidsWithBudget(
             provider: Emulator,
             auction: AuctionInstance,
             oneShotUtxo: Utxo
-        ): ExUnits =
+        ): (ExUnits, Int) =
             provider.setSlot(beforeSlot)
             auction
                 .startAuction(
@@ -581,7 +575,7 @@ object AuctionValidatorTest extends ScalusTest {
               auctionUtxo.input,
               utxosBeforeEnd,
               "End auction without bids"
-            ).budget
+            )
 
     /** Run validator with pre-captured UTxOs (for when the transaction has already been submitted)
       */
@@ -592,7 +586,7 @@ object AuctionValidatorTest extends ScalusTest {
         scriptInput: TransactionInput,
         knownUtxos: Map[TransactionInput, TransactionOutput],
         label: String = ""
-    ): Result =
+    ): (ExUnits, Int) =
         given CardanoInfo = provider.cardanoInfo
         // Merge known utxos with any remaining utxos from provider
         val body = tx.body.value
@@ -636,7 +630,7 @@ object AuctionValidatorTest extends ScalusTest {
                 println("Wrote profile to target/auction-profile.html and .json")
             }
 
-        result
+        (result.budget, plutusScript.script.size)
 
     private def createProvider(): Emulator =
         Emulator(

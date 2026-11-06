@@ -10,12 +10,14 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.{Emulator, UtxoFilter, UtxoQuery, UtxoSource}
 import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner}
 import scalus.cardano.onchain.plutus.v3.{PosixTime, PubKeyHash}
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.eval.Result
 import scalus.utils.await
 
-class BettingTransactionTest extends AnyFunSuite, ScalusTest {
+class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = BettingTransactionTestBudgets
     private given env: CardanoInfo = TestUtil.testEnvironment
     private val contract = BettingContract.compiled.withErrorTraces
     private val scriptAddress = contract.address(env.network)
@@ -287,10 +289,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         }
 
         val result = runValidator(provider, joinTx, betUtxo.input)
-        assert(result.isSuccess)
-        assert(
-          result.budget == (ExUnits(memory = 111227, steps = 44_050_890))
-        )
+        assertSuccess(result, contract.program)
 
         provider.setSlot(beforeSlot - 1)
         assert(provider.submit(joinTx).await().isRight)
@@ -512,10 +511,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         }
 
         val result = runValidator(provider, winTx, joinedBetUtxo.input)
-        assert(result.isSuccess)
-        assert(
-          result.budget == (ExUnits(memory = 98418, steps = 38_026_798))
-        )
+        assertSuccess(result, contract.program)
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTime))
 

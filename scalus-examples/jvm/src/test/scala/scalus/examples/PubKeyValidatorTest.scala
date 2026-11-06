@@ -8,13 +8,14 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{ExUnits, Script}
 import scalus.cardano.onchain.plutus.v1.*
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, SortedMap}
 import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.v3
+import scalus.testing.budget.{BudgetPins, BudgetPinsSuite, BudgetTable}
 import scalus.uplc.*
 import scalus.uplc.eval.{Log, PlutusVM, RestrictingBudgetSpender}
 
@@ -22,7 +23,12 @@ import scala.util.Try
 
 import scala.language.implicitConversions
 
-class PubKeyValidatorTest extends AnyFunSuite with ScalaCheckPropertyChecks:
+class PubKeyValidatorTest
+    extends AnyFunSuite
+    with ScalaCheckPropertyChecks
+    with BudgetPins
+    with BudgetPinsSuite:
+    override protected def budgetTable: BudgetTable = PubKeyValidatorTestBudgets
 
     given Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
@@ -57,14 +63,14 @@ class PubKeyValidatorTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         val flatBytesLen = script.flatEncoded.length
 //    println(Utils.bytesToHex(flatBytes))
         // println(term.show)
-        assert(flatBytesLen == 120)
+        pinLabel("size")(pinSize(flatBytesLen))
         import TermDSL.given
 //    println(scriptContext.toData)
         val appliedValidator = script $ () $ () $ scriptContext.toData
         given PlutusVM = PlutusVM.makePlutusV1VM()
         val evalResult = appliedValidator.deBruijnedProgram.evaluateDebug
         assert(evalResult.isSuccess)
-        assert(evalResult.budget == ExUnits(memory = 10345, steps = 2_855689))
+        pinEval(evalResult.budget, Script.PlutusV1(script).script.size)
         assert(PubKeyValidator.validator((), (), scriptContext.toData) == ())
     }
 

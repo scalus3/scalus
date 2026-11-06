@@ -8,15 +8,18 @@ import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.{RedeemerPurpose, TxBuilder}
 import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.v3.ScriptContext
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
+import scalus.uplc.eval.Result
 import scalus.utils.await
 
 import java.time.Instant
 import scala.util.Try
 
-class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
+class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = LotteryValidatorTestBudgets
     import LotteryValidatorTest.{*, given}
 
     test(s"Lottery validator size is ${LotteryContract.compiled.script.script.size} bytes") {
@@ -45,8 +48,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         assertTxSucceeds(
           provider,
           revealTx,
-          lotteryUtxo._1,
-          ExUnits(memory = 78497, steps = 36_837_286)
+          lotteryUtxo._1
         )
     }
 
@@ -72,8 +74,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         assertTxSucceeds(
           provider,
           revealTx,
-          lotteryUtxo._1,
-          ExUnits(memory = 78497, steps = 36_792_110)
+          lotteryUtxo._1
         )
     }
 
@@ -99,8 +100,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         assertTxSucceeds(
           provider,
           revealTx,
-          lotteryUtxo._1,
-          ExUnits(memory = 78497, steps = 36_837_286)
+          lotteryUtxo._1
         )
     }
 
@@ -240,8 +240,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         assertTxSucceeds(
           provider,
           p2RevealTx,
-          lotteryUtxo2._1,
-          ExUnits(memory = 42163, steps = 16_978_217)
+          lotteryUtxo2._1
         )
     }
 
@@ -287,8 +286,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         assertTxSucceeds(
           provider,
           timeoutTx,
-          lotteryUtxo2._1,
-          ExUnits(memory = 59305, steps = 24_945_709)
+          lotteryUtxo2._1
         )
     }
 
@@ -375,8 +373,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         assertTxSucceeds(
           provider,
           loseTx,
-          lotteryUtxo2._1,
-          ExUnits(memory = 55943, steps = 24_848_222)
+          lotteryUtxo2._1
         )
     }
 
@@ -420,8 +417,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         assertTxSucceeds(
           provider,
           timeoutTx,
-          lotteryUtxo2._1,
-          ExUnits(memory = 59073, steps = 24_877_222)
+          lotteryUtxo2._1
         )
     }
 
@@ -750,8 +746,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         assertTxSucceeds(
           provider,
           loseTx,
-          lotteryUtxo2._1,
-          ExUnits(memory = 55711, steps = 24_779_735)
+          lotteryUtxo2._1
         )
     }
 
@@ -920,9 +915,18 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         assertTxSucceeds(
           provider,
           p1RevealTx,
-          lotteryUtxo2._1,
-          ExUnits(memory = 41931, steps = 16_909_730)
+          lotteryUtxo2._1
         )
+    }
+
+    /** Evaluates and submits a transaction that must succeed, and pins its budget. */
+    private def assertTxSucceeds(
+        provider: Emulator,
+        tx: Transaction,
+        lotteryInput: TransactionInput
+    ): Unit = {
+        val (result, size) = evalAndSubmit(provider, tx, lotteryInput)
+        pinEval(result.budget, size)
     }
 }
 
@@ -1076,24 +1080,27 @@ object LotteryValidatorTest extends ScalusTest {
       lotteryState = lotteryState
     )
 
-    private def assertTxSucceeds(
+    /** Evaluates and submits a transaction that must succeed. Returns the evaluation result and the
+      * size in bytes of the evaluated program, for the suite's budget pin.
+      */
+    private def evalAndSubmit(
         provider: Emulator,
         tx: Transaction,
-        lotteryInput: TransactionInput,
-        expectedBudget: ExUnits
-    ): Unit = {
+        lotteryInput: TransactionInput
+    ): (Result, Int) = {
         val scriptContext = getScriptContext(provider, tx, lotteryInput)
         val directResult = Try(LotteryContract.compiled.code(scriptContext.toData))
-        val evalResult = compiledContract(scriptContext.toData).program.evaluateDebug
+        val program = compiledContract(scriptContext.toData).program
+        val evalResult = program.evaluateDebug
         assert(evalResult.isSuccess, s"UPLC evaluation failed: ${evalResult.logs.mkString(", ")}")
-        assert(evalResult.budget == expectedBudget)
         val submissionResult = provider.submit(tx).await()
 
         directResult.failed.foreach(ex => fail(s"Direct validator call failed: ${ex.getMessage}"))
         assert(submissionResult.isRight, s"Emulator submission failed: $submissionResult")
+        (evalResult, compiledContract.script.script.size)
     }
 
-    /** Like [[assertTxSucceeds]], for a transaction whose budget no other test pins. */
+    /** Like [[evalAndSubmit]], for a transaction whose budget no other test pins. */
     private def assertAccepted(
         provider: Emulator,
         tx: Transaction,

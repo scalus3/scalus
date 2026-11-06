@@ -11,11 +11,13 @@ import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.v2.*
 import scalus.cardano.onchain.plutus.prelude.List
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.*
 
-class PreimageExampleTest extends AnyFunSuite, ScalusTest {
+class PreimageExampleTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = PreimageExampleTestBudgets
 
     // Plutus V2 scripts: evaluated on the V2 machine, as BaseValidatorTest did.
     override protected def plutusVM: PlutusVM = PlutusVM.makePlutusV2VM()
@@ -106,7 +108,7 @@ class PreimageExampleTest extends AnyFunSuite, ScalusTest {
         // println(validator.showHighlighted)
         val flatSize = validator.flatEncoded.length
         // V3 backend with lambda barriers, optimizeUplc = true
-        assert(flatSize == ScalaCompilerVersion.baseline(pre38 = 191, since38 = 174))
+        pinSize(flatSize)
         // V3 backend, optimizeUplc = false
         // assert(flatSize == 380)
         // SimpleBackend

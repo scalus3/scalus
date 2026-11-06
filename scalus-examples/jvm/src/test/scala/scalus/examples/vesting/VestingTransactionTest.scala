@@ -5,13 +5,15 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.{Emulator, NodeSubmitError}
 import scalus.cardano.txbuilder.RedeemerPurpose
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.eval.Result
 import scalus.utils.await
 
-class VestingTransactionTest extends AnyFunSuite, ScalusTest {
+class VestingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = VestingTransactionTestBudgets
 
     // Lowering of the prelude's `===` macro-spliced application trips the
     // not-provably-default Eq heuristic; the warning is a known false positive here.
@@ -137,10 +139,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
         )
 
         val result = runValidator(provider, withdrawTx, lockedUtxo.input)
-        assert(result.isSuccess, s"Validator failed: $result")
-        assert(
-          result.budget == (ExUnits(memory = 102088, steps = 45_362_126))
-        )
+        assertSuccess(result, contract.program)
 
         val submitResult = provider.submit(withdrawTx).await()
         assert(submitResult.isRight, s"Full withdrawal failed: $submitResult")
@@ -170,10 +169,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
         )
 
         val result = runValidator(provider, withdrawTx, lockedUtxo.input)
-        assert(result.isSuccess, s"Validator failed: $result")
-        assert(
-          result.budget == (ExUnits(memory = 126531, steps = 62_170_114))
-        )
+        assertSuccess(result, contract.program)
 
         val submitResult = provider.submit(withdrawTx).await()
         assert(submitResult.isRight, s"Partial withdrawal failed: $submitResult")

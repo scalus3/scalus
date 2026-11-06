@@ -10,6 +10,7 @@ import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.RedeemerPurpose
 import scalus.cardano.onchain.plutus.v3.TxOutRef
 import scalus.cardano.onchain.plutus.prelude.Rational
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Oracle}
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -17,7 +18,8 @@ import scalus.utils.await
 
 import java.time.Instant
 
-class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
+class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = PricebetValidatorTestBudgets
     import PricebetValidatorTest.{*, given}
 
     test("Owner initiates bet successfully") {
@@ -53,12 +55,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
           signer = Bob.signer
         )
 
-        val joinResult = assertTxSucceeds(provider, joinTx, pricebetUtxo._1)
-        assert(
-          // Slightly higher than before: the exchange-rate check now uses RationalEq.equals
-          // (cross-multiplication) instead of the previous structural equalsData on Rational.
-          joinResult.budget == (ExUnits(memory = 58029, steps = 27_146_462))
-        )
+        val (joinResult, joinSize) = assertTxSucceedsSized(provider, joinTx, pricebetUtxo._1)
+        pinEval(joinResult.budget, joinSize)
     }
 
     test("Doesn't allow double join") {
@@ -131,10 +129,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        val winResult = assertTxSucceeds(provider, winTx, joinedPricebetUtxo._1)
-        assert(
-          winResult.budget == (ExUnits(memory = 62975, steps = 23_982_006))
-        )
+        val (winResult, winSize) = assertTxSucceedsSized(provider, winTx, joinedPricebetUtxo._1)
+        pinEval(winResult.budget, winSize)
     }
 
     test("Win rejects a forged oracle UTxO that lacks the beacon token") {
@@ -236,10 +232,9 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(afterDeadlineSlot)
-        val timeoutResult = assertTxSucceeds(provider, timeoutTx, pricebetUtxo._1)
-        assert(
-          timeoutResult.budget == (ExUnits(memory = 29783, steps = 11_632_207))
-        )
+        val (timeoutResult, timeoutSize) =
+            assertTxSucceedsSized(provider, timeoutTx, pricebetUtxo._1)
+        pinEval(timeoutResult.budget, timeoutSize)
     }
 
     test("Cannot timeout before deadline") {
@@ -280,10 +275,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(updateSlot)
-        val updateResult = assertTxSucceeds(provider, updateTx, oracleUtxo._1)
-        assert(
-          updateResult.budget == (ExUnits(memory = 52447, steps = 22_737_257))
-        )
+        val (updateResult, updateSize) = assertTxSucceedsSized(provider, updateTx, oracleUtxo._1)
+        pinEval(updateResult.budget, updateSize)
     }
 
     test("Oracle forbids unauthorized price updates") {
@@ -898,8 +891,15 @@ object PricebetValidatorTest extends ScalusTest {
         provider: Emulator,
         tx: Transaction,
         scriptInput: TransactionInput
-    ): scalus.uplc.eval.Result = {
-        val result = runValidator(provider, tx, scriptInput)
+    ): scalus.uplc.eval.Result = assertTxSucceedsSized(provider, tx, scriptInput)._1
+
+    /** Like [[assertTxSucceeds]], and also returns the size in bytes of the script it ran. */
+    def assertTxSucceedsSized(
+        provider: Emulator,
+        tx: Transaction,
+        scriptInput: TransactionInput
+    ): (scalus.uplc.eval.Result, Int) = {
+        val (result, size) = runValidatorSized(provider, tx, scriptInput)
         assert(result.isSuccess, s"Direct validation failed: $result")
 
         val submitResult = provider.submit(tx).await()
@@ -907,7 +907,7 @@ object PricebetValidatorTest extends ScalusTest {
           submitResult.isRight,
           s"Emulator submission failed: ${submitResult.left}"
         )
-        result
+        (result, size)
     }
 
     def assertTxFails(
@@ -929,7 +929,14 @@ object PricebetValidatorTest extends ScalusTest {
         provider: Emulator,
         tx: Transaction,
         scriptInput: TransactionInput
-    ): scalus.uplc.eval.Result = {
+    ): scalus.uplc.eval.Result = runValidatorSized(provider, tx, scriptInput)._1
+
+    /** Like [[runValidator]], and also returns the size in bytes of the script it ran. */
+    def runValidatorSized(
+        provider: Emulator,
+        tx: Transaction,
+        scriptInput: TransactionInput
+    ): (scalus.uplc.eval.Result, Int) = {
         val utxos = {
             val body = tx.body.value
             val allInputs =
@@ -950,6 +957,6 @@ object PricebetValidatorTest extends ScalusTest {
         val plutusScript = allResolvedPlutusScriptsMap(scriptHash)
         val program = scalus.uplc.Program.fromCborByteString(plutusScript.script)
 
-        program.runWithDebug(scriptContext)
+        (program.runWithDebug(scriptContext), plutusScript.script.size)
     }
 }

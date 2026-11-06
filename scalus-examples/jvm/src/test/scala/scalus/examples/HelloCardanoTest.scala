@@ -4,14 +4,15 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.ledger.ExUnits
 import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.ScalusTest
 
 import scala.language.implicitConversions
 
-class HelloCardanoTest extends AnyFunSuite with ScalusTest {
+class HelloCardanoTest extends AnyFunSuite with ScalusTest with BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = HelloCardanoTestBudgets
 
     // Lowering of the prelude's `===` macro-spliced application trips the
     // not-provably-default Eq heuristic; the warning is a known false positive here.
@@ -19,8 +20,8 @@ class HelloCardanoTest extends AnyFunSuite with ScalusTest {
 
     private val contract = HelloCardanoContract.compiled.withErrorTraces
 
-    test(s"Hello Cardano script size is ${contract.script.script.size} bytes") {
-        assert(contract.script.script.size == 395)
+    test("Hello Cardano script size") {
+        pinSize(contract.script.script.size)
     }
 
     test("Hello Cardano") {
@@ -33,12 +34,9 @@ class HelloCardanoTest extends AnyFunSuite with ScalusTest {
         )
 
         // Using HelloCardanoContract.compiled.withErrorTraces (Options.release with generateErrorTraces=true)
-        val scalusBudget = ExUnits(memory = 13258, steps = 5_303_392)
-
         val applied = contract.program $ context.toData
         val result = applied.evaluateDebug
-        assert(result.isSuccess)
-        assert(result.budget == scalusBudget)
+        assertSuccess(result, contract.program)
 
         // Reference budget of the original benchmark: ExUnits(memory = 28554L, steps = 9375627L)
     }

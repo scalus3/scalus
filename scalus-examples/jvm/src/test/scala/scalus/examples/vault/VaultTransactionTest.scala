@@ -8,12 +8,14 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner, TxBuilder}
 import scalus.examples.vault.State
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.eval.Result
 import scalus.utils.await
 
-class VaultTransactionTest extends AnyFunSuite, ScalusTest {
+class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = VaultTransactionTestBudgets
 
     private given env: CardanoInfo = TestUtil.testEnvironment
     private val contract = VaultContract.compiled.withErrorTraces
@@ -158,10 +160,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         }
 
         val result = runValidator(provider, withdrawTx, vaultUtxo.input)
-        assert(result.isSuccess)
-        assert(
-          result.budget == (ExUnits(memory = 88441, steps = 39_154_861))
-        )
+        assertSuccess(result, contract.program)
 
         provider.setSlot(currentSlot)
 
@@ -255,10 +254,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         }
 
         val result = runValidator(provider, depositTx, vaultUtxo.input)
-        assert(result.isSuccess, s"Deposit should succeed: $result")
-        assert(
-          result.budget == (ExUnits(memory = 75913, steps = 33_608_789))
-        )
+        assertSuccess(result, contract.program)
 
         assert(provider.submit(depositTx).await().isRight)
 
@@ -411,10 +407,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         }
 
         val withdrawResult = runValidator(provider, withdrawTx, vaultUtxo.input)
-        assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
-        assert(
-          withdrawResult.budget == (ExUnits(memory = 88441, steps = 39_154_861))
-        )
+        pinLabel("withdraw")(assertSuccess(withdrawResult, contract.program))
 
         provider.setSlot(withdrawSlot)
         assert(provider.submit(withdrawTx).await().isRight)
@@ -458,10 +451,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         }
 
         val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo.input)
-        assert(finalizeResult.isSuccess, s"Finalize should succeed: $finalizeResult")
-        assert(
-          finalizeResult.budget == (ExUnits(memory = 87125, steps = 36_121_069))
-        )
+        pinLabel("finalize")(assertSuccess(finalizeResult, contract.program))
 
         provider.setSlot(finalizeSlot)
         assert(provider.submit(finalizeTx).await().isRight)

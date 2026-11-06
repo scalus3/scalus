@@ -9,12 +9,14 @@ import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
 import scalus.cardano.txbuilder.TxBuilder
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
 import scalus.utils.await
 
-class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
+class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = EditableNftValidatorTestBudgets
     import EditableNftValidatorTest.{*, given}
 
     test(
@@ -557,10 +559,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        assertResult(
-          ExUnits(memory = 70070, steps = 24_064_803)
-        ):
-            burnTx.witnessSet.redeemers.get.value.totalExUnits
+        pinTx(burnTx)
         val burnResult = provider.submit(burnTx).await()
         assert(burnResult.isRight, s"Burn should succeed: $burnResult")
 

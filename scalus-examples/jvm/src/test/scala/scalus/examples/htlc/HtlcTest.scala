@@ -7,6 +7,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.RedeemerPurpose.ForSpend
 import scalus.cardano.txbuilder.txBuilder
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -15,7 +16,8 @@ import scalus.utils.await
 import java.time.Instant
 import scala.util.Try
 
-class HtlcTest extends AnyFunSuite, ScalusTest {
+class HtlcTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = HtlcTestBudgets
 
     private given env: CardanoInfo = TestUtil.testEnvironment
     private val contract = HtlcContract.compiled.withErrorTraces
@@ -60,8 +62,8 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         Utxo(lockedUtxo)
     }
 
-    test(s"HTLC validator size is ${HtlcContract.compiled.script.script.size} bytes") {
-        assert(HtlcContract.compiled.script.script.size == 310)
+    test("HTLC validator size") {
+        pinSize(HtlcContract.compiled.script.script.size)
     }
 
     test("VALIDATOR: receiver reveals preimage before timeout") {
@@ -82,10 +84,9 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
             .getScriptContextV3(utxos, ForSpend(lockedUtxo.input))
 
         assert(Try(contract(scriptCtx.toData).code).isSuccess)
-        val result = contract(scriptCtx.toData).program.evaluateDebug
-        assert(result.isSuccess)
-        assert(result.budget == ExUnits(memory = 24831, steps = 10_940_152))
-        assert(result.budget.fee == Coin(2222))
+        val program = contract(scriptCtx.toData).program
+        val result = program.evaluateDebug
+        assertSuccess(result, program)
     }
 
     test("receiver reveals preimage before timeout") {
@@ -104,8 +105,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
           signer = Bob.signer
         )
 
-        assertResult(ExUnits(memory = 24831, steps = 10_940_152)):
-            revealTx.witnessSet.redeemers.get.value.totalExUnits
+        pinTx(revealTx)
 
         provider.setSlot(beforeSlot)
 
@@ -185,8 +185,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
 
-        assertResult(ExUnits(memory = 21898L, steps = 8130981L)):
-            timeoutTx.witnessSet.redeemers.get.value.totalExUnits
+        pinTx(timeoutTx)
 
         provider.setSlot(afterSlot)
         val submissionResult = provider.submit(timeoutTx).await()
