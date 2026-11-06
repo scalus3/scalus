@@ -27,4 +27,74 @@ object AmmTestBudgets extends BudgetTable {
       Generation.Scala38,
       Pin.Tx(memory = 109_816, steps = 48_091_551, size = 6_251, fee = 440_229)
     )
+    pin(
+      "createPool: creates empty pool with zero reserves",
+      Generation.Scala33,
+      Pin.Tx(memory = 41_048, steps = 19_124_943, size = 6_056, fee = 425_593)
+    )
+    pin(
+      "createPool: creates empty pool with zero reserves",
+      Generation.Scala38,
+      Pin.Tx(memory = 41_048, steps = 19_124_943, size = 6_002, fee = 423_217)
+    )
+    pin(
+      "deposit to an empty pool mints LP = isqrt(x0 * x1)",
+      Generation.Scala33,
+      Pin.Tx(memory = 135_155, steps = 60_123_703, size = 6_310, fee = 445_155)
+    )
+    pin(
+      "deposit to an empty pool mints LP = isqrt(x0 * x1)",
+      Generation.Scala38,
+      Pin.Tx(memory = 135_155, steps = 60_123_703, size = 6_256, fee = 442_779)
+    )
+    pin(
+      "deposit to a non-empty pool mints LP proportionally, maintains the constant product",
+      Generation.Scala33,
+      Pin.Tx(memory = 119_051, steps = 50_745_771, size = 6_310, fee = 443_550)
+    )
+    pin(
+      "deposit to a non-empty pool mints LP proportionally, maintains the constant product",
+      Generation.Scala38,
+      Pin.Tx(memory = 119_051, steps = 50_745_771, size = 6_256, fee = 441_174)
+    )
+    pin(
+      "redeem: burns LP, receives proportional t0 and t1",
+      Generation.Scala33,
+      Pin.Tx(memory = 109_816, steps = 48_091_551, size = 6_305, fee = 442_605)
+    )
+    pin(
+      "redeem: burns LP, receives proportional t0 and t1",
+      Generation.Scala38,
+      Pin.Tx(memory = 109_816, steps = 48_091_551, size = 6_251, fee = 440_229)
+    )
+    pin(
+      "close: burns the pool NFT and reclaims min-ADA from an empty pool",
+      Generation.Scala33,
+      Pin.Tx(memory = 45_682, steps = 18_032_945, size = 5_977, fee = 422_306)
+    )
+    pin(
+      "close: burns the pool NFT and reclaims min-ADA from an empty pool",
+      Generation.Scala38,
+      Pin.Tx(memory = 45_682, steps = 18_032_945, size = 5_923, fee = 419_930)
+    )
+    pin(
+      "swap t0 to t1 correctly",
+      Generation.Scala33,
+      Pin.Tx(memory = 72_898, steps = 30_639_264, size = 6_256, fee = 437_061)
+    )
+    pin(
+      "swap t0 to t1 correctly",
+      Generation.Scala38,
+      Pin.Tx(memory = 71_038, steps = 29_974_577, size = 6_202, fee = 434_530)
+    )
+    pin(
+      "swap t1 to t0: correct output, datum updated, invariant holds",
+      Generation.Scala33,
+      Pin.Tx(memory = 72_898, steps = 30_639_264, size = 6_256, fee = 437_061)
+    )
+    pin(
+      "swap t1 to t0: correct output, datum updated, invariant holds",
+      Generation.Scala38,
+      Pin.Tx(memory = 71_038, steps = 29_974_577, size = 6_202, fee = 434_530)
+    )
 }

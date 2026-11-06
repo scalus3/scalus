@@ -145,13 +145,13 @@ class AikenMpfCompatibilityTest extends AnyFunSuite with ScalusTest {
         var aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
 
         val publishTx = publishAikenScript(aliceUtxos, Bob.address, Alice.address, Alice.signer)
-        assert(emulator.submit(publishTx).await().isRight, "Publish script failed")
+        emulator.submitSetup(publishTx)
         val refScriptUtxo = findRefScriptUtxo(publishTx)
 
         aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
         val lockAmount = 20 * K
         val lockTx = lockAiken(aliceUtxos, lockAmount, trie.rootHash, Alice.address, Alice.signer)
-        assert(emulator.submit(lockTx).await().isRight, "Lock tx failed")
+        emulator.submitSetup(lockTx)
 
         var contractUtxo = findContractUtxo(lockTx)
         var remaining = lockAmount
@@ -180,8 +180,7 @@ class AikenMpfCompatibilityTest extends AnyFunSuite with ScalusTest {
               Alice.signer
             )
 
-            val result = emulator.submit(tx).await()
-            assert(result.isRight, s"Aiken withdraw $i failed: $result")
+            emulator.submitSetup(tx)
             info(s"  Aiken delete $i OK (key=${key.toHex.take(16)}...)")
 
             contractUtxo = findContractUtxo(tx)
@@ -205,13 +204,13 @@ class AikenMpfCompatibilityTest extends AnyFunSuite with ScalusTest {
         var aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
 
         val publishTx = publishAikenScript(aliceUtxos, Bob.address, Alice.address, Alice.signer)
-        assert(emulator.submit(publishTx).await().isRight, "Publish script failed")
+        emulator.submitSetup(publishTx)
         val refScriptUtxo = findRefScriptUtxo(publishTx)
 
         aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
         val lockAmount = 10 * K
         val lockTx = lockAiken(aliceUtxos, lockAmount, trie.rootHash, Alice.address, Alice.signer)
-        assert(emulator.submit(lockTx).await().isRight, "Lock tx failed")
+        emulator.submitSetup(lockTx)
 
         var contractUtxo = findContractUtxo(lockTx)
         var remaining = lockAmount
@@ -243,8 +242,7 @@ class AikenMpfCompatibilityTest extends AnyFunSuite with ScalusTest {
               Alice.signer
             )
 
-            val result = emulator.submit(tx).await()
-            assert(result.isRight, s"Aiken deposit $i failed: $result")
+            emulator.submitSetup(tx)
             info(s"  Aiken insert $i OK (key=${key.toHex.take(16)}...)")
 
             contractUtxo = findContractUtxo(tx)

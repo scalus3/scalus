@@ -17,4 +17,8 @@ object EscrowTestBudgets extends BudgetTable {
       "Refund: seller refunds to buyer",
       Pin.Tx(memory = 100_260, steps = 45_526_339, size = 2_520, fee = 275_329)
     )
+    pin(
+      "Deposit: works when initializationAmount equals escrowAmount",
+      Pin.Tx(memory = 99_457, steps = 49_702_903, size = 2_562, fee = 277_432)
+    )
 }

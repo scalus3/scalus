@@ -8,18 +8,22 @@ object VaultTransactionTestBudgets extends BudgetTable {
     override val generation: Generation = Generation.current
     pin(
       "vault withdrawal request",
-      Pin.Eval(memory = 88_441, steps = 39_154_861, size = 3_393, fee = 58_822)
+      Pin.Tx(memory = 88_441, steps = 39_154_861, size = 3_898, fee = 334_820)
     )
     pin(
       "vault deposit adds funds",
-      Pin.Eval(memory = 75_913, steps = 33_608_789, size = 3_393, fee = 57_699)
+      Pin.Tx(memory = 75_913, steps = 33_608_789, size = 3_851, fee = 331_629)
     )
     pin(
       "vault finalization succeeds after withdrawal request / withdraw",
-      Pin.Eval(memory = 88_441, steps = 39_154_861, size = 3_393, fee = 58_822)
+      Pin.Tx(memory = 88_441, steps = 39_154_861, size = 3_898, fee = 334_820)
     )
     pin(
       "vault finalization succeeds after withdrawal request / finalize",
-      Pin.Eval(memory = 87_125, steps = 36_121_069, size = 3_393, fee = 58_527)
+      Pin.Tx(memory = 87_125, steps = 36_121_069, size = 3_772, fee = 328_981)
+    )
+    pin(
+      "recovery key cancels a pending withdrawal",
+      Pin.Tx(memory = 76_973, steps = 33_246_378, size = 3_886, fee = 333_204)
     )
 }

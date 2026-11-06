@@ -6,12 +6,14 @@ import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.crypto.tree.MerkleTree
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.{Party, ScalusTest}
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
 import scalus.utils.await
 
-class MembershipTokenTest extends AnyFunSuite with ScalusTest {
+class MembershipTokenTest extends AnyFunSuite with ScalusTest with BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = MembershipTokenTestBudgets
 
     private given env: CardanoInfo = CardanoInfo.mainnet
 
@@ -56,8 +58,7 @@ class MembershipTokenTest extends AnyFunSuite with ScalusTest {
             .sign(Party.Alice.signer)
             .transaction
 
-        val result = emulator.submit(tx).await()
-        assert(result.isRight, s"Mint should succeed: ${result.left.toOption.getOrElse("")}")
+        emulator.submitOk(tx)
     }
 
     test("Alice can burn membership token and reclaim deposit") {
@@ -85,11 +86,7 @@ class MembershipTokenTest extends AnyFunSuite with ScalusTest {
             .sign(Party.Alice.signer)
             .transaction
 
-        val mintResult = emulator.submit(mintTx).await()
-        assert(
-          mintResult.isRight,
-          s"Mint should succeed: ${mintResult.left.toOption.getOrElse("")}"
-        )
+        emulator.submitSetup(mintTx)
 
         // Step 2: Find the deposit UTxO at the script address
         val depositUtxo = mintTx.utxos
@@ -115,11 +112,7 @@ class MembershipTokenTest extends AnyFunSuite with ScalusTest {
             .sign(Party.Alice.signer)
             .transaction
 
-        val burnResult = emulator.submit(burnTx).await()
-        assert(
-          burnResult.isRight,
-          s"Burn should succeed: ${burnResult.left.toOption.getOrElse("")}"
-        )
+        emulator.submitOk(burnTx)
     }
 
     test("non-member cannot mint membership token") {

@@ -11,12 +11,14 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.EvaluatorMode
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator}
 import scalus.cardano.node.Emulator
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.TestUtil.genesisHash
 import scalus.testing.kit.ScalusTest
 import scalus.utils.await
 
-class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
+class LinkedListTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckPropertyChecks {
+    override protected def budgetTable: BudgetTable = LinkedListTestBudgets
     import LinkedListTest.{*, given}
 
     test(s"LinkedListValidator size: ${LinkedListContract.compiled.script.script.size} bytes") {
@@ -27,26 +29,26 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val tx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        assert(provider.submit(tx).await().isRight, "init should succeed")
+        provider.submitOk(tx)
     }
 
     test("deinit: valid empty list") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         val rootUtxo = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
         val deinitTx = txCreator.deinit(utxos2, rootUtxo, Alice.address, Alice.signer)
-        assert(provider.submit(deinitTx).await().isRight, "deinit should succeed")
+        provider.submitOk(deinitTx)
     }
 
     test("FAIL: deinit when list has a node") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         val rootUtxo = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
@@ -58,10 +60,10 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx).await()
+        provider.submitSetup(appendTx)
 
         // Now try to deinit the list that still has a node -- must fail.
-        // Use constMaxBudget so the invalid tx can be built without running scripts.
+        // Use uncostedTxCreator so the invalid tx can be built without running scripts.
         val (_, badTxCreator) = createSetup(EvaluatorMode.Validate)
         val rootUtxo2 = Utxo(appendTx.utxos.find { case (_, out) =>
             out.address == txCreator.scriptAddress &&
@@ -69,14 +71,14 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         }.get)
         val utxos3 = provider.findUtxos(Alice.address).await().toOption.get
         val deinitTx = badTxCreator.deinit(utxos3, rootUtxo2, Alice.address, Alice.signer)
-        assertSubmitFails(provider, deinitTx)
+        provider.submitFails(deinitTx, "deinit: list must be empty")
     }
 
     test("appendUnordered: valid append to empty list") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         val rootUtxo = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
@@ -88,14 +90,14 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assert(provider.submit(appendTx).await().isRight, "appendUnordered should succeed")
+        provider.submitOk(appendTx)
     }
 
     test("appendUnordered: two nodes") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         // First append
         val rootUtxo1 = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
@@ -108,7 +110,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx1).await()
+        provider.submitSetup(appendTx1)
 
         // Second append -- find the "alpha" node (it's the last element now)
         val alphaUtxo = Utxo(appendTx1.utxos.find { case (_, out) =>
@@ -127,14 +129,14 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assert(provider.submit(appendTx2).await().isRight, "second appendUnordered should succeed")
+        provider.submitOk(appendTx2)
     }
 
     test("FAIL: appendUnordered when anchor has a link (not last element)") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         // Append two nodes so root -> alpha -> beta
         val rootUtxo1 = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
@@ -147,7 +149,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx1).await()
+        provider.submitSetup(appendTx1)
 
         val alphaUtxo = Utxo(appendTx1.utxos.find { case (_, out) =>
             out.address == txCreator.scriptAddress &&
@@ -165,11 +167,11 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx2).await()
+        provider.submitSetup(appendTx2)
 
         // Now try to append to root (which already has link = alpha) -- must fail.
         // Root was re-produced by appendTx1 (appendTx2 only touched alpha).
-        // Use constMaxBudget so the invalid tx can be built without running scripts.
+        // Use uncostedTxCreator so the invalid tx can be built without running scripts.
         val (_, badTxCreator) = createSetup(EvaluatorMode.Validate)
         val rootUtxo2 = Utxo(appendTx1.utxos.find { case (_, out) =>
             out.address == txCreator.scriptAddress &&
@@ -184,14 +186,14 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assertSubmitFails(provider, appendTx3)
+        provider.submitFails(appendTx3, "Anchor must be the last element (no link)")
     }
 
     test("prependUnordered: valid prepend to non-empty list") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         // First add a node via append
         val rootUtxo1 = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
@@ -204,7 +206,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx).await()
+        provider.submitSetup(appendTx)
 
         // Now prepend a node -- root -> alpha -> beta
         val rootUtxo2 = Utxo(appendTx.utxos.find { case (_, out) =>
@@ -220,14 +222,14 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assert(provider.submit(prependTx).await().isRight, "prependUnordered should succeed")
+        provider.submitOk(prependTx)
     }
 
     test("FAIL: prependUnordered when anchor is not the root") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         // Append two nodes: root -> alpha -> beta
         val rootUtxo1 = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
@@ -240,7 +242,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx1).await()
+        provider.submitSetup(appendTx1)
 
         val alphaUtxo = Utxo(appendTx1.utxos.find { case (_, out) =>
             out.address == txCreator.scriptAddress &&
@@ -258,7 +260,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx2).await()
+        provider.submitSetup(appendTx2)
 
         // Try to prependUnordered using alpha as the anchor (not the root) -- must fail.
         val (_, badTxCreator) = createSetup(EvaluatorMode.Validate)
@@ -278,14 +280,17 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assertSubmitFails(provider, prependTx)
+        assert(
+          provider.submit(prependTx).await().isLeft,
+          "Expected transaction submission to fail but it succeeded"
+        )
     }
 
     test("insert: valid insert after root") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         val rootUtxo = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
@@ -297,14 +302,14 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assert(provider.submit(insertTx).await().isRight, "insert should succeed")
+        provider.submitOk(insertTx)
     }
 
     test("insert: insert between two nodes") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         // root -> "c"
         val rootUtxo1 = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
@@ -317,7 +322,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(insertTx1).await()
+        provider.submitSetup(insertTx1)
 
         // root -> "b" -> "c"  (insert "b" after root)
         val rootUtxo2 = Utxo(insertTx1.utxos.find { case (_, out) =>
@@ -333,17 +338,14 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assert(
-          provider.submit(insertTx2).await().isRight,
-          "insert middle insert should succeed"
-        )
+        provider.submitOk(insertTx2)
     }
 
     test("FAIL: insert with key greater than successor (wrong order)") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         // root -> "b"
         val rootUtxo1 = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
@@ -356,10 +358,10 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(insertTx1).await()
+        provider.submitSetup(insertTx1)
 
         // Try to insert "c" after root -- but root points to "b", and "c" > "b" so order check fails.
-        // Use constMaxBudget so the invalid tx can be built without running scripts.
+        // Use uncostedTxCreator so the invalid tx can be built without running scripts.
         val (_, badTxCreator) = createSetup(EvaluatorMode.Validate)
         val rootUtxo2 = Utxo(insertTx1.utxos.find { case (_, out) =>
             out.address == txCreator.scriptAddress &&
@@ -374,14 +376,14 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assertSubmitFails(provider, insertTx2)
+        provider.submitFails(insertTx2, "New key must be less than link key (ascending order)")
     }
 
     test("remove: valid node removal") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, ().toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         // Append one node: root -> alpha
         val rootUtxo1 = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
@@ -394,7 +396,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx).await()
+        provider.submitSetup(appendTx)
 
         val rootUtxo2 = Utxo(appendTx.utxos.find { case (_, out) =>
             out.address == txCreator.scriptAddress &&
@@ -415,14 +417,14 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assert(provider.submit(removeTx).await().isRight, "remove should succeed")
+        provider.submitOk(removeTx)
     }
 
     test("removeHead: valid removal of head node, root datum updated") {
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val initTx = txCreator.init(utxos, BigInt(0).toData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         // Append two nodes: root -> alpha -> beta
         val rootUtxo1 = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
@@ -435,7 +437,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx1).await()
+        provider.submitSetup(appendTx1)
 
         val alphaUtxo = Utxo(appendTx1.utxos.find { case (_, out) =>
             out.address == txCreator.scriptAddress &&
@@ -453,7 +455,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx2).await()
+        provider.submitSetup(appendTx2)
 
         // removeHead: consume alpha, update root accumulator to 1
         val scriptUtxos =
@@ -469,7 +471,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assert(provider.submit(removeHeadTx).await().isRight, "removeHead should succeed")
+        provider.submitOk(removeHeadTx)
 
         // List should now be root -> beta
         val scriptUtxos2 =
@@ -488,11 +490,11 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
             provider.findUtxos(txCreator.scriptAddress).await().toOption.get.map(Utxo.apply).toSeq
 
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
-        provider.submit(txCreator.init(utxos, ().toData, Alice.address, Alice.signer)).await()
+        provider.submitSetup(txCreator.init(utxos, ().toData, Alice.address, Alice.signer))
 
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
         provider
-            .submit(
+            .submitSetup(
               txCreator.insert(
                 utxos2,
                 txCreator.findRoot(scriptUtxos()),
@@ -502,11 +504,10 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                 Alice.signer
               )
             )
-            .await()
 
         val utxos3 = provider.findUtxos(Alice.address).await().toOption.get
         provider
-            .submit(
+            .submitSetup(
               txCreator.insert(
                 utxos3,
                 txCreator.findNode(scriptUtxos(), nodeKey("a")),
@@ -516,7 +517,6 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                 Alice.signer
               )
             )
-            .await()
 
         // root -> "a" -> "b": prove "ab" is absent by inserting it using only "a" as anchor.
         // The validator accepts this iff "a" < "ab" < "b" -- the gap exists and "ab" was not there.
@@ -529,7 +529,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assert(provider.submit(insertTx).await().isRight, "inserting into the gap should succeed")
+        provider.submitOk(insertTx)
         assert(
           txCreator.readAll(scriptUtxos()).map(_._1) == Seq(
             rootKeyBytes,
@@ -547,11 +547,11 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
             provider.findUtxos(txCreator.scriptAddress).await().toOption.get.map(Utxo.apply).toSeq
 
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
-        provider.submit(txCreator.init(utxos, ().toData, Alice.address, Alice.signer)).await()
+        provider.submitSetup(txCreator.init(utxos, ().toData, Alice.address, Alice.signer))
 
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
         provider
-            .submit(
+            .submitSetup(
               txCreator.insert(
                 utxos2,
                 txCreator.findRoot(scriptUtxos()),
@@ -561,7 +561,6 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                 Alice.signer
               )
             )
-            .await()
 
         // Try to insert "b" again using root as anchor -- "b" < "b" is false, so it fails.
         val (_, badTxCreator) = createSetup(EvaluatorMode.Validate)
@@ -574,7 +573,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        assertSubmitFails(provider, dupTx)
+        provider.submitFails(dupTx, "New key must be less than link key (ascending order)")
     }
 
     test("property: insert -- readAll keys are always in strict ascending order") {
@@ -583,8 +582,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
 
             val walletUtxos = provider.findUtxos(Alice.address).await().toOption.get
             provider
-                .submit(txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer))
-                .await()
+                .submitSetup(txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer))
 
             for key <- keys do
                 val scriptUtxos = provider
@@ -597,11 +595,10 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                 val anchor = txCreator.findAnchorFor(scriptUtxos, key)
                 val walletUtxos = provider.findUtxos(Alice.address).await().toOption.get
                 provider
-                    .submit(
+                    .submitSetup(
                       txCreator
                           .insert(walletUtxos, anchor, key, ().toData, Alice.address, Alice.signer)
                     )
-                    .await()
 
             val scriptUtxos = provider
                 .findUtxos(txCreator.scriptAddress)
@@ -624,8 +621,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
 
             val walletUtxos = provider.findUtxos(Alice.address).await().toOption.get
             provider
-                .submit(txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer))
-                .await()
+                .submitSetup(txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer))
 
             for key <- keys do
                 val scriptUtxos = provider
@@ -638,11 +634,10 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                 val anchor = txCreator.findAnchorFor(scriptUtxos, key)
                 val walletUtxos = provider.findUtxos(Alice.address).await().toOption.get
                 provider
-                    .submit(
+                    .submitSetup(
                       txCreator
                           .insert(walletUtxos, anchor, key, ().toData, Alice.address, Alice.signer)
                     )
-                    .await()
 
             val scriptUtxos = provider
                 .findUtxos(txCreator.scriptAddress)
@@ -668,8 +663,9 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
 
                 val walletUtxos = provider.findUtxos(Alice.address).await().toOption.get
                 provider
-                    .submit(txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer))
-                    .await()
+                    .submitSetup(
+                      txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer)
+                    )
 
                 for key <- keys do
                     val scriptUtxos = provider
@@ -682,7 +678,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                     val anchor = txCreator.findAnchorFor(scriptUtxos, key)
                     val walletUtxos = provider.findUtxos(Alice.address).await().toOption.get
                     provider
-                        .submit(
+                        .submitSetup(
                           txCreator.insert(
                             walletUtxos,
                             anchor,
@@ -692,7 +688,6 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                             Alice.signer
                           )
                         )
-                        .await()
 
                 // Pick any key already in the list and try to insert it again
                 val dupKey = keys.head
@@ -713,7 +708,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                   Alice.address,
                   Alice.signer
                 )
-                assertSubmitFails(provider, dupTx)
+                provider.submitFails(dupTx, "New key must be less than link key (ascending order)")
             }
         }
     }
@@ -725,8 +720,9 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
 
                 val walletUtxos = provider.findUtxos(Alice.address).await().toOption.get
                 provider
-                    .submit(txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer))
-                    .await()
+                    .submitSetup(
+                      txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer)
+                    )
 
                 for key <- keys do
                     val scriptUtxos = provider
@@ -739,7 +735,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                     val anchor = txCreator.findAnchorFor(scriptUtxos, key)
                     val walletUtxos = provider.findUtxos(Alice.address).await().toOption.get
                     provider
-                        .submit(
+                        .submitSetup(
                           txCreator.insert(
                             walletUtxos,
                             anchor,
@@ -749,7 +745,6 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                             Alice.signer
                           )
                         )
-                        .await()
 
                 // Remove the first node in list order (head of the sorted list)
                 val scriptUtxos = provider
@@ -764,11 +759,10 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                 val headUtxo = txCreator.findNode(scriptUtxos, headKey)
                 val walletUtxos2 = provider.findUtxos(Alice.address).await().toOption.get
                 provider
-                    .submit(
+                    .submitSetup(
                       txCreator
                           .remove(walletUtxos2, rootUtxo, headUtxo, Alice.address, Alice.signer)
                     )
-                    .await()
 
                 val scriptUtxos2 = provider
                     .findUtxos(txCreator.scriptAddress)
@@ -797,8 +791,9 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
 
                 val walletUtxos = provider.findUtxos(Alice.address).await().toOption.get
                 provider
-                    .submit(txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer))
-                    .await()
+                    .submitSetup(
+                      txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer)
+                    )
 
                 // Insert all but the last key
                 val existing = keys.init
@@ -814,7 +809,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                     val anchor = txCreator.findAnchorFor(scriptUtxos, key)
                     val walletUtxos = provider.findUtxos(Alice.address).await().toOption.get
                     provider
-                        .submit(
+                        .submitSetup(
                           txCreator.insert(
                             walletUtxos,
                             anchor,
@@ -824,7 +819,6 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                             Alice.signer
                           )
                         )
-                        .await()
 
                 // Snapshot keys before insert
                 val scriptUtxosBefore = provider
@@ -847,7 +841,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                   Alice.address,
                   Alice.signer
                 )
-                provider.submit(insertTx).await()
+                provider.submitSetup(insertTx)
 
                 val scriptUtxosAfterInsert = provider
                     .findUtxos(txCreator.scriptAddress)
@@ -860,7 +854,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                 val newNodeUtxo = txCreator.findNode(scriptUtxosAfterInsert, newKey)
                 val walletUtxos3 = provider.findUtxos(Alice.address).await().toOption.get
                 provider
-                    .submit(
+                    .submitSetup(
                       txCreator.remove(
                         walletUtxos3,
                         anchorAfter,
@@ -869,7 +863,6 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                         Alice.signer
                       )
                     )
-                    .await()
 
                 // Keys after insert+remove must equal keys before
                 val scriptUtxosAfter = provider
@@ -896,8 +889,9 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
 
                 val walletUtxos = provider.findUtxos(Alice.address).await().toOption.get
                 provider
-                    .submit(txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer))
-                    .await()
+                    .submitSetup(
+                      txCreator.init(walletUtxos, ().toData, Alice.address, Alice.signer)
+                    )
 
                 // Insert at least one node
                 val key = keys.head
@@ -911,11 +905,10 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                 val anchor = txCreator.findAnchorFor(scriptUtxos, key)
                 val walletUtxos2 = provider.findUtxos(Alice.address).await().toOption.get
                 provider
-                    .submit(
+                    .submitSetup(
                       txCreator
                           .insert(walletUtxos2, anchor, key, ().toData, Alice.address, Alice.signer)
                     )
-                    .await()
 
                 // Deinit must fail while list is non-empty
                 val scriptUtxos2 = provider
@@ -929,7 +922,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
                 val walletUtxos3 = provider.findUtxos(Alice.address).await().toOption.get
                 val deinitTx =
                     badTxCreator.deinit(walletUtxos3, rootUtxo, Alice.address, Alice.signer)
-                assertSubmitFails(provider, deinitTx)
+                provider.submitFails(deinitTx, "deinit: list must be empty")
             }
         }
     }
@@ -941,7 +934,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         val alphaData = BigInt(1).toData
         val betaData = BigInt(2).toData
         val initTx = txCreator.init(utxos, rootData, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
+        provider.submitSetup(initTx)
 
         val rootUtxo1 = Utxo(initTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
@@ -953,7 +946,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx1).await()
+        provider.submitSetup(appendTx1)
 
         val alphaUtxo = Utxo(appendTx1.utxos.find { case (_, out) =>
             out.address == txCreator.scriptAddress &&
@@ -968,7 +961,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.address,
           Alice.signer
         )
-        provider.submit(appendTx2).await()
+        provider.submitSetup(appendTx2)
 
         val scriptUtxos = provider.findUtxos(txCreator.scriptAddress).await().toOption.get
         val result = txCreator.readAll(scriptUtxos.map(Utxo.apply).toSeq)
@@ -1007,8 +1000,8 @@ object LinkedListTest extends ScalusTest {
       *
       * @param evaluatorMode
       *   `EvaluateAndComputeCost` (default) for valid transactions; `Validate` with
-      *   `constMaxBudget` when you need to build an intentionally invalid tx without the TxBuilder
-      *   running scripts.
+      *   `uncostedTxCreator` when you need to build an intentionally invalid tx without the
+      *   TxBuilder running scripts.
       */
     def createSetup(
         evaluatorMode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost
@@ -1027,7 +1020,7 @@ object LinkedListTest extends ScalusTest {
 
         val txCreator = evaluatorMode match
             case EvaluatorMode.EvaluateAndComputeCost => costingTxCreator
-            case _                                    => maxBudgetTxCreator
+            case _                                    => uncostedTxCreator
 
         (provider, txCreator)
     }
@@ -1038,8 +1031,19 @@ object LinkedListTest extends ScalusTest {
     // test still gets a fresh Emulator.
     private lazy val costingTxCreator: LinkedListOffchain =
         newTxCreator(PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost))
-    private lazy val maxBudgetTxCreator: LinkedListOffchain =
-        newTxCreator(PlutusScriptEvaluator.constMaxBudget(env))
+    // Builds a transaction without running its scripts, so a test can submit one that the validator
+    // rejects. Each redeemer gets half the transaction maximum: with the whole maximum, a
+    // transaction with two redeemers exceeds the limit and the ledger rejects it before any
+    // script runs.
+    private lazy val uncostedTxCreator: LinkedListOffchain =
+        newTxCreator(
+          PlutusScriptEvaluator.const(
+            ExUnits(
+              env.protocolParams.maxTxExecutionUnits.memory / 2,
+              env.protocolParams.maxTxExecutionUnits.steps / 2
+            )
+          )
+        )
 
     private def newTxCreator(evaluator: PlutusScriptEvaluator): LinkedListOffchain =
         LinkedListOffchain(
@@ -1049,10 +1053,4 @@ object LinkedListTest extends ScalusTest {
           rootKey = rootKeyBytes,
           prefix = prefixBytes
         )
-
-    def assertSubmitFails(provider: Emulator, tx: Transaction): Unit =
-        provider.submit(tx).await() match {
-            case Left(_)  => ()
-            case Right(_) => fail("Expected transaction submission to fail but it succeeded")
-        }
 }

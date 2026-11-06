@@ -6,12 +6,14 @@ import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.Alice
 import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
 import scalus.utils.await
 
-class AnonymousDataTest extends AnyFunSuite with ScalusTest {
+class AnonymousDataTest extends AnyFunSuite with ScalusTest with BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = AnonymousDataTestBudgets
 
     private given env: CardanoInfo = testEnvironment
     private val txs = AnonymousDataTransactions(env)
@@ -54,8 +56,7 @@ class AnonymousDataTest extends AnyFunSuite with ScalusTest {
           Alice.address,
           Alice.signer
         )
-        val result = provider.submit(tx).await()
-        assert(result.isRight, s"store should succeed: $result")
+        provider.submitOk(tx)
 
         val committed = storedUtxo(tx, txs.commitmentHash(nonce, data))
         // Only the 32-byte hash is present; the preimage (the data) is nowhere on-chain.
@@ -77,7 +78,7 @@ class AnonymousDataTest extends AnyFunSuite with ScalusTest {
           Alice.address,
           Alice.signer
         )
-        provider.submit(tx).await()
+        provider.submitSetup(tx)
         val committed = storedUtxo(tx, txs.commitmentHash(nonce, data))
 
         assert(

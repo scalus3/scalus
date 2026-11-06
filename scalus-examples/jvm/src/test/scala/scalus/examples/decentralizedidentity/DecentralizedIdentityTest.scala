@@ -9,6 +9,7 @@ import scalus.cardano.node.Emulator
 
 import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.txbuilder.TxBuilder
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
@@ -17,7 +18,8 @@ import scalus.utils.await
 import java.time.Instant
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
+class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = DecentralizedIdentityTestBudgets
     import DecentralizedIdentityTest.{*, given}
 
     test(
@@ -30,7 +32,10 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
         val provider = createProvider()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val seedUtxo = Utxo(utxos.head)
-        val txCreator = createTxCreator(seedUtxo)
+        val txCreator = createTxCreator(
+          seedUtxo,
+          PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
+        )
 
         val tx = txCreator.createIdentity(
           utxos = utxos,
@@ -39,8 +44,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
 
-        val result = provider.submit(tx).await()
-        assert(result.isRight, s"Create identity should succeed: $result")
+        provider.submitOk(tx)
 
         // Verify identity NFT at script address
         val identityOutput = tx.utxos
@@ -58,7 +62,10 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
         val provider = createProvider()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val seedUtxo = Utxo(utxos.head)
-        val txCreator = createTxCreator(seedUtxo)
+        val txCreator = createTxCreator(
+          seedUtxo,
+          PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
+        )
 
         // Create identity
         val createTx = txCreator.createIdentity(
@@ -67,7 +74,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(createTx).await()
+        provider.submitSetup(createTx)
         val identityUtxo = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Transfer ownership to Bob
@@ -80,8 +87,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           ownerSigner = Alice.signer,
           newOwnerSigner = Bob.signer
         )
-        val transferResult = provider.submit(transferTx).await()
-        assert(transferResult.isRight, s"Transfer should succeed: $transferResult")
+        provider.submitOk(transferTx)
 
         // Verify new owner in datum
         val newIdentityOutput = transferTx.utxos
@@ -98,7 +104,10 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
         val provider = createProvider()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val seedUtxo = Utxo(utxos.head)
-        val txCreator = createTxCreator(seedUtxo)
+        val txCreator = createTxCreator(
+          seedUtxo,
+          PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
+        )
 
         // Create identity
         val createTx = txCreator.createIdentity(
@@ -107,7 +116,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(createTx).await()
+        provider.submitSetup(createTx)
         val identityUtxo = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Add delegate
@@ -122,8 +131,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val delegateResult = provider.submit(delegateTx).await()
-        assert(delegateResult.isRight, s"Add delegate should succeed: $delegateResult")
+        provider.submitOk(delegateTx)
 
         // Verify delegation token at script address
         val delegationOutputs = delegateTx.utxos.filter(_._2.address == txCreator.scriptAddr)
@@ -143,7 +151,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(createTx).await()
+        provider.submitSetup(createTx)
         val identityUtxo = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Try to add delegate with Bob signing instead of Alice (the owner)
@@ -166,7 +174,10 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
         val provider = createProvider()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val seedUtxo = Utxo(utxos.head)
-        val txCreator = createTxCreator(seedUtxo)
+        val txCreator = createTxCreator(
+          seedUtxo,
+          PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
+        )
 
         // Create identity
         val createTx = txCreator.createIdentity(
@@ -175,7 +186,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(createTx).await()
+        provider.submitSetup(createTx)
         val identityUtxo = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Add delegate
@@ -190,7 +201,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(delegateTx).await()
+        provider.submitSetup(delegateTx)
 
         // Find delegation UTXO (not the identity UTXO)
         val delegationUtxo = findDelegationUtxo(delegateTx, txCreator)
@@ -207,8 +218,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Bob.address,
           signer = Bob.signer
         )
-        val publishResult = provider.submit(publishTx).await()
-        assert(publishResult.isRight, s"Publish attribute should succeed: $publishResult")
+        provider.submitOk(publishTx)
 
         // Verify attribute at script address
         val attrOutputs = publishTx.utxos.filter(_._2.address == txCreator.scriptAddr)
@@ -241,10 +251,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
             .complete(availableUtxos = charlesUtxos, Charles.address)
             .sign(Charles.signer)
             .transaction
-        assert(
-          provider.submit(plantTx).await().isRight,
-          "Planting the forged delegation should succeed"
-        )
+        provider.submitSetup(plantTx)
         val forgedDelegation = Utxo(plantTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Charles tries to publish an attribute about Alice's identity via the forged delegation.
@@ -259,8 +266,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Charles.address,
           signer = Charles.signer
         )
-        val result = provider.submit(publishTx).await()
-        assert(result.isLeft, s"Publishing via a token-less forged delegation must fail: $result")
+        provider.submitFails(publishTx, "Delegation reference input must hold the delegation token")
     }
 
     test("Revoke delegate: owner burns delegation token") {
@@ -279,7 +285,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(createTx).await()
+        provider.submitSetup(createTx)
         val identityUtxo = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Add delegate
@@ -294,7 +300,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(delegateTx).await()
+        provider.submitSetup(delegateTx)
 
         val delegationUtxo = findDelegationUtxo(delegateTx, txCreator)
 
@@ -307,8 +313,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val revokeResult = provider.submit(revokeTx).await()
-        assert(revokeResult.isRight, s"Revoke delegate should succeed: $revokeResult")
+        provider.submitOk(revokeTx)
     }
 
     test("Revoke attribute: owner burns attribute token") {
@@ -327,7 +332,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(createTx).await()
+        provider.submitSetup(createTx)
         val identityUtxo = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Add delegate
@@ -342,7 +347,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(delegateTx).await()
+        provider.submitSetup(delegateTx)
         val delegationUtxo = findDelegationUtxo(delegateTx, txCreator)
 
         // Publish attribute as delegate (Bob)
@@ -357,7 +362,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Bob.address,
           signer = Bob.signer
         )
-        provider.submit(publishTx).await()
+        provider.submitSetup(publishTx)
         val attributeUtxo = findAttributeUtxo(publishTx, txCreator)
 
         // Revoke attribute (by owner)
@@ -369,8 +374,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val revokeResult = provider.submit(revokeTx).await()
-        assert(revokeResult.isRight, s"Revoke attribute should succeed: $revokeResult")
+        provider.submitOk(revokeTx)
     }
 
     test(
@@ -391,8 +395,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val createResult = provider.submit(createTx).await()
-        assert(createResult.isRight, s"Create identity should succeed: $createResult")
+        pinLabel("create")(provider.submitOk(createTx))
         val identityUtxo = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // 2. Add delegate (Bob)
@@ -407,8 +410,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val delegateResult = provider.submit(delegateTx).await()
-        assert(delegateResult.isRight, s"Add delegate should succeed: $delegateResult")
+        pinLabel("delegate")(provider.submitOk(delegateTx))
         val delegationUtxo = findDelegationUtxo(delegateTx, txCreator)
 
         // 3. Publish attribute (by Bob as delegate)
@@ -423,8 +425,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Bob.address,
           signer = Bob.signer
         )
-        val publishResult = provider.submit(publishTx).await()
-        assert(publishResult.isRight, s"Publish attribute should succeed: $publishResult")
+        pinLabel("publish")(provider.submitOk(publishTx))
         val attributeUtxo = findAttributeUtxo(publishTx, txCreator)
 
         // 4. Revoke attribute (by owner)
@@ -436,8 +437,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val revokeAttrResult = provider.submit(revokeAttrTx).await()
-        assert(revokeAttrResult.isRight, s"Revoke attribute should succeed: $revokeAttrResult")
+        pinLabel("revoke attribute")(provider.submitOk(revokeAttrTx))
 
         // 5. Revoke delegate
         val aliceUtxos3 = provider.findUtxos(Alice.address).await().toOption.get
@@ -448,8 +448,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val revokeDelegResult = provider.submit(revokeDelegTx).await()
-        assert(revokeDelegResult.isRight, s"Revoke delegate should succeed: $revokeDelegResult")
+        pinLabel("revoke delegate")(provider.submitOk(revokeDelegTx))
 
         // 6. Transfer ownership to Bob
         val aliceUtxos4 = provider.findUtxos(Alice.address).await().toOption.get
@@ -461,8 +460,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
           ownerSigner = Alice.signer,
           newOwnerSigner = Bob.signer
         )
-        val transferResult = provider.submit(transferTx).await()
-        assert(transferResult.isRight, s"Transfer should succeed: $transferResult")
+        pinLabel("transfer")(provider.submitOk(transferTx))
 
         // Verify final state
         val finalOutput = transferTx.utxos

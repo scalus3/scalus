@@ -11,4 +11,32 @@ object EditableNftValidatorTestBudgets extends BudgetTable {
       "Burn: successful burn removes both tokens",
       Pin.Tx(memory = 70_070, steps = 24_064_803, size = 2_459, fee = 269_356)
     )
+    pin(
+      "Mint: successful minting creates paired reference and user NFTs",
+      Pin.Tx(memory = 70_892, steps = 25_222_406, size = 2_600, fee = 275_691)
+    )
+    pin(
+      "Lifecycle: mint -> edit -> edit -> seal success / mint",
+      Pin.Tx(memory = 70_892, steps = 25_222_406, size = 2_600, fee = 275_691)
+    )
+    pin(
+      "Lifecycle: mint -> edit -> edit -> seal success / first edit",
+      Pin.Tx(memory = 47_498, steps = 19_412_975, size = 2_582, fee = 273_130)
+    )
+    pin(
+      "Lifecycle: mint -> edit -> edit -> seal success / second edit",
+      Pin.Tx(memory = 47_498, steps = 19_412_975, size = 2_547, fee = 271_590)
+    )
+    pin(
+      "Lifecycle: mint -> edit -> edit -> seal success / seal",
+      Pin.Tx(memory = 47_498, steps = 19_412_975, size = 2_547, fee = 271_590)
+    )
+    pin(
+      "Lifecycle: mint -> edit -> transfer -> edit (by Bob) -> seal success / edit by Bob",
+      Pin.Tx(memory = 54_948, steps = 24_299_979, size = 2_579, fee = 273_780)
+    )
+    pin(
+      "Lifecycle: mint -> edit -> transfer -> edit (by Bob) -> seal success / seal by Bob",
+      Pin.Tx(memory = 47_498, steps = 19_412_975, size = 2_543, fee = 271_414)
+    )
 }

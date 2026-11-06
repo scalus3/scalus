@@ -3,7 +3,7 @@ package scalus.examples.vesting
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
-import scalus.cardano.node.{Emulator, NodeSubmitError}
+import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.RedeemerPurpose
 import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
@@ -72,34 +72,12 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           duration = duration,
           signer = Alice.signer
         )
-        assert(provider.submit(lockTx).await().isRight)
+        provider.submitSetup(lockTx)
 
         val lockedUtxo = lockTx.utxos.find { case (_, txOut) =>
             txOut.address == contract.address(env.network)
         }.get
         Utxo(lockedUtxo)
-    }
-
-    /** Asserts that submitting a transaction to the emulator fails with a script error containing
-      * the expected message.
-      *
-      * Since VestingTransactions uses constMaxBudget (script is not evaluated during building),
-      * validation errors are detected at emulator submission time rather than build time.
-      */
-    private def assertSubmitScriptFail(provider: Emulator, expectedError: String)(
-        tx: Transaction
-    ): Unit = {
-        val result = provider.submit(tx).await()
-        result match
-            case Right(_) =>
-                fail(s"Transaction submission should have failed but succeeded")
-            case Left(sf: NodeSubmitError.ScriptFailure) =>
-                if !sf.logs.exists(_.contains(expectedError)) then
-                    fail(
-                      s"Expected error containing '$expectedError' but got logs: ${sf.logs.mkString(", ")}"
-                    )
-            case Left(other) =>
-                fail(s"Expected ScriptFailure but got: $other")
     }
 
     test("Lock creates correct UTxO") {
@@ -138,11 +116,10 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Bob.signer
         )
 
-        val result = runValidator(provider, withdrawTx, lockedUtxo.input)
-        assertSuccess(result, contract.program)
-
-        val submitResult = provider.submit(withdrawTx).await()
-        assert(submitResult.isRight, s"Full withdrawal failed: $submitResult")
+        // VestingTransactions builds the withdrawal with constMaxBudget (its validator checks the fee
+        // exactly), so the transaction's redeemer budget is a constant. Pin the script evaluation.
+        assertSuccess(runValidator(provider, withdrawTx, lockedUtxo.input), contract.program)
+        provider.submitSetup(withdrawTx)
     }
 
     test("Partial 50% withdrawal at midpoint") {
@@ -168,11 +145,10 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Bob.signer
         )
 
-        val result = runValidator(provider, withdrawTx, lockedUtxo.input)
-        assertSuccess(result, contract.program)
-
-        val submitResult = provider.submit(withdrawTx).await()
-        assert(submitResult.isRight, s"Partial withdrawal failed: $submitResult")
+        // VestingTransactions builds the withdrawal with constMaxBudget (its validator checks the fee
+        // exactly), so the transaction's redeemer budget is a constant. Pin the script evaluation.
+        assertSuccess(runValidator(provider, withdrawTx, lockedUtxo.input), contract.program)
+        provider.submitSetup(withdrawTx)
 
         // Verify continuing output with preserved datum
         val continuingUtxo = withdrawTx.utxos.find { case (_, txOut) =>
@@ -204,7 +180,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           validFrom = validFrom,
           signer = Bob.signer
         )
-        assertSubmitScriptFail(provider, "Requested amount exceeds the available vested amount")(tx)
+        provider.submitFails(tx, "Requested amount exceeds the available vested amount")
     }
 
     test("Fail: withdraw more than available") {
@@ -229,7 +205,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           validFrom = validFrom,
           signer = Bob.signer
         )
-        assertSubmitScriptFail(provider, "Requested amount exceeds the available vested amount")(tx)
+        provider.submitFails(tx, "Requested amount exceeds the available vested amount")
     }
 
     test("Fail: wrong signer") {
@@ -253,6 +229,6 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           validFrom = validFrom,
           signer = Eve.signer
         )
-        assertSubmitScriptFail(provider, "No signature from beneficiary")(tx)
+        provider.submitFails(tx, "No signature from beneficiary")
     }
 }

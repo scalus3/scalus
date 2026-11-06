@@ -9,18 +9,27 @@ object PricebetValidatorTestBudgets extends BudgetTable {
     override val generation: Generation = Generation.current
     pin(
       "Player joins successfully",
-      Pin.Eval(memory = 58_029, steps = 27_146_462, size = 2_110, fee = 36_956)
+      Pin.Tx(memory = 58_029, steps = 27_146_462, size = 2_608, fee = 275_439)
     )
     pin(
       "Player wins with oracle rate above threshold",
-      Pin.Eval(memory = 62_975, steps = 23_982_006, size = 2_110, fee = 37_013)
+      Pin.Tx(memory = 62_975, steps = 23_982_006, size = 2_573, fee = 273_956)
     )
     pin(
       "Owner times out after deadline",
-      Pin.Eval(memory = 29_783, steps = 11_632_207, size = 2_110, fee = 34_208)
+      Pin.Tx(memory = 29_783, steps = 11_632_207, size = 2_524, fee = 268_995)
     )
     pin(
       "Oracle updates successfully",
-      Pin.Eval(memory = 52_447, steps = 22_737_257, size = 2_142, fee = 36_796)
+      Pin.Tx(memory = 52_447, steps = 22_737_257, size = 2_731, fee = 280_211)
     )
+    pin(
+      "Owner initiates bet successfully",
+      Pin.Tx(memory = 0, steps = 0, size = 294, fee = 168_317)
+    )
+    pin(
+      "Burn beacon token successfully",
+      Pin.Tx(memory = 60_551, steps = 20_339_625, size = 2_568, fee = 273_334)
+    )
+    pin("Happy path", Pin.Tx(memory = 62_975, steps = 23_982_006, size = 2_573, fee = 273_956))
 }

@@ -49,7 +49,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           initializationAmount = initializationAmount,
           signer = Alice.signer
         )
-        assert(provider.submit(initTx).await().isRight, "Initialize tx failed")
+        provider.submitSetup(initTx)
 
         val escrowUtxo = initTx.utxos.find { case (_, txOut) =>
             txOut.address == contract.address(env.network)
@@ -70,7 +70,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           buyer = Bob.addrKeyHash,
           signer = Bob.signer
         )
-        assert(provider.submit(depositTx).await().isRight, "Deposit tx failed")
+        provider.submitSetup(depositTx)
 
         // Find the new funded escrow UTxO
         val fundedUtxo = depositTx.utxos.find { case (_, txOut) =>
@@ -110,9 +110,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Bob.signer
         )
 
-        pinTx(depositTx)
-        val result = provider.submit(depositTx).await()
-        assert(result.isRight, s"Deposit tx failed: $result")
+        provider.submitOk(depositTx)
 
         // Verify the contract UTxO now has the full amount
         val fundedUtxo = depositTx.utxos.find { case (_, txOut) =>
@@ -175,7 +173,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           initializationAmount = escrowAmount, // init == escrow
           signer = Alice.signer
         )
-        assert(provider.submit(initTx).await().isRight, "init failed")
+        provider.submitSetup(initTx)
         val escrowUtxo = Utxo(
           initTx.utxos.find(_._2.address == contract.address(env.network)).get
         )
@@ -189,10 +187,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           buyer = Bob.addrKeyHash,
           signer = Bob.signer
         )
-        assert(
-          provider.submit(depositTx).await().isRight,
-          "deposit must succeed when init == escrow"
-        )
+        provider.submitOk(depositTx)
     }
 
     // --- Pay Tests ---
@@ -212,9 +207,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Bob.signer
         )
 
-        pinTx(payTx)
-        val result = provider.submit(payTx).await()
-        assert(result.isRight, s"Pay tx failed: $result")
+        provider.submitOk(payTx)
     }
 
     test("Pay fails: wrong signer (not buyer)") {
@@ -294,9 +287,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
 
-        pinTx(refundTx)
-        val result = provider.submit(refundTx).await()
-        assert(result.isRight, s"Refund tx failed: $result")
+        provider.submitOk(refundTx)
     }
 
     test("Refund fails: wrong signer (not seller)") {

@@ -6,12 +6,14 @@ import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.crypto.accumulator.BilinearAccumulatorProver
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.{Party, ScalusTest, TestUtil}
 import scalus.uplc.builtin.{Builtins, Data}
 import scalus.uplc.builtin.Builtins.bls12_381_G2_compress
 import scalus.utils.await
 
-class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
+class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest with BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = AllowlistValidatorE2ETestBudgets
 
     given CardanoInfo = CardanoInfo.mainnet
 
@@ -76,8 +78,7 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
             .sign(Party.Alice.signer)
             .transaction
 
-        val result = emulator.submit(tx).await()
-        assert(result.isRight, s"Transaction should succeed: ${result.left.toOption.getOrElse("")}")
+        emulator.submitOk(tx)
     }
 
     test("non-member cannot spend with a copied proof") {

@@ -29,7 +29,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
         val provider = createProvider()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val seedUtxo = Utxo(utxos.head)
-        val txCreator = createTxCreator(seedUtxo)
+        val txCreator = createTxCreator(seedUtxo, costingEvaluator)
 
         val mintTx = txCreator.mint(
           utxos = utxos,
@@ -40,8 +40,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           signer = Alice.signer
         )
 
-        val result = provider.submit(mintTx).await()
-        assert(result.isRight, s"Minting should succeed: $result")
+        provider.submitOk(mintTx)
 
         // Verify reference NFT at script address
         val refNftOutput = mintTx.utxos
@@ -87,7 +86,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        assert(provider.submit(mintTx).await().isRight, "first mint should succeed")
+        provider.submitSetup(mintTx)
 
         // Attacker mints again under the SAME policy (same seed parameter, same policyId) without
         // spending the seed, pointing seedIndex at an arbitrary owned input. The one-shot guarantee
@@ -128,8 +127,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
             .sign(Alice.signer)
             .transaction
 
-        val result = provider.submit(attackTx).await()
-        assert(result.isLeft, s"minting without spending the seed must fail, got: $result")
+        provider.submitFails(attackTx, "Must spend the seed UTxO")
     }
 
     test("Mint: cannot mint a pair via the Burn redeemer (empty burn branch side door)") {
@@ -160,8 +158,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
             .sign(Alice.signer)
             .transaction
 
-        val result = provider.submit(attackTx).await()
-        assert(result.isLeft, s"minting via the Burn redeemer must fail, got: $result")
+        provider.submitFails(attackTx, "Must burn exactly the reference and user NFT pair")
     }
 
     test("Mint: cannot mint extra token names alongside the pair") {
@@ -212,8 +209,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
             .sign(Alice.signer)
             .transaction
 
-        val result = provider.submit(attackTx).await()
-        assert(result.isLeft, s"minting extra tokens alongside the pair must fail, got: $result")
+        provider.submitFails(attackTx, "Must mint exactly the reference and user NFT pair")
     }
 
     test("Mint: user NFT must not be minted into the reference NFT output") {
@@ -258,11 +254,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
             .sign(Alice.signer)
             .transaction
 
-        val result = provider.submit(attackTx).await()
-        assert(
-          result.isLeft,
-          s"minting the user NFT into the reference output must fail, got: $result"
-        )
+        provider.submitFails(attackTx, "Reference NFT output must hold exactly the reference NFT")
     }
 
     test("Burn: cannot burn the user NFT alone (would orphan the reference NFT)") {
@@ -280,7 +272,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        assert(provider.submit(mintTx).await().isRight, "mint should succeed")
+        provider.submitSetup(mintTx)
 
         val parameterizedScript = EditableNftContract.compiled.withErrorTraces.apply(
           TxOutRef(TxId(seedUtxo.input.transactionId), BigInt(seedUtxo.input.index)).toData
@@ -309,15 +301,14 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
             .sign(Alice.signer)
             .transaction
 
-        val result = provider.submit(attackTx).await()
-        assert(result.isLeft, s"burning the user NFT alone must fail, got: $result")
+        provider.submitFails(attackTx, "Must burn exactly the reference and user NFT pair")
     }
 
     test("Lifecycle: mint -> edit -> edit -> seal success") {
         val provider = createProvider()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val seedUtxo = Utxo(utxos.head)
-        val txCreator = createTxCreator(seedUtxo)
+        val txCreator = createTxCreator(seedUtxo, costingEvaluator)
 
         // Mint
         val mintTx = txCreator.mint(
@@ -328,8 +319,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val mintResult = provider.submit(mintTx).await()
-        assert(mintResult.isRight, s"Mint should succeed: $mintResult")
+        pinLabel("mint")(provider.submitOk(mintTx))
         var refNftUtxo = Utxo(mintTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // First edit
@@ -341,8 +331,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val editResult1 = provider.submit(editTx1).await()
-        assert(editResult1.isRight, s"First edit should succeed: $editResult1")
+        pinLabel("first edit")(provider.submitOk(editTx1))
         refNftUtxo = Utxo(editTx1.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Second edit
@@ -354,8 +343,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val editResult2 = provider.submit(editTx2).await()
-        assert(editResult2.isRight, s"Second edit should succeed: $editResult2")
+        pinLabel("second edit")(provider.submitOk(editTx2))
         refNftUtxo = Utxo(editTx2.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Seal
@@ -366,8 +354,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val sealResult = provider.submit(sealTx).await()
-        assert(sealResult.isRight, s"Seal should succeed: $sealResult")
+        pinLabel("seal")(provider.submitOk(sealTx))
 
         // Verify final state
         val finalDatum = sealTx.utxos
@@ -393,7 +380,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(mintTx).await()
+        provider.submitSetup(mintTx)
         var refNftUtxo = Utxo(mintTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // First edit
@@ -405,7 +392,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(editTx1).await()
+        provider.submitSetup(editTx1)
         refNftUtxo = Utxo(editTx1.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Second edit
@@ -417,7 +404,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(editTx2).await()
+        provider.submitSetup(editTx2)
         refNftUtxo = Utxo(editTx2.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Seal
@@ -428,7 +415,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(sealTx).await()
+        provider.submitSetup(sealTx)
         refNftUtxo = Utxo(sealTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Try to edit after seal - should fail
@@ -440,15 +427,14 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val editResult3 = provider.submit(editTx3).await()
-        assert(editResult3.isLeft, "Edit after seal should fail")
+        provider.submitFails(editTx3, "Sealed NFTs are immutable")
     }
 
     test("Lifecycle: mint -> edit -> transfer -> edit (by Bob) -> seal success") {
         val provider = createProvider()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val seedUtxo = Utxo(utxos.head)
-        val txCreator = createTxCreator(seedUtxo)
+        val txCreator = createTxCreator(seedUtxo, costingEvaluator)
 
         // Mint (Alice)
         val mintTx = txCreator.mint(
@@ -459,7 +445,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(mintTx).await()
+        provider.submitSetup(mintTx)
         var refNftUtxo = Utxo(mintTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Edit (Alice)
@@ -471,7 +457,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(editTx1).await()
+        provider.submitSetup(editTx1)
         refNftUtxo = Utxo(editTx1.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Transfer user token from Alice to Bob
@@ -493,7 +479,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
             .sign(Alice.signer)
             .transaction
 
-        provider.submit(transferTx).await()
+        provider.submitSetup(transferTx)
 
         // Edit (Bob - new owner)
         val bobUtxos = provider.findUtxos(Bob.address).await().toOption.get
@@ -504,8 +490,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Bob.address,
           signer = Bob.signer
         )
-        val editResult2 = provider.submit(editTx2).await()
-        assert(editResult2.isRight, s"Bob should be able to edit after transfer: $editResult2")
+        pinLabel("edit by Bob")(provider.submitOk(editTx2))
         refNftUtxo = Utxo(editTx2.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Seal (Bob)
@@ -516,8 +501,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Bob.address,
           signer = Bob.signer
         )
-        val sealResult = provider.submit(sealTx).await()
-        assert(sealResult.isRight, s"Bob should be able to seal: $sealResult")
+        pinLabel("seal by Bob")(provider.submitOk(sealTx))
 
         // Verify final state
         val finalDatum = sealTx.utxos
@@ -534,10 +518,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
         val seedUtxo = Utxo(utxos.head)
         // Burn uses both spend + mint scripts, so we need proper cost evaluation
         // (constMaxBudget assigns max budget per script, which exceeds tx limit with 2 scripts)
-        val txCreator = createTxCreator(
-          seedUtxo,
-          PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
-        )
+        val txCreator = createTxCreator(seedUtxo, costingEvaluator)
 
         // Mint
         val mintTx = txCreator.mint(
@@ -548,7 +529,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        provider.submit(mintTx).await()
+        provider.submitSetup(mintTx)
         val refNftUtxo = Utxo(mintTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Burn
@@ -559,9 +540,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        pinTx(burnTx)
-        val burnResult = provider.submit(burnTx).await()
-        assert(burnResult.isRight, s"Burn should succeed: $burnResult")
+        provider.submitOk(burnTx)
 
         // Verify tokens are burned (no longer exist)
         val refTokenName = EditableNftValidator.refNftName(tokenId)
@@ -586,6 +565,9 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite 
 object EditableNftValidatorTest extends ScalusTest {
     private given env: CardanoInfo = testEnvironment
     private val compiledContract = EditableNftContract.compiled.withErrorTraces
+
+    // Computes the real redeemer budgets, for the transactions under test that `submitOk` pins.
+    private val costingEvaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
 
     def createTxCreator(
         seedUtxo: Utxo,

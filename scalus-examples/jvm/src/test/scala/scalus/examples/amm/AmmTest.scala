@@ -30,7 +30,7 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
         val (provider, txCreator) = createSetup()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         val tx = txCreator.createEmptyPool(utxos, 5_000_000L, Alice.address, Alice.signer)
-        assert(provider.submit(tx).await().isRight, "createPool should succeed")
+        provider.submitOk(tx)
         val poolUtxo = Utxo(tx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val datum = txCreator.readPoolDatum(poolUtxo)
         assert(datum == AmmDatum(BigInt(0), BigInt(0), BigInt(0)))
@@ -41,13 +41,13 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
 
         val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
         val createTx = txCreator.createEmptyPool(utxos1, 5_000_000L, Alice.address, Alice.signer)
-        provider.submit(createTx).await()
+        provider.submitSetup(createTx)
 
         val poolUtxo = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
         val depositTx =
             txCreator.deposit(utxos2, poolUtxo, x0 = 1000L, x1 = 4000L, Alice.address, Alice.signer)
-        assert(provider.submit(depositTx).await().isRight, "first deposit should succeed")
+        provider.submitOk(depositTx)
 
         val newPool = Utxo(depositTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val datum = txCreator.readPoolDatum(newPool)
@@ -64,7 +64,7 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
 
         val depositTx =
             txCreator.deposit(utxos, poolUtxo1, x0 = 1000L, x1 = 4000L, Alice.address, Alice.signer)
-        assert(provider.submit(depositTx).await().isRight, "second deposit should succeed")
+        provider.submitOk(depositTx)
 
         val newPool = Utxo(depositTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val datum = txCreator.readPoolDatum(newPool)
@@ -82,7 +82,7 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
         // Redeem half the LP supply
         val halfLp = (initialDatum.lpSupply / 2).toLong
         val redeemTx = txCreator.redeem(utxos, poolUtxo1, halfLp, Alice.address, Alice.signer)
-        assert(provider.submit(redeemTx).await().isRight, "redeem should succeed")
+        provider.submitOk(redeemTx)
 
         val newPool = Utxo(redeemTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val newDatum = txCreator.readPoolDatum(newPool)
@@ -104,7 +104,7 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
         // Init an empty pool, deposit, then redeem ALL LP so the pool is empty again.
         val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
         val createTx = txCreator.createEmptyPool(utxos1, 5_000_000L, Alice.address, Alice.signer)
-        provider.submit(createTx).await()
+        provider.submitSetup(createTx)
         val emptyPool = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
 
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
@@ -117,19 +117,19 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
               Alice.address,
               Alice.signer
             )
-        provider.submit(depositTx).await()
+        provider.submitSetup(depositTx)
         val funded = Utxo(depositTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val allLp = txCreator.readPoolDatum(funded).lpSupply.toLong
 
         val utxos3 = provider.findUtxos(Alice.address).await().toOption.get
         val redeemTx = txCreator.redeem(utxos3, funded, allLp, Alice.address, Alice.signer)
-        provider.submit(redeemTx).await()
+        provider.submitSetup(redeemTx)
         val drained = Utxo(redeemTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         assert(txCreator.readPoolDatum(drained) == AmmDatum(BigInt(0), BigInt(0), BigInt(0)))
 
         val utxos4 = provider.findUtxos(Alice.address).await().toOption.get
         val closeTx = txCreator.close(utxos4, drained, Alice.address, Alice.signer)
-        assert(provider.submit(closeTx).await().isRight, "close should succeed")
+        provider.submitOk(closeTx)
         // No pool output remains, and the pool NFT is gone.
         assert(closeTx.utxos.find(_._2.address == txCreator.scriptAddress).isEmpty)
     }
@@ -186,7 +186,7 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
           Alice.address,
           Alice.signer
         )
-        assert(provider.submit(swapTx).await().isRight, "swap t0 to t1 should succeed")
+        provider.submitOk(swapTx)
 
         val newPool = Utxo(swapTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val newDatum = txCreator.readPoolDatum(newPool)
@@ -214,7 +214,7 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
           Alice.address,
           Alice.signer
         )
-        assert(provider.submit(swapTx).await().isRight, "swap t1 to t0 should succeed")
+        provider.submitOk(swapTx)
 
         val newPool = Utxo(swapTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val newDatum = txCreator.readPoolDatum(newPool)
@@ -238,7 +238,7 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
           Alice.address,
           Alice.signer
         )
-        assertSubmitFails(provider, badTx)
+        provider.submitFails(badTx, "Deposit: ratio mismatch")
     }
 
     test("FAIL: swap below minAmountOut") {
@@ -256,7 +256,7 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
           Alice.address,
           Alice.signer
         )
-        assertSubmitFails(provider, badTx)
+        provider.submitFails(badTx, "Swap: slippage exceeded")
     }
 
     test("FAIL: swap that drains the reserve tokens from the continuation output") {
@@ -287,7 +287,7 @@ class AmmTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite, ScalaCheckProper
             .complete(utxos, Alice.address)
             .sign(Alice.signer)
             .transaction
-        assertSubmitFails(provider, drainTx)
+        provider.submitFails(drainTx, "Pool output must hold r0 of token0")
     }
 
     test("property: k-invariant holds for all valid swaps") {
@@ -390,7 +390,7 @@ object AmmTest extends ScalusTest {
 
         val txCreator = evaluatorMode match
             case EvaluatorMode.EvaluateAndComputeCost => costingTxCreator
-            case _                                    => maxBudgetTxCreator
+            case _                                    => uncostedTxCreator
 
         (provider, txCreator)
     }
@@ -401,8 +401,19 @@ object AmmTest extends ScalusTest {
     // test still gets a fresh Emulator.
     private lazy val costingTxCreator: AmmOffchain =
         newTxCreator(PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost))
-    private lazy val maxBudgetTxCreator: AmmOffchain =
-        newTxCreator(PlutusScriptEvaluator.constMaxBudget(env))
+    // Builds a transaction without running its scripts, so a test can submit one that the validator
+    // rejects. Each redeemer gets half the transaction maximum: with the whole maximum, a
+    // transaction with two redeemers exceeds the limit and the ledger rejects it before any
+    // script runs.
+    private lazy val uncostedTxCreator: AmmOffchain =
+        newTxCreator(
+          PlutusScriptEvaluator.const(
+            ExUnits(
+              env.protocolParams.maxTxExecutionUnits.memory / 2,
+              env.protocolParams.maxTxExecutionUnits.steps / 2
+            )
+          )
+        )
 
     private def newTxCreator(evaluator: PlutusScriptEvaluator): AmmOffchain =
         AmmOffchain(
@@ -416,20 +427,14 @@ object AmmTest extends ScalusTest {
     def initPoolWith(provider: Emulator, txCreator: AmmOffchain, x0: Long, x1: Long): Utxo = {
         val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
         val createTx = txCreator.createEmptyPool(utxos1, 5_000_000L, Alice.address, Alice.signer)
-        provider.submit(createTx).await()
+        provider.submitSetup(createTx)
 
         val emptyPool = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
         val depositTx = txCreator.deposit(utxos2, emptyPool, x0, x1, Alice.address, Alice.signer)
-        provider.submit(depositTx).await()
+        provider.submitSetup(depositTx)
         Utxo(depositTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
     }
-
-    def assertSubmitFails(provider: Emulator, tx: Transaction): Unit =
-        provider.submit(tx).await() match {
-            case Left(_)  => ()
-            case Right(_) => fail("Expected transaction submission to fail but it succeeded")
-        }
 
     val swapGen: Gen[(Long, Long, Long, Boolean)] =
         for

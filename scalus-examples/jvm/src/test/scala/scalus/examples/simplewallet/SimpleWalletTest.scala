@@ -4,12 +4,14 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Charles, Dave}
 import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
 import scalus.utils.await
 
-class SimpleWalletTest extends AnyFunSuite, ScalusTest {
+class SimpleWalletTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = SimpleWalletTestBudgets
     private given env: CardanoInfo = testEnvironment
     private val wallet = SimpleWalletTransactions(env)
 
@@ -35,7 +37,7 @@ class SimpleWalletTest extends AnyFunSuite, ScalusTest {
           owner = Alice.address,
           signer = Alice.signer
         )
-        assert(p.submit(tx).await().isRight, "transfer should submit")
+        p.submitOk(tx)
         assert(
           tx.utxos.exists { case (_, o) =>
               o.address == Bob.address && o.value.coin.value == 3_000_000L
@@ -50,7 +52,7 @@ class SimpleWalletTest extends AnyFunSuite, ScalusTest {
 
         val tx =
             wallet.withdrawAll(ownerUtxos = utxos, recipient = Bob.address, signer = Alice.signer)
-        assert(p.submit(tx).await().isRight, "withdrawAll should submit")
+        p.submitOk(tx)
 
         // Every owner UTxO is consumed and nothing is left at Alice's address.
         assert(utxos.keySet.forall(in => tx.body.value.inputs.toSeq.contains(in)))
@@ -80,7 +82,7 @@ class SimpleWalletTest extends AnyFunSuite, ScalusTest {
           requiredSigners = Set(Alice.addrKeyHash, Bob.addrKeyHash),
           signers = Seq(Alice.signer, Bob.signer)
         )
-        assert(p.submit(ok).await().isRight, "two owners should be able to spend")
+        p.submitOk(ok)
 
         // Only Alice signs (1 of 3) — rejected by the native script.
         val p2 = Emulator(
@@ -97,6 +99,6 @@ class SimpleWalletTest extends AnyFunSuite, ScalusTest {
           requiredSigners = Set(Alice.addrKeyHash),
           signers = Seq(Alice.signer)
         )
-        assert(p2.submit(tooFew).await().isLeft, "one owner must not be enough")
+        p2.submitFails(tooFew, "Invalid native scripts")
     }
 }

@@ -70,7 +70,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
         val publishTx =
             txHelper.publishScript(aliceUtxos, contract, Bob.address, Alice.address, Alice.signer)
-        assert(emulator.submit(publishTx).await().isRight, "Publish script failed")
+        emulator.submitSetup(publishTx)
         val refScriptUtxo = findRefScriptUtxo(publishTx)
 
         aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
@@ -85,7 +85,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
           sponsor = Alice.address,
           signer = Alice.signer
         )
-        assert(emulator.submit(lockTx).await().isRight, "Lock tx failed")
+        emulator.submitSetup(lockTx)
 
         var contractUtxo = findContractUtxo(lockTx, contract)
         var remaining = lockAmount
@@ -128,8 +128,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
               signer = Alice.signer
             )
 
-            val result = emulator.submit(tx).await()
-            assert(result.isRight, s"Withdraw $i failed: $result")
+            emulator.submitSetup(tx)
 
             val (fee, exUnits, txSize) = extractMetrics(tx)
             totalFee += fee
@@ -182,7 +181,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
         val publishTx =
             txHelper.publishScript(aliceUtxos, contract, Bob.address, Alice.address, Alice.signer)
-        assert(emulator.submit(publishTx).await().isRight, "Publish script failed")
+        emulator.submitSetup(publishTx)
         val refScriptUtxo = findRefScriptUtxo(publishTx)
 
         aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
@@ -197,7 +196,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
           sponsor = Alice.address,
           signer = Alice.signer
         )
-        assert(emulator.submit(lockTx).await().isRight, "Lock tx failed")
+        emulator.submitSetup(lockTx)
 
         var contractUtxo = findContractUtxo(lockTx, contract)
         var remaining = lockAmount
@@ -239,8 +238,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
               signer = Alice.signer
             )
 
-            val result = emulator.submit(tx).await()
-            assert(result.isRight, s"Deposit $i failed: $result")
+            emulator.submitSetup(tx)
 
             val (fee, exUnits, txSize) = extractMetrics(tx)
             totalFee += fee
@@ -293,7 +291,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
         val publishTx =
             txHelper.publishScript(aliceUtxos, contract, Bob.address, Alice.address, Alice.signer)
-        assert(emulator.submit(publishTx).await().isRight, "Publish script failed")
+        emulator.submitSetup(publishTx)
         val refScriptUtxo = findRefScriptUtxo(publishTx)
 
         aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
@@ -308,7 +306,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
           sponsor = Alice.address,
           signer = Alice.signer
         )
-        assert(emulator.submit(lockTx).await().isRight, "Lock tx failed")
+        emulator.submitSetup(lockTx)
 
         var contractUtxo = findContractUtxo(lockTx, contract)
         val remaining = lockAmount
@@ -347,8 +345,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
               signer = Alice.signer
             )
 
-            val result = emulator.submit(tx).await()
-            assert(result.isRight, s"Add $i failed: $result")
+            emulator.submitSetup(tx)
 
             val (fee, exUnits, txSize) = extractMetrics(tx)
             totalFee += fee

@@ -8,12 +8,14 @@ import scalus.cardano.ledger.EvaluatorMode
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator}
 import scalus.cardano.node.Emulator
 import scalus.patterns.{Element, ElementData}
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.Alice
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.*
 import scalus.utils.await
 
-class StorageTest extends AnyFunSuite, ScalusTest:
+class StorageTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite:
+    override protected def budgetTable: BudgetTable = StorageTestBudgets
     given env: CardanoInfo = TestUtil.testEnvironment
     given ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
@@ -56,11 +58,7 @@ class StorageTest extends AnyFunSuite, ScalusTest:
 
         assert(txs.length == 1, s"Expected 1 transaction, got ${txs.length}")
 
-        txs.foreach { tx =>
-            provider.submit(tx).await() match
-                case Left(error) => fail(s"Failed to submit: $error")
-                case Right(_)    => ()
-        }
+        txs.foreach(tx => provider.submitOk(tx))
 
         val storageUtxos = provider.findUtxos(creator.scriptAddress).await().toOption.get
         assert(
@@ -90,9 +88,7 @@ class StorageTest extends AnyFunSuite, ScalusTest:
         assert(txs.length == 3, s"Expected 3 transactions, got ${txs.length}")
 
         txs.zipWithIndex.foreach { case (tx, idx) =>
-            provider.submit(tx).await() match
-                case Left(error) => fail(s"Failed to submit transaction ${idx + 1}: $error")
-                case Right(_)    => ()
+            pinLabel(s"chunk ${idx + 1}")(provider.submitOk(tx))
         }
 
         val storageUtxos = provider.findUtxos(creator.scriptAddress).await().toOption.get

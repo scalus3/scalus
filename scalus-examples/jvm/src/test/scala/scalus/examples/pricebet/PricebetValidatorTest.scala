@@ -14,6 +14,7 @@ import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Oracle}
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
+import scalus.uplc.eval.Result
 import scalus.utils.await
 
 import java.time.Instant
@@ -37,13 +38,12 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
 
-        val result = provider.submit(initTx).await()
-        assert(result.isRight, s"Failed to submit initiate tx: ${result.left}")
+        provider.submitOk(initTx)
     }
 
     test("Player joins successfully") {
         val provider = createProvider()
-        val txCreator = createTxCreator(provider)
+        val txCreator = createTxCreator(provider, costingEvaluator)
         val (_, pricebetUtxo) = createAndSubmitInitiateTx(provider, txCreator)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
@@ -55,8 +55,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Bob.signer
         )
 
-        val (joinResult, joinSize) = assertTxSucceedsSized(provider, joinTx, pricebetUtxo._1)
-        pinEval(joinResult.budget, joinSize)
+        assertValidatorAccepts(provider, joinTx, pricebetUtxo._1)
+        provider.submitOk(joinTx)
     }
 
     test("Doesn't allow double join") {
@@ -73,7 +73,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           sponsor = Bob.address,
           signer = Bob.signer
         )
-        assertTxSucceeds(provider, joinTx1, pricebetUtxo._1)
+        assertValidatorAccepts(provider, joinTx1, pricebetUtxo._1)
+        provider.submitSetup(joinTx1)
 
         // Find the new pricebet UTXO after join
         val pricebetUtxos =
@@ -90,12 +91,14 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
 
-        assertTxFails(provider, joinTx2, newPricebetUtxo._1, "Player already joined")
+        assertValidatorRejects(provider, joinTx2, newPricebetUtxo._1)
+
+        provider.submitFails(joinTx2, "Player already joined")
     }
 
     test("Player wins with oracle rate above threshold") {
         val provider = createProvider()
-        val txCreator = createTxCreator(provider)
+        val txCreator = createTxCreator(provider, costingEvaluator)
         val oracleUtxo = createAndSubmitOracleUtxo(provider, txCreator, winningRate)
         val (_, pricebetUtxo) = createAndSubmitInitiateTx(provider, txCreator)
 
@@ -108,7 +111,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           sponsor = Bob.address,
           signer = Bob.signer
         )
-        assertTxSucceeds(provider, joinTx, pricebetUtxo._1)
+        assertValidatorAccepts(provider, joinTx, pricebetUtxo._1)
+        provider.submitSetup(joinTx)
 
         // Find the pricebet UTXO after join
         val pricebetUtxos =
@@ -129,8 +133,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        val (winResult, winSize) = assertTxSucceedsSized(provider, winTx, joinedPricebetUtxo._1)
-        pinEval(winResult.budget, winSize)
+        assertValidatorAccepts(provider, winTx, joinedPricebetUtxo._1)
+        provider.submitOk(winTx)
     }
 
     test("Win rejects a forged oracle UTxO that lacks the beacon token") {
@@ -147,7 +151,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           sponsor = Bob.address,
           signer = Bob.signer
         )
-        assertTxSucceeds(provider, joinTx, pricebetUtxo._1)
+        assertValidatorAccepts(provider, joinTx, pricebetUtxo._1)
+        provider.submitSetup(joinTx)
         val joinedPricebetUtxo = {
             val pricebetUtxos =
                 provider.findUtxos(txCreator.pricebetScriptAddress).await().toOption.get
@@ -169,10 +174,9 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(
-          provider,
+        assertValidatorRejects(provider, winTx, joinedPricebetUtxo._1)
+        provider.submitFails(
           winTx,
-          joinedPricebetUtxo._1,
           "Oracle reference input must hold the beacon token"
         )
     }
@@ -192,7 +196,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           sponsor = Bob.address,
           signer = Bob.signer
         )
-        assertTxSucceeds(provider, joinTx, pricebetUtxo._1)
+        assertValidatorAccepts(provider, joinTx, pricebetUtxo._1)
+        provider.submitSetup(joinTx)
 
         // Find the pricebet UTXO after join
         val pricebetUtxos =
@@ -213,12 +218,13 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, winTx, joinedPricebetUtxo._1, "Oracle rate must exceed bet rate")
+        assertValidatorRejects(provider, winTx, joinedPricebetUtxo._1)
+        provider.submitFails(winTx, "Oracle rate must exceed bet rate")
     }
 
     test("Owner times out after deadline") {
         val provider = createProvider()
-        val txCreator = createTxCreator(provider)
+        val txCreator = createTxCreator(provider, costingEvaluator)
         val (_, pricebetUtxo) = createAndSubmitInitiateTx(provider, txCreator)
 
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
@@ -232,9 +238,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(afterDeadlineSlot)
-        val (timeoutResult, timeoutSize) =
-            assertTxSucceedsSized(provider, timeoutTx, pricebetUtxo._1)
-        pinEval(timeoutResult.budget, timeoutSize)
+        assertValidatorAccepts(provider, timeoutTx, pricebetUtxo._1)
+        provider.submitOk(timeoutTx)
     }
 
     test("Cannot timeout before deadline") {
@@ -253,12 +258,13 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, timeoutTx, pricebetUtxo._1, "Deadline not reached")
+        assertValidatorRejects(provider, timeoutTx, pricebetUtxo._1)
+        provider.submitFails(timeoutTx, "Deadline not reached")
     }
 
     test("Oracle updates successfully") {
         val provider = createProvider()
-        val txCreator = createTxCreator(provider)
+        val txCreator = createTxCreator(provider, costingEvaluator)
         val oracleUtxo = createAndSubmitOracleUtxo(provider, txCreator, initialRate)
 
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
@@ -275,8 +281,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(updateSlot)
-        val (updateResult, updateSize) = assertTxSucceedsSized(provider, updateTx, oracleUtxo._1)
-        pinEval(updateResult.budget, updateSize)
+        assertValidatorAccepts(provider, updateTx, oracleUtxo._1)
+        provider.submitOk(updateTx)
     }
 
     test("Oracle forbids unauthorized price updates") {
@@ -310,7 +316,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .transaction
 
         provider.setSlot(updateSlot)
-        assertTxFails(provider, updateTx, oracleUtxo._1, "Must be signed by the authorized signer")
+        assertValidatorRejects(provider, updateTx, oracleUtxo._1)
+        provider.submitFails(updateTx, "Must be signed by authorized signer")
     }
 
     // An Update to a zero rate or a zero denominator would lock the oracle UTxO and its beacon:
@@ -416,7 +423,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .complete(availableUtxos = oracleUtxos, Oracle.address)
             .sign(Oracle.signer)
             .transaction
-        assert(provider.submit(tx).await().isLeft, "The Burn redeemer must not mint")
+        provider.submitFails(tx, "Burn redeemer must only burn")
     }
 
     test("Oracle discovery via beacon token") {
@@ -433,8 +440,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Oracle.signer
         )
 
-        val result = provider.submit(createTx).await()
-        assert(result.isRight, s"Failed to submit oracle creation: ${result.left}")
+        provider.submitSetup(createTx)
 
         // Step 2: Discover oracle by searching for beacon token (real-world flow)
         val beaconPolicyId = txCreator.beaconPolicyId
@@ -484,8 +490,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Oracle.signer
         )
 
-        val result = provider.submit(burnTx).await()
-        assert(result.isRight, s"Failed to burn beacon: ${result.left}")
+        provider.submitOk(burnTx)
     }
 
     test("Burn beacon fails without authorized signer") {
@@ -521,13 +526,14 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .sign(Alice.signer)
             .transaction
 
-        val result = provider.submit(burnTx).await()
-        assert(result.isLeft, s"Expected burn to fail but it succeeded")
+        provider.submitFails(burnTx, "Must be signed by authorized signer")
     }
 
     test("Happy path") {
         val provider = createProvider()
         val txCreator = createTxCreator(provider)
+        // Built from the same seed UTxO, so the same scripts. Computes the budget of the final win.
+        val costingTxCreator = createTxCreator(provider, costingEvaluator)
 
         // create oracle with rate = 1/2
         val lowRate = Rational(BigInt(1), BigInt(2))
@@ -546,8 +552,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
               changeAddress = Alice.address,
               signer = Alice.signer
             )
-            val result = provider.submit(initTx).await()
-            assert(result.isRight, s"Failed to submit: ${result.left}")
+            provider.submitSetup(initTx)
 
             val pricebetUtxos =
                 provider.findUtxos(txCreator.pricebetScriptAddress).await().toOption.get
@@ -564,8 +569,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
               sponsor = Bob.address,
               signer = Bob.signer
             )
-            val result = provider.submit(joinTx).await()
-            assert(result.isRight, s"Failed to submit join: ${result.left}")
+            provider.submitSetup(joinTx)
 
             val pricebetUtxos =
                 provider.findUtxos(txCreator.pricebetScriptAddress).await().toOption.get
@@ -585,10 +589,9 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(
-          provider,
+        assertValidatorRejects(provider, winTxLowRate, pricebetUtxoAfterJoin._1)
+        provider.submitFails(
           winTxLowRate,
-          pricebetUtxoAfterJoin._1,
           "Oracle rate must exceed bet rate"
         )
 
@@ -608,8 +611,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
               oracleSigner = Oracle.signer,
               sponsorSigner = Alice.signer
             )
-            val result = provider.submit(updateTx).await()
-            assert(result.isRight, s"Failed to update oracle: ${result.left}")
+            provider.submitSetup(updateTx)
 
             val oracleUtxos =
                 provider.findUtxos(txCreator.oracleScriptAddress).await().toOption.get
@@ -618,7 +620,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
 
         // Bob wins
         val bobUtxosAfterUpdate = provider.findUtxos(Bob.address).await().toOption.get
-        val winTxHighRate = txCreator.win(
+        val winTxHighRate = costingTxCreator.win(
           utxos = bobUtxosAfterUpdate,
           pricebetUtxo = pricebetUtxoAfterJoin,
           oracleUtxo = updatedOracleUtxo,
@@ -630,13 +632,25 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxSucceeds(provider, winTxHighRate, pricebetUtxoAfterJoin._1)
+        assertValidatorAccepts(provider, winTxHighRate, pricebetUtxoAfterJoin._1)
+        provider.submitOk(winTxHighRate)
     }
 }
 
 object PricebetValidatorTest extends ScalusTest {
     given env: CardanoInfo = TestUtil.testEnvironment
-    private val evaluator = PlutusScriptEvaluator.constMaxBudget(env)
+    // Builds a transaction without running its scripts, so a test can submit one that the validator
+    // rejects. Each redeemer gets half the transaction maximum: with the whole maximum, a
+    // transaction with two redeemers exceeds the limit and the ledger rejects it before any
+    // script runs.
+    private val evaluator = PlutusScriptEvaluator.const(
+      ExUnits(
+        env.protocolParams.maxTxExecutionUnits.memory / 2,
+        env.protocolParams.maxTxExecutionUnits.steps / 2
+      )
+    )
+    // Computes the real redeemer budgets, for the transactions under test that `submitOk` pins.
+    private val costingEvaluator = PlutusScriptEvaluator(env, EvaluateAndComputeCost)
 
     // Beacon token name for oracle (policy ID is derived from oracle script hash)
     private val beaconTokenName = ByteString.fromString("ORACLE")
@@ -753,8 +767,7 @@ object PricebetValidatorTest extends ScalusTest {
           signer = Alice.signer
         )
 
-        val result = provider.submit(initTx).await()
-        assert(result.isRight, s"Failed to submit initiate tx: ${result.left}")
+        provider.submitSetup(initTx)
 
         val pricebetUtxos =
             provider.findUtxos(txCreator.pricebetScriptAddress).await().toOption.get
@@ -777,8 +790,7 @@ object PricebetValidatorTest extends ScalusTest {
           signer = Oracle.signer
         )
 
-        val result = provider.submit(createTx).await()
-        assert(result.isRight, s"Failed to submit oracle creation: ${result.left}")
+        provider.submitSetup(createTx)
 
         // Find the oracle UTXO
         val oracleUtxos = provider.findUtxos(txCreator.oracleScriptAddress).await().toOption.get
@@ -805,8 +817,7 @@ object PricebetValidatorTest extends ScalusTest {
             .complete(availableUtxos = utxos, Alice.address)
             .sign(Alice.signer)
             .transaction
-        val result = provider.submit(tx).await()
-        assert(result.isRight, s"Planting fake oracle should succeed: ${result.left}")
+        provider.submitSetup(tx)
 
         val oracleUtxos = provider.findUtxos(txCreator.oracleScriptAddress).await().toOption.get
         // The fake has no beacon token (its value is bare ADA).
@@ -856,9 +867,7 @@ object PricebetValidatorTest extends ScalusTest {
             .complete(availableUtxos = utxos, Oracle.address)
             .sign(Oracle.signer)
             .transaction
-        provider.submit(tx).await() match
-            case Left(e)  => assert(e.toString.contains(expectedError), s"Unexpected error: $e")
-            case Right(_) => fail("The mint must be rejected")
+        provider.submitFails(tx, expectedError)
     }
 
     /** An authorized Update of a valid oracle to `newRate` fails with `expectedError`. */
@@ -884,59 +893,36 @@ object PricebetValidatorTest extends ScalusTest {
         val result = runValidator(provider, updateTx, oracleUtxo._1)
         assert(result.isFailure, s"Update to $newRate must fail")
         assert(result.logs.exists(_.contains(expectedError)), s"Unexpected logs: ${result.logs}")
-        assert(provider.submit(updateTx).await().isLeft, "Emulator must reject the update")
+        provider.submitFails(updateTx, expectedError)
     }
 
-    def assertTxSucceeds(
+    /** Runs the script that guards `scriptInput` on the script context of `tx`: it must accept.
+      * Call it before submitting `tx`, while its inputs are still unspent.
+      */
+    def assertValidatorAccepts(
         provider: Emulator,
         tx: Transaction,
         scriptInput: TransactionInput
-    ): scalus.uplc.eval.Result = assertTxSucceedsSized(provider, tx, scriptInput)._1
-
-    /** Like [[assertTxSucceeds]], and also returns the size in bytes of the script it ran. */
-    def assertTxSucceedsSized(
-        provider: Emulator,
-        tx: Transaction,
-        scriptInput: TransactionInput
-    ): (scalus.uplc.eval.Result, Int) = {
-        val (result, size) = runValidatorSized(provider, tx, scriptInput)
-        assert(result.isSuccess, s"Direct validation failed: $result")
-
-        val submitResult = provider.submit(tx).await()
-        assert(
-          submitResult.isRight,
-          s"Emulator submission failed: ${submitResult.left}"
-        )
-        (result, size)
-    }
-
-    def assertTxFails(
-        provider: Emulator,
-        tx: Transaction,
-        scriptInput: TransactionInput,
-        expectedError: String
     ): Unit = {
-        // Test direct validation
+        val result = runValidator(provider, tx, scriptInput)
+        assert(result.isSuccess, s"Direct validation failed: $result")
+    }
+
+    /** Runs the script that guards `scriptInput` on the script context of `tx`: it must reject. */
+    def assertValidatorRejects(
+        provider: Emulator,
+        tx: Transaction,
+        scriptInput: TransactionInput
+    ): Unit = {
         val result = runValidator(provider, tx, scriptInput)
         assert(result.isFailure, "Expected validation to fail but it succeeded")
-
-        // Test via emulator
-        val submitResult = provider.submit(tx).await()
-        assert(submitResult.isLeft, s"Expected submission to fail but it succeeded")
     }
 
     def runValidator(
         provider: Emulator,
         tx: Transaction,
         scriptInput: TransactionInput
-    ): scalus.uplc.eval.Result = runValidatorSized(provider, tx, scriptInput)._1
-
-    /** Like [[runValidator]], and also returns the size in bytes of the script it ran. */
-    def runValidatorSized(
-        provider: Emulator,
-        tx: Transaction,
-        scriptInput: TransactionInput
-    ): (scalus.uplc.eval.Result, Int) = {
+    ): Result = {
         val utxos = {
             val body = tx.body.value
             val allInputs =
@@ -957,6 +943,6 @@ object PricebetValidatorTest extends ScalusTest {
         val plutusScript = allResolvedPlutusScriptsMap(scriptHash)
         val program = scalus.uplc.Program.fromCborByteString(plutusScript.script)
 
-        (program.runWithDebug(scriptContext), plutusScript.script.size)
+        program.runWithDebug(scriptContext)
     }
 }

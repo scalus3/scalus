@@ -4,12 +4,15 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
 import scalus.utils.await
 
-class AtomicTransactionsTest extends AnyFunSuite, ScalusTest {
+class AtomicTransactionsTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = AtomicTransactionsTestBudgets
+
     private given env: CardanoInfo = testEnvironment
     private val txs = AtomicTransactions(env)
 
@@ -43,7 +46,7 @@ class AtomicTransactionsTest extends AnyFunSuite, ScalusTest {
           "every sender UTxO must be an input"
         )
 
-        assert(p.submit(tx).await().isRight, "atomic batch should submit")
+        p.submitOk(tx)
 
         // Bob received exactly the payment.
         val bobPaid = tx.utxos.exists { case (_, out) =>

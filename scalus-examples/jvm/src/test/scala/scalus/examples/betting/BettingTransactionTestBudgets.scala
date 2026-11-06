@@ -10,21 +10,31 @@ object BettingTransactionTestBudgets extends BudgetTable {
     pin(
       "player2 joins bet before expiration",
       Generation.Scala33,
-      Pin.Eval(memory = 111_227, steps = 44_050_890, size = 4_902, fee = 83_124)
+      Pin.Tx(memory = 111_227, steps = 44_050_890, size = 613, fee = 265_477)
     )
     pin(
       "player2 joins bet before expiration",
       Generation.Scala38,
-      Pin.Eval(memory = 111_227, steps = 44_050_890, size = 4_886, fee = 82_884)
+      Pin.Tx(memory = 111_227, steps = 44_050_890, size = 613, fee = 265_237)
     )
     pin(
       "oracle announces winner after expiration",
       Generation.Scala33,
-      Pin.Eval(memory = 98_418, steps = 38_026_798, size = 4_902, fee = 81_951)
+      Pin.Tx(memory = 129_445, steps = 45_783_184, size = 551, fee = 263_925)
     )
     pin(
       "oracle announces winner after expiration",
       Generation.Scala38,
-      Pin.Eval(memory = 98_418, steps = 38_026_798, size = 4_886, fee = 81_711)
+      Pin.Tx(memory = 127_285, steps = 45_070_497, size = 551, fee = 263_509)
+    )
+    pin(
+      "init bet",
+      Generation.Scala33,
+      Pin.Tx(memory = 70_586, steps = 25_604_524, size = 602, fee = 261_318)
+    )
+    pin(
+      "init bet",
+      Generation.Scala38,
+      Pin.Tx(memory = 68_426, steps = 24_891_837, size = 602, fee = 260_902)
     )
 }

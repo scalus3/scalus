@@ -4,9 +4,10 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.address.{StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
-import scalus.cardano.node.{Emulator, NodeSubmitError}
+import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{ScriptWitness, TwoArgumentPlutusScriptWitness, TxBuilder}
 import scalus.compiler.Options
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.PlutusV3
@@ -15,7 +16,8 @@ import scalus.utils.await
 import scalus.cardano.onchain.plutus.v3.{ScriptContext, Value as OnchainValue}
 import scalus.cardano.onchain.plutus.prelude.{!==, ===, require}
 
-class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
+class UpgradeableProxyTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = UpgradeableProxyTestBudgets
 
     private given env: CardanoInfo = TestUtil.testEnvironment
     private given Options = Options.release
@@ -72,28 +74,16 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
     private val txCreator: ProxyTransactions =
         ProxyTransactions(env = env, evaluator = evaluator, contract = contract)
 
+    // Computes the real redeemer budgets, for the transactions under test that `submitOk` pins.
+    private val costingEvaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
+    private val costingTxCreator: ProxyTransactions = txCreator.copy(evaluator = costingEvaluator)
+
     private def createProvider(): Emulator =
         Emulator.withOutputs(
           Output(Alice.address, Value.ada(5000)),
           Output(Alice.address, Value.ada(5000)),
           Output(Bob.address, Value.ada(5000))
         )
-
-    private def assertSubmitScriptFail(provider: Emulator, expectedError: String)(
-        tx: Transaction
-    ): Unit = {
-        val result = provider.submit(tx).await()
-        result match
-            case Right(_) =>
-                fail(s"Transaction submission should have failed but succeeded")
-            case Left(sf: NodeSubmitError.ScriptFailure) =>
-                if !sf.logs.exists(_.contains(expectedError)) then
-                    fail(
-                      s"Expected error containing '$expectedError' but got: ${sf.logs.mkString(", ")}"
-                    )
-            case Left(other) =>
-                fail(s"Expected ScriptFailure but got: $other")
-    }
 
     private def deployProxy(provider: Emulator, logicHash: ScriptHash): Utxo = {
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
@@ -105,7 +95,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
           sponsor = Alice.address,
           signer = Alice.signer
         )
-        assert(provider.submit(tx).await().isRight, "deploy failed")
+        provider.submitSetup(tx)
         Utxo(tx.utxos.find(_._2.address == txCreator.scriptAddress).get)
     }
 
@@ -120,7 +110,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .complete(availableUtxos = utxos, sponsor = Alice.address)
             .sign(Alice.signer)
             .transaction
-        assert(provider.submit(tx).await().isRight, s"registerStake failed")
+        provider.submitSetup(tx)
     }
 
     // mustMintLogic requires a mint in every tx it runs in, including registration.
@@ -132,7 +122,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .complete(availableUtxos = utxos, sponsor = Alice.address)
             .sign(Alice.signer)
             .transaction
-        assert(provider.submit(tx).await().isRight, s"registerMustMintStake failed")
+        provider.submitSetup(tx)
     }
 
     test("success: Call with mustNotMint logic validator") {
@@ -142,7 +132,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
 
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
         // no minting -- should pass
-        val tx = txCreator.call(
+        val tx = costingTxCreator.call(
           utxos = utxos,
           proxyUtxo = proxyUtxo,
           logicStakeAddress = mustNotMintStakeAddress,
@@ -150,7 +140,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
           sponsor = Alice.address,
           signer = Alice.signer
         )
-        assert(provider.submit(tx).await().isRight, "call with mustNotMint logic failed")
+        provider.submitOk(tx)
 
         val continuationUtxo = tx.utxos.find(_._2.address == txCreator.scriptAddress)
         assert(continuationUtxo.isDefined, "Continuation UTxO not found")
@@ -172,7 +162,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .sign(Alice.signer)
             .transaction
 
-        assertSubmitScriptFail(provider, ProxyValidator.LogicNotInvoked)(tx)
+        provider.submitFails(tx, ProxyValidator.LogicNotInvoked)
     }
 
     test("failure: Call with wrong logic validator withdrawn") {
@@ -192,7 +182,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .sign(Alice.signer)
             .transaction
 
-        assertSubmitScriptFail(provider, ProxyValidator.LogicNotInvoked)(tx)
+        provider.submitFails(tx, ProxyValidator.LogicNotInvoked)
     }
 
     test("failure: Call when logic validator itself fails") {
@@ -214,7 +204,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .sign(Alice.signer)
             .transaction
 
-        assertSubmitScriptFail(provider, "Transaction must not mint")(tx)
+        provider.submitFails(tx, "Transaction must not mint")
     }
 
     test("failure: Call with logic hash changed in continuation datum") {
@@ -233,7 +223,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .sign(Alice.signer)
             .transaction
 
-        assertSubmitScriptFail(provider, ProxyValidator.LogicHashChanged)(tx)
+        provider.submitFails(tx, ProxyValidator.LogicHashChanged)
     }
 
     test("failure: double satisfaction across two proxy inputs sharing one continuation") {
@@ -257,7 +247,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .sign(Alice.signer)
             .transaction
 
-        assertSubmitScriptFail(provider, ProxyValidator.MultipleProxyInputs)(tx)
+        provider.submitFails(tx, ProxyValidator.MultipleProxyInputs)
     }
 
     test("success: Upgrade from mustNotMint to mustMint logic with owner signature") {
@@ -265,7 +255,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
         val proxyUtxo = deployProxy(provider, mustNotMintHash)
 
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
-        val tx = txCreator.upgrade(
+        val tx = costingTxCreator.upgrade(
           utxos = utxos,
           proxyUtxo = proxyUtxo,
           newLogicHash = mustMintHash,
@@ -273,7 +263,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
           sponsor = Alice.address,
           signer = Alice.signer
         )
-        assert(provider.submit(tx).await().isRight, "upgrade failed")
+        provider.submitOk(tx)
 
         val newUtxo = tx.utxos.find(_._2.address == txCreator.scriptAddress)
         assert(newUtxo.isDefined, "Continuation UTxO not found after upgrade")
@@ -295,7 +285,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
           sponsor = Alice.address,
           signer = Alice.signer
         )
-        assert(provider.submit(upgradeTx).await().isRight)
+        provider.submitSetup(upgradeTx)
         val upgradedProxyUtxo =
             Utxo(upgradeTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
 
@@ -312,7 +302,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .sign(Alice.signer)
             .transaction
 
-        assertSubmitScriptFail(provider, ProxyValidator.LogicNotInvoked)(tx)
+        provider.submitFails(tx, ProxyValidator.LogicNotInvoked)
     }
 
     test("failure: Upgrade without owner signature") {
@@ -334,7 +324,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .sign(Bob.signer)
             .transaction
 
-        assertSubmitScriptFail(provider, ProxyValidator.NotSignedByOwner)(tx)
+        provider.submitFails(tx, ProxyValidator.NotSignedByOwner)
     }
 
     test("failure: Upgrade with wrong logic hash in continuation datum") {
@@ -356,7 +346,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .sign(Alice.signer)
             .transaction
 
-        assertSubmitScriptFail(provider, ProxyValidator.LogicHashMismatch)(tx)
+        provider.submitFails(tx, ProxyValidator.LogicHashMismatch)
     }
 
     test("failure: Upgrade with value drained from proxy") {
@@ -378,7 +368,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .sign(Alice.signer)
             .transaction
 
-        assertSubmitScriptFail(provider, ProxyValidator.ValueMustBePreserved)(tx)
+        provider.submitFails(tx, ProxyValidator.ValueMustBePreserved)
     }
 
     test("success then failure: mustMint logic works, then fails after upgrade to mustNotMint") {
@@ -391,7 +381,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
         // Step 1: Call with mint -- mustMintLogic passes
         val callUtxos1 = provider.findUtxos(Alice.address).await().toOption.get
         val proxyDatum = proxyUtxo.output.requireInlineDatum
-        val callTx1 = TxBuilder(env, evaluator)
+        val callTx1 = TxBuilder(env, costingEvaluator)
             .spend(proxyUtxo, ProxyRedeemer.Call, txCreator.script)
             .payTo(txCreator.scriptAddress, proxyValue, proxyDatum)
             .withdrawRewards(mustMintStakeAddress, Coin.zero, mustMintWitness)
@@ -399,12 +389,12 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .complete(availableUtxos = callUtxos1, sponsor = Alice.address)
             .sign(Alice.signer)
             .transaction
-        assert(provider.submit(callTx1).await().isRight, "first call with mint should succeed")
+        pinLabel("call with mint")(provider.submitOk(callTx1))
         val proxyUtxo2 = Utxo(callTx1.utxos.find(_._2.address == txCreator.scriptAddress).get)
 
         // Step 2: Upgrade to mustNotMint logic
         val upgradeUtxos = provider.findUtxos(Alice.address).await().toOption.get
-        val upgradeTx = txCreator.upgrade(
+        val upgradeTx = costingTxCreator.upgrade(
           utxos = upgradeUtxos,
           proxyUtxo = proxyUtxo2,
           newLogicHash = mustNotMintHash,
@@ -412,7 +402,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
           sponsor = Alice.address,
           signer = Alice.signer
         )
-        assert(provider.submit(upgradeTx).await().isRight, "upgrade to mustNotMint should succeed")
+        pinLabel("upgrade")(provider.submitOk(upgradeTx))
         val proxyUtxo3 = Utxo(upgradeTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
         registerStake(provider, mustNotMintStakeAddress, mustNotMintWitness)
 
@@ -426,6 +416,6 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .complete(availableUtxos = callUtxos2, sponsor = Alice.address)
             .sign(Alice.signer)
             .transaction
-        assertSubmitScriptFail(provider, "Transaction must not mint")(callTx2)
+        provider.submitFails(callTx2, "Transaction must not mint")
     }
 }

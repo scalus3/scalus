@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.Builtins.sha2_256
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.*
-import scalus.cardano.node.{Emulator, SubmitError}
+import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{RedeemerPurpose, TxBuilder}
 import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.v3.ScriptContext
@@ -12,7 +12,6 @@ import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
-import scalus.uplc.eval.Result
 import scalus.utils.await
 
 import java.time.Instant
@@ -31,7 +30,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
 
-        val revealTx = txCreator.revealPlayerOne(
+        val revealTx = costingTxCreator.revealPlayerOne(
           utxos = utxos,
           lotteryUtxo = lotteryUtxo,
           preimage = validPreimage1,
@@ -45,11 +44,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxSucceeds(
-          provider,
-          revealTx,
-          lotteryUtxo._1
-        )
+        assertValidatorAccepts(provider, revealTx, lotteryUtxo._1)
+        provider.submitOk(revealTx)
     }
 
     test("P2 reveals valid preimage from Empty state") {
@@ -57,7 +53,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
-        val revealTx = txCreator.revealPlayerTwo(
+        val revealTx = costingTxCreator.revealPlayerTwo(
           utxos = utxos,
           lotteryUtxo = lotteryUtxo,
           preimage = validPreimage2,
@@ -71,11 +67,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxSucceeds(
-          provider,
-          revealTx,
-          lotteryUtxo._1
-        )
+        assertValidatorAccepts(provider, revealTx, lotteryUtxo._1)
+        provider.submitOk(revealTx)
     }
 
     test("P1 reveal succeeds at deadline (boundary)") {
@@ -83,7 +76,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
 
-        val revealTx = txCreator.revealPlayerOne(
+        val revealTx = costingTxCreator.revealPlayerOne(
           utxos = utxos,
           lotteryUtxo = lotteryUtxo,
           preimage = validPreimage1,
@@ -97,11 +90,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(deadlineSlot)
-        assertTxSucceeds(
-          provider,
-          revealTx,
-          lotteryUtxo._1
-        )
+        assertValidatorAccepts(provider, revealTx, lotteryUtxo._1)
+        provider.submitOk(revealTx)
     }
 
     test("FAIL: P1 reveal with wrong preimage") {
@@ -123,7 +113,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, revealTx, lotteryUtxo._1, "Fraudulent attempt")
+        assertValidatorRejects(provider, revealTx, lotteryUtxo._1)
+        provider.submitFails(revealTx, "Fraudulent attempt")
     }
 
     test("FAIL: P2 reveal with wrong preimage") {
@@ -145,7 +136,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, revealTx, lotteryUtxo._1, "Fraudulent attempt")
+        assertValidatorRejects(provider, revealTx, lotteryUtxo._1)
+        provider.submitFails(revealTx, "Fraudulent attempt")
     }
 
     test("FAIL: P1 reveal attempts to change player two secret") {
@@ -170,7 +162,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, revealTx, lotteryUtxo._1, "Player two secret must not change")
+        assertValidatorRejects(provider, revealTx, lotteryUtxo._1)
+        provider.submitFails(revealTx, "Player two secret must not change")
     }
 
     test("FAIL: P2 reveal attempts to change deadline") {
@@ -195,7 +188,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, revealTx, lotteryUtxo._1, "Reveal deadline must not change")
+        assertValidatorRejects(provider, revealTx, lotteryUtxo._1)
+        provider.submitFails(revealTx, "Reveal deadline must not change")
     }
 
     test("P2 reveals with even sum (32 + 16 = 48)") {
@@ -217,13 +211,13 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p1RevealTx).await()
+        provider.submitSetup(p1RevealTx)
 
         val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
         // P2 reveals (16 bytes) -> 32 + 16 = 48 (even) -> succeeds
         val utxos2 = provider.findUtxos(Bob.address).await().toOption.get
-        val p2RevealTx = txCreator.revealPlayerTwo(
+        val p2RevealTx = costingTxCreator.revealPlayerTwo(
           utxos = utxos2,
           lotteryUtxo = lotteryUtxo2,
           preimage = validPreimage2, // 16 bytes
@@ -237,11 +231,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxSucceeds(
-          provider,
-          p2RevealTx,
-          lotteryUtxo2._1
-        )
+        assertValidatorAccepts(provider, p2RevealTx, lotteryUtxo2._1)
+        provider.submitOk(p2RevealTx)
     }
 
     // Timeout Tests
@@ -265,13 +256,13 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Bob.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p2RevealTx).await()
+        provider.submitSetup(p2RevealTx)
 
         val lotteryUtxo2 = Utxo(p2RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
         // P2 (who revealed) claims timeout pot after P1 failed to reveal before deadline
         val utxos2 = provider.findUtxos(Bob.address).await().toOption.get
-        val timeoutTx = txCreator.timeout(
+        val timeoutTx = costingTxCreator.timeout(
           utxos = utxos2,
           lotteryUtxo = lotteryUtxo2,
           preimage = validPreimage2, // P2's preimage (the one who revealed)
@@ -283,11 +274,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(afterSlot)
-        assertTxSucceeds(
-          provider,
-          timeoutTx,
-          lotteryUtxo2._1
-        )
+        assertValidatorAccepts(provider, timeoutTx, lotteryUtxo2._1)
+        provider.submitOk(timeoutTx)
     }
 
     test("FAIL: Timeout before deadline") {
@@ -309,7 +297,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Bob.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p2RevealTx).await()
+        provider.submitSetup(p2RevealTx)
 
         val lotteryUtxo2 = Utxo(p2RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
@@ -327,7 +315,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, timeoutTx, lotteryUtxo2._1, "Deadline not reached")
+        assertValidatorRejects(provider, timeoutTx, lotteryUtxo2._1)
+        provider.submitFails(timeoutTx, "Deadline not reached")
     }
 
     // Lose/Concede
@@ -351,13 +340,13 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p1RevealTx).await()
+        provider.submitSetup(p1RevealTx)
 
         val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
         // P2 concedes - gives pot to P1
         val utxos2 = provider.findUtxos(Bob.address).await().toOption.get
-        val loseTx = txCreator.lose(
+        val loseTx = costingTxCreator.lose(
           utxos = utxos2,
           lotteryUtxo = lotteryUtxo2,
           preimage = validPreimage2,
@@ -370,11 +359,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxSucceeds(
-          provider,
-          loseTx,
-          lotteryUtxo2._1
-        )
+        assertValidatorAccepts(provider, loseTx, lotteryUtxo2._1)
+        provider.submitOk(loseTx)
     }
 
     test("P1 timeout after P1 revealed but P2 didn't reveal") {
@@ -396,13 +382,13 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p1RevealTx).await()
+        provider.submitSetup(p1RevealTx)
 
         val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
         // P1 (who revealed) claims timeout pot after P2 failed to reveal before deadline
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
-        val timeoutTx = txCreator.timeout(
+        val timeoutTx = costingTxCreator.timeout(
           utxos = utxos2,
           lotteryUtxo = lotteryUtxo2,
           preimage = validPreimage1, // P1's preimage (the one who revealed)
@@ -414,11 +400,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(afterSlot)
-        assertTxSucceeds(
-          provider,
-          timeoutTx,
-          lotteryUtxo2._1
-        )
+        assertValidatorAccepts(provider, timeoutTx, lotteryUtxo2._1)
+        provider.submitOk(timeoutTx)
     }
 
     test("FAIL: a third party cannot steal the pot via Timeout using the public preimage") {
@@ -440,7 +423,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p1RevealTx).await()
+        provider.submitSetup(p1RevealTx)
         val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
         // Eve (neither player) supplies the now-public preimage and directs the pot to herself
@@ -457,7 +440,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Eve.signer
         )
         provider.setSlot(afterSlot)
-        assertTxFails(provider, theftTx, lotteryUtxo2._1, "Timeout must pay the revealer")
+        assertValidatorRejects(provider, theftTx, lotteryUtxo2._1)
+        provider.submitFails(theftTx, "Timeout must pay the revealer")
     }
 
     test("FAIL: one Timeout payout cannot settle two lottery pots (double satisfaction)") {
@@ -478,7 +462,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .sign(Eve.signer)
             .transaction
         provider.setSlot(afterSlot)
-        assertTxFails(provider, theftTx, game1.input, LotteryValidator.OneLotteryInput)
+        assertValidatorRejects(provider, theftTx, game1.input)
+        provider.submitFails(theftTx, LotteryValidator.OneLotteryInput)
     }
 
     test("FAIL: one Lose payout cannot settle two lottery pots (double satisfaction)") {
@@ -500,7 +485,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .sign(Eve.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, loseTx, game1.input, LotteryValidator.OneLotteryInput)
+        assertValidatorRejects(provider, loseTx, game1.input)
+        provider.submitFails(loseTx, LotteryValidator.OneLotteryInput)
     }
 
     test("FAIL: P2-revealed Timeout payout cannot settle two lottery pots (double satisfaction)") {
@@ -519,7 +505,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .sign(Eve.signer)
             .transaction
         provider.setSlot(afterSlot)
-        assertTxFails(provider, theftTx, game1.input, LotteryValidator.OneLotteryInput)
+        assertValidatorRejects(provider, theftTx, game1.input)
+        provider.submitFails(theftTx, LotteryValidator.OneLotteryInput)
     }
 
     test("FAIL: P2-revealed Lose payout cannot settle two lottery pots (double satisfaction)") {
@@ -538,7 +525,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .sign(Eve.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, loseTx, game1.input, LotteryValidator.OneLotteryInput)
+        assertValidatorRejects(provider, loseTx, game1.input)
+        provider.submitFails(loseTx, LotteryValidator.OneLotteryInput)
     }
 
     test("FAIL: P1 first reveal cannot take part of the pot") {
@@ -557,7 +545,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .sign(Alice.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, drainTx, lotteryUtxo.input, LotteryValidator.PotMustStay)
+        assertValidatorRejects(provider, drainTx, lotteryUtxo.input)
+        provider.submitFails(drainTx, LotteryValidator.PotMustStay)
     }
 
     test("FAIL: P2 first reveal cannot take part of the pot") {
@@ -574,7 +563,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .sign(Bob.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, drainTx, lotteryUtxo.input, LotteryValidator.PotMustStay)
+        assertValidatorRejects(provider, drainTx, lotteryUtxo.input)
+        provider.submitFails(drainTx, LotteryValidator.PotMustStay)
     }
 
     // The revealed datum is larger than the Empty one, so its min-ADA can be higher than the pot:
@@ -583,7 +573,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         val provider = createProvider()
         val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
-        val revealTx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+        val revealTx = TxBuilder(env, costingEvaluator)
             .spend(lotteryUtxo, Action.RevealPlayerOne(validPreimage1), compiledContract)
             .requireSignature(Alice.addrKeyHash)
             .payTo(
@@ -596,14 +586,15 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .sign(Alice.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertAccepted(provider, revealTx, lotteryUtxo.input)
+        assertUplcAccepts(provider, revealTx, lotteryUtxo.input)
+        provider.submitOk(revealTx)
     }
 
     test("P2 first reveal may add ADA to the pot") {
         val provider = createProvider()
         val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
-        val revealTx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+        val revealTx = TxBuilder(env, costingEvaluator)
             .spend(lotteryUtxo, Action.RevealPlayerTwo(validPreimage2), compiledContract)
             .requireSignature(Bob.addrKeyHash)
             .payTo(
@@ -616,7 +607,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .sign(Bob.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertAccepted(provider, revealTx, lotteryUtxo.input)
+        assertUplcAccepts(provider, revealTx, lotteryUtxo.input)
+        provider.submitOk(revealTx)
     }
 
     test("FAIL: two first reveals cannot share one continuing output") {
@@ -637,7 +629,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .sign(Alice.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, revealTx, game1.input, LotteryValidator.OneLotteryInput)
+        assertValidatorRejects(provider, revealTx, game1.input)
+        provider.submitFails(revealTx, LotteryValidator.OneLotteryInput)
     }
 
     test("FAIL: P2 reveals with odd sum (32 + 17 = 49) - Unlucky") {
@@ -664,7 +657,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           playerOneSigner = Alice.signer,
           playerTwoSigner = Bob.signer
         )
-        provider.submit(initiateTx).await()
+        provider.submitSetup(initiateTx)
         val lotteryUtxo = Utxo(initiateTx.utxos.find(_._2.address == scriptAddress).get)
 
         // P1 reveals first (32 bytes)
@@ -682,7 +675,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p1RevealTx).await()
+        provider.submitSetup(p1RevealTx)
 
         val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
@@ -702,7 +695,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, p2RevealTx, lotteryUtxo2._1, "Unlucky")
+        assertValidatorRejects(provider, p2RevealTx, lotteryUtxo2._1)
+        provider.submitFails(p2RevealTx, "Unlucky")
     }
 
     test("P1 concedes after P2 revealed - P2 gets pot") {
@@ -724,13 +718,13 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Bob.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p2RevealTx).await()
+        provider.submitSetup(p2RevealTx)
 
         val lotteryUtxo2 = Utxo(p2RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
         // P1 concedes - gives pot to P2
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
-        val loseTx = txCreator.lose(
+        val loseTx = costingTxCreator.lose(
           utxos = utxos2,
           lotteryUtxo = lotteryUtxo2,
           preimage = validPreimage1,
@@ -743,11 +737,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxSucceeds(
-          provider,
-          loseTx,
-          lotteryUtxo2._1
-        )
+        assertValidatorAccepts(provider, loseTx, lotteryUtxo2._1)
+        provider.submitOk(loseTx)
     }
 
     test("FAIL: P2 second reveal with wrong preimage") {
@@ -769,7 +760,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p1RevealTx).await()
+        provider.submitSetup(p1RevealTx)
 
         val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
@@ -789,7 +780,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, p2RevealTx, lotteryUtxo2._1, "Fraudulent attempt")
+        assertValidatorRejects(provider, p2RevealTx, lotteryUtxo2._1)
+        provider.submitFails(p2RevealTx, "Fraudulent attempt")
     }
 
     test("FAIL: P2 lose with wrong preimage") {
@@ -811,7 +803,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p1RevealTx).await()
+        provider.submitSetup(p1RevealTx)
 
         val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
@@ -830,7 +822,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxFails(provider, loseTx, lotteryUtxo2._1, "Fraudulent attempt")
+        assertValidatorRejects(provider, loseTx, lotteryUtxo2._1)
+        provider.submitFails(loseTx, "Fraudulent attempt")
     }
 
     test("FAIL: P1 timeout with wrong preimage") {
@@ -852,7 +845,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p1RevealTx).await()
+        provider.submitSetup(p1RevealTx)
 
         val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
@@ -870,7 +863,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(afterSlot)
-        assertTxFails(provider, timeoutTx, lotteryUtxo2._1, "Fraudulent attempt")
+        assertValidatorRejects(provider, timeoutTx, lotteryUtxo2._1)
+        provider.submitFails(timeoutTx, "Fraudulent attempt")
     }
 
     test("P1 reveals with even sum (32 + 16 = 48) after P2 revealed") {
@@ -892,13 +886,13 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Bob.signer
         )
         provider.setSlot(beforeSlot)
-        provider.submit(p2RevealTx).await()
+        provider.submitSetup(p2RevealTx)
 
         val lotteryUtxo2 = Utxo(p2RevealTx.utxos.find(_._2.address == scriptAddress).get)
 
         // P1 reveals (32 bytes) -> 16 + 32 = 48 (even) -> succeeds
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
-        val p1RevealTx = txCreator.revealPlayerOne(
+        val p1RevealTx = costingTxCreator.revealPlayerOne(
           utxos = utxos2,
           lotteryUtxo = lotteryUtxo2,
           preimage = validPreimage1, // 32 bytes
@@ -912,21 +906,8 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxSucceeds(
-          provider,
-          p1RevealTx,
-          lotteryUtxo2._1
-        )
-    }
-
-    /** Evaluates and submits a transaction that must succeed, and pins its budget. */
-    private def assertTxSucceeds(
-        provider: Emulator,
-        tx: Transaction,
-        lotteryInput: TransactionInput
-    ): Unit = {
-        val (result, size) = evalAndSubmit(provider, tx, lotteryInput)
-        pinEval(result.budget, size)
+        assertValidatorAccepts(provider, p1RevealTx, lotteryUtxo2._1)
+        provider.submitOk(p1RevealTx)
     }
 }
 
@@ -940,6 +921,10 @@ object LotteryValidatorTest extends ScalusTest {
       evaluator = PlutusScriptEvaluator.constMaxBudget(env),
       contract = compiledContract
     )
+
+    // Computes the real redeemer budgets, for the transactions under test that `submitOk` pins.
+    private val costingEvaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
+    private val costingTxCreator = txCreator.copy(evaluator = costingEvaluator)
 
     // Skips script evaluation in the builder for a transaction with two lottery inputs. Each run
     // gets half the transaction limit, so the emulator runs the scripts instead of failing the
@@ -1010,10 +995,7 @@ object LotteryValidatorTest extends ScalusTest {
           playerOneSigner = Alice.signer,
           playerTwoSigner = Bob.signer
         )
-        provider.submit(initiateTx).await() match {
-            case Left(value) => fail(s"Couldn't submit initiate tx, error: $value")
-            case Right(_)    => ()
-        }
+        provider.submitSetup(initiateTx)
         val lotteryUtxo = initiateTx.utxos.find { case (_, txOut) =>
             txOut.address == scriptAddress
         }.get
@@ -1037,7 +1019,7 @@ object LotteryValidatorTest extends ScalusTest {
           signer = Alice.signer
         )
         provider.setSlot(beforeSlot)
-        assert(provider.submit(revealTx).await().isRight, "P1 reveal must succeed")
+        provider.submitSetup(revealTx)
         Utxo(revealTx.utxos.find(_._2.address == scriptAddress).get)
     }
 
@@ -1058,8 +1040,7 @@ object LotteryValidatorTest extends ScalusTest {
             .sign(Eve.signer)
             .transaction
         provider.setSlot(beforeSlot)
-        val result = provider.submit(revealTx).await()
-        assert(result.isRight, s"P2 reveal must succeed: $result")
+        provider.submitSetup(revealTx)
         Utxo(revealTx.utxos.find(_._2.address == scriptAddress).get)
     }
 
@@ -1080,28 +1061,23 @@ object LotteryValidatorTest extends ScalusTest {
       lotteryState = lotteryState
     )
 
-    /** Evaluates and submits a transaction that must succeed. Returns the evaluation result and the
-      * size in bytes of the evaluated program, for the suite's budget pin.
+    /** Runs the validator on the JVM and its UPLC on the script context of `tx`: both must accept.
+      * Call it before submitting `tx`, while its inputs are still unspent.
       */
-    private def evalAndSubmit(
+    private def assertValidatorAccepts(
         provider: Emulator,
         tx: Transaction,
         lotteryInput: TransactionInput
-    ): (Result, Int) = {
+    ): Unit = {
         val scriptContext = getScriptContext(provider, tx, lotteryInput)
         val directResult = Try(LotteryContract.compiled.code(scriptContext.toData))
-        val program = compiledContract(scriptContext.toData).program
-        val evalResult = program.evaluateDebug
+        val evalResult = compiledContract(scriptContext.toData).program.evaluateDebug
         assert(evalResult.isSuccess, s"UPLC evaluation failed: ${evalResult.logs.mkString(", ")}")
-        val submissionResult = provider.submit(tx).await()
-
         directResult.failed.foreach(ex => fail(s"Direct validator call failed: ${ex.getMessage}"))
-        assert(submissionResult.isRight, s"Emulator submission failed: $submissionResult")
-        (evalResult, compiledContract.script.script.size)
     }
 
-    /** Like [[evalAndSubmit]], for a transaction whose budget no other test pins. */
-    private def assertAccepted(
+    /** Like [[assertValidatorAccepts]], with the UPLC evaluation only. */
+    private def assertUplcAccepts(
         provider: Emulator,
         tx: Transaction,
         lotteryInput: TransactionInput
@@ -1109,36 +1085,16 @@ object LotteryValidatorTest extends ScalusTest {
         val scriptContext = getScriptContext(provider, tx, lotteryInput)
         val evalResult = compiledContract(scriptContext.toData).program.evaluateDebug
         assert(evalResult.isSuccess, s"UPLC evaluation failed: ${evalResult.logs.mkString(", ")}")
-        val submissionResult = provider.submit(tx).await()
-        assert(submissionResult.isRight, s"Emulator submission failed: $submissionResult")
     }
 
-    private def assertTxFails(
+    /** Runs the validator on the JVM on the script context of `tx`: it must reject. */
+    private def assertValidatorRejects(
         provider: Emulator,
         tx: Transaction,
-        lotteryInput: TransactionInput,
-        expectedError: String
+        lotteryInput: TransactionInput
     ): Unit = {
         val scriptContext = getScriptContext(provider, tx, lotteryInput)
         val directResult = Try(LotteryContract.compiled.code(scriptContext.toData))
-        val submissionResult = provider.submit(tx).await()
-
         assert(directResult.isFailure, "Direct validator call should have failed but succeeded")
-        submissionResult match {
-            case Left(SubmitError.ScriptFailure(message, _, _, _)) =>
-                assert(
-                  message.contains(expectedError),
-                  s"Expected error '$expectedError' but got '$message'"
-                )
-            case Left(SubmitError.ValidationError(message, _)) =>
-                assert(
-                  message.contains(expectedError),
-                  s"Expected error '$expectedError' but got '$message'"
-                )
-            case Left(other) =>
-                throw AssertionError(s"Expected ScriptFailure or ValidationError but got: $other")
-            case Right(_) =>
-                throw AssertionError("Emulator submission should have failed but succeeded")
-        }
     }
 }

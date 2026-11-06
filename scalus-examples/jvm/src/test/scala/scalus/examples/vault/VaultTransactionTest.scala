@@ -5,7 +5,7 @@ import scalus.uplc.builtin.{platform, ByteString}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
-import scalus.cardano.node.{Emulator, SubmitError}
+import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner, TxBuilder}
 import scalus.examples.vault.State
 import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
@@ -124,7 +124,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        assert(provider.submit(lockTx).await().isRight)
+        provider.submitSetup(lockTx)
 
         val vaultUtxo = Utxo(
           provider
@@ -159,12 +159,8 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 .withdraw(utxos, utxos, vaultUtxo, ownerAddress, validityEndTime)
         }
 
-        val result = runValidator(provider, withdrawTx, vaultUtxo.input)
-        assertSuccess(result, contract.program)
-
         provider.setSlot(currentSlot)
-
-        assert(provider.submit(withdrawTx).await().isRight)
+        provider.submitOk(withdrawTx)
 
         val newVaultUtxo = Utxo(
           provider
@@ -222,7 +218,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        assert(provider.submit(lockTx).await().isRight)
+        provider.submitSetup(lockTx)
 
         val vaultUtxo = Utxo(
           provider
@@ -253,10 +249,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 .deposit(utxos, utxos, vaultUtxo, depositAmount, ownerAddress)
         }
 
-        val result = runValidator(provider, depositTx, vaultUtxo.input)
-        assertSuccess(result, contract.program)
-
-        assert(provider.submit(depositTx).await().isRight)
+        provider.submitOk(depositTx)
 
         val newVaultUtxo = Utxo(
           provider
@@ -314,7 +307,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        assert(provider.submit(lockTx).await().isRight)
+        provider.submitSetup(lockTx)
 
         val vaultUtxo = Utxo(
           provider
@@ -374,7 +367,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        assert(provider.submit(lockTx).await().isRight)
+        provider.submitSetup(lockTx)
 
         val vaultUtxo = Utxo(
           provider
@@ -406,11 +399,8 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 .withdraw(utxos, utxos, vaultUtxo, ownerAddress, withdrawTime)
         }
 
-        val withdrawResult = runValidator(provider, withdrawTx, vaultUtxo.input)
-        pinLabel("withdraw")(assertSuccess(withdrawResult, contract.program))
-
         provider.setSlot(withdrawSlot)
-        assert(provider.submit(withdrawTx).await().isRight)
+        pinLabel("withdraw")(provider.submitOk(withdrawTx))
 
         val pendingVaultUtxo = Utxo(
           provider
@@ -450,11 +440,8 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo.input)
-        pinLabel("finalize")(assertSuccess(finalizeResult, contract.program))
-
         provider.setSlot(finalizeSlot)
-        assert(provider.submit(finalizeTx).await().isRight)
+        pinLabel("finalize")(provider.submitOk(finalizeTx))
 
         val scriptOutputs = finalizeTx.body.value.outputs.filter(_.value.address.hasScript)
         assert(scriptOutputs.isEmpty, "Finalize should close vault (no script outputs)")
@@ -494,7 +481,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        assert(provider.submit(lockTx).await().isRight)
+        provider.submitSetup(lockTx)
 
         val vaultUtxo = Utxo(
           provider
@@ -530,7 +517,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
 
         provider.setSlot(withdrawSlot)
-        assert(provider.submit(withdrawTx).await().isRight)
+        provider.submitSetup(withdrawTx)
 
         val pendingVaultUtxo = Utxo(
           provider
@@ -592,7 +579,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         val withdrawTx = transactionCreatorFor(ownerSigner)
             .withdraw(withdrawUtxos, withdrawUtxos, vaultUtxo, ownerAddress, withdrawTime)
         provider.setSlot(withdrawSlot)
-        assert(provider.submit(withdrawTx).await().isRight)
+        provider.submitSetup(withdrawTx)
         Utxo(
           provider
               .queryUtxos { u =>
@@ -622,7 +609,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
 
         val result = runValidator(provider, cancelTx, pendingVaultUtxo.input)
         assert(result.isSuccess, s"Recovery-key cancel should succeed: $result")
-        assert(provider.submit(cancelTx).await().isRight)
+        provider.submitOk(cancelTx)
 
         val idleVault = Utxo(
           provider
@@ -674,7 +661,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             .get
         val lockTx = transactionCreatorFor(ownerSigner)
             .lock(utxos, amount, defaultWaitTime, ownerAddress, recoveryAddress, ownerAddress)
-        assert(provider.submit(lockTx).await().isRight)
+        provider.submitSetup(lockTx)
         Utxo(
           provider
               .queryUtxos { u =>
@@ -726,13 +713,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
             val result = runValidator(provider, attackTx, vault.input)
             assert(result.isFailure, s"Deposit spending two vaults must fail: $result")
             assert(result.logs.last.contains(VaultValidator.MultipleVaultInputs))
-        provider.submit(attackTx).await() match
-            case Left(SubmitError.ScriptFailure(message, logs, _, _)) =>
-                assert(
-                  (message +: logs).exists(_.contains(VaultValidator.MultipleVaultInputs)),
-                  s"Unexpected script failure: $message"
-                )
-            case other => fail(s"The emulator must reject the scripts, got $other")
+        provider.submitFails(attackTx, VaultValidator.MultipleVaultInputs)
     }
 
     /** An owner-signed InitiateWithdrawal of a fresh vault, whose continuing datum is

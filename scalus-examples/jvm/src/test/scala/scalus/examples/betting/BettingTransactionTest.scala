@@ -139,7 +139,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 .deploy(utxos, deploymentAddress, deploymentAddress)
         }
 
-        assert(provider.submit(deployTx).await().isRight)
+        provider.submitSetup(deployTx)
 
         val scriptUtxos = provider
             .queryUtxos(u =>
@@ -184,7 +184,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        assert(provider.submit(initTx).await().isRight)
+        provider.submitOk(initTx)
 
         val initConfig = Config(
           PubKeyHash(player1Pkh),
@@ -238,7 +238,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        assert(provider.submit(initTx).await().isRight)
+        provider.submitSetup(initTx)
 
         val initConfig = Config(
           PubKeyHash(player1Pkh),
@@ -288,11 +288,8 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        val result = runValidator(provider, joinTx, betUtxo.input)
-        assertSuccess(result, contract.program)
-
         provider.setSlot(beforeSlot - 1)
-        assert(provider.submit(joinTx).await().isRight)
+        provider.submitOk(joinTx)
 
         val joinConfig = Config(
           PubKeyHash(player1Pkh),
@@ -346,7 +343,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        assert(provider.submit(initTx).await().isRight)
+        provider.submitSetup(initTx)
 
         val initConfig = Config(
           PubKeyHash(player1Pkh),
@@ -430,7 +427,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        assert(provider.submit(initTx).await().isRight)
+        provider.submitSetup(initTx)
 
         val betUtxo = Utxo(
           provider
@@ -471,7 +468,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         }
 
         provider.setSlot(beforeSlot - 1)
-        assert(provider.submit(joinTx).await().isRight)
+        provider.submitSetup(joinTx)
 
         val joinedBetUtxo = Utxo(
           provider
@@ -510,12 +507,8 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        val result = runValidator(provider, winTx, joinedBetUtxo.input)
-        assertSuccess(result, contract.program)
-
         provider.setSlot(env.slotConfig.timeToSlot(afterTime))
-
-        assert(provider.submit(winTx).await().isRight)
+        provider.submitOk(winTx)
 
         val winnerUtxo = Utxo(
           provider
@@ -559,7 +552,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                   beforeTime
                 )
         }
-        assert(provider.submit(initTx).await().isRight)
+        provider.submitSetup(initTx)
 
         val betUtxo = Utxo(
           provider
@@ -598,7 +591,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
         provider.setSlot(beforeSlot - 1)
-        assert(provider.submit(joinTx).await().isRight)
+        provider.submitSetup(joinTx)
 
         val joinedBetUtxo = Utxo(
           provider
@@ -643,7 +636,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         // budget is pinned by the ScriptContext-level test in BettingValidatorTest.
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTime))
-        assert(provider.submit(timeoutTx).await().isRight)
+        provider.submitSetup(timeoutTx)
 
         // player2 is refunded their full stake
         val player2Refund = Utxo(
@@ -687,7 +680,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
                 )
         }
 
-        assert(provider.submit(initTx).await().isRight)
+        provider.submitSetup(initTx)
 
         val betUtxo = Utxo(
           provider
@@ -728,7 +721,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
         }
 
         provider.setSlot(beforeSlot - 1)
-        assert(provider.submit(joinTx).await().isRight)
+        provider.submitSetup(joinTx)
 
         val joinedBetUtxo = Utxo(
           provider

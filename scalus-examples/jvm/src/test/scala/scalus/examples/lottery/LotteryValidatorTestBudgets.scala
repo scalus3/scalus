@@ -8,38 +8,46 @@ object LotteryValidatorTestBudgets extends BudgetTable {
     override val generation: Generation = Generation.current
     pin(
       "P1 reveals valid preimage from Empty state",
-      Pin.Eval(memory = 78_497, steps = 36_837_286, size = 4_007, fee = 67_291)
+      Pin.Tx(memory = 78_497, steps = 36_837_286, size = 4_582, fee = 364_175)
     )
     pin(
       "P2 reveals valid preimage from Empty state",
-      Pin.Eval(memory = 78_497, steps = 36_792_110, size = 4_007, fee = 67_287)
+      Pin.Tx(memory = 78_497, steps = 36_792_110, size = 4_564, fee = 363_379)
     )
     pin(
       "P1 reveal succeeds at deadline (boundary)",
-      Pin.Eval(memory = 78_497, steps = 36_837_286, size = 4_007, fee = 67_291)
+      Pin.Tx(memory = 78_497, steps = 36_837_286, size = 4_582, fee = 364_175)
     )
     pin(
       "P2 reveals with even sum (32 + 16 = 48)",
-      Pin.Eval(memory = 42_163, steps = 16_978_217, size = 4_007, fee = 63_762)
+      Pin.Tx(memory = 42_163, steps = 16_978_217, size = 4_562, fee = 359_766)
     )
     pin(
       "P2 timeout after P2 revealed but P1 didn't reveal",
-      Pin.Eval(memory = 59_305, steps = 24_945_709, size = 4_007, fee = 65_326)
+      Pin.Tx(memory = 59_305, steps = 24_945_709, size = 4_439, fee = 355_918)
     )
     pin(
       "P2 concedes after P1 revealed - P1 gets pot",
-      Pin.Eval(memory = 55_943, steps = 24_848_222, size = 4_007, fee = 65_125)
+      Pin.Tx(memory = 55_943, steps = 24_848_222, size = 4_440, fee = 355_761)
     )
     pin(
       "P1 timeout after P1 revealed but P2 didn't reveal",
-      Pin.Eval(memory = 59_073, steps = 24_877_222, size = 4_007, fee = 65_308)
+      Pin.Tx(memory = 59_073, steps = 24_877_222, size = 4_456, fee = 356_648)
     )
     pin(
       "P1 concedes after P2 revealed - P2 gets pot",
-      Pin.Eval(memory = 55_711, steps = 24_779_735, size = 4_007, fee = 65_107)
+      Pin.Tx(memory = 55_711, steps = 24_779_735, size = 4_457, fee = 356_491)
     )
     pin(
       "P1 reveals with even sum (32 + 16 = 48) after P2 revealed",
-      Pin.Eval(memory = 41_931, steps = 16_909_730, size = 4_007, fee = 63_744)
+      Pin.Tx(memory = 41_931, steps = 16_909_730, size = 4_580, fee = 360_540)
+    )
+    pin(
+      "P1 first reveal may add ADA to the pot",
+      Pin.Tx(memory = 78_497, steps = 36_837_286, size = 4_582, fee = 364_175)
+    )
+    pin(
+      "P2 first reveal may add ADA to the pot",
+      Pin.Tx(memory = 78_497, steps = 36_792_110, size = 4_564, fee = 363_379)
     )
 }

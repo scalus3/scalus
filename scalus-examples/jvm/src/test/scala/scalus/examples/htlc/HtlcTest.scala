@@ -55,7 +55,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           timeout = timeout,
           signer = Alice.signer
         )
-        assert(provider.submit(lockTx).await().isRight)
+        provider.submitSetup(lockTx)
         val lockedUtxo = lockTx.utxos.find { case (_, txOut) =>
             txOut.address == contract.address(env.network)
         }.get
@@ -105,12 +105,8 @@ class HtlcTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Bob.signer
         )
 
-        pinTx(revealTx)
-
         provider.setSlot(beforeSlot)
-
-        val result = provider.submit(revealTx).await()
-        assert(result.isRight, s"Emulator submission failed: $result")
+        provider.submitOk(revealTx)
     }
 
     test("receiver fails with wrong preimage") {
@@ -185,11 +181,8 @@ class HtlcTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
           signer = Alice.signer
         )
 
-        pinTx(timeoutTx)
-
         provider.setSlot(afterSlot)
-        val submissionResult = provider.submit(timeoutTx).await()
-        assert(submissionResult.isRight, s"Emulator submission failed: $submissionResult")
+        provider.submitOk(timeoutTx)
     }
 
     test("committer fails with wrong committer pubkey hash") {

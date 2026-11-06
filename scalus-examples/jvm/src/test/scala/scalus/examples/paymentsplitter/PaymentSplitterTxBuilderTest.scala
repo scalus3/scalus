@@ -9,6 +9,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{TwoArgumentPlutusScriptWitness, TxBuilder}
 import scalus.cardano.onchain.plutus.v3.PubKeyHash
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.{Party, ScalusTest, TestUtil}
 import scalus.utils.await
 
@@ -17,13 +18,13 @@ import scala.util.control.NonFatal
 class PaymentSplitterTxBuilderTest
     extends AnyFunSuite
     with ScalusTest
+    with BudgetPinsSuite
     with PaymentSplitterTestCases {
+    override protected def budgetTable: BudgetTable = PaymentSplitterTxBuilderTestBudgets
 
     given CardanoInfo = CardanoInfo.mainnet
 
     case class TxResult(
-        success: Boolean,
-        error: Option[String],
         fee: Coin,
         exUnits: Map[RedeemerTag, Seq[ExUnits]],
         outputs: Seq[TransactionOutput] = Seq.empty
@@ -128,10 +129,8 @@ class PaymentSplitterTxBuilderTest
                 .await()
                 .sign(feePayerParty.signer)
                 .transaction
-            val result = emulator.submit(tx).await()
+            emulator.submitOk(tx)
             TxResult(
-              result.isRight,
-              result.left.toOption.map(_.toString),
               tx.body.value.fee,
               extractExUnits(tx),
               tx.body.value.outputs.map(_.value).toSeq
@@ -193,8 +192,7 @@ class PaymentSplitterTxBuilderTest
             .await()
             .sign(feePayerParty.signer)
             .transaction
-        val regResult = emulator.submit(regTx).await()
-        assert(regResult.isRight, s"Registration tx should succeed: $regResult")
+        emulator.submitSetup(regTx)
 
         // Step 2: Now do the payment split with zero-withdraw trick
         var builder = TxBuilder(summon[CardanoInfo])
@@ -236,10 +234,8 @@ class PaymentSplitterTxBuilderTest
                 .await()
                 .sign(feePayerParty.signer)
                 .transaction
-            val result = emulator.submit(tx).await()
+            emulator.submitOk(tx)
             TxResult(
-              result.isRight,
-              result.left.toOption.map(_.toString),
               tx.body.value.fee,
               extractExUnits(tx),
               tx.body.value.outputs.map(_.value).toSeq
@@ -257,19 +253,17 @@ class PaymentSplitterTxBuilderTest
 
     testCases.filter(_.expectedSuccess).foreach { tc =>
         test(s"TxBuilder Naive: ${tc.name}") {
-            val r = runNaive(tc)
-            assert(r.success, s"Expected success: ${r.error.getOrElse("")}")
+            runNaive(tc)
         }
         test(s"TxBuilder Optimized: ${tc.name}") {
-            val r = runOptimized(tc)
-            assert(r.success, s"Expected success: ${r.error.getOrElse("")}")
+            runOptimized(tc)
         }
     }
 
     test("TxBuilder: Cost comparison naive vs optimized (3 UTxOs)") {
         val tc = testCases.find(_.name.contains("multiple contract UTxOs")).get
-        val n = runNaive(tc)
-        val o = runOptimized(tc)
+        val n = pinLabel("naive")(runNaive(tc))
+        val o = pinLabel("optimized")(runOptimized(tc))
         val numUtxos = tc.contractInputs.size
 
         val naiveSpend = n.totalExUnits(RedeemerTag.Spend)
@@ -298,14 +292,8 @@ class PaymentSplitterTxBuilderTest
         val splitPerPayee = totalContractLovelace / nPayees // 10_333_333
         val remainder = totalContractLovelace % nPayees // 1
 
-        val resultNaive = runNaive(tc)
-        val resultOptimized = runOptimized(tc)
-
-        assert(resultNaive.success, s"Naive should succeed: ${resultNaive.error.getOrElse("")}")
-        assert(
-          resultOptimized.success,
-          s"Optimized should succeed: ${resultOptimized.error.getOrElse("")}"
-        )
+        val resultNaive = pinLabel("naive")(runNaive(tc))
+        val resultOptimized = pinLabel("optimized")(runOptimized(tc))
 
         // Find fee payer's output by address
         val feePayerAddr = payeeParty(tc.feePayerInput._1).address

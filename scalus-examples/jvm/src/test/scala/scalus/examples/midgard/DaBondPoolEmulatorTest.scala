@@ -8,8 +8,9 @@ import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
 import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
-import scalus.testing.budget.{BudgetPins, BudgetPinsSuite, BudgetTable}
+import scalus.testing.budget.{BudgetPinsSuite, BudgetTable}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
+import scalus.testing.kit.ScalusTest
 import scalus.uplc.builtin.Builtins.blake2b_256
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.ByteString
@@ -24,7 +25,7 @@ import scala.collection.mutable
   * `Slash` is not run here: it needs a hub oracle, a state-queue mint, and a correction lock. It is
   * covered by [[DaBondPoolDifferentialTest]].
   */
-class DaBondPoolEmulatorTest extends AnyFunSuite, BudgetPins, BudgetPinsSuite {
+class DaBondPoolEmulatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
     override protected def budgetTable: BudgetTable = DaBondPoolEmulatorTestBudgets
 
     import DaBondPoolConstants.*
@@ -89,21 +90,22 @@ class DaBondPoolEmulatorTest extends AnyFunSuite, BudgetPins, BudgetPinsSuite {
         )
     }
 
-    case class Step(name: String, fee: Long, exUnits: ExUnits, txSize: Int, tx: Transaction)
+    case class Step(name: String, fee: Long, exUnits: ExUnits, txSize: Int)
 
     private def metrics(name: String, tx: Transaction): Step = {
         val exUnits = tx.witnessSet.redeemers
             .map(_.value.toSeq.map(_.exUnits).foldLeft(ExUnits(0, 0))(_ + _))
             .getOrElse(ExUnits(0, 0))
-        Step(name, tx.body.value.fee.value, exUnits, tx.toCbor.length, tx)
+        Step(name, tx.body.value.fee.value, exUnits, tx.toCbor.length)
     }
 
     /** Runs publish, InitPool, TopUp, BeginWithdraw, CancelWithdraw, BeginWithdraw and
-      * CompleteWithdraw on a fresh Emulator.
+      * CompleteWithdraw on a fresh Emulator. With `pin`, each step is pinned under its name.
       */
     private def lifecycle(
         initInput: TransactionInput,
-        script: DaBondPoolParams => Script.PlutusV3
+        script: DaBondPoolParams => Script.PlutusV3,
+        pin: Boolean
     ): (Int, Seq[Step]) = {
         val emulator = newEmulator()
         val alice = Alice.address(network)
@@ -125,8 +127,8 @@ class DaBondPoolEmulatorTest extends AnyFunSuite, BudgetPins, BudgetPinsSuite {
         val steps = mutable.ArrayBuffer.empty[Step]
 
         def submit(name: String, tx: Transaction): Transaction = {
-            val result = emulator.submit(tx).await()
-            assert(result.isRight, s"$name failed: $result")
+            if pin then pinLabel(name)(emulator.submitOk(tx))
+            else emulator.submitSetup(tx)
             steps += metrics(name, tx)
             tx
         }
@@ -259,7 +261,8 @@ class DaBondPoolEmulatorTest extends AnyFunSuite, BudgetPins, BudgetPinsSuite {
     test("da-bond-pool lifecycle: Aiken vs Scalus fees with reference scripts") {
         val (aikenSize, aiken) = lifecycle(
           aikenInitInput,
-          p => Script.PlutusV3(AikenDaBondPool(p).cborByteString)
+          p => Script.PlutusV3(AikenDaBondPool(p).cborByteString),
+          pin = false
         )
         val (scalusSize, scalus) = lifecycle(
           scalusInitInput,
@@ -268,7 +271,8 @@ class DaBondPoolEmulatorTest extends AnyFunSuite, BudgetPins, BudgetPinsSuite {
                 DaBondPoolContract
                     .applyParams(DaBondPoolContract.compiled.program, p)
                     .cborByteString
-              )
+              ),
+          pin = true
         )
         val refFee = new RefScriptFee(env.protocolParams)
         val lines = mutable.ArrayBuffer(
@@ -286,6 +290,5 @@ class DaBondPoolEmulatorTest extends AnyFunSuite, BudgetPins, BudgetPinsSuite {
                 f"${s.fee.toDouble / a.fee}%.2f | ${a.exUnits.memory}%,d | ${s.exUnits.memory}%,d | $memRatio |"
         println(lines.mkString("\n"))
         assert(aiken.map(_.name) == scalus.map(_.name))
-        for s <- scalus do pinLabel(s.name)(pinTx(s.tx))
     }
 }
