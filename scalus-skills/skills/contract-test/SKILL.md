@@ -40,47 +40,52 @@ class MyValidatorTest extends AnyFunSuite, ScalusTest {
         val provider = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val utxos = provider.findUtxos(address = Alice.address).await().toOption.get
         // build a transaction with txBuilder, then:
-        assert(provider.submit(tx).await().isRight)
+        provider.submitOk(tx)
     }
 }
 ```
 
 **Assertions from `scalus.testing.kit`:**
-- `assertScriptFail(expectedError) { buildTx }` - expect a validator failure
-- `assertEvalResult(expected)(program)` - check an evaluation result
+- `buildFails(expectedError) { buildTx }` - building the transaction fails with that error
+- `assertSuccess(result, program)` - a successful run of `program`; pins its budget
+- `assertFailure(result, "message")` - a failed run with that message; failures are never pinned
+- `assertOutcome(result, expectedError)` - for a test that takes the outcome as a parameter
+  (`None` = success)
+- `provider.submitOk(tx)` - the transaction under test is accepted; pins it.
+  `provider.submitSetup(tx)` for setup transactions (not pinned).
+  `provider.submitFails(tx, "message")` - the transaction is rejected with that message
 
-**Budget assertions from `scalus.testing.dsl.EvalTestDsl`:**
-- `.assertBudgetWithin(memory, steps)` - upper bound
-- `.assertBudgetEquals(memory, steps)` - exact pin (baseline tests)
-
-**Pin convention:**
-- Every new prelude/stdlib operation gets a `budget:` test in `scalus-core` that pins mem, cpu
-  and the mainnet fee: `assertEvalWithBudgetAndFee(code, arg, expected, ExUnits(memory = m, steps = s), Coin(fee))`
-  from `scalus.testing.kit.EvalTestKit`. Pass the input as `arg` (it goes in as `Data`) so constant
-  folding cannot remove the work being measured.
-- Example validator tests pin the exact `ExUnits` of every transaction, and the fee where the test
-  already does (`result.budget.fee == Coin(2398)` in `HtlcTest`). Wrap a pin in
-  `ScalaCompilerVersion.baseline(pre38 = ..., since38 = ...)` only when the two compiler generations
-  differ; otherwise write the bare value.
-- Format: `ExUnits(memory = 27127, steps = 11_541882)`, named parameters, `_` at the million boundary.
+**Budget pins** (exact memory, steps, script size and fee; regressions and improvements both fail):
+- The values live in a generated table next to the suite, `MyValidatorTestBudgets.scala`, not in the
+  test. Mix `BudgetPinsSuite` into the suite and set `override protected def budgetTable = MyValidatorTestBudgets`.
+- Start with an empty table object, then run
+  `sbtn "<project>/testOnly *MyValidatorTest -- -Dscalus.budgets.update=true"` to fill it.
+  `sbtn updateBudgets` updates every table on both compiler generations. Commit the table diff:
+  it records each improvement or regression.
+- A changed pin fails with the old and new value and the change in percent:
+  `memory 1_101 -> 1_085 (-1.5 %)`.
+- In `EvalTestKit`, a closed expression checks correctness only: `assertEvalEq[BigInt](1)(min(1, 2))`.
+  A budget needs runtime inputs, which constant folding cannot remove:
+  `assertEvalEq(BigInt(1))(min).at(1, 2)`. Every on-chain operation that validators call gets at
+  least one `.at` pin.
 
 **Property-based testing:** ScalusTest provides generators (e.g. `genByteStringOfN`); use ScalaCheck `forAll` for on-chain function properties.
 
 **Negative cases:** three idioms; pick one per test, do not mix them:
 - Builder path (`HtlcTest`): keep the default evaluator and wrap the build in
-  `assertScriptFail(expectedError) { buildTx }`. The builder runs the script while balancing,
+  `buildFails(expectedError) { buildTx }`. The builder runs the script while balancing,
   throws, and the helper matches `expectedError` against the script logs, so pass the
   validator's own error constant.
 - Emulator path (`EditableNftValidatorTest`): build with
   `TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))` so the builder skips script
-  evaluation, then `provider.submit(tx).await()` and `assert(result.isLeft)`. Use it when the
+  evaluation, then `provider.submitFails(tx, expectedError)`. Use it when the
   transaction must get past the builder (for example, to reach the ledger's own checks).
 - Unit path (`VestingValidatorTest`): build a `ScriptContext` by hand, run
   `compiled.runScript(ctx)` (an extension from `ScalusTest`: mix it into the test class) and
-  `assert(result.isFailure, "...")`. For an on-chain helper evaluated directly, `assertEvalFailsWithMessage[OnchainError](msg)(expr)` checks the message.
+  `assertFailure(result, expectedError)`. For an on-chain helper evaluated directly, `assertEvalFailsWithMessage[OnchainError](msg)(expr)` checks the message.
 
 ```scala
-assertScriptFail(HtlcValidator.InvalidReceiverPreimage) {
+buildFails(HtlcValidator.InvalidReceiverPreimage) {
     txCreator.reveal(utxos = utxos, lockedUtxo = lockedUtxo, preimage = wrongPreimage, ...)
 }
 ```

@@ -9,8 +9,8 @@ Analyze Scalus/Cardano smart contracts for execution budget optimization opportu
 
 ## Prerequisites — Before You Optimize
 
-1. **Establish a baseline.** Run the validator's tests with budget assertions (`assertBudgetEquals` or `assertBudgetWithin`) on representative inputs — simple case, worst case, and typical case.
-2. **Identify actual hot paths.** Don't guess — measure. Use `EvalTestDsl` budget assertions to find which code paths dominate the budget.
+1. **Establish a baseline.** Pin the validator's budget on representative inputs — simple case, worst case, and typical case (see Measuring Budget).
+2. **Identify actual hot paths.** Don't guess — measure. Pin each code path you suspect; the pins show which ones dominate the budget.
 3. **Optimize surgically.** Change one thing at a time and re-measure. Small, targeted changes are safer than sweeping rewrites.
 4. **Re-benchmark after every significant change.** Budget is the only ground truth.
 
@@ -281,26 +281,29 @@ private given Options = Options.release
 
 ## Measuring Budget
 
-Use `EvalTestDsl` for precise budget measurement:
+Use budget pins (`scalus.testing.budget`, see the contract-test skill). A pin is exact, so it catches
+regressions AND improvements, and it covers memory, steps, script size and the combined fee:
 
 ```scala
-import scalus.testing.dsl.EvalTestDsl.*
+class MyValidatorTest extends AnyFunSuite, ScalusTest, BudgetPinsSuite {
+    override protected def budgetTable: BudgetTable = MyValidatorTestBudgets
 
-// Exact budget match — catches regressions AND improvements
-eval(compiled)
-  .onVM(PlutusV3.makePlutusV3VM())
-  .expectSuccess()
-  .assertBudgetEquals(memory = 129528, steps = 37_067868)
-
-// Upper bound — for tests where budget fluctuates slightly between builds
-eval(compiled)
-  .onVM(PlutusV3.makePlutusV3VM())
-  .expectSuccess()
-  .assertBudgetWithin(memory = 140000, steps = 40_000000)
+    test("spend: typical case") {
+        val result = contract.program.runWithDebug(scriptContext)
+        assertSuccess(result, contract.program) // pins
+    }
+}
 ```
 
-**Format convention:** Always use named parameters and `_` at million boundary:
-`ExUnits(memory = 129528, steps = 37_067868)`
+After a change, run the update and read the table diff, or the failure message:
+
+```
+memory 129_528 -> 121_004 (-6.6 %)
+fee = execution 8_812 -> 8_301 + reference script 73_530 -> 73_530
+```
+
+Script size is part of the fee: an unrolling that lowers memory but grows the script can raise the
+fee. Judge a change by the fee and memory, not by CPU steps alone.
 
 ## Output Format
 

@@ -626,7 +626,7 @@ performance-critical validators, consider replacing with manual folds:
 ## Optimization Workflow Summary
 
 1. Write the simplest obviously correct validator
-2. Add budget tests with `assertBudgetEquals`
+2. Add budget pins (`assertSuccess(result, program)`, `provider.submitOk(tx)`, `assertEvalEq(expected)(f).at(args)`)
 3. Identify hot paths by testing worst-case inputs
 4. Apply high-impact patterns first (single traversals, fail fast, don't compute/verify)
 5. Re-measure after each change
