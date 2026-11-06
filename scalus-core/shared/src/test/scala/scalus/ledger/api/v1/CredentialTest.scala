@@ -1,12 +1,13 @@
 package scalus.cardano.onchain.plutus.v1
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{Coin, ExUnits}
+import scalus.testing.budget.BudgetTable
 import scalus.cardano.onchain.OnchainError
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.builtin.ByteString.hex
 
 class CredentialTest extends AnyFunSuite with EvalTestKit {
+    override protected def budgetTable: BudgetTable = CredentialTestBudgets
 
     test("scriptHashOrFail") {
         assert(
@@ -29,23 +30,15 @@ class CredentialTest extends AnyFunSuite with EvalTestKit {
     }
 
     test("budget: scriptHashOrFail") {
-        assertEvalWithBudgetAndFee(
-          (c: Credential) => c.scriptHashOrFail("expected script"),
-          Credential.ScriptCredential(hex"aa"),
-          hex"aa",
-          ExUnits(memory = 2660, steps = 795867),
-          Coin(211)
-        )
+        assertEvalEq(hex"aa"): (c: Credential) =>
+            c.scriptHashOrFail("expected script")
+        .at(Credential.ScriptCredential(hex"aa"))
     }
 
     test("budget: pubKeyHashOrFail") {
-        assertEvalWithBudgetAndFee(
-          (c: Credential) => c.pubKeyHashOrFail("expected key"),
-          Credential.PubKeyCredential(PubKeyHash(hex"bb")),
-          PubKeyHash(hex"bb"),
-          ExUnits(memory = 2660, steps = 795867),
-          Coin(211)
-        )
+        assertEvalEq(PubKeyHash(hex"bb")): (c: Credential) =>
+            c.pubKeyHashOrFail("expected key")
+        .at(Credential.PubKeyCredential(PubKeyHash(hex"bb")))
     }
 
     test("pubKeyHashOrFail") {

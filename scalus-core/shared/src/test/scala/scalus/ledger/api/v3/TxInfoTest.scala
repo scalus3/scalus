@@ -1,7 +1,7 @@
 package scalus.cardano.onchain.plutus.v3
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{Coin, ExUnits}
+import scalus.testing.budget.BudgetTable
 import scalus.cardano.onchain.OnchainError
 import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.{List, Option, SortedMap}
@@ -53,6 +53,7 @@ private object TxInfoTestFixtures {
 }
 
 class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
+    override protected def budgetTable: BudgetTable = TxInfoTestBudgets
     import TxInfoTestFixtures.*
 
     test("findInputOrFail") {
@@ -463,100 +464,54 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
     }
 
     test("budget: findInputOrFail") {
-        assertEvalWithBudgetAndFee(
-          (tx: TxInfo) => tx.findInputOrFail(ref0, "missing").resolved.value.getLovelace,
-          budgetTx,
-          BigInt(1),
-          ExUnits(memory = 11375, steps = 7_143283),
-          Coin(1172)
-        )
+        assertEvalEq(BigInt(1)): (tx: TxInfo) =>
+            tx.findInputOrFail(ref0, "missing").resolved.value.getLovelace
+        .at(budgetTx)
     }
 
     test("budget: findContinuingOutputOrFail") {
-        assertEvalWithBudgetAndFee(
-          (tx: TxInfo) =>
-              tx.findContinuingOutputOrFail(tx.findInputOrFail(ref0, "missing"), "no continuing")
-                  .value
-                  .getLovelace,
-          budgetTx,
-          BigInt(5),
-          ExUnits(memory = 26150, steps = 16_235_924),
-          Coin(2680)
-        )
+        assertEvalEq(BigInt(5)): (tx: TxInfo) =>
+            tx.findContinuingOutputOrFail(tx.findInputOrFail(ref0, "missing"), "no continuing")
+                .value
+                .getLovelace
+        .at(budgetTx)
     }
 
     test("budget: valuePaidTo") {
-        assertEvalWithBudgetAndFee(
-          (tx: TxInfo) => tx.valuePaidTo(addrA).getLovelace,
-          budgetTx,
-          BigInt(5),
-          ExUnits(memory = 19244, steps = 11_574260),
-          Coin(1945)
-        )
+        assertEvalEq(BigInt(5))((tx: TxInfo) => tx.valuePaidTo(addrA).getLovelace).at(budgetTx)
     }
 
     test("budget: valueSpentFrom") {
-        assertEvalWithBudgetAndFee(
-          (tx: TxInfo) => tx.valueSpentFrom(addrA).getLovelace,
-          budgetTx,
-          BigInt(1),
-          ExUnits(memory = 21524, steps = 12_751_814),
-          Coin(2162)
-        )
+        assertEvalEq(BigInt(1))((tx: TxInfo) => tx.valueSpentFrom(addrA).getLovelace).at(budgetTx)
     }
 
     test("budget: isSignedByAny") {
-        assertEvalWithBudgetAndFee(
-          (tx: TxInfo) => tx.isSignedByAny(List(PubKeyHash(hex"09"), PubKeyHash(hex"02"))),
-          budgetTx,
-          true,
-          ExUnits(memory = 15304, steps = 7_187752),
-          Coin(1402)
-        )
+        assertEvalEq(true): (tx: TxInfo) =>
+            tx.isSignedByAny(List(PubKeyHash(hex"09"), PubKeyHash(hex"02")))
+        .at(budgetTx)
     }
 
     test("budget: validFromOrFail and validToOrFail") {
-        assertEvalWithBudgetAndFee(
-          (tx: TxInfo) => tx.validToOrFail("to") - tx.validFromOrFail("from"),
-          budgetTx,
-          BigInt(10),
-          ExUnits(memory = 10174, steps = 3_708_189),
-          Coin(855)
-        )
+        assertEvalEq(BigInt(10)): (tx: TxInfo) =>
+            tx.validToOrFail("to") - tx.validFromOrFail("from")
+        .at(budgetTx)
     }
 
     test("budget: onlyBurnsUnder") {
-        assertEvalWithBudgetAndFee(
-          (tx: TxInfo) => tx.onlyBurnsUnder(hex"cc"),
-          budgetTx,
-          true,
-          ExUnits(memory = 22708, steps = 5_332_698),
-          Coin(1695)
-        )
+        assertEvalEq(true)((tx: TxInfo) => tx.onlyBurnsUnder(hex"cc")).at(budgetTx)
     }
 
     test("budget: hasPaidTagged") {
-        assertEvalWithBudgetAndFee(
-          (tx: TxInfo) =>
-              tx.hasPaidTagged(
-                addrA,
-                Value.lovelace(5) + token,
-                OutputDatum.OutputDatum(BigInt(7).toData)
-              ),
-          budgetTx,
-          true,
-          ExUnits(memory = 28459, steps = 16_022_351),
-          Coin(2798)
-        )
+        assertEvalEq(true): (tx: TxInfo) =>
+            tx.hasPaidTagged(
+              addrA,
+              Value.lovelace(5) + token,
+              OutputDatum.OutputDatum(BigInt(7).toData)
+            )
+        .at(budgetTx)
     }
 
     test("budget: deriveTokenName") {
-        assertEvalWithBudgetAndFee(
-          (ref: TxOutRef) => ref.deriveTokenName,
-          ref0,
-          ref0TokenName,
-          ExUnits(memory = 2034, steps = 5_301726),
-          Coin(500)
-        )
+        assertEvalEq(ref0TokenName)((ref: TxOutRef) => ref.deriveTokenName).at(ref0)
     }
 }

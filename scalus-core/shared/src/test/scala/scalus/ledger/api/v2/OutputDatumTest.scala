@@ -1,7 +1,7 @@
 package scalus.cardano.onchain.plutus.v2
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{Coin, ExUnits}
+import scalus.testing.budget.BudgetTable
 import scalus.cardano.onchain.OnchainError
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
@@ -9,6 +9,7 @@ import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.toData
 
 class OutputDatumTest extends AnyFunSuite with EvalTestKit {
+    override protected def budgetTable: BudgetTable = OutputDatumTestBudgets
 
     test("inlineOrFail decodes an inline datum") {
         assert(OutputDatum.OutputDatum(BigInt(42).toData).inlineOrFail[BigInt] == BigInt(42))
@@ -66,16 +67,14 @@ class OutputDatumTest extends AnyFunSuite with EvalTestKit {
 
     test("budget: TxOut.hasInlineDatum") {
         import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
-        assertEvalWithBudgetAndFee(
-          (out: TxOut) => out.hasInlineDatum(BigInt(42)),
+        assertEvalEq(true): (out: TxOut) =>
+            out.hasInlineDatum(BigInt(42))
+        .at(
           TxOut(
             Address(Credential.PubKeyCredential(PubKeyHash(hex"aa")), Option.None),
             Value.lovelace(1),
             OutputDatum.OutputDatum(BigInt(42).toData)
-          ),
-          true,
-          ExUnits(memory = 2401, steps = 1_866114),
-          Coin(274)
+          )
         )
     }
 
