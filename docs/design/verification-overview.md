@@ -154,7 +154,7 @@ inline def ==>:(inline premise: Prop): Prop   // premise ==>: this, right-associ
 inline def ==>?:(inline premise: Prop): Prop  // premise ==>?: this, a test: where it is false, premise does not hold; where it fails, nothing
 def <=>(q: Prop): Prop
 def unary_! : Prop
-def implies(q: Prop): Prop          // ==>: with the lowest precedence
+inline def implies_:(inline premise: Prop): Prop  // ==>: with the lowest precedence
 def iff(q: Prop): Prop              // <=> with the lowest precedence
 ```
 
@@ -170,9 +170,10 @@ into a local value, except for an inline parameter, so a Boolean premise reaches
 code. A Boolean on either side is a test. Scala ranks an operator by its
 first character, so `==>:` binds like `==` and `<=>` like `<`, both tighter than `&&` and `||`, on
 either side: `p && q ==>: r` means `p && (q ==>: r)`, and `p ==>: q && r` means `(p ==>: q) && r`.
-The alphanumeric aliases `implies` and `iff` bind loosest, and are left-associative, as every
-alphanumeric operator is: `p implies (q implies r)`. Nor does Scala mix operators of one precedence
-and of both associativities: `x == y ==>: p` is a compile error, written `(x == y) ==>: p`. `==>?:`
+`implies_:` and `iff`, whose names begin with a letter, bind loosest: `p && q implies_: r && s`
+means `(p && q) implies_: (r && s)`, and `implies_:` is right-associative, as its name ends in
+`:`. Nor does Scala mix operators of one precedence and of both associativities: `x == y ==>: p` is
+a compile error, written `(x == y) ==>: p` or `x == y implies_: p`. `==>?:`
 binds as `==>:` does. It differs from `==>:` only where the claim fails, which it counts as
 holding, and is checked in the rejecting form
 ([statement semantics, §4](verification-details/prop-semantics.md#4-connectives)).

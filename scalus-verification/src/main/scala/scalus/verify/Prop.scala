@@ -35,11 +35,12 @@ enum PropExpr[A] {
   *
   * Precedence: Scala ranks an operator by its first character, so `==>:` binds like `==` and `<=>`
   * like `<`, both tighter than `&&` and `||`, on either side: `p && q ==>: r` means
-  * `p && (q ==>: r)`, and `p ==>: q && r` means `(p ==>: q) && r`. Parenthesize, or use the
-  * alphanumeric [[implies]] and [[iff]], which bind loosest of all. An alphanumeric operator is
-  * left-associative, so a chain of `implies` is parenthesized too: `p implies (q implies r)`. Nor
-  * does Scala mix operators of one precedence and of both associativities: `x == y ==>: p` is a
-  * compile error, and is written `(x == y) ==>: p`.
+  * `p && (q ==>: r)`, and `p ==>: q && r` means `(p ==>: q) && r`. Parenthesize, or use
+  * [[implies_:]] and [[iff]], whose names begin with a letter and so bind loosest of all:
+  * `p && q implies_: r && s` means `(p && q) implies_: (r && s)`. `implies_:` ends in `:`, so it is
+  * right-associative as `==>:` is. Nor does Scala mix operators of one precedence and of both
+  * associativities: `x == y ==>: p` is a compile error, and is written `(x == y) ==>: p`, or
+  * `x == y implies_: p`.
   */
 enum Prop {
 
@@ -107,11 +108,12 @@ enum Prop {
     def <=>(q: Prop): Prop = Iff(this, q)
     def unary_! : Prop = Not(this)
 
-    /** [[==>:]] with the lowest precedence: `p && q implies r` means `(p && q) ==>: r`. Unlike
-      * `==>:`, it is left-associative, as every alphanumeric operator is: a chain of it is
-      * parenthesized, `p implies (q implies r)`.
+    /** [[==>:]] with the lowest precedence: its name begins with a letter.
+      * `p && q implies_: r && s` means `(p && q) ==>: (r && s)`, and `x == y implies_: p` means
+      * `(x == y) ==>: p`. Its name ends in `:`, so it is right-associative as `==>:` is, and has
+      * its premise inline: `p implies_: q implies_: r` means `p implies_: (q implies_: r)`.
       */
-    infix def implies(q: Prop): Prop = Implies(this, q)
+    infix inline def implies_:(inline premise: Prop): Prop = Implies(premise, this)
 
     /** [[<=>]] with the lowest precedence. */
     infix def iff(q: Prop): Prop = Iff(this, q)
