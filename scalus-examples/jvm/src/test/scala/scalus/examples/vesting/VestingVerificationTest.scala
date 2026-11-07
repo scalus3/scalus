@@ -82,7 +82,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val zeroBeforeStart = verifier.statement(
       "vesting.schedule.zero_before_start",
       forAll[Config, BigInt]((config, time) =>
-          (time < config.startTimestamp) ==>
+          (time < config.startTimestamp) ==>:
               call(linearVesting, (config, time))(vested => vested == BigInt(0))
       )
     )
@@ -95,7 +95,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
       "vesting.schedule.everything_from_the_end",
       forAll[Config, BigInt]((config, time) =>
           (config.startTimestamp <= time
-              && config.startTimestamp + config.duration <= time) ==>
+              && config.startTimestamp + config.duration <= time) ==>:
               call(linearVesting, (config, time))(vested => vested == config.initialAmount)
       )
     )
@@ -161,7 +161,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val doesNotDecrease = verifier.statement(
       "vesting.schedule.does_not_decrease",
       forAll[Config, BigInt, BigInt]((config, earlier, later) =>
-          (config.initialAmount >= BigInt(0) && earlier <= later) ==>
+          (config.initialAmount >= BigInt(0) && earlier <= later) ==>:
               call(linearVesting, (config, earlier))(before =>
                   call(linearVesting, (config, later))(after => before <= after)
               )
@@ -171,7 +171,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val doesNotDecreaseForAnyAmount = verifier.refute(
       "vesting.schedule.does_not_decrease_for_any_amount",
       forAll[Config, BigInt, BigInt]((config, earlier, later) =>
-          (earlier <= later) ==>
+          (earlier <= later) ==>:
               call(linearVesting, (config, earlier))(before =>
                   call(linearVesting, (config, later))(after => before <= after)
               )
@@ -201,7 +201,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val noDatumIsRejected = verifier.statement(
       "vesting.validator.no_datum_is_rejected",
-      forAllData[ScriptContext](ctx => spendsWithoutDatum(ctx) ==> fails(validator, ctx.toData))
+      forAllData[ScriptContext](ctx => spendsWithoutDatum(ctx) ==>: fails(validator, ctx.toData))
     )
 
     test("an output without a datum cannot be spent") {
@@ -211,7 +211,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val nonPositiveAmountIsRejected = verifier.statement(
       "vesting.validator.non_positive_amount_is_rejected",
       forAllData[ScriptContext](ctx =>
-          (spendsWithDatum(ctx) && ctx.redeemer.to[Action].amount <= BigInt(0)) ==>
+          (spendsWithDatum(ctx) && ctx.redeemer.to[Action].amount <= BigInt(0)) ==>:
               fails(validator, ctx.toData)
       )
     )
@@ -224,7 +224,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val onlySpending = verifier.statement(
       "vesting.validator.only_spending",
-      forAllData[ScriptContext](ctx => !Prop(isSpending(ctx)) ==> fails(validator, ctx.toData))
+      forAllData[ScriptContext](ctx => !Prop(isSpending(ctx)) ==>: fails(validator, ctx.toData))
     )
 
     test("the script validates nothing but spending") {
@@ -308,11 +308,11 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     /** What `VestingValidator.spend` states at its head, with `Spec.ensures`: the beneficiary
       * signed, something is withdrawn, and what stays locked is at least what has not vested.
       *
-      * Each is stated with `==>?` ([[Connective.Rejects]]): wherever a clause is false, the
+      * Each is stated with `==>?:` ([[Connective.Rejects]]): wherever a clause is false, the
       * validator rejects the spend. A clause reads the datum, the redeemer, the spent input and the
       * validity range as the validator does, and fails where they cannot be read, where the
       * validator rejects the spend too; there it says nothing, and the rejecting program ends at
-      * once. With `==>` a clause would have to return there as well: one that read a default
+      * once. With `==>:` a clause would have to return there as well: one that read a default
       * instead lets every datum it cannot read run on into the validator, which reads the datum
       * after it walks the inputs, and Lean does not finish.
       */
@@ -333,8 +333,8 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("spend's clauses return true on the samples the validator accepts") {
-        // Stated with `==>?`, a clause that failed wherever the validator returns would be proved
-        // of every context. Read with `==>` on a spend the validator accepts, each returns `true`
+        // Stated with `==>?:`, a clause that failed wherever the validator returns would be proved
+        // of every context. Read with `==>:` on a spend the validator accepts, each returns `true`
         // there: run on the Scalus CEK, without Lean.
         val accepted = List(sampleOfEverything(signed), sampleHalfway(halfOfTheAmount))
         for
@@ -432,7 +432,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
                   o.value.toSortedMap.length <= 1 &&
                       o.value.toSortedMap.values.forall(t => t.length <= 1)
               )
-      )(ctx => (takesEverything(ctx) && afterTheEnd(ctx)) ==> succeeds(validator, ctx.toData))
+      )(ctx => (takesEverything(ctx) && afterTheEnd(ctx)) ==>: succeeds(validator, ctx.toData))
     )
 
     private val everythingAtAnyTime = verifier.refute(
@@ -448,7 +448,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
                   o.value.toSortedMap.length <= 1 &&
                       o.value.toSortedMap.values.forall(t => t.length <= 1)
               )
-      )(ctx => takesEverything(ctx) ==> succeeds(validator, ctx.toData))
+      )(ctx => takesEverything(ctx) ==>: succeeds(validator, ctx.toData))
     )
 
     test(
@@ -540,7 +540,7 @@ class VestingVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val everythingAfterTheEndOnAnyContext = verifier.statement(
       "vesting.withdrawal.everything_after_the_end.any_context",
       forAllData[ScriptContext](ctx =>
-          (takesEverything(ctx) && afterTheEnd(ctx)) ==> succeeds(validator, ctx.toData)
+          (takesEverything(ctx) && afterTheEnd(ctx)) ==>: succeeds(validator, ctx.toData)
       )
     )
 

@@ -74,7 +74,7 @@ class ObligationsTest extends AnyFunSuite with LeanProofsSuite {
         owed.prop match
             case Prop.Forall(x, Prop.Implies(Prop.Denotes(_), Prop.Bool(_))) =>
                 assert(x.tp == scalus.compiler.sir.SIRType.Integer)
-            case other => fail(s"expected for all x, denotes(reach) ==> check, got $other")
+            case other => fail(s"expected for all x, denotes(reach) ==>: check, got $other")
     }
 
     test("a caller's own contract is the premise of its obligations") {

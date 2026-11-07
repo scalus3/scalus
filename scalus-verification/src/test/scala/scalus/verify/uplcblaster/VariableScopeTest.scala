@@ -171,5 +171,5 @@ object VariableScopeTest {
 
     /** Of every positive integer `x`, the statement `k(x)`. */
     inline def positive(inline k: BigInt => Prop): Prop =
-        forAll[BigInt](x => (x > BigInt(0)) ==> k(x))
+        forAll[BigInt](x => (x > BigInt(0)) ==>: k(x))
 }

@@ -150,21 +150,27 @@ object Prop {
 // members of Prop
 def &&(q: Prop): Prop
 def ||(q: Prop): Prop
-def ==>(q: Prop): Prop
-def ==>?(q: Prop): Prop             // where q, a test, is false, this does not hold; where q fails, nothing
+def ==>:(premise: Prop): Prop        // premise ==>: this, right-associative
+def ==>?:(premise: Prop): Prop       // premise ==>?: this, a test: where it is false, premise does not hold; where it fails, nothing
 def <=>(q: Prop): Prop
 def unary_! : Prop
-def implies(q: Prop): Prop          // ==> with the lowest precedence
+def implies(q: Prop): Prop          // ==>: with the lowest precedence
 def iff(q: Prop): Prop              // <=> with the lowest precedence
 ```
 
 Implemented in `scalus-verification/.../scalus/verify/Prop.scala`. There `Prop` is an `enum`
 holding the statement's explicit logical form at runtime. The Scala lambdas in the declarations
 above are syntax sugar; compilation turns them into binder and body nodes. The verifier does not
-execute a Scala callback to establish the claim. Scala ranks an operator by
-its first character, so `==>` binds like `==` and `<=>` like `<`, both tighter than `&&` and `||`:
-`p && q ==> r` means `p && (q ==> r)`. The alphanumeric aliases `implies` and `iff` bind loosest.
-`==>?` binds as `==>` does. It differs from `==>` only where the claim fails, which it counts as
+execute a Scala callback to establish the claim.
+
+An operator whose name ends in `:` is right-associative in Scala, as implication is read:
+`p ==>: q ==>: r` means `p ==>: (q ==>: r)`. Such an operator is a method of its right operand, so
+the premise is its parameter; a Boolean on either side is a test. `==>` and `==>?`, their
+left-associative predecessors, are deprecated. Scala ranks an operator by its
+first character, so `==>:` binds like `==` and `<=>` like `<`, both tighter than `&&` and `||`:
+`p && q ==>: r` means `p && (q ==>: r)`. The alphanumeric aliases `implies` and `iff` bind loosest.
+Nor does Scala mix operators of one precedence and of both associativities: `x == y ==>: p` is a
+compile error, written `(x == y) ==>: p`. `==>?:` binds as `==>:` does. It differs from `==>:` only where the claim fails, which it counts as
 holding, and is checked in the rejecting form
 ([statement semantics, §4](verification-details/prop-semantics.md#4-connectives)).
 
@@ -172,7 +178,7 @@ The nested syntax for `∀z ∀x. x ≠ 0 ⇒ ∃y. x·y > z` is:
 
 ```scala
 forAll[BigInt](z => forAll[BigInt](x =>
-    (x !== BigInt(0)) ==> exists[BigInt](y => x * y > z)
+    (x !== BigInt(0)) ==>: exists[BigInt](y => x * y > z)
 ))
 ```
 
@@ -195,7 +201,7 @@ instead of asking the backend to search for one. For example:
 
 ```scala
 forAll[BigInt](x =>
-    (x > 0) ==> existsLet(x + 1)(y => y > x)
+    (x > 0) ==>: existsLet(x + 1)(y => y > x)
 )
 ```
 
@@ -217,12 +223,12 @@ The quantifier stays in `Prop`; the computation in each leaf is SIR.
 A binder's body is either a statement or a Boolean. A Boolean body is one test, whatever it
 contains, so `forAll[Boolean, BigInt]((flag, x) => if flag then x > 0 else x < 0)` is a single
 test, and so is a body with a `match` or local `val`s. A Boolean operand of a connective also
-becomes one test, through an implicit conversion: in `(lo <= hi) ==> call(...)`, `lo <= hi` is a
+becomes one test, through an implicit conversion: in `(lo <= hi) ==>: call(...)`, `lo <= hi` is a
 test.
 
 In a statement body, a binder variable used outside a leaf would make the shape of the statement
 depend on its value, so it is a compile error. For example, an `if` or `match` that chooses
-between statements is outside the subset of §4.1; state the cases with `==>` instead.
+between statements is outside the subset of §4.1; state the cases with `==>:` instead.
 
 The explicit representation gives the verifier stable scoping, serialization and backend access.
 How the macros build it is described in
@@ -434,7 +440,7 @@ Both forms elaborate to the same statement, with `f` bound to the target:
   `guarantees` or `obligations`, makes the function's parameter a `forAllDataLimited` variable:
   the statements are of every context within the limits, as a hand-written statement over
   `forAllDataLimited` is. `guarantees(f, parameter, Connective.Rejects)` states each clause with
-  `==>?`: a clause that reads the datum as the validator does fails where the validator cannot
+  `==>?:`: a clause that reads the datum as the validator does fails where the validator cannot
   read it, which rejects the spend too, and says nothing there.
 
 ### 3.8 Calls and the function table
@@ -483,7 +489,7 @@ table to analyze the named method.
 ```
 prop  ::= forAll[T](x => prop) | exists[T](x => prop) | existsLet[T](term)(x => prop)
         | call(function, term)(result => prop) | whenReturns(function, term)(result => prop)
-        | prop && prop | prop || prop | prop ==> prop | prop <=> prop | !prop
+        | prop && prop | prop || prop | prop ==>: prop | prop <=> prop | !prop
         | denotes(term) | equal(term, term) | { val v = term; prop } | bool
 bool  ::= a Boolean expression in the @Compile subset
 term  ::= an expression in the @Compile subset
@@ -501,7 +507,7 @@ is one test and is accepted.
 These are rejected with a compile error:
 
 - a quantifier inside a test, for example inside `xs.forall(...)`;
-- `if` or `match` that produces a `Prop` (write `==>`; case analysis is a v2 item);
+- `if` or `match` that produces a `Prop` (write `==>:`; case analysis is a v2 item);
 - recursion at the `Prop` level (use lemmas and induction tactics instead).
 
 ### 4.2 Algorithm
@@ -723,7 +729,7 @@ and case classes and enums of them.
 
 - Each leaf of the body (a Boolean test, a total call, `denotes`, `equal`) is compiled to its own
   UPLC predicate over the quantified values. A partial call, `whenReturns`, is
-  `denotes(f(a)) ==> call(f, a)(…)`, the form of §3.7.
+  `denotes(f(a)) ==>: call(f, a)(…)`, the form of §3.7.
 - The connectives become a Lean proposition that reads each leaf by the polarity rule of §6.2.
 - The tactic replays a counterexample on the Scalus CEK before it reports `Refuted` (§5.2).
 - A closed statement, one without quantified variables, is decided by evaluation in Lean instead
@@ -735,7 +741,7 @@ accepts one, two or three binders, and its body is any statement of the fragment
 ```scala
 val clamp = FunctionDef(Math.clamp)
 forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-    (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+    (lo <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
 )
 ```
 
@@ -766,7 +772,7 @@ object MathProofs {                        // plain Scala; each statement is com
 
     val mulUnbounded = verifier.statement("mul_unbounded") {
         forAll[BigInt](z => forAll[BigInt](x =>
-            (x !== BigInt(0)) ==> existsLet(x * (Math.abs(z) + 1))(y => x * y > z)
+            (x !== BigInt(0)) ==>: existsLet(x * (Math.abs(z) + 1))(y => x * y > z)
         ))
     }
 }
@@ -848,7 +854,7 @@ final class Verifier {
     // over the values of the one parameter that `parameter` says, a forAllDataLimited variable
     def guarantees(function: FunctionRef[?, ?], parameter: LimitedData): StatedGuarantees
     def guarantees(function: FunctionRef[?, ?], parameter: LimitedData,
-                   connective: Connective): StatedGuarantees // Implies (==>) or Rejects (==>?)
+                   connective: Connective): StatedGuarantees // Implies (==>:) or Rejects (==>?:)
     def obligations(caller: FunctionRef[?, ?]): CallObligations
     def obligations(caller: FunctionRef[?, ?], parameter: LimitedData): CallObligations
     def addTheorem(theorem: Theorem): Unit
@@ -1197,7 +1203,7 @@ without a step limit (§5.2).
   domain.
 - A program whose step count grows with its input, such as `gcd`, does not prove over an unbounded
   domain. The user must write the restriction into the statement, for example
-  `(Math.abs(x) < 65536) ==> …`. It then shows up in the report instead of hiding in a budget
+  `(Math.abs(x) < 65536) ==>: …`. It then shows up in the report instead of hiding in a budget
   number.
 
 **Budgets.** A request gives the budget, `Budget.LeanSteps(n)`, or lets the tactic find it,

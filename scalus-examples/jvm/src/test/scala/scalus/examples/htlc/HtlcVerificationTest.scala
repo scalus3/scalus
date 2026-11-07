@@ -97,7 +97,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val outputWithoutADatumIsRejected = verifier.statement(
       "htlc.context.output_without_a_datum_is_rejected",
-      forAllData[ScriptContext](ctx => spendsWithoutDatum(ctx) ==> fails(validator, ctx.toData))
+      forAllData[ScriptContext](ctx => spendsWithoutDatum(ctx) ==>: fails(validator, ctx.toData))
     )
 
     test("an output without a datum cannot be spent") {
@@ -106,7 +106,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
 
     private val onlySpendingIsValidated = verifier.statement(
       "htlc.context.only_spending_is_validated",
-      forAllData[ScriptContext](ctx => !Prop(isSpending(ctx)) ==> fails(validator, ctx.toData))
+      forAllData[ScriptContext](ctx => !Prop(isSpending(ctx)) ==>: fails(validator, ctx.toData))
     )
 
     test("the script validates nothing but spending") {
@@ -119,7 +119,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
           (Prop(spendsWithDatum(ctx)) && !Prop(
             unConstrData(ctx.redeemer).fst == BigInt(0)
                 || unConstrData(ctx.redeemer).fst == BigInt(1)
-          )) ==> fails(validator, ctx.toData)
+          )) ==>: fails(validator, ctx.toData)
       )
     )
 
@@ -135,13 +135,13 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val refundRejectedUnlessTheCommitterSigns = verifier.statement(
       "htlc.refund.rejected_unless_the_committer_signs",
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
-          (isRefund(ctx) && !signedByTheCommitter(ctx)) ==> fails(validator, ctx.toData)
+          (isRefund(ctx) && !signedByTheCommitter(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
     private val refundRejectedWhoeverSigns = verifier.refute(
       "htlc.refund.rejected_whoever_signs",
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
-          isRefund(ctx) ==> fails(validator, ctx.toData)
+          isRefund(ctx) ==>: fails(validator, ctx.toData)
       )
     )
 
@@ -156,13 +156,13 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val refundRejectedBeforeTheTimeout = verifier.statement(
       "htlc.refund.rejected_before_the_timeout",
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
-          (isRefund(ctx) && !startsFromTheTimeout(ctx)) ==> fails(validator, ctx.toData)
+          (isRefund(ctx) && !startsFromTheTimeout(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
     private val refundRejectedAtTheTimeout = verifier.refute(
       "htlc.refund.rejected_at_the_timeout",
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
-          (isRefund(ctx) && !startsAfterTheTimeout(ctx)) ==> fails(validator, ctx.toData)
+          (isRefund(ctx) && !startsAfterTheTimeout(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
 
@@ -177,14 +177,14 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val committerRefundsFromTheTimeout = verifier.statement(
       "htlc.refund.committer_refunds_from_the_timeout",
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
-          (isRefund(ctx) && startsFromTheTimeout(ctx) && signedByTheCommitter(ctx)) ==>
+          (isRefund(ctx) && startsFromTheTimeout(ctx) && signedByTheCommitter(ctx)) ==>:
               succeeds(validator, ctx.toData)
       )
     )
     private val committerRefundsAtAnyTime = verifier.refute(
       "htlc.refund.committer_refunds_at_any_time",
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
-          (isRefund(ctx) && signedByTheCommitter(ctx)) ==> succeeds(validator, ctx.toData)
+          (isRefund(ctx) && signedByTheCommitter(ctx)) ==>: succeeds(validator, ctx.toData)
       )
     )
 
@@ -202,7 +202,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val revealRejectedUnlessTheReceiverSigns = verifier.statement(
       "htlc.reveal.rejected_unless_the_receiver_signs",
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
-          (isReveal(ctx) && !signedByTheReceiver(ctx)) ==> fails(validator, ctx.toData)
+          (isReveal(ctx) && !signedByTheReceiver(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
 
@@ -215,7 +215,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val revealRejectedAfterTheTimeout = verifier.statement(
       "htlc.reveal.rejected_after_the_timeout",
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
-          (isReveal(ctx) && !endsByTheTimeout(ctx)) ==> fails(validator, ctx.toData)
+          (isReveal(ctx) && !endsByTheTimeout(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
 
@@ -229,7 +229,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val revealRejectedWithoutAPreimage = verifier.statement(
       "htlc.reveal.rejected_without_a_preimage",
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
-          (isReveal(ctx) && !revealsAPreimage(ctx)) ==> fails(validator, ctx.toData)
+          (isReveal(ctx) && !revealsAPreimage(ctx)) ==>: fails(validator, ctx.toData)
       )
     )
 
@@ -241,7 +241,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val noRevealIsAccepted = verifier.statement(
       "htlc.reveal.no_reveal_is_accepted",
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
-          (isReveal(ctx) && endsByTheTimeout(ctx) && signedByTheReceiver(ctx)) ==>
+          (isReveal(ctx) && endsByTheTimeout(ctx) && signedByTheReceiver(ctx)) ==>:
               fails(validator, ctx.toData)
       )
     )
@@ -266,7 +266,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
       "htlc.reveal.receiver_reveals_up_to_the_timeout",
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(ctx =>
           (isReveal(ctx) && endsByTheTimeout(ctx) && signedByTheReceiver(ctx) &&
-              revealsAPreimage(ctx)) ==> succeeds(validator, ctx.toData)
+              revealsAPreimage(ctx)) ==>: succeeds(validator, ctx.toData)
       )
     )
 
@@ -283,7 +283,7 @@ class HtlcVerificationTest extends AnyFunSuite with LeanProofsSuite {
       forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(revealed =>
           forAllDataLimited[ScriptContext](ctx => ctx.txInfo.signatories.length <= 2)(refunded =>
               (isReveal(revealed) && isRefund(refunded) && datumOf(revealed) == datumOf(refunded)
-                  && startsBeforeTheEnd(refunded, revealed)) ==>
+                  && startsBeforeTheEnd(refunded, revealed)) ==>:
                   (fails(validator, revealed.toData) || fails(validator, refunded.toData))
           )
       )
