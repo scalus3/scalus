@@ -34,8 +34,10 @@ enum PropExpr[A] {
   * holds of `premise ==>?: claim` ([[Rejects]]).
   *
   * Precedence: Scala ranks an operator by its first character, so `==>:` binds like `==` and `<=>`
-  * like `<`, both tighter than `&&` and `||`. `p && q ==>: r` therefore means `p && (q ==>: r)`.
-  * Parenthesize, or use the alphanumeric [[implies]] and [[iff]], which bind loosest of all. Nor
+  * like `<`, both tighter than `&&` and `||`, on either side: `p && q ==>: r` means
+  * `p && (q ==>: r)`, and `p ==>: q && r` means `(p ==>: q) && r`. Parenthesize, or use the
+  * alphanumeric [[implies]] and [[iff]], which bind loosest of all. An alphanumeric operator is
+  * left-associative, so a chain of `implies` is parenthesized too: `p implies (q implies r)`. Nor
   * does Scala mix operators of one precedence and of both associativities: `x == y ==>: p` is a
   * compile error, and is written `(x == y) ==>: p`.
   */
@@ -85,27 +87,28 @@ enum Prop {
 
     /** [[Implies]]: `premise ==>: this`. A right-associative operator is a method of its right
       * operand, so the premise is the argument: `p ==>: q` is `q.==>:(p)`, `Implies(p, q)`.
+      *
+      * The premise is an inline parameter. Scala evaluates the left operand of a right-associative
+      * call first, binding it to a local value, except where it is given to an inline parameter: so
+      * a premise written as a Boolean reaches its conversion, [[Props.booleanToProp]], as code, and
+      * is a test of that code, not a value computed where the statement is built.
       */
-    def ==>:(premise: Prop): Prop = Implies(premise, this)
+    inline def ==>:(inline premise: Prop): Prop = Implies(premise, this)
 
     /** [[Rejects]]: `premise ==>?: this`, where `this` is a test. The premise rejects every value
       * the test is false of; a value the test fails on says nothing. Right-associative, as
-      * [[==>:]].
+      * [[==>:]], so in `p ==>?: q ==>: r` the claim is the implication `q ==>: r`, which is no
+      * test, and a tactic rejects it: the other reading is `(p ==>?: q) ==>: r`.
       */
-    def ==>?:(premise: Prop): Prop = Rejects(premise, this)
-
-    /** [[Implies]] of `this` and `q`, left-associative: `p ==> q ==> r` is `(p ==> q) ==> r`. */
-    @deprecated("use ==>:, which is right-associative", "1.5.0")
-    def ==>(q: Prop): Prop = Implies(this, q)
-
-    /** [[Rejects]] of `this` and `q`, left-associative. */
-    @deprecated("use ==>?:, which is right-associative", "1.5.0")
-    def ==>?(q: Prop): Prop = Rejects(this, q)
+    inline def ==>?:(inline premise: Prop): Prop = Rejects(premise, this)
 
     def <=>(q: Prop): Prop = Iff(this, q)
     def unary_! : Prop = Not(this)
 
-    /** [[==>:]] with the lowest precedence: `p && q implies r` means `(p && q) ==>: r`. */
+    /** [[==>:]] with the lowest precedence: `p && q implies r` means `(p && q) ==>: r`. Unlike
+      * `==>:`, it is left-associative, as every alphanumeric operator is: a chain of it is
+      * parenthesized, `p implies (q implies r)`.
+      */
     infix def implies(q: Prop): Prop = Implies(this, q)
 
     /** [[<=>]] with the lowest precedence. */
@@ -595,14 +598,13 @@ object Props {
 
     inline def equal[A](inline a: A, inline b: A): Prop = ${ PropMacro.equal('a, 'b) }
 
+    /** A Boolean, as the test of its code. Through it a Boolean on either side of `==>:` or `==>?:`
+      * is a test: as their premise, an inline parameter, or as their right operand, of which they
+      * are methods.
+      */
     implicit inline def booleanToProp(inline b: Boolean): Prop = ${ PropMacro.test('b) }
 
-    // A Boolean operand of `==>:` or `==>?:`, on either side, is a test through `booleanToProp`.
     extension (inline b: Boolean) {
-        @deprecated("use ==>:, which is right-associative", "1.5.0")
-        inline def ==>(q: Prop): Prop = Prop.Implies(Prop(b), q)
-        @deprecated("use ==>?:, which is right-associative", "1.5.0")
-        inline def ==>?(q: Prop): Prop = Prop.Rejects(Prop(b), q)
         infix inline def implies(q: Prop): Prop = Prop.Implies(Prop(b), q)
     }
 }
