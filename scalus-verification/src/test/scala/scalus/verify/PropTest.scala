@@ -272,10 +272,32 @@ class PropTest extends AnyFunSuite {
         forAll[BigInt](x => succeeds(BigInt(10) / x) ==>?: (x != BigInt(0))) match
             case Prop.Forall(_, Prop.Rejects(Prop.Denotes(_), Prop.Bool(_))) =>
             case other => fail(s"expected a success that rejects a test, got $other")
-        // `implies` of a Boolean, through the conversion of the operand it is a method of.
-        ((BigInt(1) / BigInt(0) > BigInt(0)) implies c) match
-            case Prop.Implies(Prop.Bool(PropExpr.SIRExpr(_)), `c`) =>
-            case other => fail(s"expected a test of the premise's code, got $other")
+    }
+
+    test("implies_: is ==>: at the lowest precedence, right-associative too") {
+        val (a, b, c, d) =
+            (Prop(BigInt(1) > 0), Prop(BigInt(2) > 0), Prop(BigInt(3) > 0), Prop(BigInt(4) > 0))
+        // Looser than `&&` on either side, where `==>:` binds tighter.
+        assert((a && b implies_: c && d) == Prop.Implies(Prop.And(a, b), Prop.And(c, d)))
+        assert((a implies_: b implies_: c) == Prop.Implies(a, Prop.Implies(b, c)))
+        assert((a ==>: b implies_: c) == Prop.Implies(Prop.Implies(a, b), c))
+        // A Boolean on either side is a test of its code, and an equality needs no parentheses:
+        // the precedences differ.
+        forAll[BigInt](x => x != BigInt(0) implies_: x * x > BigInt(0)) match
+            case Prop.Forall(
+                  x,
+                  Prop.Implies(
+                    Prop.Bool(PropExpr.SIRExpr(premise)),
+                    Prop.Bool(PropExpr.SIRExpr(conclusion))
+                  )
+                ) =>
+                assert(premise.toString.contains(x.name), premise)
+                assert(conclusion.toString.contains(x.name), conclusion)
+            case other => fail(s"expected a test that implies a test, got $other")
+        assert(
+          LeftOperand.boundAs((BigInt(1) > BigInt(0)) implies_: (BigInt(2) > BigInt(1))) ==
+              "not bound"
+        )
     }
 
     test("Scala binds no local value for the premise of ==>:, an inline parameter") {
