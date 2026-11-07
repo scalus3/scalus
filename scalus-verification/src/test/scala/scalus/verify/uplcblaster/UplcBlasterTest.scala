@@ -178,9 +178,9 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         assert(!searches(forAll[BigInt](n => n == n)))
         assert(searches(exists[BigInt](n => n == n)))
         assert(searches(!forAll[BigInt](n => n != BigInt(2))))
-        assert(searches(forAll[BigInt](n => n != BigInt(2)) ==> Prop(false)))
+        assert(searches(forAll[BigInt](n => n != BigInt(2)) ==>: Prop(false)))
         assert(!searches(!exists[BigInt](n => n != n)))
-        assert(!searches(exists[BigInt](n => n != n) ==> Prop(false)))
+        assert(!searches(exists[BigInt](n => n != n) ==>: Prop(false)))
         assert(searches(forAll[BigInt](n => n == n) <=> Prop(true)))
         assert(!searches(!(!forAll[BigInt](n => n == n))))
 
@@ -212,7 +212,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
 
     test("proves connectives over separately compiled tests, with each test read by polarity") {
         val implication =
-            forAll[BigInt, BigInt]((x, y) => (x <= y) ==> (Math.min(x, y) == x))
+            forAll[BigInt, BigInt]((x, y) => (x <= y) ==>: (Math.min(x, y) == x))
         assert(lowered(implication, FunctionTable.empty).leaves.size == 2)
         proven(implication, budget = 60)
         proven(
@@ -220,7 +220,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           budget = 60
         )
         proven(
-          forAll[BigInt, BigInt]((x, y) => !Prop(x <= y) ==> (Math.min(x, y) == y)),
+          forAll[BigInt, BigInt]((x, y) => !Prop(x <= y) ==>: (Math.min(x, y) == y)),
           budget = 60
         )
         proven(
@@ -228,7 +228,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
           budget = 60
         )
 
-        val wrong = forAll[BigInt, BigInt]((x, y) => (x <= y) ==> (Math.min(x, y) == y))
+        val wrong = forAll[BigInt, BigInt]((x, y) => (x <= y) ==>: (Math.min(x, y) == y))
         // println(s"wrong: $wrong")
         val (x, y, _) = split2(wrong)
         val counterexample = refuted(wrong, budget = 60)
@@ -300,13 +300,13 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         assert(integer(refuted(checked, budget = 80)(x.name)) < 0)
         proven(
           forAll[BigInt](x =>
-              (x < BigInt(0)) ==> !denotes { require(x >= BigInt(0)); x * BigInt(2) }
+              (x < BigInt(0)) ==>: !denotes { require(x >= BigInt(0)); x * BigInt(2) }
           ),
           budget = 80
         )
         proven(
           forAll[BigInt](x =>
-              (x >= BigInt(0)) ==> denotes { require(x >= BigInt(0)); x * BigInt(2) }
+              (x >= BigInt(0)) ==>: denotes { require(x >= BigInt(0)); x * BigInt(2) }
           ),
           budget = 80
         )
@@ -317,9 +317,9 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("denotes in a premise restricts a statement to the inputs where a program returns") {
-        proven(forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x != BigInt(0))), budget = 40)
+        proven(forAll[BigInt](x => denotes(BigInt(10) / x) ==>: (x != BigInt(0))), budget = 40)
 
-        val positive = forAll[BigInt](x => denotes(BigInt(10) / x) ==> (x > BigInt(0)))
+        val positive = forAll[BigInt](x => denotes(BigInt(10) / x) ==>: (x > BigInt(0)))
         val x = positive match
             case Prop.Forall(x, _) => x
             case other             => fail(s"expected a universal proposition, got $other")
@@ -398,7 +398,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
                     UplcBlaster.LeafFormula.Test(1)
                   )
                 ) =>
-            case other => fail(s"expected denotes(div10(x)) ==> call(div10, x), got $other")
+            case other => fail(s"expected denotes(div10(x)) ==>: call(div10, x), got $other")
         proven(partial, 60, div10)
 
         // The total call also claims that div10 returns, which it does not at 0.
@@ -425,14 +425,14 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         proven(forAll[BigInt](x => equal(Builtins.unIData(Builtins.iData(x)), x)), budget = 40)
         proven(
           forAll[Data](d =>
-              denotes(Builtins.unIData(d)) ==> equal(Builtins.iData(Builtins.unIData(d)), d)
+              denotes(Builtins.unIData(d)) ==>: equal(Builtins.iData(Builtins.unIData(d)), d)
           ),
           budget = 60
         )
 
         // negative control: an I value can hold a negative integer
         val nonNegative =
-            forAll[Data](d => denotes(Builtins.unIData(d)) ==> (Builtins.unIData(d) >= BigInt(0)))
+            forAll[Data](d => denotes(Builtins.unIData(d)) ==>: (Builtins.unIData(d) >= BigInt(0)))
         val d = nonNegative match
             case Prop.Forall(d, _) => d
             case other             => fail(s"expected a universal proposition, got $other")
@@ -442,7 +442,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
 
         // A counterexample that nests: a list with an element.
         val empty = forAll[Data](d =>
-            denotes(Builtins.nullList(Builtins.unListData(d))) ==>
+            denotes(Builtins.nullList(Builtins.unListData(d))) ==>:
                 Builtins.nullList(Builtins.unListData(d))
         )
         val list = empty match
@@ -979,7 +979,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
             case Right(_) => fail("expected the statement to be refused")
         refused(exists[prelude.List[String]](names => names.isEmpty))
         refused(!forAll[prelude.List[String]](names => names.isEmpty))
-        refused(forAll[prelude.List[String]](names => names.isEmpty) ==> Prop(true))
+        refused(forAll[prelude.List[String]](names => names.isEmpty) ==>: Prop(true))
         refused(forAll[prelude.List[String]](names => names.isEmpty) <=> Prop(true))
         // Where it stands for every value it is a variable.
         assert(
@@ -1360,12 +1360,14 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
     test("states that an expression fails, whatever its type") {
         // A builtin that fails: unBData of an I value, for every x.
         proven(forAll[BigInt](x => fails(Builtins.unBData(Builtins.iData(x)))), budget = 60)
-        proven(forAll[BigInt](x => (x == BigInt(0)) ==> fails(BigInt(10) / x)), budget = 40)
+        proven(forAll[BigInt](x => (x == BigInt(0)) ==>: fails(BigInt(10) / x)), budget = 40)
         proven(
-          forAll[BigInt](x => (x < BigInt(0)) ==> fails { require(x >= BigInt(0)); x * BigInt(2) }),
+          forAll[BigInt](x =>
+              (x < BigInt(0)) ==>: fails { require(x >= BigInt(0)); x * BigInt(2) }
+          ),
           budget = 80
         )
-        proven(forAll[BigInt](x => (x != BigInt(0)) ==> succeeds(BigInt(10) / x)), budget = 40)
+        proven(forAll[BigInt](x => (x != BigInt(0)) ==>: succeeds(BigInt(10) / x)), budget = 40)
         // A comparison returns a Boolean on every input: it never fails.
         refuted(forAll[BigInt](x => fails(x > BigInt(0))), budget = 40)
     }
@@ -1465,7 +1467,7 @@ class UplcBlasterTest extends AnyFunSuite with LeanProofsSuite {
         )
         proven(
           forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-              (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+              (lo <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
           ),
           120,
           clamp

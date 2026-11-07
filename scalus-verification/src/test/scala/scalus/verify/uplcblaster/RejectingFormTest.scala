@@ -36,7 +36,7 @@ class RejectingFormTest extends AnyFunSuite with LeanProofsSuite {
         UplcBlaster.lower(prop, FunctionTable(positive, anything)).fold(fail(_), identity)
 
     test("a success that implies a test of values quantified over is in the rejecting form") {
-        val goal = lowered(forAll[BigInt](x => succeeds(positive, x) ==> (x > BigInt(0))))
+        val goal = lowered(forAll[BigInt](x => succeeds(positive, x) ==>: (x > BigInt(0))))
         // Lean reads that the claim returns, and that the program `if claim then error else
         // positive(x)` fails.
         goal.body match
@@ -65,7 +65,7 @@ class RejectingFormTest extends AnyFunSuite with LeanProofsSuite {
         // `a && b`, with the premise in one program.
         val both = lowered(
           forAll[BigInt](x =>
-              denotes(BigInt(10) / x) ==>
+              denotes(BigInt(10) / x) ==>:
                   (Prop(x != BigInt(0)) && Prop(BigInt(10) / x <= BigInt(10)))
           )
         )
@@ -85,21 +85,21 @@ class RejectingFormTest extends AnyFunSuite with LeanProofsSuite {
             assert(goal.unrewritten.isEmpty, goal.body)
         }
         // In a negative position, where the stronger rejecting form would prove less.
-        asWritten(forAll[BigInt](x => !(succeeds(positive, x) ==> (x > BigInt(0)))))
+        asWritten(forAll[BigInt](x => !(succeeds(positive, x) ==>: (x > BigInt(0)))))
         asWritten(
-          forAll[BigInt](x => (succeeds(positive, x) ==> (x > BigInt(0))) ==> (x > BigInt(-5)))
+          forAll[BigInt](x => (succeeds(positive, x) ==>: (x > BigInt(0))) ==>: (x > BigInt(-5)))
         )
         asWritten(
           forAll[BigInt](x =>
-              (succeeds(positive, x) ==> (x > BigInt(0))) <=> (x > BigInt(-1000000))
+              (succeeds(positive, x) ==>: (x > BigInt(0))) <=> (x > BigInt(-1000000))
           )
         )
         // A test as the premise: the conclusion may fail where it is false.
-        asWritten(forAll[BigInt](x => (x != BigInt(0)) ==> (BigInt(10) / x > BigInt(-100))))
+        asWritten(forAll[BigInt](x => (x != BigInt(0)) ==>: (BigInt(10) / x > BigInt(-100))))
         // A call whose continuation is a test, for the same reason.
         asWritten(
           forAll[BigInt](x =>
-              call(positive, x)(r => r > BigInt(1)) ==> (BigInt(10) / (x - BigInt(1)) > BigInt(
+              call(positive, x)(r => r > BigInt(1)) ==>: (BigInt(10) / (x - BigInt(1)) > BigInt(
                 -100
               ))
           )
@@ -107,15 +107,15 @@ class RejectingFormTest extends AnyFunSuite with LeanProofsSuite {
         // A partial call: its continuation calls the function, which need not return.
         asWritten(forAll[BigInt](x => whenReturnsRef(positive.ref, x)(r => r > BigInt(0))))
         // A closed statement, which Lean evaluates.
-        asWritten(succeeds(positive, BigInt(5)) ==> (BigInt(5) > BigInt(0)))
+        asWritten(succeeds(positive, BigInt(5)) ==>: (BigInt(5) > BigInt(0)))
     }
 
     test("a claim of a success is proved and refuted in the rejecting form") {
         requireLean()
-        provenAt(forAll[BigInt](x => succeeds(positive, x) ==> (x > BigInt(0))), positive)
+        provenAt(forAll[BigInt](x => succeeds(positive, x) ==>: (x > BigInt(0))), positive)
         // positive accepts 1, where the claim is false.
         val one = refuted(
-          forAll[BigInt](x => succeeds(positive, x) ==> (x > BigInt(1))),
+          forAll[BigInt](x => succeeds(positive, x) ==>: (x > BigInt(1))),
           Budget.Auto,
           positive
         )
@@ -123,7 +123,7 @@ class RejectingFormTest extends AnyFunSuite with LeanProofsSuite {
         // A claim that fails where the function returns is false there, as the statement reads a
         // failing test.
         val zero = refuted(
-          forAll[BigInt](x => succeeds(anything, x) ==> (BigInt(10) / x >= BigInt(-10))),
+          forAll[BigInt](x => succeeds(anything, x) ==>: (BigInt(10) / x >= BigInt(-10))),
           Budget.Auto,
           anything
         )
@@ -136,48 +136,48 @@ class RejectingFormTest extends AnyFunSuite with LeanProofsSuite {
         // form's program fails because the claim does, which proves nothing. The statement as
         // written is proved.
         provenAt(
-          forAll[BigInt](x => succeeds(positive, x) ==> (BigInt(10) / x >= BigInt(0))),
+          forAll[BigInt](x => succeeds(positive, x) ==>: (BigInt(10) / x >= BigInt(0))),
           positive
         )
     }
-    test("==>? is the rejecting form alone, in any position") {
+    test("==>?: is the rejecting form alone, in any position") {
         def rejecting(formula: LeafFormula): Boolean = formula match
             case LeafFormula.Not(LeafFormula.Denotes(_)) => true
             case _                                       => false
-        val claimed = lowered(forAll[BigInt](x => succeeds(positive, x) ==>? (x > BigInt(0))))
+        val claimed = lowered(forAll[BigInt](x => succeeds(positive, x) ==>?: (x > BigInt(0))))
         claimed.body match
             case LeafFormula.Forall(_, body) => assert(rejecting(body), body)
             case other                       => fail(s"expected a forAll, got $other")
         // The rejecting form is what it says: there is no other statement as written, and no claim
         // that the claim returns.
         assert(claimed.unrewritten.isEmpty)
-        val negated = lowered(forAll[BigInt](x => !(succeeds(positive, x) ==>? (x > BigInt(0)))))
+        val negated = lowered(forAll[BigInt](x => !(succeeds(positive, x) ==>?: (x > BigInt(0)))))
         negated.body match
             case LeafFormula.Forall(_, LeafFormula.Not(body)) => assert(rejecting(body), body)
             case other => fail(s"expected the negated rejecting form, got $other")
         // A test as the premise too.
         val tested =
-            lowered(forAll[BigInt](x => (x != BigInt(0)) ==>? (BigInt(10) / x > BigInt(-100))))
+            lowered(forAll[BigInt](x => (x != BigInt(0)) ==>?: (BigInt(10) / x > BigInt(-100))))
         tested.body match
             case LeafFormula.Forall(_, body) => assert(rejecting(body), body)
             case other                       => fail(s"expected a forAll, got $other")
     }
 
-    test("==>? holds where the claim fails, and is refuted where it is false") {
+    test("==>?: holds where the claim fails, and is refuted where it is false") {
         requireLean()
-        // At 0 the claim fails: with ==>? that is no counterexample, and the rejecting form proves
+        // At 0 the claim fails: with ==>?: that is no counterexample, and the rejecting form proves
         // the statement at once.
         provenAt(
-          forAll[BigInt](x => succeeds(positive, x) ==>? (BigInt(10) / x >= BigInt(0))),
+          forAll[BigInt](x => succeeds(positive, x) ==>?: (BigInt(10) / x >= BigInt(0))),
           positive
         )
-        // anything returns at 0, where the claim fails: ==> is refuted there, and ==>? holds.
+        // anything returns at 0, where the claim fails: ==>: is refuted there, and ==>?: holds.
         provenAt(
-          forAll[BigInt](x => succeeds(anything, x) ==>? (BigInt(10) / x >= BigInt(-10))),
+          forAll[BigInt](x => succeeds(anything, x) ==>?: (BigInt(10) / x >= BigInt(-10))),
           anything
         )
         val one = refuted(
-          forAll[BigInt](x => succeeds(positive, x) ==>? (x > BigInt(1))),
+          forAll[BigInt](x => succeeds(positive, x) ==>?: (x > BigInt(1))),
           Budget.Auto,
           positive
         )
@@ -198,7 +198,7 @@ class RejectingFormTest extends AnyFunSuite with LeanProofsSuite {
         val goal = UplcBlaster
             .lower(
               forAll[BigInt](x =>
-                  denotes(Math.clamp(x, BigInt(0), BigInt(9))) ==>
+                  denotes(Math.clamp(x, BigInt(0), BigInt(9))) ==>:
                       (Math.clamp(x, BigInt(0), BigInt(9)) == BigInt(-1))
               ),
               FunctionTable(standIn)
@@ -225,7 +225,7 @@ class RejectingFormTest extends AnyFunSuite with LeanProofsSuite {
             override def workspace: Option[java.nio.file.Path] = None
         }
         val statement = Verifier.empty.statement(
-          forAll[BigInt](x => succeeds(positive, x) ==> (x > BigInt(0)))
+          forAll[BigInt](x => succeeds(positive, x) ==>: (x > BigInt(0)))
         )
         UplcBlaster(Budget.Within(100), nothing)
             .prepare(Goal(statement, FunctionTable(positive), Nil)) match
@@ -241,19 +241,19 @@ class RejectingFormTest extends AnyFunSuite with LeanProofsSuite {
             case Left(report) => fail(report.toString)
     }
 
-    test("read with ==> on a value, a claim of ==>? that fails there is false") {
-        // `==>?` holds where its claim fails, so this is proved of every value, vacuously: the
-        // claim fails wherever `positive` returns. Read with `==>` at 5, which `positive` accepts,
+    test("read with ==>: on a value, a claim of ==>?: that fails there is false") {
+        // `==>?:` holds where its claim fails, so this is proved of every value, vacuously: the
+        // claim fails wherever `positive` returns. Read with `==>:` at 5, which `positive` accepts,
         // it is false; and a claim that holds there is true.
         def at(prop: Prop, x: BigInt): Option[Boolean] =
             UplcBlaster
                 .holdsAsImplicationOn(prop, FunctionTable(positive), List(Constant.Integer(x)))
                 .fold(fail(_), identity)
         val vacuous =
-            forAll[BigInt](x => succeeds(positive, x) ==>? (BigInt(10) / (x - x) > BigInt(0)))
+            forAll[BigInt](x => succeeds(positive, x) ==>?: (BigInt(10) / (x - x) > BigInt(0)))
         assert(at(vacuous, BigInt(5)) == Some(false))
         assert(
-          at(forAll[BigInt](x => succeeds(positive, x) ==>? (x > BigInt(0))), BigInt(5)) == Some(
+          at(forAll[BigInt](x => succeeds(positive, x) ==>?: (x > BigInt(0))), BigInt(5)) == Some(
             true
           )
         )
@@ -262,7 +262,7 @@ class RejectingFormTest extends AnyFunSuite with LeanProofsSuite {
     }
 
     test("a result the statement as written decided says so, and keeps it") {
-        val goal = lowered(forAll[BigInt](x => succeeds(positive, x) ==> (x > BigInt(0))))
+        val goal = lowered(forAll[BigInt](x => succeeds(positive, x) ==>: (x > BigInt(0))))
         val artifact = UplcBlaster.Artifact(
           goal.programHashes,
           120,

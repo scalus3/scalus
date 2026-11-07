@@ -366,7 +366,7 @@ object UplcBlaster {
       * tests, calls, `denotes` and `equal`. [[lower]] compiles each leaf into a closed UPLC program
       * in [[Lowered.leaves]], and a `LeafFormula` keeps the connectives around them, with each leaf
       * replaced by its index there. `<=>` is already split into two implications, and a partial
-      * call `whenReturns(f, a)(k)` is already `denotes(f(a)) ==> call(f, a)(k)`, two leaves. Both
+      * call `whenReturns(f, a)(k)` is already `denotes(f(a)) ==>: call(f, a)(k)`, two leaves. Both
       * the Lean proposition (`renderFormula`) and the replay of a counterexample (`holds`) are read
       * from it.
       */
@@ -426,7 +426,7 @@ object UplcBlaster {
         }
 
         /** Whether a quantifier of the statement asks for a witness: an `exists` in a positive
-          * position, or a `forAll` in a negative one, under `!` or in the premise of `==>`. Either
+          * position, or a `forAll` in a negative one, under `!` or in the premise of `==>:`. Either
           * side of `<=>` is in both.
           *
           * Without one, every variable ranges over all its values, and the statement is false where
@@ -578,10 +578,10 @@ object UplcBlaster {
       * witness and introduces no Lean quantifier. Leaves are Boolean tests, calls whose
       * continuation is a test or another total call, `denotes`, and `equal` over `BigInt`,
       * `Boolean`, `ByteString`, `String` and `Data`. A call's arguments and result, and the operand
-      * of `denotes`, can have any type. Its connectives are `&&`, `||`, `!`, `==>` and `<=>`. `<=>`
-      * becomes two implications, because its operands occur in both polarities. A partial call,
-      * `whenReturns(f, a)(r => p)`, becomes `denotes(f(a)) ==> call(f, a)(r => p)`: its two leaves
-      * run the function's program each.
+      * of `denotes`, can have any type. Its connectives are `&&`, `||`, `!`, `==>:` and `<=>`.
+      * `<=>` becomes two implications, because its operands occur in both polarities. A partial
+      * call, `whenReturns(f, a)(r => p)`, becomes `denotes(f(a)) ==>: call(f, a)(r => p)`: its two
+      * leaves run the function's program each.
       *
       * A call of a function in `functions` is linked to that function's compiled program, so the
       * function's bytes appear unchanged in the predicate. A function of several parameters is
@@ -999,7 +999,7 @@ object UplcBlaster {
                 yield (claimSir, rejectingSir)
             }
 
-            // `premise ==> claim`, a success that implies a test, in the rejecting form: its
+            // `premise ==>: claim`, a success that implies a test, in the rejecting form: its
             // rejecting program fails on every value, and the claim returns on every value, as a
             // claim that failed would fail the program whatever the premise does. The replay
             // decides by the statement as written ([[Lowered.unrewritten]]).
@@ -1021,7 +1021,7 @@ object UplcBlaster {
                         )
                 }
 
-            // `premise ==>? claim`: its rejecting program fails on every value. That is what the
+            // `premise ==>?: claim`: its rejecting program fails on every value. That is what the
             // statement says, a claim that fails included, so it is the statement in any position.
             def rejects(
                 premise: Prop,
@@ -1118,13 +1118,14 @@ object UplcBlaster {
         case _: Origin.Obligation => false
         case _                    => true
 
-    /** Whether `premise ==> conclusion` is checked in the rejecting form: the premise is a success,
-      * of an expression (`denotes`) or of a call (`succeeds`, a total call whose continuation is
-      * `true`), and the conclusion is tests, a `Bool` or an `Equal` or a conjunction of them. The
-      * rejecting form claims that the tests return on every value. So a premise that is a test does
-      * not have it, as its conclusion may fail where it is false: `(x != 0) ==> (10 / x > 1)`. Nor
-      * does a call whose continuation is a test, for the same reason. Neither does a conclusion
-      * that calls a function, as the expansion of `whenReturns` has: the call need not return.
+    /** Whether `premise ==>: conclusion` is checked in the rejecting form: the premise is a
+      * success, of an expression (`denotes`) or of a call (`succeeds`, a total call whose
+      * continuation is `true`), and the conclusion is tests, a `Bool` or an `Equal` or a
+      * conjunction of them. The rejecting form claims that the tests return on every value. So a
+      * premise that is a test does not have it, as its conclusion may fail where it is false:
+      * `(x != 0) ==>: (10 / x > 1)`. Nor does a call whose continuation is a test, for the same
+      * reason. Neither does a conclusion that calls a function, as the expansion of `whenReturns`
+      * has: the call need not return.
       */
     private def rejectable(premise: Prop, conclusion: Prop): Boolean = {
         def tests(prop: Prop): Boolean = prop match
@@ -3266,11 +3267,11 @@ object UplcBlaster {
     }
 
     /** Whether `prop` holds on `values`, the values of its variables in the order it quantifies
-      * over them, read with `==>` for each `==>?`: run on the Scalus CEK, as a replay runs a
+      * over them, read with `==>:` for each `==>?:`: run on the Scalus CEK, as a replay runs a
       * counterexample. None where a program did not end within the replay budget.
       *
-      * Stated with `==>?`, a claim that fails says nothing, so a claim that failed wherever the
-      * function returns would be proved of every value. Read with `==>`, the statement holds on a
+      * Stated with `==>?:`, a claim that fails says nothing, so a claim that failed wherever the
+      * function returns would be proved of every value. Read with `==>:`, the statement holds on a
       * value the function accepts only where the claim returns `true` there: a sample the function
       * accepts shows that its claims are not vacuous.
       */

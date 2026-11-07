@@ -128,7 +128,7 @@ class PropTest extends AnyFunSuite {
             case other => fail(s"expected a call continuing with one test, got $other")
     }
 
-    test("a contract states expects ==> whenReturns ensures over the function's parameters") {
+    test("a contract states expects ==>: whenReturns ensures over the function's parameters") {
         val inRange = contract(clamp)(
           expects = (x, lo, hi) => lo <= hi,
           ensures = (x, lo, hi) => r => lo <= r && r <= hi
@@ -231,7 +231,7 @@ class PropTest extends AnyFunSuite {
                     assert(sir.toString.contains(x.name), sir)
                 )
             case other =>
-                fail(s"expected expects ==> fails-clause && returns-clause && ensures, got $other")
+                fail(s"expected expects ==>: fails-clause && returns-clause && ensures, got $other")
 
         contract(clamp)(
           expects = (x, lo, hi) => lo <= hi,
@@ -248,6 +248,112 @@ class PropTest extends AnyFunSuite {
                  declared.returnsWhen(x => x > BigInt(0)).failsWhen(x => x == BigInt(0))"""
         )
         assert(errors.isEmpty, errors)
+    }
+
+    test("==>: and ==>?: are right-associative, with a Boolean operand on either side a test") {
+        val (a, b, c) = (Prop(BigInt(1) > 0), Prop(BigInt(2) > 0), Prop(BigInt(3) > 0))
+        assert((a ==>: b ==>: c) == Prop.Implies(a, Prop.Implies(b, c)))
+        assert((a ==>?: b) == Prop.Rejects(a, b))
+        assert((a ==>: b ==>?: c) == Prop.Implies(a, Prop.Rejects(b, c)))
+        // The premise is the left operand, as written, though the operator is a method of the
+        // right one; a Boolean on either side is captured as code, not evaluated.
+        forAll[BigInt](x => (x > BigInt(0)) ==>: (x + 1 > BigInt(1))) match
+            case Prop.Forall(
+                  x,
+                  Prop.Implies(
+                    Prop.Bool(PropExpr.SIRExpr(premise)),
+                    Prop.Bool(PropExpr.SIRExpr(conclusion))
+                  )
+                ) =>
+                assert(premise.toString.contains(x.name), premise)
+                assert(conclusion.toString.contains(x.name), conclusion)
+                assert(premise != conclusion)
+            case other => fail(s"expected a test that implies a test, got $other")
+        forAll[BigInt](x => succeeds(BigInt(10) / x) ==>?: (x != BigInt(0))) match
+            case Prop.Forall(_, Prop.Rejects(Prop.Denotes(_), Prop.Bool(_))) =>
+            case other => fail(s"expected a success that rejects a test, got $other")
+    }
+
+    test("implies_: is ==>: at the lowest precedence, right-associative too") {
+        val (a, b, c, d) =
+            (Prop(BigInt(1) > 0), Prop(BigInt(2) > 0), Prop(BigInt(3) > 0), Prop(BigInt(4) > 0))
+        // Looser than `&&` on either side, where `==>:` binds tighter.
+        assert((a && b implies_: c && d) == Prop.Implies(Prop.And(a, b), Prop.And(c, d)))
+        assert((a implies_: b implies_: c) == Prop.Implies(a, Prop.Implies(b, c)))
+        assert((a ==>: b implies_: c) == Prop.Implies(Prop.Implies(a, b), c))
+        // A Boolean on either side is a test of its code, and an equality needs no parentheses:
+        // the precedences differ.
+        forAll[BigInt](x => x != BigInt(0) implies_: x * x > BigInt(0)) match
+            case Prop.Forall(
+                  x,
+                  Prop.Implies(
+                    Prop.Bool(PropExpr.SIRExpr(premise)),
+                    Prop.Bool(PropExpr.SIRExpr(conclusion))
+                  )
+                ) =>
+                assert(premise.toString.contains(x.name), premise)
+                assert(conclusion.toString.contains(x.name), conclusion)
+            case other => fail(s"expected a test that implies a test, got $other")
+        assert(
+          LeftOperand.boundAs((BigInt(1) > BigInt(0)) implies_: (BigInt(2) > BigInt(1))) ==
+              "not bound"
+        )
+    }
+
+    test("Scala binds no local value for the premise of ==>:, an inline parameter") {
+        // The risk of a right-associative operator: Scala evaluates its left operand first, into a
+        // local value. Were a Boolean premise bound as a Boolean, it would be computed on the JVM,
+        // where the statement is built, and be no test. The premise of `==>:` and `==>?:` is an
+        // inline parameter, for which Scala binds nothing: it reaches its conversion as code.
+        assert(
+          LeftOperand.boundAs((BigInt(1) > BigInt(0)) ==>: (BigInt(2) > BigInt(1))) == "not bound"
+        )
+        assert(
+          LeftOperand.boundAs((BigInt(1) > BigInt(0)) ==>?: (BigInt(2) > BigInt(1))) == "not bound"
+        )
+        // That "not bound" is no blind spot of the test: an operator whose parameter is a Prop,
+        // and not inline, has its left operand bound, which the test sees.
+        val ofProp = LeftOperand.binding((BigInt(1) > BigInt(0)) <==: PropTest.PropSink)
+        info(ofProp)
+        assert(ofProp != "not bound", ofProp)
+        // The risk itself: an operator whose parameter is a Boolean, and not inline, has its left
+        // operand bound, and so evaluated, as a Boolean: the binding is the premise's code itself.
+        assert(LeftOperand.boundAs((BigInt(1) > BigInt(0)) <==: PropTest.BooleanSink) == "Boolean")
+        val evaluated = LeftOperand.binding((BigInt(1) > BigInt(0)) <==: PropTest.BooleanSink)
+        info(evaluated)
+        assert(evaluated.contains(": Boolean = ") && evaluated.contains(".>("), evaluated)
+    }
+
+    test(
+      "a Boolean premise or claim of ==>: and ==>?: is not evaluated where the statement is built"
+    ) {
+        // Evaluated, `BigInt(1) / BigInt(0)` would throw here: each side is a test of its code.
+        ((BigInt(1) / BigInt(0) > BigInt(0)) ==>: Prop(true)) match
+            case Prop.Implies(Prop.Bool(PropExpr.SIRExpr(_)), Prop.Bool(_)) =>
+            case other => fail(s"expected a test of the premise's code, got $other")
+        (Prop(true) ==>: (BigInt(1) / BigInt(0) > BigInt(0))) match
+            case Prop.Implies(Prop.Bool(_), Prop.Bool(PropExpr.SIRExpr(_))) =>
+            case other => fail(s"expected a test of the conclusion's code, got $other")
+        ((BigInt(1) / BigInt(0) > BigInt(0)) ==>?: (BigInt(1) / BigInt(0) > BigInt(1))) match
+            case Prop.Rejects(Prop.Bool(PropExpr.SIRExpr(_)), Prop.Bool(PropExpr.SIRExpr(_))) =>
+            case other => fail(s"expected tests of the premise's and the claim's code, got $other")
+    }
+
+    test("==>: or ==>?: mixed with == or != of the same precedence is a compile error") {
+        // Scala does not mix operators of one precedence and of both associativities: a Boolean
+        // premise of an equality is written in parentheses.
+        val equal = scala.compiletime.testing.typeCheckErrors(
+          """import scalus.verify.*
+             import scalus.verify.Props.*
+             forAll[BigInt](x => x == BigInt(0) ==>: fails(BigInt(10) / x))"""
+        )
+        assert(equal.exists(_.message.contains("may not be mixed")), equal)
+        val notEqual = scala.compiletime.testing.typeCheckErrors(
+          """import scalus.verify.*
+             import scalus.verify.Props.*
+             forAll[BigInt](x => x != BigInt(0) ==>?: (BigInt(10) / x != BigInt(0)))"""
+        )
+        assert(notEqual.exists(_.message.contains("may not be mixed")), notEqual)
     }
 
     test("succeeds and fails of an expression are denotes and its negation") {
@@ -278,7 +384,7 @@ class PropTest extends AnyFunSuite {
                 ) =>
                 assert(fn == div10.ref)
                 assert(when.toString.contains(x.name) && arg.toString.contains(x.name))
-            case other => fail(s"expected for all x, when ==> not call, got $other")
+            case other => fail(s"expected for all x, when ==>: not call, got $other")
 
         returnsWhen(clamp)((x, lo, hi) => lo <= hi) match
             case Prop.Forall(
@@ -296,7 +402,7 @@ class PropTest extends AnyFunSuite {
                 ) =>
                 assert(fn == clamp.ref)
                 assert(List(x, lo, hi).forall(v => arg.toString.contains(v.name)), arg)
-            case other => fail(s"expected three quantifiers around when ==> call, got $other")
+            case other => fail(s"expected three quantifiers around when ==>: call, got $other")
     }
 
     test("a statement cannot be built inside a @Compile object") {
@@ -380,5 +486,22 @@ class PropTest extends AnyFunSuite {
 
     test("a synthetic name cannot look like a qualified one") {
         assertThrows[IllegalArgumentException](FunctionDef.named("my.div", (x: BigInt) => x))
+    }
+}
+
+object PropTest {
+
+    /** A right operand of `<==:`, an operator that takes a Boolean: what `==>:` would be without
+      * `booleanToProp`, for the test of what Scala binds its left operand to.
+      */
+    object BooleanSink {
+        def <==:(evaluated: Boolean): Boolean = evaluated
+    }
+
+    /** A right operand of `<==:`, an operator that takes a `Prop`, and not inline: `==>:` as it
+      * would be without its inline premise, for the test of what Scala binds its left operand to.
+      */
+    object PropSink {
+        def <==:(premise: Prop): Prop = premise
     }
 }
