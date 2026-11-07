@@ -8,239 +8,16 @@
     }
   },
   "results": {
-    "payment_splitter.naive.every_payee_is_paid": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "81f4e8e4f3df8812",
-      "programs": [
-        "160706ae9dc6e9ee"
-      ],
-      "notes": {
-        "budget": "4958",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "every payee is paid"
-      ]
-    },
-    "payment_splitter.naive.every_payout_is_accepted": {
-      "tactic": "uplc-blaster",
-      "result": "refuted",
-      "statement": "03b50a677127c975",
-      "programs": [
-        "7afda6d9d38b825d",
-        "da85f6e9f44ae06a"
-      ],
-      "notes": {
-        "budget": "5558",
-        "kind": "Blaster"
-      },
-      "counterexample": {
-        "a": "213021",
-        "b": "213121",
-        "funds": 0,
-        "locked": 2,
-        "rest.certificates": {"list":[]},
-        "rest.currentTreasuryAmount": {"int":3},
-        "rest.data": {"list":[]},
-        "rest.datum": {"bytes":"213321"},
-        "rest.fee": {"list":[]},
-        "rest.id": {"list":[]},
-        "rest.mint": {"list":[]},
-        "rest.proposalProcedures": {"list":[]},
-        "rest.redeemer": {"bytes":"213221"},
-        "rest.redeemers": {"list":[]},
-        "rest.referenceInputs": {"list":[]},
-        "rest.signatories": {"list":[]},
-        "rest.treasuryDonation": {"int":4},
-        "rest.validRange": {"list":[]},
-        "rest.votes": {"list":[]},
-        "rest.withdrawals": {"list":[]},
-        "toA": 0,
-        "toB": 0
-      },
-      "tests": [
-        "an honest payout is accepted"
-      ]
-    },
-    "payment_splitter.naive.honest_payout_is_accepted": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "331e353364850c92",
-      "programs": [
-        "7afda6d9d38b825d",
-        "1d571b1d270396ef",
-        "da85f6e9f44ae06a"
-      ],
-      "notes": {
-        "budget": "6781",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "an honest payout is accepted"
-      ]
-    },
-    "payment_splitter.naive.no_other_key_is_paid": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "091759a2a654fa53",
-      "programs": [
-        "327c26033637a6e7",
-        "cbb7613c390c7981"
-      ],
-      "notes": {
-        "budget": "6180",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "nobody but the payees is paid"
-      ]
-    },
-    "payment_splitter.naive.no_script_is_paid": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "7a1e752977ce321b",
-      "programs": [
-        "2172e6ec39b1a641"
-      ],
-      "notes": {
-        "budget": "4787",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "nobody but the payees is paid"
-      ]
-    },
-    "payment_splitter.naive.only_a_payee_submits": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "091759a2a654fa53",
-      "programs": [
-        "327c26033637a6e7",
-        "d73161e7a75951ba"
-      ],
-      "notes": {
-        "budget": "2075",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "only a payee submits a payout"
-      ]
-    },
-    "payment_splitter.naive.only_ada_is_split": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "2a9b72baf259f3c6",
-      "programs": [
-        "3cbe9d3ae5d2585f",
-        "e3b5bf39a094480b",
-        "8bda82c809ae94fe"
-      ],
-      "notes": {
-        "budget": "3493",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "only ADA is split"
-      ]
-    },
-    "payment_splitter.naive.other_payee_is_paid_exactly_the_split": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "47784b153c5e4526",
-      "programs": [
-        "1d571b1d270396ef",
-        "da85f6e9f44ae06a"
-      ],
-      "notes": {
-        "budget": "6778",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "the payees other than the submitter are paid exactly the split"
-      ]
-    },
-    "payment_splitter.naive.split_is_exactly_half": {
-      "tactic": "uplc-blaster",
-      "result": "refuted",
-      "statement": "47784b153c5e4526",
-      "programs": [
-        "e52bba1132039e01",
-        "da85f6e9f44ae06a"
-      ],
-      "notes": {
-        "budget": "6725",
-        "kind": "Blaster"
-      },
-      "counterexample": {
-        "a": "213021",
-        "b": "213121",
-        "funds": 0,
-        "locked": 1,
-        "rest.certificates": {"list":[{"int":15}]},
-        "rest.currentTreasuryAmount": {"int":4},
-        "rest.data": {"list":[{"int":7}]},
-        "rest.datum": {"bytes":"213321"},
-        "rest.fee": {"list":[{"int":9}]},
-        "rest.id": {"list":[{"int":14}]},
-        "rest.mint": {"list":[{"int":11}]},
-        "rest.proposalProcedures": {"list":[{"int":17}]},
-        "rest.redeemer": {"bytes":"213221"},
-        "rest.redeemers": {"list":[{"int":16}]},
-        "rest.referenceInputs": {"list":[{"int":8}]},
-        "rest.signatories": {"list":[{"int":12}]},
-        "rest.treasuryDonation": {"int":5},
-        "rest.validRange": {"list":[{"int":13}]},
-        "rest.votes": {"list":[{"int":6}]},
-        "rest.withdrawals": {"list":[{"int":10}]},
-        "toA": 0,
-        "toB": 0
-      },
-      "tests": [
-        "the payees other than the submitter are paid exactly the split, negative control"
-      ]
-    },
-    "payment_splitter.optimized.spend_needs_a_withdrawal": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "8f1ae93b54019fe3",
-      "programs": [
-        "92a958a03f4341fe"
-      ],
-      "notes": {
-        "budget": "1393",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "a contract output is spent only with the stake validator's withdrawal"
-      ]
-    },
-    "payment_splitter.optimized.spend_needs_its_own_withdrawal": {
-      "tactic": "uplc-blaster",
-      "result": "proved",
-      "statement": "e48ba72563a7f646",
-      "programs": [
-        "84e9d729a0a6a17f",
-        "ffcbb526e1c16d70"
-      ],
-      "notes": {
-        "budget": "1597",
-        "kind": "Blaster"
-      },
-      "tests": [
-        "a contract output is spent only with the stake validator's withdrawal"
-      ]
-    },
     "payment_splitter.optimized.spend_redeemer_names_its_input": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "cd6fe9131d7faf3d",
+      "statement": "d5e117c510336f61",
       "programs": [
-        "da20ee8598dcb7ba",
-        "1f25af7309881085"
+        "4a4ac80d6c9d71b4",
+        "a782eadd71f22250"
       ],
       "notes": {
-        "budget": "1258",
+        "budget": "1730",
         "kind": "Blaster"
       },
       "tests": [
@@ -250,28 +27,31 @@
     "payment_splitter.optimized.spend_with_its_withdrawal_is_accepted": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "fd53816de5e94c3c",
+      "statement": "c9c917090575abda",
       "programs": [
-        "187274292b61db6d"
+        "4ebd98e18bb7130f",
+        "986cdb759d2d34e8",
+        "a782eadd71f22250"
       ],
       "notes": {
-        "budget": "1583",
+        "budget": "1600",
         "kind": "Blaster"
       },
       "tests": [
-        "a contract output is spent only with the stake validator's withdrawal"
+        "a spend with its withdrawal is accepted"
       ]
     },
     "payment_splitter.optimized.stake_is_never_delegated": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "e49bda6ff0d9f481",
+      "statement": "246bb843e4a6f614",
       "programs": [
-        "8609c6e7efb2d96f",
-        "f758b32b0e953671"
+        "cd32853d61131d79",
+        "23a14d9f2aad58b6",
+        "5133f79019e7bec4"
       ],
       "notes": {
-        "budget": "269",
+        "budget": "297",
         "kind": "Blaster"
       },
       "tests": [
@@ -281,50 +61,62 @@
     "payment_splitter.optimized.stake_registration_is_accepted": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "cb3a0ab7820177d7",
+      "statement": "86a8390ec5802b91",
       "programs": [
-        "c9a4c29c0a75baa2"
+        "7cda037ae8799580",
+        "5133f79019e7bec4"
       ],
       "notes": {
-        "budget": "259",
+        "budget": "190",
         "kind": "Blaster"
       },
       "tests": [
         "the contract's stake credential is registered and deregistered, and not delegated"
       ]
     },
-    "payment_splitter.optimized.stake_validator_accepts_an_honest_payout": {
+    "payment_splitter.samples.naive_payout_is_accepted": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "331e353364850c92",
+      "statement": "2d3cb18e20f505f4",
       "programs": [
-        "7afda6d9d38b825d",
-        "b4da1362688fbe40",
-        "e4853fb0da75878b"
+        "7baf5bc8fb6258be"
       ],
       "notes": {
-        "budget": "4844",
-        "kind": "Blaster"
+        "budget": "5569",
+        "kind": "LeanNative"
       },
       "tests": [
-        "the stake validator accepts an honest payout"
+        "sample payouts are accepted on the Lean machine"
       ]
     },
-    "payment_splitter.optimized.stake_validator_pays_exactly_the_split": {
+    "payment_splitter.samples.reward_is_accepted": {
       "tactic": "uplc-blaster",
       "result": "proved",
-      "statement": "841bff4f970680fc",
+      "statement": "2d3cb18e20f505f4",
       "programs": [
-        "bf6c1778862da16c",
-        "d83bc3d89570738b",
-        "38dc49ed12295991"
+        "2113bab3de0adbe8"
       ],
       "notes": {
-        "budget": "4891",
-        "kind": "Blaster"
+        "budget": "3652",
+        "kind": "LeanNative"
       },
       "tests": [
-        "the stake validator pays the payees other than the submitter exactly the split"
+        "sample payouts are accepted on the Lean machine"
+      ]
+    },
+    "payment_splitter.samples.spend_is_accepted": {
+      "tactic": "uplc-blaster",
+      "result": "proved",
+      "statement": "2d3cb18e20f505f4",
+      "programs": [
+        "ab682cf78bf7faf3"
+      ],
+      "notes": {
+        "budget": "693",
+        "kind": "LeanNative"
+      },
+      "tests": [
+        "sample payouts are accepted on the Lean machine"
       ]
     }
   }

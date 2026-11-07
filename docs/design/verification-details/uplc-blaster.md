@@ -447,9 +447,22 @@ through the types around it.
   accepted run is the whole validator on every path. Lean's profiler on a check written at a small
   budget would show which reads branch; a clause that read the datum once, as the validator does,
   or tighter limits for liveness alone, are what to try.
-- **HTLC and the payment splitter over real contexts.** They still build contexts from the `Data`
-  of their fields, with `ScriptContextData`, which goes once they quantify over real contexts as
-  the vesting suite does.
+- **The payment splitters' payouts.** Their statements about a payout, and the optimized spend's
+  withdrawal, are tagged `Unfinished` (see
+  [What `PaymentSplitterVerificationTest` covers](#what-paymentsplitterverificationtest-covers)):
+  their runs are long, 1500 to 3400 steps for a rejection and 3652 to 5569 for an accepted run,
+  and Lean's time grows far faster than the budget past about 1100 steps. Lean's profiler on one
+  of them at a small budget would show which reads branch most; exact lengths in the limits, one
+  shape of each value, are the next thing to try.
+- **Counting a counterexample outside the type.** Where Lean's restriction of a variable is not
+  exact, as for a map whose keys are not bytes, a counterexample can be no value of the type. It
+  refutes nothing, but Lean's variable ranges over it, so its steps on Lean's machine are what a
+  budget must cover: the search could count them, as for a spurious counterexample, instead of
+  giving up or doubling. It would find the budget of the splitter's spend, which is given by hand.
+- **Liveness under its premise.** `premise ==> succeeds(validator, …)` has Lean run the validator on
+  every context, the premise pruning none, as the rejecting form does for a guarantee. One program
+  `if premise then validator else ()`, which halts on every context exactly where the statement
+  holds, would run the validator only where the premise holds, for a premise that returns.
 - **Two walks of one name throw.** `LeanRecursions` fails with an exception where two walks of
   different text have one 64-bit name, inside `lower`, whose other failures are a `Left`. It is
   an invariant, not an error a statement can meet, but it could be told as a reason.
@@ -1297,62 +1310,60 @@ What the suite shows about the tactic:
 ## What `HtlcVerificationTest` covers
 
 `scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcVerificationTest.scala` states
-properties of the hashed timelock example, in the library's Lean workspace. The validator reads
-the datum, the redeemer, one bound of the validity range and the signatures. A statement is
-about every datum: a `Config` variable, which is one variable per field for Lean, the two keys
-among them. And it is about a transaction whose other parts are any `Data`: an `Unread` variable
-has the fourteen other fields of the transaction, the other bound of the validity range and the
-reference of the output. So that the validator reads nothing else is proved with each
-statement, and not only seen in its source. The context is written field by field, as the
-ledger encodes it; a test without Lean checks that against the ledger's types.
+properties of the hashed timelock example, in the library's Lean workspace. Its statements
+quantify over real script contexts, as the vesting suite's do: `forAllData[ScriptContext]`, or a
+`forAllDataLimited` one of at most two signatures, with what a statement is about stated as a
+premise over the typed context (a refund, a reveal, a validity range). The validator reads the
+datum, the redeemer, the validity range and the signatures; a statement holds whatever the rest
+of the context is, and of every datum and redeemer that the premise does not exclude. A premise
+reads the context as the validator does, so where the datum is not a `Config` it fails, and does
+not hold. A test without Lean checks that the samples the validator accepts meet the premises of
+the statements that it accepts, which are so not vacuous.
 
 Its source states no contract: the validator is the read of a bound and two or three `require`s
 on each of two branches, and a clause would say them again.
 
-| About | Statement | Quantified over | Budget |
-|---|---|---|---|
-| the validator | an output without a datum cannot be spent | `txInfo`, redeemer, reference: any `Data` | 600 |
-| | nothing but spending is validated | `txInfo`, redeemer, script info: any `Data` | |
-| | a redeemer that is neither action is rejected | `txInfo`, reference, datum, redeemer: any `Data` | |
-| a refund | signed by another key, by two other keys, or by nobody, it is rejected | the datum, the lower bound, the signers; what is not read | 4000 |
-| | before the timeout it is rejected | the datum, the lower bound, the signer; what is not read | |
-| | with a lower bound of the validity range that is no time it is rejected | the datum; what is not read, the upper bound with it | |
-| | from the timeout on the committer's is accepted, also where another signature comes first | the datum, the lower bound, the other signer; what is not read | |
-| a reveal | signed by another key, by two other keys, or by nobody, it is rejected | the datum, the preimage, the upper bound, the signers; what is not read | |
-| | with a validity range that ends after the timeout it is rejected | the datum, the preimage, the upper bound, the signer; what is not read | |
-| | with an upper bound of the validity range that is no time it is rejected | the datum, the preimage; what is not read, the lower bound with it | |
-| | of what is not a preimage of the image it is rejected | the datum, the preimage, the upper bound, the signer; what is not read | |
-| | up to the timeout the receiver's of a preimage is accepted, also where another signature comes first | both keys, the preimage, the timeout, the upper bound, the other signer; what is not read | |
-| both | an accepted reveal ends before any accepted refund begins | the datum, the preimage, two signers, both bounds; what is not read, of each transaction | |
-| | it accepts a transaction with the one closure of a bound where it accepts it with the other | the datum, the bound, the signer, the preimage; what is not read | |
-| samples | a reveal and a refund are accepted, and rejected unsigned or with another secret | closed, `native_decide`, on a transaction the ledger's types build | |
+| About | Statement | Quantified over | Budget | Time |
+|---|---|---|---|---|
+| the validator | an output without a datum cannot be spent | every script context, `forAllData[ScriptContext]` | 600 | 19 s |
+| | nothing but spending is validated | | | 10 s |
+| | a redeemer that is neither action is rejected | | | 11 s |
+| a refund | rejected unless the committer signs; negative control: whoever signs | every context of at most two signatures | 4000 | 20 s; 20 s |
+| | rejected unless its validity range starts at the timeout or later; negative control: after it | | | 22 s; 22 s |
+| | from the timeout on, the committer's is accepted; negative control: at any time | | | 24 s; 20 s |
+| a reveal | rejected unless the receiver signs | | | 21 s |
+| | rejected unless its validity range ends by the timeout | | | 22 s |
+| | of what is not a preimage of the image, rejected | | | 20 s |
+| | up to the timeout, the receiver's of a preimage is accepted | | | 23 s |
+| both | of two spends under one datum, where the refund starts before the reveal ends, one is rejected | two such contexts | | 80 s |
+| | the validator accepts a context where it accepts the one with the closure of either bound of its validity range the other way | every context of at most two signatures | | 39 s; 41 s |
+| samples | a reveal and a refund are accepted, the reveal up to the timeout and the refund from it, and rejected unsigned, late or with another secret | closed, `native_decide`, on a transaction the ledger's types build | | under 1 s each |
 
-The suite keeps the results of 35 statements, seven of them negative controls that are refuted,
-and takes about 3 min with Lean. On its kept results it takes up to a minute: a refutation is
+The times are of single checks with Blaster compiled, in the suite's Lean server (2026-11-06).
+The suite keeps the results of 23 statements, three of them negative controls that are refuted,
+and takes about 8 min with Lean. On its kept results it takes under a minute: a refutation is
 replayed, and one statement is asked of Lean every time, the second point below.
 
 What the suite shows about the tactic:
 
 - **A hash of unknown bytes is a function.** Lean's model declares `sha3_256` `opaque`, so a
   proof knows nothing of it but that equal bytes have equal hashes. That is enough for both
-  directions of the hash lock: a reveal is accepted where the image is written as
-  `sha3_256(preimage)`, and rejected under the premise `sha3_256(preimage) != image`. A proof
-  holds whatever the function is, and says nothing of how hard a preimage is to find. A closed
-  statement runs the real hash.
-- **A counterexample cannot name a preimage.** To "no reveal is accepted", over any image, the
-  solver gives an image it takes for the hash of its preimage. Replayed with the real hash that
-  reveal is rejected, so the counterexample is spurious and the result inconclusive: one test
-  states this. A negative control that needs an accepted reveal therefore writes the image as
-  the hash of the preimage, and is refuted. The tactic's message says that the budget is not at
-  fault, and names the hash ([Replay](#replay)).
-- **Unknown `Data` costs where a program reads it.** A refund or a reveal has no loop but the
-  search of at most two signatures: with `Budget.Auto` a refund proves at about 750 steps and a
-  reveal at about 830, and the suite's statements about them prove at its budget of 4000, with
-  sixteen parts of the context that are any `Data` and never read. With those parts written out
-  as constants the suite took 1 min 43 s. The three statements over a transaction that is any
-  `Data` as a whole took nearly three minutes together at that budget and a quarter of a minute
-  at 600: there Lean also runs the contexts that pass the check, on into the unknown
-  transaction, as for the vesting statement with any outputs.
+  directions of the hash lock: a reveal is accepted under the premise
+  `sha3_256(preimage) == image`, and rejected under its negation, where premise and validator
+  apply the one function to the one preimage. A proof holds whatever the function is, and says
+  nothing of how hard a preimage is to find. A closed statement runs the real hash.
+- **A counterexample cannot name a preimage.** To "no reveal is accepted", the solver gives a
+  context whose datum has an image it takes for the hash of the preimage. Replayed with the real
+  hash that reveal is rejected, so the counterexample is spurious and the result inconclusive:
+  one test states this. The tactic's message says that the budget is not at fault, and names the
+  hash ([Replay](#replay)). Over a context variable the image is the datum's, a value the solver
+  chooses, not one a statement computes, so no negative control can need an accepted reveal: the
+  samples, run with the real hash, show a reveal accepted up to the timeout and not after it.
+- **A real context costs no more than a written one where the validator reads little.** With the
+  context as one variable, a check of a refund or a reveal takes about 20 s, as the former
+  statements over a context written field by field, with sixteen parts of it any `Data`, did:
+  every run ends within the budget, at most two signatures searched, so a larger budget costs
+  nothing. The three statements over every context are rejections before the signatures, at 600.
 - **`.toData` on an enum case without fields did not lower**: `Action.Timeout.toData` gave
   "Unsupported conversion for `Action$.Timeout` from ProdDataList to DataConstr", in any compiled
   code and not only in a statement
@@ -1362,6 +1373,77 @@ What the suite shows about the tactic:
 What it does not show: that a bound of the validity range is inclusive or not, which the
 validator does not read and the ledger decides; a transaction of more than two signatures; and
 the published script, which `HtlcContract` compiles with other options.
+
+## What `PaymentSplitterVerificationTest` covers
+
+`scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterVerificationTest.scala`
+states properties of the naive and the optimized payment splitters, in the library's Lean
+workspace. Its statements quantify over the payees, a `forAllDataLimited` list of two keys, and
+over real script contexts, as the vesting and HTLC suites' do. A rejection is stated as what an
+accepted context is, `succeeds(validator, …) ==> claim`, which the tactic checks in the rejecting
+form: the validator runs only where the claim is false. Stated as `premise ==> fails(…)`, the
+validator ran on every context within the limits, and Lean did not finish the first statement in
+ten minutes. A claim that reads the context as the validator does, and fails where it cannot read
+it, is stated with `==>?`; a test on the Scalus CEK shows each claim true on the samples the
+validators accept, and a JVM test shows that the samples meet the premises of the statements that
+the validators accept.
+
+| About | Statement | Quantified over | Budget | Time |
+|---|---|---|---|---|
+| the naive validator | an accepted payout spends an input of a payee | two payees; contexts of two inputs of values of one token, any outputs | | not finished (`Unfinished`) |
+| | and no input of another key than a payee's and the contract's | | | not finished (`Unfinished`) |
+| | and no contract input with a token besides ADA | the same, values of two tokens | | not finished (`Unfinished`) |
+| | the other payee is paid exactly the split; negative control: half | two payees; contexts of two inputs and two outputs at most, values of one token | | not finished (`Unfinished`) |
+| | nobody but the payees is paid; every payee is paid | | | not finished (`Unfinished`) |
+| | an honest payout is accepted; negative control: any payout | | | not finished (`Unfinished`) |
+| the optimized validator | an accepted spend withdraws from the stake credential of the script of the input its redeemer names | any parameter; contexts of two inputs and two withdrawals at most | | not finished (`Unfinished`) |
+| | its redeemer names the spent input | | 1730, found | 490 s |
+| | a spend that names its input, with its withdrawal, is accepted | | 1600 | 333 s |
+| | the stake validator pays the other payee exactly the split | as the naive validator's payouts | | not finished (`Unfinished`) |
+| | the stake validator accepts an honest payout | | | not finished (`Unfinished`) |
+| | an accepted certificate registers or deregisters the stake credential; registration is accepted | any parameter; every script context | 297; 190, found | 8 s; 8 s |
+| samples | an honest payout is accepted by the naive validator, and by the optimized one's spend and stake validator | closed, `native_decide` | 5569, 693, 3652 | under 1 s each |
+
+The times are of single checks with Blaster compiled, in the suite's Lean server (2026-11-07).
+
+What the suite shows about the tactic:
+
+- **A limit on what the rejected runs do not read costs the most.** The statements about a
+  payout's inputs are rejected in the walk of the inputs, before an output is read. With the
+  outputs limited too, to two of one token each, the guard's shapes were thirteen times as many,
+  and the rejecting form was still in Lean's symbolic run at 2002 steps after five minutes;
+  without, a check at 1295 steps took 26 s.
+- **The rejected runs of a payout's inputs are long.** They walk both inputs and the values of the
+  contract's (`withoutLovelace`, `getLovelace`): on Lean's counterexamples they took up to 3357
+  steps. The budget search climbed there by spurious counterexamples, each round longer than the
+  one before, 26 s at 1295 steps, 47 s at 1673, 108 s at 2099, and at 3357 it did not finish in 27
+  minutes.
+- **A counterexample outside the type stops the search.** Lean's restriction of a context checks
+  the order of the keys of a map whose keys are bytes, not of one whose keys are credentials, as
+  the withdrawals': its variable ranges over unsorted maps too, which is sound, as a proof is then
+  of more values than the type's. But a counterexample with such a map is no context, and the
+  search neither replays it nor counts its steps. In the rejecting form it gave up at 747 steps,
+  where Lean's machine counts 772 on that counterexample; as written, and with `==>?`, it doubles
+  the budget. The spend's statements are stated with `==>?`, so that the search doubles.
+- **A claim's cost is part of every rejected run.** The rejecting program runs the claim first.
+  Stated as "some input of the spent reference has its script withdrawn", the claim searched the
+  inputs and looked each one's script up, 1854 steps on two inputs, and the rejecting program
+  took 2816; at 3200 steps it did not finish in 15 minutes, where at 1000 a check took 46 s. Stated
+  of the input the redeemer names, which the validator reads, the claim reads one input, and with
+  "the redeemer names the spent input" it says the same. The search for its budget then climbed
+  by spurious counterexamples, 12 s at 728 steps, 16 s at 856, 42 s at 1115, 273 s at 1487 and
+  707 s at 1661, and at 3322 it did not finish: the claim and the validator read the input and
+  look its script up each, and the time grew far faster than the budget past 1100 steps.
+- **A liveness statement wants the budget of its longest accepted run.** That a spend with its
+  withdrawal is accepted is stated as written, and Lean runs the validator on every context: its
+  search climbed by spurious counterexamples, 633, 752, 1081, 1103, 1122 and 1146 steps, until a
+  counterexample with two withdrawals could not be counted, and the doubled budget did not
+  finish. On the longest spend measured, the premise takes 1434 steps of Lean's machine and the
+  validator 1347; at 1600 it is proved in 333 s.
+- **What a payout pays is beyond Lean's symbolic run.** The runs of a statement about the outputs
+  walk the inputs, the outputs, and the sums of the payees, which the naive validator builds as an
+  association list; an accepted payout is 5569 steps on the sample. Lean was still in the
+  symbolic run at about 1900 to 2400 steps after five to ten minutes, in both forms.
 
 ## What `MintingPolicyVerificationTest` covers
 
@@ -1477,11 +1559,12 @@ larger context; and the published scripts, which `MintingPolicy` compiles with o
 
 ## Statements that do not finish
 
-Some statements are natural to write, and Lean does not return on them. `UplcBlasterLimitsTest`
-and two tests of `VestingVerificationTest` state them, with a time limit: the third of `spend`'s
-guarantees, and that everything can be withdrawn after the end, over contexts of at most two
-inputs. In each, how long a loop
-runs depends on a quantified value.
+Some statements are natural to write, and Lean does not return on them. `UplcBlasterLimitsTest`,
+tests of `VestingVerificationTest` and tests of `PaymentSplitterVerificationTest` state them, with
+a time limit: the third of vesting's `spend` guarantees, and that everything can be withdrawn after
+the end, over contexts of at most two inputs; and the payment splitters' statements of what a
+payout pays. In each, how long a loop runs depends on a quantified value, or the paths of the
+symbolic run multiply over the walks of several lists.
 
 These tests carry the ScalaTest tag `Unfinished`. The build leaves it out of `test` and
 `testQuick`, in `Test / test / testOptions`, so `testOnly` still runs them: by suite, by name with
