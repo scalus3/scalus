@@ -128,7 +128,7 @@ class PropTest extends AnyFunSuite {
             case other => fail(s"expected a call continuing with one test, got $other")
     }
 
-    test("a contract states expects ==> whenReturns ensures over the function's parameters") {
+    test("a contract states expects ==>: whenReturns ensures over the function's parameters") {
         val inRange = contract(clamp)(
           expects = (x, lo, hi) => lo <= hi,
           ensures = (x, lo, hi) => r => lo <= r && r <= hi
@@ -231,7 +231,7 @@ class PropTest extends AnyFunSuite {
                     assert(sir.toString.contains(x.name), sir)
                 )
             case other =>
-                fail(s"expected expects ==> fails-clause && returns-clause && ensures, got $other")
+                fail(s"expected expects ==>: fails-clause && returns-clause && ensures, got $other")
 
         contract(clamp)(
           expects = (x, lo, hi) => lo <= hi,
@@ -248,6 +248,48 @@ class PropTest extends AnyFunSuite {
                  declared.returnsWhen(x => x > BigInt(0)).failsWhen(x => x == BigInt(0))"""
         )
         assert(errors.isEmpty, errors)
+    }
+
+    test("==>: and ==>?: are right-associative, with a Boolean operand on either side a test") {
+        val (a, b, c) = (Prop(BigInt(1) > 0), Prop(BigInt(2) > 0), Prop(BigInt(3) > 0))
+        assert((a ==>: b ==>: c) == Prop.Implies(a, Prop.Implies(b, c)))
+        assert((a ==>?: b) == Prop.Rejects(a, b))
+        assert((a ==>: b ==>?: c) == Prop.Implies(a, Prop.Rejects(b, c)))
+        // The premise is the left operand, as written, though the operator is a method of the
+        // right one; a Boolean on either side is captured as code, not evaluated.
+        forAll[BigInt](x => (x > BigInt(0)) ==>: (x + 1 > BigInt(1))) match
+            case Prop.Forall(
+                  x,
+                  Prop.Implies(
+                    Prop.Bool(PropExpr.SIRExpr(premise)),
+                    Prop.Bool(PropExpr.SIRExpr(conclusion))
+                  )
+                ) =>
+                assert(premise.toString.contains(x.name), premise)
+                assert(conclusion.toString.contains(x.name), conclusion)
+                assert(premise != conclusion)
+            case other => fail(s"expected a test that implies a test, got $other")
+        forAll[BigInt](x => succeeds(BigInt(10) / x) ==>?: (x != BigInt(0))) match
+            case Prop.Forall(_, Prop.Rejects(Prop.Denotes(_), Prop.Bool(_))) =>
+            case other => fail(s"expected a success that rejects a test, got $other")
+    }
+
+    test("==>: mixed with == or != of the same precedence is a compile error") {
+        // Scala does not mix operators of one precedence and of both associativities: a Boolean
+        // premise of an equality is written in parentheses.
+        val errors = scala.compiletime.testing.typeCheckErrors(
+          """import scalus.verify.*
+             import scalus.verify.Props.*
+             forAll[BigInt](x => x == BigInt(0) ==>: fails(BigInt(10) / x))"""
+        )
+        assert(errors.exists(_.message.contains("may not be mixed")), errors)
+    }
+
+    test("the deprecated ==> and ==>? build what ==>: and ==>?: do") {
+        val (a, b) = (Prop(BigInt(1) > 0), Prop(BigInt(2) > 0))
+        @scala.annotation.nowarn("msg=deprecated") // the aliases are what is tested
+        val written = (a ==> b, a ==>? b)
+        assert(written == ((a ==>: b), (a ==>?: b)))
     }
 
     test("succeeds and fails of an expression are denotes and its negation") {
@@ -278,7 +320,7 @@ class PropTest extends AnyFunSuite {
                 ) =>
                 assert(fn == div10.ref)
                 assert(when.toString.contains(x.name) && arg.toString.contains(x.name))
-            case other => fail(s"expected for all x, when ==> not call, got $other")
+            case other => fail(s"expected for all x, when ==>: not call, got $other")
 
         returnsWhen(clamp)((x, lo, hi) => lo <= hi) match
             case Prop.Forall(
@@ -296,7 +338,7 @@ class PropTest extends AnyFunSuite {
                 ) =>
                 assert(fn == clamp.ref)
                 assert(List(x, lo, hi).forall(v => arg.toString.contains(v.name)), arg)
-            case other => fail(s"expected three quantifiers around when ==> call, got $other")
+            case other => fail(s"expected three quantifiers around when ==>: call, got $other")
     }
 
     test("a statement cannot be built inside a @Compile object") {

@@ -245,8 +245,8 @@ class PaymentSplitterVerificationTest extends AnyFunSuite with LeanProofsSuite {
     // Samples
 
     test("the claims return true on the sample payouts the validators accept") {
-        // Stated with `==>?`, a claim that failed wherever the validator returns would be proved
-        // of every context. Read with `==>` on a payout the validator accepts, each claim returns
+        // Stated with `==>?:`, a claim that failed wherever the validator returns would be proved
+        // of every context. Read with `==>:` on a payout the validator accepts, each claim returns
         // `true` there: run on the Scalus CEK, without Lean.
         val payees = Constant.Data(PaymentSplitterVerificationTest.samplePayees)
         def holdsOn(statement: Statement, context: Data): Unit =
@@ -296,20 +296,20 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
     verifier.addFunction(naive)
     verifier.addFunction(optimized)
 
-    // A rejection is stated as what an accepted context is, `succeeds(validator, …) ==> claim`,
+    // A rejection is stated as what an accepted context is, `succeeds(validator, …) ==>: claim`,
     // which the tactic checks in the rejecting form: a program that runs the validator only where
     // the claim is false, and so ends where the validator rejects that context. Stated as
-    // `premise ==> fails(validator, …)`, the validator is run on every context within the limits,
+    // `premise ==>: fails(validator, …)`, the validator is run on every context within the limits,
     // the premise pruning none, and an accepted run goes through all of it. A claim that reads
     // the context as the validator does, and fails where the validator cannot read it, is stated
-    // with `==>?`: it holds where the claim fails, and the samples show the claims true where the
+    // with `==>?:`: it holds where the claim fails, and the samples show the claims true where the
     // validators accept.
 
     val onlyAPayeeSubmits: Statement = verifier.statement(
       "payment_splitter.naive.only_a_payee_submits",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => twoInputs(ctx))(ctx =>
-              succeeds(naive, (payees.toData, ctx.toData)) ==>
+              succeeds(naive, (payees.toData, ctx.toData)) ==>:
                   (!isSpending(ctx) || ctx.txInfo.inputs.exists(input =>
                       isAPayee(payees, input.resolved.address.credential)
                   ))
@@ -321,7 +321,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.naive.no_other_key_spends",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => twoInputs(ctx))(ctx =>
-              succeeds(naive, (payees.toData, ctx.toData)) ==>?
+              succeeds(naive, (payees.toData, ctx.toData)) ==>?:
                   (!isSpending(ctx) || !spendsAnInputOfNeither(payees, ctx, spentCredential(ctx)))
           )
       )
@@ -331,7 +331,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.naive.other_payee_is_paid_exactly_the_split",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
-              succeeds(naive, (payees.toData, ctx.toData)) ==>? (!isSpending(ctx) ||
+              succeeds(naive, (payees.toData, ctx.toData)) ==>?: (!isSpending(ctx) ||
                   !someOtherPayeeIsNotPaidTheSplit(payees, ctx, spentCredential(ctx)))
           )
       )
@@ -341,7 +341,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.naive.split_is_exactly_half",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
-              succeeds(naive, (payees.toData, ctx.toData)) ==>? (!isSpending(ctx) ||
+              succeeds(naive, (payees.toData, ctx.toData)) ==>?: (!isSpending(ctx) ||
                   !someOtherPayeeIsNotPaidExactlyAShare(payees, ctx, spentCredential(ctx)))
           )
       )
@@ -351,7 +351,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.naive.nobody_but_the_payees_is_paid",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
-              succeeds(naive, (payees.toData, ctx.toData)) ==>
+              succeeds(naive, (payees.toData, ctx.toData)) ==>:
                   (!isSpending(ctx) || ctx.txInfo.outputs.forall(output =>
                       isAPayee(payees, output.address.credential)
                   ))
@@ -363,7 +363,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.naive.every_payee_is_paid",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
-              succeeds(naive, (payees.toData, ctx.toData)) ==>
+              succeeds(naive, (payees.toData, ctx.toData)) ==>:
                   (!isSpending(ctx) || payees.forall(payee => isPaid(ctx, payee)))
           )
       )
@@ -373,7 +373,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.naive.only_ada_is_split",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => twoInputsWithTokens(ctx))(ctx =>
-              succeeds(naive, (payees.toData, ctx.toData)) ==>? (!isSpending(ctx) ||
+              succeeds(naive, (payees.toData, ctx.toData)) ==>?: (!isSpending(ctx) ||
                   !spendsAContractInputWithTokens(payees, ctx, spentCredential(ctx)))
           )
       )
@@ -384,7 +384,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
               (isSpending(ctx) && areDifferent(payees) &&
-                  isAPayoutOfTheSplit(payees, ctx, spentCredential(ctx))) ==>
+                  isAPayoutOfTheSplit(payees, ctx, spentCredential(ctx))) ==>:
                   succeeds(naive, (payees.toData, ctx.toData))
           )
       )
@@ -395,7 +395,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
               (isSpending(ctx) && areDifferent(payees) &&
-                  isAPayout(payees, ctx, spentCredential(ctx))) ==>
+                  isAPayout(payees, ctx, spentCredential(ctx))) ==>:
                   succeeds(naive, (payees.toData, ctx.toData))
           )
       )
@@ -405,7 +405,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.optimized.spend_needs_its_own_withdrawal",
       forAll[Data](parameter =>
           forAllDataLimited[ScriptContext](ctx => aSpend(ctx))(ctx =>
-              succeeds(optimized, (parameter, ctx.toData)) ==>?
+              succeeds(optimized, (parameter, ctx.toData)) ==>?:
                   (!isSpending(ctx) || isWithdrawnFrom(ctx, namedInput(ctx)))
           )
       )
@@ -416,7 +416,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       forAll[Data](parameter =>
           forAllDataLimited[ScriptContext](ctx => aSpend(ctx))(ctx =>
               (isSpending(ctx) && namesTheSpentInput(ctx) && isWithdrawnFrom(ctx, namedInput(ctx)))
-                  ==> succeeds(optimized, (parameter, ctx.toData))
+                  ==>: succeeds(optimized, (parameter, ctx.toData))
           )
       )
     )
@@ -425,7 +425,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.optimized.spend_redeemer_names_its_input",
       forAll[Data](parameter =>
           forAllDataLimited[ScriptContext](ctx => aSpend(ctx))(ctx =>
-              succeeds(optimized, (parameter, ctx.toData)) ==>?
+              succeeds(optimized, (parameter, ctx.toData)) ==>?:
                   (!isSpending(ctx) || namesTheSpentInput(ctx))
           )
       )
@@ -435,7 +435,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.optimized.stake_validator_pays_exactly_the_split",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
-              succeeds(optimized, (payees.toData, ctx.toData)) ==> (!isRewarding(ctx) ||
+              succeeds(optimized, (payees.toData, ctx.toData)) ==>: (!isRewarding(ctx) ||
                   !someOtherPayeeIsNotPaidTheSplit(payees, ctx, rewardedCredential(ctx)))
           )
       )
@@ -445,7 +445,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.optimized.stake_validator_accepts_an_honest_payout",
       forAllDataLimited[prelude.List[ByteString]](payees => payees.length == 2)(payees =>
           forAllDataLimited[ScriptContext](ctx => aPayout(ctx))(ctx =>
-              (isRewarding(ctx) && areDifferent(payees) && claimsAnHonestPayout(payees, ctx)) ==>
+              (isRewarding(ctx) && areDifferent(payees) && claimsAnHonestPayout(payees, ctx)) ==>:
                   succeeds(optimized, (payees.toData, ctx.toData))
           )
       )
@@ -455,7 +455,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.optimized.stake_is_never_delegated",
       forAll[Data](parameter =>
           forAllData[ScriptContext](ctx =>
-              succeeds(optimized, (parameter, ctx.toData)) ==>
+              succeeds(optimized, (parameter, ctx.toData)) ==>:
                   (!isCertifying(ctx) || registersOrDeregisters(ctx))
           )
       )
@@ -465,7 +465,7 @@ final class PaymentSplitterProofs(val verifier: Verifier) {
       "payment_splitter.optimized.stake_registration_is_accepted",
       forAll[Data](parameter =>
           forAllData[ScriptContext](ctx =>
-              registersOrDeregisters(ctx) ==> succeeds(optimized, (parameter, ctx.toData))
+              registersOrDeregisters(ctx) ==>: succeeds(optimized, (parameter, ctx.toData))
           )
       )
     )

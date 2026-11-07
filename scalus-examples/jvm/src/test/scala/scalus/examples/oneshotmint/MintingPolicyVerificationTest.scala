@@ -142,7 +142,7 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val seedMintsTheTokens = verifier.statement(
       "one_shot_mint.mint.seed_mints_the_tokens",
       forAll[Mint](m =>
-          (spendsTheSeed(m) && firstIsOwn(m) && m.token == m.name && m.quantity == m.amount) ==>
+          (spendsTheSeed(m) && firstIsOwn(m) && m.token == m.name && m.quantity == m.amount) ==>:
               succeeds(mints, m)
       )
     )
@@ -150,7 +150,7 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val seedMintsAnyQuantity = verifier.refute(
       "one_shot_mint.mint.seed_mints_any_quantity",
       forAll[Mint](m =>
-          (spendsTheSeed(m) && firstIsOwn(m) && m.token == m.name) ==> succeeds(mints, m)
+          (spendsTheSeed(m) && firstIsOwn(m) && m.token == m.name) ==>: succeeds(mints, m)
       )
     )
 
@@ -164,13 +164,13 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
     private val burnsWithoutTheSeed = verifier.statement(
       "one_shot_mint.mint.burns_without_the_seed",
       forAll[Mint](m =>
-          (!spendsTheSeed(m) && firstIsOwn(m) && m.quantity < BigInt(0)) ==> succeeds(mints, m)
+          (!spendsTheSeed(m) && firstIsOwn(m) && m.quantity < BigInt(0)) ==>: succeeds(mints, m)
       )
     )
 
     private val acceptedOnlyWithTheSeed = verifier.refute(
       "one_shot_mint.mint.accepted_only_with_the_seed",
-      forAll[Mint](m => succeeds(mints, m) ==> spendsTheSeed(m))
+      forAll[Mint](m => succeeds(mints, m) ==>: spendsTheSeed(m))
     )
 
     test("a transaction that does not spend the seed burns the tokens") {
@@ -212,7 +212,7 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
           forAllDataLimited[v1.ScriptContext](ctx =>
               ctx.txInfo.inputs.length <= 2 && ctx.txInfo.mint.toSortedMap.length <= 2 &&
                   ctx.txInfo.mint.toSortedMap.values.forall(tokens => tokens.length <= 2)
-          )(ctx => succeeds(deployed, ctx.toData) ==> onlyTheSeedMints(ctx))
+          )(ctx => succeeds(deployed, ctx.toData) ==>: onlyTheSeedMints(ctx))
         )
         check(limited, 2500)
     }
@@ -226,20 +226,20 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
         // on that rewriting. It takes the deserializer as given; the statement above, of the
         // context's own type, is of the deserializer too.
         //
-        // It is stated with `==>?`: a context the deserializer cannot read, where the claim fails,
+        // It is stated with `==>?:`: a context the deserializer cannot read, where the claim fails,
         // is no counterexample, and the claim says nothing of it. The statement above says what
         // the script does there. So the check is the rejecting program alone, `if claim then error
         // else script`, without the claim that the claim returns, which fails where the
-        // deserializer does, and without a check of the statement with `==>` after it.
+        // deserializer does, and without a check of the statement with `==>:` after it.
         val asRead = verifier.statement(
           "one_shot_mint.deployed.only_the_seed_mints_as_read.two_of_each",
           forAllDataLimited[v1.ScriptContext](ctx =>
               ctx.txInfo.inputs.length <= 2 && ctx.txInfo.mint.toSortedMap.length <= 2 &&
                   ctx.txInfo.mint.toSortedMap.values.forall(tokens => tokens.length <= 2)
-          )(ctx => succeeds(deployed, ctx.toData) ==>? onlyTheSeedMintsAsRead(ctx.toData))
+          )(ctx => succeeds(deployed, ctx.toData) ==>?: onlyTheSeedMintsAsRead(ctx.toData))
         )
         // The rejecting program runs the claim's deserializer and then the script: at the 2500
-        // steps the statement with `==>` was proved at, the runs are cut, and at 5000 it is proved
+        // steps the statement with `==>:` was proved at, the runs are cut, and at 5000 it is proved
         // in 75 s.
         check(asRead, 5000)
     }
@@ -255,7 +255,7 @@ class MintingPolicyVerificationTest extends AnyFunSuite with LeanProofsSuite {
         val deployedOnlyTheSeedMints = verifier.statement(
           "one_shot_mint.deployed.only_the_seed_mints",
           forAllData[v1.ScriptContext](ctx =>
-              succeeds(deployed, ctx.toData) ==> onlyTheSeedMints(ctx)
+              succeeds(deployed, ctx.toData) ==>: onlyTheSeedMints(ctx)
           )
         )
         // At 2000 steps Lean was still in the symbolic run of a test after 10 minutes.

@@ -539,7 +539,7 @@ private[verify] object PropMacro {
             case other => report.errorAndAbort(message, other.pos)
     }
 
-    /** `∀ args. expects(args) ==> whenReturns(fn, args)(r => ensures(args)(r))`, or a total `call`
+    /** `∀ args. expects(args) ==>: whenReturns(fn, args)(r => ensures(args)(r))`, or a total `call`
       * in place of `whenReturns` (design doc §3.7), as a [[FunctionContract]].
       *
       * The arguments are the parameters of `expects`, whose types the overload of `Props.contract`
@@ -614,8 +614,8 @@ private[verify] object PropMacro {
                     .asExprOf[Arg]
     }
 
-    /** `∀ args. when(args) ==> succeeds(fn, args)`, or `==> fails(fn, args)`: the function returns,
-      * or fails, on every argument that satisfies `when`. `succeeds` is the total call
+    /** `∀ args. when(args) ==>: succeeds(fn, args)`, or `==>: fails(fn, args)`: the function
+      * returns, or fails, on every argument that satisfies `when`. `succeeds` is the total call
       * `call(fn, args)(_ => true)`, and `fails` is its negation, so this is only syntax over
       * existing statements.
       */
@@ -652,8 +652,8 @@ private[verify] object PropMacro {
             }
         }
 
-    /** The parameters of the lambda literal `when`, and `when ==> succeeds(fn, parameters)` or
-      * `when ==> fails(fn, parameters)` over them.
+    /** The parameters of the lambda literal `when`, and `when ==>: succeeds(fn, parameters)` or
+      * `when ==>: fails(fn, parameters)` over them.
       */
     private def outcomeWhen[Arg: Type, R: Type](using
         Quotes
@@ -674,7 +674,7 @@ private[verify] object PropMacro {
 
     private val choiceHint =
         "An if or match that chooses between statements is not supported: state each case with " +
-            "==>, as (c ==> p) && (!c ==> q). An if or match over Boolean tests is itself one test."
+            "==>:, as (c ==>: p) && (!c ==>: q). An if or match over Boolean tests is itself one test."
 
     /** Reports every use of `symbols` left in a statement body, where the leaves have already
       * replaced their own uses. A remaining use computes the statement itself.

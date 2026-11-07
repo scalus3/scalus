@@ -212,13 +212,13 @@ class PreludeProofsTest extends AnyFunSuite with LeanProofsSuite {
     private val clampStaysInRange = verifier.statement(
       "prelude.clamp.in_range",
       forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-          (lo <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
+          (lo <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => lo <= r && r <= hi)
       )
     )
     private val clampKeepsAValueInRange = verifier.statement(
       "prelude.clamp.keeps_a_value_in_range",
       forAll[BigInt, BigInt, BigInt]((x, lo, hi) =>
-          (lo <= x && x <= hi) ==> callRef(clamp.ref, (x, lo, hi))(r => r == x)
+          (lo <= x && x <= hi) ==>: callRef(clamp.ref, (x, lo, hi))(r => r == x)
       )
     )
     // negative control: without lo <= hi the range is empty
@@ -232,23 +232,23 @@ class PreludeProofsTest extends AnyFunSuite with LeanProofsSuite {
     // exp2
     private val exp2OfANegativeExponentIsZero = verifier.statement(
       "prelude.exp2.negative_exponent",
-      forAll[BigInt](e => (e < BigInt(0)) ==> callRef(exp2.ref, e)(r => r == BigInt(0)))
+      forAll[BigInt](e => (e < BigInt(0)) ==>: callRef(exp2.ref, e)(r => r == BigInt(0)))
     )
     // negative control
     private val exp2OfANegativeExponentIsOne = verifier.refute(
       "prelude.exp2.negative_exponent_one",
-      forAll[BigInt](e => (e < BigInt(0)) ==> callRef(exp2.ref, e)(r => r == BigInt(1)))
+      forAll[BigInt](e => (e < BigInt(0)) ==>: callRef(exp2.ref, e)(r => r == BigInt(1)))
     )
 
     // an Option match
     private val aPositiveValueIsDoubled = verifier.statement(
       "prelude.option_match.doubles_a_positive_value",
-      forAll[BigInt](x => (x > BigInt(0)) ==> callRef(optDoubleOrDefault.ref, x)(r => r == x * 2))
+      forAll[BigInt](x => (x > BigInt(0)) ==>: callRef(optDoubleOrDefault.ref, x)(r => r == x * 2))
     )
     private val otherwiseTheDefault = verifier.statement(
       "prelude.option_match.defaults_otherwise",
       forAll[BigInt](x =>
-          (x <= BigInt(0)) ==> callRef(optDoubleOrDefault.ref, x)(r => r == BigInt(-1))
+          (x <= BigInt(0)) ==>: callRef(optDoubleOrDefault.ref, x)(r => r == BigInt(-1))
       )
     )
     // negative control: a non-positive value is not doubled
