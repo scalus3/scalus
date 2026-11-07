@@ -674,7 +674,8 @@ private[verify] object PropMacro {
 
     private val choiceHint =
         "An if or match that chooses between statements is not supported: state each case with " +
-            "==>:, as (c ==>: p) && (!c ==>: q). An if or match over Boolean tests is itself one test."
+            "==>:, as (c ==>: p) && (!c ==>: q). An if or match over Boolean tests is itself " +
+            "one test."
 
     /** Reports every use of `symbols` left in a statement body, where the leaves have already
       * replaced their own uses. A remaining use computes the statement itself.
