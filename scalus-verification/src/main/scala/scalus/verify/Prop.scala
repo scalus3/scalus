@@ -89,9 +89,11 @@ enum Prop {
       * operand, so the premise is the argument: `p ==>: q` is `q.==>:(p)`, `Implies(p, q)`.
       *
       * The premise is an inline parameter. Scala evaluates the left operand of a right-associative
-      * call first, binding it to a local value, except where it is given to an inline parameter: so
-      * a premise written as a Boolean reaches its conversion, [[Props.booleanToProp]], as code, and
-      * is a test of that code, not a value computed where the statement is built.
+      * call first, binding it to a local value, except where it is given to an inline parameter. A
+      * premise written as a Boolean is converted by [[Props.booleanToProp]], into a test of its
+      * code, before Scala binds it; an inline premise is not bound at all, so it reaches the
+      * conversion as code whatever that order is. The right operand, `this`, is then built first,
+      * which changes nothing: the names of a statement's variables are fixed where it is compiled.
       */
     inline def ==>:(inline premise: Prop): Prop = Implies(premise, this)
 
@@ -598,15 +600,11 @@ object Props {
 
     inline def equal[A](inline a: A, inline b: A): Prop = ${ PropMacro.equal('a, 'b) }
 
-    /** A Boolean, as the test of its code. Through it a Boolean on either side of `==>:` or `==>?:`
-      * is a test: as their premise, an inline parameter, or as their right operand, of which they
-      * are methods.
+    /** A Boolean, as the test of its code. Through it a Boolean on either side of `==>:`, `==>?:`
+      * or a connective of `Prop` is a test: as their argument, or as the operand they are methods
+      * of.
       */
     implicit inline def booleanToProp(inline b: Boolean): Prop = ${ PropMacro.test('b) }
-
-    extension (inline b: Boolean) {
-        infix inline def implies(q: Prop): Prop = Prop.Implies(Prop(b), q)
-    }
 }
 
 object Prop {

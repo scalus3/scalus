@@ -1019,7 +1019,7 @@ lengthen a list within 100.
 
 ### Limits of a variable's collections
 
-`forAllDataLimited[A](x => limit)(x => body)` is `forAllData[A](x => limit ==>: body)`, where `limit`
+`forAllDataLimited[A](x => limit)(x => body)` is `forAllData[A](x => (limit) ==>: body)`, where `limit`
 says how many elements the collections of `x` have. A collection is a list or a map of the type, as
 its `Data` encoding has it: the fields of a case class are none, and neither is a list in a field of
 type `Data`. The macro turns `limit` into `Limits` at compile time, a list of `Limit`s:

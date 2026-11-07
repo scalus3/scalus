@@ -272,6 +272,10 @@ class PropTest extends AnyFunSuite {
         forAll[BigInt](x => succeeds(BigInt(10) / x) ==>?: (x != BigInt(0))) match
             case Prop.Forall(_, Prop.Rejects(Prop.Denotes(_), Prop.Bool(_))) =>
             case other => fail(s"expected a success that rejects a test, got $other")
+        // `implies` of a Boolean, through the conversion of the operand it is a method of.
+        ((BigInt(1) / BigInt(0) > BigInt(0)) implies c) match
+            case Prop.Implies(Prop.Bool(PropExpr.SIRExpr(_)), `c`) =>
+            case other => fail(s"expected a test of the premise's code, got $other")
     }
 
     test("Scala binds no local value for the premise of ==>:, an inline parameter") {
@@ -285,6 +289,11 @@ class PropTest extends AnyFunSuite {
         assert(
           LeftOperand.boundAs((BigInt(1) > BigInt(0)) ==>?: (BigInt(2) > BigInt(1))) == "not bound"
         )
+        // That "not bound" is no blind spot of the test: an operator whose parameter is a Prop,
+        // and not inline, has its left operand bound, which the test sees.
+        val ofProp = LeftOperand.binding((BigInt(1) > BigInt(0)) <==: PropTest.PropSink)
+        info(ofProp)
+        assert(ofProp != "not bound", ofProp)
         // The risk itself: an operator whose parameter is a Boolean, and not inline, has its left
         // operand bound, and so evaluated, as a Boolean: the binding is the premise's code itself.
         assert(LeftOperand.boundAs((BigInt(1) > BigInt(0)) <==: PropTest.BooleanSink) == "Boolean")
@@ -465,5 +474,12 @@ object PropTest {
       */
     object BooleanSink {
         def <==:(evaluated: Boolean): Boolean = evaluated
+    }
+
+    /** A right operand of `<==:`, an operator that takes a `Prop`, and not inline: `==>:` as it
+      * would be without its inline premise, for the test of what Scala binds its left operand to.
+      */
+    object PropSink {
+        def <==:(premise: Prop): Prop = premise
     }
 }
