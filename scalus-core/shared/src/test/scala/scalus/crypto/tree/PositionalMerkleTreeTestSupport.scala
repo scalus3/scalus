@@ -74,9 +74,13 @@ object PositionalMerkleTreeTestSupport {
         assert(cases.map(_.count).toSet == expectedCounts)
         assert(cases.size == expectedCounts.size)
         assert(cases.forall(_.singles.nonEmpty))
+        assert(cases.forall(v => v.singles.forall(s => s.occupied == (s.position < v.count))))
         assert(cases.filter(_.count > 0).forall(_.multis.nonEmpty))
         cases
     }
+
+    def assertReferenceHash(actual: ByteString, expectedHex: String): Unit =
+        org.scalatest.Assertions.assert(actual == ByteString.fromHex(expectedHex))
 
     def element(index: Int): ByteString = ByteString.fromString(s"element-${index % 7}")
     def uniqueElement(index: Int): ByteString = ByteString.fromString(s"unique-element-$index")

@@ -37,11 +37,12 @@ class PositionalMerkleTreeTest extends AnyFunSuite with ScalaCheckPropertyChecks
                 val tree = PositionalMerkleTree.fromElements(data, depth, hash)
                 val model = naive(data, depth, hash)
                 val expected = ByteString.fromHex(v.root)
-                assert(tree.rootHash == expected)
+                assertReferenceHash(tree.rootHash, v.root)
                 assert(model.root == expected)
                 counts("materialized") += 1
-                assert(
-                  PositionalMerkleTree.rootFromElements(data.iterator, depth, hash) == expected
+                assertReferenceHash(
+                  PositionalMerkleTree.rootFromElements(data.iterator, depth, hash),
+                  v.root
                 )
                 counts("streaming") += 1
                 for single <- v.singles do
@@ -50,22 +51,17 @@ class PositionalMerkleTreeTest extends AnyFunSuite with ScalaCheckPropertyChecks
                     )
                     assert(model.proof(single.position) == ByteString.fromHex(single.proof))
                     counts("single proofs") += 1
-                    if single.occupied then
-                        assert(
-                          tree.emptied(Vector(single.position)).rootHash == ByteString.fromHex(
-                            single.emptiedRoot
-                          )
+                    if single.position < v.count then
+                        assertReferenceHash(
+                          tree.emptied(Vector(single.position)).rootHash,
+                          single.emptiedRoot
                         )
                         counts("emptied") += 1
                 for multi <- v.multis do
                     assert(model.helpers(multi.positions).map(_._1) == multi.helperIndices)
                     assert(tree.proveMulti(multi.positions) == ByteString.fromHex(multi.proof))
                     assert(model.multiProof(multi.positions) == ByteString.fromHex(multi.proof))
-                    assert(
-                      tree.emptied(multi.positions).rootHash == ByteString.fromHex(
-                        multi.emptiedRoot
-                      )
-                    )
+                    assertReferenceHash(tree.emptied(multi.positions).rootHash, multi.emptiedRoot)
                     counts("multiproofs") += 1
             for backend <- Vector(
                   "materialized",

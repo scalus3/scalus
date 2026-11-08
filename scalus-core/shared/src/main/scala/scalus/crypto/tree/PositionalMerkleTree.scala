@@ -33,9 +33,8 @@ final class PositionalMerkleTree private (
       * the on-chain verifier refuses membership or emptying of those slots.
       */
     def proveMembership(position: Int): ByteString = {
-        checkPosition(position)
         val out = new java.io.ByteArrayOutputStream(depth * 32)
-        var index = capacity + position
+        var index = leafIndex(depth, position)
         while index > 1 do
             out.write(hashes(index ^ 1).bytes)
             index >>= 1
@@ -86,8 +85,10 @@ final class PositionalMerkleTree private (
         new PositionalMerkleTree(depth, updated, nodeHash)
     }
 
-    private def checkPosition(position: Int): Unit =
-        require(position >= 0 && position < capacity, "PositionalMerkleTree: position out of range")
+    private def checkPosition(position: Int): Unit = {
+        leafIndex(depth, position)
+        ()
+    }
 
     private def checkPositions(positions: IndexedSeq[Int]): Unit = {
         require(positions.nonEmpty, "PositionalMerkleTree: empty query")
@@ -114,15 +115,17 @@ object PositionalMerkleTree {
     /** Build with a custom 32-byte node digest, for interoperability tests or off-chain use.
       *
       * Leaf hashing remains BLAKE2b-256. The digest is applied to the concatenation of two child
-      * hashes. Only the default BLAKE2b-256 digest is compatible with the on-chain API.
+      * hashes. Each result must be exactly 32 bytes; malformed results are rejected and digest
+      * exceptions propagate. Only the default BLAKE2b-256 digest is compatible with the on-chain
+      * API.
       */
     def fromElements(
         elements: IterableOnce[ByteString],
         depth: Int,
         nodeHash: ByteString => ByteString
     ): PositionalMerkleTree = {
-        require(depth >= 0 && depth <= 29, "PositionalMerkleTree: materialized depth must be 0..29")
-        val capacity = 1 << depth
+        val capacity = capacityAtDepth(depth)
+        val digest = checkedNodeHash(nodeHash)
         val hashes = Array.fill(capacity * 2)(EmptyLeafHash)
         val input = elements.iterator
         var count = 0
@@ -132,9 +135,9 @@ object PositionalMerkleTree {
             count += 1
         var index = capacity - 1
         while index > 0 do
-            hashes(index) = nodeHash(appendByteString(hashes(index * 2), hashes(index * 2 + 1)))
+            hashes(index) = digest(appendByteString(hashes(index * 2), hashes(index * 2 + 1)))
             index -= 1
-        new PositionalMerkleTree(depth, hashes.toVector, nodeHash)
+        new PositionalMerkleTree(depth, hashes.toVector, digest)
     }
 
     /** Root of at most 2^depth elements in one pass with O(depth) auxiliary memory (depth 0..256).
@@ -154,6 +157,7 @@ object PositionalMerkleTree {
         nodeHash: ByteString => ByteString
     ): ByteString = {
         require(depth >= 0 && depth <= 256, "PositionalMerkleTree: depth must be 0..256")
+        val digest = checkedNodeHash(nodeHash)
         val capacity = BigInt(1) << depth
         val frontier = new Array[ByteString](depth + 1)
         var count = BigInt(0)
@@ -163,7 +167,7 @@ object PositionalMerkleTree {
             var hash = leafHash(input.next())
             var level = 0
             while count.testBit(level) do
-                hash = nodeHash(appendByteString(frontier(level), hash))
+                hash = digest(appendByteString(frontier(level), hash))
                 level += 1
             frontier(level) = hash
             count += 1
@@ -175,12 +179,29 @@ object PositionalMerkleTree {
             var level = 0
             while level < depth do
                 hash =
-                    if count.testBit(level) then nodeHash(appendByteString(frontier(level), hash))
-                    else nodeHash(appendByteString(hash, zero))
-                zero = nodeHash(appendByteString(zero, zero))
+                    if count.testBit(level) then digest(appendByteString(frontier(level), hash))
+                    else digest(appendByteString(hash, zero))
+                zero = digest(appendByteString(zero, zero))
                 level += 1
             hash
     }
+
+    private[tree] def capacityAtDepth(depth: Int): Int = {
+        require(depth >= 0 && depth <= 29, "PositionalMerkleTree: materialized depth must be 0..29")
+        1 << depth
+    }
+
+    private[tree] def leafIndex(depth: Int, position: Int): Int = {
+        val capacity = capacityAtDepth(depth)
+        require(position >= 0 && position < capacity, "PositionalMerkleTree: position out of range")
+        capacity + position
+    }
+
+    private def checkedNodeHash(nodeHash: ByteString => ByteString): ByteString => ByteString =
+        input =>
+            val hash = nodeHash(input)
+            require(hash.size == 32, "PositionalMerkleTree: node digest must be 32 bytes")
+            hash
 
     private def leafHash(element: ByteString): ByteString = {
         val hash = blake2b_256(element)

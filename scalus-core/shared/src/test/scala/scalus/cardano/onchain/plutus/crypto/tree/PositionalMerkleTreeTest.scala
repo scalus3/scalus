@@ -54,11 +54,10 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
                       element(s.position),
                       ByteString.fromHex(s.proof)
                     )
-                    if s.occupied then
-                        val expected = ByteString.fromHex(s.emptiedRoot)
-                        assert(scalaSingle(input) == expected)
+                    if s.position < v.count then
+                        assertReferenceHash(scalaSingle(input), s.emptiedRoot)
                         scalaSingles += 1
-                        assert(returned(singleResult(input)) == expected)
+                        assertReferenceHash(returned(singleResult(input)), s.emptiedRoot)
                         uplcSingles += 1
                         assert(scalaMembership(input) == root)
                         assert(returned(membershipResult(input)) == root)
@@ -70,10 +69,9 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
                       SList.from(m.positions.map(p => Leaf(BigInt(p), element(p)))),
                       ByteString.fromHex(m.proof)
                     )
-                    val expected = ByteString.fromHex(m.emptiedRoot)
-                    assert(scalaMulti(input) == expected)
+                    assertReferenceHash(scalaMulti(input), m.emptiedRoot)
                     scalaMultis += 1
-                    assert(returned(multiResult(input)) == expected)
+                    assertReferenceHash(returned(multiResult(input)), m.emptiedRoot)
                     uplcMultis += 1
             assert(
               scalaSingles > 0 && uplcSingles == scalaSingles,
