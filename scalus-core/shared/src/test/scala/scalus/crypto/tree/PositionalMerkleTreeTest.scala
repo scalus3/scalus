@@ -10,36 +10,72 @@ import scalus.uplc.builtin.Builtins.{blake2b_256, sha2_256}
 class PositionalMerkleTreeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     import PositionalMerkleTreeTestSupport.*
 
-    test("Ethereum v1.5.0 reference: SHA-256 and BLAKE2b roots, paths, helpers and emptied roots") {
-        assert(vectors.size == 42)
-        assert(vectors.map(_.depth).toSet == Set(1, 2, 3, 4, 5, 6, 15))
-        for v <- vectors do
-            val hash = if v.algorithm == "sha256" then sha2_256 else blake2b_256
-            val data = elements(v.count)
-            val tree = PositionalMerkleTree.fromElements(data, v.depth, hash)
-            val model = naive(data, v.depth)
+    test(
+      "maintained SSZ fixture covers both hashes and keeps v1.5.0 as an arithmetic cross-check"
+    ) {
+        assert(vectors.size == 86)
+        assert(vectors.map(_.algorithm).toSet == referenceHashes.toSet)
+        assert(vectors.map(_.depth).toSet == referenceDepths.toSet)
+        assert(legacyVectors.size == 42)
+        for legacy <- legacyVectors do
             assert(
-              tree.rootHash == ByteString.fromHex(v.root),
-              s"${v.algorithm}/${v.depth}/${v.shape}"
+              vectors
+                  .find(v =>
+                      v.algorithm == legacy.algorithm && v.depth == legacy.depth && v.shape == legacy.shape
+                  )
+                  .contains(legacy)
             )
-            assert(
-              PositionalMerkleTree.rootFromElements(data.iterator, v.depth, hash) == tree.rootHash
-            )
-            for single <- v.singles do
-                assert(tree.proveMembership(single.position) == ByteString.fromHex(single.proof))
-                if single.occupied then
+    }
+
+    for algorithm <- referenceHashes; depth <- referenceDepths do
+        test(s"maintained SSZ arithmetic: $algorithm at depth $depth on each off-chain backend") {
+            val cases = referenceCases(vectors, algorithm, depth)
+            val hash = if algorithm == "sha256" then sha2_256 else blake2b_256
+            val counts = collection.mutable.Map.empty[String, Int].withDefaultValue(0)
+            for v <- cases do
+                val data = elements(v.count)
+                val tree = PositionalMerkleTree.fromElements(data, depth, hash)
+                val model = naive(data, depth, hash)
+                val expected = ByteString.fromHex(v.root)
+                assert(tree.rootHash == expected)
+                assert(model.root == expected)
+                counts("materialized") += 1
+                assert(
+                  PositionalMerkleTree.rootFromElements(data.iterator, depth, hash) == expected
+                )
+                counts("streaming") += 1
+                for single <- v.singles do
                     assert(
-                      tree.emptied(Vector(single.position)).rootHash == ByteString.fromHex(
-                        single.emptiedRoot
+                      tree.proveMembership(single.position) == ByteString.fromHex(single.proof)
+                    )
+                    assert(model.proof(single.position) == ByteString.fromHex(single.proof))
+                    counts("single proofs") += 1
+                    if single.occupied then
+                        assert(
+                          tree.emptied(Vector(single.position)).rootHash == ByteString.fromHex(
+                            single.emptiedRoot
+                          )
+                        )
+                        counts("emptied") += 1
+                for multi <- v.multis do
+                    assert(model.helpers(multi.positions).map(_._1) == multi.helperIndices)
+                    assert(tree.proveMulti(multi.positions) == ByteString.fromHex(multi.proof))
+                    assert(model.multiProof(multi.positions) == ByteString.fromHex(multi.proof))
+                    assert(
+                      tree.emptied(multi.positions).rootHash == ByteString.fromHex(
+                        multi.emptiedRoot
                       )
                     )
-            for multi <- v.multis do
-                assert(model.helpers(multi.positions).map(_._1) == multi.helperIndices)
-                assert(tree.proveMulti(multi.positions) == ByteString.fromHex(multi.proof))
-                assert(
-                  tree.emptied(multi.positions).rootHash == ByteString.fromHex(multi.emptiedRoot)
+                    counts("multiproofs") += 1
+            for backend <- Vector(
+                  "materialized",
+                  "streaming",
+                  "single proofs",
+                  "emptied",
+                  "multiproofs"
                 )
-    }
+            do assert(counts(backend) > 0, s"No $algorithm/depth=$depth/$backend cases executed")
+        }
 
     private def compare(data: Vector[ByteString], depth: Int, positions: Vector[Int]): Unit = {
         val tree = PositionalMerkleTree.fromElements(data, depth)

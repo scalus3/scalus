@@ -48,11 +48,35 @@ object PositionalMerkleTreeTestSupport {
     )
 
     private given JsonValueCodec[Vector[ReferenceVector]] = JsonCodecMaker.make
+    val referenceDepths: Vector[Int] = Vector(1, 2, 3, 4, 5, 6, 15)
+    val referenceHashes: Vector[String] = Vector("sha256", "blake2b256")
     lazy val vectors: Vector[ReferenceVector] = readFromArray(
+      platform.readFile(
+        "scalus-core/shared/src/test/resources/positional-merkle-tree/ssz-v0.1.0.json"
+      )
+    )
+    lazy val legacyVectors: Vector[ReferenceVector] = readFromArray(
       platform.readFile(
         "scalus-core/shared/src/test/resources/positional-merkle-tree/ssz-v1.5.0.json"
       )
     )
+
+    def referenceCases(
+        corpus: Vector[ReferenceVector],
+        algorithm: String,
+        depth: Int
+    ): Vector[ReferenceVector] = {
+        val cases = corpus.filter(v => v.algorithm == algorithm && v.depth == depth)
+        val capacity = 1 << depth
+        val expectedCounts = Set(0, math.max(1, capacity * 3 / 5), capacity) ++
+            Vector(1, 3, 5, capacity - 1).filter(_ <= capacity)
+        assert(cases.nonEmpty, s"No $algorithm/depth=$depth reference cases")
+        assert(cases.map(_.count).toSet == expectedCounts)
+        assert(cases.size == expectedCounts.size)
+        assert(cases.forall(_.singles.nonEmpty))
+        assert(cases.filter(_.count > 0).forall(_.multis.nonEmpty))
+        cases
+    }
 
     def element(index: Int): ByteString = ByteString.fromString(s"element-${index % 7}")
     def uniqueElement(index: Int): ByteString = ByteString.fromString(s"unique-element-$index")
@@ -66,7 +90,10 @@ object PositionalMerkleTreeTestSupport {
     }
 
     /** Full independent rebuilding, deliberately without frontier or path-update logic. */
-    final class Naive(val chunks: Vector[ByteString]) {
+    final class Naive(
+        val chunks: Vector[ByteString],
+        nodeHash: ByteString => ByteString = blake2b_256
+    ) {
         val depth: Int = Integer.numberOfTrailingZeros(chunks.size)
         private val levels: Vector[Vector[ByteString]] = {
             var layers = Vector(chunks)
@@ -74,7 +101,7 @@ object PositionalMerkleTreeTestSupport {
                 layers :+= layers.last
                     .grouped(2)
                     .map { pair =>
-                        blake2b_256(appendByteString(pair(0), pair(1)))
+                        nodeHash(appendByteString(pair(0), pair(1)))
                     }
                     .toVector
             layers
@@ -107,14 +134,24 @@ object PositionalMerkleTreeTestSupport {
         }
         def multiProof(positions: Vector[Int]): ByteString = concat(helpers(positions).map(_._2))
         def emptied(positions: Iterable[Int]): Naive =
-            new Naive(chunks.indices.map { i =>
-                if positions.toSet.contains(i) then PositionalMerkleTree.EmptyLeafHash
-                else chunks(i)
-            }.toVector)
+            new Naive(
+              chunks.indices.map { i =>
+                  if positions.toSet.contains(i) then PositionalMerkleTree.EmptyLeafHash
+                  else chunks(i)
+              }.toVector,
+              nodeHash
+            )
     }
 
-    def naive(data: Vector[ByteString], depth: Int): Naive =
-        new Naive(data.map(blake2b_256).padTo(1 << depth, PositionalMerkleTree.EmptyLeafHash))
+    def naive(
+        data: Vector[ByteString],
+        depth: Int,
+        nodeHash: ByteString => ByteString = blake2b_256
+    ): Naive =
+        new Naive(
+          data.map(blake2b_256).padTo(1 << depth, PositionalMerkleTree.EmptyLeafHash),
+          nodeHash
+        )
 
     def query(tree: PositionalMerkleTree, data: Vector[ByteString], positions: Vector[Int]): Multi =
         Multi(

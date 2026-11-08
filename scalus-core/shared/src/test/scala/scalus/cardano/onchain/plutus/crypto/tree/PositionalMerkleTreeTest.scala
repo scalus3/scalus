@@ -37,35 +37,53 @@ class PositionalMerkleTreeTest extends AnyFunSuite {
     private def single(position: Int): Single =
         Single(tree.rootHash, 4, BigInt(position), data(position), tree.proveMembership(position))
 
-    test("Ethereum BLAKE2b vectors agree as Scala and compiled Plutus V3, including empty slots") {
-        for v <- vectors if v.algorithm == "blake2b256" do
-            val root = ByteString.fromHex(v.root)
-            for s <- v.singles do
-                val input = Single(
-                  root,
-                  BigInt(v.depth),
-                  BigInt(s.position),
-                  element(s.position),
-                  ByteString.fromHex(s.proof)
-                )
-                if s.occupied then
-                    val expected = ByteString.fromHex(s.emptiedRoot)
-                    assert(scalaSingle(input) == expected)
-                    assert(returned(singleResult(input)) == expected)
-                    assert(scalaMembership(input) == root)
-                    assert(returned(membershipResult(input)) == root)
-                else rejects(input)
-            for m <- v.multis do
-                val input = Multi(
-                  root,
-                  BigInt(v.depth),
-                  SList.from(m.positions.map(p => Leaf(BigInt(p), element(p)))),
-                  ByteString.fromHex(m.proof)
-                )
-                val expected = ByteString.fromHex(m.emptiedRoot)
-                assert(scalaMulti(input) == expected)
-                assert(returned(multiResult(input)) == expected)
-    }
+    for depth <- referenceDepths do
+        test(s"maintained SSZ BLAKE2b arithmetic at depth $depth as Scala and compiled Plutus V3") {
+            val cases = referenceCases(vectors, "blake2b256", depth)
+            var scalaSingles = 0
+            var uplcSingles = 0
+            var scalaMultis = 0
+            var uplcMultis = 0
+            for v <- cases do
+                val root = ByteString.fromHex(v.root)
+                for s <- v.singles do
+                    val input = Single(
+                      root,
+                      BigInt(v.depth),
+                      BigInt(s.position),
+                      element(s.position),
+                      ByteString.fromHex(s.proof)
+                    )
+                    if s.occupied then
+                        val expected = ByteString.fromHex(s.emptiedRoot)
+                        assert(scalaSingle(input) == expected)
+                        scalaSingles += 1
+                        assert(returned(singleResult(input)) == expected)
+                        uplcSingles += 1
+                        assert(scalaMembership(input) == root)
+                        assert(returned(membershipResult(input)) == root)
+                    else rejects(input)
+                for m <- v.multis do
+                    val input = Multi(
+                      root,
+                      BigInt(v.depth),
+                      SList.from(m.positions.map(p => Leaf(BigInt(p), element(p)))),
+                      ByteString.fromHex(m.proof)
+                    )
+                    val expected = ByteString.fromHex(m.emptiedRoot)
+                    assert(scalaMulti(input) == expected)
+                    scalaMultis += 1
+                    assert(returned(multiResult(input)) == expected)
+                    uplcMultis += 1
+            assert(
+              scalaSingles > 0 && uplcSingles == scalaSingles,
+              s"No Scala/UPLC single cases at $depth"
+            )
+            assert(
+              scalaMultis > 0 && uplcMultis == scalaMultis,
+              s"No Scala/UPLC multi cases at $depth"
+            )
+        }
 
     test(
       "single proof: every proof byte, element byte, position bit and root mutation fails in Scala and UPLC"

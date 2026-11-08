@@ -45,7 +45,7 @@ final class PositionalMerkleTree private (
     /** Minimal SSZ multiproof for strictly ascending, distinct, in-range positions.
       *
       * The query must be nonempty. Helpers are concatenated 32-byte hashes in descending
-      * generalized-index order (`get_helper_indices` in consensus-specs v1.5.0). There are no
+      * generalized-index order (`get_helper_indices` in ethereum/ssz-specs v0.1.0). There are no
       * direction bytes, flags or indices in the proof itself.
       */
     def proveMulti(positions: IndexedSeq[Int]): ByteString = {
