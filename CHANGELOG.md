@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- `PositionalMerkleTree`: fixed-depth positional commitments with SSZ proofs and multiproofs using
+  BLAKE2b-256, streaming off-chain roots, and on-chain membership and verify-and-empty operations.
+
 ## 1.5.0 (2026-11-04)
 
 ### Highlights
